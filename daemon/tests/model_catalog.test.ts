@@ -107,12 +107,10 @@ describe("applicability answers for every sdk, model and field", () => {
     expect(applicability("anthropic", "claude-haiku-4-5", "budget_tokens")).toBe("honored");
   });
 
-  test("replay_prior_thinking is ignored exactly where thinking is not replayed", () => {
+  test("replay_prior_thinking is honored on every sdk, with no carve-outs", () => {
     for (const model of MODELS) {
       for (const sdk of SDK_VARIANTS) {
-        expect(applicability(sdk, model, "replay_prior_thinking"), sdk).toBe(
-          sdk === "deepseek" || sdk === "moonshot" ? "ignored" : "honored",
-        );
+        expect(applicability(sdk, model, "replay_prior_thinking"), sdk).toBe("honored");
       }
     }
   });

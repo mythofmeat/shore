@@ -26,46 +26,29 @@ function thinkingTurn(block: Record<string, unknown>, provenance: Partial<WireMe
 
 const types = (msgs: WireMessage[]): string[][] => msgs.map((m) => m.content.map((b) => b.type));
 
-describe("carrier-less thinking", () => {
+describe("shared replay has no opinion about thinking", () => {
   const uncarried = thinkingTurn({ type: "thinking", thinking: "private chain" });
+  const signed = { type: "thinking", thinking: "t", signature: "sig" };
 
-  test("is dropped for Anthropic, which rejects an unsigned thinking block", () => {
-    const out = replayableMessages(req({ messages: [uncarried] }));
-    expect(types(out)).toEqual([["text"]]);
-  });
-
-  test("survives on the dialects that echo raw reasoning back", () => {
-    for (const sdk of ["openai", "zai", "deepseek", "moonshot"] as const) {
+  test("an unsigned block survives on every sdk, anthropic included", () => {
+    for (const sdk of ["anthropic", "openai", "zai", "deepseek", "moonshot", "gemini"] as const) {
       const out = replayableMessages(
         req({ sdk, model: "m", provider_key: sdk, messages: [uncarried] }),
       );
       expect(types(out), `${sdk} must keep uncarried thinking`).toEqual([["thinking", "text"]]);
     }
   });
-});
 
-describe("replay portability", () => {
-  const signed = { type: "thinking", thinking: "t", signature: "sig" };
-
-  test("thinking minted by the active model is replayed", () => {
-    const out = replayableMessages(
-      req({
-        messages: [thinkingTurn(signed, { provider_key: "anthropic", model: "claude-opus-4-8" })],
-      }),
-    );
-    expect(types(out)).toEqual([["thinking", "text"]]);
-  });
-
-  test("thinking minted by another model of the same provider is dropped", () => {
+  test("thinking minted by another model is not dropped here", () => {
     const out = replayableMessages(
       req({
         messages: [thinkingTurn(signed, { provider_key: "anthropic", model: "claude-opus-4-6" })],
       }),
     );
-    expect(types(out)).toEqual([["text"]]);
+    expect(types(out)).toEqual([["thinking", "text"]]);
   });
 
-  test("a foreign carrier is dropped when provenance is unknown", () => {
+  test("a foreign carrier with unknown provenance is not dropped here", () => {
     const out = replayableMessages(
       req({
         messages: [
@@ -73,15 +56,10 @@ describe("replay portability", () => {
         ],
       }),
     );
-    expect(types(out)).toEqual([["text"]]);
-  });
-
-  test("a plain legacy blob with no provenance is kept", () => {
-    const out = replayableMessages(req({ messages: [thinkingTurn(signed)] }));
     expect(types(out)).toEqual([["thinking", "text"]]);
   });
 
-  test("an OpenRouter-tagged redacted blob is kept only on OpenRouter", () => {
+  test("an OpenRouter-tagged redacted blob travels to every sdk", () => {
     const blob = {
       role: "assistant" as const,
       content: [
@@ -89,14 +67,11 @@ describe("replay portability", () => {
         { type: "text" as const, text: "answer" },
       ],
     };
-    expect(types(replayableMessages(req({ messages: [blob] })))).toEqual([["text"]]);
-    expect(
-      types(
-        replayableMessages(
-          req({ sdk: "openrouter", provider_key: "openrouter", messages: [blob] }),
-        ),
-      ),
-    ).toEqual([["redacted_thinking", "text"]]);
+    for (const sdk of ["anthropic", "openrouter", "moonshot"] as const) {
+      expect(types(replayableMessages(req({ sdk, provider_key: sdk, messages: [blob] })))).toEqual([
+        ["redacted_thinking", "text"],
+      ]);
+    }
   });
 });
 
@@ -128,51 +103,48 @@ describe("prior-thinking replay setting", () => {
     expect(types(out)).toEqual([["text"], ["text"], ["text"]]);
   });
 
-  test("the provider floor overrides `none` where the API demands replay", () => {
-    for (const provider of ["moonshot", "moonshotai"]) {
-      const own: WireMessage[] = history.map((m) =>
-        m.role === "assistant" ? { ...m, provider_key: provider, model: "reasoner" } : m,
-      );
+  const ownHistory = (provider: string): WireMessage[] =>
+    history.map((m) =>
+      m.role === "assistant" ? { ...m, provider_key: provider, model: "reasoner" } : m,
+    );
+
+  test("`all` is the only thing standing between a block and the wire", () => {
+    for (const sdk of ["anthropic", "openai", "moonshot", "deepseek", "zai"] as const) {
       const out = replayableMessages(
-        req({
-          sdk: "deepseek",
-          model: "reasoner",
-          provider_key: provider,
-          messages: own,
-          replay_prior_thinking: "none",
-        }),
+        req({ sdk, model: "reasoner", provider_key: sdk, messages: ownHistory(sdk) }),
       );
-      expect(types(out)[1], `${provider} must keep prior reasoning`).toEqual(["thinking", "text"]);
+      expect(types(out)[1], `${sdk} replays by default`).toEqual(["thinking", "text"]);
     }
   });
 
-  test("portability still wins over the floor: a foreign signature is dropped", () => {
-    const out = replayableMessages(
-      req({
-        sdk: "moonshot",
-        model: "reasoner",
-        provider_key: "moonshot",
-        messages: history,
-        replay_prior_thinking: "none",
-      }),
-    );
-    expect(types(out)[1]).toEqual(["text"]);
+  test("`none` strips on every sdk, with no carve-outs", () => {
+    for (const sdk of ["anthropic", "openai", "moonshot", "deepseek", "zai"] as const) {
+      const out = replayableMessages(
+        req({
+          sdk,
+          model: "reasoner",
+          provider_key: sdk,
+          messages: ownHistory(sdk),
+          replay_prior_thinking: "none",
+        }),
+      );
+      expect(types(out)[1], `${sdk} honors the user's own off switch`).toEqual(["text"]);
+    }
   });
 
-  test("deepseek is not on the floor: `none` strips there like anywhere else", () => {
-    const own: WireMessage[] = history.map((m) =>
-      m.role === "assistant" ? { ...m, provider_key: "deepseek", model: "reasoner" } : m,
-    );
-    const out = replayableMessages(
-      req({
-        sdk: "deepseek",
-        model: "reasoner",
-        provider_key: "deepseek",
-        messages: own,
-        replay_prior_thinking: "none",
-      }),
-    );
-    expect(types(out)[1]).toEqual(["text"]);
+  test("the provider serving a model does not change the answer", () => {
+    for (const provider of ["moonshot", "moonshotai", "opencode-go", "openrouter"]) {
+      const out = replayableMessages(
+        req({
+          sdk: "moonshot",
+          model: "reasoner",
+          provider_key: provider,
+          messages: ownHistory(provider),
+          replay_prior_thinking: "none",
+        }),
+      );
+      expect(types(out)[1], `${provider} gets the same strip`).toEqual(["text"]);
+    }
   });
 
   test("the same history always projects to the same bytes", () => {

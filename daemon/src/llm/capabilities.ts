@@ -217,7 +217,7 @@ export function applicability(
       return vendorField(sdk, "zai");
 
     case "replay_prior_thinking":
-      return replayApplicability(sdk);
+      return "honored";
   }
 }
 
@@ -232,20 +232,6 @@ function budgetTokensApplicability(sdk: Sdk, caps?: ModelCapabilities): Applicab
     case "openrouter":
     case "zai":
     case "deepseek":
-      return "ignored";
-  }
-}
-
-function replayApplicability(sdk: Sdk): Applicability {
-  switch (sdk) {
-    case "anthropic":
-    case "openai":
-    case "zai":
-    case "openrouter":
-    case "gemini":
-      return "honored";
-    case "deepseek":
-    case "moonshot":
       return "ignored";
   }
 }

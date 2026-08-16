@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ContentBlock } from "../src/engine/types.ts";
 import { replayableMessages } from "../src/llm/replay.ts";
-import { buildAnthropicParams } from "../src/llm/providers/anthropic.ts";
+import { buildAnthropicParams, dropUnverifiableThinking } from "../src/llm/providers/anthropic.ts";
 import {
   systemToText,
   toolResultText,
@@ -313,9 +313,19 @@ describe("the census survives the real code paths", () => {
     expect(kept).toContain("image");
   });
 
-  test("a message whose thinking carries nothing replayable loses all of it", () => {
+  test("shared replay hands every block on, unreplayable ones included", () => {
     const out = replayableMessages(req);
     const kept = out[3]?.content.map((b) => b.type) ?? [];
+    expect(kept).toContain("thinking");
+  });
+
+  test("the anthropic adapter is what loses a message that carries nothing replayable", () => {
+    const { messages } = dropUnverifiableThinking(
+      replayableMessages(req),
+      "anthropic",
+      "claude-opus-4-8",
+    );
+    const kept = messages[3]?.content.map((b) => b.type) ?? [];
     expect(kept).toEqual(["text"]);
   });
 

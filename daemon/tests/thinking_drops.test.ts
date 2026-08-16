@@ -5,6 +5,7 @@ import {
   replayableMessagesWithDrops,
   totalThinkingDrops,
 } from "../src/llm/replay.ts";
+import { dropUnverifiableThinking } from "../src/llm/providers/anthropic.ts";
 import type { CallContext, SidecarRequest, WireMessage } from "../src/llm/types.ts";
 
 function signedThinking(provider: string, model: string): WireMessage {
@@ -36,40 +37,18 @@ function context(): CallContext {
   return { character: "Rhia", call_type: "message", thinking_enabled: true };
 }
 
-describe("thinking blocks that cannot travel are counted", () => {
-  test("a block minted by another model is dropped and the drop is recorded", () => {
+describe("replay hands every thinking block to the adapter", () => {
+  test("a block minted by another model still leaves the shared replay intact", () => {
     const { messages, drops } = replayableMessagesWithDrops(
       request({ messages: [signedThinking("anthropic", "claude-sonnet-5")] }),
-    );
-
-    expect(drops.unportable).toBe(1);
-    expect(totalThinkingDrops(drops)).toBe(1);
-    expect(messages[0]?.content.map((b) => b.type)).toEqual(["text"]);
-  });
-
-  test("a block minted by this same provider and model still travels", () => {
-    const { messages, drops } = replayableMessagesWithDrops(
-      request({ messages: [signedThinking("anthropic", "claude-opus-5")] }),
     );
 
     expect(totalThinkingDrops(drops)).toBe(0);
     expect(messages[0]?.content.map((b) => b.type)).toEqual(["thinking", "text"]);
   });
 
-  test("a policy strip is counted separately from an unportable one", () => {
-    const { drops } = replayableMessagesWithDrops(
-      request({
-        replay_prior_thinking: "none",
-        messages: [signedThinking("anthropic", "claude-opus-5")],
-      }),
-    );
-
-    expect(drops.strippedByPolicy).toBe(1);
-    expect(drops.unportable).toBe(0);
-  });
-
-  test("an unsigned block dropped for want of a carrier is its own count", () => {
-    const { drops } = replayableMessagesWithDrops(
+  test("an unsigned block also survives the shared replay", () => {
+    const { messages, drops } = replayableMessagesWithDrops(
       request({
         messages: [
           {
@@ -83,15 +62,74 @@ describe("thinking blocks that cannot travel are counted", () => {
       }),
     );
 
-    expect(drops.uncarried).toBe(1);
+    expect(totalThinkingDrops(drops)).toBe(0);
+    expect(messages[0]?.content.map((b) => b.type)).toEqual(["thinking", "text"]);
+  });
+
+  test("only the user's own `none` strips anything", () => {
+    const { drops } = replayableMessagesWithDrops(
+      request({
+        replay_prior_thinking: "none",
+        messages: [signedThinking("anthropic", "claude-opus-5")],
+      }),
+    );
+
+    expect(drops.strippedByPolicy).toBe(1);
+  });
+});
+
+describe("the anthropic adapter drops what its api cannot verify", () => {
+  test("a block minted by another model is dropped there", () => {
+    const { messages, dropped } = dropUnverifiableThinking(
+      [signedThinking("anthropic", "claude-sonnet-5")],
+      "anthropic",
+      "claude-opus-5",
+    );
+
+    expect(dropped).toBe(1);
+    expect(messages[0]?.content.map((b) => b.type)).toEqual(["text"]);
+  });
+
+  test("a block minted by this same provider and model still travels", () => {
+    const { messages, dropped } = dropUnverifiableThinking(
+      [signedThinking("anthropic", "claude-opus-5")],
+      "anthropic",
+      "claude-opus-5",
+    );
+
+    expect(dropped).toBe(0);
+    expect(messages[0]?.content.map((b) => b.type)).toEqual(["thinking", "text"]);
+  });
+
+  test("an unsigned block is dropped for want of a signature", () => {
+    const { messages, dropped } = dropUnverifiableThinking(
+      [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "no signature here" },
+            { type: "text", text: "answer" },
+          ],
+        },
+      ],
+      "anthropic",
+      "claude-opus-5",
+    );
+
+    expect(dropped).toBe(1);
+    expect(messages[0]?.content.map((b) => b.type)).toEqual(["text"]);
   });
 });
 
 describe("the count reaches the call log", () => {
-  test("a stripped history is visible on the request context", () => {
+  test("a policy strip is visible on the request context", () => {
     const ctx = context();
     replayableMessages(
-      request({ context: ctx, messages: [signedThinking("anthropic", "claude-sonnet-5")] }),
+      request({
+        context: ctx,
+        replay_prior_thinking: "none",
+        messages: [signedThinking("anthropic", "claude-opus-5")],
+      }),
     );
     expect(ctx.thinking_dropped).toBe(1);
   });

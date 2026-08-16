@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { replayableMessagesWithDrops } from "../src/llm/replay.ts";
+import { dropUnverifiableThinking } from "../src/llm/providers/anthropic.ts";
 import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 
 const SIG = "sig-abc";
@@ -76,7 +77,7 @@ describe("the strip policy stops at a tool-use turn", () => {
     expect(drops.strippedByPolicy).toBe(0);
   });
 
-  test("a model switch still strips a tool-use turn, as the docs require", () => {
+  test("a model switch leaves the shared replay alone", () => {
     const { messages, drops } = replayableMessagesWithDrops(
       request([thinkingWithToolUse()], {
         model: "claude-sonnet-5",
@@ -84,12 +85,23 @@ describe("the strip policy stops at a tool-use turn", () => {
       }),
     );
 
+    expect(messages[0]?.content.some((b) => b.type === "thinking")).toBe(true);
+    expect(drops.strippedByPolicy).toBe(0);
+  });
+
+  test("a model switch still strips a tool-use turn at the anthropic adapter", () => {
+    const { messages, dropped } = dropUnverifiableThinking(
+      [thinkingWithToolUse()],
+      "anthropic",
+      "claude-sonnet-5",
+    );
+
     expect(messages[0]?.content.some((b) => b.type === "thinking")).toBe(false);
-    expect(drops.unportable).toBe(1);
+    expect(dropped).toBe(1);
   });
 });
 
-describe("thinking blocks are dropped per message, never per block", () => {
+describe("the anthropic adapter drops per message, never per block", () => {
   function mixed(): WireMessage {
     return {
       role: "assistant",
@@ -103,13 +115,15 @@ describe("thinking blocks are dropped per message, never per block", () => {
     };
   }
 
-  test("one uncarried block takes its signed siblings with it", () => {
-    const { messages, drops } = replayableMessagesWithDrops(
-      request([mixed()], { replay_prior_thinking: "all" }),
+  test("one unsigned block takes its signed siblings with it", () => {
+    const { messages, dropped } = dropUnverifiableThinking(
+      [mixed()],
+      "anthropic",
+      "claude-opus-5",
     );
 
     expect(messages[0]?.content).toEqual([{ type: "text", text: "answer" }]);
-    expect(drops.uncarried).toBe(2);
+    expect(dropped).toBe(2);
   });
 
   test("a redacted_thinking block is dropped with its regular siblings", () => {
@@ -123,12 +137,14 @@ describe("thinking blocks are dropped per message, never per block", () => {
         { type: "text", text: "answer" },
       ],
     };
-    const { messages, drops } = replayableMessagesWithDrops(
-      request([message], { replay_prior_thinking: "all" }),
+    const { messages, dropped } = dropUnverifiableThinking(
+      [message],
+      "anthropic",
+      "claude-opus-5",
     );
 
     expect(messages[0]?.content).toEqual([{ type: "text", text: "answer" }]);
-    expect(drops.unportable).toBe(2);
+    expect(dropped).toBe(2);
   });
 
   test("a message whose blocks all travel keeps every one of them", () => {
@@ -143,11 +159,21 @@ describe("thinking blocks are dropped per message, never per block", () => {
         { type: "text", text: "answer" },
       ],
     };
-    const { messages, drops } = replayableMessagesWithDrops(
-      request([message], { replay_prior_thinking: "all" }),
+    const { messages, dropped } = dropUnverifiableThinking(
+      [message],
+      "anthropic",
+      "claude-opus-5",
     );
 
     expect(messages[0]?.content).toHaveLength(4);
-    expect(drops.uncarried + drops.unportable + drops.strippedByPolicy).toBe(0);
+    expect(dropped).toBe(0);
+  });
+
+  test("every other sdk gets the block untouched", () => {
+    const { messages } = replayableMessagesWithDrops(
+      request([mixed()], { sdk: "moonshot", provider_key: "opencode-go", model: "kimi-k3", replay_prior_thinking: "all" }),
+    );
+
+    expect(messages[0]?.content.filter((b) => b.type === "thinking")).toHaveLength(2);
   });
 });

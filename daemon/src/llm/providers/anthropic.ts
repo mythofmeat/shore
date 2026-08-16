@@ -30,7 +30,7 @@ import {
   recordCacheCall,
   type CachePlacement,
 } from "../../cache/forensics.ts";
-import { replayableMessages } from "../replay.ts";
+import { recordExtraThinkingDrops, replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
@@ -235,7 +235,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     else req.context.cache_ttl = cacheTtl;
   }
 
-  const converted = convertInlineSystemMessages(replayableMessages(req), req.model);
+  const converted = convertInlineSystemMessages(replayableForAnthropic(req), req.model);
   const hasExistingMarkers = messagesHaveCacheControl(converted);
 
   let messages: MessageParam[];
@@ -527,6 +527,98 @@ function wrapInlineSystemInstruction(text: string): string {
 
 function systemToBlocks(system: SystemContent | undefined): TextBlockParam[] {
   return (system ?? []).map((b) => ({ type: "text", text: b.text }));
+}
+
+function carriesSignature(block: ContentBlock): boolean {
+  if (block.type === "redacted_thinking") return true;
+  if (block.type !== "thinking") return false;
+  return (
+    block.signature !== undefined ||
+    block.reasoning_details !== undefined ||
+    block.reasoning_content !== undefined
+  );
+}
+
+function hasForeignCarrier(block: ContentBlock): boolean {
+  if (block.type !== "thinking") return false;
+  return block.reasoning_details !== undefined || block.reasoning_content !== undefined;
+}
+
+function isThinkingBlock(block: ContentBlock): boolean {
+  return block.type === "thinking" || block.type === "redacted_thinking";
+}
+
+function signatureTravels(
+  block: ContentBlock,
+  mintingProvider: string | undefined,
+  mintingModel: string | undefined,
+  activeProvider: string,
+  activeModel: string,
+): boolean {
+  if (!carriesSignature(block)) return true;
+
+  if (hasForeignCarrier(block) && mintingModel !== activeModel) return false;
+
+  if (mintingProvider !== undefined && mintingModel !== undefined) {
+    return mintingProvider === activeProvider && mintingModel === activeModel;
+  }
+  if (mintingProvider !== undefined) {
+    return mintingProvider === activeProvider;
+  }
+  if (block.type === "redacted_thinking" && block.data.startsWith("openrouter.reasoning:")) {
+    return activeProvider.includes("openrouter");
+  }
+  return true;
+}
+
+export function dropUnverifiableThinking(
+  turns: WireMessage[],
+  activeProvider: string,
+  activeModel: string,
+): { messages: WireMessage[]; dropped: number } {
+  let dropped = 0;
+  const out: WireMessage[] = [];
+
+  for (const msg of turns) {
+    const thinking = msg.content.filter(isThinkingBlock);
+    const verifiable =
+      thinking.length === 0 ||
+      (thinking.every((block) => block.type !== "thinking" || carriesSignature(block)) &&
+        thinking.every((block) =>
+          signatureTravels(block, msg.provider_key, msg.model, activeProvider, activeModel),
+        ));
+
+    if (verifiable) {
+      out.push(msg);
+      continue;
+    }
+
+    const kept = msg.content.filter((block) => !isThinkingBlock(block));
+    dropped += msg.content.length - kept.length;
+    if (kept.length === 0) continue;
+    out.push({ ...msg, content: kept });
+  }
+
+  return { messages: out, dropped };
+}
+
+function replayableForAnthropic(req: SidecarRequest): WireMessage[] {
+  const { messages, dropped } = dropUnverifiableThinking(
+    replayableMessages(req),
+    req.provider_key ?? "",
+    req.model,
+  );
+
+  recordExtraThinkingDrops(req, dropped);
+
+  if (dropped > 0) {
+    console.warn(
+      `shore: ${String(dropped)} thinking block(s) carried no signature this account can ` +
+        `verify, or were minted by another provider or model, and could not travel to ` +
+        `${req.provider_key ?? req.sdk}/${req.model}; the turn goes over the wire stripped`,
+    );
+  }
+  return messages;
 }
 
 function convertInlineSystemMessages(
