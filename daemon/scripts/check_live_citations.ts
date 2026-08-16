@@ -1,7 +1,8 @@
-import ts from "typescript";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { Glob } from "bun";
+
+import { commentRanges, lineNumberAt, lineStartsOf } from "./comment_ranges.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const REPO = join(ROOT, "..");
@@ -20,24 +21,6 @@ interface Offence {
   line: number;
   path: string;
   excerpt: string;
-}
-
-function commentRanges(sf: ts.SourceFile, text: string): ts.CommentRange[] {
-  const byPos = new Map<number, ts.CommentRange>();
-  const add = (rs: ts.CommentRange[] | undefined) => {
-    for (const r of rs ?? []) byPos.set(r.pos, r);
-  };
-  const walk = (node: ts.Node) => {
-    const kids = node.getChildren(sf);
-    if (kids.length === 0) {
-      add(ts.getLeadingCommentRanges(text, node.getFullStart()));
-      add(ts.getTrailingCommentRanges(text, node.getEnd()));
-      return;
-    }
-    for (const k of kids) walk(k);
-  };
-  walk(sf);
-  return [...byPos.values()].sort((a, b) => a.pos - b.pos);
 }
 
 function sentences(comment: string): string[] {
@@ -76,9 +59,9 @@ for (const dir of SCANNED) {
     const abs = join(base, rel);
     const text = readFileSync(abs, "utf8");
     scanned += 1;
-    const sf = ts.createSourceFile(abs, text, ts.ScriptTarget.Latest, true);
+    const lineStarts = lineStartsOf(text);
 
-    for (const range of commentRanges(sf, text)) {
+    for (const range of commentRanges(text)) {
       const comment = text.slice(range.pos, range.end);
       for (const sentence of sentences(comment)) {
         if (!COUPLING.test(sentence)) continue;
@@ -87,7 +70,7 @@ for (const dir of SCANNED) {
           if (resolves(cited)) continue;
           offences.push({
             file: relative(REPO, abs),
-            line: sf.getLineAndCharacterOfPosition(range.pos).line + 1,
+            line: lineNumberAt(lineStarts, range.pos),
             path: cited,
             excerpt: sentence.slice(0, 140),
           });
