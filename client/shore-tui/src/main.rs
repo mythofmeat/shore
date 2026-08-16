@@ -400,8 +400,10 @@ impl FrameDump {
 
 fn render_app_to_string(app: &mut App, width: u16, height: u16) -> io::Result<String> {
     let backend = TestBackend::new(width, height);
-    let mut terminal = Terminal::new(backend)?;
-    let _ = terminal.draw(|frame| ui::draw(frame, app))?;
+    let mut terminal = Terminal::new(backend).map_err(io::Error::other)?;
+    let _ = terminal
+        .draw(|frame| ui::draw(frame, app))
+        .map_err(io::Error::other)?;
     Ok(buffer_to_string(terminal.backend().buffer()))
 }
 

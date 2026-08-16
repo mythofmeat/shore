@@ -17,35 +17,15 @@ repository = "https://github.com/mythofmeat/shore"
 shore-common = { path = "shore-common" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-toml = "0.8"
+toml = "1.1"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 dirs = "6"
-dotenvy = "0.15"
-tokio = { version = "1", features = ["full"] }
-chrono = "0.4"
 libc = "0.2"
 tempfile = "3"
-uuid = { version = "1", features = ["v4"] }
-which = "6"
-reqwest = { version = "0.12", default-features = false, features = [
-    "json",
-    "stream",
-    "rustls-tls",
-] }
-dashmap = "6"
-futures-util = "0.3"
-async-trait = "0.1"
 insta = { version = "1", features = ["json"] }
 proptest = "1"
-rusqlite = { version = "0.37", features = ["bundled"] }
-zstd = "0.13"
-rmcp = { version = "1.8", features = [
-    "client",
-    "transport-child-process",
-    "transport-streamable-http-client-reqwest",
-] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

@@ -21,6 +21,7 @@ run citations bun run lint:citations
 run typecheck bun run typecheck
 
 cd "$root/client" || exit 1
+run cargo-upgrade cargo upgrade --incompatible
 run fmt cargo fmt --all --check
 run clippy cargo clippy --workspace --all-targets
 
