@@ -14275,6 +14275,45 @@
         "result": {
           "ok": true
         }
+      },
+      {
+        "sub": [
+          "log",
+          "log",
+          "--oneline",
+          "-8"
+        ],
+        "result": {
+          "err": "invalid args: `args` repeats the subcommand: this would run `git log log ...`, and git reads the second 'log' as a revision or path. Drop 'log' from `args` and pass only the flags and paths after it."
+        }
+      },
+      {
+        "sub": [
+          "status",
+          "status"
+        ],
+        "result": {
+          "err": "invalid args: `args` repeats the subcommand: this would run `git status status`, and git reads the second 'status' as a revision or path. Drop 'status' from `args` and pass only the flags and paths after it."
+        }
+      },
+      {
+        "sub": [
+          "log",
+          "--oneline",
+          "log"
+        ],
+        "result": {
+          "ok": true
+        }
+      },
+      {
+        "sub": [
+          "add",
+          "memory/add"
+        ],
+        "result": {
+          "ok": true
+        }
       }
     ],
     "token": [

@@ -945,6 +945,15 @@ export function validateGitSubcommand(sub: string[]): void {
   const rest = sub.slice(1);
   const has = (flag: string) => rest.includes(flag);
 
+  if (rest[0] === cmd) {
+    throw new InvalidArgs(
+      `\`args\` repeats the subcommand: this would run \`git ${cmd} ${cmd}${
+        rest.length > 1 ? " ..." : ""
+      }\`, and git reads the second '${cmd}' as a revision or path. ` +
+        `Drop '${cmd}' from \`args\` and pass only the flags and paths after it.`,
+    );
+  }
+
   switch (cmd) {
     case "config":
       throw new InvalidArgs("git config is not allowed (use the daemon's identity setup)");
