@@ -527,6 +527,11 @@ fn save_prefs(app: &App) {
     }
 }
 
+fn force_full_redraw(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
+    let area = terminal.size()?.into();
+    terminal.resize(area)
+}
+
 fn open_in_editor(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     input: &mut InputState,
@@ -548,7 +553,7 @@ fn open_in_editor(
         DisableLineWrap,
         EnableBracketedPaste
     )?;
-    terminal.clear()?;
+    force_full_redraw(terminal)?;
 
     if let Ok(contents) = std::fs::read_to_string(&tmp) {
         input.set_text(contents.trim_end_matches('\n').to_string());
@@ -578,7 +583,7 @@ fn pick_image(
         DisableLineWrap,
         EnableBracketedPaste
     )?;
-    terminal.clear()?;
+    force_full_redraw(terminal)?;
 
     match result {
         Some(true) => {
@@ -989,7 +994,7 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     let result = loop {
         if needs_redraw {
             if needs_full_redraw {
-                terminal.clear()?;
+                force_full_redraw(&mut terminal)?;
                 needs_full_redraw = false;
             }
             let _ = terminal.draw(|frame| ui::draw(frame, &mut app))?;
@@ -1206,6 +1211,8 @@ fn build_history_entries(messages: Vec<Message>, active_start: usize) -> Vec<Con
 fn rebuild_entries_from_history(app: &mut App, messages: Vec<Message>, active_start: usize) {
     app.entries = build_history_entries(messages, active_start);
     splice_subagent_sections(&mut app.entries, &app.subagent_traces);
+    app.grew_above_viewport = true;
+    app.history_version = app.history_version.wrapping_add(1);
 }
 
 fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start: usize) {
@@ -1218,6 +1225,7 @@ fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start:
     let prev_msg_id = in_flight.and_then(|turn| turn.msg_id.clone());
 
     app.entries = build_history_entries(messages, active_start);
+    app.grew_above_viewport = true;
 
     if !app.stream.active {
         return;
@@ -2155,7 +2163,7 @@ mod redraw_tests {
     use super::*;
     use shore_common::protocol::error::ErrorCode;
     use shore_common::protocol::server_msg::{
-        CommandOutput, Error as CommandError, StreamChunk, StreamEnd,
+        CommandOutput, Error as CommandError, History, StreamChunk, StreamEnd, StreamStart,
     };
     use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
 
@@ -2234,6 +2242,158 @@ mod redraw_tests {
                 ttft_ms: 1,
             },
         }
+    }
+
+    fn top_rows(frame: &str, count: usize) -> Vec<&str> {
+        frame.lines().take(count).collect()
+    }
+
+    fn simple_message(role: Role, id: &str, content: &str) -> Message {
+        Message {
+            msg_id: id.into(),
+            role,
+            content: content.into(),
+            images: vec![],
+            content_blocks: vec![],
+            alt_index: None,
+            alt_count: None,
+            alternatives: vec![],
+            timestamp: format!("t{id}"),
+            provider_key: None,
+            model: None,
+            origin: None,
+        }
+    }
+
+    #[test]
+    fn history_rebuild_keeps_scrolled_up_viewport() {
+        let mut app = App::default();
+        app.connection_status = ConnectionStatus::Connected;
+
+        let mut messages: Vec<Message> = Vec::new();
+        for i in 0..20 {
+            messages.push(simple_message(
+                Role::User,
+                &format!("u{i}"),
+                &format!("Message {i}"),
+            ));
+            messages.push(simple_message(
+                Role::Assistant,
+                &format!("a{i}"),
+                &format!("Reply {i}"),
+            ));
+        }
+        rebuild_entries_from_history(&mut app, messages.clone(), 0);
+        let _ = render_app_to_string(&mut app, 80, 30);
+
+        app.scroll_up(20);
+        let before = render_app_to_string(&mut app, 80, 30).unwrap();
+
+        messages[3].content =
+            "A much longer reply that wraps over several lines\n\nsecond paragraph\n\nthird paragraph"
+                .into();
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::History(History {
+                rid: None,
+                messages,
+                active_start: 0,
+                config: serde_json::json!({}),
+                selected_character: None,
+                revision: 0,
+            }),
+        );
+        let after = render_app_to_string(&mut app, 80, 30).unwrap();
+
+        assert_eq!(
+            top_rows(&before, 20),
+            top_rows(&after, 20),
+            "text under a scrolled-up viewport should not move when a history rebuild changes content above it\nbefore:\n{before}\nafter:\n{after}"
+        );
+    }
+
+    fn stream_start(app: &mut App) {
+        let _ = handle_server_message(
+            app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+                subagent: None,
+            }),
+        );
+    }
+
+    fn stream_chunk(app: &mut App, text: &str) {
+        let _ = handle_server_message(
+            app,
+            ServerMessage::StreamChunk(StreamChunk {
+                rid: None,
+                text: text.into(),
+                content_type: "text".into(),
+                subagent: None,
+            }),
+        );
+    }
+
+    fn stream_end(app: &mut App) {
+        let _ = handle_server_message(
+            app,
+            ServerMessage::StreamEnd(StreamEnd {
+                rid: None,
+                msg_id: None,
+                revision: None,
+                content: String::new(),
+                metadata: metadata(),
+                finish_reason: "stop".into(),
+                is_final: true,
+                subagent: None,
+            }),
+        );
+    }
+
+    #[test]
+    fn stream_end_keeps_scrolled_up_viewport() {
+        let mut app = App::default();
+        app.connection_status = ConnectionStatus::Connected;
+
+        for i in 0..20 {
+            app.entries.push(ConversationEntry::user(
+                format!("Message {i}"),
+                vec![],
+                format!("t{i}"),
+            ));
+            app.entries.push(ConversationEntry::assistant(
+                None,
+                format!("Reply {i}"),
+                vec![],
+                format!("r{i}"),
+                None,
+            ));
+        }
+
+        stream_start(&mut app);
+        stream_chunk(&mut app, "First chunk of the answer.");
+        let _ = render_app_to_string(&mut app, 80, 30);
+
+        app.scroll_up(500);
+        let before = render_app_to_string(&mut app, 80, 30).unwrap();
+
+        for tick in 0..6 {
+            stream_chunk(
+                &mut app,
+                &format!("\nchunk {tick} with some reasonably long text to wrap around"),
+            );
+            let _ = render_app_to_string(&mut app, 80, 30);
+        }
+
+        stream_end(&mut app);
+        let after = render_app_to_string(&mut app, 80, 30).unwrap();
+
+        assert_eq!(
+            top_rows(&before, 20),
+            top_rows(&after, 20),
+            "text under a scrolled-up viewport should not move when the stream completes\nbefore:\n{before}\nafter:\n{after}"
+        );
     }
 
     fn debug_config_from(pairs: &[(&str, &str)]) -> io::Result<TuiDebugConfig> {

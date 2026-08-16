@@ -3056,6 +3056,46 @@ mod scenario_tests {
     }
 
     #[test]
+    fn scenario_scrolled_up_viewport_holds_when_stream_completes() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+
+        for i in 0..20 {
+            h.app.entries.push(ConversationEntry::user(
+                format!("Message {i}"),
+                vec![],
+                format!("t{i}"),
+            ));
+            h.app.entries.push(ConversationEntry::assistant(
+                None,
+                format!("Reply {i}"),
+                vec![],
+                format!("r{i}"),
+                None,
+            ));
+        }
+
+        h.stream_start();
+        h.stream_chunk("First chunk of the answer.");
+        let _ = h.render("streaming pinned to bottom");
+
+        h.app.scroll_up(10);
+        let before = h.render_with_blank_rows("scrolled up mid-stream");
+
+        h.stream_chunk("\nsecond line\nthird line");
+        let _ = h.render_with_blank_rows("stream appended while scrolled up");
+
+        h.stream_end("final content of the answer");
+        let after = h.render_with_blank_rows("stream completed while scrolled up");
+
+        assert_eq!(
+            top_rows(&before, 20),
+            top_rows(&after, 20),
+            "text under a scrolled-up viewport should not move when the stream completes\nbefore:\n{before}\nafter:\n{after}"
+        );
+    }
+
+    #[test]
     fn scenario_scrolled_up_viewport_holds_when_older_history_is_prepended() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
