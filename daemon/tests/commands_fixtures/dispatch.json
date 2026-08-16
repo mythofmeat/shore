@@ -450,29 +450,6 @@
       "active_model_after": null
     },
     {
-      "name": "memory",
-      "args": {},
-      "output": {
-        "kind": "command_output",
-        "name": "memory",
-        "data_keys": [
-          "character",
-          "curated_files",
-          "daily_files",
-          "entries",
-          "image_files"
-        ],
-        "data_shape": {
-          "character": "string",
-          "entries": "number:2",
-          "curated_files": "number:1",
-          "daily_files": "number:1",
-          "image_files": "number:0"
-        }
-      },
-      "active_model_after": null
-    },
-    {
       "name": "compact",
       "args": {},
       "output": {

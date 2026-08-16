@@ -2638,7 +2638,6 @@ mod tests {
             &["character", "use", "qifei"][..],
             &["character", "new", "ada"][..],
             &["provider", "models", "openrouter"][..],
-            &["memory", "what did we decide"][..],
             &["log", "last"][..],
             &["model", "--info", "opus"][..],
         ] {

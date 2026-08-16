@@ -347,7 +347,7 @@ describe("a switch_character", () => {
 
 describe("every other command", () => {
   test("passes through untouched", async () => {
-    for (const name of ["status", "list_models", "memory", "usage", "config_get"]) {
+    for (const name of ["status", "list_models", "usage", "config_get"]) {
       const f = fakes();
       const data = { anything: true };
 

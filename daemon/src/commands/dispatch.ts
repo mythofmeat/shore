@@ -32,7 +32,6 @@ import {
 import { compact, type CompactContext } from "./compact.ts";
 import { sessionActivateCommand, type SessionActivateContext } from "./activate.ts";
 import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
-import { memory } from "./memory.ts";
 import { describeTool, runTool, type RunToolContext } from "./run_tool.ts";
 import {
   effectiveChatModel,
@@ -159,8 +158,6 @@ export async function runCommand(
       return setModelSetting(session, args);
     case "model_settings":
       return modelSettings(session, args);
-    case "memory":
-      return await memory(configDir, character, args, workspaceRoot);
     case "compact":
       if (deps.compaction === undefined) throw unwired("compact");
       return await compact(

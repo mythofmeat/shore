@@ -11,7 +11,7 @@ import {
 import { dirname, join, relative, sep } from "node:path";
 
 import { isInside, pathComponents } from "../tools/workspace_path";
-import { compareRustStrings, rustLines, rustTrim, rustTrimStart, tokenizeQuery } from "./lines";
+import { compareRustStrings, rustTrim } from "./lines";
 
 const INTERNAL_TOP_LEVEL = [".dreams", "dreaming", "dreams.md", "memory.md"];
 
@@ -151,20 +151,6 @@ export class MarkdownMemoryStore {
     }
   }
 
-  async searchText(query: string): Promise<MarkdownEntry[]> {
-    const q = query.toLowerCase();
-    const terms = tokenizeQuery(q);
-    const scored: Array<{ score: number; entry: MarkdownEntry }> = [];
-    for (const entry of await this.listAll()) {
-      const score = entrySearchScore(entry, q, terms);
-      if (score > 0) scored.push({ score, entry });
-    }
-    scored.sort(
-      (a, b) => b.score - a.score || compareRustStrings(a.entry.path, b.entry.path),
-    );
-    return scored.map((s) => s.entry);
-  }
-
   async #collect(dir: string, entries: MarkdownEntry[]): Promise<void> {
     let children;
     try {
@@ -257,25 +243,4 @@ export class MarkdownMemoryStore {
       ancestor = parent;
     }
   }
-}
-
-function entrySearchScore(entry: MarkdownEntry, query: string, terms: string[]): number {
-  const path = entry.path.toLowerCase();
-  const content = entry.content.toLowerCase();
-  const title = (
-    rustLines(entry.content).find((line) => rustTrimStart(line).startsWith("#")) ?? ""
-  ).toLowerCase();
-
-  let score = 0;
-  if (path.includes(query)) score += 50;
-  if (title.includes(query)) score += 40;
-  if (content.includes(query)) score += 30;
-
-  for (const term of terms) {
-    if (path.includes(term)) score += 12;
-    if (title.includes(term)) score += 10;
-    if (content.includes(term)) score += 4;
-  }
-
-  return score;
 }
