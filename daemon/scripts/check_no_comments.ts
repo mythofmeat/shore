@@ -3,6 +3,14 @@ import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { Glob } from "bun";
 
+if (typeof ts.createSourceFile !== "function") {
+  const resolved = Bun.resolveSync("typescript", import.meta.dir);
+  console.error(`typescript ${ts.version} at ${resolved} has no compiler API.`);
+  console.error(`Run \`bun install\` in daemon/. Without node_modules bun falls back to a`);
+  console.error(`globally cached typescript, and 7.x exports only its version from the root.`);
+  process.exit(1);
+}
+
 const ROOT = join(import.meta.dir, "..");
 const ROOTS = [join(ROOT, "src"), join(ROOT, "tests"), join(ROOT, "scripts")];
 const CLIENT = join(ROOT, "..", "client");
