@@ -539,43 +539,14 @@ function carriesSignature(block: ContentBlock): boolean {
   );
 }
 
-function hasForeignCarrier(block: ContentBlock): boolean {
-  if (block.type !== "thinking") return false;
-  return block.reasoning_details !== undefined || block.reasoning_content !== undefined;
-}
-
 function isThinkingBlock(block: ContentBlock): boolean {
   return block.type === "thinking" || block.type === "redacted_thinking";
 }
 
-function signatureTravels(
-  block: ContentBlock,
-  mintingProvider: string | undefined,
-  mintingModel: string | undefined,
-  activeProvider: string,
-  activeModel: string,
-): boolean {
-  if (!carriesSignature(block)) return true;
-
-  if (hasForeignCarrier(block) && mintingModel !== activeModel) return false;
-
-  if (mintingProvider !== undefined && mintingModel !== undefined) {
-    return mintingProvider === activeProvider && mintingModel === activeModel;
-  }
-  if (mintingProvider !== undefined) {
-    return mintingProvider === activeProvider;
-  }
-  if (block.type === "redacted_thinking" && block.data.startsWith("openrouter.reasoning:")) {
-    return activeProvider.includes("openrouter");
-  }
-  return true;
-}
-
-export function dropUnverifiableThinking(
-  turns: WireMessage[],
-  activeProvider: string,
-  activeModel: string,
-): { messages: WireMessage[]; dropped: number } {
+export function dropUnverifiableThinking(turns: WireMessage[]): {
+  messages: WireMessage[];
+  dropped: number;
+} {
   let dropped = 0;
   const out: WireMessage[] = [];
 
@@ -583,10 +554,7 @@ export function dropUnverifiableThinking(
     const thinking = msg.content.filter(isThinkingBlock);
     const verifiable =
       thinking.length === 0 ||
-      (thinking.every((block) => block.type !== "thinking" || carriesSignature(block)) &&
-        thinking.every((block) =>
-          signatureTravels(block, msg.provider_key, msg.model, activeProvider, activeModel),
-        ));
+      thinking.every((block) => block.type !== "thinking" || carriesSignature(block));
 
     if (verifiable) {
       out.push(msg);
@@ -603,19 +571,15 @@ export function dropUnverifiableThinking(
 }
 
 function replayableForAnthropic(req: SidecarRequest): WireMessage[] {
-  const { messages, dropped } = dropUnverifiableThinking(
-    replayableMessages(req),
-    req.provider_key ?? "",
-    req.model,
-  );
+  const { messages, dropped } = dropUnverifiableThinking(replayableMessages(req));
 
   recordExtraThinkingDrops(req, dropped);
 
   if (dropped > 0) {
     console.warn(
       `shore: ${String(dropped)} thinking block(s) carried no signature this account can ` +
-        `verify, or were minted by another provider or model, and could not travel to ` +
-        `${req.provider_key ?? req.sdk}/${req.model}; the turn goes over the wire stripped`,
+        `verify and could not travel to ${req.provider_key ?? req.sdk}/${req.model}; ` +
+        `the turn goes over the wire stripped`,
     );
   }
   return messages;

@@ -77,7 +77,7 @@ describe("the strip policy stops at a tool-use turn", () => {
     expect(drops.strippedByPolicy).toBe(0);
   });
 
-  test("a model switch leaves the shared replay alone", () => {
+  test("a model switch strips a tool-use turn that the strip policy would have kept", () => {
     const { messages, drops } = replayableMessagesWithDrops(
       request([thinkingWithToolUse()], {
         model: "claude-sonnet-5",
@@ -85,69 +85,51 @@ describe("the strip policy stops at a tool-use turn", () => {
       }),
     );
 
-    expect(messages[0]?.content.some((b) => b.type === "thinking")).toBe(true);
-    expect(drops.strippedByPolicy).toBe(0);
-  });
-
-  test("a model switch still strips a tool-use turn at the anthropic adapter", () => {
-    const { messages, dropped } = dropUnverifiableThinking(
-      [thinkingWithToolUse()],
-      "anthropic",
-      "claude-sonnet-5",
-    );
-
     expect(messages[0]?.content.some((b) => b.type === "thinking")).toBe(false);
-    expect(dropped).toBe(1);
+    expect(drops.strippedByPolicy).toBe(0);
+    expect(drops.unportable).toBe(1);
   });
 });
 
+function mixed(): WireMessage {
+  return {
+    role: "assistant",
+    provider_key: "anthropic",
+    model: "claude-opus-5",
+    content: [
+      { type: "thinking", thinking: "signed", signature: SIG },
+      { type: "thinking", thinking: "capture lost the signature" },
+      { type: "text", text: "answer" },
+    ],
+  };
+}
+
 describe("the anthropic adapter drops per message, never per block", () => {
-  function mixed(): WireMessage {
-    return {
+  test("one unsigned block takes its signed siblings with it", () => {
+    const { messages, dropped } = dropUnverifiableThinking([mixed()]);
+
+    expect(messages[0]?.content).toEqual([{ type: "text", text: "answer" }]);
+    expect(dropped).toBe(2);
+  });
+
+  test("an unsigned block takes a redacted sibling with it too", () => {
+    const message: WireMessage = {
       role: "assistant",
       provider_key: "anthropic",
       model: "claude-opus-5",
       content: [
-        { type: "thinking", thinking: "signed", signature: SIG },
         { type: "thinking", thinking: "capture lost the signature" },
-        { type: "text", text: "answer" },
-      ],
-    };
-  }
-
-  test("one unsigned block takes its signed siblings with it", () => {
-    const { messages, dropped } = dropUnverifiableThinking(
-      [mixed()],
-      "anthropic",
-      "claude-opus-5",
-    );
-
-    expect(messages[0]?.content).toEqual([{ type: "text", text: "answer" }]);
-    expect(dropped).toBe(2);
-  });
-
-  test("a redacted_thinking block is dropped with its regular siblings", () => {
-    const message: WireMessage = {
-      role: "assistant",
-      provider_key: "anthropic",
-      model: "claude-sonnet-5",
-      content: [
-        { type: "thinking", thinking: "signed", signature: SIG },
         { type: "redacted_thinking", data: "opaque" },
         { type: "text", text: "answer" },
       ],
     };
-    const { messages, dropped } = dropUnverifiableThinking(
-      [message],
-      "anthropic",
-      "claude-opus-5",
-    );
+    const { messages, dropped } = dropUnverifiableThinking([message]);
 
     expect(messages[0]?.content).toEqual([{ type: "text", text: "answer" }]);
     expect(dropped).toBe(2);
   });
 
-  test("a message whose blocks all travel keeps every one of them", () => {
+  test("a message whose blocks all carry a signature keeps every one of them", () => {
     const message: WireMessage = {
       role: "assistant",
       provider_key: "anthropic",
@@ -159,21 +141,44 @@ describe("the anthropic adapter drops per message, never per block", () => {
         { type: "text", text: "answer" },
       ],
     };
-    const { messages, dropped } = dropUnverifiableThinking(
-      [message],
-      "anthropic",
-      "claude-opus-5",
-    );
+    const { messages, dropped } = dropUnverifiableThinking([message]);
 
     expect(messages[0]?.content).toHaveLength(4);
     expect(dropped).toBe(0);
   });
+});
 
-  test("every other sdk gets the block untouched", () => {
-    const { messages } = replayableMessagesWithDrops(
-      request([mixed()], { sdk: "moonshot", provider_key: "opencode-go", model: "kimi-k3", replay_prior_thinking: "all" }),
+describe("shared replay drops per message, never per block", () => {
+  test("one unportable block takes its signed siblings with it", () => {
+    const message: WireMessage = {
+      role: "assistant",
+      provider_key: "anthropic",
+      model: "claude-sonnet-5",
+      content: [
+        { type: "thinking", thinking: "signed", signature: SIG },
+        { type: "redacted_thinking", data: "opaque" },
+        { type: "text", text: "answer" },
+      ],
+    };
+    const { messages, drops } = replayableMessagesWithDrops(
+      request([message], { replay_prior_thinking: "all" }),
     );
 
-    expect(messages[0]?.content.filter((b) => b.type === "thinking")).toHaveLength(2);
+    expect(messages[0]?.content).toEqual([{ type: "text", text: "answer" }]);
+    expect(drops.unportable).toBe(2);
+  });
+
+  test("every other sdk refuses a foreign block the same way", () => {
+    const { messages, drops } = replayableMessagesWithDrops(
+      request([mixed()], {
+        sdk: "moonshot",
+        provider_key: "opencode-go",
+        model: "kimi-k3",
+        replay_prior_thinking: "all",
+      }),
+    );
+
+    expect(messages[0]?.content.filter((b) => b.type === "thinking")).toHaveLength(0);
+    expect(drops.unportable).toBe(2);
   });
 });

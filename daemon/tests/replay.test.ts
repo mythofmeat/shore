@@ -26,11 +26,11 @@ function thinkingTurn(block: Record<string, unknown>, provenance: Partial<WireMe
 
 const types = (msgs: WireMessage[]): string[][] => msgs.map((m) => m.content.map((b) => b.type));
 
-describe("shared replay has no opinion about thinking", () => {
+describe("an opaque block travels only to the model that minted it", () => {
   const uncarried = thinkingTurn({ type: "thinking", thinking: "private chain" });
   const signed = { type: "thinking", thinking: "t", signature: "sig" };
 
-  test("an unsigned block survives on every sdk, anthropic included", () => {
+  test("a block carrying nothing opaque survives on every sdk", () => {
     for (const sdk of ["anthropic", "openai", "zai", "deepseek", "moonshot", "gemini"] as const) {
       const out = replayableMessages(
         req({ sdk, model: "m", provider_key: sdk, messages: [uncarried] }),
@@ -39,16 +39,39 @@ describe("shared replay has no opinion about thinking", () => {
     }
   });
 
-  test("thinking minted by another model is not dropped here", () => {
+  test("thinking minted by the active provider and model travels", () => {
     const out = replayableMessages(
       req({
-        messages: [thinkingTurn(signed, { provider_key: "anthropic", model: "claude-opus-4-6" })],
+        messages: [thinkingTurn(signed, { provider_key: "anthropic", model: "claude-opus-4-8" })],
       }),
     );
     expect(types(out)).toEqual([["thinking", "text"]]);
   });
 
-  test("a foreign carrier with unknown provenance is not dropped here", () => {
+  test("thinking minted by another model of the same provider is dropped", () => {
+    const out = replayableMessages(
+      req({
+        messages: [thinkingTurn(signed, { provider_key: "anthropic", model: "claude-opus-4-6" })],
+      }),
+    );
+    expect(types(out)).toEqual([["text"]]);
+  });
+
+  test("thinking minted by another provider is dropped on every sdk", () => {
+    for (const sdk of ["anthropic", "openai", "zai", "gemini", "openrouter", "moonshot"] as const) {
+      const out = replayableMessages(
+        req({
+          sdk,
+          model: "m",
+          provider_key: sdk,
+          messages: [thinkingTurn(signed, { provider_key: "somewhere-else", model: "m" })],
+        }),
+      );
+      expect(types(out), `${sdk} must refuse a foreign signature`).toEqual([["text"]]);
+    }
+  });
+
+  test("a foreign carrier with unknown provenance is dropped", () => {
     const out = replayableMessages(
       req({
         messages: [
@@ -56,10 +79,15 @@ describe("shared replay has no opinion about thinking", () => {
         ],
       }),
     );
-    expect(types(out)).toEqual([["thinking", "text"]]);
+    expect(types(out)).toEqual([["text"]]);
   });
 
-  test("an OpenRouter-tagged redacted blob travels to every sdk", () => {
+  test("a signed block with no provenance at all is dropped rather than assumed", () => {
+    const out = replayableMessages(req({ messages: [thinkingTurn(signed)] }));
+    expect(types(out)).toEqual([["text"]]);
+  });
+
+  test("an OpenRouter-tagged redacted blob travels only back to OpenRouter", () => {
     const blob = {
       role: "assistant" as const,
       content: [
@@ -67,10 +95,15 @@ describe("shared replay has no opinion about thinking", () => {
         { type: "text" as const, text: "answer" },
       ],
     };
-    for (const sdk of ["anthropic", "openrouter", "moonshot"] as const) {
-      expect(types(replayableMessages(req({ sdk, provider_key: sdk, messages: [blob] })))).toEqual([
-        ["redacted_thinking", "text"],
-      ]);
+    expect(
+      types(replayableMessages(req({ sdk: "openrouter", provider_key: "openrouter", messages: [blob] }))),
+    ).toEqual([["redacted_thinking", "text"]]);
+
+    for (const sdk of ["anthropic", "moonshot"] as const) {
+      expect(
+        types(replayableMessages(req({ sdk, provider_key: sdk, messages: [blob] }))),
+        `${sdk} must refuse an OpenRouter blob`,
+      ).toEqual([["text"]]);
     }
   });
 });

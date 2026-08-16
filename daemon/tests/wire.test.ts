@@ -313,18 +313,14 @@ describe("the census survives the real code paths", () => {
     expect(kept).toContain("image");
   });
 
-  test("shared replay hands every block on, unreplayable ones included", () => {
+  test("shared replay has nothing to invalidate in a block carrying no signature", () => {
     const out = replayableMessages(req);
     const kept = out[3]?.content.map((b) => b.type) ?? [];
     expect(kept).toContain("thinking");
   });
 
   test("the anthropic adapter is what loses a message that carries nothing replayable", () => {
-    const { messages } = dropUnverifiableThinking(
-      replayableMessages(req),
-      "anthropic",
-      "claude-opus-4-8",
-    );
+    const { messages } = dropUnverifiableThinking(replayableMessages(req));
     const kept = messages[3]?.content.map((b) => b.type) ?? [];
     expect(kept).toEqual(["text"]);
   });
