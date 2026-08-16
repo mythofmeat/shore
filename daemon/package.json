@@ -9,7 +9,8 @@
     "lint:comments": "bun run scripts/check_no_comments.ts",
     "test": "bun test",
     "lint:citations": "bun run scripts/check_live_citations.ts",
-    "mutate": "bun run scripts/mutate.ts"
+    "mutate": "bun run scripts/mutate.ts",
+    "postinstall": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.28",
