@@ -1,0 +1,28 @@
+#!/bin/sh
+set -u
+
+root=$(CDPATH= cd -- "$(git rev-parse --show-toplevel)" && pwd)
+failed=""
+
+run() {
+    name=$1
+    shift
+    printf '\n===== %s =====\n' "$name"
+    if ! "$@"; then
+        failed="$failed $name"
+    fi
+}
+
+cd "$root/daemon" || exit 1
+run install bun install
+run daemon-tests bun test
+
+cd "$root/client" || exit 1
+run client-tests cargo test --workspace
+
+if [ -n "$failed" ]; then
+    printf '\nfailed:%s\n' "$failed"
+    exit 1
+fi
+
+printf '\nall checks passed\n'
