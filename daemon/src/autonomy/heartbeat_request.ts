@@ -9,13 +9,14 @@ import {
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { toRequestModel, type ResolvedModel } from "../config/models.ts";
 import { resolveDisplayName } from "../config/app.ts";
+import { resolvePromptTemplate } from "../config/dirs.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import { ensureActivePromptSnapshot } from "../memory/deferred_edits.ts";
-import { buildHeartbeatPrompt } from "./heartbeat_shape.ts";
+import { DEFAULT_HEARTBEAT_TEMPLATE, renderHeartbeatPrompt } from "./heartbeat_shape.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
 import { rebuildRequestFromDisk, type RebuildDeps } from "../cache/rebuild.ts";
 
@@ -165,7 +166,11 @@ export async function prepareHeartbeatRequest(
   }
 
   const nowMs = deps.now?.() ?? Date.now();
-  const prompt = buildHeartbeatPrompt(
+  const template =
+    resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ??
+    DEFAULT_HEARTBEAT_TEMPLATE;
+  const prompt = renderHeartbeatPrompt(
+    template,
     formatWallClock(nowMs, deps.timeZone ?? hostZone()),
     resolveDisplayName(config.app.defaults, deps.env),
     fallbackIntervalPhrase(config.app.behavior.autonomy.heartbeat.fallback_heartbeat_interval.asSecs()),

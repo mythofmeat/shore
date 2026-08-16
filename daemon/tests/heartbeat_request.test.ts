@@ -271,6 +271,47 @@ describe("preparing a heartbeat body", () => {
     expect(text).toContain("your next moment will arrive in 3 hours");
   });
 
+  test("uses a heartbeat.md override from the config prompts dir", async () => {
+    const config = await baseConfig();
+    await mkdir(join(config.dirs.config, "prompts"), { recursive: true });
+    await writeFile(
+      join(config.dirs.config, "prompts", "heartbeat.md"),
+      "[{{now}}]\n\ncustom body for {{user}} every {{default_interval}}\n",
+    );
+    await withConversation(config);
+    const cache = new LastRequestCache();
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
+
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+
+    const text = (prepared?.request.messages.at(-1)?.content[0] as { text: string }).text;
+    expect(text).toStartWith("[Thursday 2026-07-30 · 1:00 PM]");
+    expect(text).toContain("custom body");
+    expect(text).toContain("every 1 hour");
+    expect(text).not.toContain("{{");
+  });
+
+  test("prefers a per-character heartbeat.md override", async () => {
+    const config = await baseConfig();
+    await mkdir(join(config.dirs.config, "characters", "alice", "prompts"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(config.dirs.config, "characters", "alice", "prompts", "heartbeat.md"),
+      "char-level {{user}} wakes in {{default_interval}}",
+    );
+    await withConversation(config);
+    const cache = new LastRequestCache();
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
+
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+
+    const text = (prepared?.request.messages.at(-1)?.content[0] as { text: string }).text;
+    expect(text).toContain("char-level");
+    expect(text).toContain("wakes in 1 hour");
+    expect(text).not.toContain("{{");
+  });
+
   test("drops the stale request id from the chat turn that seeded the body", async () => {
     const config = await baseConfig();
     await withConversation(config);

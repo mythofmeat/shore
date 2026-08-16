@@ -1,3 +1,7 @@
+import heartbeatTemplateRaw from "../../prompts/autonomy/heartbeat.md" with { type: "text" };
+
+import { renderTemplate } from "../engine/prompt.ts";
+
 export type WireRole = "user" | "assistant" | "system";
 
 export interface WireTextBlock {
@@ -147,43 +151,28 @@ function deriveContentFromBlocks(blocks: readonly WireTextBlock[]): string {
   return blocks.map((block) => block.text).join("");
 }
 
+export const DEFAULT_HEARTBEAT_TEMPLATE = heartbeatTemplateRaw.trimEnd();
+
+export function renderHeartbeatPrompt(
+  template: string,
+  now: string,
+  userName: string,
+  defaultInterval: string,
+): string {
+  return renderTemplate(
+    template,
+    new Map([
+      ["now", now],
+      ["user", userName],
+      ["default_interval", defaultInterval],
+    ]),
+  );
+}
+
 export function buildHeartbeatPrompt(
   now: string,
   userName: string,
   defaultInterval: string,
 ): string {
-  return `[Current time: ${now}]
-
-[This is a private heartbeat turn — your own time, to use however seems useful. \
-You have real tools and can search or write workspace and memory files, search \
-your conversation history, check the web, generate images, and schedule the next wake.
-
-In addition, you can:
-
-- Schedule your next heartbeat session: use set_next_wake(hours_from_now, \
-reason). The minimum is 1 hour, the maximum is 48 hours. Sooner if you want \
-to come back to something, later if you'd rather rest. If you don't \
-schedule, your next moment will arrive in ${defaultInterval}. This is the \
-next opportunity you will have to send ${userName} an autonomous message or \
-to continue any unfinished or ongoing work from this current heartbeat \
-session.
-
-- Send a message to ${userName}: wrap it in <sendMessage>...</sendMessage>. \
-You have the ability to autonomously and spontaneously send messages to \
-${userName}. Any text included in the \`sendMessage\` tags will be delivered \
-to ${userName}.
-
-Thoughts, tool-use results, and any text in your response that is not part \
-of \`<sendMessage>\` tags are private and ephemeral. If you want to carry \
-something forward, write it down with a workspace tool.
-
-If you have a multi-step task in progress and want future-you to pick it up, \
-record it in MEMORY.md with today's date, and keep it short. MEMORY.md is in \
-your system prompt for every turn — heartbeat and conversation alike — so notes \
-you leave there are visible to your next session either way. Anything durable \
-belongs in a memory/ file instead; MEMORY.md only carries what is still live, \
-and you should clear entries out of it once they are done or stale.
-
-Changes you make to workspace files, including files under memory/, will persist. \
-If nothing needs doing right now, respond with HEARTBEAT_OK and stop.]`;
+  return renderHeartbeatPrompt(DEFAULT_HEARTBEAT_TEMPLATE, now, userName, defaultInterval);
 }

@@ -10,6 +10,7 @@ import {
   extractToolSendMessage,
   generatedImageRef,
   isSendMessageTool,
+  renderHeartbeatPrompt,
   WRAP_UP_NUDGE_TEXT,
   type BudgetAction,
   type ImageRef,
@@ -51,7 +52,6 @@ interface Fixture {
     value: unknown;
     image_ref: { path: string; caption: string | null; data_is_none: boolean } | null;
   }[];
-  prompt: string;
 }
 
 const fixture = (await Bun.file(
@@ -186,9 +186,23 @@ describe("the message it ends up sending", () => {
 });
 
 describe("the prompt", () => {
-  test("is byte-identical to the Rust's", () => {
-    expect(buildHeartbeatPrompt("Thursday 2026-07-30 · 9:00 AM", "Sam", "1 hour")).toBe(
-      fixture.prompt,
+  test("renders time, user, and interval into the built-in template", () => {
+    const prompt = buildHeartbeatPrompt("Thursday 2026-07-30 · 9:00 AM", "Sam", "1 hour");
+    expect(prompt).toStartWith("[Current time: Thursday 2026-07-30 · 9:00 AM]");
+    expect(prompt).toContain("send Sam an autonomous message");
+    expect(prompt).toContain("arrive in 1 hour");
+    expect(prompt).toContain("delivered to Sam.");
+    expect(prompt).not.toContain("{{");
+    expect(prompt).not.toContain("${");
+  });
+
+  test("renders a caller-supplied template through the same variables", () => {
+    const prompt = renderHeartbeatPrompt(
+      "[{{now}}] {{user}} wakes in {{default_interval}}",
+      "Thursday 2026-07-30 · 9:00 AM",
+      "Sam",
+      "2 hours",
     );
+    expect(prompt).toBe("[Thursday 2026-07-30 · 9:00 AM] Sam wakes in 2 hours");
   });
 });
