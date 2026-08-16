@@ -146,7 +146,11 @@ export class ConversationEngine {
   }
 
   async deleteMessage(msgId: string): Promise<void> {
-    await this.#messages.delete(msgId);
+    await this.deleteMessages([msgId]);
+  }
+
+  async deleteMessages(msgIds: readonly string[]): Promise<void> {
+    await this.#messages.deleteAll(msgIds);
     this.#advanceRewrite();
     this.broadcastHistory();
   }

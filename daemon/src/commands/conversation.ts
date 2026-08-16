@@ -1,4 +1,4 @@
-import { mergeToolLoopMessages } from "../engine/merge.ts";
+import { mergeToolLoopMessages, turnMsgIds } from "../engine/merge.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { ImageRef, Message, Role } from "../engine/types.ts";
 import { embedImageData, embedMessagesImageData } from "../engine/wire_images.ts";
@@ -225,17 +225,22 @@ export async function deleteMessages(engine: ConversationEngine, args: Args): Pr
     throw invalidRequest("Missing required argument: refs");
   }
 
-  const merged = mergeToolLoopMessages([...engine.messages()]);
-  const resolved = rawRefs.map((r) => resolveRef(merged, r));
+  const raw = [...engine.messages()];
+  const merged = mergeToolLoopMessages(raw);
+  const turns = rawRefs.map((r) => turnMsgIds(raw, resolveRef(merged, r)));
 
   const deleted: string[] = [];
-  for (const msgId of resolved) {
+  const gone = new Set<string>();
+  for (const turn of turns) {
+    const pending = turn.filter((msgId) => !gone.has(msgId));
+    if (pending.length === 0) continue;
     try {
-      await engine.deleteMessage(msgId);
+      await engine.deleteMessages(pending);
     } catch (e) {
       throw engineError(e);
     }
-    deleted.push(msgId);
+    for (const msgId of pending) gone.add(msgId);
+    deleted.push(...pending);
   }
 
   return { deleted };
