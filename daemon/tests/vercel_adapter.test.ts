@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { generateText, type LanguageModel } from "ai";
+import { MockLanguageModelV3 } from "ai/test";
+import type { LanguageModelV3CallOptions, LanguageModelV3GenerateResult } from "@ai-sdk/provider";
 
 import { buildCall, buildProviderOptions, toUsage, turnToVercel } from "../src/llm/providers/vercel.ts";
 import type { SidecarRequest, TurnMessage } from "../src/llm/types.ts";
@@ -179,5 +182,71 @@ describe("toUsage", () => {
       cache_read_tokens: 0,
       cache_creation_tokens: 0,
     });
+  });
+});
+
+describe("buildCall against the ai SDK's own prompt validation", () => {
+  const conversation: SidecarRequest = {
+    sdk: "moonshot",
+    model: "kimi-k2-thinking",
+    api_key: "sk-test",
+    system: [{ type: "text", text: "You are Poppy." }],
+    messages: [
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+      { role: "assistant", content: [{ type: "text", text: "hello" }] },
+      { role: "system", content: [{ type: "text", text: "be brief" }] },
+      { role: "user", content: [{ type: "text", text: "how are you" }] },
+    ],
+    max_tokens: 1024,
+    replay_prior_thinking: "all",
+  } as unknown as SidecarRequest;
+
+  async function promptSeenByProvider(req: SidecarRequest): Promise<unknown> {
+    let seen: unknown;
+    const model = new MockLanguageModelV3({
+      doGenerate: async (
+        options: LanguageModelV3CallOptions,
+      ): Promise<LanguageModelV3GenerateResult> => {
+        seen = options.prompt;
+        return {
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+            outputTokens: { total: 1, text: 1, reasoning: 0 },
+          },
+          content: [{ type: "text", text: "ok" }],
+          warnings: [],
+        };
+      },
+    });
+    const call = buildCall(req);
+    await generateText({ ...call, model: model as unknown as LanguageModel } as Parameters<
+      typeof generateText
+    >[0]);
+    return seen;
+  }
+
+  test("the character's system prompt travels as instructions, not a message", () => {
+    const call = buildCall(conversation);
+    expect(call.instructions).toBe("You are Poppy.");
+    expect(call.messages?.map((m) => m.role)).toEqual(["user", "assistant", "system", "user"]);
+  });
+
+  test("generateText accepts the call: system prompt first, inline note in place", async () => {
+    expect(await promptSeenByProvider(conversation)).toEqual([
+      { role: "system", content: "You are Poppy." },
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+      { role: "assistant", content: [{ type: "text", text: "hello" }] },
+      { role: "system", content: "be brief" },
+      { role: "user", content: [{ type: "text", text: "how are you" }] },
+    ]);
+  });
+
+  test("a request with no system prompt still validates", async () => {
+    const { system: _system, ...rest } = conversation;
+    const bare: SidecarRequest = { ...rest, messages: [conversation.messages[0]!] };
+    expect(await promptSeenByProvider(bare)).toEqual([
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+    ]);
   });
 });

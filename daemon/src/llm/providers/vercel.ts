@@ -42,7 +42,7 @@ export class VercelProvider implements SidecarProvider {
     let finishReason = "stop";
     let usage: Usage = emptyUsage();
 
-    for await (const part of result.fullStream) {
+    for await (const part of result.stream) {
       switch (part.type) {
         case "reasoning-delta":
           if (part.text.length > 0) {
@@ -117,7 +117,10 @@ export function buildCall(req: SidecarRequest, signal?: AbortSignal): VercelCall
     model: buildModel(req),
     messages: buildMessages(req),
     maxOutputTokens: req.max_tokens,
+    allowSystemInMessages: true,
   };
+  const instructions = systemToText(req.system);
+  if (instructions) call.instructions = instructions;
   const tools = buildTools(req.tools);
   if (tools) call.tools = tools;
   if (req.temperature !== undefined) call.temperature = req.temperature;
@@ -175,8 +178,6 @@ function buildTools(tools: ToolDefinition[] | undefined): ToolSet | undefined {
 
 function buildMessages(req: SidecarRequest): ModelMessage[] {
   const messages: ModelMessage[] = [];
-  const systemText = systemToText(req.system);
-  if (systemText) messages.push({ role: "system", content: systemText });
   const toolNames = new Map<string, string>();
   for (const turn of replayableMessages(req)) {
     const norm = toTurn(turn);
