@@ -1,4 +1,10 @@
-import { applicability, defaultValue, type Field, type Sdk } from "../llm/capabilities.ts";
+import {
+  applicability,
+  defaultValue,
+  type Field,
+  type ModelCapabilities,
+  type Sdk,
+} from "../llm/capabilities.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
@@ -160,6 +166,7 @@ export interface ResolvedModel {
   zaiSubscription?: boolean;
   replayPriorThinking?: ThinkingReplay;
   maxToolIterations?: number;
+  capabilities?: ModelCapabilities;
 }
 
 export function resolvedReplayPriorThinking(
@@ -212,6 +219,7 @@ export function resolvedModelFromParts(
   modelId: string,
   sdkFallback: Sdk,
   fields: ModelConfigFields,
+  capabilities?: ModelCapabilities,
 ): ResolvedModel {
   const merged: ModelConfigFields = { ...fields };
 
@@ -231,11 +239,11 @@ export function resolvedModelFromParts(
     }
   }
 
-  stripRejectedSampler(sdk, modelId, "temperature", merged, "temperature", 1.0);
-  stripRejectedSampler(sdk, modelId, "top_p", merged, "topP", undefined);
-  stripRejectedSampler(sdk, modelId, "budget_tokens", merged, "budgetTokens", undefined);
+  stripRejectedSampler(sdk, modelId, "temperature", merged, "temperature", undefined, capabilities);
+  stripRejectedSampler(sdk, modelId, "top_p", merged, "topP", undefined, capabilities);
+  stripRejectedSampler(sdk, modelId, "budget_tokens", merged, "budgetTokens", undefined, capabilities);
 
-  warnIgnoredFields(sdk, modelId, merged);
+  warnIgnoredFields(sdk, modelId, merged, capabilities);
 
   const resolved: ResolvedModel = {
     name,
@@ -255,6 +263,7 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "budgetTokens", merged.budgetTokens);
   assignIfPresent(resolved, "cacheTtl", merged.cacheTtl);
   assignIfPresent(resolved, "cacheKeepalive", merged.cacheKeepalive);
+  assignIfPresent(resolved, "capabilities", capabilities);
   assignIfPresent(resolved, "openrouterProvider", merged.openrouterProvider);
   assignIfPresent(resolved, "geminiGeneration", merged.geminiGeneration);
   assignIfPresent(resolved, "zaiClearThinking", merged.zaiClearThinking);
@@ -277,20 +286,25 @@ function stripRejectedSampler(
   fields: ModelConfigFields,
   key: "temperature" | "topP" | "budgetTokens",
   silentDefault: number | undefined,
+  capabilities: ModelCapabilities | undefined,
 ): void {
   if (fields[key] === undefined) return;
-  if (applicability(sdk, modelId, field) !== "rejected") return;
+  if (applicability(sdk, modelId, field, capabilities) !== "rejected") return;
   if (fields[key] !== silentDefault) {
     console.warn(
       `shore: dropping \`${field}\` for model ${modelId} (sdk ${sdk}): the ` +
-        `\`${modelId}\` wire rejects it (Claude >=4.7 cutoff or per-model ` +
-        `OpenRouter override)`,
+        `provider reports that this model does not accept it`,
     );
   }
   delete fields[key];
 }
 
-function warnIgnoredFields(sdk: Sdk, modelId: string, fields: ModelConfigFields): void {
+function warnIgnoredFields(
+  sdk: Sdk,
+  modelId: string,
+  fields: ModelConfigFields,
+  capabilities?: ModelCapabilities,
+): void {
   const checks: readonly [Field, boolean][] = [
     ["cache_ttl", fields.cacheTtl !== undefined],
     ["openrouter_provider", fields.openrouterProvider !== undefined],
@@ -299,7 +313,7 @@ function warnIgnoredFields(sdk: Sdk, modelId: string, fields: ModelConfigFields)
     ["zai_subscription", fields.zaiSubscription !== undefined],
   ];
   for (const [field, present] of checks) {
-    if (present && applicability(sdk, modelId, field) === "ignored") {
+    if (present && applicability(sdk, modelId, field, capabilities) === "ignored") {
       console.warn(
         `shore: ignoring \`${field}\` for model ${modelId}: the \`${sdk}\` sdk does not honor it`,
       );
@@ -596,7 +610,7 @@ function parseAuxSection<T>(
 }
 
 function baseProviderDefaults(): ModelConfigFields {
-  return { temperature: 1.0, maxOutputTokens: 8192, maxContextTokens: 200_000 };
+  return { maxOutputTokens: 8192, maxContextTokens: 200_000 };
 }
 
 export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {

@@ -133,7 +133,7 @@ describe("capabilityCheck follows applicability, for every sdk and key", () => {
 
   test("a honored key accepts a value of its own type", () => {
     const inDomain = (sdk: Sdk, model: string, key: string): unknown => {
-      if (key === "reasoning_effort") return reasoningEffortDomain(sdk, model)[0] ?? "low";
+      if (key === "reasoning_effort") return reasoningEffortDomain(sdk)[0] ?? "low";
       if (key === "cache_keepalive") return "55m";
       return 1;
     };
@@ -187,7 +187,7 @@ describe("the three refusals, spelled out", () => {
   });
 
   test("an effort outside the model's domain names the domain", () => {
-    const domain = reasoningEffortDomain("anthropic", "claude-opus-4-8");
+    const domain = reasoningEffortDomain("anthropic");
     const failure = capabilityCheck("anthropic", "claude-opus-4-8", "reasoning_effort", "banana");
     expect(failure?.message).toBe(
       `\`reasoning_effort\` value "banana" is out of domain; allowed: ${domain.join(", ")}`,
@@ -198,7 +198,7 @@ describe("the three refusals, spelled out", () => {
 describe("reasoning effort", () => {
   test("every sdk has a non-empty domain", () => {
     for (const sdk of SDK_VARIANTS) {
-      expect(reasoningEffortDomain(sdk, "some-model").length, sdk).toBeGreaterThan(0);
+      expect(reasoningEffortDomain(sdk).length, sdk).toBeGreaterThan(0);
     }
   });
 
@@ -206,17 +206,17 @@ describe("reasoning effort", () => {
     for (const sdk of SDK_VARIANTS) {
       const failure = capabilityCheck(sdk, "some-model", "reasoning_effort", "off");
       expect(failure === undefined, `${sdk} disagreed with supportsReasoningOff`).toBe(
-        supportsReasoningOff(sdk) || reasoningEffortDomain(sdk, "some-model").includes("off"),
+        supportsReasoningOff(sdk) || reasoningEffortDomain(sdk).includes("off"),
       );
     }
   });
 
-  test("a model override narrows the domain its family gets", () => {
-    const base = reasoningEffortDomain("openrouter", "some-model");
-    for (const model of ["gemini-3.1-pro", "google/gemini-2.5-flash", "x-ai/grok-4"]) {
-      const narrowed = reasoningEffortDomain("openrouter", model);
-      expect(narrowed, model).not.toEqual(base);
-      expect(narrowed.every((e) => base.includes(e)), `${model} left the base domain`).toBe(true);
+  test("discovered effort levels narrow the domain the sdk offers", () => {
+    const base = reasoningEffortDomain("openrouter");
+    for (const levels of [["low", "medium", "high"], ["minimal", "low"]]) {
+      const narrowed = reasoningEffortDomain("openrouter", { effort_levels: levels });
+      expect(narrowed, levels.join("/")).not.toEqual(base);
+      expect(narrowed.every((e) => base.includes(e)), `${levels.join("/")} left the base domain`).toBe(true);
     }
   });
 });
@@ -248,7 +248,11 @@ describe("keyApplicability", () => {
   });
 
   test("sampling is rejected on the models that reject it, honored on the rest", () => {
-    expect(keyApplicability("anthropic", "claude-opus-4-8")["temperature"]).toBe("rejected");
+    expect(
+      keyApplicability("anthropic", "claude-opus-4-8", {
+        supported_parameters: ["reasoning", "max_tokens"],
+      })["temperature"],
+    ).toBe("rejected");
     expect(keyApplicability("anthropic", "claude-3-5-sonnet-20241022")["temperature"]).toBe(
       "honored",
     );

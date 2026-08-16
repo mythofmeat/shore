@@ -11,7 +11,6 @@ import type {
   ToolResultBlockParam,
 } from "@anthropic-ai/sdk/resources/messages";
 
-import { claudeThinkingCaps, effortBudget } from "../capabilities.ts";
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { resolveImage, imageLabel, omissionNotice } from "../images.ts";
 import type {
@@ -656,31 +655,19 @@ export function buildThinkingParams(
   const wantsAdaptive = effort === "adaptive" || namedEffort !== undefined;
 
   const budget = opts.budget_tokens;
-  const wantsEnabled = budget !== undefined;
 
-  if (!wantsAdaptive && !wantsEnabled) return {};
-
-  const caps = claudeThinkingCaps(model);
-  const requestedBudget = budget;
-
-  if (wantsAdaptive) {
-    if (caps.adaptive) {
-      return {
-        thinking: { type: "adaptive", display },
-        ...(namedEffort !== undefined ? { outputConfig: { effort: namedEffort } } : {}),
-      };
-    }
-    const derived = requestedBudget ?? effortBudget(effort ?? "medium");
-    const b = clampEnabledBudget(derived, maxTokens);
-    return b !== undefined ? { thinking: { type: "enabled", budget_tokens: b } } : {};
-  }
-
-  if (caps.enabled) {
-    const b = clampEnabledBudget(requestedBudget ?? 1024, maxTokens);
+  if (budget !== undefined) {
+    const b = clampEnabledBudget(budget, maxTokens);
     if (b !== undefined) return { thinking: { type: "enabled", budget_tokens: b } };
+    return {};
   }
-  if (caps.adaptive) return { thinking: { type: "adaptive", display } };
-  return {};
+
+  if (!wantsAdaptive) return {};
+
+  return {
+    thinking: { type: "adaptive", display },
+    ...(namedEffort !== undefined ? { outputConfig: { effort: namedEffort } } : {}),
+  };
 }
 
 function emptyUsage(): Usage {

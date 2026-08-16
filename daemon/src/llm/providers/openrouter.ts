@@ -4,6 +4,7 @@ import type {
   ChatMessages,
   ChatFunctionTool,
   ChatRequest,
+  ChatResult,
   ChatStreamChunk,
   ChatToolMessage,
   ChatUsage,
@@ -11,7 +12,7 @@ import type {
 } from "@openrouter/sdk/models";
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { foldEffort } from "../capabilities.ts";
+import { REASONING_OFF } from "../capabilities.ts";
 import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
@@ -40,10 +41,10 @@ export class OpenRouterProvider implements SidecarProvider {
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
     const { client, chatRequest } = buildCall(req, false);
-    const result = await client.chat.send(
+    const result = (await client.chat.send(
       { chatRequest: { ...chatRequest, stream: false } },
       signal ? { fetchOptions: { signal } } : undefined,
-    );
+    )) as ChatResult;
     const choice = result.choices?.[0];
     const message = choice?.message;
     const content_blocks: ContentBlock[] = [];
@@ -194,12 +195,10 @@ export function buildCall(
   if (req.provider_options?.thinking_enabled === false) {
     chatRequest.reasoning = { effort: "none" as NonNullable<ChatRequest["reasoning"]>["effort"] };
   } else {
-    const effortRaw = req.provider_options?.reasoning_effort;
-    if (typeof effortRaw === "string") {
-      const effort = foldEffort("openrouter", effortRaw, req.model);
-      if (effort) {
-        chatRequest.reasoning = { effort: effort as NonNullable<ChatRequest["reasoning"]>["effort"] };
-      }
+    const effort = req.provider_options?.reasoning_effort;
+    if (typeof effort === "string" && effort.length > 0) {
+      const wire = effort === REASONING_OFF ? "none" : effort;
+      chatRequest.reasoning = { effort: wire as NonNullable<ChatRequest["reasoning"]>["effort"] };
     }
   }
 

@@ -107,6 +107,14 @@ export class SegmentReader {
       : this.#manifest.total_compacted_messages;
   }
 
+  archiveDigest(): string {
+    const durable = this.#history?.archiveDigest(this.#character) ?? "";
+    const manifest = this.#manifest.segments
+      .map((entry) => `${entry.file}:${entry.message_count}:${entry.compacted_at}`)
+      .join(",");
+    return `${durable}|${manifest}`;
+  }
+
   entries(): readonly SegmentEntry[] {
     const historyEntries = this.#history?.entries(this.#character) ?? [];
     return historyEntries.length >= this.#manifest.segments.length

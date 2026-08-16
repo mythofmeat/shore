@@ -2,7 +2,6 @@ import {
   GoogleGenAI,
   HarmBlockThreshold,
   HarmCategory,
-  ThinkingLevel,
   type Content,
   type FunctionDeclaration,
   type GenerateContentConfig,
@@ -348,7 +347,7 @@ function buildThinkingConfig(req: SidecarRequest): ThinkingConfig | undefined {
   if (effort === undefined || effort.length === 0) return undefined;
 
   if (generation >= 3) {
-    const level = thinkingLevel(effort);
+    const level = geminiLevelName(effort);
     return level !== undefined ? { thinkingLevel: level } : { thinkingBudget: -1 };
   }
   return { thinkingBudget: -1 };
@@ -360,21 +359,6 @@ export function detectGeminiGeneration(model: string): number {
   const after = model.slice(idx + "gemini-".length);
   const digits = after.match(/^\d+/)?.[0];
   return digits === undefined ? 0 : Number.parseInt(digits, 10);
-}
-
-function thinkingLevel(effort: string): ThinkingLevel | undefined {
-  switch (geminiLevelName(effort)) {
-    case "minimal":
-      return ThinkingLevel.MINIMAL;
-    case "low":
-      return ThinkingLevel.LOW;
-    case "medium":
-      return ThinkingLevel.MEDIUM;
-    case "high":
-      return ThinkingLevel.HIGH;
-    default:
-      return undefined;
-  }
 }
 
 function safetySettings(): SafetySetting[] {

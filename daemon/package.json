@@ -12,15 +12,16 @@
     "mutate": "bun run scripts/mutate.ts"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^2.0.51",
-    "@ai-sdk/moonshotai": "^2.0.40",
-    "@anthropic-ai/sdk": "^0.100.1",
-    "@google/genai": "^2.15.0",
+    "@ai-sdk/deepseek": "^3.0.28",
+    "@ai-sdk/moonshotai": "^3.0.34",
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@google/genai": "^2.17.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openrouter/sdk": "^0.12.79",
-    "ai": "^6.0.238",
+    "@openrouter/sdk": "^1.2.37",
+    "ai": "^7.0.66",
     "matrix-js-sdk": "^42.1.0",
-    "openai": "^6.49.0"
+    "openai": "^7.4.0",
+    "zhipu-ai-provider": "^0.4.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

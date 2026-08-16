@@ -438,7 +438,7 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
   }
 
   const target = settingTarget(ctx, args);
-  const failure = capabilityCheck(target.sdk, target.modelId, key, value);
+  const failure = capabilityCheck(target.sdk, target.modelId, key, value, target.capabilities);
   if (failure !== undefined) throw failure;
 
   const character = scope === "character" ? requireCharacter(ctx) : undefined;
@@ -524,8 +524,8 @@ export function modelSettings(ctx: ModelsContext, args: Args): unknown {
     effective_sampler: samplerJson(sampler),
     saved_global: saved(global),
     saved_character: saved(charPrefs),
-    applicability: keyApplicability(target.sdk, target.modelId),
-    reasoning_effort_domain: reasoningDomain(target.sdk, target.modelId),
+    applicability: keyApplicability(target.sdk, target.modelId, target.capabilities),
+    reasoning_effort_domain: reasoningDomain(target.sdk, target.capabilities),
     scopes: scopesJson(scopes, SETTINGS_SCOPE_FIELDS),
   };
 }

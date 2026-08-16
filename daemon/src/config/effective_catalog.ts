@@ -249,6 +249,7 @@ function buildResolvedFromProvider(
     modelId,
     sdkFallback,
     fields,
+    disc,
   );
 }
 

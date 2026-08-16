@@ -336,15 +336,21 @@ describe("end to end", () => {
     ).toBe(true);
   });
 
-  test("unselected alternatives are opt-in", async () => {
+  test("unselected alternatives are unreachable, with or without the retired flag", async () => {
     const dir = await corpusDir();
-    const ordinary = successful(await run({ query: "third take" }, dir));
-    expect(ordinary.count).toBe(0);
-    const withAlternatives = successful(
-      await run({ query: "third take", include_alternatives: true }, dir),
-    );
-    expect(withAlternatives.count).toBe(1);
-    expect((withAlternatives.results as Json[])[0]?.alternative_index).toBe(2);
+    expect(successful(await run({ query: "third take" }, dir)).count).toBe(0);
+    expect(
+      successful(await run({ query: "third take", include_alternatives: true }, dir)).count,
+    ).toBe(0);
+  });
+
+  test("the active window is unreachable", async () => {
+    const dir = await corpusDir();
+    const result = successful(await run({ query: "tea" }, dir));
+    const ids = (result.results as Json[]).map((entry) => entry.msg_id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids).not.toContain("a-recent");
+    expect(result.searched_messages).toBe(6);
   });
 
   test("time-only results remain chronological", async () => {

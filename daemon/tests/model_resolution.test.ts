@@ -530,13 +530,13 @@ describe("catalogFromSections", () => {
   test("the provider defaults are not shared between models", () => {
     const catalog = catalogFromSections(
       Bun.TOML.parse(
-        '[anthropic.new]\nmodel_id = "claude-opus-4-7"\n[anthropic.old]\nmodel_id = "claude-opus-4-6"\n',
+        '[anthropic.new]\nmodel_id = "claude-opus-4-7"\ntemperature = 0.5\n[anthropic.old]\nmodel_id = "claude-opus-4-6"\n',
       ) as Record<string, unknown>,
       undefined,
       undefined,
     );
-    expect((catalog.chat.get("chat.anthropic.new") as ResolvedModel).temperature).toBeUndefined();
-    expect((catalog.chat.get("chat.anthropic.old") as ResolvedModel).temperature).toBe(1.0);
+    expect((catalog.chat.get("chat.anthropic.new") as ResolvedModel).temperature).toBe(0.5);
+    expect((catalog.chat.get("chat.anthropic.old") as ResolvedModel).temperature).toBeUndefined();
   });
 
   test("the final sort is load-bearing, not a formality", () => {
