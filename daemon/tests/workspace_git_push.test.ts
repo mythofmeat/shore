@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   ensureWorkspaceGitRepo,
+  envWithoutInheritedGitRepo,
   gitCommitAll,
   gitPushWorkspace,
   gitPushWorkspaceBestEffort,
@@ -32,14 +33,24 @@ async function gitAvailable(): Promise<boolean> {
 }
 
 async function git(cwd: string, ...args: string[]): Promise<void> {
-  const proc = Bun.spawn(["git", ...args], { cwd, stdout: "ignore", stderr: "pipe" });
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    env: envWithoutInheritedGitRepo(),
+    stdout: "ignore",
+    stderr: "pipe",
+  });
   if ((await proc.exited) !== 0) {
     throw new Error(`git ${args.join(" ")} failed: ${await new Response(proc.stderr).text()}`);
   }
 }
 
 async function gitOutput(cwd: string, ...args: string[]): Promise<string> {
-  const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "ignore" });
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    env: envWithoutInheritedGitRepo(),
+    stdout: "pipe",
+    stderr: "ignore",
+  });
   const text = await new Response(proc.stdout).text();
   if ((await proc.exited) !== 0) throw new Error(`git ${args.join(" ")} failed`);
   return text.trim();
