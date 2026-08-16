@@ -225,15 +225,16 @@ impl ImageCache {
     }
 
     pub(crate) fn version(&self) -> u64 {
-        ((self.next_id as u64) << 32) | (self.cache.len() as u64)
+        (u64::from(self.next_id) << 32) | (self.cache.len() as u64)
     }
 
     pub(crate) fn clear(&mut self) {
-        if self.protocol == Some(ImageProtocol::Kitty) && !self.cache.is_empty() {
-            if let Some(mut tty) = open_tty_write() {
-                let _ = write!(tty, "\x1b_Ga=d,q=2\x1b\\");
-                let _ = tty.flush();
-            }
+        if self.protocol == Some(ImageProtocol::Kitty)
+            && !self.cache.is_empty()
+            && let Some(mut tty) = open_tty_write()
+        {
+            let _ = write!(tty, "\x1b_Ga=d,q=2\x1b\\");
+            let _ = tty.flush();
         }
         self.cache.clear();
     }
@@ -245,17 +246,17 @@ impl ImageCache {
         max_cols: u16,
         max_rows: u16,
     ) -> (u16, u16) {
-        let cw = self.cell_width as f64;
-        let ch = self.cell_height as f64;
+        let cw = f64::from(self.cell_width);
+        let ch = f64::from(self.cell_height);
 
-        let natural_cols = pw as f64 / cw;
-        let cols_f = natural_cols.min(max_cols as f64).max(1.0);
-        let scale_w = (cols_f * cw) / pw as f64;
-        let rows_from_w = (ph as f64 * scale_w / ch).ceil();
+        let natural_cols = f64::from(pw) / cw;
+        let cols_f = natural_cols.min(f64::from(max_cols)).max(1.0);
+        let scale_w = (cols_f * cw) / f64::from(pw);
+        let rows_from_w = (f64::from(ph) * scale_w / ch).ceil();
 
-        let (cols, rows) = if rows_from_w > max_rows as f64 {
-            let scale_h = (max_rows as f64 * ch) / ph as f64;
-            let cols_from_h = (pw as f64 * scale_h / cw).floor().max(1.0);
+        let (cols, rows) = if rows_from_w > f64::from(max_rows) {
+            let scale_h = (f64::from(max_rows) * ch) / f64::from(ph);
+            let cols_from_h = (f64::from(pw) * scale_h / cw).floor().max(1.0);
             (cols_from_h as u16, max_rows)
         } else {
             (cols_f as u16, rows_from_w as u16)
@@ -303,13 +304,13 @@ pub(crate) fn fixup_placeholder_cells(
         for x in area.x..(area.x + area.width) {
             let cell = &buf[(x, y)];
             let sym = cell.symbol();
-            if let Some(rest) = sym.strip_prefix('\u{2800}') {
-                if !rest.is_empty() {
-                    let mut new_sym = String::with_capacity(4 + rest.len());
-                    new_sym.push('\u{10EEEE}');
-                    new_sym.push_str(rest);
-                    let _ = buf[(x, y)].set_symbol(&new_sym);
-                }
+            if let Some(rest) = sym.strip_prefix('\u{2800}')
+                && !rest.is_empty()
+            {
+                let mut new_sym = String::with_capacity(4 + rest.len());
+                new_sym.push('\u{10EEEE}');
+                new_sym.push_str(rest);
+                let _ = buf[(x, y)].set_symbol(&new_sym);
             }
         }
     }
@@ -340,7 +341,7 @@ fn transmit_kitty_data<W: Write>(w: &mut W, id: u32, encoded: &str) {
         .collect();
 
     for (i, chunk) in chunks.iter().enumerate() {
-        let more = if i + 1 < chunks.len() { 1 } else { 0 };
+        let more = i32::from(i + 1 < chunks.len());
         if i == 0 {
             let _ = write!(w, "\x1b_Ga=t,f=100,q=2,i={id},m={more};{chunk}\x1b\\");
         } else {
@@ -368,8 +369,8 @@ fn image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
             }
             let marker = data[i + 1];
             if marker == 0xC0 || marker == 0xC2 {
-                let h = u16::from_be_bytes([data[i + 5], data[i + 6]]) as u32;
-                let w = u16::from_be_bytes([data[i + 7], data[i + 8]]) as u32;
+                let h = u32::from(u16::from_be_bytes([data[i + 5], data[i + 6]]));
+                let w = u32::from(u16::from_be_bytes([data[i + 7], data[i + 8]]));
                 return Some((w, h));
             }
             if i + 3 < data.len() {
@@ -382,8 +383,8 @@ fn image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
     }
     if data.len() >= 30 && data.starts_with(b"RIFF") && &data[8..12] == b"WEBP" {
         if &data[12..16] == b"VP8 " {
-            let w = (u16::from_le_bytes([data[26], data[27]]) & 0x3FFF) as u32;
-            let h = (u16::from_le_bytes([data[28], data[29]]) & 0x3FFF) as u32;
+            let w = u32::from(u16::from_le_bytes([data[26], data[27]]) & 0x3FFF);
+            let h = u32::from(u16::from_le_bytes([data[28], data[29]]) & 0x3FFF);
             return Some((w, h));
         }
         if &data[12..16] == b"VP8L" && data.len() >= 25 {

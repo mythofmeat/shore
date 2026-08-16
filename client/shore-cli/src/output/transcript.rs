@@ -9,7 +9,7 @@ use super::styling::{
 use super::vocab::{COLOR_ERROR, Tone, indent_to, paint};
 use super::{
     COLOR_RESULT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK, SIGIL_THINKING, SIGIL_TOOL,
-    parse_timestamp, primary_tool_arg, print_dim_line, process_wrap_width, term_width, use_color,
+    parse_timestamp, primary_tool_arg, print_dim_line, process_wrap_width, term_width,
     write_channel_rule, write_process_body, write_section_header, write_sigil_header,
     write_thinking_content_line,
 };
@@ -302,8 +302,6 @@ fn write_log_with_boundary(
 
         render_message_content(out, content_blocks, content, is_tool_result_msg, filter);
 
-        if role_str == "system" && use_color() {}
-
         if let Some(imgs) = images {
             for img in imgs {
                 let label = img["caption"]
@@ -330,18 +328,18 @@ pub(crate) fn print_message_content(data: &serde_json::Value) {
     let content = data["content"].as_str().unwrap_or("");
     let content_blocks = data["content_blocks"].as_array();
 
-    if let Some(blocks) = content_blocks {
-        if !blocks.is_empty() {
-            for block in blocks {
-                if block["type"].as_str() == Some("text") {
-                    let text = block["text"].as_str().unwrap_or("");
-                    if !text.is_empty() {
-                        cli_out!("{text}");
-                    }
+    if let Some(blocks) = content_blocks
+        && !blocks.is_empty()
+    {
+        for block in blocks {
+            if block["type"].as_str() == Some("text") {
+                let text = block["text"].as_str().unwrap_or("");
+                if !text.is_empty() {
+                    cli_out!("{text}");
                 }
             }
-            return;
         }
+        return;
     }
     if !content.is_empty() {
         cli_out!("{content}");

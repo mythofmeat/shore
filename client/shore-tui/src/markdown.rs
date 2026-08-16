@@ -21,12 +21,12 @@ fn render_markdown_inner(text: &str, max_width: Option<usize>) -> Vec<Line<'stat
     let mut renderer = MarkdownRenderer::new(max_width);
     let mut previous_block_end = None;
     for (event, range) in Parser::new_ext(text, markdown_options()).into_offset_iter() {
-        if starts_visual_block(&event) {
-            if let Some(end) = previous_block_end.take() {
-                if range.start > end && source_gap_has_blank_line(&text[end..range.start]) {
-                    renderer.push_blank_line_if_needed();
-                }
-            }
+        if starts_visual_block(&event)
+            && let Some(end) = previous_block_end.take()
+            && range.start > end
+            && source_gap_has_blank_line(&text[end..range.start])
+        {
+            renderer.push_blank_line_if_needed();
         }
 
         let ends_block = ends_visual_block(&event);
@@ -313,8 +313,7 @@ impl MarkdownRenderer {
                 let needs_separator = self
                     .table
                     .as_ref()
-                    .map(|table| table.cell_index > 0)
-                    .unwrap_or(false);
+                    .is_some_and(|table| table.cell_index > 0);
                 if needs_separator {
                     self.push_text(" | ", Style::default().fg(Color::DarkGray));
                 }
@@ -399,7 +398,7 @@ impl MarkdownRenderer {
             }
             TagEnd::TableHead => {
                 self.pop_style();
-                let cols = self.table.as_ref().map(|t| t.last_cell_count).unwrap_or(0);
+                let cols = self.table.as_ref().map_or(0, |t| t.last_cell_count);
                 if cols > 0 {
                     self.lines.push(Line::from(Span::styled(
                         std::iter::repeat_n("---", cols)
@@ -413,7 +412,7 @@ impl MarkdownRenderer {
                 }
             }
             TagEnd::TableRow => {
-                let cell_count = self.table.as_ref().map(|t| t.cell_index).unwrap_or(0);
+                let cell_count = self.table.as_ref().map_or(0, |t| t.cell_index);
                 self.flush_current();
                 if let Some(table) = &mut self.table {
                     table.last_cell_count = cell_count;
@@ -433,13 +432,14 @@ impl MarkdownRenderer {
             }
             TagEnd::Link => {
                 self.pop_style();
-                if let Some(link) = self.link_stack.pop() {
-                    if !link.dest_url.is_empty() && link.dest_url != link.visible {
-                        self.push_text(
-                            &format!(" ({})", link.dest_url),
-                            self.current_style().fg(Color::DarkGray),
-                        );
-                    }
+                if let Some(link) = self.link_stack.pop()
+                    && !link.dest_url.is_empty()
+                    && link.dest_url != link.visible
+                {
+                    self.push_text(
+                        &format!(" ({})", link.dest_url),
+                        self.current_style().fg(Color::DarkGray),
+                    );
                 }
             }
             TagEnd::Image | TagEnd::MetadataBlock(_) => {}
@@ -468,12 +468,12 @@ impl MarkdownRenderer {
     fn next_item_prefix(&mut self) -> String {
         let depth = self.list_stack.len().saturating_sub(1);
         let indent = "  ".repeat(depth);
-        if let Some(list) = self.list_stack.last_mut() {
-            if list.next > 0 {
-                let n = list.next;
-                list.next += 1;
-                return format!("{indent}{n}. ");
-            }
+        if let Some(list) = self.list_stack.last_mut()
+            && list.next > 0
+        {
+            let n = list.next;
+            list.next += 1;
+            return format!("{indent}{n}. ");
         }
 
         let marker = match depth % 3 {

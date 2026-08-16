@@ -16,10 +16,6 @@ const SECONDS_PER_MINUTE: u64 = 60;
 const SECONDS_PER_HOUR: u64 = 3_600;
 const SECONDS_PER_DAY: u64 = 86_400;
 
-#[expect(
-    clippy::float_arithmetic,
-    reason = "heatmap rendering maps a normalized float density onto eight display glyphs"
-)]
 fn checked_div_u64(value: u64, divisor: u64) -> u64 {
     value.checked_div(divisor).unwrap_or_default()
 }
@@ -27,15 +23,6 @@ fn checked_div_u64(value: u64, divisor: u64) -> u64 {
 fn checked_rem_u64(value: u64, divisor: u64) -> u64 {
     value.checked_rem(divisor).unwrap_or_default()
 }
-
-#[expect(
-    clippy::float_arithmetic,
-    reason = "CLI usage summaries add daemon-provided f64 display costs for rounded totals only"
-)]
-#[expect(
-    clippy::float_arithmetic,
-    reason = "activity heatmap uses visual-only logarithmic scaling of normalized f64 densities"
-)]
 
 pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
     match name {
@@ -314,12 +301,10 @@ fn display_payload_body(body: &serde_json::Value) -> String {
     match body {
         serde_json::Value::Null => String::new(),
         serde_json::Value::String(text) => text.clone(),
-        value @ serde_json::Value::Bool(_)
-        | value @ serde_json::Value::Number(_)
-        | value @ serde_json::Value::Array(_)
-        | value @ serde_json::Value::Object(_) => {
-            serde_json::to_string_pretty(value).unwrap_or_default()
-        }
+        value @ (serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::Array(_)
+        | serde_json::Value::Object(_)) => serde_json::to_string_pretty(value).unwrap_or_default(),
     }
 }
 
@@ -715,7 +700,7 @@ fn print_keepalive_ping(data: &serde_json::Value) {
     match status {
         "warm" => cli_out!("Ping for {character}: warm — read {read} cached tokens."),
         "cold" => {
-            cli_out!("Ping for {character}: COLD — read nothing, wrote {written} cache tokens.")
+            cli_out!("Ping for {character}: COLD — read nothing, wrote {written} cache tokens.");
         }
         other => cli_out!("Ping for {character}: {other}."),
     }
@@ -1126,7 +1111,7 @@ fn print_provider_refresh_all(data: &serde_json::Value) {
                 let count = r["model_count"].as_u64().unwrap_or(0);
                 let fetched = r["fetched_at"].as_str().unwrap_or("?");
                 if use_color() {
-                    paint(&mut out, Tone::Good, &format!("  ok  "));
+                    paint(&mut out, Tone::Good, "  ok  ");
                 } else {
                     indent_to(&mut out, 0);
                     _ = write!(out, "ok  ");
@@ -1136,7 +1121,7 @@ fn print_provider_refresh_all(data: &serde_json::Value) {
                 fail_count = fail_count.saturating_add(1);
                 let err = r["error"].as_str().unwrap_or("unknown error");
                 if use_color() {
-                    paint(&mut out, COLOR_ERROR, &format!("  FAIL"));
+                    paint(&mut out, COLOR_ERROR, "  FAIL");
                 } else {
                     indent_to(&mut out, 0);
                     _ = write!(out, "FAIL");
@@ -1146,16 +1131,16 @@ fn print_provider_refresh_all(data: &serde_json::Value) {
         }
     }
 
-    if let Some(skipped) = data["skipped"].as_array() {
-        if !skipped.is_empty() {
+    if let Some(skipped) = data["skipped"].as_array()
+        && !skipped.is_empty()
+    {
+        _ = writeln!(out);
+        write_section_header(&mut out, "Skipped", "", width);
+        for s in skipped {
+            let provider = s["provider"].as_str().unwrap_or("?");
+            let reason = s["reason"].as_str().unwrap_or("?");
+            paint(&mut out, Tone::Muted, &format!("  {provider}: {reason}"));
             _ = writeln!(out);
-            write_section_header(&mut out, "Skipped", "", width);
-            for s in skipped {
-                let provider = s["provider"].as_str().unwrap_or("?");
-                let reason = s["reason"].as_str().unwrap_or("?");
-                paint(&mut out, Tone::Muted, &format!("  {provider}: {reason}"));
-                _ = writeln!(out);
-            }
         }
     }
 
@@ -1197,27 +1182,27 @@ fn print_character_info(data: &serde_json::Value) {
         write_row_colored(&mut out, "Config override", "yes", Tone::Warn);
     }
 
-    if let Some(overrides) = data["prompt_overrides"].as_array() {
-        if !overrides.is_empty() {
-            let names: Vec<&str> = overrides.iter().filter_map(|v| v.as_str()).collect();
-            write_row(&mut out, "Prompts", &names.join(", "));
-        }
+    if let Some(overrides) = data["prompt_overrides"].as_array()
+        && !overrides.is_empty()
+    {
+        let names: Vec<&str> = overrides.iter().filter_map(|v| v.as_str()).collect();
+        write_row(&mut out, "Prompts", &names.join(", "));
     }
 
     if let Some(dir) = data["data_dir"].as_str() {
         write_row(&mut out, "Data", dir);
     }
 
-    if let Some(preview) = data["definition_preview"].as_str() {
-        if !preview.is_empty() {
+    if let Some(preview) = data["definition_preview"].as_str()
+        && !preview.is_empty()
+    {
+        _ = writeln!(out);
+        write_section_header(&mut out, "Preview", "", width);
+        for line in preview.lines().take(8) {
+            paint(&mut out, Tone::Muted, &format!("  {line}"));
             _ = writeln!(out);
-            write_section_header(&mut out, "Preview", "", width);
-            for line in preview.lines().take(8) {
-                paint(&mut out, Tone::Muted, &format!("  {line}"));
-                _ = writeln!(out);
-            }
-            if false {}
         }
+        if false {}
     }
     _ = writeln!(out);
 }
@@ -1286,14 +1271,14 @@ fn print_config_reload(data: &serde_json::Value) {
     } else {
     }
 
-    if let Some(sections) = data["restart_required"].as_array() {
-        if !sections.is_empty() {
-            let list: Vec<&str> = sections.iter().filter_map(|s| s.as_str()).collect();
-            cli_out!(
-                "Restart shore-daemon to apply startup-owned changes: {}",
-                list.join(", ")
-            );
-        }
+    if let Some(sections) = data["restart_required"].as_array()
+        && !sections.is_empty()
+    {
+        let list: Vec<&str> = sections.iter().filter_map(|s| s.as_str()).collect();
+        cli_out!(
+            "Restart shore-daemon to apply startup-owned changes: {}",
+            list.join(", ")
+        );
     }
 }
 
@@ -1778,16 +1763,16 @@ mod tests {
 
         set_color_enabled(true);
         let mut stdout = io::stdout();
-        let _ignored = stdout.write_all(b"\n----- shore trace calls 9012 -----\n");
+        _ = stdout.write_all(b"\n----- shore trace calls 9012 -----\n");
         print_call_log(&serde_json::json!({
             "enabled": true, "call": call, "wire": bare,
         }));
-        let _ignored = stdout.write_all(b"----- shore trace calls 9012 --wire -----\n");
+        _ = stdout.write_all(b"----- shore trace calls 9012 --wire -----\n");
         print_call_log(&serde_json::json!({
             "enabled": true, "call": call, "wire": wire,
         }));
         set_color_enabled(false);
-        let _ignored = stdout.write_all(b"----- end -----\n");
+        _ = stdout.write_all(b"----- end -----\n");
         _ = stdout.flush();
     }
 

@@ -10,7 +10,6 @@
     clippy::exit,
     clippy::expect_used,
     clippy::float_arithmetic,
-    clippy::impl_trait_in_params,
     clippy::indexing_slicing,
     clippy::integer_division,
     clippy::let_underscore_must_use,
@@ -231,8 +230,7 @@ impl TuiDebugConfig {
             frame_dump_path: lookup(ENV_TUI_DEBUG_FRAMES).map(PathBuf::from),
             no_image_probe: lookup(ENV_TUI_DEBUG_NO_IMAGE_PROBE)
                 .as_deref()
-                .map(parse_bool_env)
-                .unwrap_or(false),
+                .is_some_and(parse_bool_env),
         })
     }
 
@@ -271,7 +269,7 @@ impl TuiFixtureConfig {
                 )),
                 FixtureRole::User => {
                     app.entries
-                        .push(ConversationEntry::user(content.clone(), vec![], timestamp))
+                        .push(ConversationEntry::user(content.clone(), vec![], timestamp));
                 }
                 FixtureRole::System => app.entries.push(ConversationEntry::System {
                     content: content.clone(),
@@ -426,10 +424,10 @@ fn resolve_character(cli_character: Option<String>) -> Option<String> {
     if cli_character.is_some() {
         return cli_character;
     }
-    if let Ok(val) = std::env::var("SHORE_CHARACTER") {
-        if !val.is_empty() {
-            return Some(val);
-        }
+    if let Ok(val) = std::env::var("SHORE_CHARACTER")
+        && !val.is_empty()
+    {
+        return Some(val);
     }
     shore_common::active_character::read_active_character()
 }
@@ -451,46 +449,49 @@ fn legacy_prefs_path() -> std::path::PathBuf {
 fn load_prefs(app: &mut App) {
     let data = std::fs::read_to_string(prefs_path())
         .or_else(|_| std::fs::read_to_string(legacy_prefs_path()));
-    if let Ok(data) = data {
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data) {
-            if let Some(b) = v.get("show_thinking").and_then(|v| v.as_bool()) {
-                app.show_thinking = b;
-            }
-            if let Some(b) = v.get("show_tools").and_then(|v| v.as_bool()) {
-                app.show_tools = b;
-            }
-            if let Some(b) = v.get("show_subagent").and_then(|v| v.as_bool()) {
-                app.show_subagent = b;
-            }
-            if let Some(b) = v.get("show_images").and_then(|v| v.as_bool()) {
-                app.show_images = b;
-            }
-            if let Some(b) = v.get("show_timestamps").and_then(|v| v.as_bool()) {
-                app.show_timestamps = b;
-            }
-            if let Some(b) = v.get("show_metadata").and_then(|v| v.as_bool()) {
-                app.show_metadata = b;
-            }
-            if let Some(mode) = v
-                .get("usage_display")
-                .and_then(|v| v.as_str())
-                .and_then(app::UsageDisplay::from_token)
-            {
-                app.usage_display = mode;
-            } else if let Some(b) = v.get("show_usage").and_then(|v| v.as_bool()) {
-                app.usage_display = if b {
-                    app::UsageDisplay::Always
-                } else {
-                    app::UsageDisplay::Off
-                };
-            }
-            if let Some(focus) = v
-                .get("budget_focus")
-                .and_then(|v| v.as_str())
-                .and_then(app::BudgetFocus::from_token)
-            {
-                app.budget_focus = focus;
-            }
+    if let Ok(data) = data
+        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&data)
+    {
+        if let Some(b) = v.get("show_thinking").and_then(serde_json::Value::as_bool) {
+            app.show_thinking = b;
+        }
+        if let Some(b) = v.get("show_tools").and_then(serde_json::Value::as_bool) {
+            app.show_tools = b;
+        }
+        if let Some(b) = v.get("show_subagent").and_then(serde_json::Value::as_bool) {
+            app.show_subagent = b;
+        }
+        if let Some(b) = v.get("show_images").and_then(serde_json::Value::as_bool) {
+            app.show_images = b;
+        }
+        if let Some(b) = v
+            .get("show_timestamps")
+            .and_then(serde_json::Value::as_bool)
+        {
+            app.show_timestamps = b;
+        }
+        if let Some(b) = v.get("show_metadata").and_then(serde_json::Value::as_bool) {
+            app.show_metadata = b;
+        }
+        if let Some(mode) = v
+            .get("usage_display")
+            .and_then(|v| v.as_str())
+            .and_then(app::UsageDisplay::from_token)
+        {
+            app.usage_display = mode;
+        } else if let Some(b) = v.get("show_usage").and_then(serde_json::Value::as_bool) {
+            app.usage_display = if b {
+                app::UsageDisplay::Always
+            } else {
+                app::UsageDisplay::Off
+            };
+        }
+        if let Some(focus) = v
+            .get("budget_focus")
+            .and_then(|v| v.as_str())
+            .and_then(app::BudgetFocus::from_token)
+        {
+            app.budget_focus = focus;
         }
     }
 }
@@ -507,11 +508,11 @@ fn save_prefs(app: &App) {
         "budget_focus": app.budget_focus.as_token(),
     });
     let path = prefs_path();
-    if let Some(dir) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(dir) {
-            warn!("failed to create prefs dir {}: {e}", dir.display());
-            return;
-        }
+    if let Some(dir) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        warn!("failed to create prefs dir {}: {e}", dir.display());
+        return;
     }
     let tmp = path.with_extension("json.tmp");
     if let Err(e) = std::fs::write(&tmp, v.to_string()) {
@@ -651,8 +652,7 @@ fn which_exists(cmd: &str) -> bool {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .is_ok_and(|s| s.success())
 }
 
 async fn send_conn_commands(
@@ -760,9 +760,7 @@ fn absorb_subagent_traces(app: &mut App, data: &serde_json::Value) {
     }
 
     for id in std::mem::take(&mut app.pending_subagent_trace_ids) {
-        if !app.subagent_traces.contains_key(&id) {
-            drop(app.subagent_traces.insert(id, None));
-        }
+        _ = app.subagent_traces.entry(id).or_insert(None);
     }
 
     splice_subagent_sections(&mut app.entries, &app.subagent_traces);
@@ -1007,42 +1005,39 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
                 app.should_quit = true;
             }
             conn_event = event_rx.recv(), if conn_events_open => {
-                match conn_event {
-                    Some(event) => {
-                        process_conn_event(
-                            &mut app,
-                            &cmd_tx,
-                            event,
-                            &mut needs_redraw,
-                            &mut deferred_stream_dirty,
-                            &mut needs_full_redraw,
-                        ).await;
+                if let Some(event) = conn_event {
+                    process_conn_event(
+                        &mut app,
+                        &cmd_tx,
+                        event,
+                        &mut needs_redraw,
+                        &mut deferred_stream_dirty,
+                        &mut needs_full_redraw,
+                    ).await;
 
-                        loop {
-                            match event_rx.try_recv() {
-                                Ok(event) => {
-                                    process_conn_event(
-                                        &mut app,
-                                        &cmd_tx,
-                                        event,
-                                        &mut needs_redraw,
-                                        &mut deferred_stream_dirty,
-                                        &mut needs_full_redraw,
-                                    ).await;
-                                }
-                                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
-                                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                                    mark_connection_task_exited(&mut app, &mut conn_events_open);
-                                    break;
-                                }
+                    loop {
+                        match event_rx.try_recv() {
+                            Ok(event) => {
+                                process_conn_event(
+                                    &mut app,
+                                    &cmd_tx,
+                                    event,
+                                    &mut needs_redraw,
+                                    &mut deferred_stream_dirty,
+                                    &mut needs_full_redraw,
+                                ).await;
+                            }
+                            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
+                            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                                mark_connection_task_exited(&mut app, &mut conn_events_open);
+                                break;
                             }
                         }
+                    }
 
-                    }
-                    None => {
-                        mark_connection_task_exited(&mut app, &mut conn_events_open);
-                        needs_redraw = true;
-                    }
+                } else {
+                    mark_connection_task_exited(&mut app, &mut conn_events_open);
+                    needs_redraw = true;
                 }
             }
             terminal_event = terminal_events.next() => {
@@ -1136,11 +1131,11 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
             app.usage_budgets.clear();
-            app.characters = characters.clone();
+            app.characters.clone_from(&characters);
 
             app.character_name = next_character;
 
-            if let Some(private) = config.get("private").and_then(|v| v.as_bool()) {
+            if let Some(private) = config.get("private").and_then(serde_json::Value::as_bool) {
                 app.is_private = private;
             }
             app.set_active_model(config.get("active_model").and_then(|v| v.as_str()));
@@ -1252,7 +1247,7 @@ fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start:
 fn accumulate_metadata(slot: &mut Option<StreamMetadata>, incoming: &StreamMetadata) {
     match slot {
         Some(acc) => {
-            acc.model = incoming.model.clone();
+            acc.model.clone_from(&incoming.model);
             acc.tokens.input += incoming.tokens.input;
             acc.tokens.output += incoming.tokens.output;
             acc.tokens.cache_read += incoming.tokens.cache_read;
@@ -1280,11 +1275,11 @@ fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
     app.history_page_loading = false;
     app.history_next_before = data
         .get("next_before")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .map(|v| v as usize);
     app.history_has_more_before = data
         .get("has_more_before")
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
 
     let Some(messages) = data.get("messages").and_then(|v| v.as_array()) else {
@@ -1372,7 +1367,7 @@ fn splice_subagent_sections(
             nested.extend(section.blocks.iter().cloned());
             nested.push(Block::SubagentEnd(section.name.clone()));
             let inserted = nested.len();
-            drop(turn.blocks.splice(i + 1..i + 1, nested));
+            drop(turn.blocks.splice((i + 1)..=i, nested));
             i += inserted + 1;
         }
     }
@@ -1621,7 +1616,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 Some(turn) => {
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
-                        turn.msg_id = end.msg_id.clone();
+                        turn.msg_id.clone_from(&end.msg_id);
                     }
                     if final_phase {
                         if !end.content.is_empty()
@@ -1648,7 +1643,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     let turn = app.ensure_streaming_turn();
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
-                        turn.msg_id = end.msg_id.clone();
+                        turn.msg_id.clone_from(&end.msg_id);
                     }
                 }
             }
@@ -1665,11 +1660,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     cmds: vec![usage_budget_conn_command()],
                     redraw: RedrawEffect::ImmediateFull,
                 };
-            } else {
-                app.stream.phase = "tool_use".into();
-                app.stream.tool_name = None;
-                RedrawEffect::Immediate
             }
+            app.stream.phase = "tool_use".into();
+            app.stream.tool_name = None;
+            RedrawEffect::Immediate
         }
 
         ServerMessage::Phase(phase) => {
@@ -1730,18 +1724,18 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         let active_start = co
                             .data
                             .get("active_start")
-                            .and_then(|v| v.as_u64())
+                            .and_then(serde_json::Value::as_u64)
                             .unwrap_or(0) as usize;
                         rebuild_entries_from_history(app, history, active_start);
                         app.history_next_before = co
                             .data
                             .get("next_before")
-                            .and_then(|v| v.as_u64())
+                            .and_then(serde_json::Value::as_u64)
                             .map(|v| v as usize);
                         app.history_has_more_before = co
                             .data
                             .get("has_more_before")
-                            .and_then(|v| v.as_bool())
+                            .and_then(serde_json::Value::as_bool)
                             .unwrap_or(false);
                         app.history_page_loading = false;
                         transmit_entry_images(app);
@@ -1812,12 +1806,18 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     app.subagent_traces.clear();
                     app.pending_subagent_trace_ids.clear();
                     app.effective_sampler = None;
-                    if co.data.get("active_model").is_some_and(|v| v.is_null()) {
+                    if co
+                        .data
+                        .get("active_model")
+                        .is_some_and(serde_json::Value::is_null)
+                    {
                         app.set_active_model(None);
                     } else {
                         app.set_active_model(co.data.get("active_model").and_then(|v| v.as_str()));
                     }
-                    if let Some(private) = co.data.get("private").and_then(|v| v.as_bool()) {
+                    if let Some(private) =
+                        co.data.get("private").and_then(serde_json::Value::as_bool)
+                    {
                         app.is_private = private;
                     }
                     if let Some(name) = co.data.get("character").and_then(|v| v.as_str()) {
@@ -1858,12 +1858,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             let hidden_count = co
                                 .data
                                 .get("hidden_count")
-                                .and_then(|v| v.as_u64())
+                                .and_then(serde_json::Value::as_u64)
                                 .unwrap_or(0);
                             let include_hidden = co
                                 .data
                                 .get("include_hidden")
-                                .and_then(|v| v.as_bool())
+                                .and_then(serde_json::Value::as_bool)
                                 .unwrap_or(false);
                             let list = models
                                 .iter()
@@ -1878,8 +1878,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                     };
                                     let source =
                                         m.get("source").and_then(|v| v.as_str()).unwrap_or("");
-                                    let hidden =
-                                        m.get("hidden").and_then(|v| v.as_bool()).unwrap_or(false);
+                                    let hidden = m
+                                        .get("hidden")
+                                        .and_then(serde_json::Value::as_bool)
+                                        .unwrap_or(false);
                                     let marker = if model_switch_name(m)
                                         .is_some_and(|s| app.is_active_model_candidate(&s))
                                     {
@@ -1925,14 +1927,13 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             app.note_active_model_from_snapshot(&snapshot);
                             app.effective_sampler = Some(snapshot);
                         }
-                    } else if co.rid.is_none() {
-                        if let Some(snapshot) = snapshot
+                    } else if co.rid.is_none()
+                        && let Some(snapshot) = snapshot
                             .filter(|snapshot| app.sampler_snapshot_matches_active_model(snapshot))
-                        {
-                            app.finish_sampler_settings_refresh();
-                            app.note_active_model_from_snapshot(&snapshot);
-                            app.effective_sampler = Some(snapshot);
-                        }
+                    {
+                        app.finish_sampler_settings_refresh();
+                        app.note_active_model_from_snapshot(&snapshot);
+                        app.effective_sampler = Some(snapshot);
                     }
                     if app.is_setting_palette_open() {
                         app.update_completions();
@@ -1963,11 +1964,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         .get("key")
                         .and_then(|v| v.as_str())
                         .unwrap_or("setting");
-                    let value_is_null = co
-                        .data
-                        .get("value")
-                        .map(|value| value.is_null())
-                        .unwrap_or(true);
+                    let value_is_null = co.data.get("value").is_none_or(serde_json::Value::is_null);
                     if value_is_null {
                         app.set_status(format!("reset {key}"));
                     } else {
@@ -1998,16 +1995,19 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             items
                                 .iter()
                                 .map(|item| AltChoice {
-                                    index: item.get("index").and_then(|v| v.as_u64()).unwrap_or(0)
+                                    index: item
+                                        .get("index")
+                                        .and_then(serde_json::Value::as_u64)
+                                        .unwrap_or(0)
                                         as u32,
                                     position: item
                                         .get("position")
-                                        .and_then(|v| v.as_u64())
+                                        .and_then(serde_json::Value::as_u64)
                                         .unwrap_or(0)
                                         as u32,
                                     active: item
                                         .get("active")
-                                        .and_then(|v| v.as_bool())
+                                        .and_then(serde_json::Value::as_bool)
                                         .unwrap_or(false),
                                     content: item
                                         .get("content")
@@ -2033,12 +2033,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     let position = co
                         .data
                         .get("position")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .unwrap_or(0);
                     let count = co
                         .data
                         .get("alt_count")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .unwrap_or(0);
                     app.set_status(format!("alt {position}/{count}"));
                 }
@@ -2094,7 +2094,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::UsageWarning(w) => {
-            if app.usage_display != UsageDisplay::Off {
+            if app.usage_display == UsageDisplay::Off {
+                app.set_warning(w.message.clone());
+            } else {
                 let scope = if w.scope.as_deref() == Some("pace") {
                     UsageScope::Pace
                 } else {
@@ -2109,14 +2111,16 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         over_limit: w.percent_used >= 1.0,
                     },
                 );
-            } else {
-                app.set_warning(w.message.clone());
             }
             RedrawEffect::Immediate
         }
 
         ServerMessage::History(hist) => {
-            if let Some(private) = hist.config.get("private").and_then(|v| v.as_bool()) {
+            if let Some(private) = hist
+                .config
+                .get("private")
+                .and_then(serde_json::Value::as_bool)
+            {
                 app.is_private = private;
             }
             app.set_active_model(hist.config.get("active_model").and_then(|v| v.as_str()));

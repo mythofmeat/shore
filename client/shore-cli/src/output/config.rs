@@ -809,7 +809,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "writes rendered output to stdout for visual inspection; run with --ignored"]
     fn render_preview_config_set() {
         set_color_enabled(true);
         let mut buf = Vec::new();

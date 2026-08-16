@@ -1203,7 +1203,7 @@ pub(crate) fn to_swp_command(
     use serde_json::json;
     match cmd {
         CliCommand::Send { system: false, .. }
-        | CliCommand::Regen { .. }
+        | CliCommand::Regen
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. }
         | CliCommand::Config {

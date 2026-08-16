@@ -446,7 +446,7 @@ impl Meter {
         reason = "a proportional bar is inherently a ratio of two measured amounts"
     )]
     pub(crate) fn new(current: f64, limit: f64) -> Self {
-        if !(limit > 0.0) || !current.is_finite() {
+        if limit.is_nan() || limit <= 0.0 || !current.is_finite() {
             return Self {
                 filled: 0,
                 over: 0,

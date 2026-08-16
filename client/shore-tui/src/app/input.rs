@@ -45,8 +45,7 @@ impl InputState {
             let prev = self.text[..self.cursor]
                 .char_indices()
                 .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+                .map_or(0, |(i, _)| i);
             drop(self.text.drain(prev..self.cursor));
             self.cursor = prev;
         }
@@ -57,8 +56,7 @@ impl InputState {
             let next = self.text[self.cursor..]
                 .char_indices()
                 .nth(1)
-                .map(|(i, _)| self.cursor + i)
-                .unwrap_or(self.text.len());
+                .map_or(self.text.len(), |(i, _)| self.cursor + i);
             drop(self.text.drain(self.cursor..next));
         }
     }
@@ -91,8 +89,7 @@ impl InputState {
             self.cursor = self.text[..self.cursor]
                 .char_indices()
                 .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+                .map_or(0, |(i, _)| i);
         }
     }
 
@@ -101,22 +98,20 @@ impl InputState {
             self.cursor = self.text[self.cursor..]
                 .char_indices()
                 .nth(1)
-                .map(|(i, _)| self.cursor + i)
-                .unwrap_or(self.text.len());
+                .map_or(self.text.len(), |(i, _)| self.cursor + i);
         }
     }
 
     pub(crate) fn move_home(&mut self) {
         let before = &self.text[..self.cursor];
-        self.cursor = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        self.cursor = before.rfind('\n').map_or(0, |i| i + 1);
     }
 
     pub(crate) fn move_end(&mut self) {
         let after = &self.text[self.cursor..];
         self.cursor = after
             .find('\n')
-            .map(|i| self.cursor + i)
-            .unwrap_or(self.text.len());
+            .map_or(self.text.len(), |i| self.cursor + i);
     }
 
     pub(crate) fn take_text(&mut self) -> String {
@@ -176,8 +171,7 @@ impl InputState {
             let prev = self.cmd_text[..self.cmd_cursor]
                 .char_indices()
                 .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+                .map_or(0, |(i, _)| i);
             drop(self.cmd_text.drain(prev..self.cmd_cursor));
             self.cmd_cursor = prev;
         }

@@ -77,19 +77,17 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
     );
     let _ignored = SESSION_DISPLAY_CHARACTER.set(display_character.clone());
 
-    if let Some(requested) = cli.character.as_deref().filter(|r| !r.is_empty()) {
-        if let Some(serving) = history
+    if let Some(requested) = cli.character.as_deref().filter(|r| !r.is_empty())
+        && let Some(serving) = history
             .selected_character
             .as_deref()
             .filter(|s| !s.is_empty())
-        {
-            if serving != requested {
-                return Err(format!(
+        && serving != requested
+    {
+        return Err(format!(
                     "no character named {requested:?}; the daemon is serving {serving:?}. Run `shore character` to list them."
                 )
                 .into());
-            }
-        }
     }
 
     pre_apply_active_model(&mut conn).await;
@@ -240,7 +238,7 @@ fn wants_json(other: &CliCommand) -> bool {
         ),
         CliCommand::Edit { json, .. } | CliCommand::Delete { json, .. } => *json,
         CliCommand::Send { .. }
-        | CliCommand::Regen { .. }
+        | CliCommand::Regen
         | CliCommand::Alt { .. }
         | CliCommand::Log { .. }
         | CliCommand::Status { .. }

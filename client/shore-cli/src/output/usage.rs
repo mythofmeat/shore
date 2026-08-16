@@ -230,10 +230,6 @@ fn write_budget_meters<W: Write>(out: &mut W, budget: &Value) {
     }
 }
 
-#[expect(
-    clippy::float_arithmetic,
-    reason = "the pace allowance is stated as a base plus rollover minus debt"
-)]
 pub(crate) fn write_budgets<W: Write>(out: &mut W, data: &Value) {
     let budgets = rows_of(data, "budgets");
     section(out, View::Budgets.title(), period_of(data).as_deref());
