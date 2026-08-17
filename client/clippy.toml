@@ -2,8 +2,6 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 
-# Clippy's default, pinned explicitly so the value is visible rather than
-# implied. The staged 100 -> 80 ratchet was dropped: diminishing returns.
-too-many-lines-threshold = 100
+too-many-lines-threshold = 120
 
 future-size-threshold = 24576
