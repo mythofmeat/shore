@@ -3791,6 +3791,11 @@
             "model": "chat.anthropic.one",
             "provider": "anthropic",
             "model_id": "same-id",
+            "background_task": "all",
+            "also_affects": [
+              "chat",
+              "sub-agents"
+            ],
             "key": "temperature",
             "value": 0.6
           },

@@ -1064,14 +1064,51 @@ fn print_alt_list(data: &serde_json::Value) {
     _ = writeln!(out);
 }
 
+fn role_label(role: &str) -> &str {
+    if role == "background" {
+        "background tasks"
+    } else {
+        role
+    }
+}
+
+fn join_names(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 fn print_model_switched(data: &serde_json::Value) {
     let model = data["active"].as_str().unwrap_or("(none)");
-    cli_out!("Switched to model: {}", abbreviate_model(model));
+    let Some(role) = data["role"].as_str() else {
+        cli_out!("Switched to model: {}", abbreviate_model(model));
+        return;
+    };
+    cli_out!(
+        "Pinned {} to: {}",
+        role_label(role),
+        abbreviate_model(model)
+    );
+    let cleared = string_list(data, "cleared");
+    if !cleared.is_empty() {
+        cli_out!("  cleared {}", join_names(&cleared));
+    }
 }
 
 fn print_model_reset(data: &serde_json::Value) {
     let model = data["active"].as_str().unwrap_or("(none)");
-    cli_out!("Model reset to: {}", abbreviate_model(model));
+    let Some(role) = data["role"].as_str() else {
+        cli_out!("Model reset to: {}", abbreviate_model(model));
+        return;
+    };
+    let source = data["source"].as_str().unwrap_or("config default");
+    cli_out!(
+        "Unpinned {}; now {} ({source})",
+        role_label(role),
+        abbreviate_model(model)
+    );
 }
 
 fn print_set_model_setting(data: &serde_json::Value) {
@@ -1083,6 +1120,15 @@ fn print_set_model_setting(data: &serde_json::Value) {
         None => "(cleared)".to_owned(),
     };
     let model = data["model"].as_str().unwrap_or("?");
+    let also = string_list(data, "also_affects");
+    if !also.is_empty() {
+        let task = data["background_task"].as_str().unwrap_or("that task");
+        cli_out!(
+            "note: {} shares {model} with {} — {key} applies there too",
+            role_label(task),
+            join_names(&also)
+        );
+    }
     cli_out!("[{scope}] {key} = {value}  ({})", abbreviate_model(model));
 }
 
@@ -2064,6 +2110,95 @@ mod tests {
                 }],
             }),
         );
+    }
+
+    #[test]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh roles"]
+    fn render_preview_model_roles() {
+        let cases: [(&str, fn()); 5] = [
+            ("shore model use --background heartbeat kimi-k3", || {
+                print_model_switched(&serde_json::json!({
+                    "active": "openrouter:moonshotai/kimi-k3",
+                    "role": "heartbeat",
+                    "config_key": "defaults.background.heartbeat",
+                    "cleared": [],
+                }));
+            }),
+            ("shore model use --background all claude-opus-5", || {
+                print_model_switched(&serde_json::json!({
+                    "active": "anthropic:claude-opus-5",
+                    "role": "background",
+                    "config_key": "defaults.background.model",
+                    "cleared": ["defaults.background.heartbeat"],
+                }));
+            }),
+            ("shore model reset --background heartbeat", || {
+                print_model_reset(&serde_json::json!({
+                    "active": "anthropic:claude-opus-4-6",
+                    "role": "heartbeat",
+                    "cleared": ["defaults.background.heartbeat"],
+                    "source": "inherits chat",
+                }));
+            }),
+            (
+                "shore model setting --background heartbeat temperature 0",
+                || {
+                    print_set_model_setting(&serde_json::json!({
+                        "key": "temperature",
+                        "scope": "character",
+                        "value": "0",
+                        "model": "anthropic:claude-opus-4-6",
+                        "background_task": "heartbeat",
+                        "also_affects": ["chat", "sub-agents"],
+                    }));
+                },
+            ),
+            ("shore model use claude-opus-5", || {
+                print_model_switched(&serde_json::json!({"active": "anthropic:claude-opus-5"}));
+            }),
+        ];
+
+        for (label, render) in cases {
+            cli_out!("----- {label} -----");
+            set_color_enabled(true);
+            render();
+            set_color_enabled(false);
+            cli_out!("----- end -----");
+        }
+    }
+
+    #[test]
+    fn a_pinned_role_reads_differently_from_a_chat_switch() {
+        set_color_enabled(false);
+        print_model_switched(&serde_json::json!({"active": "anthropic:claude-opus-5"}));
+        print_model_switched(&serde_json::json!({
+            "active": "anthropic:claude-opus-5",
+            "role": "heartbeat",
+        }));
+    }
+
+    #[test]
+    fn joining_names_reads_as_a_sentence() {
+        assert_eq!(join_names(&[]), "");
+        assert_eq!(join_names(&["chat".to_owned()]), "chat");
+        assert_eq!(
+            join_names(&["chat".to_owned(), "sub-agents".to_owned()]),
+            "chat and sub-agents"
+        );
+        assert_eq!(
+            join_names(&[
+                "chat".to_owned(),
+                "compaction".to_owned(),
+                "sub-agents".to_owned()
+            ]),
+            "chat, compaction and sub-agents"
+        );
+    }
+
+    #[test]
+    fn the_blanket_role_is_named_in_words() {
+        assert_eq!(role_label("background"), "background tasks");
+        assert_eq!(role_label("heartbeat"), "heartbeat");
     }
 
     #[test]

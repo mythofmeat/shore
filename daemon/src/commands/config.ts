@@ -16,7 +16,12 @@ import { serializeConfigValue } from "../config/serialize.ts";
 import { CATALOG_SECTIONS, defaultAppConfig } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
-import { setTomlValue, tomlKeyDefined, TomlEditError } from "../config/toml_edit.ts";
+import {
+  setTomlValue,
+  tomlKeyDefined,
+  unsetTomlValue,
+  TomlEditError,
+} from "../config/toml_edit.ts";
 import { restartRequiredChanges } from "../config/restart.ts";
 import { applyDeferredEdits, changedPromptFiles } from "../memory/deferred_edits.ts";
 import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
@@ -297,21 +302,17 @@ function readOrEmpty(file: string): string {
   }
 }
 
-function configSet(ctx: ConfigContext, rawKey: string, value: string): unknown {
-  const key = canonicalKey(rawKey);
-  const entry = findSchemaEntry(schemaOf(ctx), key);
-  if (entry === undefined) throw notFound(notFoundMessage(rawKey));
+interface ConfigWrite {
+  text: string;
+  action: string;
+}
 
-  let literal: string;
-  try {
-    literal = schemaValueLiteral(entry, value);
-  } catch (e) {
-    if (e instanceof SchemaValueError) throw invalidRequest(`${key}: ${e.message}`);
-    throw e;
-  }
-
-  checkAgainstSource(ctx, entry, value);
-
+function commitConfigKey(
+  ctx: ConfigContext,
+  key: string,
+  edit: (before: string) => ConfigWrite,
+  rejection: string,
+): ConfigSetResult {
   const path = key.split(".");
   const file = targetFile(ctx, path);
   const before = readOrEmpty(file);
@@ -319,9 +320,9 @@ function configSet(ctx: ConfigContext, rawKey: string, value: string): unknown {
   let written: string;
   let action: string;
   try {
-    const edit = setTomlValue(before, path, literal);
-    written = edit.text;
-    action = edit.action;
+    const result = edit(before);
+    written = result.text;
+    action = result.action;
   } catch (e) {
     if (e instanceof TomlEditError) throw invalidRequest(e.message);
     throw e;
@@ -338,7 +339,7 @@ function configSet(ctx: ConfigContext, rawKey: string, value: string): unknown {
     fresh = loadConfig(ctx.configPath, loaderOptions(ctx));
   } catch (e) {
     writeFileSync(file, before);
-    throw invalidRequest(`${key} = ${literal} was rejected: ${message(e)}`);
+    throw invalidRequest(`${rejection} was rejected: ${message(e)}`);
   }
 
   const restart = restartRequiredChanges(ctx.config, fresh);
@@ -355,6 +356,58 @@ function configSet(ctx: ConfigContext, rawKey: string, value: string): unknown {
     masked_by_session: sessionMask(ctx, key),
   };
 }
+
+export interface ConfigSetResult {
+  set: string;
+  value: unknown;
+  previous: unknown;
+  file: string;
+  action: string;
+  restart_required: readonly string[];
+  masked_by_session: string | null;
+}
+
+export function setConfigKey(
+  ctx: ConfigContext,
+  rawKey: string,
+  value: string,
+): ConfigSetResult {
+  const key = canonicalKey(rawKey);
+  const entry = findSchemaEntry(schemaOf(ctx), key);
+  if (entry === undefined) throw notFound(notFoundMessage(rawKey));
+
+  let literal: string;
+  try {
+    literal = schemaValueLiteral(entry, value);
+  } catch (e) {
+    if (e instanceof SchemaValueError) throw invalidRequest(`${key}: ${e.message}`);
+    throw e;
+  }
+
+  checkAgainstSource(ctx, entry, value);
+
+  return commitConfigKey(
+    ctx,
+    key,
+    (before) => setTomlValue(before, key.split("."), literal),
+    `${key} = ${literal}`,
+  );
+}
+
+export function clearConfigKey(ctx: ConfigContext, key: string): ConfigSetResult {
+  return commitConfigKey(
+    ctx,
+    key,
+    (before) => {
+      const removal = unsetTomlValue(before, key.split("."));
+      return { text: removal.text, action: removal.removed ? "removed" : "absent" };
+    },
+    `clearing ${key}`,
+  );
+}
+
+const configSet = (ctx: ConfigContext, rawKey: string, value: string): unknown =>
+  setConfigKey(ctx, rawKey, value);
 
 function sessionMask(ctx: ConfigContext, key: string): string | null {
   if (key !== "defaults.model") return null;

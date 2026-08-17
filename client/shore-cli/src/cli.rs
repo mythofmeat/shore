@@ -66,7 +66,8 @@ const PROMOTED: [(&str, &str); 1] = [("memory compact", "compact")];
 
 const FOLDED_IN: [(&str, &str); 1] = [(
     "model background",
-    "every model role is listed by: shore model",
+    "every model role is listed by `shore model`; pin one with \
+     `shore model use --background <heartbeat|compaction|all> <name>`",
 )];
 
 const RETIRED_UNDER: [(&str, &str, &str); 1] = [(
@@ -721,9 +722,19 @@ pub(crate) enum ModelCommand {
     /// The same thing as `shore model <name>`, spelled out. Use it when a
     /// model's name would otherwise read as one of these subcommands. An
     /// unknown name is an error, never a fallback.
+    ///
+    /// Without --background this picks the chat model, saved against the
+    /// attached character, so characters can differ. With --background it
+    /// pins a background task instead, by writing defaults.background in the
+    /// config file, which is global. `--background all` writes
+    /// defaults.background.model, the value both tasks fall back to.
     Use {
         /// Model name or provider:model_id
         name: String,
+
+        /// Pin a background task's model instead of the chat model
+        #[arg(long, value_enum)]
+        background: Option<BackgroundTarget>,
     },
 
     /// Describe a model: provider, sdk, limits, and where it resolves from
@@ -793,7 +804,16 @@ pub(crate) enum ModelCommand {
     },
 
     /// Drop the saved selection and fall back to the configured default
-    Reset,
+    ///
+    /// Bare, this clears the character's chat model. With --background it
+    /// clears that task's pin from the config file, so the task goes back to
+    /// defaults.background.model, or to the chat model if that is unset too.
+    /// `--background all` clears all three keys.
+    Reset {
+        /// Unpin a background task instead of the chat model
+        #[arg(long, value_enum)]
+        background: Option<BackgroundTarget>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1476,11 +1496,27 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         let target = info_name.clone().unwrap_or_default();
         return Some(("model_info", json!({ "name": target })));
     }
-    if let Some(ModelCommand::Use { name: target }) = subcommand {
-        return Some(("switch_model", json!({ "name": target })));
+    if let Some(ModelCommand::Use {
+        name: target,
+        background: use_background,
+    }) = subcommand
+    {
+        let mut obj = Map::new();
+        let _ignored = obj.insert("name".into(), json!(target));
+        if let Some(task) = use_background {
+            _ = obj.insert("background_task".into(), json!(task.as_str()));
+        }
+        return Some(("switch_model", Value::Object(obj)));
     }
-    if let Some(ModelCommand::Reset) = subcommand {
-        return Some(("reset_model", json!({})));
+    if let Some(ModelCommand::Reset {
+        background: reset_background,
+    }) = subcommand
+    {
+        let mut obj = Map::new();
+        if let Some(task) = reset_background {
+            _ = obj.insert("background_task".into(), json!(task.as_str()));
+        }
+        return Some(("reset_model", Value::Object(obj)));
     }
     if let Some(ModelCommand::Setting {
         key,
@@ -2189,7 +2225,7 @@ mod tests {
             CliCommand::Model { subcommand, .. } => {
                 assert!(matches!(
                     subcommand,
-                    Some(ModelCommand::Use { name })
+                    Some(ModelCommand::Use { name, background: None })
                         if name == "claude-haiku-4-5-20251001"
                 ));
             }
@@ -3128,8 +3164,40 @@ mod tests {
             misplaced(&["model", "background"]),
             Some(FlagProblem::Retired(
                 "model background",
-                "every model role is listed by: shore model",
+                "every model role is listed by `shore model`; pin one with \
+                 `shore model use --background <heartbeat|compaction|all> <name>`",
             )),
+        );
+    }
+
+    #[test]
+    fn model_use_background_threads_the_task() {
+        let cli = parse(&["model", "use", "--background", "heartbeat", "kimi-k3"]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "switch_model");
+        assert_eq!(arg(&args, "name"), "kimi-k3");
+        assert_eq!(arg(&args, "background_task"), "heartbeat");
+    }
+
+    #[test]
+    fn model_use_without_background_omits_the_task() {
+        let cli = parse(&["model", "use", "kimi-k3"]);
+        let (_, args) = to_swp_command(&cli.command, None).unwrap();
+        assert!(args.get("background_task").is_none());
+    }
+
+    #[test]
+    fn model_reset_background_threads_the_task() {
+        let cli = parse(&["model", "reset", "--background", "all"]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "reset_model");
+        assert_eq!(arg(&args, "background_task"), "all");
+    }
+
+    #[test]
+    fn a_background_pin_needs_a_model_name() {
+        assert!(
+            Cli::try_parse_from(["shore", "model", "use", "--background", "heartbeat"]).is_err()
         );
     }
 
@@ -3918,7 +3986,10 @@ mod tests {
                 json: false,
             },
             CliCommand::Model {
-                subcommand: Some(ModelCommand::Use { name: "m".into() }),
+                subcommand: Some(ModelCommand::Use {
+                    name: "m".into(),
+                    background: None,
+                }),
                 info: false,
                 reset: false,
                 all: false,

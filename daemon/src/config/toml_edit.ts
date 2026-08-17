@@ -274,3 +274,30 @@ export function setTomlValue(source: string, path: readonly string[], literal: s
 export function tomlKeyDefined(source: string, path: readonly string[]): boolean {
   return scanToml(source).assignments.some((a) => samePath(a.path, path));
 }
+
+export interface TomlRemoval {
+  text: string;
+  removed: boolean;
+}
+
+export function unsetTomlValue(source: string, path: readonly string[]): TomlRemoval {
+  if (path.length === 0) throw new TomlEditError("empty config key");
+
+  const scan = scanToml(source);
+  const shadowing = scan.assignments.find(
+    (a) => a.path.length < path.length && isPrefix(a.path, path),
+  );
+  if (shadowing !== undefined) {
+    throw new TomlEditError(
+      `\`${renderKey(path)}\` lives inside the value of \`${renderKey(shadowing.path)}\` ` +
+        `on line ${shadowing.startLine + 1}; edit that line by hand`,
+    );
+  }
+
+  const existing = scan.assignments.find((a) => samePath(a.path, path));
+  if (existing === undefined) return { text: source, removed: false };
+
+  const lines = source.split("\n");
+  const next = [...lines.slice(0, existing.startLine), ...lines.slice(existing.endLine + 1)];
+  return { text: next.join("\n"), removed: true };
+}

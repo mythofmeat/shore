@@ -33,6 +33,13 @@ import {
 } from "../config/preferences.ts";
 import { reasoningDomain } from "../llm/capabilities.ts";
 import { missingModelMessage, resolveSubagentModel } from "../tools/subagent.ts";
+import type { Env } from "../config/dirs.ts";
+import {
+  clearConfigKey,
+  setConfigKey,
+  type ConfigContext,
+  type ConfigRuntime,
+} from "./config.ts";
 import { applySamplerValue, capabilityCheck, keyApplicability } from "./model_settings.ts";
 import { internalError, invalidRequest, notFound, type CommandError } from "./errors.ts";
 
@@ -44,6 +51,9 @@ export interface ModelsContext {
   characterName: string | undefined;
   activeModel: string | undefined;
   activeResolvedModel: ResolvedModel | undefined;
+  configPath?: string;
+  runtime?: ConfigRuntime;
+  env?: Env;
 }
 
 const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
@@ -435,7 +445,88 @@ function loadPreferencesFor(
   }
 }
 
+const BACKGROUND_KEY = "defaults.background";
+
+const backgroundKeys = (selector: string): string[] =>
+  selector === "all"
+    ? [`${BACKGROUND_KEY}.model`]
+    : [`${BACKGROUND_KEY}.${backgroundTask(selector)}`];
+
+function configContext(ctx: ModelsContext): ConfigContext {
+  if (ctx.configPath === undefined || ctx.runtime === undefined) {
+    throw internalError("background model changes need a config-backed session");
+  }
+  return ctx as ConfigContext & { configPath: string; runtime: ConfigRuntime };
+}
+
+function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Args): unknown {
+  const name = asName(args["name"]);
+  if (name === undefined) throw invalidRequest("missing model name");
+
+  const includeHidden = asBool(args["include_hidden"]) ?? false;
+  const resolved = resolve(ctx, name, includeHidden);
+  const config = configContext(ctx);
+
+  const key = backgroundKeys(selector)[0] as string;
+  const written = setConfigKey(config, key, resolved.qualifiedName);
+
+  const cleared =
+    selector === "all"
+      ? BACKGROUND_TASKS.filter(
+          (task) => ctx.config.app.defaults.background[task] !== undefined,
+        ).map((task) => {
+          const removed = clearConfigKey(config, `${BACKGROUND_KEY}.${task}`);
+          return removed.set;
+        })
+      : [];
+
+  return {
+    active: resolved.qualifiedName,
+    qualified_name: resolved.qualifiedName,
+    provider: resolved.providerKey,
+    model_id: resolved.modelId,
+    changed: true,
+    role: selector === "all" ? "background" : selector,
+    config_key: key,
+    cleared,
+    file: written.file,
+    restart_required: written.restart_required,
+  };
+}
+
+function unpinBackgroundModel(ctx: ModelsContext, selector: string): unknown {
+  const config = configContext(ctx);
+  const keys =
+    selector === "all"
+      ? [`${BACKGROUND_KEY}.model`, ...BACKGROUND_TASKS.map((t) => `${BACKGROUND_KEY}.${t}`)]
+      : backgroundKeys(selector);
+
+  const cleared: string[] = [];
+  let file: string | undefined;
+  for (const key of keys) {
+    const removed = clearConfigKey(config, key);
+    file = removed.file;
+    if (removed.action === "removed") cleared.push(key);
+  }
+
+  const chat = chatRole(ctx);
+  const task = selector === "all" ? "heartbeat" : backgroundTask(selector);
+  const role = backgroundRole(ctx, task, chat);
+
+  return {
+    active: role.model,
+    role: selector === "all" ? "background" : selector,
+    cleared,
+    source: role.source,
+    file: file ?? null,
+    reset_to: role.source ?? "config default",
+  };
+}
+
 export function switchModel(ctx: ModelsContext, args: Args): unknown {
+  const selector = asStr(args["background_task"]);
+  if (selector !== undefined) return pinBackgroundModel(ctx, selector, args);
+
   const name = asStr(args["name"]);
   if (name === undefined) {
     return { active: effectiveChatModel(ctx.config, ctx.characterName)?.qualifiedName ?? null };
@@ -461,7 +552,10 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
   };
 }
 
-export function resetModel(ctx: ModelsContext): unknown {
+export function resetModel(ctx: ModelsContext, args: Args = {}): unknown {
+  const selector = asStr(args["background_task"]);
+  if (selector !== undefined) return unpinBackgroundModel(ctx, selector);
+
   const character = requireCharacter(ctx);
   const prefs = loadCharacterPreferences(ctx, character);
   const previous = { ...prefs.selected };
@@ -543,9 +637,45 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
     provider: model.providerKey,
     model_id: model.modelId,
     ...targetJson(target),
+    ...aliasedRolesJson(ctx, args, model),
     key,
     value,
   };
+}
+
+const SAMPLER_ROLES = ["chat", "heartbeat", "compaction", "sub-agents"];
+
+function aliasedRolesJson(
+  ctx: ModelsContext,
+  args: Args,
+  model: ResolvedModel,
+): Record<string, unknown> {
+  const selector = asStr(args["background_task"]);
+  if (selector === undefined) return {};
+
+  const targeted = new Set<string>(
+    selector === "all" ? [...BACKGROUND_TASKS] : [backgroundTask(selector)],
+  );
+  const shared = modelRoles(ctx)
+    .filter((role) => SAMPLER_ROLES.includes(role.role) && !targeted.has(role.role))
+    .filter((role) => sharesPreferenceKey(ctx, role.model, model))
+    .map((role) => role.role);
+
+  return shared.length === 0 ? {} : { background_task: selector, also_affects: shared };
+}
+
+function sharesPreferenceKey(
+  ctx: ModelsContext,
+  name: string | null,
+  model: ResolvedModel,
+): boolean {
+  if (name === null) return false;
+  try {
+    const other = resolve(ctx, name, true);
+    return other.providerKey === model.providerKey && other.modelId === model.modelId;
+  } catch {
+    return false;
+  }
 }
 
 function targetJson(target: SettingTarget): Record<string, unknown> {

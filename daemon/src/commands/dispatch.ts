@@ -153,7 +153,7 @@ export async function runCommand(
     case "switch_model":
       return switchModel(session, args);
     case "reset_model":
-      return resetModel(session);
+      return resetModel(session, args);
     case "set_model_setting":
       return setModelSetting(session, args);
     case "model_settings":

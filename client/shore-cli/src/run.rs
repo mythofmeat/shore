@@ -7,7 +7,7 @@ use shore_common::protocol::types::Role;
 use shore_common::swp_client::{SWPConnection, ServerAddr};
 use tracing::{debug, info, instrument};
 
-use crate::cli::{Cli, CliCommand, LogRole, ModelCommand};
+use crate::cli::{BackgroundTarget, Cli, CliCommand, LogRole, ModelCommand};
 use crate::output;
 use crate::state;
 
@@ -736,8 +736,8 @@ async fn handle_status_command(
 }
 
 enum ModelChange<'target> {
-    SwitchTo(&'target str),
-    Reset,
+    SwitchTo(&'target str, Option<BackgroundTarget>),
+    Reset(Option<BackgroundTarget>),
 }
 
 fn model_change(cmd: &CliCommand) -> Option<ModelChange<'_>> {
@@ -748,10 +748,13 @@ fn model_change(cmd: &CliCommand) -> Option<ModelChange<'_>> {
         return None;
     };
     match subcommand {
-        Some(ModelCommand::Use { name: target }) => Some(ModelChange::SwitchTo(target)),
-        Some(ModelCommand::Reset) => Some(ModelChange::Reset),
+        Some(ModelCommand::Use {
+            name: target,
+            background,
+        }) => Some(ModelChange::SwitchTo(target, *background)),
+        Some(ModelCommand::Reset { background }) => Some(ModelChange::Reset(*background)),
         Some(_) => None,
-        None if *reset => Some(ModelChange::Reset),
+        None if *reset => Some(ModelChange::Reset(None)),
         None => None,
     }
 }
@@ -764,22 +767,33 @@ async fn apply_model_change(
     let CliCommand::Model { all, json, .. } = cmd else {
         return Ok(());
     };
+    let background = match change {
+        ModelChange::Reset(task) | ModelChange::SwitchTo(_, task) => task,
+    };
+    let with_task = |mut args: serde_json::Map<String, serde_json::Value>| {
+        if let Some(task) = background {
+            _ = args.insert("background_task".into(), serde_json::json!(task.as_str()));
+        }
+        args
+    };
     let (command, args) = match change {
-        ModelChange::Reset => ("reset_model", serde_json::Map::new()),
-        ModelChange::SwitchTo(target) => {
+        ModelChange::Reset(_) => ("reset_model", with_task(serde_json::Map::new())),
+        ModelChange::SwitchTo(target, _) => {
             let mut args = serde_json::Map::new();
             _ = args.insert("name".into(), serde_json::json!(target));
             if *all {
                 _ = args.insert("include_hidden".into(), serde_json::json!(true));
             }
-            ("switch_model", args)
+            ("switch_model", with_task(args))
         }
     };
     _ = conn
         .send_command(command, serde_json::Value::Object(args))
         .await?;
     let data = recv_command_data(conn).await?;
-    _ = state::clear_active_model();
+    if background.is_none() {
+        _ = state::clear_active_model();
+    }
     if *json {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else {
@@ -1537,9 +1551,13 @@ mod tests {
     fn switching_models_clears_the_local_pin() {
         let cmd = model_command(Some(ModelCommand::Use {
             name: "opus".to_owned(),
+            background: None,
         }));
         assert!(
-            matches!(model_change(&cmd), Some(ModelChange::SwitchTo("opus"))),
+            matches!(
+                model_change(&cmd),
+                Some(ModelChange::SwitchTo("opus", None))
+            ),
             "{cmd:?}"
         );
     }
@@ -1547,10 +1565,15 @@ mod tests {
     #[test]
     fn both_spellings_of_a_model_reset_are_one_change() {
         let flag = model_flags(None, false, true);
-        assert!(matches!(model_change(&flag), Some(ModelChange::Reset)));
         assert!(matches!(
-            model_change(&model_command(Some(ModelCommand::Reset))),
-            Some(ModelChange::Reset)
+            model_change(&flag),
+            Some(ModelChange::Reset(None))
+        ));
+        assert!(matches!(
+            model_change(&model_command(Some(ModelCommand::Reset {
+                background: None
+            }))),
+            Some(ModelChange::Reset(None))
         ));
     }
 
