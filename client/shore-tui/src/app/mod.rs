@@ -2215,6 +2215,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::float_cmp,
+        reason = "level() selects a stored percent_used without arithmetic, so these are the fixture's own values"
+    )]
     fn focused_budget_honors_scope_and_name_pins() {
         let mut app = App {
             usage_budgets: vec![

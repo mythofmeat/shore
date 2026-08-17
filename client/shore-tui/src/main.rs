@@ -5,6 +5,7 @@
     clippy::as_conversions,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::else_if_without_else,
     clippy::exit,
@@ -122,6 +123,10 @@ fn main() -> io::Result<()> {
     let cli = Cli::parse();
     let debug = TuiDebugConfig::from_env()?;
 
+    #[expect(
+        clippy::print_stdout,
+        reason = "the debug render mode exists to print one frame to stdout"
+    )]
     if let Some((width, height)) = debug.render_size {
         let mut app = debug.build_app()?;
         let frame = render_app_to_string(&mut app, width, height)?;
@@ -679,7 +684,7 @@ fn model_settings_conn_command(_app: &App, rid: Option<String>) -> ConnCommand {
     }))
 }
 
-fn subagent_trace_conn_command(ids: Vec<String>) -> ConnCommand {
+fn subagent_trace_conn_command(ids: &[String]) -> ConnCommand {
     ConnCommand::Send(ClientMessage::Command(Command {
         rid: None,
         name: "subagent_trace".into(),
@@ -720,7 +725,7 @@ pub(crate) fn subagent_trace_fetch(app: &mut App) -> Vec<ConnCommand> {
         return vec![];
     }
     app.pending_subagent_trace_ids.extend(ids.iter().cloned());
-    vec![subagent_trace_conn_command(ids)]
+    vec![subagent_trace_conn_command(&ids)]
 }
 
 fn absorb_subagent_traces(app: &mut App, data: &serde_json::Value) {
@@ -1106,6 +1111,10 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
+    #[expect(
+        clippy::print_stderr,
+        reason = "the session error summary is written to the restored terminal on exit"
+    )]
     if !app.error_log.is_empty() {
         eprintln!("\n{} error(s) during this session:", app.error_log.len());
         for line in &app.error_log {
@@ -2267,8 +2276,10 @@ mod redraw_tests {
 
     #[test]
     fn history_rebuild_keeps_scrolled_up_viewport() {
-        let mut app = App::default();
-        app.connection_status = ConnectionStatus::Connected;
+        let mut app = App {
+            connection_status: ConnectionStatus::Connected,
+            ..App::default()
+        };
 
         let mut messages: Vec<Message> = Vec::new();
         for i in 0..20 {
@@ -2353,8 +2364,10 @@ mod redraw_tests {
 
     #[test]
     fn stream_end_keeps_scrolled_up_viewport() {
-        let mut app = App::default();
-        app.connection_status = ConnectionStatus::Connected;
+        let mut app = App {
+            connection_status: ConnectionStatus::Connected,
+            ..App::default()
+        };
 
         for i in 0..20 {
             app.entries.push(ConversationEntry::user(

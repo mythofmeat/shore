@@ -79,6 +79,8 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
 }
 
 fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
+    const MAX_LINES: usize = 3;
+
     if app.notifications.is_empty() || area.width < 16 || area.height < 3 {
         return;
     }
@@ -112,7 +114,6 @@ fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
         if wrapped.is_empty() {
             wrapped.push(String::new());
         }
-        const MAX_LINES: usize = 3;
         if wrapped.len() > MAX_LINES {
             wrapped.truncate(MAX_LINES);
             if let Some(last) = wrapped.last_mut() {
@@ -180,7 +181,7 @@ fn looks_like_token_stream(text: &str) -> bool {
             continue;
         }
         non_empty += 1;
-        if line.chars().next().is_some_and(|c| c.is_whitespace()) {
+        if line.chars().next().is_some_and(char::is_whitespace) {
             leading_ws += 1;
         }
     }
@@ -891,9 +892,8 @@ fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
         _ => return,
     };
     let entry = &app.image_index[idx];
-    let transmitted = match app.image_cache.get(&entry.path) {
-        Some(t) => t,
-        None => return,
+    let Some(transmitted) = app.image_cache.get(&entry.path) else {
+        return;
     };
 
     let chunks = Layout::default()
@@ -1297,6 +1297,8 @@ fn completion_window_start(
 }
 
 fn draw_completions_inline(frame: &mut Frame, app: &App, area: Rect) {
+    const ACTIVE_MARKER: &str = "  ● active";
+
     if area.height == 0 || app.completion.candidates.is_empty() {
         return;
     }
@@ -1315,8 +1317,6 @@ fn draw_completions_inline(frame: &mut Frame, app: &App, area: Rect) {
     let candidate_rows = (area.height as usize).saturating_sub(lines.len());
     let row_width = area.width as usize;
     let name_col: usize = 18;
-
-    const ACTIVE_MARKER: &str = "  ● active";
 
     let window_start = completion_window_start(
         app.completion.selected,
@@ -1588,6 +1588,11 @@ fn draw_alt_picker_inline(frame: &mut Frame, app: &App, area: Rect) {
 
 #[cfg(test)]
 mod scenario_tests {
+    #![expect(
+        clippy::print_stderr,
+        reason = "these scenarios dump rendered frames and diffs for `cargo test -- --nocapture`"
+    )]
+
     use super::*;
     use crate::app::{App, Block, ConnectionStatus, ConversationEntry, InputMode, Turn, TurnState};
 
@@ -1858,11 +1863,11 @@ mod scenario_tests {
         let _ = crate::handle_server_message(&mut h.app, sampler_settings_output());
     }
 
-    fn assert_set_model_setting(action: input::Action, key: &str, value: serde_json::Value) {
+    fn assert_set_model_setting(action: input::Action, key: &str, value: &serde_json::Value) {
         let cmd = sent_command(action);
         assert_eq!(cmd.name, "set_model_setting");
         assert_eq!(cmd.args["key"], key);
-        assert_eq!(cmd.args["value"], value);
+        assert_eq!(cmd.args["value"], *value);
         assert_eq!(cmd.args["scope"], "character");
     }
 
@@ -2208,18 +2213,6 @@ mod scenario_tests {
 
     #[test]
     fn scenario_command_palette_input_returns_to_bottom() {
-        let mut h = Harness::new();
-        h.app.connection_status = ConnectionStatus::Connected;
-        h.app.input.mode = InputMode::Normal;
-
-        for i in 0..20 {
-            h.app.entries.push(ConversationEntry::user(
-                format!("hello {i}"),
-                vec![],
-                format!("t{i}"),
-            ));
-        }
-
         fn input_row(h: &mut Harness, label: &str) -> u16 {
             let _ = h.terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
             let buf = h.terminal.backend().buffer();
@@ -2236,6 +2229,18 @@ mod scenario_tests {
                 }
             }
             panic!("{label}: no input border row found");
+        }
+
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        for i in 0..20 {
+            h.app.entries.push(ConversationEntry::user(
+                format!("hello {i}"),
+                vec![],
+                format!("t{i}"),
+            ));
         }
 
         let baseline = input_row(&mut h, "baseline normal mode");
@@ -2829,7 +2834,7 @@ mod scenario_tests {
         h.type_str("1.25");
         let action = h.press_action(KeyCode::Enter);
 
-        assert_set_model_setting(action, "temperature", serde_json::json!(1.25));
+        assert_set_model_setting(action, "temperature", &serde_json::json!(1.25));
     }
 
     #[test]
@@ -2862,7 +2867,7 @@ mod scenario_tests {
         ));
         let action = h.press_action(KeyCode::Enter);
 
-        assert_set_model_setting(action, "temperature", serde_json::json!(0.7));
+        assert_set_model_setting(action, "temperature", &serde_json::json!(0.7));
     }
 
     #[test]
@@ -2916,7 +2921,7 @@ mod scenario_tests {
         );
         let action = h.press_action(KeyCode::Enter);
 
-        assert_set_model_setting(action, "cache_ttl", serde_json::json!("15m"));
+        assert_set_model_setting(action, "cache_ttl", &serde_json::json!("15m"));
     }
 
     #[test]
@@ -2965,7 +2970,7 @@ mod scenario_tests {
         h.type_str("anthropic");
         let action = h.press_action(KeyCode::Enter);
 
-        assert_set_model_setting(action, "sdk", serde_json::json!("anthropic"));
+        assert_set_model_setting(action, "sdk", &serde_json::json!("anthropic"));
     }
 
     #[test]
@@ -3011,7 +3016,7 @@ mod scenario_tests {
         h.type_str("moonshot");
         let action = h.press_action(KeyCode::Enter);
 
-        assert_set_model_setting(action, "sdk", serde_json::json!("moonshot"));
+        assert_set_model_setting(action, "sdk", &serde_json::json!("moonshot"));
     }
 
     #[test]
@@ -3030,7 +3035,7 @@ mod scenario_tests {
         h.type_str("temperature");
         let action = h.press_action(KeyCode::Enter);
 
-        assert_set_model_setting(action, "temperature", serde_json::Value::Null);
+        assert_set_model_setting(action, "temperature", &serde_json::Value::Null);
     }
 
     #[test]
@@ -4586,17 +4591,6 @@ mod scenario_tests {
 
     #[test]
     fn scenario_line_by_line_scroll_repaints_unique_rows() {
-        let mut h = Harness::with_size(48, 16);
-        h.app.connection_status = ConnectionStatus::Connected;
-
-        for i in 0..45 {
-            h.app.entries.push(ConversationEntry::user(
-                format!("unique row {i:02}"),
-                vec![],
-                format!("t{i}"),
-            ));
-        }
-
         fn visible_unique_rows(frame: &str) -> Vec<String> {
             frame
                 .lines()
@@ -4614,6 +4608,17 @@ mod scenario_tests {
                     "visible row {idx} duplicated after repaint:\n{frame}"
                 );
             }
+        }
+
+        let mut h = Harness::with_size(48, 16);
+        h.app.connection_status = ConnectionStatus::Connected;
+
+        for i in 0..45 {
+            h.app.entries.push(ConversationEntry::user(
+                format!("unique row {i:02}"),
+                vec![],
+                format!("t{i}"),
+            ));
         }
 
         assert_no_duplicate_rows(&h.render("scroll repaint at bottom"));

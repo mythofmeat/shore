@@ -26,17 +26,17 @@ pub(crate) enum Action {
 pub(crate) fn handle_event(app: &mut App, event: Event) -> Action {
     match event {
         Event::Key(key) => handle_key(app, key),
-        Event::Paste(text) => handle_paste(app, text),
+        Event::Paste(text) => handle_paste(app, &text),
         Event::Resize(_, _) => Action::Redraw,
         _ => Action::None,
     }
 }
 
-fn handle_paste(app: &mut App, text: String) -> Action {
+fn handle_paste(app: &mut App, text: &str) -> Action {
     if app.input.mode != InputMode::Insert {
         app.input.mode = InputMode::Insert;
     }
-    app.input.insert_str(&text);
+    app.input.insert_str(text);
     Action::Redraw
 }
 
@@ -855,7 +855,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 if word == "restart" {
                     args["restart"] = serde_json::json!(true);
                 } else if let Ok(n) = word.parse::<u32>() {
-                    args["keep_turns"] = serde_json::json!(n)
+                    args["keep_turns"] = serde_json::json!(n);
                 } else {
                     app.set_status("usage: :compact [keep_turns] [restart]");
                     return Action::Redraw;
@@ -900,16 +900,14 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                     app.set_status("usage: :edit <ref>  (e.g. last, -1, -2)");
                 }
                 Action::Redraw
+            } else if let Some(content) = app.resolve_ref_content(arg) {
+                app.editing_ref = Some(arg.to_string());
+                app.input.set_text(content);
+                app.input.mode = InputMode::Insert;
+                Action::Redraw
             } else {
-                if let Some(content) = app.resolve_ref_content(arg) {
-                    app.editing_ref = Some(arg.to_string());
-                    app.input.set_text(content);
-                    app.input.mode = InputMode::Insert;
-                    Action::Redraw
-                } else {
-                    app.set_error(format!("message not found: {arg}"));
-                    Action::Redraw
-                }
+                app.set_error(format!("message not found: {arg}"));
+                Action::Redraw
             }
         }
 

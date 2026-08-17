@@ -370,7 +370,7 @@ pub(crate) fn write_anomalies<W: Write>(out: &mut W, data: &Value) {
     table.write(out);
 }
 
-fn quota<W: Write>(rows: &mut Rows, row: &Value, label: &str, remaining: &str, limit: &str) {
+fn quota(rows: &mut Rows, row: &Value, label: &str, remaining: &str, limit: &str) {
     let left = number(row, remaining);
     let total = number(row, limit);
     if total == 0 {
@@ -402,21 +402,21 @@ pub(crate) fn write_limits<W: Write>(out: &mut W, data: &Value) {
         );
         header.write(out);
         let mut rows = Rows::new();
-        quota::<W>(
+        quota(
             &mut rows,
             row,
             "requests",
             "requests_remaining",
             "requests_limit",
         );
-        quota::<W>(
+        quota(
             &mut rows,
             row,
             "input",
             "input_tokens_remaining",
             "input_tokens_limit",
         );
-        quota::<W>(
+        quota(
             &mut rows,
             row,
             "output",
@@ -467,10 +467,10 @@ mod tests {
             "period": "today",
             "summary": [
                 {"provider": "anthropic", "model": "claude-opus-5", "call_count": 35,
-                 "total_input": 8007, "total_output": 34100, "total_cache_read": 1400000,
-                 "total_cache_write": 113300, "total_cost": 2.75},
+                 "total_input": 8007, "total_output": 34100, "total_cache_read": 1_400_000,
+                 "total_cache_write": 113_300, "total_cost": 2.75},
                 {"provider": "opencode-go", "model": "glm-5.2", "call_count": 17,
-                 "total_input": 279600, "total_output": 12400, "total_cache_read": 425000,
+                 "total_input": 279_600, "total_output": 12400, "total_cache_read": 425_000,
                  "total_cache_write": 0, "total_cost": 0.0}
             ],
             "cache_health": [{"character": "qifei", "state": "cold", "streak": 3}],
@@ -554,7 +554,7 @@ mod tests {
             "dimension": "call_type",
             "period": "today",
             "summary": [{"group": "compaction", "call_count": 17, "total_input": 30600,
-                         "total_output": 22400, "total_cache_read": 837000,
+                         "total_output": 22400, "total_cache_read": 837_000,
                          "total_cache_write": 25500, "total_cost": 0.82}]
         });
         let out = render(|buf| write_breakdown(buf, &payload));
@@ -644,8 +644,8 @@ mod tests {
             "rate_limits": [{"host": "api.anthropic.com",
                              "resets_at": "2026-08-15T04:05:00+00:00",
                              "requests_remaining": 9999, "requests_limit": 10000,
-                             "input_tokens_remaining": 10000000, "input_tokens_limit": 10000000,
-                             "output_tokens_remaining": 2000000, "output_tokens_limit": 2000000}]
+                             "input_tokens_remaining": 10_000_000, "input_tokens_limit": 10_000_000,
+                             "output_tokens_remaining": 2_000_000, "output_tokens_limit": 2_000_000}]
         });
         let out = render(|buf| write_limits(buf, &payload));
         assert!(out.contains("api.anthropic.com"), "{out}");

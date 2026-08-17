@@ -171,6 +171,8 @@ mod tests {
     #[test]
     #[ignore = "writes rendered output to stdout for visual inspection; run with --ignored"]
     fn render_preview_index_unusable() {
+        use std::io::Write as _;
+
         crate::output::set_color_enabled(true);
         let mut buf = Vec::new();
         write_index_section(
@@ -192,7 +194,6 @@ mod tests {
             }),
         );
         crate::output::set_color_enabled(false);
-        use std::io::Write as _;
         std::io::stdout().write_all(&buf).unwrap();
     }
 

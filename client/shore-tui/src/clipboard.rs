@@ -114,7 +114,11 @@ mod tests {
         let p = fresh_temp_path();
         let name = p.file_name().unwrap().to_string_lossy().into_owned();
         assert!(name.starts_with("shore_paste_"), "name was {name}");
-        assert!(name.ends_with(".png"), "name was {name}");
+        assert_eq!(
+            p.extension().and_then(std::ffi::OsStr::to_str),
+            Some("png"),
+            "name was {name}"
+        );
         assert_eq!(p.parent().unwrap(), std::env::temp_dir().as_path());
     }
 }

@@ -1080,6 +1080,10 @@ fn grouped_names() -> impl Iterator<Item = &'static str> {
         .flat_map(|(_, names)| names.iter().copied())
 }
 
+#[expect(
+    clippy::format_push_string,
+    reason = "writeln! here would trip only_the_vocabulary_is_allowed_to_hardcode_indentation, and this builds clap help text rather than terminal output"
+)]
 fn render_command_groups(base: &clap::Command) -> String {
     let width = COMMAND_GROUPS
         .iter()
@@ -1455,24 +1459,21 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             ..
         } => {
             let mut args = Map::new();
-            match id {
-                Some(one) => {
-                    _ = args.insert("id".into(), json!(one));
-                    if *wire {
-                        _ = args.insert("wire".into(), json!(true));
-                    }
-                    if *diff {
-                        _ = args.insert("diff".into(), json!(true));
-                        if let Some(other) = against {
-                            _ = args.insert("against".into(), json!(other));
-                        }
+            if let Some(one) = id {
+                _ = args.insert("id".into(), json!(one));
+                if *wire {
+                    _ = args.insert("wire".into(), json!(true));
+                }
+                if *diff {
+                    _ = args.insert("diff".into(), json!(true));
+                    if let Some(other) = against {
+                        _ = args.insert("against".into(), json!(other));
                     }
                 }
-                None => {
-                    _ = args.insert("count".into(), json!(count));
-                    if let Some(ct) = call_type {
-                        _ = args.insert("call_type".into(), json!(ct));
-                    }
+            } else {
+                _ = args.insert("count".into(), json!(count));
+                if let Some(ct) = call_type {
+                    _ = args.insert("call_type".into(), json!(ct));
                 }
             }
             Some(("call_log", Value::Object(args)))
@@ -1645,9 +1646,9 @@ fn usage_to_swp(
         )
         | None => (false, false),
     };
-    let (export_csv, export_tsv) = match subcommand {
-        Some(UsageCommand::Export { tsv }) => (!tsv, *tsv),
-        _ => (false, false),
+    let tab_separated = match subcommand {
+        Some(UsageCommand::Export { tsv }) => Some(*tsv),
+        _ => None,
     };
     let group_by = match subcommand {
         Some(UsageCommand::By { dimension }) => Some(dimension.wire()),
@@ -1665,8 +1666,8 @@ fn usage_to_swp(
             "group_by": group_by,
             "budget": budget,
             "anomalies": anomalies,
-            "export_csv": export_csv,
-            "export_tsv": export_tsv,
+            "export_csv": tab_separated == Some(false),
+            "export_tsv": tab_separated == Some(true),
         }),
     ))
 }

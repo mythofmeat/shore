@@ -183,6 +183,8 @@ impl ImageCache {
         max_cols: u16,
         max_rows: u16,
     ) -> Option<&TransmittedImage> {
+        use base64::Engine as _;
+
         if self.protocol != Some(ImageProtocol::Kitty) {
             return None;
         }
@@ -190,7 +192,6 @@ impl ImageCache {
             return self.cache.get(key);
         }
 
-        use base64::Engine;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(b64_data)
             .ok()?;

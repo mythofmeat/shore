@@ -203,10 +203,9 @@ fn render_message_content(
                 }
             }
         }
+    } else if !content.is_empty() || !is_tool_result_msg {
+        let _ignored = writeln!(out, "{content}");
     } else {
-        if !content.is_empty() || !is_tool_result_msg {
-            let _ignored = writeln!(out, "{content}");
-        }
     }
 }
 

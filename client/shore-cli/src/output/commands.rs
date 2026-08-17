@@ -1470,12 +1470,11 @@ pub(crate) fn write_error_log<W: Write>(out: &mut W, data: &serde_json::Value) {
             let kind = event["kind"].as_str().unwrap_or("?");
             let reason = event["reason"].as_str().unwrap_or("?");
 
-            match event["to_key"].as_str() {
-                Some(to) => _ = write!(w, "{from} -> {to}"),
-                None => {
-                    _ = write!(w, "{from} -> ");
-                    write_fg(w, COLOR_ERROR, "nothing");
-                }
+            if let Some(to) = event["to_key"].as_str() {
+                _ = write!(w, "{from} -> {to}");
+            } else {
+                _ = write!(w, "{from} -> ");
+                write_fg(w, COLOR_ERROR, "nothing");
             }
             write_dim(w, &format!("  {kind}"));
             if let Some(status) = event["status"].as_u64() {
