@@ -63,6 +63,20 @@ describe("request construction", () => {
     ).toBe("https://custom.example/v4");
   });
 
+  test("a subscription key reaches the coding endpoint even when discovery stamped the standard base URL", () => {
+    expect(
+      resolveZaiBaseUrl(
+        req({
+          base_url: "https://api.z.ai/api/paas/v4",
+          provider_options: { zai_subscription: true },
+        }),
+      ),
+    ).toBe(ZAI_CODING_BASE_URL);
+    expect(
+      resolveZaiBaseUrl(req({ base_url: "https://api.z.ai/api/paas/v4" })),
+    ).toBe(ZAI_BASE_URL);
+  });
+
   test("builds Z.ai params with thinking controls, tools, sampling, and usage streaming", () => {
     const params = buildZaiParams(
       req({

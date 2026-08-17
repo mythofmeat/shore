@@ -52,8 +52,11 @@ export class ZaiProvider implements SidecarProvider {
 }
 
 export function resolveZaiBaseUrl(req: SidecarRequest): string {
-  if (req.base_url) return trimTrailingSlash(req.base_url);
-  return req.provider_options?.zai_subscription === true ? ZAI_CODING_BASE_URL : ZAI_BASE_URL;
+  const base = req.base_url ? trimTrailingSlash(req.base_url) : ZAI_BASE_URL;
+  if (req.provider_options?.zai_subscription === true && base === ZAI_BASE_URL) {
+    return ZAI_CODING_BASE_URL;
+  }
+  return base;
 }
 
 function buildZaiCall(
