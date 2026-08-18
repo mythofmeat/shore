@@ -290,6 +290,17 @@ describe("seeding the activity tracker", () => {
     await bridge.settled("ada");
     expect(service.calls).toEqual(["register", "backfill:3:9000"]);
   });
+
+  test("an empty selection leaves the silence clock unseeded", async () => {
+    const service = recordingService();
+    const bridge = new TurnAutonomyBridge(service);
+    bridge.ensureState("ada", configWith());
+
+    bridge.backfillActivity("ada", []);
+
+    await bridge.settled("ada");
+    expect(service.calls).toEqual(["register", "backfill:0:undefined"]);
+  });
 });
 
 describe("a config reload", () => {

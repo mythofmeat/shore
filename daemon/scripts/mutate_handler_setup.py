@@ -11,7 +11,7 @@ The chain is the dangerous one. Falling through to the first catalog model when
 the user's `defaults.model` is misspelled would look like it worked, on a model
 they did not ask for and are paying for.
 
-A mutant is KILLED if `bun test tests/setup_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/setup.test.ts` fails with it
 applied; a survivor means either the fixture cannot see that decision, or the
 code is equivalent under it.
 
@@ -197,7 +197,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/setup_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/setup.test.ts"], src=SETUP)
 
 
 if __name__ == "__main__":

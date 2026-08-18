@@ -16,7 +16,7 @@ Covers `src/handler/command_dispatch.ts`, `restartRequiredChanges` in
   the command already wrote rather than replacing it.
 
 A mutant is KILLED if `bun test tests/handler_command_dispatch.test.ts
-tests/swp_parity.test.ts tests/swp_transport.test.ts` fails with it applied.
+tests/swp.test.ts tests/swp_transport.test.ts` fails with it applied.
 The two SWP files are in because `historyMessage` is now shared with the
 handshake, whose wire shape those pin.
 
@@ -173,7 +173,7 @@ MUTANTS = [
 
 TESTS = [
     "tests/handler_command_dispatch.test.ts",
-    "tests/swp_parity.test.ts",
+    "tests/swp.test.ts",
     "tests/swp_transport.test.ts",
 ]
 

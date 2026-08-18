@@ -6,7 +6,7 @@ five ports in a row had a fixture replay green while still full of holes. This
 is the harness for the assembly and validation half of `config/loader.ts`.
 
 Each entry is a single textual edit that inverts one decision in the port. A
-mutant is KILLED if `bun test tests/validate_parity.test.ts` fails with it
+mutant is KILLED if `bun test tests/validate.test.ts` fails with it
 applied; a survivor means either the fixture cannot see that decision, or the
 code is equivalent under it.
 
@@ -43,23 +43,12 @@ LOADER = ROOT / "src/config/loader.ts"
 # (label, find, replace)
 MUTANTS = [
     # --- section extraction -----------------------------------------------
-    ("extract: chat stays in the table",
-     "  delete remainder.chat;\n", ""),
-    ("extract: embedding stays in the table",
-     "  delete remainder.embedding;\n", ""),
-    ("extract: image_generation stays in the table",
-     "  delete remainder.image_generation;\n", ""),
-    ("extract: providers stays in the table",
-     "  delete remainder.providers;\n", ""),
-    ("extract: tools is lifted too",
-     "  delete remainder.providers;\n",
-     "  delete remainder.providers;\n  delete remainder.tools;\n"),
+    ("extract: tools is lifted out before AppConfig is parsed",
+     "  const parsed = parseAppConfig(remainder);",
+     "  delete remainder.tools;\n\n  const parsed = parseAppConfig(remainder);"),
     ("extract: the raw table is captured after extraction, not before",
      "  const rawTable = structuredClone(table);\n\n  const remainder = { ...table };",
      "  const remainder = { ...table };"),
-    ("extract: the raw table is captured after extraction (tail)",
-     "  validateConfig(app, models, providers, onWarn);\n\n  return { app, models, providers, dirs, rawTable };",
-     "  validateConfig(app, models, providers, onWarn);\n\n  return { app, models, providers, dirs, rawTable: structuredClone(remainder) };"),
     ("extract: a non-table section is passed through instead of ignored",
      "  return isTable(value) ? value : undefined;",
      "  return value === undefined ? undefined : (value as TomlTable);"),
@@ -72,21 +61,11 @@ MUTANTS = [
     ("extract: a catalog failure reports as an app parse failure",
      'throw new ConfigError("catalog", e.message);',
      'throw new ConfigError("parse_app", e.message);'),
-    ("extract: deprecated aliases are not normalized",
-     "  normalizeDeprecatedAliases(app.defaults);\n", ""),
-    # A genuine reordering, not a deletion: the whole AppConfig block moves
-    # below the registry block, so a document that is bad in both ways reports
-    # the provider instead of the section name.
     ("extract: the registry is built before AppConfig is parsed",
      '  const parsed = parseAppConfig(remainder);\n'
      '  if ("err" in parsed) throw new ConfigError("parse_app", parsed.err);\n'
      '  const app = parsed.ok;\n'
      '\n'
-     '  // Forwards the legacy top-level `defaults.heartbeat` into\n'
-     '  // `defaults.background.heartbeat`. It runs *before* validation, so a warning\n'
-     '  // about that value names the key it was moved to, never the key the user\n'
-     '  // wrote.\n'
-     '  normalizeDeprecatedAliases(app.defaults);\n'
      '\n'
      '  let providers: ProviderRegistry;\n'
      '  try {\n'
@@ -105,8 +84,7 @@ MUTANTS = [
      '\n'
      '  const parsed = parseAppConfig(remainder);\n'
      '  if ("err" in parsed) throw new ConfigError("parse_app", parsed.err);\n'
-     '  const app = parsed.ok;\n'
-     '  normalizeDeprecatedAliases(app.defaults);\n'),
+     '  const app = parsed.ok;\n'),
 
     # --- validateConfig: which defaults are checked ------------------------
     ("validate: defaults.model is not checked",
@@ -350,7 +328,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/validate_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/validate.test.ts"], src=LOADER)
 
 
 if __name__ == "__main__":

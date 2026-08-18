@@ -19,7 +19,7 @@ composition, so that is what these mutants attack:
   variant and the new tests cover this one.
 
 A mutant is KILLED if `bun test tests/handler_active_model.test.ts
-tests/preferences_parity.test.ts` fails with it applied.
+tests/preferences.test.ts` fails with it applied.
 
 This is **13/13**, from 12/14 on the first full pass.
 
@@ -138,7 +138,11 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/handler_active_model.test.ts", "tests/preferences_parity.test.ts"])
+    return _run_mutants(
+        MUTANTS,
+        ["tests/handler_active_model.test.ts", "tests/preferences.test.ts"],
+        src=PREFS,
+    )
 
 
 if __name__ == "__main__":

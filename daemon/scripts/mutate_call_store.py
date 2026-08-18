@@ -20,7 +20,7 @@ failure modes are all silent ones. What the fixture has to catch:
 - **The migration.** A DB predating `transcripts.character` must gain the
   column. Skip it and every transcript write against an old store fails.
 
-A mutant is KILLED if `bun test tests/call_store_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/call_store.test.ts` fails with it
 applied.
 
 This is **60/60**, from 54/63 on the first pass. Of the nine that lived:
@@ -309,7 +309,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/call_store_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/call_store.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ the one this file exists for: `chars().take(200)` counts Unicode scalar values
 and `slice(0, 200)` counts UTF-16 code units, and nothing but an astral-plane
 character tells them apart.
 
-A mutant is KILLED if `bun test tests/compact_command_parity.test.ts` fails
+A mutant is KILLED if `bun test tests/compact_command.test.ts` fails
 with it applied.
 
 This is **29/29**, from 28/29 on the first pass. One survivor, and it is the
@@ -187,7 +187,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/compact_command_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/compact_command.test.ts"])
 
 
 if __name__ == "__main__":

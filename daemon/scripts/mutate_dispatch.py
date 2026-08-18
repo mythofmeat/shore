@@ -23,7 +23,7 @@ The mutants cover four things:
   codes, and the fact that a non-`CommandError` throw becomes an internal error
   rather than escaping the dispatcher.
 
-A mutant is KILLED if `bun test tests/dispatch_command_parity.test.ts` fails
+A mutant is KILLED if `bun test tests/dispatch_command.test.ts` fails
 with it applied.
 
 This is **24/24**, from 15/24 on the first pass.
@@ -51,6 +51,7 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+DISPATCH = ROOT / "src/commands/dispatch.ts"
 D = "src/commands/dispatch.ts"
 
 # (label, find, replace)
@@ -69,7 +70,7 @@ MUTANTS = [
      '    case "switch_model":\n      return switchModel(session, args);',
      '    case "switch_model":\n      return resetModel(session);'),
     ("wire: `reset_model` reaches `switch_model`",
-     '    case "reset_model":\n      return resetModel(session);',
+     '    case "reset_model":\n      return resetModel(session, args);',
      '    case "reset_model":\n      return switchModel(session, args);'),
     ("wire: `model_info` reaches `model_settings`",
      '    case "model_info":\n      return modelInfo(session, args);',
@@ -89,19 +90,16 @@ MUTANTS = [
     ("wire: `config_check` reaches `config_reload`",
      '    case "config_check":\n      return configCheck(session, session.env ?? process.env);',
      '    case "config_check":\n      return await configReload(session, args);'),
-    ("wire: `diagnostics` reaches `heartbeat_log`",
-     '    case "diagnostics":\n      return diagnosticsCommand(statusContext(engine, session, deps), args);',
-     '    case "diagnostics":\n      return heartbeatLog(statusContext(engine, session, deps), args);'),
     ("wire: `character_info` is given the data dir as its config dir",
-     "        { configDir, dataDir: session.dataDir, active: character },",
-     "        { configDir: session.dataDir, dataDir: session.dataDir, active: character },"),
+     "        { configDir, dataDir: session.dataDir, active: character, workspaceRoot },",
+     "        { configDir: session.dataDir, dataDir: session.dataDir, active: character, workspaceRoot },"),
 
     # --- arms going missing ---------------------------------------------------
     ("missing: `inject_system` is not in the table",
      '    case "inject_system":\n      return await injectSystem(engine, args);\n',
      ""),
     ("missing: `tools` is not in the table",
-     '    case "tools":\n      return tools(session);\n',
+     '    case "tools":\n      return tools(session, (deps.runTool?.mcpTools() ?? []).map((t) => t.full_name));\n',
      ""),
     ("missing: `transcript` is not in the table",
      '    case "transcript":\n      return transcript({ characterName: character, callStore: deps.callStore }, args);\n',
@@ -109,17 +107,17 @@ MUTANTS = [
 
     # --- the characterless split ---------------------------------------------
     ("split: `status` answers without a character",
-     '    case "list_characters":\n      // No active character to mark, which is the whole difference from the',
-     '    case "status":\n      return {};\n    case "list_characters":\n      // No active character to mark, which is the whole difference from the'),
+     '  const args = (cmd.args ?? {}) as Args;\n  switch (cmd.name) {\n    case "list_characters":',
+     '  const args = (cmd.args ?? {}) as Args;\n  switch (cmd.name) {\n    case "status":\n      return {};\n    case "list_characters":'),
     ("split: `list_providers` is refused without a character",
      '    case "list_providers":\n      return listProviders(providersContext(session, deps));\n    case "list_provider_models":\n      return listProviderModels(providersContext(session, deps), args);\n    default:\n      throw invalidRequest(`Command \'${cmd.name}\' requires a character`);',
      '    case "list_provider_models":\n      return listProviderModels(providersContext(session, deps), args);\n    default:\n      throw invalidRequest(`Command \'${cmd.name}\' requires a character`);'),
-    ("split: the predicate and the table disagree about `background_models`",
-     '  "background_models",\n  "list_providers",',
-     '  "list_providers",'),
+    ("split: the predicate and the table disagree about `list_providers`",
+     '  "list_providers",\n  "list_provider_models",\n]);',
+     '  "list_provider_models",\n]);'),
     ("split: the characterless `list_characters` marks an active character",
-     "      return listCharacters(session.config.dirs.config);",
-     '      return listCharacters(session.config.dirs.config, "ada");'),
+     "        session.config.dirs.config,\n        undefined,\n        session.config.dirs.workspace,",
+     '        session.config.dirs.config,\n        "ada",\n        session.config.dirs.workspace,'),
 
     # --- the envelope ---------------------------------------------------------
     ("envelope: the reply carries the character's name instead of the command's",
@@ -138,7 +136,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/dispatch_command_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/dispatch_command.test.ts"], src=DISPATCH)
 
 
 if __name__ == "__main__":

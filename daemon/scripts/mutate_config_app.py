@@ -6,7 +6,7 @@ five ports in a row had a fixture replay green while still full of holes. This
 is the harness for `config/app.ts`.
 
 Each entry is a single textual edit that inverts one decision in the port. A
-mutant is KILLED if `bun test tests/app_parity.test.ts` fails with it applied;
+mutant is KILLED if `bun test tests/app.test.ts` fails with it applied;
 a survivor means either the fixture cannot see that decision, or the code is
 equivalent under it.
 
@@ -305,7 +305,7 @@ def main() -> int:
         else (label, find, replace)
         for label, find, replace in MUTANTS
     ]
-    return _run_mutants(routed, ["tests/app_parity.test.ts"], src=APP)
+    return _run_mutants(routed, ["tests/app.test.ts"], src=APP)
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@
           },
           "requested": null,
           "result": {
-            "err": "no characters available — create one at characters/<name>/workspace/SOUL.md",
+            "err": "no characters available \u2014 create one at characters/<name>/workspace/SOUL.md",
             "variant": "none_available"
           }
         },
@@ -500,7 +500,7 @@
           },
           "requested": null,
           "result": {
-            "err": "multiple characters available ([\"Alice\", \"Bob\"]) — specify one with --character or SHORE_CHARACTER",
+            "err": "multiple characters available ([\"Alice\", \"Bob\"]) \u2014 specify one with --character or SHORE_CHARACTER",
             "variant": "ambiguous"
           }
         },
@@ -1059,7 +1059,7 @@
       ]
     },
     {
-      "name": "an unloadable character config falls back to the global",
+      "name": "an unloadable character config fails closed",
       "seed": {
         "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
@@ -1106,11 +1106,7 @@
             ]
           },
           "name": "Alice",
-          "result": {
-            "stream": true,
-            "display_name": "GLOBAL",
-            "addr": "127.0.0.1:9999"
-          }
+          "error": "unknown field `completely_unknown`"
         },
         {
           "op": "fs:write_character_config",
@@ -1147,11 +1143,7 @@
             ]
           },
           "name": "Alice",
-          "result": {
-            "stream": true,
-            "display_name": "GLOBAL",
-            "addr": "127.0.0.1:9999"
-          }
+          "error": "must be a `provider:model_id` id"
         }
       ]
     },
@@ -2174,7 +2166,7 @@
       ]
     },
     {
-      "name": "a failed character config is cached like any other miss",
+      "name": "a fixed character config takes effect without an invalidation",
       "seed": {
         "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
         "raw_table": true,
@@ -2221,11 +2213,7 @@
             ]
           },
           "name": "Alice",
-          "result": {
-            "stream": true,
-            "display_name": "GLOBAL",
-            "addr": "127.0.0.1:9999"
-          }
+          "error": "unknown field `completely_unknown`"
         },
         {
           "op": "fs:write_character_config",
@@ -2252,7 +2240,7 @@
           },
           "name": "Alice",
           "result": {
-            "stream": true,
+            "stream": false,
             "display_name": "GLOBAL",
             "addr": "127.0.0.1:9999"
           }

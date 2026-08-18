@@ -12,7 +12,7 @@ concentrated in two places, and neither errors when it is wrong:
   page. A boundary that is one off greys out the wrong message; a `cursor` that
   is one off makes the client re-request a page it already has, or skip one.
 
-A mutant is KILLED if `bun test tests/conversation_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/conversation.test.ts` fails with it
 applied; a survivor means either the fixture cannot see that decision, or the
 code is equivalent under it.
 
@@ -472,7 +472,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/conversation_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/conversation.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ of three caches. None of it is visible from a single call, so the fixture is
 scripted runs and this harness is the check that the scripts actually reach the
 decisions they were written for.
 
-A mutant is KILLED if `bun test tests/characters_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/characters.test.ts` fails with it
 applied; a survivor means either the fixture cannot see that decision, or the
 code is equivalent under it.
 
@@ -97,12 +97,12 @@ MUTANTS = [
     ("config: absence is not cached",
      "        this.#charConfigs.set(name, loadCharacterConfig(this.#globalConfig, name));",
      "        const c = loadCharacterConfig(this.#globalConfig, name);\n        if (c !== undefined) this.#charConfigs.set(name, c);\n        else return this.#globalConfig;"),
-    ("config: a load failure is fatal instead of falling back",
-     "      } catch (e) {\n        console.warn(\n          `shore: failed to load config for character ${name}, using global: ${String(e)}`,\n        );\n        this.#charConfigs.set(name, undefined);\n      }",
-     "      } catch (e) {\n        throw e;\n      }"),
-    ("config: a load failure is not cached",
-     "        this.#charConfigs.set(name, undefined);\n      }",
-     "      }"),
+    ("config: a load failure falls back to the global instead of throwing",
+     "      } catch (e) {\n        throw new CharacterConfigError(name, e);\n      }",
+     "      } catch (e) {\n        return this.#globalConfig;\n      }"),
+    ("config: a load failure is cached",
+     "      } catch (e) {\n        throw new CharacterConfigError(name, e);\n      }",
+     "      } catch (e) {\n        this.#charConfigs.set(name, this.#globalConfig);\n        throw new CharacterConfigError(name, e);\n      }"),
     ("config: membership is checked",
      "  effectiveConfig(name: string): LoadedConfig {",
      "  effectiveConfig(name: string): LoadedConfig {\n    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);"),
@@ -150,11 +150,11 @@ MUTANTS = [
      "      throw CharacterError.notFound(requested, this.#available);",
      "      if (this.#available.length === 1) return this.#available[0] as string;\n      throw CharacterError.notFound(requested, this.#available);"),
     ("resolve: empty and ambiguous are swapped",
-     "    if (this.#available.length === 0) throw CharacterError.noneAvailable();\n    if (this.#available.length === 1) return this.#available[0] as string;\n    throw CharacterError.ambiguous(this.#available);",
-     "    if (this.#available.length === 0) throw CharacterError.ambiguous(this.#available);\n    if (this.#available.length === 1) return this.#available[0] as string;\n    throw CharacterError.noneAvailable();"),
+     "      throw CharacterError.noneAvailable(this.#configDir, this.#workspaceRoot());",
+     "      throw CharacterError.ambiguous(this.#available);"),
     ("resolve: two characters auto-select the first",
-     "    if (this.#available.length === 1) return this.#available[0] as string;",
-     "    if (this.#available.length >= 1) return this.#available[0] as string;"),
+     "    if (this.#available.length === 1) {\n      this.#selected = this.#available[0] as string;\n      return this.#selected;\n    }",
+     "    if (this.#available.length >= 1) {\n      this.#selected = this.#available[0] as string;\n      return this.#selected;\n    }"),
     ("resolve: the not-found message omits the available list",
      "      `character ${JSON.stringify(name)} not found (available: ${CharacterError.#list(available)})`,",
      "      `character ${JSON.stringify(name)} not found`,"),
@@ -164,23 +164,23 @@ MUTANTS = [
     ("resolve: the ambiguous message names the wrong flag",
      '        "specify one with --character or SHORE_CHARACTER",',
      '        "specify one with --name or SHORE_NAME",'),
-    ("resolve: the none-available message points at the legacy file",
-     '      "no characters available — create one at characters/<name>/workspace/SOUL.md",',
-     '      "no characters available — create one at characters/<name>/character.md",'),
+    ("resolve: the none-available message loses how to create one",
+     '      `no characters available — create one at ${soul}, ` +\n        "or run: shore character --new <name>",',
+     '      `no characters available — create one at ${soul}`,'),
     ("resolve: the error kind is always not_found",
      '    return new CharacterError(\n      "ambiguous",',
      '    return new CharacterError(\n      "not_found",'),
 
     # --- definitions ------------------------------------------------------
     ("definition: the character definition reads the user file",
-     "    return loadCharacterDefinition(this.#configDir, name);",
-     "    return resolveUserDefinition(this.#configDir, name);"),
+     "    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());",
+     "    return resolveUserDefinition(this.#configDir, name, this.#workspaceRoot());"),
     ("definition: the user definition reads the character file",
-     "    return resolveUserDefinition(this.#configDir, name);",
-     "    return loadCharacterDefinition(this.#configDir, name);"),
+     "    return resolveUserDefinition(this.#configDir, name, this.#workspaceRoot());",
+     "    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());"),
     ("definition: definitions are read from the data dir",
-     "    return loadCharacterDefinition(this.#configDir, name);",
-     "    return loadCharacterDefinition(this.#dataDir, name);"),
+     "    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());",
+     "    return loadCharacterDefinition(this.#dataDir, name, this.#workspaceRoot());"),
     ("engines: the engine is opened against the config dir",
      "    const engine = await ConversationEngine.load(name, this.#dataDir, this.#onHistory);",
      "    const engine = await ConversationEngine.load(name, this.#configDir, this.#onHistory);"),
@@ -191,7 +191,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/characters_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/characters.test.ts"], src=CHARACTERS)
 
 
 if __name__ == "__main__":

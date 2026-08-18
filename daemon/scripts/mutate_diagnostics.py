@@ -17,7 +17,7 @@ throw, so a wrong answer just looks like a slightly different diagnostic:
   side, so they are *missing* from the object rather than null. A port that
   emits `"error": null` changes the shape of a wire format.
 
-A mutant is KILLED if `bun test tests/diagnostics_parity.test.ts` fails with
+A mutant is KILLED if `bun test tests/diagnostics.test.ts` fails with
 it applied.
 
 This is **20/20**, from 18/21 on the first pass.
@@ -137,7 +137,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/diagnostics_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/diagnostics.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":

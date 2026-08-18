@@ -25,7 +25,7 @@ The **reprime** decides whether to keep pinging. A rebuild that failed must
 disarm; leaving the pre-invalidation body armed pings a prefix no real turn
 will reuse.
 
-A mutant is KILLED if `bun test tests/last_request_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/last_request.test.ts` fails with it
 applied.
 
 This is **33/33**, from 28/33 on the first pass. Five survivors, and only three
@@ -224,7 +224,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/last_request_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/last_request.test.ts"])
 
 
 if __name__ == "__main__":

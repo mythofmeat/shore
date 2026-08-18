@@ -271,7 +271,7 @@ describe("runCommand", () => {
         }
       } else {
         expect(got["name"]).toBe(want["name"] as string);
-        expect(got["data_keys"]).toEqual(expect.arrayContaining(want["data_keys"] as string[]));
+        expect(got["data_keys"]).toEqual(want["data_keys"] as string[]);
         expect(got["data_shape"]).toMatchObject(want["data_shape"] as object);
       }
     });
@@ -294,9 +294,7 @@ describe("runCharacterlessCommand", () => {
         });
         expect(want["kind"]).toBe("ok");
         const record = (data ?? {}) as Record<string, unknown>;
-        expect(Object.keys(record).sort()).toEqual(
-          expect.arrayContaining(want["data_keys"] as string[]),
-        );
+        expect(Object.keys(record).sort()).toEqual(want["data_keys"] as string[]);
         expect(
           Object.fromEntries(Object.entries(record).map(([k, v]) => [k, typeName(v, k)])),
         ).toEqual(want["data_shape"] as Record<string, string>);

@@ -22,7 +22,7 @@ The mutants cover five things:
   which is this port's one deliberate divergence and so has to be pinned from
   this side rather than from the fixture.
 
-A mutant is KILLED if `bun test tests/command_path_parity.test.ts` fails with
+A mutant is KILLED if `bun test tests/command_path.test.ts` fails with
 it applied.
 
 This is **18/18**, from 11/18 on the first pass.
@@ -54,6 +54,7 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+COMMANDS = ROOT / "src/handler/commands.ts"
 P = "src/handler/commands.ts"
 
 # (label, find, replace)
@@ -128,7 +129,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/command_path_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/command_path.test.ts"], src=COMMANDS)
 
 
 if __name__ == "__main__":

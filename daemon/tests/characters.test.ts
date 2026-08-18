@@ -27,6 +27,7 @@ interface Step {
   body?: string;
   requested?: string | null;
   result?: unknown;
+  error?: string;
   summary?: {
     available_before: number;
     available_after: number;
@@ -141,13 +142,7 @@ describe("the fixture is real", () => {
 
 describe("CharacterRegistry", () => {
   for (const scenario of scenarios) {
-    const parityTest = new Set([
-      "an unloadable character config falls back to the global",
-      "a failed character config is cached like any other miss",
-    ]).has(scenario.name)
-      ? test.skip
-      : test;
-    parityTest(scenario.name, async () => {
+    test(scenario.name, async () => {
       const root = makeRoot();
       const configDir = join(root, "config");
       const dataDir = join(root, "data");
@@ -255,12 +250,17 @@ describe("CharacterRegistry", () => {
             break;
           }
 
-          case "effective_config":
-            expect(
-              configMarks(required(registry, where).effectiveConfig(step.name as string)),
-              where,
-            ).toEqual(step.result);
+          case "effective_config": {
+            const reg = required(registry, where);
+            if (step.error !== undefined) {
+              expect(() => reg.effectiveConfig(step.name as string), where).toThrow(step.error);
+            } else {
+              expect(configMarks(reg.effectiveConfig(step.name as string)), where).toEqual(
+                step.result,
+              );
+            }
             break;
+          }
 
           case "invalidate_configs":
             required(registry, where).invalidateConfigs();

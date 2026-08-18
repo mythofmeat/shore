@@ -25,7 +25,7 @@ The mutants cover six things:
 - **The budget gate.** That a chat turn is checked at all, that it is checked
   where the key is known, and that a refusal neither rotates nor retries.
 
-A mutant is KILLED if `bun test tests/generation_parity.test.ts
+A mutant is KILLED if `bun test tests/generation.test.ts
 tests/budget_gate.test.ts` fails with it applied. The second file is here
 because the gate mutants are about a call that never happens, and the parity
 fixture records what a turn *did* — it has nothing to say about a turn that was
@@ -242,7 +242,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/generation_parity.test.ts", "tests/budget_gate.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/generation.test.ts", "tests/budget_gate.test.ts"])
 
 
 if __name__ == "__main__":

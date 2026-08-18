@@ -23,7 +23,7 @@ suspicious. What the fixture has to catch:
   `{ enabled: false }` rather than failing, and `transcript` still carries its
   `source` while `call_log` carries `entries`. A client renders on `enabled`.
 
-A mutant is KILLED if `bun test tests/call_log_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/call_log.test.ts` fails with it
 applied.
 
 This is **41/41**, from 36/41 on the first pass.
@@ -216,7 +216,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/call_log_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/call_log.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":

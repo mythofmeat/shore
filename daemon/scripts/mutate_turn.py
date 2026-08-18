@@ -20,7 +20,7 @@ Four things the mutants attack:
 - **The token sum.** All three components, and that it saturates rather than
   wrapping.
 
-A mutant is KILLED if `bun test tests/turn_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/turn.test.ts` fails with it
 applied.
 
 This is **33/36**, from 30/36 on the first full pass.
@@ -63,6 +63,7 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+TURN = ROOT / "src/handler/turn.ts"
 TURN = "src/handler/turn.ts"
 
 # (label, find, replace)
@@ -137,21 +138,21 @@ MUTANTS = [
      "  if (false) emitNewMessageEvent("),
 
     # --- the backfill filters -------------------------------------------------
-    ("backfill: it runs even when the state already existed",
-     "  if (!ctx.autonomy.ensureState(charName, config)) return;\n",
+    ("backfill: it runs again after a backfill already happened",
+     "  if (!ctx.autonomy.needsActivityBackfill(charName)) return;\n",
      ""),
-    ("backfill: it runs only when the state already existed",
-     "  if (!ctx.autonomy.ensureState(charName, config)) return;",
-     "  if (ctx.autonomy.ensureState(charName, config)) return;"),
+    ("backfill: the already-backfilled check is inverted",
+     "  if (!ctx.autonomy.needsActivityBackfill(charName)) return;",
+     "  if (ctx.autonomy.needsActivityBackfill(charName)) return;"),
     ("backfill: the window is 9 days rather than 90",
-     "export const ACTIVITY_BACKFILL_DAYS = 90;",
-     "export const ACTIVITY_BACKFILL_DAYS = 9;"),
+     "const ACTIVITY_BACKFILL_DAYS = 90;",
+     "const ACTIVITY_BACKFILL_DAYS = 9;"),
     ("backfill: the cutoff boundary is exclusive (EQUIVALENT)",
-     "      if (!Number.isNaN(at.getTime()) && at >= cutoff) timestamps.push(at);",
-     "      if (!Number.isNaN(at.getTime()) && at > cutoff) timestamps.push(at);"),
+     "      if (Number.isNaN(at.getTime()) || at < cutoff) continue;",
+     "      if (Number.isNaN(at.getTime()) || at <= cutoff) continue;"),
     ("backfill: there is no cutoff, so a years-old history seeds the tracker",
-     "      if (!Number.isNaN(at.getTime()) && at >= cutoff) timestamps.push(at);",
-     "      if (!Number.isNaN(at.getTime())) timestamps.push(at);"),
+     "      if (Number.isNaN(at.getTime()) || at < cutoff) continue;",
+     "      if (Number.isNaN(at.getTime())) continue;"),
     ("backfill: assistant turns count as user activity",
      '      if (msg.role !== "user" || isToolResultOnly(msg)) continue;',
      "      if (isToolResultOnly(msg)) continue;"),
@@ -159,11 +160,8 @@ MUTANTS = [
      '      if (msg.role !== "user" || isToolResultOnly(msg)) continue;',
      '      if (msg.role !== "user") continue;'),
     ("backfill: archived segments are not read",
-     "  for (let i = 0; i < segments.segmentCount(); i += 1) {",
-     "  for (let i = 0; i < 0; i += 1) {"),
-    ("backfill: an empty selection is passed down as an empty list",
-     "  if (timestamps.length > 0) ctx.autonomy.backfillActivity(charName, timestamps);",
-     "  ctx.autonomy.backfillActivity(charName, timestamps);"),
+     "i >= 0 && barren < SEGMENTS_PAST_THE_WINDOW",
+     "false"),
     # EQUIVALENT — kept so it is not "fixed" later. See the module docstring.
     ("backfill: segments are read before the live window",
      "  collect(engine.messages());\n  const segments = engine.segments();",
@@ -203,7 +201,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/turn_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/turn.test.ts"], src=TURN)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ silently in the allowing direction in two distinct ways:
 
 Mutants target `src/commands/model_settings.ts` and the two functions the port
 added to `src/llm/capabilities.ts`; each entry names its file. A mutant is
-KILLED if `bun test tests/model_settings_parity.test.ts` fails with it applied.
+KILLED if `bun test tests/model_settings.test.ts` fails with it applied.
 
 The first pass was 57/62 and the second is 61/61 — every mutant killed, which is
 a first for this series. Three of the five first-pass survivors were mis-indented
@@ -313,7 +313,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/model_settings_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/model_settings.test.ts"])
 
 
 if __name__ == "__main__":

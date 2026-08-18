@@ -15,7 +15,7 @@ wrong quietly:
   wrong key, wrong scope or wrong file is invisible until the next session
   loads it back.
 
-A mutant is KILLED if `bun test tests/model_commands_parity.test.ts` fails with
+A mutant is KILLED if `bun test tests/model_commands.test.ts` fails with
 it applied.
 
 The first pass was 55/70 and the second is 69/69. Fourteen of the fifteen
@@ -352,7 +352,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/model_commands_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/model_commands.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":

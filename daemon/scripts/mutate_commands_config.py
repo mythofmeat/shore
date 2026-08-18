@@ -24,7 +24,7 @@ else is broken:
   somewhere else. This one was a real bug, found by this fixture and not by the
   replay passing.
 
-A mutant is KILLED if `bun test tests/config_commands_parity.test.ts` fails
+A mutant is KILLED if `bun test tests/config_commands.test.ts` fails
 with it applied.
 
 This stands at **45/45**, from 36/41 on the first pass. One survivor was an
@@ -231,7 +231,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/config_commands_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/config_commands.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":

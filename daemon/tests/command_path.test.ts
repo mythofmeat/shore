@@ -191,7 +191,7 @@ function envelope(frame: Awaited<ReturnType<typeof dispatchCommand>>): Record<st
       rid: frame.rid,
       name: frame.name,
       data_keys: Object.keys(record).sort(),
-      data_active: record["active"] ?? null,
+      data_active: record["active_model"] ?? record["active"] ?? null,
     };
   }
   if (frame.type === "error") {

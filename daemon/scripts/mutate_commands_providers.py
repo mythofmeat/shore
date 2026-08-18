@@ -12,7 +12,7 @@ failure modes are worse than an error:
   empty one, and nothing would report an error afterwards; the daemon would just
   quietly know about fewer models than it did before.
 
-A mutant is KILLED if `bun test tests/providers_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/providers.test.ts` fails with it
 applied.
 
 The first pass was 38/49 and the third is 49/49. Nine of the eleven first-pass
@@ -281,7 +281,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/providers_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/providers.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":

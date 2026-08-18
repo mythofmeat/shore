@@ -224,9 +224,10 @@
           "character",
           "config_dir",
           "data_dir",
+          "index",
+          "keepalive_halted",
           "message_count",
           "pending_deferred_edit_count",
-          "index",
           "pending_deferred_edits",
           "sections",
           "tokens",
@@ -301,6 +302,7 @@
           "replay_prior_thinking",
           "scopes",
           "sdk",
+          "supports_images",
           "temperature",
           "top_p",
           "zai_clear_thinking",
@@ -456,6 +458,7 @@
         "kind": "command_output",
         "name": "tools",
         "data_keys": [
+          "mcp",
           "subagents",
           "tools",
           "warnings"
@@ -479,6 +482,7 @@
           "config_dir",
           "data_dir",
           "info",
+          "providers",
           "valid",
           "warnings"
         ],

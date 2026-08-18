@@ -31,7 +31,7 @@ type is right, and the number is off. What the fixture has to catch:
   empty list for a character nobody registered; the three heartbeat controls
   raise `invalid_request` for the same character.
 
-A mutant is KILLED if `bun test tests/status_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/status.test.ts` fails with it
 applied.
 
 This is **55/55**, from 50/56 on the first pass. Five of the six survivors were
@@ -298,7 +298,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/status_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/status.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ The rest resolve things, and there the failure mode is a fallback that fires
 when it should not: a template default that wins over a character's override,
 a model that is chosen instead of refused.
 
-A mutant is KILLED if `bun test tests/compaction_assembly_parity.test.ts` fails
+A mutant is KILLED if `bun test tests/compaction_assembly.test.ts` fails
 with it applied.
 
 This is **17/17**, from 14/17 on the first pass.
@@ -124,7 +124,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/compaction_assembly_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/compaction_assembly.test.ts"])
 
 
 if __name__ == "__main__":

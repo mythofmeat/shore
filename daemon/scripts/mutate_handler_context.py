@@ -17,7 +17,7 @@ cases cannot see, so the scenarios were written as multi-turn from the start.
 and what mode reaches the builder. Its mutants are mostly swaps — read the wrong
 file into the wrong slot — because that is the whole surface a wiring bug has.
 
-A mutant is KILLED if `bun test tests/context_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/context.test.ts` fails with it
 applied; a survivor means either the fixture cannot see that decision, or the
 code is equivalent under it.
 
@@ -340,7 +340,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/context_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/context.test.ts"])
 
 
 if __name__ == "__main__":

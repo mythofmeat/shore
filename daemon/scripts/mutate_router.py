@@ -21,7 +21,7 @@ Four things the mutants attack:
 - **The rid filter.** Both halves of `is_ascii() && !contains('\\0')`, and that
   a rejected rid yields `null` rather than failing the request.
 
-A mutant is KILLED if `bun test tests/router_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/router.test.ts` fails with it
 applied.
 
 This is **29/30**, from 21/28 on the first pass.
@@ -62,6 +62,7 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROUTER = ROOT / "src/handler/router.ts"
 ROUTER = "src/handler/router.ts"
 
 # (label, find, replace)
@@ -210,7 +211,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/router_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/router.test.ts"], src=ROUTER)
 
 
 if __name__ == "__main__":

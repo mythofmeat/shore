@@ -290,11 +290,6 @@ export function parseConfigTable(
   const embeddingSection = sectionTable(remainder.embedding);
   const imageGenerationSection = sectionTable(remainder.image_generation);
   const providersSection = sectionTable(remainder.providers);
-  delete remainder.chat;
-  delete remainder.embedding;
-  delete remainder.image_generation;
-  delete remainder.providers;
-
   const parsed = parseAppConfig(remainder);
   if ("err" in parsed) throw new ConfigError("parse_app", parsed.err);
   const app = parsed.ok;

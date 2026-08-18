@@ -6,7 +6,7 @@ five ports in a row had a fixture replay green while still full of holes. This
 is the harness for `config/dirs.ts` and `config/loader.ts`.
 
 Each entry is a single textual edit that inverts one decision in the port. A
-mutant is KILLED if `bun test tests/dirs_parity.test.ts` fails with it applied;
+mutant is KILLED if `bun test tests/dirs.test.ts` fails with it applied;
 a survivor means either the fixture cannot see that decision, or the code is
 equivalent under it. The first pass here was 35/52 and the survivors were the
 useful output: two functions with no coverage at all, several conf.d cases
@@ -145,7 +145,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/dirs_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/dirs.test.ts"])
 
 
 if __name__ == "__main__":

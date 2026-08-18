@@ -154,20 +154,24 @@ MUTANTS = [
      "        this.#service.setCompactionConfig("),
     ("user: the timestamp is taken when the queue drains, not when the user spoke",
      R,
-     "    const at = this.#now();\n    this.#after(character, () => {\n"
-     "      this.#service.onUserMessage(character, turnCount, at);\n    });",
+     "    const localAt = localWallClock(this.#now(), this.#zone);\n    this.#after(character, () => {\n"
+     "      this.#service.onUserMessage(character, turnCount, localAt);\n    });",
      "    this.#after(character, () => {\n"
-     "      this.#service.onUserMessage(character, turnCount, this.#now());\n    });"),
+     "      this.#service.onUserMessage(character, turnCount, localWallClock(this.#now(), this.#zone));\n    });"),
 
     # --- the backfill ---------------------------------------------------------
     ("backfill: the latest user turn is the last in the list, which is the oldest",
      R,
-     "    const latestUserAt = stamps.length === 0 ? undefined : Math.max(...stamps);",
-     "    const latestUserAt = stamps[stamps.length - 1];"),
+     "    const latestUserAt = instants.length === 0 ? undefined : Math.max(...instants);",
+     "    const latestUserAt = instants[instants.length - 1];"),
+    ("backfill: an empty selection seeds the silence clock at -Infinity",
+     R,
+     "    const latestUserAt = instants.length === 0 ? undefined : Math.max(...instants);",
+     "    const latestUserAt = Math.max(...instants);"),
     ("backfill: the histogram is sent without the latest turn, leaving the silence clock unseeded",
      R,
-     "      this.#service.backfillActivity(character, stamps, latestUserAt);",
-     "      this.#service.backfillActivity(character, stamps, undefined);"),
+     "      this.#service.backfillActivity(character, localStamps, latestUserAt);",
+     "      this.#service.backfillActivity(character, localStamps, undefined);"),
 
     # --- the question that cannot wait ----------------------------------------
     ("compact: an unregistered character is told to compact, taking a latch nothing releases",

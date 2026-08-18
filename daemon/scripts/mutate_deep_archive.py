@@ -23,7 +23,7 @@ matters: the LLM arm must not set it, because a pass that wrote no memory
 returns the same zero a successful one does, and setting it there stops the next
 window retrying a conversation that is still fully intact.
 
-A mutant is KILLED if `bun test tests/deep_archive_parity.test.ts
+A mutant is KILLED if `bun test tests/deep_archive.test.ts
 tests/autonomy_runner.test.ts` fails with it applied — two files, because what
 the archive *reports* is only behaviour once the runner folds it in.
 
@@ -210,7 +210,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/deep_archive_parity.test.ts", "tests/autonomy_runner.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/deep_archive.test.ts", "tests/autonomy_runner.test.ts"])
 
 
 if __name__ == "__main__":

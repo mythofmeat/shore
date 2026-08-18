@@ -16,7 +16,7 @@ modes are quiet ones — nothing here errors when it goes wrong:
   path it builds has to be built from *that* name and not from the session's.
   Swapping one reports another character's pending edits as this one's.
 
-A mutant is KILLED if `bun test tests/navigation_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/navigation.test.ts` fails with it
 applied.
 
 This stands at **37/38**, and the fixture needed no new cases to get there — it
@@ -228,7 +228,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/navigation_parity.test.ts"], src=SRC)
+    return _run_mutants(MUTANTS, ["tests/navigation.test.ts"], src=SRC)
 
 
 if __name__ == "__main__":
