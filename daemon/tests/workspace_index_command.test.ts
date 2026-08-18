@@ -124,6 +124,25 @@ describe("the status index section", () => {
     });
   });
 
+  test("before the first pass the backlog comes off disk, not from a zeroed counter", async () => {
+    const out = await section(
+      sourceFor({
+        progressFor: () => ({
+          character: "qifei",
+          pending: 0,
+          files: 0,
+          failures: 0,
+          retryAt: 0,
+          lastError: undefined,
+          sweptAt: undefined,
+          embedderError: undefined,
+        }),
+      }),
+    );
+
+    expect(out?.pending).toBe(1);
+  });
+
   test("a pass with no embedder carries the reason it will never run", async () => {
     const out = await section(
       sourceFor({

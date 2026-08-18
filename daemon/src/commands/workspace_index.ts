@@ -32,7 +32,7 @@ export async function workspaceIndexSection(
     ...(stats.unusableReason === undefined ? {} : { unusable: stats.unusableReason }),
     files: stats.files,
     embedded: stats.embedded,
-    pending: progress?.pending ?? stats.pending,
+    pending: progress?.sweptAt === undefined ? stats.pending : progress.pending,
     skipped: stats.skipped,
     skip_reasons: stats.skipReasons,
     vectors: stats.vectors,

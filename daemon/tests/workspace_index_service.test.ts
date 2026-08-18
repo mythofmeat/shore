@@ -186,6 +186,61 @@ describe("WorkspaceIndexService", () => {
     expect(embedder.documents).toBe(4);
   });
 
+  test("a second character is not starved by the first", async () => {
+    let clock = 10_000;
+    const service = serviceAt(() => clock, { maxBatchItems: 2 });
+    const first = new CountingEmbedder();
+    const second = new CountingEmbedder();
+    service.register({
+      character: "Yuna",
+      workspaceDir: await workspaceOf(2),
+      indexPath: join(root, "first.db"),
+      retrievalConfig: CONFIG,
+      embedder: first,
+    });
+    service.register({
+      character: "qifei",
+      workspaceDir: await workspaceOf(8),
+      indexPath: join(root, "second.db"),
+      retrievalConfig: CONFIG,
+      embedder: second,
+    });
+
+    for (let pass = 0; pass < 6; pass += 1) {
+      clock += 2000;
+      await service.runOnce();
+    }
+
+    expect(service.progress("qifei")!.sweptAt).toBeDefined();
+    expect(second.documents).toBeGreaterThan(0);
+  });
+
+  test("a swept character waits out the batch pause before it is rescanned", async () => {
+    let clock = 10_000;
+    const service = serviceAt(() => clock, { maxBatchItems: 8 });
+    service.register({
+      character: "Yuna",
+      workspaceDir: await workspaceOf(2),
+      indexPath: join(root, "rescan.db"),
+      retrievalConfig: CONFIG,
+      embedder: new CountingEmbedder(),
+    });
+
+    clock += 2000;
+    await service.runOnce();
+    const swept = service.progress("Yuna")!;
+    expect(swept.sweptAt).toBe(clock);
+    expect(swept.pending).toBe(0);
+
+    clock += 100;
+    await service.runOnce();
+    expect(service.progress("Yuna")!.sweptAt).toBe(swept.sweptAt);
+
+    clock += 1000;
+    await service.runOnce();
+    expect(service.progress("Yuna")!.sweptAt).toBe(clock);
+  });
+
   test("a character with no embedder reports why instead of waiting forever", async () => {
     let clock = 10_000;
     const service = serviceAt(() => clock);

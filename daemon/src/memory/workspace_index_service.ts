@@ -47,6 +47,7 @@ export class WorkspaceIndexService {
   readonly #timerIntervalMs: number;
   readonly #maxBatchItems: number | undefined;
   #idleSince: number;
+  #lastPicked: string | undefined;
   #foreground = 0;
   #timer: ReturnType<typeof setInterval> | undefined;
   #running: Promise<void> | undefined;
@@ -143,8 +144,13 @@ export class WorkspaceIndexService {
     const now = this.#now();
     if (this.#foreground > 0 || now - this.#idleSince < this.#idleDelayMs) return;
 
-    for (const entry of this.#entries.values()) {
+    const characters = [...this.#entries.keys()];
+    const after = this.#lastPicked === undefined ? -1 : characters.indexOf(this.#lastPicked);
+    for (let step = 1; step <= characters.length; step += 1) {
+      const name = characters[(after + step) % characters.length]!;
+      const entry = this.#entries.get(name)!;
       if (entry.embedder === undefined || now < entry.retryAt || now < entry.nextBatchAt) continue;
+      this.#lastPicked = name;
       try {
         const outcome = await indexPendingBatch({
           workspaceDir: entry.workspaceDir,
@@ -159,7 +165,7 @@ export class WorkspaceIndexService {
         entry.pending = outcome.pending;
         entry.files = outcome.files;
         entry.sweptAt = this.#now();
-        if (outcome.embedded > 0) entry.nextBatchAt = this.#now() + this.#batchPauseMs;
+        entry.nextBatchAt = this.#now() + this.#batchPauseMs;
       } catch (error) {
         entry.failures += 1;
         entry.lastError = error instanceof Error ? error.message : String(error);
