@@ -19,11 +19,11 @@ off-by-one either archives a message the user has not read or leaves a covered
 exchange in `active.jsonl` forever.
 
 The **reporting** is what the runner folds in. `deepArchiveDone` is the one that
-matters: the LLM arm must not set it, because a pass that wrote no memory
-returns the same zero a successful one does, and setting it there stops the next
-window retrying a conversation that is still fully intact.
+matters: the LLM arm must not set it, because a keep-0 pass retains an
+unanswered autonomous run in `active.jsonl`, and setting it there would stop
+the next window from coming back to quiesce that tail.
 
-A mutant is KILLED if `bun test tests/deep_archive_parity.test.ts
+A mutant is KILLED if `bun test tests/deep_archive.test.ts
 tests/autonomy_runner.test.ts` fails with it applied — two files, because what
 the archive *reports* is only behaviour once the runner folds it in.
 
@@ -141,12 +141,12 @@ MUTANTS = [
      "    return { events: [], deepArchiveDone: false };"),
     ("report: a failed archive finishes the period, so it never retries",
      D,
-     "    return { events: [], failed: message(e), deepArchiveDone: false };\n  } finally {",
-     "    return { events: [], failed: message(e), deepArchiveDone: true };\n  } finally {"),
+     "      `shore: deep-idle archive for ${character} failed, will retry after the next ` +\n        `archive_after window: ${String(e)}`,\n    );\n    return {\n      events: [],\n      failed: message(e),\n      deepArchiveDone: false,",
+     "      `shore: deep-idle archive for ${character} failed, will retry after the next ` +\n        `archive_after window: ${String(e)}`,\n    );\n    return {\n      events: [],\n      failed: message(e),\n      deepArchiveDone: true,"),
     ("report: a conversation that will not load is reported as nothing to do",
      D,
-     "    return { events: [], failed: message(e), deepArchiveDone: false };\n  }\n\n  const plan",
-     "    return { events: [], deepArchiveDone: true };\n  }\n\n  const plan"),
+     "    return {\n      events: [],\n      failed: message(e),\n      deepArchiveDone: false,\n    };",
+     "    return {\n      events: [],\n      failed: message(e),\n      deepArchiveDone: true,\n    };"),
     ("report: missing compaction deps archives with no pass at all",
      D,
      '      failed: "deep-idle archive has no compaction dependencies",',
@@ -210,7 +210,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/deep_archive_parity.test.ts", "tests/autonomy_runner.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/deep_archive.test.ts", "tests/autonomy_runner.test.ts"])
 
 
 if __name__ == "__main__":

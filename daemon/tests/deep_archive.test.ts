@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import fixture from "./autonomy_fixtures/deep_archive.json" with { type: "json" };
@@ -288,12 +288,37 @@ describe("runDeepIdleArchive", () => {
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(kase.active_after);
   });
 
-  test("the LLM arm runs a keep-0 pass and does not finish the idle period", async () => {
+  test("a failed archive reports failure and does not finish the idle period", async () => {
+    const kase = fixture.pure_archive[0]!;
+    const { config, characterDir } = await world(kase.active_before);
+    await mkdir(join(config.dirs.data, "history.db"));
+
+    const result = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
+
+    expect(typeof result.failed).toBe("string");
+    expect(result.deepArchiveDone).toBe(false);
+    expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(
+      kase.active_before as string,
+    );
+  });
+
+  test("a conversation that will not load is a failure, not nothing to do", async () => {
+    const kase = fixture.pure_archive[0]!;
+    const { config, characterDir } = await world(kase.active_before);
+    await rm(join(characterDir, "active.jsonl"));
+    await mkdir(join(characterDir, "active.jsonl"));
+
+    const result = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
+
+    expect(typeof result.failed).toBe("string");
+    expect(result.deepArchiveDone).toBe(false);
+  });
+
+  test("the LLM arm archives a keep-0 pass that wrote nothing, and does not finish the idle period", async () => {
     const kase = fixture.plan.find((c) => c.plan.arm === "compaction")!;
     const { config, characterDir } = await world((kase.input as Shape[]).map(fromShape), false, {
       backgroundModel: true,
     });
-    const before = await readFile(join(characterDir, "active.jsonl"), "utf8");
     process.env["SHORE_FIXTURE_API_KEY"] = "sk-fixture";
 
     const seen: { keepTurns: unknown }[] = [];
@@ -322,7 +347,7 @@ describe("runDeepIdleArchive", () => {
     expect(result.turnCount).toBe(0);
     expect(result.failed).toBeUndefined();
     expect(result.deepArchiveDone).toBe(false);
-    expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(before);
+    expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe("");
   });
 
   test("the keep-0 pass retains the unanswered autonomous run", async () => {
