@@ -7,6 +7,7 @@
     "build": "bun build src/daemon/run.ts --compile --outfile dist/shore-daemon",
     "typecheck": "tsc --noEmit",
     "lint:comments": "bun run scripts/check_no_comments.ts",
+    "lint": "oxlint --type-aware src tests scripts",
     "test": "bun test",
     "lint:citations": "bun run scripts/check_live_citations.ts",
     "mutate": "bun run scripts/mutate.ts",
@@ -26,6 +27,8 @@
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
+    "oxlint": "^1.78.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "typescript": "^7.0.2"
   }
 }

@@ -19,6 +19,7 @@ run install bun install
 run comments bun run lint:comments
 run citations bun run lint:citations
 run typecheck bun run typecheck
+run lint bun run lint
 
 cd "$root/client" || exit 1
 run cargo-upgrade cargo upgrade --incompatible

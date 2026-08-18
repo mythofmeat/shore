@@ -1,0 +1,108 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "promise",
+    "node"
+  ],
+  "env": {
+    "es2024": true
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "src/protocol/**"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "typescript/await-thenable": "warn",
+    "typescript/no-floating-promises": "warn",
+    "typescript/no-misused-promises": "warn",
+    "typescript/no-misused-spread": "warn",
+    "typescript/no-base-to-string": "warn",
+    "typescript/restrict-template-expressions": "warn",
+    "typescript/restrict-plus-operands": "error",
+    "typescript/no-duplicate-type-constituents": "warn",
+    "typescript/no-redundant-type-constituents": "warn",
+    "typescript/no-unnecessary-type-assertion": "warn",
+    "typescript/no-unnecessary-type-conversion": "warn",
+    "typescript/no-unnecessary-boolean-literal-compare": "warn",
+    "typescript/no-unnecessary-template-expression": "warn",
+    "typescript/require-array-sort-compare": "warn",
+    "typescript/only-throw-error": "warn",
+    "typescript/prefer-promise-reject-errors": "warn",
+    "typescript/use-unknown-in-catch-callback-variable": "warn",
+    "typescript/switch-exhaustiveness-check": "warn",
+    "typescript/no-dynamic-delete": "warn",
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-var-requires": "warn",
+    "typescript/no-require-imports": "warn",
+    "typescript/no-deprecated": "warn",
+    "typescript/no-non-null-assertion": "warn",
+    "typescript/no-unsafe-assignment": "warn",
+    "typescript/no-unsafe-argument": "warn",
+    "typescript/no-unsafe-call": "warn",
+    "typescript/no-unsafe-member-access": "warn",
+    "typescript/no-unsafe-return": "warn",
+    "eslint/no-unsafe-optional-chaining": "warn",
+    "eslint/no-shadow": "warn",
+    "eslint/eqeqeq": "warn",
+    "eslint/no-throw-literal": "warn",
+    "eslint/no-promise-executor-return": "warn",
+    "eslint/no-loop-func": "warn",
+    "eslint/no-sequences": "warn",
+    "eslint/no-eq-null": "warn",
+    "eslint/no-empty": [
+      "warn",
+      {
+        "allowEmptyCatch": true
+      }
+    ],
+    "eslint/no-useless-return": "warn",
+    "eslint/no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "eslint/no-console": "warn",
+    "unicorn/no-process-exit": "warn",
+    "unicorn/no-new-array": "warn",
+    "unicorn/no-useless-spread": "warn",
+    "unicorn/no-useless-length-check": "warn",
+    "unicorn/no-array-fill-with-reference-type": "warn",
+    "unicorn/no-immediate-mutation": "warn",
+    "unicorn/no-unnecessary-array-splice-count": "warn",
+    "unicorn/no-object-as-default-parameter": "warn",
+    "unicorn/new-for-builtins": "warn",
+    "unicorn/prefer-number-properties": "warn",
+    "unicorn/escape-case": "warn",
+    "promise/no-return-wrap": "error",
+    "promise/param-names": "warn",
+    "import/no-self-import": "error",
+    "import/no-cycle": "warn",
+    "typescript/unbound-method": "warn",
+    "eslint/require-yield": "warn"
+  },
+  "overrides": [
+    {
+      "files": [
+        "tests/**/*.ts",
+        "scripts/**/*.ts"
+      ],
+      "rules": {
+        "eslint/no-console": "off",
+        "unicorn/no-process-exit": "off",
+        "typescript/no-explicit-any": "warn",
+        "typescript/no-unnecessary-type-assertion": "warn"
+      }
+    }
+  ]
+}
