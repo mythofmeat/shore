@@ -276,5 +276,5 @@ function describe(err: { kind: string; message?: string }): string {
 }
 
 function toolLimits(config: LoadedConfig): ToolLimitsView {
-  return toolLimitsFrom(config.app.tools);
+  return toolLimitsFrom(config.app.tools, config.app.subagents);
 }

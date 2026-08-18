@@ -244,7 +244,7 @@ export async function runTool(
   const exec: ToolExecution = {
     sendDirect: send,
     ctx: toolContext,
-    limits: toolLimitsFrom(ctx.config.app.tools),
+    limits: toolLimitsFrom(ctx.config.app.tools, ctx.config.app.subagents),
     now,
     newMessageId,
     schemas: schemasFrom(

@@ -141,6 +141,31 @@ function withRustMcpFieldCount(err: string): string {
   );
 }
 
+const SUBAGENT_FIELDS_ADDED_SINCE = ["timeout"] as const;
+
+function withoutAddedSubagentFields(value: unknown): unknown {
+  const subagents = (value as { subagents?: unknown } | null)?.subagents;
+  if (subagents === null || typeof subagents !== "object") return value;
+  const specs: Record<string, unknown> = {};
+  for (const [name, spec] of Object.entries(subagents as Record<string, unknown>)) {
+    const copy = { ...(spec as Record<string, unknown>) };
+    for (const key of SUBAGENT_FIELDS_ADDED_SINCE) delete copy[key];
+    specs[name] = copy;
+  }
+  return { ...(value as object), subagents: specs };
+}
+
+const RUST_SUBAGENT_FIELD_COUNT = 5;
+
+function withRustSubagentFields(err: string): string {
+  return err
+    .replace("`model`, `max_iterations`, `timeout`", "`model`, `max_iterations`")
+    .replace(
+      `SubagentConfig with ${RUST_SUBAGENT_FIELD_COUNT + SUBAGENT_FIELDS_ADDED_SINCE.length} elements`,
+      `SubagentConfig with ${RUST_SUBAGENT_FIELD_COUNT} elements`,
+    );
+}
+
 const CACHE_KEYS_MOVED_SINCE = {
   keepalive_max: ["behavior", "autonomy", "cache_keepalive_max"],
   forensics: ["advanced", "cache_forensics"],
@@ -188,7 +213,9 @@ function withoutReintroducedConnectionsFields(value: unknown): unknown {
 }
 
 const withoutAddedFields = (value: unknown): unknown =>
-  withoutReintroducedConnectionsFields(withoutAddedMcpFields(withoutAddedBudgetFields(value)));
+  withoutReintroducedConnectionsFields(
+    withoutAddedSubagentFields(withoutAddedMcpFields(withoutAddedBudgetFields(value))),
+  );
 
 function withRustCacheFields(err: string): string {
   return err
@@ -200,7 +227,9 @@ function withRustCacheFields(err: string): string {
 }
 
 const withRustFieldCounts = (err: string): string =>
-  withRustCacheFields(withRustMcpFieldCount(withRustBudgetFieldCount(err)));
+  withRustSubagentFields(
+    withRustCacheFields(withRustMcpFieldCount(withRustBudgetFieldCount(err))),
+  );
 
 const DELIBERATELY_DIVERGENT = new Set([
   "the daemon section",
@@ -254,6 +283,15 @@ describe("the fixture is real", () => {
       expect(text).not.toContain(`"${key}"`);
     }
     expect(text).toContain(`McpServerConfig with ${RUST_MCP_FIELD_COUNT} elements`);
+  });
+
+  test("the exempted subagent fields really are ones it never had", () => {
+    const subagents = (fixture.defaults as { subagents: Record<string, object> }).subagents;
+    for (const spec of Object.values(subagents)) {
+      for (const key of SUBAGENT_FIELDS_ADDED_SINCE) {
+        expect(Object.keys(spec)).not.toContain(key);
+      }
+    }
   });
 
   test("the moved cache keys really are ones it had, where it had them", () => {
@@ -691,6 +729,24 @@ describe("the tool allowlist and per-tool resolution", () => {
     const parsed = parseAppConfig(parseToml("[tools]\ntimeout = 0\n"));
     if ("err" in parsed) throw new Error(parsed.err);
     expect(timeoutFor(parsed.ok.tools, "read")).toBeUndefined();
+  });
+});
+
+describe("sub-agent timeouts", () => {
+  test("a sub-agent timeout parses as a duration", () => {
+    const parsed = parseAppConfig(
+      parseToml('[subagents.research]\ndescription = "d"\nprompt = "p"\ntimeout = "20m"\n'),
+    );
+    if ("err" in parsed) throw new Error(parsed.err);
+    expect(parsed.ok.subagents.get("research")?.timeout?.asMillis()).toBe(1_200_000);
+  });
+
+  test("a sub-agent without a timeout leaves it unset", () => {
+    const parsed = parseAppConfig(
+      parseToml('[subagents.research]\ndescription = "d"\nprompt = "p"\n'),
+    );
+    if ("err" in parsed) throw new Error(parsed.err);
+    expect(parsed.ok.subagents.get("research")?.timeout).toBeUndefined();
   });
 });
 

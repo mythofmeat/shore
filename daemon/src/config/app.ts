@@ -1035,18 +1035,20 @@ export interface SubagentConfig {
   tools: string[];
   model: string | undefined;
   max_iterations: number | undefined;
+  timeout: ConfigDuration | undefined;
 }
 
 const SUBAGENT: StructSpec<SubagentConfig> = {
   name: "SubagentConfig",
   required: ["description", "prompt"],
-  noDefault: ["description", "prompt", "model", "max_iterations"],
+  noDefault: ["description", "prompt", "model", "max_iterations", "timeout"],
   make: () => ({
     description: "",
     prompt: "",
     tools: [],
     model: undefined,
     max_iterations: undefined,
+    timeout: undefined,
   }),
   fields: {
     description: readString,
@@ -1054,6 +1056,7 @@ const SUBAGENT: StructSpec<SubagentConfig> = {
     tools: readToolNameSeq,
     model: optional(readChatModelName),
     max_iterations: optional(readU32),
+    timeout: optional(readDuration),
   },
 };
 

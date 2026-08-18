@@ -116,6 +116,7 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
       tools: [],
       model: "anthropic:claude-x",
       max_iterations: undefined,
+      timeout: undefined,
     });
   }
   if (knobs.image_generation != null) app.defaults.image_generation = knobs.image_generation;

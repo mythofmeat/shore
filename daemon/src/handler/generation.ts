@@ -547,7 +547,7 @@ function callContext(
 }
 
 function toolLimits(config: LoadedConfig): ToolLimitsView {
-  return toolLimitsFrom(config.app.tools);
+  return toolLimitsFrom(config.app.tools, config.app.subagents);
 }
 
 function thinkingEnabled(opts: ProviderOptions | undefined): boolean {

@@ -32,6 +32,7 @@ function spec(over: Partial<SubagentConfig> = {}): SubagentConfig {
     tools: [],
     model: undefined,
     max_iterations: undefined,
+    timeout: undefined,
     ...over,
   };
 }
