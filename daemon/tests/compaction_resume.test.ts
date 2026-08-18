@@ -290,6 +290,73 @@ test("a checkpoint the workspace has moved past stays wedged until a restart thr
   await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
+test("a checkpoint whose source was edited out from under it is discarded instead of wedging", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-edited-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(characterDir, { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+
+  const messages = conversation();
+  const activeContent = messages.map(activeLine).join("\n") + "\n";
+  await writeFile(join(characterDir, "active.jsonl"), activeContent, "utf8");
+
+  let edits = 0;
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    configDir: "",
+    dispatch: async (_name, input) => {
+      edits += 1;
+      const edit = input as { path: string; content: string };
+      const path = join(workspace, edit.path);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, edit.content, "utf8");
+      return { output: "written", isError: false };
+    },
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const run = (msgs: ConversationMessage[], content: string, llm: CompactionLlm) =>
+    compact(
+      options(dataDir, workspace, memoryStore, msgs, content, tools, llm),
+      { keepRecentTurns: 1 },
+    );
+
+  const editTurn = response("tool_use", [
+    {
+      type: "tool_use",
+      id: "write-1",
+      name: "edit",
+      input: { path: "memory/fact.md", content: "remembered\n" },
+    },
+  ]);
+  const paused = await run(
+    messages,
+    activeContent,
+    scripted([editTurn, new Error("provider unavailable")]),
+  );
+  expect(paused.kind).toBe("paused");
+
+  const edited = [
+    { ...messages[0]!, content: "old question, reworded after sending" },
+    ...messages.slice(1),
+  ];
+  const editedLines = edited.map(activeLine).join("\n") + "\n";
+  await writeFile(join(characterDir, "active.jsonl"), editedLines, "utf8");
+
+  const freshLlm = scripted([editTurn, response("end_turn", [{ type: "text", text: "done" }])]);
+  const second = await run(edited, editedLines, freshLlm);
+
+  expect(second.kind).toBe("compacted");
+  expect(freshLlm.calls).toBe(2);
+  expect(edits).toBe(2);
+  expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).not.toBe(editedLines);
+  await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+});
+
 function options(
   dataDir: string,
   workspace: string,

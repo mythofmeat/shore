@@ -12,7 +12,6 @@ export interface TickInputs {
   readonly deepArchiveDone: boolean;
   readonly activeTurnCount: number;
   readonly minTurns: number;
-  readonly maxTurns: number;
   readonly idleSecs: number;
   readonly idleTriggerSecs: number;
   readonly archiveAfterSecs: number;
@@ -45,9 +44,6 @@ export function tickDecision(i: TickInputs): TickDecision {
 function compactionReason(i: TickInputs): CompactionReason | undefined {
   if (!(i.autonomyEnabled && i.compactionEnabled && !i.compactionTriggered)) {
     return undefined;
-  }
-  if (i.maxTurns > 0 && i.activeTurnCount >= i.maxTurns && i.activeTurnCount >= i.minTurns) {
-    return "max_turns";
   }
   if (
     i.activeTurnCount >= i.minTurns &&

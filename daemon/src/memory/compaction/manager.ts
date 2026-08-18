@@ -546,7 +546,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const compactedTurns = countTurns(messages.slice(0, splitAt));
   const originalRetained = messages.length - splitAt;
   const originalRetainedTurns = countTurns(messages.slice(splitAt));
-  const checkpoint = await resolveCheckpoint(opts, splitAt, compactedTurns, initialRequest);
+  let checkpoint = await resolveCheckpoint(opts, splitAt, compactedTurns, initialRequest);
   checkpoint.request.api_key = initialRequest.api_key;
   const alreadyArchived = opts.resumable === true && opts.dataDir !== undefined
     ? await hasCompactionOperation(join(opts.dataDir, opts.charName), checkpoint.id)
@@ -581,12 +581,29 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   }
   const conflict = await checkpointConflict(checkpoint, opts.activeContent);
   if (conflict !== undefined) {
-    checkpoint.state = "paused";
-    checkpoint.pauseReason = conflict.reason;
-    if (conflict.detail === undefined) delete checkpoint.pauseDetail;
-    else checkpoint.pauseDetail = conflict.detail;
-    await persistCheckpoint(opts, checkpoint);
-    return pausedOutcome(opts, checkpoint);
+    if (conflict.reason !== "source_conflict") {
+      checkpoint.state = "paused";
+      checkpoint.pauseReason = conflict.reason;
+      if (conflict.detail === undefined) delete checkpoint.pauseDetail;
+      else checkpoint.pauseDetail = conflict.detail;
+      await persistCheckpoint(opts, checkpoint);
+      return pausedOutcome(opts, checkpoint);
+    }
+    console.warn(
+      `shore: discarding compaction checkpoint ${checkpoint.id} for ${opts.charName}: the active ` +
+        `conversation was rewritten under it, so the pass can never resume; summarizing from the ` +
+        `current conversation instead. The memory it already wrote stays on disk`,
+    );
+    await clearCheckpoint(opts);
+    checkpoint = newCompactionCheckpoint(
+      opts.charName,
+      opts.activeContent,
+      splitAt,
+      compactedTurns,
+      initialRequest,
+      opts.dryRun,
+    );
+    checkpoint.request.api_key = initialRequest.api_key;
   }
   checkpoint.state = "running";
   delete checkpoint.pauseReason;

@@ -213,8 +213,8 @@ describe("ticking", () => {
       now.value += 2 * HOUR;
       await service.tick();
       expect(executor.calls.filter((c) => c.includes("compaction")).sort()).toEqual([
-        "iris:compaction:max_turns",
-        "nova:compaction:max_turns",
+        "iris:compaction:idle",
+        "nova:compaction:idle",
       ]);
     });
   });
@@ -234,7 +234,7 @@ describe("ticking", () => {
       now.value += 2 * HOUR;
       await service.tick();
 
-      expect(executor.calls).toEqual(["nova:compaction:max_turns"]);
+      expect(executor.calls).toEqual(["nova:compaction:idle"]);
       void first;
     });
   });
@@ -250,7 +250,7 @@ describe("ticking", () => {
 
       now.value += 2 * HOUR;
       await service.tick();
-      expect(executor.calls).toContain("iris:compaction:max_turns");
+      expect(executor.calls).toContain("iris:compaction:idle");
     });
   });
 
@@ -268,8 +268,8 @@ describe("ticking", () => {
       now.value += 2 * HOUR;
       await service.tick();
       expect(executor.calls).toEqual([
-        "nova:compaction:max_turns",
-        "nova:compaction:max_turns",
+        "nova:compaction:idle",
+        "nova:compaction:idle",
       ]);
     });
   });
@@ -368,7 +368,7 @@ describe("the surface the daemon drives", () => {
       service.onCompactionFailed("nova");
       now.value += 3 * HOUR;
       await service.tick();
-      expect(executor.calls).toEqual(["nova:compaction:max_turns"]);
+      expect(executor.calls).toEqual(["nova:compaction:idle"]);
     });
   });
 

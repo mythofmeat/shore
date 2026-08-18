@@ -278,7 +278,6 @@ export class CharacterAutonomy {
       deepArchiveDone: s.deepArchiveDone,
       activeTurnCount: s.activeTurnCount,
       minTurns: c.minTurns,
-      maxTurns: c.maxTurns,
       idleSecs: Math.trunc(Math.max(now - s.lastActivityAt, 0) / 1000),
       idleTriggerSecs: c.idleTriggerSecs,
       archiveAfterSecs: c.archiveAfterSecs,
