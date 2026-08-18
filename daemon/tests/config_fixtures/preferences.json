@@ -116,38 +116,38 @@
       "matches": false
     },
     {
-      "pattern": "\u00e9*",
-      "input": "\u00e9a",
+      "pattern": "é*",
+      "input": "éa",
       "matches": true
     },
     {
-      "pattern": "*\u00e9",
-      "input": "a\u00e9",
+      "pattern": "*é",
+      "input": "aé",
       "matches": true
     },
     {
       "pattern": "*",
-      "input": "\ud83c\udfb5",
+      "input": "🎵",
       "matches": true
     },
     {
-      "pattern": "\ud83c\udfb5*",
-      "input": "\ud83c\udfb5drum",
+      "pattern": "🎵*",
+      "input": "🎵drum",
       "matches": true
     },
     {
-      "pattern": "a*\ud83c\udfb5",
-      "input": "a\ud83c\udfb5",
+      "pattern": "a*🎵",
+      "input": "a🎵",
       "matches": true
     },
     {
       "pattern": "ab*",
-      "input": "\u00e9",
+      "input": "é",
       "matches": false
     },
     {
-      "pattern": "\ud83c\udfb5*\ud83c\udfb5",
-      "input": "\ud83c\udfb5",
+      "pattern": "🎵*🎵",
+      "input": "🎵",
       "matches": false
     },
     {
@@ -509,7 +509,7 @@
     {
       "name": "removed_provider",
       "toml": "[claude_code]\n",
-      "err": "[providers.claude_code] is no longer supported \u2014 the Claude Code transport was removed; drop this section from your config"
+      "err": "[providers.claude_code] is no longer supported — the Claude Code transport was removed; drop this section from your config"
     },
     {
       "name": "conflicting_key_forms",
@@ -2546,7 +2546,6 @@
       "name": "nothing_anywhere",
       "global_toml": "",
       "character_toml": "",
-      "legacy_active_model": null,
       "app_default_model": null,
       "qualified_name": "chat.anthropic.opus"
     },
@@ -2554,7 +2553,6 @@
       "name": "character_selection_wins",
       "global_toml": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-6\"\n",
       "character_toml": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-opus-4-6\"\n",
-      "legacy_active_model": null,
       "app_default_model": null,
       "qualified_name": "chat.anthropic.opus"
     },
@@ -2562,31 +2560,13 @@
       "name": "global_selection_used",
       "global_toml": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-6\"\n",
       "character_toml": "",
-      "legacy_active_model": null,
       "app_default_model": null,
       "qualified_name": "chat.anthropic.sonnet"
-    },
-    {
-      "name": "legacy_active_model",
-      "global_toml": "",
-      "character_toml": "",
-      "legacy_active_model": "opus",
-      "app_default_model": null,
-      "qualified_name": "chat.anthropic.opus"
-    },
-    {
-      "name": "legacy_unknown_falls_through",
-      "global_toml": "",
-      "character_toml": "",
-      "legacy_active_model": "no-such-model",
-      "app_default_model": null,
-      "qualified_name": "chat.anthropic.opus"
     },
     {
       "name": "app_default_model",
       "global_toml": "",
       "character_toml": "",
-      "legacy_active_model": null,
       "app_default_model": "sonnet",
       "qualified_name": "chat.anthropic.sonnet"
     },
@@ -2594,7 +2574,6 @@
       "name": "app_default_unknown_falls_through",
       "global_toml": "",
       "character_toml": "",
-      "legacy_active_model": null,
       "app_default_model": "nope",
       "qualified_name": "chat.anthropic.opus"
     },
@@ -2602,15 +2581,13 @@
       "name": "first_chat_model_last_resort",
       "global_toml": "",
       "character_toml": "",
-      "legacy_active_model": null,
       "app_default_model": null,
       "qualified_name": "chat.anthropic.opus"
     },
     {
-      "name": "selection_beats_legacy_and_default",
+      "name": "selection_beats_the_app_default",
       "global_toml": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-6\"\n",
       "character_toml": "",
-      "legacy_active_model": "opus",
       "app_default_model": "opus",
       "qualified_name": "chat.anthropic.sonnet"
     }
@@ -2626,19 +2603,6 @@
       },
       "chat": {
         "qualified_name": "chat.anthropic.opus",
-        "max_output_tokens": 32768
-      }
-    },
-    {
-      "name": "legacy_runtime_state_supplies_the_chat_model",
-      "background_toml": "",
-      "character_prefs": "",
-      "heartbeat": {
-        "qualified_name": "chat.anthropic.sonnet",
-        "max_output_tokens": 32768
-      },
-      "chat": {
-        "qualified_name": "chat.anthropic.sonnet",
         "max_output_tokens": 32768
       }
     },

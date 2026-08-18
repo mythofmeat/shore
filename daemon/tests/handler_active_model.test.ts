@@ -36,7 +36,6 @@ interface World {
   config: LoadedConfig;
   globalPrefs(toml: string): void;
   charPrefs(toml: string): void;
-  legacy(model: string): void;
 }
 
 function world(opts: { catalog?: string; defaultModel?: string } = {}): World {
@@ -74,8 +73,6 @@ function world(opts: { catalog?: string; defaultModel?: string } = {}): World {
     globalPrefs: (toml) => write(join(dirs.data, "preferences", "models.toml"), toml),
     charPrefs: (toml) =>
       write(join(dirs.data, CHARACTER, "preferences", "models.toml"), toml),
-    legacy: (model) =>
-      write(join(dirs.data, CHARACTER, "runtime_state.json"), `{"active_model": ${JSON.stringify(model)}}`),
   };
 }
 
@@ -107,13 +104,6 @@ describe("which model", () => {
     w.charPrefs(selects("anthropic", "claude-opus-4-6"));
 
     expect(resolve(w).model?.name).toBe("opus");
-  });
-
-  test("the legacy runtime_state file is still read, from the character's own directory", () => {
-    const w = world({ defaultModel: "opus" });
-    w.legacy("sonnet");
-
-    expect(resolve(w).model?.name).toBe("sonnet");
   });
 
   test("the configured default is next", () => {
