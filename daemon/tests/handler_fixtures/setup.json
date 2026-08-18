@@ -3,7 +3,7 @@
   "resolve_generation_model": [
     {
       "name": "the pre-resolved model passes straight through",
-      "note": "an empty overlay must not rebuild the model — the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
+      "note": "an empty overlay must not rebuild the model \u2014 the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
       "input": {
         "active_model": {
           "name": "opus",
@@ -187,7 +187,7 @@
           "api_key_env": "ANTHROPIC_API_KEY",
           "base_url": null,
           "max_context_tokens": 200000,
-          "max_output_tokens": 8192,
+          "max_output_tokens": 32768,
           "temperature": 0.2,
           "top_p": null,
           "reasoning_effort": null,
@@ -257,7 +257,7 @@
     },
     {
       "name": "a misspelled default surfaces as an error",
-      "note": "not silently swapped for the first model — a typo in user config should say so",
+      "note": "not silently swapped for the first model \u2014 a typo in user config should say so",
       "input": {
         "active_model": null,
         "default_model": "nope",
@@ -286,7 +286,7 @@
     },
     {
       "name": "no default falls back to the first static chat model",
-      "note": "first, not any — catalog order is the tiebreak",
+      "note": "first, not any \u2014 catalog order is the tiebreak",
       "input": {
         "active_model": null,
         "default_model": null,
@@ -320,7 +320,7 @@
           "api_key_env": "ANTHROPIC_API_KEY",
           "base_url": null,
           "max_context_tokens": 200000,
-          "max_output_tokens": 8192,
+          "max_output_tokens": 32768,
           "temperature": 0.1,
           "top_p": null,
           "reasoning_effort": null,
@@ -827,7 +827,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "[Tuesday 2026-06-30 · 8:00 PM]\n\nfirst"
+                "text": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nfirst"
               }
             ]
           },
@@ -1012,7 +1012,7 @@
     },
     {
       "name": "the mcp surface is filtered by enabled_tools",
-      "note": "one server, two tools, one allowlisted — and the static tools come first, which is the cache prefix",
+      "note": "one server, two tools, one allowlisted \u2014 and the static tools come first, which is the cache prefix",
       "input": {
         "history": [
           {
@@ -1150,7 +1150,7 @@
         "tools": [
           {
             "name": "read",
-            "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
+            "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders \u2014 `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
             "input_schema": {
               "type": "object",
               "properties": {

@@ -619,7 +619,7 @@ function parseAuxSection<T>(
 }
 
 function baseProviderDefaults(): ModelConfigFields {
-  return { maxOutputTokens: 8192, maxContextTokens: 200_000 };
+  return { maxOutputTokens: 32768, maxContextTokens: 200_000 };
 }
 
 export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {

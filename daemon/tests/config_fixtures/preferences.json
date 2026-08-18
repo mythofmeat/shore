@@ -1208,7 +1208,7 @@
         "top_p": null,
         "reasoning_effort": null,
         "budget_tokens": null,
-        "max_output_tokens": 8192,
+        "max_output_tokens": 32768,
         "cache_ttl": "1h",
         "cache_keepalive": null,
         "sdk": "anthropic",
@@ -1231,7 +1231,7 @@
         "api_key_env": "ANTHROPIC_API_KEY",
         "base_url": null,
         "max_context_tokens": 200000,
-        "max_output_tokens": 8192,
+        "max_output_tokens": 32768,
         "temperature": null,
         "top_p": null,
         "reasoning_effort": null,
@@ -1469,7 +1469,7 @@
             "api_key_env": "ANTHROPIC_API_KEY",
             "base_url": null,
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -1497,7 +1497,7 @@
             "api_key_env": "ANTHROPIC_API_KEY",
             "base_url": null,
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -1562,7 +1562,7 @@
             "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -1590,7 +1590,7 @@
             "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -1769,7 +1769,7 @@
             "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -1930,7 +1930,7 @@
             "api_key_env": "OPENROUTER_API_KEY",
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -1990,7 +1990,7 @@
             "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -2023,7 +2023,7 @@
             "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -2056,7 +2056,7 @@
             "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -2192,7 +2192,7 @@
             "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -2398,7 +2398,7 @@
             "api_key_env": null,
             "base_url": null,
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -2441,7 +2441,7 @@
             "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 32768,
             "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
@@ -2622,11 +2622,11 @@
       "character_prefs": "",
       "heartbeat": {
         "qualified_name": "chat.anthropic.opus",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       },
       "chat": {
         "qualified_name": "chat.anthropic.opus",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       }
     },
     {
@@ -2635,11 +2635,11 @@
       "character_prefs": "",
       "heartbeat": {
         "qualified_name": "chat.anthropic.sonnet",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       },
       "chat": {
         "qualified_name": "chat.anthropic.sonnet",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       }
     },
     {
@@ -2648,11 +2648,11 @@
       "character_prefs": "",
       "heartbeat": {
         "qualified_name": "chat.anthropic.sonnet",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       },
       "chat": {
         "qualified_name": "chat.anthropic.opus",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       }
     },
     {
@@ -2661,11 +2661,11 @@
       "character_prefs": "",
       "heartbeat": {
         "qualified_name": "chat.anthropic.sonnet",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       },
       "chat": {
         "qualified_name": "chat.anthropic.opus",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       }
     },
     {
@@ -2674,11 +2674,11 @@
       "character_prefs": "",
       "heartbeat": {
         "qualified_name": "chat.anthropic.sonnet",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       },
       "chat": {
         "qualified_name": "chat.anthropic.opus",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       }
     },
     {
@@ -2687,11 +2687,11 @@
       "character_prefs": "[selected]\nprovider = \"anthropic\"\nmodel_id = \"claude-sonnet-4-6\"\n",
       "heartbeat": {
         "qualified_name": "chat.anthropic.sonnet",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       },
       "chat": {
         "qualified_name": "chat.anthropic.sonnet",
-        "max_output_tokens": 8192
+        "max_output_tokens": 32768
       }
     },
     {

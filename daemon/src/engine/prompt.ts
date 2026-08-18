@@ -6,7 +6,7 @@ import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 
-const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+const DEFAULT_MAX_OUTPUT_TOKENS = 32768;
 
 
 const TIME_GAP_THRESHOLD_SECS = 1_800;

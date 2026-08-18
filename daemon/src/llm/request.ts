@@ -12,7 +12,7 @@ import type {
 import type { ContentBlock } from "../engine/types";
 import { rustTrim } from "../memory/lines";
 
-const DEFAULT_MAX_TOKENS = 4096;
+const DEFAULT_MAX_TOKENS = 32768;
 
 export interface ResolvedModel {
   name: string;

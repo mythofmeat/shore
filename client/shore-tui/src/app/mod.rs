@@ -1543,7 +1543,15 @@ impl App {
                 }
                 self.completion.candidates = candidates;
             }
-            "setting:max_output_tokens" | "setting:budget_tokens" => {
+            "setting:max_output_tokens" => {
+                let mut candidates =
+                    Self::filtered_presets(&["16384", "32768", "65536", "reset"], &filter);
+                if raw_filter.parse::<u32>().is_ok() {
+                    candidates.push(format!("Custom: {raw_filter}"));
+                }
+                self.completion.candidates = candidates;
+            }
+            "setting:budget_tokens" => {
                 let mut candidates = Self::filtered_presets(
                     &["1024", "2048", "4096", "8192", "16384", "32768", "reset"],
                     &filter,

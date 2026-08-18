@@ -503,7 +503,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -562,7 +562,7 @@
       "retain_long": false
     },
     {
-      "name": "absent max_output_tokens defaults to 4096",
+      "name": "absent max_output_tokens defaults to 32768",
       "model": {
         "name": "test-model",
         "qualified_name": "chat.anthropic.test-model",
@@ -602,7 +602,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "none"
       },
@@ -698,7 +698,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -746,7 +746,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -794,7 +794,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -842,7 +842,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -890,7 +890,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "none"
       },
@@ -938,7 +938,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -986,7 +986,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -1034,7 +1034,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -1082,7 +1082,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -1130,7 +1130,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -1178,7 +1178,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -1226,7 +1226,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -1274,7 +1274,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
       },
@@ -1322,7 +1322,7 @@
             ]
           }
         ],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
         "provider_options": {
           "thinking_enabled": false
         },
