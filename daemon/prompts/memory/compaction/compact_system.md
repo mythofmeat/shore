@@ -111,4 +111,3 @@ Local commits only. Do not push, alter remotes, rewrite history, or change git c
 End with a brief plain-text summary of what you preserved.
 
 If no `edit` tools are called, the compaction system treats that as a deliberate signal that the conversation should remain active and will retry later. Use that outcome only when there is genuinely nothing worth preserving. If something from the conversation should survive the archive, write it.
-
