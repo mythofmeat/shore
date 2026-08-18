@@ -23,10 +23,10 @@ fn session_line(data: &Value) -> String {
     });
     let turn_word = if turns == 1 { "turn" } else { "turns" };
     if spent == 0 {
-        format!("{turns} {turn_word} since the daemon started")
+        format!("{turns} {turn_word} in this conversation")
     } else {
         format!(
-            "{turns} {turn_word} since the daemon started \u{00b7} {} tokens",
+            "{turns} {turn_word} in this conversation \u{00b7} {} tokens since the daemon started",
             count(spent)
         )
     }
@@ -233,6 +233,27 @@ mod tests {
         let _ignored = stdout.write_all(b"\n----- STATUS, FRESH DAEMON (shore status) -----\n");
         _ = stdout.write_all(&buf);
         _ = stdout.write_all(b"----- end -----\n");
+
+        set_color_enabled(true);
+        let busy = json!({
+            "character": "qifei",
+            "active_model": "opencode-go:glm-5.3",
+            "turn_count": 11, "message_count": 34,
+            "config_dir": "/config",
+            "tokens": {
+                "input": 120_000, "output": 48_000,
+                "cache_read": 1_600_000, "cache_write": 32_000
+            },
+            "pending_deferred_edit_count": 0,
+            "keepalive_halted": null, "autonomy": null, "activity": null,
+            "sections": ["tokens", "autonomy", "activity"]
+        });
+        let mut busy_buf = Vec::new();
+        write_status(&mut busy_buf, &busy, "");
+        set_color_enabled(false);
+        _ = stdout.write_all(b"\n----- STATUS, MID CONVERSATION (shore status) -----\n");
+        _ = stdout.write_all(&busy_buf);
+        _ = stdout.write_all(b"----- end -----\n");
         _ = stdout.flush();
     }
 
@@ -240,12 +261,48 @@ mod tests {
     fn a_zero_turn_count_says_what_it_is_counting() {
         let out = render(&payload());
         assert!(
-            out.contains("since the daemon started"),
+            out.contains("0 turns in this conversation"),
             "a bare 0 reads as 'nothing ever happened'; say the window: {out}"
         );
         assert!(
             !out.contains("Turns        0"),
             "the old unqualified label must be gone: {out}"
+        );
+    }
+
+    #[test]
+    fn turns_count_the_conversation_not_the_daemon_uptime() {
+        let mut data = payload();
+        if let Some(slot) = data.get_mut("turn_count") {
+            *slot = json!(11);
+        }
+        let out = render(&data);
+        assert!(
+            out.contains("11 turns in this conversation"),
+            "turn_count is user turns in the stored conversation, which outlives a restart: {out}"
+        );
+        assert!(
+            !out.contains("turns since the daemon started"),
+            "the turn count is not a daemon-uptime figure: {out}"
+        );
+    }
+
+    #[test]
+    fn tokens_keep_the_daemon_uptime_window_the_turn_count_lost() {
+        let mut data = payload();
+        if let Some(slot) = data.get_mut("turn_count") {
+            *slot = json!(11);
+        }
+        if let Some(slot) = data.get_mut("tokens") {
+            *slot = json!({
+                "input": 1_000_000, "output": 500_000,
+                "cache_read": 300_000, "cache_write": 0
+            });
+        }
+        let out = render(&data);
+        assert!(
+            out.contains("tokens since the daemon started"),
+            "session tokens really do reset on restart; each half names its own window: {out}"
         );
     }
 
@@ -275,7 +332,11 @@ mod tests {
         if let Some(slot) = data.get_mut("turn_count") {
             *slot = json!(1);
         }
-        assert!(render(&data).contains("1 turn since"), "{}", render(&data));
+        assert!(
+            render(&data).contains("1 turn in this"),
+            "{}",
+            render(&data)
+        );
     }
 
     #[test]
