@@ -131,7 +131,6 @@ describe("registering", () => {
       await service.register(registration("nova", characterDir(root, "nova")));
       expect(service.status("nova")).toEqual({
         character: "nova",
-        paused: false,
         heartbeat_state: "Active",
         ticks_without_user: 0,
         covered_turn_count: 0,
@@ -304,22 +303,11 @@ describe("what the daemon reports", () => {
   test("notifying a character nobody registered is ignored, not an error", async () => {
     const { service } = build();
     expect(() => service.onUserMessage("ghost", 1, LOCAL_AT)).not.toThrow();
-    expect(service.setPaused("ghost", true)).toBeUndefined();
     expect(service.log("ghost", 10)).toEqual([]);
   });
 });
 
 describe("the surface the daemon drives", () => {
-  test("pause round-trips, and reports the state it set", async () => {
-    await inTempDir(async (root) => {
-      const { service } = build();
-      await service.register(registration("nova", characterDir(root, "nova")));
-
-      expect(service.setPaused("nova", true)).toBe(true);
-      expect(service.setPaused("nova", false)).toBe(false);
-    });
-  });
-
   test("the log reads back the events a tick wrote", async () => {
     await inTempDir(async (root) => {
       const { service, now } = build();

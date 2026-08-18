@@ -110,7 +110,6 @@ export async function sessionActivateCommand(
         ? null
         : {
             state: status.heartbeat_state,
-            paused: status.paused,
             ...(wake === undefined
               ? {}
               : { next_wake_at: rfc3339(wake), seconds_until_wake: untilSecs(wake, now) }),

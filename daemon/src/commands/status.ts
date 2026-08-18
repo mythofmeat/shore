@@ -48,7 +48,6 @@ export function autonomyWire(status: AutonomyStatus, now: number): Json {
   const wake = status.next_wake_at;
   const user = status.last_user_at;
   return {
-    paused: status.paused,
     heartbeat_state: status.heartbeat_state,
     ticks_without_user: status.ticks_without_user,
     dormant_after_heartbeat_turns: status.max_idle_ticks,

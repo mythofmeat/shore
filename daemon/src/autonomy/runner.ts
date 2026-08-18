@@ -57,7 +57,6 @@ export interface TickOutcome {
 }
 
 interface RunnerState {
-  paused: boolean;
   dirty: boolean;
   lastActivityAt: number;
   compactionTriggered: boolean;
@@ -107,7 +106,6 @@ export class CharacterAutonomy {
       this.#clock.deferWakeToMinimumLatency(opts.now());
     }
     this.#state = {
-      paused: false,
       dirty: false,
       lastActivityAt: opts.now(),
       compactionTriggered: false,
@@ -118,26 +116,12 @@ export class CharacterAutonomy {
     };
   }
 
-  get paused(): boolean {
-    return this.#state.paused;
-  }
-
   get clock(): HeartbeatClock {
     return this.#clock;
   }
 
   get log(): HeartbeatLog {
     return this.#log;
-  }
-
-  pause(): void {
-    this.#state.paused = true;
-    this.#state.dirty = true;
-  }
-
-  resume(): void {
-    this.#state.paused = false;
-    this.#state.dirty = true;
   }
 
   onUserMessage(turnCount: number, now: number): void {
@@ -270,7 +254,6 @@ export class CharacterAutonomy {
     const s = this.#state;
     return {
       autonomyEnabled: c.autonomyEnabled,
-      paused: s.paused,
       heartbeatEnabled: c.heartbeatEnabled,
 
       compactionEnabled: c.compactionEnabled,

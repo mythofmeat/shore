@@ -633,37 +633,6 @@ describe("a completed compaction", () => {
   });
 });
 
-describe("pausing", () => {
-  test("stops the heartbeat and nothing else", async () => {
-    await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({ dir, config: {} });
-      runner.onUserMessage(50, time.now);
-      time.now += 4 * HOUR;
-      runner.pause();
-
-      const outcome = await runner.tick();
-      expect(outcome.heartbeat).toBe("none");
-      expect(executor.calls).toEqual(["compaction:idle"]);
-    });
-  });
-
-  test("resuming lets it run again", async () => {
-    await inTempDir(async (dir) => {
-      const { runner, time } = build({
-        dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0 },
-      });
-      runner.onUserMessage(1, time.now);
-      runner.pause();
-      time.now += 4 * HOUR;
-      expect((await runner.tick()).heartbeat, "paused").toBe("none");
-
-      runner.resume();
-      await driveToHeartbeat(runner, time);
-    });
-  });
-});
-
 describe("persistence", () => {
   test("a tick that changed something writes it", async () => {
     await inTempDir(async (dir) => {

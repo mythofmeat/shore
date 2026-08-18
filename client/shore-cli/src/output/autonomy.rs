@@ -183,9 +183,7 @@ pub(crate) fn write_autonomy_section(
     autonomy: &serde_json::Value,
     width: usize,
 ) {
-    let paused = autonomy["paused"].as_bool().unwrap_or(false);
-    let suffix = if paused { "paused" } else { "" };
-    write_section_header(out, "autonomy", suffix, width);
+    write_section_header(out, "autonomy", "", width);
 
     let int_state = autonomy["heartbeat_state"].as_str().unwrap_or("Active");
     let ticks = autonomy["ticks_without_user"].as_u64().unwrap_or(0);

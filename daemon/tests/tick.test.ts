@@ -7,7 +7,6 @@ const HOUR_MS = 3_600_000;
 function quietTick(overrides: Partial<TickInputs> = {}): TickInputs {
   return {
     autonomyEnabled: true,
-    paused: false,
     heartbeatEnabled: true,
 
     compactionEnabled: true,
@@ -97,18 +96,6 @@ describe("the deep archive", () => {
 });
 
 describe("the master switches", () => {
-  test("pausing stops the heartbeat and nothing else", () => {
-    const d = tickDecision(
-      quietTick({
-        paused: true,
-        activeTurnCount: 50,
-        idleSecs: 10_000_000,
-      }),
-    );
-    expect(d.heartbeatMayTick).toBe(false);
-    expect(d.compaction).toBe("idle");
-  });
-
   test("disabling autonomy stops every trigger at once", () => {
     const d = tickDecision(
       quietTick({
@@ -135,9 +122,8 @@ describe("the master switches", () => {
     expect(d.heartbeatMayTick).toBe(true);
   });
 
-  test("the heartbeat gate reads all three switches", () => {
+  test("the heartbeat gate reads both switches", () => {
     expect(tickDecision(quietTick()).heartbeatMayTick).toBe(true);
-    expect(tickDecision(quietTick({ paused: true })).heartbeatMayTick).toBe(false);
     expect(tickDecision(quietTick({ autonomyEnabled: false })).heartbeatMayTick).toBe(false);
     expect(tickDecision(quietTick({ heartbeatEnabled: false })).heartbeatMayTick).toBe(false);
   });
@@ -161,35 +147,33 @@ describe("the background retry backoff", () => {
 function* everyTick(): Generator<TickInputs> {
   const bools = [false, true];
   for (const autonomyEnabled of bools)
-    for (const paused of bools)
-      for (const heartbeatEnabled of bools)
-        for (const compactionEnabled of bools)
-          for (const compactionTriggered of bools)
-            for (const deepArchiveDone of bools)
-              for (const activeTurnCount of [0, 4, 5, 19, 20])
-                for (const minTurns of [0, 4, 20])
-                  for (const idleSecs of [0, 100, 86_400])
-                    for (const idleTriggerSecs of [0, 100])
-                      for (const archiveAfterSecs of [0, 86_400])
-                          yield {
-                            autonomyEnabled,
-                            paused,
-                            heartbeatEnabled,
-                            compactionEnabled,
-                            compactionTriggered,
-                            deepArchiveDone,
-                            activeTurnCount,
-                            minTurns,
-                            idleSecs,
-                            idleTriggerSecs,
-                            archiveAfterSecs,
-                          };
+    for (const heartbeatEnabled of bools)
+      for (const compactionEnabled of bools)
+        for (const compactionTriggered of bools)
+          for (const deepArchiveDone of bools)
+            for (const activeTurnCount of [0, 4, 5, 19, 20])
+              for (const minTurns of [0, 4, 20])
+                for (const idleSecs of [0, 100, 86_400])
+                  for (const idleTriggerSecs of [0, 100])
+                    for (const archiveAfterSecs of [0, 86_400])
+                      yield {
+                        autonomyEnabled,
+                        heartbeatEnabled,
+                        compactionEnabled,
+                        compactionTriggered,
+                        deepArchiveDone,
+                        activeTurnCount,
+                        minTurns,
+                        idleSecs,
+                        idleTriggerSecs,
+                        archiveAfterSecs,
+                      };
 }
 
 describe("the sweep", () => {
   test("it is as big as it claims and every case is distinct", () => {
     const all = [...everyTick()];
-    expect(all.length).toBe(11_520);
+    expect(all.length).toBe(5_760);
     expect(new Set(all.map((i) => JSON.stringify(i))).size).toBe(all.length);
   });
 
@@ -226,21 +210,11 @@ describe("the sweep", () => {
     }
   });
 
-  test("the heartbeat gate reads only its own three switches", () => {
+  test("the heartbeat gate reads only its own two switches", () => {
     for (const i of everyTick()) {
       expect(tickDecision(i).heartbeatMayTick, JSON.stringify(i)).toBe(
-        i.autonomyEnabled && i.heartbeatEnabled && !i.paused,
+        i.autonomyEnabled && i.heartbeatEnabled,
       );
-    }
-  });
-
-  test("pausing stops the heartbeat and nothing else", () => {
-    for (const i of everyTick()) {
-      if (i.paused) continue;
-      const paused = tickDecision({ ...i, paused: true });
-      const running = tickDecision(i);
-      expect(paused.compaction, JSON.stringify(i)).toBe(running.compaction);
-      expect(paused.deepArchive, JSON.stringify(i)).toBe(running.deepArchive);
     }
   });
 

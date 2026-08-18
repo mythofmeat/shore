@@ -923,17 +923,9 @@ fn session_activate_heartbeat(h: &serde_json::Value) -> String {
     let Some(state) = h["state"].as_str() else {
         return "no state (registration failed)".to_owned();
     };
-    let paused = if h["paused"].as_bool().unwrap_or(false) {
-        ", paused"
-    } else {
-        ""
-    };
     match h["seconds_until_wake"].as_i64() {
-        Some(secs) => format!(
-            "{state}{paused}, next wake in {}",
-            format_duration_compact(secs)
-        ),
-        None => format!("{state}{paused}, no wake scheduled"),
+        Some(secs) => format!("{state}, next wake in {}", format_duration_compact(secs)),
+        None => format!("{state}, no wake scheduled"),
     }
 }
 

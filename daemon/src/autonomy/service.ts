@@ -28,7 +28,6 @@ export interface RegisterCharacter {
 
 export interface AutonomyStatus {
   character: string;
-  paused: boolean;
   heartbeat_state: string;
   ticks_without_user: number;
   covered_turn_count: number;
@@ -179,14 +178,6 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.onCompactionComplete(turnCount, this.#now());
   }
 
-  setPaused(character: string, paused: boolean): boolean | undefined {
-    const runner = this.#entries.get(character)?.runner;
-    if (runner === undefined) return undefined;
-    if (paused) runner.pause();
-    else runner.resume();
-    return runner.paused;
-  }
-
   status(character: string): AutonomyStatus | undefined {
     const runner = this.#entries.get(character)?.runner;
     if (runner === undefined) return undefined;
@@ -195,7 +186,6 @@ export class AutonomyService {
     const bounds = runner.clock.config;
     const status: AutonomyStatus = {
       character,
-      paused: runner.paused,
       heartbeat_state: runner.clock.stateAt(now),
       ticks_without_user: snapshot.ticksWithoutUser,
       covered_turn_count: snapshot.coveredTurnCount,
