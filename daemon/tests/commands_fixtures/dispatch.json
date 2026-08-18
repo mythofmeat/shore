@@ -13,8 +13,7 @@
         "data_shape": {
           "characters": "array[ada,aaron,bob]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "switch_character",
@@ -32,8 +31,7 @@
           "character": "string",
           "changed": "bool"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "character_info",
@@ -69,8 +67,7 @@
           "data_dir": "string",
           "has_data": "bool"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "log",
@@ -100,8 +97,7 @@
           "total_messages": "number:2",
           "total_turns": "number:2"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "history_page",
@@ -131,8 +127,7 @@
           "total_messages": "number:2",
           "total_turns": "number:2"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "get",
@@ -158,8 +153,7 @@
           "content_blocks": "array[1]",
           "timestamp": "string"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "edit",
@@ -170,8 +164,7 @@
         "kind": "error",
         "code": "invalid_request",
         "message": "Missing required argument: content"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "delete",
@@ -182,8 +175,7 @@
         "kind": "error",
         "code": "invalid_request",
         "message": "Missing required argument: refs"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "alt",
@@ -194,8 +186,7 @@
         "kind": "error",
         "code": "invalid_request",
         "message": "Alternate response selection only applies to assistant messages"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "list_alternatives",
@@ -206,8 +197,7 @@
         "kind": "error",
         "code": "invalid_request",
         "message": "Alternate response selection only applies to assistant messages"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "inject_system",
@@ -218,8 +208,7 @@
         "kind": "error",
         "code": "invalid_request",
         "message": "Missing required argument: text"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "status",
@@ -259,8 +248,7 @@
           "index": "null",
           "sections": "array[4]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "list_models",
@@ -282,8 +270,7 @@
           "hidden_count": "number:0",
           "roles": "array[6]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "model_info",
@@ -345,8 +332,7 @@
           "effective_sampler": "object",
           "scopes": "object"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "switch_model",
@@ -362,8 +348,7 @@
         "data_shape": {
           "active": "string"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "reset_model",
@@ -373,20 +358,17 @@
         "name": "reset_model",
         "data_keys": [
           "active",
-          "previous",
           "previous_model_id",
           "previous_provider",
           "reset_to"
         ],
         "data_shape": {
-          "previous": "null",
           "previous_provider": "null",
           "previous_model_id": "null",
           "active": "null",
           "reset_to": "string"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "set_model_setting",
@@ -415,8 +397,7 @@
           "key": "string",
           "value": "number:0.5"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "model_settings",
@@ -446,8 +427,7 @@
           "reasoning_effort_domain": "array[6]",
           "scopes": "object"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "compact",
@@ -456,8 +436,7 @@
         "kind": "error",
         "code": "internal_error",
         "message": "API key environment variable SHORE_FIXTURE_API_KEY is not set"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "config",
@@ -468,8 +447,7 @@
         "kind": "error",
         "code": "not_found",
         "message": "Config section not found: behavior.autonomy.enabled"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "tools",
@@ -487,8 +465,7 @@
           "subagents": "array[0]",
           "warnings": "array[0]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "config_check",
@@ -514,8 +491,7 @@
           "cache_dir": "string",
           "chat_models": "number:1"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "config_reload",
@@ -535,8 +511,7 @@
           "character": "string",
           "changed_prompt_files": "array[1]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "error_log",
@@ -554,8 +529,7 @@
           "errors": "object",
           "key_fallbacks": "object"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "heartbeat_log",
@@ -571,8 +545,7 @@
         "data_shape": {
           "events": "array[0]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "call_log",
@@ -590,8 +563,7 @@
           "enabled": "bool",
           "entries": "array[0]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "transcript",
@@ -611,8 +583,7 @@
           "source": "string",
           "entries": "array[0]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "heartbeat_tick_now",
@@ -628,8 +599,7 @@
           "status": "status:scheduled",
           "character": "string"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "keepalive_ping_now",
@@ -647,8 +617,7 @@
           "character": "string",
           "reason": "string"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "heartbeat_set_dormant",
@@ -664,8 +633,7 @@
           "status": "status:dormant",
           "character": "string"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "heartbeat_set_active",
@@ -681,8 +649,7 @@
           "status": "status:active",
           "character": "string"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "usage",
@@ -693,8 +660,7 @@
         "kind": "error",
         "code": "internal_error",
         "message": "provider error: usage reports need a ledger on disk; this client has an in-memory one"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "list_providers",
@@ -708,8 +674,7 @@
         "data_shape": {
           "providers": "array[0]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "refresh_provider_models",
@@ -720,8 +685,7 @@
         "kind": "error",
         "code": "not_found",
         "message": "provider \"anthropic\" is not configured"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "refresh_all_provider_models",
@@ -737,8 +701,7 @@
           "results": "array[0]",
           "skipped": "array[0]"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "list_provider_models",
@@ -764,8 +727,7 @@
           "include_hidden": "bool",
           "cache": "object"
         }
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "list_character",
@@ -774,8 +736,7 @@
         "kind": "error",
         "code": "invalid_request",
         "message": "Unknown command: list_character"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "switch_models",
@@ -784,8 +745,7 @@
         "kind": "error",
         "code": "invalid_request",
         "message": "Unknown command: switch_models"
-      },
-      "active_model_after": null
+      }
     },
     {
       "name": "",
@@ -794,8 +754,7 @@
         "kind": "error",
         "code": "invalid_request",
         "message": "Unknown command: "
-      },
-      "active_model_after": null
+      }
     }
   ],
   "dispatch_characterless": [

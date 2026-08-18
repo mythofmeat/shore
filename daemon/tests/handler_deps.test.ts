@@ -746,20 +746,6 @@ describe("the command path", () => {
     }
   });
 
-  test("one session's active model is remembered per character, not per session", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-cmd-switch-");
-    try {
-      const deps = buildCommandPathDeps(commandAssembly(runtime));
-      deps.sessions.setActiveModel(1, "ada", "anthropic:a");
-
-      expect(deps.sessions.activeModel(1, "nova")).toBeUndefined();
-      expect(deps.sessions.activeModel(1, "ada")).toBe("anthropic:a");
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
   test("a refreshed prompt snapshot drops the cached body", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-prompt-");
     try {

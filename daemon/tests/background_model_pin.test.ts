@@ -63,7 +63,6 @@ async function build(defaults: string): Promise<World> {
       dataDir: loaded.dirs.data,
       characterName: "Tester",
       activeModel: undefined,
-      activeResolvedModel: undefined,
       runtime: silentRuntime(),
       env,
     },

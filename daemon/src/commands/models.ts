@@ -50,7 +50,6 @@ export interface ModelsContext {
   dataDir: string;
   characterName: string | undefined;
   activeModel: string | undefined;
-  activeResolvedModel: ResolvedModel | undefined;
   configPath?: string;
   runtime?: ConfigRuntime;
   env?: Env;
@@ -541,8 +540,6 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
   prefs.selected.modelId = resolved.modelId;
   saveCharacter(ctx, character, prefs);
 
-  ctx.activeModel = name;
-  ctx.activeResolvedModel = resolved;
   return {
     active: name,
     qualified_name: resolved.qualifiedName,
@@ -562,11 +559,7 @@ export function resetModel(ctx: ModelsContext, args: Args = {}): unknown {
   prefs.selected = {};
   saveCharacter(ctx, character, prefs);
 
-  const previousActive = ctx.activeModel;
-  ctx.activeModel = undefined;
-  ctx.activeResolvedModel = undefined;
   return {
-    previous: previousActive ?? null,
     previous_provider: previous.provider ?? null,
     previous_model_id: previous.modelId ?? null,
     active: null,

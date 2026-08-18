@@ -38,7 +38,7 @@ import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo, type ToolContext } from "../tools/dispatch.ts";
 import { subagentRunner } from "../tools/subagent_loop.ts";
-import { makeDispatchCommand, type CommandPathDeps, type SessionCache } from "./commands.ts";
+import { makeDispatchCommand, type CommandPathDeps } from "./commands.ts";
 import type { DispatchRuntime, ReloadSummary } from "./command_dispatch.ts";
 import {
   generationEngine,
@@ -290,42 +290,18 @@ export interface CommandAssembly {
 
 export function buildCommandPathDeps(a: CommandAssembly): CommandPathDeps {
   const { runtime } = a;
-  const sessions = new ProcessSessionCache();
   return {
     registry: runtime.registry,
     globalConfig: () => runtime.registry.globalConfig(),
     configPath: runtime.configPath,
     dataDir: runtime.config.dirs.data,
-    sessions,
     commands: commandDeps(a),
     runtime: configRuntime(a),
-    dispatchRuntime: dispatchRuntime(a, sessions),
+    dispatchRuntime: dispatchRuntime(a),
     router: a.router,
     handshake: a.handshake,
     ...(a.env === undefined ? {} : { env: a.env }),
   };
-}
-
-class ProcessSessionCache implements SessionCache {
-  readonly #models = new Map<string, string>();
-
-  static #key(sessionId: number, character: string | undefined): string {
-    return `${sessionId}\0${character ?? ""}`;
-  }
-
-  activeModel(sessionId: number, character: string | undefined): string | undefined {
-    return this.#models.get(ProcessSessionCache.#key(sessionId, character));
-  }
-
-  setActiveModel(sessionId: number, character: string | undefined, model: string | undefined): void {
-    const key = ProcessSessionCache.#key(sessionId, character);
-    if (model === undefined) this.#models.delete(key);
-    else this.#models.set(key, model);
-  }
-
-  clear(): void {
-    this.#models.clear();
-  }
 }
 
 function configRuntime(a: CommandAssembly): ConfigRuntime {
@@ -349,10 +325,7 @@ function configRuntime(a: CommandAssembly): ConfigRuntime {
   };
 }
 
-function dispatchRuntime(
-  a: CommandAssembly,
-  sessions: ProcessSessionCache,
-): DispatchRuntime {
+function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
   const { runtime } = a;
   return {
     globalConfig: () => runtime.registry.globalConfig(),

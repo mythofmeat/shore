@@ -2,7 +2,6 @@ import { describeError } from "../llm/errors.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import type { ResolvedModel } from "../config/models.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { CallStore } from "../call_store.ts";
 import type { Diagnostics } from "../diagnostics.ts";
@@ -74,7 +73,6 @@ export interface CommandSession {
   dataDir: string;
   characterName: string | undefined;
   activeModel: string | undefined;
-  activeResolvedModel: ResolvedModel | undefined;
   runtime: ConfigRuntime;
   env?: NodeJS.ProcessEnv;
 }

@@ -294,12 +294,12 @@ fn write_set<W: Write>(out: &mut W, key: &str, data: &Value) {
         );
     }
 
-    if let Some(session) = data.get("masked_by_session").and_then(Value::as_str) {
+    if let Some(preferred) = data.get("masked_by_preference").and_then(Value::as_str) {
         blank(out);
         note(
             out,
             &format!(
-                "this session still uses {session} \u{00b7} `shore model reset` to fall back to the default"
+                "this character still uses {preferred} \u{00b7} `shore model reset` to fall back to the default"
             ),
         );
     }
@@ -666,7 +666,7 @@ mod tests {
             "file": "/home/ren/.config/shore/config.toml",
             "action": "replaced",
             "restart_required": [],
-            "masked_by_session": null
+            "masked_by_preference": null
         })
     }
 
@@ -721,12 +721,12 @@ mod tests {
     }
 
     #[test]
-    fn a_session_override_is_called_out_after_setting_the_default_model() {
+    fn a_saved_model_preference_is_called_out_after_setting_the_default_model() {
         let data = with(
             set_payload(),
             &[
                 ("set", json!("defaults.model")),
-                ("masked_by_session", json!("anthropic:claude-opus-4-5")),
+                ("masked_by_preference", json!("anthropic:claude-opus-4-5")),
             ],
         );
         let out = render(&data, false);
@@ -820,7 +820,7 @@ mod tests {
                 ("set", json!("defaults.model")),
                 ("value", json!("anthropic:claude-opus-4-5")),
                 ("previous", json!("zai:glm-4.6")),
-                ("masked_by_session", json!("zai:glm-4.6")),
+                ("masked_by_preference", json!("zai:glm-4.6")),
             ],
         );
         write_set(&mut buf, "defaults.model", &moved);

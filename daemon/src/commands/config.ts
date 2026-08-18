@@ -11,7 +11,6 @@ import {
   type LoadedConfig,
 } from "../config/loader.ts";
 import { findModel, NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
-import type { ResolvedModel } from "../config/models.ts";
 import { serializeConfigValue } from "../config/serialize.ts";
 import { CATALOG_SECTIONS, defaultAppConfig } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
@@ -40,7 +39,6 @@ export interface ConfigContext {
   configPath: string;
   characterName: string | undefined;
   activeModel: string | undefined;
-  activeResolvedModel: ResolvedModel | undefined;
   runtime: ConfigRuntime;
   env?: Env;
 }
@@ -353,7 +351,7 @@ function commitConfigKey(
     file,
     action,
     restart_required: restart,
-    masked_by_session: sessionMask(ctx, key),
+    masked_by_preference: preferredModelMask(ctx, key),
   };
 }
 
@@ -364,7 +362,7 @@ export interface ConfigSetResult {
   file: string;
   action: string;
   restart_required: readonly string[];
-  masked_by_session: string | null;
+  masked_by_preference: string | null;
 }
 
 export function setConfigKey(
@@ -409,7 +407,7 @@ export function clearConfigKey(ctx: ConfigContext, key: string): ConfigSetResult
 const configSet = (ctx: ConfigContext, rawKey: string, value: string): unknown =>
   setConfigKey(ctx, rawKey, value);
 
-function sessionMask(ctx: ConfigContext, key: string): string | null {
+function preferredModelMask(ctx: ConfigContext, key: string): string | null {
   if (key !== "defaults.model") return null;
   const active = ctx.activeModel;
   return active === undefined || active === ctx.config.app.defaults.model ? null : active;
