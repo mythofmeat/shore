@@ -101,7 +101,6 @@ async function harness(characters: readonly string[]): Promise<Harness> {
       },
     },
     commands: {
-      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
       autonomy: new AutonomyService(
         { run: async () => ({ ok: false, detail: "unwired" }) } as never,
       ),

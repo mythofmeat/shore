@@ -143,7 +143,6 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
     providers: { anthropic: provider },
     autonomy,
     notifier: { notifyMessageComplete: () => {} } as unknown as GenerationDeps["notifier"],
-    sessionTokens: { input: 0, output: 0 } as GenerationDeps["sessionTokens"],
     diagnostics: { key_fallbacks: { push: () => {} } },
     emitEvent: () => {},
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },

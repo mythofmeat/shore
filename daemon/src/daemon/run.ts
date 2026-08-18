@@ -4,7 +4,6 @@ import { mkdirSync } from "node:fs";
 import { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { Diagnostics } from "../diagnostics.ts";
 import { emitNewMessageEvent } from "../handler/persistence.ts";
-import type { SessionTokens } from "../handler/persistence.ts";
 import { createDefaultConfig } from "../config/loader.ts";
 import { superviseMatrixBridge } from "../connections/matrix/supervise.ts";
 import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
@@ -200,7 +199,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     router: server.sessionRouter,
     handshake,
     emitEvent: (message: ServerMessage) => server.broadcast(message),
-    sessionTokens: newSessionTokens(),
     diagnostics,
     env,
     ...(log === undefined ? {} : { log }),
@@ -338,10 +336,6 @@ function format(level: string, msg: string, fields?: Record<string, unknown>): s
 
 export function formatAddr(host: string, port: number): string {
   return host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`;
-}
-
-function newSessionTokens(): SessionTokens {
-  return { input: 0, output: 0, cache_read: 0, cache_write: 0 };
 }
 
 export async function bounded(

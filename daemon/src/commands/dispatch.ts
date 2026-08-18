@@ -64,7 +64,7 @@ import {
   status,
 } from "./status.ts";
 import { usage } from "./usage.ts";
-import type { SessionTokens } from "../handler/persistence.ts";
+import { conversationTokens } from "../ledger/conversation_spend.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 
@@ -80,7 +80,6 @@ export interface CommandSession {
 }
 
 export interface CommandDeps {
-  sessionTokens: SessionTokens;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
   callStore: CallStore | undefined;
@@ -305,7 +304,11 @@ function statusContext(
     turnCount: engine.turnCount(),
     activeModel: effectiveChatModel(session.config, engine.characterName)?.qualifiedName,
     config: { app: { defaults: { model: session.config.app.defaults.model } }, dirs: session.config.dirs },
-    sessionTokens: deps.sessionTokens,
+    conversationTokens: conversationTokens(
+      deps.ledgerPath,
+      engine.characterName,
+      engine.startedAt(),
+    ),
     autonomy: deps.autonomy,
     diagnostics: deps.diagnostics,
     now: deps.now ?? Date.now,

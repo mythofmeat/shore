@@ -26,7 +26,7 @@ fn session_line(data: &Value) -> String {
         format!("{turns} {turn_word} in this conversation")
     } else {
         format!(
-            "{turns} {turn_word} in this conversation \u{00b7} {} tokens since the daemon started",
+            "{turns} {turn_word} \u{00b7} {} tokens in this conversation",
             count(spent)
         )
     }
@@ -288,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn tokens_keep_the_daemon_uptime_window_the_turn_count_lost() {
+    fn both_halves_of_the_session_line_share_one_window() {
         let mut data = payload();
         if let Some(slot) = data.get_mut("turn_count") {
             *slot = json!(11);
@@ -301,8 +301,12 @@ mod tests {
         }
         let out = render(&data);
         assert!(
-            out.contains("tokens since the daemon started"),
-            "session tokens really do reset on restart; each half names its own window: {out}"
+            out.contains("11 turns \u{00b7} 1.8M tokens in this conversation"),
+            "turns and tokens are both scoped to the active conversation now: {out}"
+        );
+        assert!(
+            !out.contains("since the daemon started"),
+            "nothing on this line is a daemon-lifetime figure any more: {out}"
         );
     }
 

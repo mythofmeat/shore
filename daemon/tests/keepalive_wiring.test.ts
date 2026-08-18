@@ -129,7 +129,6 @@ async function turnPersisted(
     sendDirect: () => {},
     autonomy: turnAutonomy(bridge, cache),
     notifier: { notifyMessageComplete: () => {} },
-    sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
     diagnostics: { api_calls: { push: () => {} } },
     newlyCrossedUsageBudgetWarnings: () => Promise.resolve([]),
     now: () => "2026-08-08T12:00:00+00:00",

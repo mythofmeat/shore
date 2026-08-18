@@ -899,7 +899,6 @@ function makeContext(): {
       }),
       recordingSink(notified),
     ),
-    sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
     newlyCrossedUsageBudgetWarnings: () => Promise.resolve([]),
     now: () => "2026-08-03T00:00:00+00:00",
     newMessageId: () => `m_${(n += 1)}`,
@@ -945,7 +944,6 @@ describe("persist_and_notify", () => {
     expect((events[0] as unknown as Row)["origin"]).toBe("assistant_reply");
     expect(notified).toEqual(["notify_send:Shore — Alice:hi"]);
     expect(lastRequests[0]?.messages).toHaveLength(1);
-    expect(ctx.sessionTokens).toEqual({ input: 10, output: 5, cache_read: 3, cache_write: 1 });
   });
 
   test("a result with nothing in it persists nothing and emits nothing", async () => {

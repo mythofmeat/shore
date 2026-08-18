@@ -236,7 +236,7 @@ async function build(name: string): Promise<StatusContext> {
     turnCount: s.turns ?? 0,
     activeModel: s.activeModel,
     config: { app: { defaults: { model: s.configModel } }, dirs },
-    sessionTokens: {
+    conversationTokens: {
       input,
       output,
       cache_read: cacheRead,

@@ -127,7 +127,6 @@ async function harness(): Promise<{
   };
 
   const deps: CommandDeps = {
-    sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
     autonomy: await autonomyWithState(dirs.data),
     diagnostics: new Diagnostics(),
     callStore: undefined,

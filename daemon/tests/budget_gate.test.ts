@@ -489,7 +489,6 @@ async function chatTurn(
       notifyAssistantMessage: noop,
     } as unknown as GenerationDeps["autonomy"],
     notifier: { notifyMessageComplete: noop } as unknown as GenerationDeps["notifier"],
-    sessionTokens: { input: 0, output: 0 } as GenerationDeps["sessionTokens"],
     diagnostics: {
       api_calls: { push: noop },
       tool_calls: { push: noop },

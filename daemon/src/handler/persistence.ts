@@ -14,13 +14,6 @@ export interface CompletedResponseMessage {
   content_blocks: ContentBlock[];
 }
 
-export interface SessionTokens {
-  input: number;
-  output: number;
-  cache_read: number;
-  cache_write: number;
-}
-
 export interface PersistEngine {
   appendMessage(msg: Message): Promise<void>;
   replaceAfterLastUserTurn(newMessages: Message[]): Promise<number>;
@@ -49,7 +42,6 @@ export interface PersistContext {
   sendDirect: (message: ServerMessage) => void;
   autonomy: PersistAutonomy;
   notifier: NotificationService;
-  sessionTokens: SessionTokens;
   newlyCrossedUsageBudgetWarnings: (character: string) => Promise<UsageBudgetWarningEvent[]>;
   now: () => string;
   newMessageId: () => string;
@@ -72,8 +64,6 @@ export async function persistAndNotify(
   params: PersistParams,
 ): Promise<void> {
   const { charName, result, request, resolvedProviderKey } = params;
-
-  accumulateSessionTokens(ctx, result);
 
   const completedMessages = completedResponseMessages(result);
 
@@ -153,19 +143,6 @@ export async function applyGeneratedMessagesToEngine(
       emitNewMessageEvent(emitEvent, charName, "assistant_reply", engine.currentRevision(), emitted);
     }
   }
-}
-
-function accumulateSessionTokens(ctx: PersistContext, result: StreamResult): void {
-  const tokens = ctx.sessionTokens;
-  tokens.input = saturatingAdd(tokens.input, result.usage.input_tokens);
-  tokens.output = saturatingAdd(tokens.output, result.usage.output_tokens);
-  tokens.cache_read = saturatingAdd(tokens.cache_read, result.usage.cache_read_tokens);
-  tokens.cache_write = saturatingAdd(tokens.cache_write, result.usage.cache_creation_tokens);
-}
-
-function saturatingAdd(a: number, b: number): number {
-  const sum = a + b;
-  return sum > Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : sum;
 }
 
 async function emitUsageBudgetWarnings(

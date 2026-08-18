@@ -53,7 +53,6 @@ import type {
   HandlerRegistry,
   MessageHandlerDeps,
 } from "./router.ts";
-import type { SessionTokens } from "./persistence.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
 import { indexPath as workspaceIndexPath } from "../memory/workspace_index.ts";
 
@@ -62,7 +61,6 @@ export interface GenerationAssembly {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   autonomy: TurnAutonomyBridge;
   emitEvent: (message: ServerMessage) => void;
-  sessionTokens: SessionTokens;
   diagnostics: Diagnostics;
   env?: NodeJS.ProcessEnv | undefined;
   now?: (() => number) | undefined;
@@ -83,7 +81,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
     autonomy: turnAutonomy(a.autonomy, runtime.cache),
     notifier: runtime.notifier,
-    sessionTokens: a.sessionTokens,
     diagnostics: a.diagnostics,
     emitEvent: a.emitEvent,
     mcpRegistry: {
@@ -214,7 +211,7 @@ export function usageBudgetWarnings(
 
 export interface HandlerAssembly
   extends Omit<GenerationAssembly, "emitEvent">,
-    Omit<CommandAssembly, "runtime" | "autonomy" | "sessionTokens" | "diagnostics" | "providers" | "env"> {
+    Omit<CommandAssembly, "runtime" | "autonomy" | "diagnostics" | "providers" | "env"> {
   runtime: ShoreRuntime;
   emitEvent: (message: ServerMessage) => void;
   log?: MessageHandlerDeps["log"];
@@ -275,7 +272,6 @@ export function handlerNotifier(
 export interface CommandAssembly {
   runtime: ShoreRuntime;
   autonomy: TurnAutonomyBridge;
-  sessionTokens: SessionTokens;
   diagnostics: Diagnostics;
   router: SessionRouter;
   handshake: HandshakeProvider;
@@ -524,7 +520,6 @@ function commandDeps(a: CommandAssembly): CommandDeps {
   const { runtime } = a;
   const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");
   return {
-    sessionTokens: a.sessionTokens,
     autonomy: runtime.autonomy,
     diagnostics: a.diagnostics,
     callStore: runtime.callStore,

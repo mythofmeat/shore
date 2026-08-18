@@ -280,7 +280,6 @@ describe("the compaction a long turn runs inline", () => {
         providers: {},
         autonomy: new TurnAutonomyBridge(recordingService()),
         emitEvent: () => {},
-        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
@@ -355,7 +354,6 @@ describe("what the assembly hands the driver", () => {
         providers: {},
         autonomy: new TurnAutonomyBridge(recordingService()),
         emitEvent: () => {},
-        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
@@ -380,7 +378,6 @@ describe("what the assembly hands the driver", () => {
         providers: {},
         autonomy: new TurnAutonomyBridge(recordingService()),
         emitEvent: () => {},
-        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
@@ -413,7 +410,6 @@ describe("what the assembly hands the driver", () => {
         providers: {},
         autonomy: new TurnAutonomyBridge(recordingService()),
         emitEvent: () => {},
-        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
@@ -483,7 +479,6 @@ describe("the handler, whole", () => {
     return {
       runtime,
       autonomy: new TurnAutonomyBridge(recordingService()),
-      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
       diagnostics: { api_calls: { push: () => {} } } as never,
       router: new SessionRouter(),
       handshake: {
@@ -583,7 +578,6 @@ describe("the command path", () => {
     return {
       runtime,
       autonomy: new TurnAutonomyBridge(recordingService()),
-      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
       diagnostics: { api_calls: { push: () => {} } } as never,
       router: new SessionRouter(),
       handshake: { hello: () => ({}) as never, history: () => Promise.resolve({} as never) },
@@ -803,7 +797,6 @@ describe("reloading [mcp]", () => {
     return {
       runtime,
       autonomy: new TurnAutonomyBridge(recordingService()),
-      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
       diagnostics: { api_calls: { push: () => {} } } as never,
       router: new SessionRouter(),
       handshake: { hello: () => ({}) as never, history: () => Promise.resolve({} as never) },
