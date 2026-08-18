@@ -62,4 +62,4 @@ Finish when you have written everything that needs to survive. End your final tu
 
 ## What "no writes" means
 
-The compaction system treats **zero memory writes** as a deliberate signal that this conversation does **not** need to be archived. If you call no `edit` tools, the active conversation stays intact and the next compaction trigger will retry. So write *something* whenever the conversation produced anything worth remembering — even a one-line note in `MEMORY.md` — instead of falling silent.
+The conversation is archived whether or not you write anything, so zero `edit` calls is a correct outcome whenever memory already covers it — say so in your closing summary instead of inventing filler. Junk written to look diligent costs every future turn.
