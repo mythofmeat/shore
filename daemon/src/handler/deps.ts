@@ -217,6 +217,15 @@ export interface HandlerAssembly
   log?: MessageHandlerDeps["log"];
 }
 
+function beginIndexForeground(a: HandlerAssembly): () => void {
+  const endHistory = a.runtime.historyIndex.beginForeground();
+  const endWorkspace = a.runtime.workspaceIndex.beginForeground();
+  return () => {
+    endHistory();
+    endWorkspace();
+  };
+}
+
 export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps {
   const runGeneration = makeRunGeneration(buildGenerationDeps(a));
   const dispatchCommand = makeDispatchCommand(buildCommandPathDeps(a));
@@ -226,7 +235,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     registry: handlerRegistry(a.runtime.registry),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta) => {
-      const endForeground = a.runtime.historyIndex.beginForeground();
+      const endForeground = beginIndexForeground(a);
       try {
         return await dispatchCommand(command, meta);
       } finally {
@@ -234,7 +243,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
       }
     },
     runGeneration: async (params) => {
-      const endForeground = a.runtime.historyIndex.beginForeground();
+      const endForeground = beginIndexForeground(a);
       try {
         await runGeneration(params);
       } finally {

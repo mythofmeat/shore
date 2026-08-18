@@ -110,6 +110,7 @@ describe("the status index section", () => {
       retryAt: 1_030_000,
       lastError: "provider is down",
       sweptAt: 999_000,
+      embedderError: undefined,
     };
     const out = await section(sourceFor({ progressFor: () => progress }));
 
@@ -123,6 +124,30 @@ describe("the status index section", () => {
     });
   });
 
+  test("a pass with no embedder carries the reason it will never run", async () => {
+    const out = await section(
+      sourceFor({
+        progressFor: () => ({
+          character: "qifei",
+          pending: 0,
+          files: 0,
+          failures: 0,
+          retryAt: 0,
+          lastError: undefined,
+          sweptAt: undefined,
+          embedderError: "no embedding model configured; semantic search disabled",
+        }),
+      }),
+    );
+
+    expect(out?.background).toEqual({
+      registered: true,
+      swept: false,
+      embedder_error: "no embedding model configured; semantic search disabled",
+      failures: 0,
+    });
+  });
+
   test("a healthy registered pass carries no error and no retry", async () => {
     const out = await section(
       sourceFor({
@@ -132,6 +157,7 @@ describe("the status index section", () => {
           files: 4,
           failures: 0,
           retryAt: 0,
+          embedderError: undefined,
           lastError: undefined,
           sweptAt: 999_000,
         }),

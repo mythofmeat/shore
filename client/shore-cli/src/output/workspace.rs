@@ -127,6 +127,12 @@ fn write_background_pass(out: &mut impl Write, background: &serde_json::Value, p
         return;
     }
 
+    if let Some(reason) = background["embedder_error"].as_str() {
+        write_row_colored(out, "background", "cannot run", Tone::Bad);
+        write_row(out, "no embedder", reason);
+        return;
+    }
+
     if let Some(error) = background["last_error"].as_str() {
         write_row_colored(out, "background", "failing", Tone::Bad);
         write_row(out, "last error", error);
@@ -193,6 +199,16 @@ mod tests {
                 "background": {"registered": true, "swept": true, "failures": 0},
             }),
         );
+        write_index_section(
+            &mut buf,
+            &serde_json::json!({
+                "path": "/home/eshen/.cache/shore/characters/poppy/workspace_index.db",
+                "files": 42, "embedded": 0, "pending": 42, "skipped": 0, "skip_reasons": {},
+                "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
+                "background": {"registered": true, "swept": false, "failures": 0,
+                               "embedder_error": "no embedding model configured; semantic search disabled. Set defaults.embedding = \"provider:model_id\" pointing at an OpenAI-compatible embeddings endpoint and configure [providers.<provider>]."},
+            }),
+        );
         crate::output::set_color_enabled(false);
         std::io::stdout().write_all(&buf).unwrap();
     }
@@ -230,6 +246,40 @@ mod tests {
             "background": {"registered": false},
         }));
         assert!(out.contains("no background indexer registered"));
+    }
+
+    #[test]
+    fn an_indexer_with_no_embedder_says_it_cannot_run_rather_than_not_yet() {
+        let out = render(&serde_json::json!({
+            "files": 10, "embedded": 0, "pending": 10, "skip_reasons": {},
+            "background": {"registered": true, "swept": false, "failures": 0,
+                           "embedder_error": "no embedding model configured; \
+        semantic search disabled"},
+        }));
+        assert!(out.contains("cannot run"), "{out}");
+        assert!(out.contains("no embedding model configured"), "{out}");
+        assert!(
+            !out.contains("not yet run"),
+            "waiting for idle is the one thing it is not doing: {out}"
+        );
+        assert!(
+            !out.contains("idle"),
+            "idleness has nothing to do with it; do not send the reader looking: {out}"
+        );
+    }
+
+    #[test]
+    fn a_pending_backlog_does_not_hide_a_missing_embedder() {
+        let out = render(&serde_json::json!({
+            "files": 10, "embedded": 0, "pending": 10, "skip_reasons": {},
+            "background": {"registered": true, "swept": false, "failures": 0,
+                           "embedder_error": "embedding API key not set for provider 'openai'"},
+        }));
+        assert!(out.contains("cannot run"), "{out}");
+        assert!(
+            !out.contains("working"),
+            "a backlog with no embedder is stuck, not working: {out}"
+        );
     }
 
     #[test]

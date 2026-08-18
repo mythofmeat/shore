@@ -7,6 +7,7 @@ export interface WorkspaceIndexRegistration {
   indexPath: string;
   retrievalConfig: RetrievalConfig;
   embedder?: Embedder;
+  embedderError?: string;
 }
 
 export interface WorkspaceIndexServiceOptions {
@@ -25,6 +26,7 @@ export interface WorkspaceIndexProgress {
   retryAt: number;
   lastError: string | undefined;
   sweptAt: number | undefined;
+  embedderError: string | undefined;
 }
 
 interface Entry extends WorkspaceIndexRegistration {
@@ -96,6 +98,7 @@ export class WorkspaceIndexService {
       retryAt: entry.retryAt,
       lastError: entry.lastError,
       sweptAt: entry.sweptAt,
+      embedderError: entry.embedderError,
     };
   }
 

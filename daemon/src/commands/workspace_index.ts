@@ -48,6 +48,7 @@ function backgroundView(progress: WorkspaceIndexProgress | undefined, now: numbe
   return {
     registered: true,
     swept: progress.sweptAt !== undefined,
+    ...(progress.embedderError === undefined ? {} : { embedder_error: progress.embedderError }),
     failures: progress.failures,
     ...(progress.lastError === undefined ? {} : { last_error: progress.lastError }),
     ...(progress.retryAt > now

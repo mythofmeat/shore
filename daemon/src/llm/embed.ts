@@ -2,6 +2,7 @@ import type { LlmError } from "./errors";
 import { parseRetryAfterMs } from "./retry_after";
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
+const EMBED_TIMEOUT_MS = 60_000;
 
 export interface Embedder {
   embed(inputs: string[]): Promise<number[][]>;
@@ -72,6 +73,7 @@ export class OpenAIEmbedder implements Embedder {
   readonly #apiKey: string;
   readonly #baseUrl: string | undefined;
   readonly #fetch: typeof fetch;
+  readonly #timeoutMs: number;
 
   constructor(
     model: string,
@@ -80,6 +82,7 @@ export class OpenAIEmbedder implements Embedder {
     dimensions: number | undefined,
     fetchImpl: typeof fetch = fetch,
     identity?: string,
+    timeoutMs: number = EMBED_TIMEOUT_MS,
   ) {
     this.modelId = model;
     this.dimensions = dimensions;
@@ -87,6 +90,7 @@ export class OpenAIEmbedder implements Embedder {
     this.#apiKey = apiKey;
     this.#baseUrl = baseUrl;
     this.#fetch = fetchImpl;
+    this.#timeoutMs = timeoutMs;
   }
 
   async embed(inputs: string[]): Promise<number[][]> {
@@ -100,6 +104,7 @@ export class OpenAIEmbedder implements Embedder {
           "content-type": "application/json",
         },
         body: JSON.stringify(buildEmbedBody(this.modelId, inputs, this.dimensions)),
+        signal: AbortSignal.timeout(this.#timeoutMs),
       });
     } catch (e) {
       throw { kind: "transport", message: String(e) } satisfies LlmError;

@@ -186,6 +186,49 @@ describe("WorkspaceIndexService", () => {
     expect(embedder.documents).toBe(4);
   });
 
+  test("a character with no embedder reports why instead of waiting forever", async () => {
+    let clock = 10_000;
+    const service = serviceAt(() => clock);
+    service.register({
+      character: "ada",
+      workspaceDir: await workspaceOf(3),
+      indexPath: join(root, "noembedder.db"),
+      retrievalConfig: CONFIG,
+      embedderError: "no embedding model configured; semantic search disabled",
+    });
+
+    clock += 60_000;
+    await service.runOnce();
+
+    const progress = service.progress("ada")!;
+    expect(progress.sweptAt).toBeUndefined();
+    expect(progress.embedderError).toBe(
+      "no embedding model configured; semantic search disabled",
+    );
+  });
+
+  test("configuring an embedder clears the reason the pass was blocked", async () => {
+    let clock = 10_000;
+    const service = serviceAt(() => clock, { maxBatchItems: 4 });
+    const registration = {
+      character: "ada",
+      workspaceDir: await workspaceOf(3),
+      indexPath: join(root, "recovered.db"),
+      retrievalConfig: CONFIG,
+    };
+    service.register({ ...registration, embedderError: "no embedding model configured" });
+    clock += 60_000;
+    await service.runOnce();
+    expect(service.progress("ada")!.sweptAt).toBeUndefined();
+
+    service.register({ ...registration, embedder: new CountingEmbedder() });
+    await service.runOnce();
+
+    const progress = service.progress("ada")!;
+    expect(progress.embedderError).toBeUndefined();
+    expect(progress.sweptAt).toBe(clock);
+  });
+
   test("a batch pause keeps consecutive rounds off the provider", async () => {
     let clock = 10_000;
     const service = serviceAt(() => clock, { maxBatchItems: 2 });
