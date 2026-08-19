@@ -169,8 +169,13 @@ export function chatToolDeps(
     ...(taskId === undefined ? {} : { taskId }),
   });
   return {
-    ...sharedToolDeps(runtime.config, runtime.mcp),
-    runSubagent: (parent: ToolContext) => subagentRunner(subagentDeps(parent)),
+    ...sharedToolDeps(runtime.config, runtime.mcp, {
+      providers: a.providers,
+      registry: runtime.registry,
+      ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
+      ...(a.env === undefined ? {} : { env: a.env }),
+      turn,
+    }),
     ...(a.subagentTasks === undefined
       ? {}
       : {

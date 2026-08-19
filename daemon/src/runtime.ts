@@ -10,6 +10,7 @@ import { characterDataDir, characterWorkspaceDir, pluginsDir, rustJoin } from ".
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
+import type { SubagentTurn } from "./handler/generation.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
 import { providerRecord, retrievalView } from "./handler/tool_context.ts";
 import { Diagnostics } from "./diagnostics.ts";
@@ -178,9 +179,9 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       providers,
       tools: sharedToolDeps(config, mcp, {
         providers,
+        registry,
         ...(callStore === undefined ? {} : { callStore }),
         ...(options.env === undefined ? {} : { env: options.env }),
-        ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
       }),
       ...(callStore === undefined ? {} : { callStore }),
       ...(options.emit === undefined ? {} : { emit: options.emit }),
@@ -323,14 +324,18 @@ async function connectMcpRegistry(
   );
 }
 
+export interface SubagentToolDeps {
+  providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
+  registry: Pick<CharacterRegistry, "effectiveConfig">;
+  callStore?: CallStore | undefined;
+  env?: NodeJS.ProcessEnv | undefined;
+  turn?: SubagentTurn | undefined;
+}
+
 export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
-  subagent?: {
-    providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
-    callStore?: CallStore | undefined;
-    env?: NodeJS.ProcessEnv | undefined;
-  },
+  subagent?: SubagentToolDeps,
 ): ToolContextDeps {
   return {
     mcpRegistry: mcp.callView(),
@@ -338,13 +343,23 @@ export function sharedToolDeps(
       ? {}
       : {
           runSubagent: (parent: ToolContext) => {
+            const turn = subagent.turn;
             return subagentRunner({
-              config,
+              config: subagent.registry.effectiveConfig(parent.characterName),
               ctx: parent,
               providers: subagent.providers,
               ...(subagent.callStore === undefined ? {} : { callStore: subagent.callStore }),
               mcpRegistry: mcp.current,
               ...(subagent.env === undefined ? {} : { env: subagent.env }),
+              ...(turn === undefined
+                ? {}
+                : {
+                    sendDirect: turn.send,
+                    conversation: turn.conversation,
+                    ...(turn.rid === undefined ? {} : { rid: turn.rid }),
+                    now: turn.now,
+                    newMessageId: turn.newMessageId,
+                  }),
             });
           },
         }),
