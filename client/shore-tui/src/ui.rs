@@ -328,9 +328,7 @@ fn render_tool_block(
 }
 
 fn subagent_started_line(name: &str) -> String {
-    format!(
-        "\u{00bb} {name} started \u{00b7} press S. You can now continue with these answers in mind."
-    )
+    format!("\u{00bb} {name} started \u{00b7} press S")
 }
 
 fn render_blocks(

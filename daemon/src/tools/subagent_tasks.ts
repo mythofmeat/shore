@@ -28,7 +28,8 @@ export function subagentStartedAck(record: SubagentTaskRecord): string {
   return (
     `Subagent '${record.name}' started in the background (task ${record.id}). ` +
     `Do not wait for it or poll: its result will arrive on its own as a later ` +
-    `message tagged with this task id, and you will get to respond to it then.`
+    `message tagged with this task id, and you will get to respond to it then. ` +
+    `You can now continue with these answers in mind.`
   );
 }
 
