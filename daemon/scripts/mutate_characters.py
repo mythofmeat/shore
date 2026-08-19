@@ -129,7 +129,10 @@ MUTANTS = [
     ("summary: discovery_changed compares counts, not names",
      "      characterDiscoveryChanged: !sameList(before, after),",
      "      characterDiscoveryChanged: before.length !== after.length,"),
-    ("summary: discovery_changed is a set compare",
+    ("summary: discovery_changed is a set compare (EQUIVALENT — both lists come "
+     "from discoverCharacters, which returns a de-duplicated, code-point-sorted "
+     "array, so for equal lengths set containment and element-wise equality agree; "
+     "the ordered compare is kept because sameList is a general helper)",
      "  return a.length === b.length && a.every((item, i) => item === b[i]);",
      "  return a.length === b.length && a.every((item) => b.includes(item));"),
     ("summary: discovery_changed is inverted",

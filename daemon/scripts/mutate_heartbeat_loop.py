@@ -123,7 +123,7 @@ MUTANTS = [
      "    void hasTools;"),
     ("rounds: a failed model call is treated as an empty round rather than the end",
      L,
-     "    if (resp === undefined) break;",
+     "    if (resp === undefined) {\n      failedRound = iteration;\n      break;\n    }",
      "    if (resp === undefined) continue;"),
     ("rounds: every call is labelled a first call, so the ledger loses the loop",
      L,

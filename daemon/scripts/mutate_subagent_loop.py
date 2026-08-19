@@ -57,18 +57,16 @@ MUTANTS = [
     # --- the model chain ------------------------------------------------------
     ("model: no model anywhere is not an error, so it falls through to a default",
      S,
-     "  if (modelName === undefined) throw new InvalidArgs(missingModelMessage(name));",
-     '  if (modelName === undefined) throw new InvalidArgs("no model");'),
+     "  if (catalogModel === undefined) throw new InvalidArgs(missingModelMessage(name, charName));",
+     '  if (catalogModel === undefined) throw new InvalidArgs("no model");'),
     ("model: the spec's own model is ignored in favour of the defaults",
      S,
-     "  const modelName = resolveSubagentModel(spec.model, {",
-     "  const modelName = resolveSubagentModel(undefined, {"),
+     "      configView(config),\n      charName,\n      spec.model,",
+     "      configView(config),\n      charName,\n      undefined,"),
     ("model: defaults.subagent_model is dropped from the chain",
-     S,
-     "    ...(config.app.defaults.subagent_model === undefined\n"
-     "      ? {}\n"
-     "      : { subagent_model: config.app.defaults.subagent_model }),",
-     "    // dropped"),
+     "src/config/preferences.ts",
+     "  const configured = specModel ?? config.app.defaults.subagent_model;",
+     "  const configured = specModel;"),
 
     # --- the request ----------------------------------------------------------
     ("request: the system prompt is inlined after the query instead of top-level",
@@ -103,18 +101,16 @@ MUTANTS = [
     # --- the tag --------------------------------------------------------------
     ("tag: frames go out untagged and read as the character talking",
      S,
-     "      TAGGED_FRAMES.has(message.type)\n"
-     "        ? ({ ...message, subagent: name } as ServerMessage)\n"
-     "        : message,",
-     "      message,"),
+     "    if (!TAGGED_FRAMES.has(message.type)) {",
+     "    if (true as boolean) {"),
     ("tag: every frame type is tagged, including those the field means nothing for",
      S,
-     "      TAGGED_FRAMES.has(message.type)",
-     "      true"),
+     "    if (!TAGGED_FRAMES.has(message.type)) {",
+     "    if (false as boolean) {"),
     ("tag: the tag is the wrong name, so two sub-agents in one turn are indistinguishable",
      S,
-     "        ? ({ ...message, subagent: name } as ServerMessage)",
-     '        ? ({ ...message, subagent: "subagent" } as ServerMessage)'),
+     "      subagent: name,\n      ...(taskId === undefined ? {} : { task_id: taskId }),",
+     '      subagent: "subagent",\n      ...(taskId === undefined ? {} : { task_id: taskId }),'),
     ("tag: a background context forwards to nothing, throwing instead of dropping",
      S,
      "  if (sendDirect === undefined) return () => {};",

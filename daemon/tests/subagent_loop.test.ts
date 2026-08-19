@@ -37,17 +37,19 @@ function spec(over: Partial<SubagentConfig> = {}): SubagentConfig {
   };
 }
 
-function catalogWith(name: string): ModelCatalog {
+function catalogWith(...names: string[]): ModelCatalog {
   const catalog = emptyCatalog();
-  catalog.chat.set(name, {
-    name,
-    qualifiedName: `openrouter:${name}`,
-    category: "chat",
-    providerKey: "openrouter",
-    sdk: "openrouter",
-    modelId: name,
-    apiKeyEnv: KEY_ENV,
-  } as never);
+  for (const name of names) {
+    catalog.chat.set(name, {
+      name,
+      qualifiedName: `openrouter:${name}`,
+      category: "chat",
+      providerKey: "openrouter",
+      sdk: "openrouter",
+      modelId: name,
+      apiKeyEnv: KEY_ENV,
+    } as never);
+  }
   return catalog;
 }
 
@@ -65,7 +67,7 @@ async function configWith(
     root,
     config: {
       app,
-      models: catalogWith("cheap"),
+      models: catalogWith("cheap", "pricey"),
       providers: ProviderRegistry.fromSection({ openrouter: { api_key_env: KEY_ENV } }),
       dirs: {
         config: join(root, "config"),
@@ -266,7 +268,7 @@ describe("resolution", () => {
     const seen: SidecarRequest[] = [];
     const { config, root } = await configWith({ researcher: spec() }, (app) => {
       app.defaults.subagent_model = "cheap";
-      app.defaults.model = "missing";
+      app.defaults.model = "pricey";
     });
 
     await run(config, root, "researcher", scriptedProvider("done", seen));

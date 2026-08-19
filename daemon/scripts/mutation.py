@@ -18,6 +18,16 @@ separately here, and the score is over the mutants that actually applied.
 **One entry point.** `bun run mutate [module]`, so the whole set can be run
 rather than remembered.
 
+**A survivor with a checked reason is not a finding.** #130: once every pass
+applied, 30 of the 33 remaining survivors were mutants somebody had already sat
+down with and decided were not worth killing — a clamp another clamp covers, a
+guard on a value the store cannot produce. Exiting non-zero on those means the
+harness can never go green, so it can never be a gate, so a pattern that quietly
+stops matching stays silent for six months. A survivor whose label carries one
+of `REASONS` is a recorded decision and is reported apart from the unexplained
+ones; the exit code is over the unexplained survivors, the stale patterns, and
+any label whose reason has since become false.
+
 A mutant is normally one edit. `(label, [(find, replace), ...])` is the shape for
 one that only means anything as a set — two clamps that cover each other are
 each individually equivalent, and only removing the pair is a change worth
@@ -31,6 +41,28 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 APPLIED = "applied"
 INAPPLICABLE = "inapplicable"
+
+REASONS = ("EQUIVALENT", "UNKILLABLE", "NEEDS A SEAM")
+
+
+def expected_reason(label):
+    """The reason a mutant is expected to survive, or `None` if it is not.
+
+    The convention is the one already in the tree: the reason goes in the label,
+    in parentheses, followed by why. `expected_reason` reads it back so `run`
+    can tell a recorded decision from a finding.
+    """
+    for reason in REASONS:
+        if f"({reason}" in label:
+            return reason
+    return None
+
+
+def _tally(values):
+    counts = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
 
 def _normalize(mutant, default_src):
@@ -83,6 +115,8 @@ def run(mutants, tests, src=None, timeout=180):
         sys.exit("baseline is red; fix that before mutating")
 
     survivors = []
+    expected = []
+    mislabelled = []
     inapplicable = []
     applied = 0
 
@@ -107,17 +141,39 @@ def run(mutants, tests, src=None, timeout=180):
         finally:
             for path, text in originals.items():
                 path.write_text(text)
-        print(f"{i:3d}. {'kill' if killed else 'LIVE'}  {label}")
-        if not killed:
+        reason = expected_reason(label)
+        if killed:
+            outcome = "kill"
+            if reason is not None:
+                mislabelled.append((label, reason))
+        elif reason is not None:
+            outcome = "kept"
+            expected.append((label, reason))
+        else:
+            outcome = "LIVE"
             survivors.append(label)
+        print(f"{i:3d}. {outcome}  {label}")
 
-    print(f"\n{applied - len(survivors)}/{applied} killed")
+    lived = len(survivors) + len(expected)
+    summary = f"\n{applied - lived}/{applied} killed"
+    if expected:
+        breakdown = ", ".join(
+            f"{n} {reason.lower()}" for reason, n in _tally(reason for _, reason in expected)
+        )
+        summary += f", {len(expected)} survivor(s) kept on purpose: {breakdown}"
+    print(summary)
+
     for label in survivors:
         print(f"  SURVIVOR: {label}")
+
+    if mislabelled:
+        print(f"\n{len(mislabelled)} label(s) are now wrong — these died, so the reason no longer holds:")
+        for label, reason in mislabelled:
+            print(f"  {reason} BUT KILLED: {label}")
 
     if inapplicable:
         print(f"\n{len(inapplicable)} mutant(s) no longer apply — the source moved, not the tests:")
         for label, matches in inapplicable:
             print(f"  STALE: {label} (matched {matches}x)")
 
-    return 1 if survivors or inapplicable else 0
+    return 1 if survivors or mislabelled or inapplicable else 0

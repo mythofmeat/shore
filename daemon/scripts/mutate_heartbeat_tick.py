@@ -49,19 +49,27 @@ MUTANTS = [
     # --- said something, or said nothing --------------------------------------
     ("skip: an image-only tick is treated as having said nothing",
      T,
-     "  if (loop.sendMessageText === undefined && loop.images.length === 0) {",
-     "  if (loop.sendMessageText === undefined) {"),
+     "  } else if (loop.sendMessageText === undefined && loop.images.length === 0) {",
+     "  } else if (loop.sendMessageText === undefined) {"),
     ("skip: an empty sendMessage is collapsed into having said nothing",
      T,
-     "  if (loop.sendMessageText === undefined && loop.images.length === 0) {",
-     "  if ((loop.sendMessageText ?? \"\") === \"\" && loop.images.length === 0) {"),
+     "  } else if (loop.sendMessageText === undefined && loop.images.length === 0) {",
+     "  } else if ((loop.sendMessageText ?? \"\") === \"\" && loop.images.length === 0) {"),
     ("skip: every tick delivers, including the ones with nothing to deliver",
      T,
-     "  if (loop.sendMessageText === undefined && loop.images.length === 0) {\n"
+     "  } else if (loop.sendMessageText === undefined && loop.images.length === 0) {\n"
      "    note(\"message_skipped\", \"Tick completed — no message sent\");\n"
      "    return;\n"
      "  }",
-     "  if (false as boolean) return;"),
+     "  }"),
+    ("failed: a failed round is reported as an ordinary quiet tick",
+     T,
+     "      \"call_failed\",",
+     "      \"message_skipped\","),
+    ("failed: a failed round is not reported at all, so the tick looks quiet",
+     T,
+     "  if (loop.failedRound !== undefined) {",
+     "  if (false as boolean) {"),
 
     # --- the message ----------------------------------------------------------
     ("message: an image-only tick carries an empty text block beside the image",
