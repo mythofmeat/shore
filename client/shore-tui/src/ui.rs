@@ -309,7 +309,11 @@ fn render_tool_block(
                         .add_modifier(Modifier::BOLD),
                 ),
             ]));
-            let output = format_tool_output(output);
+            let started = tool_name.strip_prefix("ask_").filter(|_| !*is_error);
+            let output = match started {
+                Some(name) => subagent_started_line(name),
+                None => format_tool_output(output),
+            };
             push_bar_wrapped(
                 lines,
                 &output,
@@ -321,6 +325,12 @@ fn render_tool_block(
         }
         _ => {}
     }
+}
+
+fn subagent_started_line(name: &str) -> String {
+    format!(
+        "\u{00bb} {name} started \u{00b7} press S. You can now continue with these answers in mind."
+    )
 }
 
 fn render_blocks(
@@ -1569,24 +1579,160 @@ mod subagent_panel_tests {
         assert_eq!(h.app.subagent_tasks[0].query, "the late query");
     }
 
-    #[test]
-    fn an_untagged_subagent_frame_keeps_the_legacy_inline_path() {
-        let mut h = Harness::new();
+    fn untagged_chunk(h: &mut Harness, name: &str, text: &str) {
         let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 rid: None,
-                text: "inline as before".into(),
+                text: text.into(),
                 content_type: "text".into(),
-                subagent: Some("research".into()),
+                subagent: Some(name.into()),
                 task_id: None,
             }),
         );
+    }
 
-        assert!(h.app.subagent_tasks.is_empty());
+    #[test]
+    fn an_untagged_subagent_frame_lands_in_the_panel_under_its_name() {
+        let mut h = Harness::new();
+        untagged_chunk(&mut h, "research", "no task id on this one");
+
         assert!(
-            !h.app.entries.is_empty(),
-            "an untagged sub-agent frame still renders in the conversation"
+            h.app.entries.is_empty(),
+            "no sub-agent output belongs in the conversation"
+        );
+        assert_eq!(h.app.subagent_tasks.len(), 1);
+        assert_eq!(h.app.subagent_tasks[0].name, "research");
+        assert_eq!(h.app.subagent_tasks[0].blocks.len(), 1);
+    }
+
+    fn ask_call(h: &mut Harness, tool_id: &str, name: &str, output: &str, is_error: bool) {
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolCall(ToolCall {
+                rid: None,
+                tool_id: tool_id.into(),
+                tool_name: format!("ask_{name}"),
+                input: serde_json::json!({"query": "what is the weather"}),
+                subagent: None,
+                task_id: None,
+            }),
+        );
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolResult(ToolResult {
+                rid: None,
+                tool_id: tool_id.into(),
+                tool_name: format!("ask_{name}"),
+                output: output.into(),
+                is_error,
+                subagent: None,
+                task_id: None,
+            }),
+        );
+    }
+
+    #[test]
+    fn a_started_subagent_reads_as_one_line_not_the_model_s_instructions() {
+        let mut h = Harness::new();
+        h.app.connection_status = crate::app::ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+        for (i, name) in ["internet", "music", "memory"].iter().enumerate() {
+            ask_call(
+                &mut h,
+                &format!("p{i}"),
+                name,
+                &format!(
+                    "Subagent '{name}' started in the background (task sa_{i}). Do not wait for                      it or poll: its result will arrive on its own as a later message tagged with                      this task id, and you will get to respond to it then."
+                ),
+                false,
+            );
+        }
+
+        let frame = h.render("three acks");
+        assert!(
+            !frame.contains("Do not wait for it or poll"),
+            "the model's own instructions do not belong in the transcript:\n{frame}"
+        );
+        for name in ["internet", "music", "memory"] {
+            assert!(
+                frame.contains(&format!("{name} started")),
+                "{name} must still be announced:\n{frame}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_refused_ask_still_shows_why() {
+        let mut h = Harness::new();
+        h.app.connection_status = crate::app::ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+        ask_call(
+            &mut h,
+            "p1",
+            "ghost",
+            "ask_ghost is not available in this build",
+            true,
+        );
+
+        let frame = h.render("refused ask");
+        assert!(
+            frame.contains("not available in this build"),
+            "an error must survive the compaction:\n{frame}"
+        );
+    }
+
+    #[test]
+    fn three_at_once_do_not_spam_the_conversation() {
+        let mut h = Harness::new();
+        let running = [("sa_1", "internet"), ("sa_2", "music"), ("sa_3", "memory")];
+        for (task_id, name) in running {
+            status(&mut h, task_id, name, "what is the weather", "running");
+        }
+        for round in 0..4 {
+            for (task_id, name) in running {
+                chunk(&mut h, task_id, name, &format!("{name} said {round}. "));
+            }
+        }
+
+        assert!(
+            h.app.entries.is_empty(),
+            "interleaved sub-agents must not reach the conversation: {:?}",
+            h.app.entries
+        );
+        assert_eq!(h.app.subagent_tasks.len(), 3);
+        for task in &h.app.subagent_tasks {
+            assert_eq!(
+                task.blocks.len(),
+                1,
+                "{} kept one text block, not one per frame",
+                task.name
+            );
+        }
+
+        let frame = h.render("three running");
+        assert!(frame.contains("3 sub-agents running"), "frame: {frame}");
+        assert!(
+            !frame.contains("(press s)"),
+            "no collapsed section markers belong here:\n{frame}"
+        );
+    }
+
+    #[test]
+    fn three_untagged_at_once_do_not_spam_either() {
+        let mut h = Harness::new();
+        for round in 0..4 {
+            for name in ["internet", "music", "memory"] {
+                untagged_chunk(&mut h, name, &format!("{name} said {round}. "));
+            }
+        }
+
+        assert!(h.app.entries.is_empty());
+        assert_eq!(h.app.subagent_tasks.len(), 3);
+        let frame = h.render("three untagged");
+        assert!(
+            !frame.contains("(press s)"),
+            "the old inline path opened a section per frame:\n{frame}"
         );
     }
 
@@ -3996,33 +4142,6 @@ pub(crate) mod scenario_tests {
             f.contains("research · 2 tools (press s)"),
             "marker must count the section's tools, not the turn's:\n{f}"
         );
-    }
-
-    #[test]
-    fn subagent_tag_transitions_bracket_blocks() {
-        let mut app = App::default();
-        app.stream.active = true;
-
-        app.sync_subagent_section(Some("research"));
-        app.stream_append_thinking("hmm");
-        app.sync_subagent_section(Some("research"));
-        app.stream_append_text("nested out");
-        app.sync_subagent_section(None);
-        app.stream_append_text("primary");
-
-        let turn = app.entries.last().and_then(|e| e.as_turn()).unwrap();
-        let kinds: Vec<&str> = turn
-            .blocks
-            .iter()
-            .map(|b| match b {
-                Block::SubagentBegin(_) => "begin",
-                Block::SubagentEnd(_) => "end",
-                Block::Thinking(_) => "think",
-                Block::Text(_) => "text",
-                _ => "other",
-            })
-            .collect();
-        assert_eq!(kinds, ["begin", "think", "text", "end", "text"]);
     }
 
     #[test]

@@ -4,7 +4,6 @@ pub(crate) struct StreamState {
     pub regen: bool,
     pub phase: String,
     pub tool_name: Option<String>,
-    pub subagent: Option<String>,
 }
 
 impl StreamState {
@@ -13,6 +12,5 @@ impl StreamState {
         self.regen = false;
         self.phase.clear();
         self.tool_name = None;
-        self.subagent = None;
     }
 }

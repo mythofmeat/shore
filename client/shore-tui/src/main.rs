@@ -1570,11 +1570,19 @@ fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Optio
         .flatten()
 }
 
+fn untagged_task_key(name: &str) -> String {
+    format!("subagent:{name}")
+}
+
 fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
-    let Some(task_id) = msg.task_id().map(str::to_string) else {
+    let name = msg.subagent().map(str::to_string);
+    let Some(task_id) = msg
+        .task_id()
+        .map(str::to_string)
+        .or_else(|| name.as_deref().map(untagged_task_key))
+    else {
         return UiEffect::redraw(RedrawEffect::None);
     };
-    let name = msg.subagent().map(str::to_string);
     let idx = app.subagent_task_index(&task_id, name.as_deref());
 
     match msg {
@@ -1622,28 +1630,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         return UiEffect::redraw(RedrawEffect::Immediate);
     }
 
-    if msg.task_id().is_some() {
+    if msg.task_id().is_some() || msg.subagent().is_some() {
         return route_subagent_task_frame(app, msg);
-    }
-
-    if matches!(
-        msg,
-        ServerMessage::StreamStart(_)
-            | ServerMessage::StreamChunk(_)
-            | ServerMessage::StreamEnd(_)
-            | ServerMessage::ToolCall(_)
-            | ServerMessage::ToolResult(_)
-            | ServerMessage::SendImage(_)
-    ) {
-        app.sync_subagent_section(msg.subagent());
     }
 
     let redraw = match msg {
         ServerMessage::StreamStart(start) => {
-            if start.subagent.is_some() {
-                app.spinner_frame = 0;
-                return UiEffect::redraw(RedrawEffect::Immediate);
-            }
             app.spinner_frame = 0;
             if start.regen {
                 app.begin_regen_optimistic();
@@ -1672,9 +1664,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::StreamEnd(end) => {
-            if end.subagent.is_some() {
-                return UiEffect::redraw(RedrawEffect::Immediate);
-            }
             if end.finish_reason == "cancelled" {
                 app.abort_stream();
                 app.set_status("generation cancelled");

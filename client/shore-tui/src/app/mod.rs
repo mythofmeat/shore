@@ -471,23 +471,6 @@ impl App {
             .expect("just ensured a trailing streaming turn")
     }
 
-    pub(crate) fn sync_subagent_section(&mut self, tag: Option<&str>) {
-        if self.stream.subagent.as_deref() == tag {
-            return;
-        }
-        if let Some(prev) = self.stream.subagent.take() {
-            self.ensure_streaming_turn()
-                .blocks
-                .push(Block::SubagentEnd(prev));
-        }
-        if let Some(name) = tag {
-            self.ensure_streaming_turn()
-                .blocks
-                .push(Block::SubagentBegin(name.to_string()));
-            self.stream.subagent = Some(name.to_string());
-        }
-    }
-
     pub(crate) fn subagent_task_index(&mut self, task_id: &str, name: Option<&str>) -> usize {
         if let Some(idx) = self
             .subagent_tasks
