@@ -19,7 +19,7 @@
     "@anthropic-ai/sdk": "^0.117.1",
     "@google/genai": "^2.17.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openrouter/sdk": "^1.2.43",
+    "@openrouter/sdk": "^1.2.44",
     "ai": "^7.0.68",
     "matrix-js-sdk": "^42.2.0",
     "openai": "^7.5.0",
