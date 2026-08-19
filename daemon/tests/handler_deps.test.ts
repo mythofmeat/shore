@@ -33,6 +33,7 @@ import {
 } from "../src/runtime.ts";
 import { buildToolContext, type ToolContextDeps } from "../src/handler/tool_context.ts";
 import { dispatchTool } from "../src/tools/dispatch.ts";
+import { readSubagentTraces } from "../src/tools/subagent_trace.ts";
 import type { McpRegistry } from "../src/tools/mcp_registry.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -41,7 +42,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { Ledger } from "../src/ledger/store.ts";
-import type { SidecarRequest } from "../src/llm/types.ts";
+import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 
 const NO_MCP = () => Promise.reject(new Error("no MCP server should be connected"));
 
@@ -180,7 +181,152 @@ async function subagentFailure(runtime: ShoreRuntime, character: string): Promis
   return await failureFrom(runtime, chatToolDeps(assemblyFor(runtime), character, turnFor()));
 }
 
+const SUBAGENT_KEY_ENV = "SHORE_DEPS_SUBAGENT_KEY";
+
+const SUBAGENT_MODEL = {
+  name: "fixture",
+  qualifiedName: "chat.fixture",
+  category: "chat",
+  providerKey: "openrouter",
+  sdk: "openrouter",
+  modelId: "model-fixture",
+  apiKeyEnv: SUBAGENT_KEY_ENV,
+  maxContextTokens: 200_000,
+  maxOutputTokens: 4096,
+  maxToolIterations: 3,
+} as never;
+
+function withQuotingResearch(app: ReturnType<typeof defaultAppConfig>): void {
+  app.defaults.model = "fixture";
+  app.subagents.set("research", {
+    description: "reads things",
+    prompt: "You look things up.\n{{active_history:5}}",
+    tools: ["roll_dice"],
+    model: undefined,
+    max_iterations: undefined,
+    timeout: undefined,
+  });
+}
+
+function subagentWorld(root: string): LoadedConfig {
+  const config = configFor(root, withQuotingResearch);
+  config.models.chat.set("chat.fixture", SUBAGENT_MODEL);
+  return {
+    ...config,
+    providers: ProviderRegistry.fromSection({
+      openrouter: { api_key_env: SUBAGENT_KEY_ENV },
+    }),
+  };
+}
+
+function dicerollingProvider(seen: SidecarRequest[]): SidecarProvider {
+  let call = 0;
+  return {
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async *stream(req: SidecarRequest): AsyncGenerator<StreamEvent> {
+      seen.push(req);
+      call += 1;
+      const usage = {
+        input_tokens: 1,
+        output_tokens: 1,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
+      };
+      const timing = { total_ms: 1, time_to_first_token_ms: 1 };
+      yield { type: "start", model: req.model };
+      if (call === 1) {
+        yield { type: "tool_use", id: "toolu_dice", name: "roll_dice", input: { notation: "1d6" } };
+        yield { type: "done", content: "", finish_reason: "tool_use", usage, timing };
+        return;
+      }
+      yield { type: "text", text: "rolled" };
+      yield { type: "done", content: "rolled", finish_reason: "end_turn", usage, timing };
+    },
+    generate: () => {
+      throw new Error("a sub-agent streams");
+    },
+  } as unknown as SidecarProvider;
+}
+
+function streamingAssembly(
+  runtime: ShoreRuntime,
+  provider: SidecarProvider,
+): Parameters<typeof chatToolDeps>[0] {
+  return {
+    runtime,
+    providers: { openrouter: provider },
+    diagnostics: new Diagnostics(),
+    env: { [SUBAGENT_KEY_ENV]: "sk-test" },
+  } as unknown as Parameters<typeof chatToolDeps>[0];
+}
+
 describe("the tool backends a character's turn gets", () => {
+  test("a sub-agent is handed the turn it was spawned from, not a bare runner", async () => {
+    const { root, runtime } = await runtimeUnder(
+      "shore-deps-subagent-turn-",
+      withQuotingResearch,
+      ["ada"],
+    );
+    try {
+      runtime.registry.setRuntimeEffectiveConfig("ada", subagentWorld(root));
+
+      const frames: ServerMessage[] = [];
+      const seen: SidecarRequest[] = [];
+      const turn: Parameters<typeof chatToolDeps>[2] = {
+        conversation: [
+          {
+            msg_id: "m_parent",
+            role: "user",
+            content: "the tide is out at Whitstable",
+            images: [],
+            content_blocks: [{ type: "text", text: "the tide is out at Whitstable" }],
+            alternatives: [],
+            timestamp: "2026-01-01T09:00:00+00:00",
+          },
+        ],
+        send: (message: ServerMessage) => frames.push(message),
+        rid: "rid-7",
+        now: () => "2026-01-01T10:00:00+00:00",
+        newMessageId: () => "m_from_the_turn",
+        signal: new AbortController().signal,
+      };
+
+      const deps = chatToolDeps(streamingAssembly(runtime, dicerollingProvider(seen)), "ada", turn);
+      const ctx = await buildToolContext(runtime.config, runtime.config.dirs.data, "ada", deps);
+      const answer = await dispatchTool(
+        "ask_research",
+        { query: "how is the tide" },
+        { ...ctx, toolUseId: "toolu_parent" },
+      );
+
+      expect(answer).toBe("rolled");
+
+      expect(frames.length).toBeGreaterThan(0);
+      for (const frame of frames) {
+        expect((frame as { subagent?: string }).subagent).toBe("research");
+      }
+      const rids = frames
+        .map((frame) => (frame as { rid?: string | null }).rid)
+        .filter((rid) => rid !== null && rid !== undefined);
+      expect(rids.length).toBeGreaterThan(0);
+      expect([...new Set(rids)]).toEqual(["rid-7"]);
+
+      expect(JSON.stringify(seen[0]?.system)).toContain("the tide is out at Whitstable");
+
+      const traces = await readSubagentTraces(join(root, "data", "ada"));
+      expect(traces).toHaveLength(1);
+      const reported = traces[0]?.messages ?? [];
+      expect(reported.length).toBeGreaterThan(0);
+      for (const message of reported) {
+        expect(message.msg_id).toBe("m_from_the_turn");
+        expect(message.timestamp).toBe("2026-01-01T10:00:00+00:00");
+      }
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("a deferred edit lands in the character's own directory", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-defer-");
     try {

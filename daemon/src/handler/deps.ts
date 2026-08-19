@@ -219,8 +219,6 @@ function beginIndexForeground(a: HandlerAssembly): () => void {
 }
 
 export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps {
-  const leases = new StreamLeases();
-
   async function runGenerationInForeground(params: GenerationParams): Promise<void> {
     const endForeground = beginIndexForeground(a);
     try {
@@ -234,7 +232,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
   const dispatchCommand = makeDispatchCommand(buildCommandPathDeps(a));
   return {
     router: a.router,
-    leases,
+    leases: new StreamLeases(),
     registry: handlerRegistry(a.runtime.registry),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta) => {

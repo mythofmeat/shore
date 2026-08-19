@@ -70,6 +70,9 @@ MUTANTS = [
      D,
      "        : { stats: report.stats, turnCount: report.messageCount };",
      "        : { stats: report.stats, turnCount: 0 };"),
+    ("tools: a chat turn's sub-agents are handed no turn, so they cannot stream out", D,
+     "      ...(a.env === undefined ? {} : { env: a.env }),\n      turn,\n    }),",
+     "      ...(a.env === undefined ? {} : { env: a.env }),\n    } as never),"),
     ("tools: the shared backends are dropped, so chat is offered less than a heartbeat", D,
      "    ...sharedToolDeps(runtime.config, runtime.mcp, {\n"
      "      providers: a.providers,\n"
