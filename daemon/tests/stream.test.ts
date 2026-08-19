@@ -988,6 +988,46 @@ describe("persist_and_notify", () => {
     expect((events[0] as unknown as Row)["msg_id"]).toBe("m_1");
   });
 
+  test("a tool-loop turn is stored with the provenance of the model that minted it", async () => {
+    const { ctx } = makeContext();
+    const engine = new FakeEngine();
+    const assistantTurn: Message = {
+      msg_id: "m_tool",
+      role: "assistant",
+      content: "",
+      images: [],
+      content_blocks: [
+        { type: "thinking", thinking: "why not", reasoning_content: "why not" },
+        { type: "tool_use", id: "t", name: "n", input: {} },
+      ],
+      timestamp: "t",
+    };
+    const toolResult: Message = {
+      msg_id: "m_result",
+      role: "user",
+      content: "",
+      images: [],
+      content_blocks: [{ type: "tool_result", tool_use_id: "t", content: "ok", is_error: false }],
+      timestamp: "t",
+    };
+    await persistAndNotify(ctx, engine, {
+      charName: "Alice",
+      resolvedProviderKey: "zai",
+      result: { ...resultWith("done", [{ type: "text", text: "done" }]), model: "glm-5.3" },
+      request: { model: "glm-5.3", provider_key: "zai", messages: [] },
+      keepaliveIntervalMs: undefined,
+      toolIntermediateMessages: [assistantTurn, toolResult],
+      wallClockMs: 1,
+    });
+
+    const stored = engine.messages.find((m) => m.msg_id === "m_tool");
+    expect(stored?.provider_key).toBe("zai");
+    expect(stored?.model).toBe("glm-5.3");
+    const result = engine.messages.find((m) => m.msg_id === "m_result");
+    expect(result?.provider_key).toBeUndefined();
+    expect(result?.model).toBeUndefined();
+  });
+
   test("a regeneration replaces the tail, stamps alternatives, and reports one revision", async () => {
     const { ctx, events } = makeContext();
     const engine = new FakeEngine();
