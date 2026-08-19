@@ -144,3 +144,51 @@ impl ConversationEntry {
         }
     }
 }
+
+#[derive(Clone, Debug)]
+pub(crate) struct SubagentTaskView {
+    pub task_id: String,
+    pub name: String,
+    pub query: String,
+    pub status: String,
+    pub detail: Option<String>,
+    pub blocks: Vec<Block>,
+    pub scroll: u16,
+    pub follow: bool,
+}
+
+impl SubagentTaskView {
+    pub(crate) fn new(task_id: String, name: String) -> Self {
+        Self {
+            task_id,
+            name,
+            query: String::new(),
+            status: "running".to_string(),
+            detail: None,
+            blocks: Vec::new(),
+            scroll: 0,
+            follow: true,
+        }
+    }
+
+    pub(crate) fn is_running(&self) -> bool {
+        self.status == "running"
+    }
+
+    pub(crate) fn selector_label(&self) -> String {
+        let name = if self.name.is_empty() {
+            self.task_id.as_str()
+        } else {
+            self.name.as_str()
+        };
+        if self.query.is_empty() {
+            name.to_string()
+        } else {
+            format!("{name} · {}", one_line(&self.query))
+        }
+    }
+}
+
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}

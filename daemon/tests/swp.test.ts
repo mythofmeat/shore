@@ -297,6 +297,22 @@ describe("event_matches_session", () => {
     expect(eventMatchesSession(message, null, true)).toBe(false);
   });
 
+  test("subagent status only reaches the character that owns the task", () => {
+    const status = {
+      type: "subagent_status",
+      task_id: "sa_1",
+      character: "poppy",
+      name: "research",
+      query: "q",
+      status: "running",
+    } as ServerMessage;
+
+    expect(eventMatchesSession(status, "poppy", true)).toBe(true);
+    expect(eventMatchesSession(status, "Yuna", true)).toBe(false);
+    expect(eventMatchesSession(status, null, true)).toBe(false);
+    expect(eventMatchesSession(status, "poppy", false)).toBe(false);
+  });
+
   test("an all-characters subscriber gets conversation events for every character", () => {
     const message = {
       type: "new_message",

@@ -218,6 +218,7 @@ mod tests {
     fn server_stream_start_round_trip() {
         let msg = ServerMessage::StreamStart(StreamStart {
             subagent: None,
+            task_id: None,
             rid: Some("msg_01".into()),
             regen: false,
         });
@@ -231,6 +232,7 @@ mod tests {
     fn server_stream_chunk_round_trip() {
         let msg = ServerMessage::StreamChunk(StreamChunk {
             subagent: None,
+            task_id: None,
             rid: Some("msg_01".into()),
             text: "partial".into(),
             content_type: "text".into(),
@@ -245,6 +247,7 @@ mod tests {
     fn server_stream_chunk_thinking() {
         let msg = ServerMessage::StreamChunk(StreamChunk {
             subagent: None,
+            task_id: None,
             rid: Some("msg_01".into()),
             text: "hmm...".into(),
             content_type: "thinking".into(),
@@ -258,6 +261,7 @@ mod tests {
     fn server_stream_end_round_trip() {
         let msg = ServerMessage::StreamEnd(StreamEnd {
             subagent: None,
+            task_id: None,
             rid: Some("msg_01".into()),
             msg_id: None,
             revision: None,
@@ -340,6 +344,7 @@ mod tests {
     fn server_tool_call_round_trip() {
         let msg = ServerMessage::ToolCall(ToolCall {
             subagent: None,
+            task_id: None,
             rid: Some("msg_01".into()),
             tool_id: "t1".into(),
             tool_name: "search".into(),
@@ -357,6 +362,7 @@ mod tests {
     fn server_tool_result_round_trip() {
         let msg = ServerMessage::ToolResult(ToolResult {
             subagent: None,
+            task_id: None,
             rid: Some("msg_01".into()),
             tool_id: "t1".into(),
             tool_name: "search".into(),
@@ -372,6 +378,7 @@ mod tests {
     fn server_send_image_round_trip() {
         let msg = ServerMessage::SendImage(SendImage {
             subagent: None,
+            task_id: None,
             rid: Some("msg_01".into()),
             path: "/tmp/img.png".into(),
             caption: Some("generated chart".into()),

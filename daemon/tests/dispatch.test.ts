@@ -692,6 +692,35 @@ describe("dispatch deadline", () => {
     expect(aborted).toBe(true);
   });
 
+  test("a background-capable context starts the sub-agent instead of awaiting it", async () => {
+    let foregroundCalled = false;
+    const ctx = bareContext({
+      startSubagent: (name, query, toolUseId) => {
+        expect({ name, query, toolUseId }).toEqual({
+          name: "researcher",
+          query: "tides",
+          toolUseId: undefined,
+        });
+        return "started sa_1";
+      },
+      runSubagent: async () => {
+        foregroundCalled = true;
+        return "blocking";
+      },
+    });
+    expect(await dispatchTool("ask_researcher", { query: "tides" }, ctx)).toBe("started sa_1");
+    expect(foregroundCalled).toBe(false);
+  });
+
+  test("without a starter the sub-agent still runs in the foreground", async () => {
+    const ctx = bareContext({
+      runSubagent: async (name, query) => `blocking ${name}:${query}`,
+    });
+    expect(await dispatchTool("ask_researcher", { query: "tides" }, ctx)).toBe(
+      "blocking researcher:tides",
+    );
+  });
+
   test("a sub-agent receives the same signal", async () => {
     let seen: AbortSignal | undefined;
     const ctx = bareContext({

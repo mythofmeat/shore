@@ -26,6 +26,7 @@ import {
   applyIntermediateMessages,
   generationEngine,
   runGeneration,
+  serializedPerKey,
   type GenerationDeps,
 } from "../src/handler/generation.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
@@ -167,6 +168,64 @@ function model(): ResolvedModel {
 async function tempRoot(name: string): Promise<string> {
   return await mkdtemp(testTmp(`shore-gen-${name}-`));
 }
+
+describe("serializedPerKey", () => {
+  test("calls with the same key never overlap", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const run = serializedPerKey(
+      (p: { key: string }) => p.key,
+      async (p: { key: string; delay: number }) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, p.delay));
+        inFlight -= 1;
+        return p.key;
+      },
+    );
+
+    await Promise.all([
+      run({ key: "a", delay: 30 }),
+      run({ key: "a", delay: 10 }),
+      run({ key: "a", delay: 20 }),
+    ]);
+    expect(maxInFlight).toBe(1);
+  });
+
+  test("calls with different keys still run concurrently", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const run = serializedPerKey(
+      (p: string) => p,
+      async (p: string) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        inFlight -= 1;
+        return p;
+      },
+    );
+
+    await Promise.all([run("a"), run("b"), run("c")]);
+    expect(maxInFlight).toBeGreaterThan(1);
+  });
+
+  test("a rejected call does not strand the queue behind it", async () => {
+    const order: string[] = [];
+    const run = serializedPerKey(
+      (p: string) => "a",
+      async (p: string) => {
+        order.push(p);
+        if (p === "first") throw new Error("boom");
+        return p;
+      },
+    );
+
+    await expect(run("first")).rejects.toThrow("boom");
+    await expect(run("second")).resolves.toBe("second");
+    expect(order).toEqual(["first", "second"]);
+  });
+});
 
 describe("applyIntermediateMessages", () => {
   for (const c of fixture.apply_intermediate_messages) {

@@ -14,6 +14,7 @@ import type { McpRegistry } from "../tools/mcp_registry.ts";
 export interface ToolContextDeps {
   mcpRegistry?: Pick<McpRegistry, "call">;
   runSubagent?: (parent: ToolContext) => NonNullable<ToolContext["runSubagent"]>;
+  startSubagent?: (parent: ToolContext) => NonNullable<ToolContext["startSubagent"]>;
   deferEdit?: (path: string) => Promise<void> | void;
   imageGenerator?: ToolContext["imageGenerator"];
   modelHistoryQuery?: ToolContext["modelHistoryQuery"];
@@ -90,6 +91,9 @@ export async function buildToolContext(
 
   if (subagentsConfigured && deps.runSubagent !== undefined) {
     ctx.runSubagent = deps.runSubagent(ctx);
+  }
+  if (subagentsConfigured && deps.startSubagent !== undefined) {
+    ctx.startSubagent = deps.startSubagent(ctx);
   }
   return ctx;
 }

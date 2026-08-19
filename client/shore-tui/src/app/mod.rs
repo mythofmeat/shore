@@ -1,4 +1,5 @@
 use ratatui::text::Line;
+use shore_common::protocol::server_msg::SubagentStatus;
 use shore_common::protocol::types::{CharacterInfo, ImageRef, Role, StreamMetadata, TokenCounts};
 
 use crate::images::ImageCache;
@@ -267,6 +268,8 @@ pub(crate) struct App {
     pub show_subagent: bool,
     pub subagent_traces: std::collections::HashMap<String, Option<SubagentSection>>,
     pub pending_subagent_trace_ids: Vec<String>,
+    pub subagent_tasks: Vec<SubagentTaskView>,
+    pub subagent_panel: Option<usize>,
     pub show_images: bool,
     pub show_timestamps: bool,
     pub show_metadata: bool,
@@ -327,6 +330,8 @@ impl Default for App {
             show_subagent: true,
             subagent_traces: std::collections::HashMap::new(),
             pending_subagent_trace_ids: Vec::new(),
+            subagent_tasks: Vec::new(),
+            subagent_panel: None,
             show_images: true,
             show_timestamps: false,
             show_metadata: true,
@@ -470,6 +475,109 @@ impl App {
                 .blocks
                 .push(Block::SubagentBegin(name.to_string()));
             self.stream.subagent = Some(name.to_string());
+        }
+    }
+
+    pub(crate) fn subagent_task_index(&mut self, task_id: &str, name: Option<&str>) -> usize {
+        if let Some(idx) = self
+            .subagent_tasks
+            .iter()
+            .position(|task| task.task_id == task_id)
+        {
+            if let Some(name) = name
+                && self.subagent_tasks[idx].name.is_empty()
+            {
+                self.subagent_tasks[idx].name = name.to_string();
+            }
+            return idx;
+        }
+        self.subagent_tasks.push(SubagentTaskView::new(
+            task_id.to_string(),
+            name.unwrap_or_default().to_string(),
+        ));
+        self.subagent_tasks.len() - 1
+    }
+
+    pub(crate) fn apply_subagent_status(&mut self, status: &SubagentStatus) {
+        let idx = self.subagent_task_index(&status.task_id, Some(&status.name));
+        let task = &mut self.subagent_tasks[idx];
+        task.name.clone_from(&status.name);
+        task.query.clone_from(&status.query);
+        task.status.clone_from(&status.status);
+        task.detail.clone_from(&status.detail);
+    }
+
+    pub(crate) fn subagent_task_append_text(&mut self, idx: usize, text: &str) {
+        let Some(task) = self.subagent_tasks.get_mut(idx) else {
+            return;
+        };
+        match task.blocks.last_mut() {
+            Some(Block::Text(content)) => content.push_str(text),
+            _ => task.blocks.push(Block::Text(text.to_string())),
+        }
+    }
+
+    pub(crate) fn subagent_task_append_thinking(&mut self, idx: usize, text: &str) {
+        let Some(task) = self.subagent_tasks.get_mut(idx) else {
+            return;
+        };
+        match task.blocks.last_mut() {
+            Some(Block::Thinking(content)) => content.push_str(text),
+            _ => task.blocks.push(Block::Thinking(text.to_string())),
+        }
+    }
+
+    pub(crate) fn subagent_task_push_block(&mut self, idx: usize, block: Block) {
+        if let Some(task) = self.subagent_tasks.get_mut(idx) {
+            task.blocks.push(block);
+        }
+    }
+
+    pub(crate) fn running_subagent_count(&self) -> usize {
+        self.subagent_tasks
+            .iter()
+            .filter(|task| task.is_running())
+            .count()
+    }
+
+    pub(crate) fn open_subagent_panel(&mut self) {
+        if self.subagent_tasks.is_empty() {
+            return;
+        }
+        let running = self
+            .subagent_tasks
+            .iter()
+            .position(SubagentTaskView::is_running);
+        self.subagent_panel = Some(running.unwrap_or(self.subagent_tasks.len() - 1));
+    }
+
+    pub(crate) fn select_subagent_task(&mut self, delta: isize) {
+        let total = self.subagent_tasks.len();
+        let Some(selected) = self.subagent_panel else {
+            return;
+        };
+        if total == 0 {
+            return;
+        }
+        let total_i = total as isize;
+        let next = (selected as isize + delta).rem_euclid(total_i);
+        self.subagent_panel = Some(next as usize);
+    }
+
+    pub(crate) fn selected_subagent_task_mut(&mut self) -> Option<&mut SubagentTaskView> {
+        let idx = self.subagent_panel?;
+        self.subagent_tasks.get_mut(idx)
+    }
+
+    pub(crate) fn scroll_subagent_panel(&mut self, delta: i32) {
+        let Some(task) = self.selected_subagent_task_mut() else {
+            return;
+        };
+        if delta < 0 {
+            task.scroll = task.scroll.saturating_sub(delta.unsigned_abs() as u16);
+            task.follow = false;
+        } else {
+            task.scroll = task.scroll.saturating_add(delta as u16);
         }
     }
 

@@ -436,6 +436,7 @@
             "idle": {
               "description": "Never enabled",
               "prompt": "You are idle.",
+              "timeout": null,
               "tools": [
                 "fetch_url",
                 "idle_not_real"
@@ -446,6 +447,7 @@
             "researcher": {
               "description": "Looks things up",
               "prompt": "You look things up.",
+              "timeout": null,
               "tools": [
                 "web_search",
                 "also_not_real"
@@ -646,6 +648,7 @@
           "idle": {
             "description": "Never enabled",
             "prompt": "You are idle.",
+            "timeout": null,
             "tools": [
               "fetch_url",
               "idle_not_real"
@@ -656,6 +659,7 @@
           "researcher": {
             "description": "Looks things up",
             "prompt": "You look things up.",
+            "timeout": null,
             "tools": [
               "web_search",
               "also_not_real"
@@ -806,6 +810,7 @@
             "idle": {
               "description": "Never enabled",
               "prompt": "You are idle.",
+              "timeout": null,
               "tools": [
                 "fetch_url",
                 "idle_not_real"
@@ -816,6 +821,7 @@
             "researcher": {
               "description": "Looks things up",
               "prompt": "You look things up.",
+              "timeout": null,
               "tools": [
                 "web_search",
                 "also_not_real"
@@ -1078,6 +1084,7 @@
             "idle": {
               "description": "Never enabled",
               "prompt": "You are idle.",
+              "timeout": null,
               "tools": [
                 "fetch_url",
                 "idle_not_real"
@@ -1088,6 +1095,7 @@
             "researcher": {
               "description": "Looks things up",
               "prompt": "You look things up.",
+              "timeout": null,
               "tools": [
                 "web_search",
                 "also_not_real"

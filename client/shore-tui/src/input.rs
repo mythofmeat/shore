@@ -50,6 +50,10 @@ fn handle_key(app: &mut App, key: KeyEvent) -> Action {
         return handle_fullscreen(app, key);
     }
 
+    if app.subagent_panel.is_some() {
+        return handle_subagent_panel(app, key);
+    }
+
     match (key.modifiers, key.code) {
         (KeyModifiers::CONTROL, KeyCode::Char('c')) => return Action::Interrupt,
         (KeyModifiers::CONTROL, KeyCode::Char('q')) => return Action::Quit,
@@ -185,6 +189,15 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::SendAndSavePrefs(crate::subagent_trace_fetch(app))
         }
 
+        (KeyModifiers::SHIFT, KeyCode::Char('S')) => {
+            if app.subagent_tasks.is_empty() {
+                app.set_status("no background sub-agents yet");
+                return Action::Redraw;
+            }
+            app.open_subagent_panel();
+            Action::Redraw
+        }
+
         (KeyModifiers::NONE, KeyCode::Char('p')) => {
             app.show_images = !app.show_images;
             Action::SavePrefs
@@ -233,6 +246,56 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
+        _ => Action::None,
+    }
+}
+
+fn handle_subagent_panel(app: &mut App, key: KeyEvent) -> Action {
+    match (key.modifiers, key.code) {
+        (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q'))
+        | (KeyModifiers::SHIFT, KeyCode::Char('S')) => {
+            app.subagent_panel = None;
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Tab | KeyCode::Char('l') | KeyCode::Right)
+        | (KeyModifiers::NONE, KeyCode::Char('n')) => {
+            app.select_subagent_task(1);
+            Action::Redraw
+        }
+        (KeyModifiers::SHIFT, KeyCode::BackTab)
+        | (KeyModifiers::NONE, KeyCode::BackTab | KeyCode::Char('h') | KeyCode::Left) => {
+            app.select_subagent_task(-1);
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
+            app.scroll_subagent_panel(1);
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
+            app.scroll_subagent_panel(-1);
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('d') | KeyCode::PageDown) => {
+            app.scroll_subagent_panel(10);
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('u') | KeyCode::PageUp) => {
+            app.scroll_subagent_panel(-10);
+            Action::Redraw
+        }
+        (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
+            if let Some(task) = app.selected_subagent_task_mut() {
+                task.follow = true;
+            }
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('g')) => {
+            if let Some(task) = app.selected_subagent_task_mut() {
+                task.scroll = 0;
+                task.follow = false;
+            }
+            Action::Redraw
+        }
         _ => Action::None,
     }
 }
