@@ -180,11 +180,11 @@ describe("the messages a task produces", () => {
     detail: "high tide at 18:04",
   };
 
-  test("the ack tells the caller not to wait, and to keep going", () => {
+  test("the ack promises a later result rather than implying one is in hand", () => {
     const ack = subagentStartedAck(task);
     expect(ack).toContain("sa_1");
     expect(ack).toContain("will arrive");
-    expect(ack).toContain("continue");
+    expect(ack).not.toContain("these answers");
   });
 
   test("the result message carries id, name, status, query and result", () => {
