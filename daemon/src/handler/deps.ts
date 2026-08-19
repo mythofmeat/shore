@@ -36,14 +36,7 @@ import { McpRegistry } from "../tools/mcp_registry.ts";
 import { pluginsDir } from "../config/dirs.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
-import { deferEditTo, timeoutFor, toolLimitsFrom, type ToolContext } from "../tools/dispatch.ts";
-import { NotImplemented } from "../tools/errors.ts";
-import { subagentRunner } from "../tools/subagent_loop.ts";
-import {
-  SubagentTaskManager,
-  subagentResultMessage,
-  type SubagentTaskRecord,
-} from "../tools/subagent_tasks.ts";
+import { deferEditTo } from "../tools/dispatch.ts";
 import { makeDispatchCommand, type CommandPathDeps } from "./commands.ts";
 import type { DispatchRuntime, ReloadSummary } from "./command_dispatch.ts";
 import {
@@ -59,7 +52,6 @@ import type {
   HandlerNotifier,
   HandlerRegistry,
   MessageHandlerDeps,
-  RunGeneration,
 } from "./router.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
 import { indexPath as workspaceIndexPath } from "../memory/workspace_index.ts";
@@ -72,7 +64,6 @@ export interface GenerationAssembly {
   diagnostics: Diagnostics;
   env?: NodeJS.ProcessEnv | undefined;
   now?: (() => number) | undefined;
-  subagentTasks?: SubagentTaskManager | undefined;
 }
 
 export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
@@ -145,7 +136,7 @@ export function turnAutonomy(
 
 export type ToolAssembly = Pick<
   GenerationAssembly,
-  "runtime" | "providers" | "diagnostics" | "env" | "subagentTasks"
+  "runtime" | "providers" | "diagnostics" | "env"
 >;
 
 export function chatToolDeps(
@@ -154,20 +145,6 @@ export function chatToolDeps(
   turn: SubagentTurn,
 ): ToolContextDeps {
   const { runtime } = a;
-  const subagentDeps = (parent: ToolContext, taskId?: string) => ({
-    config: runtime.registry.effectiveConfig(charName),
-    ctx: parent,
-    providers: a.providers,
-    ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
-    mcpRegistry: runtime.mcp.current,
-    sendDirect: turn.send,
-    conversation: turn.conversation,
-    ...(a.env === undefined ? {} : { env: a.env }),
-    ...(turn.rid === undefined ? {} : { rid: turn.rid }),
-    now: turn.now,
-    newMessageId: turn.newMessageId,
-    ...(taskId === undefined ? {} : { taskId }),
-  });
   return {
     ...sharedToolDeps(runtime.config, runtime.mcp, {
       providers: a.providers,
@@ -176,27 +153,6 @@ export function chatToolDeps(
       ...(a.env === undefined ? {} : { env: a.env }),
       turn,
     }),
-    ...(a.subagentTasks === undefined
-      ? {}
-      : {
-          startSubagent: (parent: ToolContext) => (name: string, query: string, toolUseId?: string) => {
-            const config = runtime.registry.effectiveConfig(charName);
-            if (!config.app.subagents.has(name)) throw new NotImplemented(`ask_${name}`);
-            const tasks = a.subagentTasks;
-            if (tasks === undefined) throw new NotImplemented(`ask_${name}`);
-            return tasks.start({
-              character: charName,
-              name,
-              query,
-              timeoutMs: timeoutFor(
-                toolLimitsFrom(config.app.tools, config.app.subagents),
-                `ask_${name}`,
-              ),
-              run: async (task, signal) =>
-                await subagentRunner(subagentDeps(parent, task.id))(name, query, signal, toolUseId),
-            });
-          },
-        }),
     deferEdit: deferEditTo(
       characterDataDir(runtime.config.dirs.data, charName),
       queueDeferredEdit,
@@ -274,22 +230,13 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     }
   }
 
-  const subagentTasks = new SubagentTaskManager({
-    emit: a.emitEvent,
-    log: (msg) => {
-      a.log?.info?.(msg);
-    },
-    onSettled: (task) => deliverSubagentResult(a, leases, runGenerationInForeground, task),
-  });
-
-  const runGeneration = makeRunGeneration(buildGenerationDeps({ ...a, subagentTasks }));
+  const runGeneration = makeRunGeneration(buildGenerationDeps(a));
   const dispatchCommand = makeDispatchCommand(buildCommandPathDeps(a));
   return {
     router: a.router,
     leases,
     registry: handlerRegistry(a.runtime.registry),
     notifier: handlerNotifier(a.runtime.notifier),
-    subagentTasks,
     dispatchCommand: async (command, meta) => {
       const endForeground = beginIndexForeground(a);
       try {
@@ -301,51 +248,6 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     runGeneration: runGenerationInForeground,
     ...(a.log === undefined ? {} : { log: a.log }),
   };
-}
-
-async function deliverSubagentResult(
-  a: HandlerAssembly,
-  leases: StreamLeases,
-  runGeneration: RunGeneration,
-  task: SubagentTaskRecord,
-): Promise<void> {
-  const leaseSend = leases.sendForCharacter(task.character, a.router);
-  const send: (message: ServerMessage) => Promise<void> =
-    leaseSend === undefined
-      ? async () => {}
-      : async (message) => {
-          try {
-            await leaseSend(message);
-          } catch {
-          }
-        };
-
-  await runGeneration({
-    meta: {
-      session: {
-        clientId: -1,
-        sessionId: -1,
-        clientType: "daemon",
-        clientName: "subagent-tasks",
-        capabilities: [],
-        selectedCharacter: task.character,
-      },
-      rid: null,
-      kind: "message",
-    },
-    body: {
-      rid: null,
-      text: subagentResultMessage(task),
-      stream: true,
-      images: [],
-      image_data: [],
-    },
-    regen: false,
-    charName: task.character,
-    rid: null,
-    send,
-    signal: new AbortController().signal,
-  });
 }
 
 export function handlerRegistry(

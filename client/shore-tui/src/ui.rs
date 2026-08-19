@@ -309,11 +309,7 @@ fn render_tool_block(
                         .add_modifier(Modifier::BOLD),
                 ),
             ]));
-            let started = tool_name.strip_prefix("ask_").filter(|_| !*is_error);
-            let output = match started {
-                Some(name) => subagent_started_line(name),
-                None => format_tool_output(output),
-            };
+            let output = format_tool_output(output);
             push_bar_wrapped(
                 lines,
                 &output,
@@ -325,10 +321,6 @@ fn render_tool_block(
         }
         _ => {}
     }
-}
-
-fn subagent_started_line(name: &str) -> String {
-    format!("\u{00bb} {name} started \u{00b7} press S")
 }
 
 fn render_blocks(
@@ -1367,24 +1359,48 @@ fn wrap_plain(text: &str, width: usize) -> Vec<String> {
 mod subagent_panel_tests {
     use super::scenario_tests::Harness;
     use crossterm::event::{KeyCode, KeyModifiers};
-    use shore_common::protocol::server_msg::{
-        ServerMessage, StreamChunk, SubagentStatus, ToolCall, ToolResult,
-    };
+    use shore_common::protocol::server_msg::{ServerMessage, StreamChunk, ToolCall, ToolResult};
 
-    fn status(h: &mut Harness, task_id: &str, name: &str, query: &str, state: &str) {
+    fn asking(h: &mut Harness, task_id: &str, name: &str, query: &str) {
         let _ = crate::handle_server_message(
             &mut h.app,
-            ServerMessage::SubagentStatus(SubagentStatus {
-                task_id: task_id.into(),
-                character: "poppy".into(),
-                name: name.into(),
-                query: query.into(),
-                status: state.into(),
-                detail: if state == "running" {
-                    None
-                } else {
-                    Some(format!("{name} reported back"))
-                },
+            ServerMessage::ToolCall(ToolCall {
+                rid: None,
+                tool_id: task_id.into(),
+                tool_name: format!("ask_{name}"),
+                input: serde_json::json!({ "query": query }),
+                subagent: None,
+                task_id: None,
+            }),
+        );
+    }
+
+    fn failed(h: &mut Harness, task_id: &str, name: &str) {
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolResult(ToolResult {
+                rid: None,
+                tool_id: task_id.into(),
+                tool_name: format!("ask_{name}"),
+                output: format!("{name} reported back"),
+                is_error: true,
+                subagent: None,
+                task_id: None,
+            }),
+        );
+    }
+
+    fn answered(h: &mut Harness, task_id: &str, name: &str) {
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolResult(ToolResult {
+                rid: None,
+                tool_id: task_id.into(),
+                tool_name: format!("ask_{name}"),
+                output: format!("{name} reported back"),
+                is_error: false,
+                subagent: None,
+                task_id: None,
             }),
         );
     }
@@ -1436,43 +1452,39 @@ mod subagent_panel_tests {
     #[test]
     fn a_running_task_never_lands_in_the_conversation() {
         let mut h = Harness::new();
-        status(
-            &mut h,
-            "sa_1",
-            "research",
-            "find the tide tables",
-            "running",
-        );
-        chunk(&mut h, "sa_1", "research", "checking the almanac");
-        tool(&mut h, "sa_1", "research", "web_search");
+        asking(&mut h, "tu_1", "research", "find the tide tables");
+        chunk(&mut h, "tu_1", "research", "checking the almanac");
+        tool(&mut h, "tu_1", "research", "web_search");
 
-        assert!(
-            h.app.entries.is_empty(),
-            "background sub-agent frames must not append to the conversation"
-        );
         assert_eq!(h.app.subagent_tasks.len(), 1);
         assert_eq!(h.app.subagent_tasks[0].blocks.len(), 3);
+        let blocks = &h
+            .app
+            .entries
+            .last()
+            .and_then(|e| e.as_turn())
+            .unwrap()
+            .blocks;
+        assert_eq!(
+            blocks.len(),
+            1,
+            "only the ask_ call itself belongs in the conversation: {blocks:?}"
+        );
     }
 
     #[test]
     fn the_input_border_says_how_many_are_running() {
         let mut h = Harness::new();
-        status(
-            &mut h,
-            "sa_1",
-            "research",
-            "find the tide tables",
-            "running",
-        );
+        asking(&mut h, "tu_1", "research", "find the tide tables");
         let frame = h.render("one running");
         assert!(frame.contains("1 sub-agent running"), "frame: {frame}");
         assert!(frame.contains("press S"), "frame: {frame}");
 
-        status(&mut h, "sa_2", "cook", "plan dinner", "running");
+        asking(&mut h, "tu_2", "cook", "plan dinner");
         let frame = h.render("two running");
         assert!(frame.contains("2 sub-agents running"), "frame: {frame}");
 
-        status(&mut h, "sa_1", "research", "find the tide tables", "done");
+        answered(&mut h, "tu_1", "research");
         let frame = h.render("one settled");
         assert!(frame.contains("1 sub-agent running"), "frame: {frame}");
     }
@@ -1480,15 +1492,9 @@ mod subagent_panel_tests {
     #[test]
     fn the_panel_opens_on_shift_s_and_shows_the_selected_task() {
         let mut h = Harness::new();
-        status(
-            &mut h,
-            "sa_1",
-            "research",
-            "find the tide tables",
-            "running",
-        );
-        chunk(&mut h, "sa_1", "research", "checking the almanac");
-        tool(&mut h, "sa_1", "research", "web_search");
+        asking(&mut h, "tu_1", "research", "find the tide tables");
+        chunk(&mut h, "tu_1", "research", "checking the almanac");
+        tool(&mut h, "tu_1", "research", "web_search");
 
         open_panel(&mut h);
         assert_eq!(h.app.subagent_panel, Some(0));
@@ -1514,16 +1520,10 @@ mod subagent_panel_tests {
     #[test]
     fn tab_switches_between_tasks_by_name_and_query() {
         let mut h = Harness::new();
-        status(
-            &mut h,
-            "sa_1",
-            "research",
-            "find the tide tables",
-            "running",
-        );
-        chunk(&mut h, "sa_1", "research", "checking the almanac");
-        status(&mut h, "sa_2", "cook", "plan dinner for six", "running");
-        chunk(&mut h, "sa_2", "cook", "counting the plates");
+        asking(&mut h, "tu_1", "research", "find the tide tables");
+        chunk(&mut h, "tu_1", "research", "checking the almanac");
+        asking(&mut h, "tu_2", "cook", "plan dinner for six");
+        chunk(&mut h, "tu_2", "cook", "counting the plates");
 
         open_panel(&mut h);
         let frame = h.render("first task selected");
@@ -1543,14 +1543,8 @@ mod subagent_panel_tests {
     #[test]
     fn a_settled_task_shows_its_status_and_result() {
         let mut h = Harness::new();
-        status(
-            &mut h,
-            "sa_1",
-            "research",
-            "find the tide tables",
-            "running",
-        );
-        status(&mut h, "sa_1", "research", "find the tide tables", "error");
+        asking(&mut h, "tu_1", "research", "find the tide tables");
+        failed(&mut h, "tu_1", "research");
 
         open_panel(&mut h);
         let frame = h.render("errored task");
@@ -1560,19 +1554,19 @@ mod subagent_panel_tests {
     }
 
     #[test]
-    fn a_tagged_frame_without_a_status_still_creates_the_task() {
+    fn a_frame_that_beats_its_ask_call_still_creates_the_task() {
         let mut h = Harness::new();
-        chunk(&mut h, "sa_9", "research", "arriving before the status did");
+        chunk(&mut h, "tu_9", "research", "arriving before the call did");
 
         assert_eq!(h.app.subagent_tasks.len(), 1);
         assert_eq!(h.app.subagent_tasks[0].name, "research");
         assert!(h.app.entries.is_empty());
 
-        status(&mut h, "sa_9", "research", "the late query", "running");
+        asking(&mut h, "tu_9", "research", "the late query");
         assert_eq!(
             h.app.subagent_tasks.len(),
             1,
-            "the status upserts, not appends"
+            "the ask_ call upserts, it does not append"
         );
         assert_eq!(h.app.subagent_tasks[0].query, "the late query");
     }
@@ -1631,36 +1625,6 @@ mod subagent_panel_tests {
     }
 
     #[test]
-    fn a_started_subagent_reads_as_one_line_not_the_model_s_instructions() {
-        let mut h = Harness::new();
-        h.app.connection_status = crate::app::ConnectionStatus::Connected;
-        h.app.character_name = "Alice".into();
-        for (i, name) in ["internet", "music", "memory"].iter().enumerate() {
-            ask_call(
-                &mut h,
-                &format!("p{i}"),
-                name,
-                &format!(
-                    "Subagent '{name}' started in the background (task sa_{i}). Do not wait for                      it or poll: its result will arrive on its own as a later message tagged with                      this task id, and you will get to respond to it then."
-                ),
-                false,
-            );
-        }
-
-        let frame = h.render("three acks");
-        assert!(
-            !frame.contains("Do not wait for it or poll"),
-            "the model's own instructions do not belong in the transcript:\n{frame}"
-        );
-        for name in ["internet", "music", "memory"] {
-            assert!(
-                frame.contains(&format!("{name} started")),
-                "{name} must still be announced:\n{frame}"
-            );
-        }
-    }
-
-    #[test]
     fn a_refused_ask_still_shows_why() {
         let mut h = Harness::new();
         h.app.connection_status = crate::app::ConnectionStatus::Connected;
@@ -1676,16 +1640,16 @@ mod subagent_panel_tests {
         let frame = h.render("refused ask");
         assert!(
             frame.contains("not available in this build"),
-            "an error must survive the compaction:\n{frame}"
+            "a refused ask_ must say why:\n{frame}"
         );
     }
 
     #[test]
     fn three_at_once_do_not_spam_the_conversation() {
         let mut h = Harness::new();
-        let running = [("sa_1", "internet"), ("sa_2", "music"), ("sa_3", "memory")];
+        let running = [("tu_1", "internet"), ("tu_2", "music"), ("tu_3", "memory")];
         for (task_id, name) in running {
-            status(&mut h, task_id, name, "what is the weather", "running");
+            asking(&mut h, task_id, name, "what is the weather");
         }
         for round in 0..4 {
             for (task_id, name) in running {
@@ -1693,10 +1657,17 @@ mod subagent_panel_tests {
             }
         }
 
-        assert!(
-            h.app.entries.is_empty(),
-            "interleaved sub-agents must not reach the conversation: {:?}",
-            h.app.entries
+        let blocks = &h
+            .app
+            .entries
+            .last()
+            .and_then(|e| e.as_turn())
+            .unwrap()
+            .blocks;
+        assert_eq!(
+            blocks.len(),
+            3,
+            "the three ask_ calls, and nothing the sub-agents said: {blocks:?}"
         );
         assert_eq!(h.app.subagent_tasks.len(), 3);
         for task in &h.app.subagent_tasks {
@@ -1737,15 +1708,9 @@ mod subagent_panel_tests {
     #[test]
     fn scrolling_stops_following_and_g_resumes_it() {
         let mut h = Harness::new();
-        status(
-            &mut h,
-            "sa_1",
-            "research",
-            "find the tide tables",
-            "running",
-        );
+        asking(&mut h, "tu_1", "research", "find the tide tables");
         for i in 0..60 {
-            chunk(&mut h, "sa_1", "research", &format!("line {i}\n"));
+            chunk(&mut h, "tu_1", "research", &format!("line {i}\n"));
         }
 
         open_panel(&mut h);

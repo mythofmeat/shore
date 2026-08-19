@@ -3,7 +3,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use shore_common::protocol::server_msg::{
     ConfigWarning, Phase, ProviderFallbackWarning, SendImage, ServerMessage, StreamChunk,
-    StreamEnd, SubagentStatus, ToolCall, ToolResult, UsageWarning,
+    StreamEnd, ToolCall, ToolResult, UsageWarning,
 };
 use shore_common::protocol::tool_display::{
     format_tool_input_with_limit, format_tool_output_with_limit,
@@ -166,29 +166,6 @@ pub(crate) fn print_subagent_end(name: &str) {
     let _ignored = out.flush();
 }
 
-pub(crate) fn print_subagent_status(status: &SubagentStatus) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let mut state = lock_chunk_state();
-    flush_thinking(&mut out, &mut state);
-    begin_block(&mut out, &mut state, true);
-    state.was_thinking = false;
-    let label = match status.status.as_str() {
-        "running" => format!("{} (sub-agent) started: {}", status.name, status.query),
-        "done" => format!("{} (sub-agent) finished: {}", status.name, status.query),
-        _ => format!(
-            "{} (sub-agent) {}: {} — {}",
-            status.name,
-            status.status,
-            status.query,
-            status.detail.as_deref().unwrap_or("")
-        ),
-    };
-    write_sigil_header(&mut out, SIGIL_SUBAGENT, &label, COLOR_SUBAGENT);
-    state.at_line_start = true;
-    let _ignored = out.flush();
-}
-
 pub(crate) fn print_subagent_chunk(chunk: &StreamChunk) {
     if chunk.text.is_empty() {
         return;
@@ -305,7 +282,6 @@ pub(crate) fn print_warning_frame(msg: &ServerMessage) {
         | ServerMessage::ToolCall(_)
         | ServerMessage::ToolResult(_)
         | ServerMessage::SendImage(_)
-        | ServerMessage::SubagentStatus(_)
         | ServerMessage::CacheWarning(_)
         | ServerMessage::Unknown => {}
     }

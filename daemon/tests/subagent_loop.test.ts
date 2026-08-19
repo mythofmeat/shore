@@ -433,14 +433,12 @@ describe("the trace", () => {
 
 describe("the recursion cap", () => {
   test("the nested context has no way to reach another sub-agent", () => {
-    const parent = { ...contextIn("/tmp/whatever"), startSubagent: () => "started" };
+    const parent = contextIn("/tmp/whatever");
     expect(parent.runSubagent).toBeDefined();
-    expect(parent.startSubagent).toBeDefined();
 
     const nested = nestedContext(parent);
 
     expect("runSubagent" in nested).toBe(false);
-    expect("startSubagent" in nested).toBe(false);
     expect(nested.characterName).toBe(parent.characterName);
     expect(nested.workspaceDir).toBe(parent.workspaceDir);
   });

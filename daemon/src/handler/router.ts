@@ -97,7 +97,6 @@ export interface MessageHandlerDeps {
   readonly notifier: HandlerNotifier;
   readonly dispatchCommand: (cmd: Command, meta: RequestMeta) => Promise<ServerMessage>;
   readonly runGeneration: RunGeneration;
-  readonly subagentTasks?: { cancelAll(): void } | undefined;
   readonly log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
     error?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -267,7 +266,6 @@ export class MessageHandler {
   }
 
   async drain(): Promise<void> {
-    this.#deps.subagentTasks?.cancelAll();
     while (this.#inFlight.size > 0) {
       await Promise.allSettled([...this.#inFlight]);
     }

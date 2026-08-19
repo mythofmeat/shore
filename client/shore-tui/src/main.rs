@@ -1574,6 +1574,14 @@ fn untagged_task_key(name: &str) -> String {
     format!("subagent:{name}")
 }
 
+fn query_of(input: &serde_json::Value) -> String {
+    input
+        .get("query")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
 fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
     let name = msg.subagent().map(str::to_string);
     let Some(task_id) = msg
@@ -1625,11 +1633,6 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
 }
 
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
-    if let ServerMessage::SubagentStatus(status) = &msg {
-        app.apply_subagent_status(status);
-        return UiEffect::redraw(RedrawEffect::Immediate);
-    }
-
     if msg.task_id().is_some() || msg.subagent().is_some() {
         return route_subagent_task_frame(app, msg);
     }
@@ -1761,6 +1764,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             app.stream.active = true;
             app.stream.phase = "tool_use".into();
             app.stream.tool_name = Some(tc.tool_name.clone());
+            if let Some(name) = tc.tool_name.strip_prefix("ask_") {
+                app.begin_subagent_task(&tc.tool_id, name, query_of(&tc.input));
+            }
             app.stream_push_tool_call(tc.tool_id, tc.tool_name, tc.input);
             if app.auto_scroll {
                 app.scroll_to_bottom();
@@ -1770,6 +1776,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
         ServerMessage::ToolResult(tr) => {
             app.stream.tool_name = None;
+            app.settle_subagent_task(&tr.tool_id, &tr.output, tr.is_error);
             app.stream_push_tool_result(tr.tool_id, tr.tool_name, tr.output, tr.is_error);
             if app.auto_scroll {
                 app.scroll_to_bottom();

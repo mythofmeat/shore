@@ -1,5 +1,4 @@
 use ratatui::text::Line;
-use shore_common::protocol::server_msg::SubagentStatus;
 use shore_common::protocol::types::{CharacterInfo, ImageRef, Role, StreamMetadata, TokenCounts};
 
 use crate::images::ImageCache;
@@ -491,13 +490,24 @@ impl App {
         self.subagent_tasks.len() - 1
     }
 
-    pub(crate) fn apply_subagent_status(&mut self, status: &SubagentStatus) {
-        let idx = self.subagent_task_index(&status.task_id, Some(&status.name));
+    pub(crate) fn begin_subagent_task(&mut self, tool_id: &str, name: &str, query: String) {
+        let idx = self.subagent_task_index(tool_id, Some(name));
         let task = &mut self.subagent_tasks[idx];
-        task.name.clone_from(&status.name);
-        task.query.clone_from(&status.query);
-        task.status.clone_from(&status.status);
-        task.detail.clone_from(&status.detail);
+        task.query = query;
+        task.status = "running".to_string();
+        task.detail = None;
+    }
+
+    pub(crate) fn settle_subagent_task(&mut self, tool_id: &str, output: &str, is_error: bool) {
+        let Some(task) = self
+            .subagent_tasks
+            .iter_mut()
+            .find(|task| task.task_id == tool_id)
+        else {
+            return;
+        };
+        task.status = if is_error { "error" } else { "done" }.to_string();
+        task.detail = Some(output.to_string());
     }
 
     pub(crate) fn subagent_task_append_text(&mut self, idx: usize, text: &str) {

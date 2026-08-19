@@ -148,29 +148,8 @@ const defaultMessageId = (): string => `m_${crypto.randomUUID()}`;
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-export function serializedPerKey<P, R>(
-  keyOf: (params: P) => string,
-  fn: (params: P) => Promise<R>,
-): (params: P) => Promise<R> {
-  const tails = new Map<string, Promise<R>>();
-  return (params: P) => {
-    const key = keyOf(params);
-    const previous = tails.get(key) ?? Promise.resolve(undefined as R);
-    const current = previous.catch(() => {}).then(() => fn(params));
-    tails.set(key, current);
-    const cleanup = () => {
-      if (tails.get(key) === current) tails.delete(key);
-    };
-    void current.then(cleanup, cleanup);
-    return current;
-  };
-}
-
 export function makeRunGeneration(deps: GenerationDeps): RunGeneration {
-  return serializedPerKey(
-    (params: GenerationParams) => params.charName,
-    (params) => runGeneration(deps, params),
-  );
+  return (params: GenerationParams) => runGeneration(deps, params);
 }
 
 function droppedHistoryImages(

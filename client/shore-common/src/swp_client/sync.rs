@@ -70,7 +70,6 @@ impl SyncState {
             | ServerMessage::ToolCall(_)
             | ServerMessage::ToolResult(_)
             | ServerMessage::SendImage(_)
-            | ServerMessage::SubagentStatus(_)
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
