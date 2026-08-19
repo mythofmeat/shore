@@ -90,26 +90,41 @@ fn write_spend_table<W: Write>(out: &mut W, data: &Value, view: View, label: &st
         ],
     );
     let mut total = 0.0_f64;
+    let mut calls = 0_u64;
+    let mut input = 0_u64;
+    let mut output = 0_u64;
+    let mut cache_read = 0_u64;
+    let mut cache_write = 0_u64;
     for row in summary {
         let cost = decimal(row, "total_cost");
+        let row_calls = number(row, "call_count");
+        let row_input = number(row, "total_input");
+        let row_output = number(row, "total_output");
+        let row_cache_read = number(row, "total_cache_read");
+        let row_cache_write = number(row, "total_cache_write");
         total += cost;
+        calls = calls.saturating_add(row_calls);
+        input = input.saturating_add(row_input);
+        output = output.saturating_add(row_output);
+        cache_read = cache_read.saturating_add(row_cache_read);
+        cache_write = cache_write.saturating_add(row_cache_write);
         table.row(&[
             spend_label(row, view),
-            count(number(row, "call_count")),
-            count(number(row, "total_input")),
-            count(number(row, "total_output")),
-            count(number(row, "total_cache_read")),
-            count(number(row, "total_cache_write")),
+            count(row_calls),
+            count(row_input),
+            count(row_output),
+            count(row_cache_read),
+            count(row_cache_write),
             money(cost),
         ]);
     }
     table.total(&[
         "total".to_owned(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
+        count(calls),
+        count(input),
+        count(output),
+        count(cache_read),
+        count(cache_write),
         money(total),
     ]);
     table.write(out);
@@ -482,6 +497,29 @@ mod tests {
                          "base_allowance": 2.14, "rollover": 0.49, "debt_adjustment": 0}
             }]
         })
+    }
+
+    #[test]
+    fn the_total_line_adds_up_every_column_not_just_cost() {
+        let out = render(|buf| write_summary(buf, &summary_payload()));
+        let total = out
+            .lines()
+            .find(|line| line.trim_start().starts_with("total"))
+            .expect("the spend table carries a total line");
+
+        for (column, sum) in [
+            ("calls", "52"),
+            ("in", "287.6K"),
+            ("out", "46.5K"),
+            ("cache read", "1.8M"),
+            ("cache write", "113.3K"),
+            ("cost", "$2.75"),
+        ] {
+            assert!(
+                total.contains(sum),
+                "{column} must total to {sum} on the total line: {total}"
+            );
+        }
     }
 
     #[test]
