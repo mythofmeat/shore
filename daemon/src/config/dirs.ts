@@ -172,14 +172,6 @@ export const characterSegmentsDir = (data: string, name: string): string =>
 export const characterCompactionManifest = (data: string, name: string): string =>
   rustJoin(characterDataDir(data, name), COMPACTION_MANIFEST_FILE);
 
-function isDir(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
 export function isFile(path: string): boolean {
   try {
     return statSync(path).isFile();
@@ -212,7 +204,6 @@ export function discoverCharacters(config: string, workspaceRoot?: string | unde
   for (const name of readdirOrEmpty(charsDir)) {
     if (!isUsableCharacterName(name)) continue;
     const dir = join(charsDir, name);
-    if (!isDir(dir)) continue;
     if (
       (workspaceRoot === undefined &&
         pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) ||
@@ -226,7 +217,6 @@ export function discoverCharacters(config: string, workspaceRoot?: string | unde
     for (const name of readdirOrEmpty(workspaceRoot)) {
       if (!isUsableCharacterName(name)) continue;
       const dir = join(workspaceRoot, name);
-      if (!isDir(dir)) continue;
       if (pathExists(join(dir, SOUL_FILE))) names.add(name);
     }
   }

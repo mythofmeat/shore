@@ -37,27 +37,27 @@ test("moonshot exposes the levels its provider accepts", () => {
 
 test("a model with no discovered capabilities is permissive", () => {
   expect(rejectsSampling(undefined)).toBe(false);
-  expect(applicability("openai", "mystery-model", "temperature")).toBe("honored");
-  expect(applicability("openai", "mystery-model", "top_p")).toBe("honored");
-  expect(validate("openai", "mystery-model", "reasoning_effort", "xhigh")).toBeUndefined();
+  expect(applicability("openai", "temperature")).toBe("honored");
+  expect(applicability("openai", "top_p")).toBe("honored");
+  expect(validate("openai", "reasoning_effort", "xhigh")).toBeUndefined();
 });
 
 test("discovered supported_parameters decide sampler applicability", () => {
   const reasoningOnly = { supported_parameters: ["reasoning", "max_tokens"] };
   expect(rejectsSampling(reasoningOnly)).toBe(true);
-  expect(applicability("openrouter", "openai/o3", "temperature", reasoningOnly)).toBe("rejected");
-  expect(applicability("openrouter", "openai/o3", "top_p", reasoningOnly)).toBe("rejected");
+  expect(applicability("openrouter", "temperature", reasoningOnly)).toBe("rejected");
+  expect(applicability("openrouter", "top_p", reasoningOnly)).toBe("rejected");
 
   const sampled = { supported_parameters: ["temperature", "top_p", "reasoning"] };
   expect(rejectsSampling(sampled)).toBe(false);
-  expect(applicability("openrouter", "openai/gpt-5", "temperature", sampled)).toBe("honored");
+  expect(applicability("openrouter", "temperature", sampled)).toBe("honored");
 });
 
 test("discovered effort levels narrow the sdk domain", () => {
   const caps = { effort_levels: ["low", "medium", "high"] };
   expect(reasoningDomain("anthropic", caps)).toEqual(["low", "medium", "high"]);
-  expect(validate("anthropic", "claude-opus-4-8", "reasoning_effort", "xhigh", caps)).toBeDefined();
-  expect(validate("anthropic", "claude-opus-4-8", "reasoning_effort", "high", caps)).toBeUndefined();
+  expect(validate("anthropic", "reasoning_effort", "xhigh", caps)).toBeDefined();
+  expect(validate("anthropic", "reasoning_effort", "high", caps)).toBeUndefined();
 });
 
 test("an effort set the provider does not name at all falls back to the sdk domain", () => {
@@ -66,11 +66,11 @@ test("an effort set the provider does not name at all falls back to the sdk doma
 });
 
 test("budget_tokens follows the discovered thinking capability", () => {
-  expect(applicability("anthropic", "claude-opus-4-8", "budget_tokens")).toBe("honored");
+  expect(applicability("anthropic", "budget_tokens")).toBe("honored");
   expect(
-    applicability("anthropic", "claude-opus-4-8", "budget_tokens", { thinking_enabled: false }),
+    applicability("anthropic", "budget_tokens", { thinking_enabled: false }),
   ).toBe("rejected");
-  expect(applicability("openai", "gpt-5.6", "budget_tokens")).toBe("ignored");
+  expect(applicability("openai", "budget_tokens")).toBe("ignored");
 });
 
 test("every sdk but gemini can turn reasoning off", () => {

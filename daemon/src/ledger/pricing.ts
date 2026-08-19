@@ -81,7 +81,6 @@ export type CatalogFetch = (url: string) => Promise<Response>;
 export interface PricingStore {
   get(modelId: string): ModelPricing | undefined;
   put(modelId: string, pricing: ModelPricing): void;
-  clear(): void;
 }
 
 export class PricingEngine {
@@ -103,10 +102,6 @@ export class PricingEngine {
     if (hit) return hit;
     await this.#refreshCatalog();
     return this.cached(provider, model);
-  }
-
-  clearCache(): void {
-    this.#store.clear();
   }
 
   cost(request: CostRequest): CostBreakdown | undefined {

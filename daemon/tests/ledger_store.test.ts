@@ -12,7 +12,7 @@ import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 
 function fixedPricing(entry: ModelPricing): PricingEngine {
   const map = new Map<string, ModelPricing>([["anthropic/claude-opus-4.6", entry]]);
-  const store: PricingStore = { get: (id) => map.get(id), put: () => {}, clear: () => map.clear() };
+  const store: PricingStore = { get: (id) => map.get(id), put: () => {} };
   return new PricingEngine(store, async () => {
     throw new Error("no network in tests");
   });

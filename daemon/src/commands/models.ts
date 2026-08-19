@@ -601,7 +601,7 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
 
   const target = settingTarget(ctx, args);
   const model = target.model;
-  const failure = capabilityCheck(model.sdk, model.modelId, key, value, model.capabilities);
+  const failure = capabilityCheck(model.sdk, key, value, model.capabilities);
   if (failure !== undefined) throw failure;
 
   const character = scope === "character" ? requireCharacter(ctx) : undefined;
@@ -759,7 +759,7 @@ export function modelSettings(ctx: ModelsContext, args: Args): unknown {
     effective_sampler: samplerJson(sampler),
     saved_global: saved(global),
     saved_character: saved(charPrefs),
-    applicability: keyApplicability(model.sdk, model.modelId, model.capabilities),
+    applicability: keyApplicability(model.sdk, model.capabilities),
     reasoning_effort_domain: reasoningDomain(model.sdk, model.capabilities),
     scopes: scopesJson(scopes, SETTINGS_SCOPE_FIELDS),
   };

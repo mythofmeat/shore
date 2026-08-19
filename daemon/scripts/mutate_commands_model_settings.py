@@ -239,13 +239,13 @@ MUTANTS = [
 
     # --- keyApplicability -----------------------------------------------------
     ("table: matrix-less keys report honored rather than always", SETTINGS,
-     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, capabilities);',
-     '    out[key] = field === undefined ? "honored" : applicability(sdk, modelId, field, capabilities);'),
+     '    out[key] = field === undefined ? "always" : applicability(sdk, field, capabilities);',
+     '    out[key] = field === undefined ? "honored" : applicability(sdk, field, capabilities);'),
     ("table: the model's capabilities are ignored", SETTINGS,
-     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, capabilities);',
-     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, undefined);'),
+     '    out[key] = field === undefined ? "always" : applicability(sdk, field, capabilities);',
+     '    out[key] = field === undefined ? "always" : applicability(sdk, field, undefined);'),
     ("table: every key is reported as always", SETTINGS,
-     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, capabilities);',
+     '    out[key] = field === undefined ? "always" : applicability(sdk, field, capabilities);',
      '    out[key] = "always";'),
 
     # --- capabilities.ts: supportsReasoningOff --------------------------------
@@ -261,13 +261,13 @@ MUTANTS = [
 
     # --- capabilities.ts: validate --------------------------------------------
     ("validate: an ignored field is settable", CAPS,
-     '  if (applicability(sdk, modelId, field, caps) !== "honored") {',
-     '  if (applicability(sdk, modelId, field, caps) === "rejected") {'),
+     '  if (applicability(sdk, field, caps) !== "honored") {',
+     '  if (applicability(sdk, field, caps) === "rejected") {'),
     ("validate: a rejected field is settable", CAPS,
-     '  if (applicability(sdk, modelId, field, caps) !== "honored") {',
-     '  if (applicability(sdk, modelId, field, caps) === "ignored") {'),
+     '  if (applicability(sdk, field, caps) !== "honored") {',
+     '  if (applicability(sdk, field, caps) === "ignored") {'),
     ("validate: applicability is never checked", CAPS,
-     '  if (applicability(sdk, modelId, field, caps) !== "honored") {',
+     '  if (applicability(sdk, field, caps) !== "honored") {',
      "  if (false as boolean) {"),
     ("validate: the effort domain is not checked", CAPS,
      '  if (field === "reasoning_effort" && probe !== true) {',

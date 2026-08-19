@@ -298,7 +298,7 @@ function stripRejectedSampler(
   capabilities: ModelCapabilities | undefined,
 ): void {
   if (fields[key] === undefined) return;
-  if (applicability(sdk, modelId, field, capabilities) !== "rejected") return;
+  if (applicability(sdk, field, capabilities) !== "rejected") return;
   if (fields[key] !== silentDefault) {
     console.warn(
       `shore: dropping \`${field}\` for model ${modelId} (sdk ${sdk}): the ` +
@@ -322,7 +322,7 @@ function warnIgnoredFields(
     ["zai_subscription", fields.zaiSubscription !== undefined],
   ];
   for (const [field, present] of checks) {
-    if (present && applicability(sdk, modelId, field, capabilities) === "ignored") {
+    if (present && applicability(sdk, field, capabilities) === "ignored") {
       console.warn(
         `shore: ignoring \`${field}\` for model ${modelId}: the \`${sdk}\` sdk does not honor it`,
       );

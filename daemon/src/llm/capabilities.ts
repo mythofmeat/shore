@@ -183,7 +183,6 @@ export function rejectsSampling(caps?: ModelCapabilities): boolean {
 
 export function applicability(
   sdk: Sdk,
-  modelId: string,
   field: Field,
   caps?: ModelCapabilities,
 ): Applicability {
@@ -251,12 +250,11 @@ class CapabilityError extends Error {
 
 export function validate(
   sdk: Sdk,
-  modelId: string,
   field: Field,
   probe: string | true,
   caps?: ModelCapabilities,
 ): CapabilityError | undefined {
-  if (applicability(sdk, modelId, field, caps) !== "honored") {
+  if (applicability(sdk, field, caps) !== "honored") {
     return new CapabilityError(`\`${field}\` is not applicable to the \`${sdk}\` sdk for this model`);
   }
 

@@ -118,8 +118,8 @@ MUTANTS = [
      "    store.queryTranscripts(source, ctx.characterName, countArg(args, 20)),",
      "    store.queryTranscripts(source, null, countArg(args, 20)),"),
     ("character: transcript echoes back a different name than it filtered on",
-     "    character: ctx.characterName,\n    entries: orderTranscriptRows(rows),",
-     "    character: \"\",\n    entries: orderTranscriptRows(rows),"),
+     "    character: ctx.characterName,\n    entries: [...rows].reverse(),",
+     "    character: \"\",\n    entries: [...rows].reverse(),"),
 
     # --- call_type ------------------------------------------------------------
     ("call_type: a non-string argument is coerced rather than ignored",
@@ -184,26 +184,8 @@ MUTANTS = [
 
     # --- the reordering -------------------------------------------------------
     ("order: transcript rows are returned in store order, newest first throughout",
-     "  return ticks.flat();",
-     "  return rows.slice();"),
-    ("order: a tick's rounds are not grouped, so a continued round starts a new tick (EQUIVALENT — the tick grouping is inert. e53896b9 deleted the `ticks.reverse()` that used it, so `ticks.flat()` now reproduces the oldest-first walk order whatever the grouping decides)",
-     "    if (continues) (ticks[ticks.length - 1] as TranscriptRow[]).push(row);\n    else ticks.push([row]);",
-     "    void continues;\n    ticks.push([row]);"),
-    ("order: a repeated iteration continues the tick rather than starting one (EQUIVALENT — the tick grouping is inert. e53896b9 deleted the `ticks.reverse()` that used it, so `ticks.flat()` now reproduces the oldest-first walk order whatever the grouping decides)",
-     "    const continues = previous !== undefined && row.iteration > previous;",
-     "    const continues = previous !== undefined && row.iteration >= previous;"),
-    ("order: the first row continues a tick that does not exist yet",
-     "    const continues = previous !== undefined && row.iteration > previous;",
-     "    const continues = previous === undefined || row.iteration > previous;"),
-    ("order: every row starts its own tick (EQUIVALENT — the tick grouping is inert. e53896b9 deleted the `ticks.reverse()` that used it, so `ticks.flat()` now reproduces the oldest-first walk order whatever the grouping decides)",
-     "    const continues = previous !== undefined && row.iteration > previous;",
-     "    const continues = false;"),
-    ("order: the boundary is measured against the previous tick's first row (EQUIVALENT — the tick grouping is inert. e53896b9 deleted the `ticks.reverse()` that used it, so `ticks.flat()` now reproduces the oldest-first walk order whatever the grouping decides)",
-     "    previous = row.iteration;\n",
-     "    if (!continues) previous = row.iteration;\n"),
-    ("order: the walk runs newest-first rather than chronologically",
-     "  for (let i = rows.length - 1; i >= 0; i -= 1) {\n    const row = rows[i] as TranscriptRow;",
-     "  for (let i = 0; i < rows.length; i += 1) {\n    const row = rows[i] as TranscriptRow;"),
+     "    entries: [...rows].reverse(),",
+     "    entries: [...rows],"),
 
     # --- the failure wording --------------------------------------------------
     ("errors: transcript reports a call-store failure",

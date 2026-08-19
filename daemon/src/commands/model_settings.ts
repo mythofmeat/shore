@@ -132,7 +132,6 @@ export function applySamplerValue(sampler: SamplerSettings, key: string, value: 
 
 export function capabilityCheck(
   sdk: Sdk,
-  modelId: string,
   key: string,
   value: unknown,
   capabilities?: ModelCapabilities,
@@ -145,19 +144,18 @@ export function capabilityCheck(
     field === "reasoning_effort" && value === "off" && supportsReasoningOff(sdk);
 
   const probe: string | true = typeof value === "string" && !reasoningOff ? value : true;
-  const failure = validate(sdk, modelId, field, probe, capabilities);
+  const failure = validate(sdk, field, probe, capabilities);
   return failure === undefined ? undefined : invalidRequest(failure.message);
 }
 
 export function keyApplicability(
   sdk: Sdk,
-  modelId: string,
   capabilities?: ModelCapabilities,
 ): Record<string, Applicability | "always"> {
   const out: Record<string, Applicability | "always"> = {};
   for (const key of SAMPLER_KEYS) {
     const field = fieldFromKey(key);
-    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, capabilities);
+    out[key] = field === undefined ? "always" : applicability(sdk, field, capabilities);
   }
   return out;
 }

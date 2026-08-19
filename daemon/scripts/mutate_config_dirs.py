@@ -88,15 +88,6 @@ MUTANTS = [
     (DIRS, "discoverCharacters: the workspace root is never searched",
      "    for (const name of readdirOrEmpty(workspaceRoot)) {",
      "    for (const name of [] as string[]) {"),
-    (DIRS, "discoverCharacters: accept non-directories under the config tree "
-     "(EQUIVALENT — a plain file has no SOUL.md beneath it, so the probe below "
-     "rejects it anyway; the guard is an early-out, not a decision)",
-     "    const dir = join(charsDir, name);\n    if (!isDir(dir)) continue;",
-     "    const dir = join(charsDir, name);"),
-    (DIRS, "discoverCharacters: accept non-directories under the workspace root "
-     "(EQUIVALENT — same early-out; removing both guards fails nothing in the suite)",
-     "      const dir = join(workspaceRoot, name);\n      if (!isDir(dir)) continue;",
-     "      const dir = join(workspaceRoot, name);"),
     (DIRS, "loadCharacterDefinition: legacy wins over SOUL.md",
      "    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceRoot)) ??\n"
      "    readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE))",

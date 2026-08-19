@@ -118,10 +118,10 @@ describe("capabilityCheck follows applicability, for every sdk and key", () => {
         for (const key of SAMPLER_KEYS) {
           const field = fieldFromKey(key);
           if (field === undefined) continue;
-          if (applicability(sdk, model, field) === "honored") continue;
+          if (applicability(sdk, field) === "honored") continue;
 
           for (const probe of PROBES) {
-            const failure = capabilityCheck(sdk, model, key, probe);
+            const failure = capabilityCheck(sdk, key, probe);
             expect(failure, `${sdk}/${model} ${key}=${String(probe)}`).toBeInstanceOf(CommandError);
             expect(failure!.message).toBe(
               `\`${field}\` is not applicable to the \`${sdk}\` sdk for this model`,
@@ -143,9 +143,9 @@ describe("capabilityCheck follows applicability, for every sdk and key", () => {
         for (const key of SAMPLER_KEYS) {
           const field = fieldFromKey(key);
           if (field === undefined) continue;
-          if (applicability(sdk, model, field) !== "honored") continue;
+          if (applicability(sdk, field) !== "honored") continue;
 
-          const failure = capabilityCheck(sdk, model, key, inDomain(sdk, model, key));
+          const failure = capabilityCheck(sdk, key, inDomain(sdk, model, key));
           expect(failure, `${sdk}/${model} ${key} rejected an in-domain value`).toBeUndefined();
         }
       }
@@ -155,41 +155,41 @@ describe("capabilityCheck follows applicability, for every sdk and key", () => {
   test("clearing a key is never a capability error, even where the key is meaningless", () => {
     for (const sdk of SDK_VARIANTS) {
       for (const key of SAMPLER_KEYS) {
-        expect(capabilityCheck(sdk, "some-model", key, null)).toBeUndefined();
-        expect(capabilityCheck(sdk, "some-model", key, undefined)).toBeUndefined();
+        expect(capabilityCheck(sdk, key, null)).toBeUndefined();
+        expect(capabilityCheck(sdk, key, undefined)).toBeUndefined();
       }
     }
   });
 
   test("a key with no capability field is left to the parser", () => {
     for (const sdk of SDK_VARIANTS) {
-      expect(capabilityCheck(sdk, "some-model", "frobnicate", 1)).toBeUndefined();
+      expect(capabilityCheck(sdk, "frobnicate", 1)).toBeUndefined();
     }
   });
 });
 
 describe("the three refusals, spelled out", () => {
   test("not applicable names the field and the sdk", () => {
-    expect(capabilityCheck("openai", "some-model", "cache_ttl", "1h")?.message).toBe(
+    expect(capabilityCheck("openai", "cache_ttl", "1h")?.message).toBe(
       "`cache_ttl` is not applicable to the `openai` sdk for this model",
     );
   });
 
   test("out of domain lists what was allowed", () => {
-    expect(capabilityCheck("anthropic", "some-model", "cache_keepalive", "soon")?.message).toBe(
+    expect(capabilityCheck("anthropic", "cache_keepalive", "soon")?.message).toBe(
       '`cache_keepalive` value "soon" is out of domain; allowed: off, or a duration string like 55m / 6h / 30s',
     );
   });
 
   test("a non-string keepalive is reported as the string it is not", () => {
-    expect(capabilityCheck("anthropic", "some-model", "cache_keepalive", 55)?.message).toBe(
+    expect(capabilityCheck("anthropic", "cache_keepalive", 55)?.message).toBe(
       '`cache_keepalive` value "true" is out of domain; allowed: off, or a duration string like 55m / 6h / 30s',
     );
   });
 
   test("an effort outside the model's domain names the domain", () => {
     const domain = reasoningEffortDomain("anthropic");
-    const failure = capabilityCheck("anthropic", "claude-opus-4-8", "reasoning_effort", "banana");
+    const failure = capabilityCheck("anthropic", "reasoning_effort", "banana");
     expect(failure?.message).toBe(
       `\`reasoning_effort\` value "banana" is out of domain; allowed: ${domain.join(", ")}`,
     );
@@ -205,7 +205,7 @@ describe("reasoning effort", () => {
 
   test('"off" is accepted exactly where the sdk supports turning thinking off', () => {
     for (const sdk of SDK_VARIANTS) {
-      const failure = capabilityCheck(sdk, "some-model", "reasoning_effort", "off");
+      const failure = capabilityCheck(sdk, "reasoning_effort", "off");
       expect(failure === undefined, `${sdk} disagreed with supportsReasoningOff`).toBe(
         supportsReasoningOff(sdk) || reasoningEffortDomain(sdk).includes("off"),
       );
@@ -225,7 +225,7 @@ describe("reasoning effort", () => {
 describe("keyApplicability", () => {
   test("it answers for every settable key, on every sdk", () => {
     for (const sdk of SDK_VARIANTS) {
-      const table = keyApplicability(sdk, "some-model");
+      const table = keyApplicability(sdk);
       expect(Object.keys(table).sort()).toEqual([...SAMPLER_KEYS].sort());
       for (const [key, verdict] of Object.entries(table)) {
         expect(["honored", "ignored", "rejected", "always"], `${sdk} ${key}`).toContain(verdict);
@@ -241,7 +241,7 @@ describe("keyApplicability", () => {
       ["zai_clear_thinking", "zai"],
     ] as const) {
       for (const sdk of SDK_VARIANTS) {
-        expect(keyApplicability(sdk, "some-model")[key], `${key} on ${sdk}`).toBe(
+        expect(keyApplicability(sdk)[key], `${key} on ${sdk}`).toBe(
           sdk === owner ? "honored" : "ignored",
         );
       }
@@ -250,11 +250,11 @@ describe("keyApplicability", () => {
 
   test("sampling is rejected on the models that reject it, honored on the rest", () => {
     expect(
-      keyApplicability("anthropic", "claude-opus-4-8", {
+      keyApplicability("anthropic", {
         supported_parameters: ["reasoning", "max_tokens"],
       })["temperature"],
     ).toBe("rejected");
-    expect(keyApplicability("anthropic", "claude-3-5-sonnet-20241022")["temperature"]).toBe(
+    expect(keyApplicability("anthropic")["temperature"]).toBe(
       "honored",
     );
   });
@@ -334,7 +334,7 @@ describe("what a rejection says, and what a value is stored as", () => {
 
 describe("the keys with no applicability matrix", () => {
   test("they answer `always`, not a verdict they never had", () => {
-    const table = keyApplicability("anthropic", "claude-opus-4-8");
+    const table = keyApplicability("anthropic");
     for (const key of ["sdk", "max_tool_iterations", "supports_images"]) {
       expect(table[key], `${key} has no Field, so no sdk can have an opinion`).toBe("always");
     }
@@ -346,14 +346,14 @@ describe("capabilityCheck, past the honored/ignored split", () => {
   test("a rejected key is refused, not merely reported", () => {
     const rejectsSampling = { supported_parameters: ["reasoning", "max_tokens"] };
     expect(
-      capabilityCheck("openrouter", "openai/o3", "temperature", 0.7, rejectsSampling),
+      capabilityCheck("openrouter", "temperature", 0.7, rejectsSampling),
     ).toBeInstanceOf(CommandError);
   });
 
   test("`off` is a reasoning_effort sentinel, and not a licence for other keys", () => {
-    expect(capabilityCheck("anthropic", "claude-opus-4-8", "reasoning_effort", "off")).toBeUndefined();
+    expect(capabilityCheck("anthropic", "reasoning_effort", "off")).toBeUndefined();
     expect(
-      capabilityCheck("anthropic", "claude-opus-4-8", "cache_keepalive", "off"),
+      capabilityCheck("anthropic", "cache_keepalive", "off"),
       "`off` is a real keepalive value and must still go through its own parse",
     ).toBeUndefined();
   });

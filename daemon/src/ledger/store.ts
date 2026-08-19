@@ -596,8 +596,5 @@ function sqlitePricingStore(db: Database, now: () => number = () => Date.now()):
         $at: new Date().toISOString(),
       });
     },
-    clear() {
-      db.run("DELETE FROM pricing");
-    },
   };
 }

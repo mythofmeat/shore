@@ -3,7 +3,6 @@ import type {
   CallPayload,
   CallStore,
   HttpExchangeRow,
-  TranscriptRow,
 } from "../call_store.ts";
 import { invalidRequest, internalError } from "./errors.ts";
 import { decodeBody } from "./decode_body.ts";
@@ -115,21 +114,8 @@ export function transcript(ctx: CallLogContext, args: Args): Json {
     enabled: true,
     source,
     character: ctx.characterName,
-    entries: orderTranscriptRows(rows),
+    entries: [...rows].reverse(),
   };
-}
-
-function orderTranscriptRows(rows: readonly TranscriptRow[]): TranscriptRow[] {
-  const ticks: TranscriptRow[][] = [];
-  let previous: number | undefined;
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i] as TranscriptRow;
-    const continues = previous !== undefined && row.iteration > previous;
-    previous = row.iteration;
-    if (continues) (ticks[ticks.length - 1] as TranscriptRow[]).push(row);
-    else ticks.push([row]);
-  }
-  return ticks.flat();
 }
 
 function query<T>(prefix: string, run: () => T): T {
