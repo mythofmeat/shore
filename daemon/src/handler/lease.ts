@@ -38,6 +38,25 @@ export class StreamLeases {
     return send;
   }
 
+  sendForCharacter(
+    character: string,
+    router: LeaseRouter,
+    now = Date.now(),
+  ): DirectSender | undefined {
+    const lease = this.#leases.get(character);
+    if (lease === undefined) return undefined;
+    if (now >= lease.expiresAt) {
+      this.#leases.delete(character);
+      return undefined;
+    }
+    const send = router.senderFor(lease.sessionId);
+    if (send === undefined) {
+      this.#leases.delete(character);
+      return undefined;
+    }
+    return send;
+  }
+
   fanout(
     character: string,
     issuerSession: number,

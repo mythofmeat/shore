@@ -32,6 +32,7 @@ function spec(over: Partial<SubagentConfig> = {}): SubagentConfig {
     tools: [],
     model: undefined,
     max_iterations: undefined,
+    timeout: undefined,
     ...over,
   };
 }
@@ -402,13 +403,15 @@ describe("the trace", () => {
 });
 
 describe("the recursion cap", () => {
-  test("the nested context has no runSubagent", () => {
-    const parent = contextIn("/tmp/whatever");
+  test("the nested context has no way to reach another sub-agent", () => {
+    const parent = { ...contextIn("/tmp/whatever"), startSubagent: () => "started" };
     expect(parent.runSubagent).toBeDefined();
+    expect(parent.startSubagent).toBeDefined();
 
     const nested = nestedContext(parent);
 
     expect("runSubagent" in nested).toBe(false);
+    expect("startSubagent" in nested).toBe(false);
     expect(nested.characterName).toBe(parent.characterName);
     expect(nested.workspaceDir).toBe(parent.workspaceDir);
   });
@@ -431,6 +434,26 @@ describe("the forwarder", () => {
 
     expect((out[0] as { subagent?: string }).subagent).toBe("researcher");
     expect((out[1] as { subagent?: string }).subagent).toBeUndefined();
+  });
+
+  test("a task id rides along on the tagged frames only", () => {
+    const out: ServerMessage[] = [];
+    const send = taggedSink("researcher", (m) => out.push(m), "sa_7");
+
+    send({ type: "stream_chunk", text: "hi", content_type: "text" } as ServerMessage);
+    send({ type: "phase", phase: "thinking" } as unknown as ServerMessage);
+
+    expect((out[0] as { task_id?: string }).task_id).toBe("sa_7");
+    expect((out[1] as { task_id?: string }).task_id).toBeUndefined();
+  });
+
+  test("without a task id the frames carry no task field at all", () => {
+    const out: ServerMessage[] = [];
+    const send = taggedSink("researcher", (m) => out.push(m));
+
+    send({ type: "stream_chunk", text: "hi", content_type: "text" } as ServerMessage);
+
+    expect("task_id" in (out[0] as object)).toBe(false);
   });
 
   test("with no client channel the frames are dropped, and the sub-agent still runs", async () => {

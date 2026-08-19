@@ -80,5 +80,6 @@ export function eventMatchesSession(
   if (selectedCharacter === null) return false;
   if (msg.type === "history") return msg.selected_character === selectedCharacter;
   if (msg.type === "new_message") return msg.character === selectedCharacter;
+  if (msg.type === "subagent_status") return msg.character === selectedCharacter;
   return true;
 }

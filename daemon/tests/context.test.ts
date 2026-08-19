@@ -252,6 +252,7 @@ async function contextFixture(c: ContextCase): Promise<{
       tools: [],
       model: undefined,
       max_iterations: undefined,
+      timeout: undefined,
     });
   }
 

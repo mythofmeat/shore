@@ -65,6 +65,7 @@ export interface SubagentDeps {
   rid?: string | undefined;
   now?: (() => string) | undefined;
   newMessageId?: (() => string) | undefined;
+  taskId?: string | undefined;
 }
 
 export function subagentRunner(
@@ -176,7 +177,7 @@ export async function runSubagent(
     },
   };
 
-  const send = taggedSink(name, deps.sendDirect);
+  const send = taggedSink(name, deps.sendDirect, deps.taskId);
   const messages: Message[] = [];
   const phase = toolPhase({
     sendDirect: send,
@@ -253,21 +254,26 @@ export async function runSubagent(
 }
 
 export function nestedContext(ctx: ToolContext, signal?: AbortSignal): ToolContext {
-  const { runSubagent: _dropped, ...rest } = ctx;
+  const { runSubagent: _dropped, startSubagent: _alsoDropped, ...rest } = ctx;
   return { ...rest, ...(signal === undefined ? {} : { signal }) };
 }
 
 export function taggedSink(
   name: string,
   sendDirect: ((message: ServerMessage) => void) | undefined,
+  taskId?: string,
 ): (message: ServerMessage) => void {
   if (sendDirect === undefined) return () => {};
   return (message) => {
-    sendDirect(
-      TAGGED_FRAMES.has(message.type)
-        ? ({ ...message, subagent: name } as ServerMessage)
-        : message,
-    );
+    if (!TAGGED_FRAMES.has(message.type)) {
+      sendDirect(message);
+      return;
+    }
+    sendDirect({
+      ...message,
+      subagent: name,
+      ...(taskId === undefined ? {} : { task_id: taskId }),
+    } as ServerMessage);
   };
 }
 
@@ -276,5 +282,5 @@ function describe(err: { kind: string; message?: string }): string {
 }
 
 function toolLimits(config: LoadedConfig): ToolLimitsView {
-  return toolLimitsFrom(config.app.tools);
+  return toolLimitsFrom(config.app.tools, config.app.subagents);
 }

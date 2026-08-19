@@ -14,7 +14,7 @@ import {
   type ToolInput,
 } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
-import type { ToolsConfig } from "../config/app.ts";
+import type { SubagentConfig, ToolsConfig } from "../config/app.ts";
 import type { Embedder } from "../llm/embed.ts";
 import type { RetrievalConfig } from "../memory/workspace_index.ts";
 
@@ -47,6 +47,8 @@ export interface ToolContext {
     signal?: AbortSignal,
     toolUseId?: string,
   ) => Promise<unknown>;
+
+  startSubagent?: (name: string, query: string, toolUseId?: string) => unknown;
 
   toolUseId?: string;
 
@@ -208,6 +210,9 @@ export async function dispatchTool(
         if (typeof query !== "string") {
           throw new InvalidArgs(`${name} requires a string \`query\``);
         }
+        if (ctx.startSubagent !== undefined) {
+          return ctx.startSubagent(agent, query, ctx.toolUseId);
+        }
         if (ctx.runSubagent === undefined) throw new NotImplemented(`ask_${agent}`);
         return await ctx.runSubagent(agent, query, ctx.signal, ctx.toolUseId);
       }
@@ -226,7 +231,12 @@ export interface ToolLimitsView {
   config?: Record<string, { max_result_chars?: number; timeout_ms?: number }>;
 }
 
-export function toolLimitsFrom(cfg: ToolsConfig): ToolLimitsView {
+export const DEFAULT_SUBAGENT_TIMEOUT_MS = 3_600_000;
+
+export function toolLimitsFrom(
+  cfg: ToolsConfig,
+  subagents?: ReadonlyMap<string, SubagentConfig>,
+): ToolLimitsView {
   const overrides: Record<string, { max_result_chars?: number; timeout_ms?: number }> = {};
   for (const [name, override] of cfg.config) {
     overrides[name] = {
@@ -234,6 +244,15 @@ export function toolLimitsFrom(cfg: ToolsConfig): ToolLimitsView {
         ? {}
         : { max_result_chars: override.max_result_chars }),
       ...(override.timeout === undefined ? {} : { timeout_ms: override.timeout.asMillis() }),
+    };
+  }
+  for (const [name, spec] of subagents ?? []) {
+    const toolName = `ask_${name}`;
+    const explicit = overrides[toolName];
+    if (explicit?.timeout_ms !== undefined) continue;
+    overrides[toolName] = {
+      ...explicit,
+      timeout_ms: spec.timeout?.asMillis() ?? DEFAULT_SUBAGENT_TIMEOUT_MS,
     };
   }
   return {

@@ -1570,7 +1570,62 @@ fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Optio
         .flatten()
 }
 
+fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
+    let Some(task_id) = msg.task_id().map(str::to_string) else {
+        return UiEffect::redraw(RedrawEffect::None);
+    };
+    let name = msg.subagent().map(str::to_string);
+    let idx = app.subagent_task_index(&task_id, name.as_deref());
+
+    match msg {
+        ServerMessage::StreamChunk(chunk) => {
+            if chunk.content_type == "thinking" {
+                app.subagent_task_append_thinking(idx, &chunk.text);
+            } else {
+                app.subagent_task_append_text(idx, &chunk.text);
+            }
+        }
+        ServerMessage::ToolCall(tc) => {
+            app.subagent_task_push_block(
+                idx,
+                Block::ToolUse {
+                    tool_id: tc.tool_id,
+                    tool_name: tc.tool_name,
+                    input: tc.input,
+                },
+            );
+        }
+        ServerMessage::ToolResult(tr) => {
+            app.subagent_task_push_block(
+                idx,
+                Block::ToolResult {
+                    tool_id: tr.tool_id,
+                    tool_name: tr.tool_name,
+                    output: tr.output,
+                    is_error: tr.is_error,
+                },
+            );
+        }
+        _ => {}
+    }
+
+    UiEffect::redraw(if app.subagent_panel == Some(idx) {
+        RedrawEffect::Immediate
+    } else {
+        RedrawEffect::None
+    })
+}
+
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
+    if let ServerMessage::SubagentStatus(status) = &msg {
+        app.apply_subagent_status(status);
+        return UiEffect::redraw(RedrawEffect::Immediate);
+    }
+
+    if msg.task_id().is_some() {
+        return route_subagent_task_frame(app, msg);
+    }
+
     if matches!(
         msg,
         ServerMessage::StreamStart(_)
@@ -2355,6 +2410,7 @@ mod redraw_tests {
                 rid: None,
                 regen: false,
                 subagent: None,
+                task_id: None,
             }),
         );
     }
@@ -2367,6 +2423,7 @@ mod redraw_tests {
                 text: text.into(),
                 content_type: "text".into(),
                 subagent: None,
+                task_id: None,
             }),
         );
     }
@@ -2383,6 +2440,7 @@ mod redraw_tests {
                 finish_reason: "stop".into(),
                 is_final: true,
                 subagent: None,
+                task_id: None,
             }),
         );
     }
@@ -3525,6 +3583,7 @@ mod redraw_tests {
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3545,6 +3604,7 @@ mod redraw_tests {
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3601,6 +3661,7 @@ mod redraw_tests {
             &mut app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 text: "partial".into(),
                 content_type: "text".into(),
@@ -3633,6 +3694,7 @@ mod redraw_tests {
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: Some("m_target".into()),
                 revision: Some(7),
@@ -3676,6 +3738,7 @@ mod redraw_tests {
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: Some("m_missing_from_history".into()),
                 revision: Some(8),

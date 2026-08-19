@@ -72,6 +72,7 @@ async function world(
       tools: ["read"],
       model: undefined,
       max_iterations: undefined,
+      timeout: undefined,
     });
   }
 

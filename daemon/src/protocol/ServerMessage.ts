@@ -14,8 +14,9 @@ import type { Shutdown } from "./Shutdown";
 import type { StreamChunk } from "./StreamChunk";
 import type { StreamEnd } from "./StreamEnd";
 import type { StreamStart } from "./StreamStart";
+import type { SubagentStatus } from "./SubagentStatus";
 import type { ToolCall } from "./ToolCall";
 import type { ToolResult } from "./ToolResult";
 import type { UsageWarning } from "./UsageWarning";
 
-export type ServerMessage = { "type": "hello" } & ServerHello | { "type": "history" } & History | { "type": "shutdown" } & Shutdown | { "type": "ping" } & Ping | { "type": "command_output" } & CommandOutput | { "type": "error" } & Error | { "type": "stream_start" } & StreamStart | { "type": "stream_chunk" } & StreamChunk | { "type": "stream_end" } & StreamEnd | { "type": "phase" } & Phase | { "type": "new_message" } & NewMessage | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "send_image" } & SendImage | { "type": "cache_warning" } & CacheWarning | { "type": "provider_fallback_warning" } & ProviderFallbackWarning | { "type": "usage_warning" } & UsageWarning | { "type": "config_warning" } & ConfigWarning;
+export type ServerMessage = { "type": "hello" } & ServerHello | { "type": "history" } & History | { "type": "shutdown" } & Shutdown | { "type": "ping" } & Ping | { "type": "command_output" } & CommandOutput | { "type": "error" } & Error | { "type": "stream_start" } & StreamStart | { "type": "stream_chunk" } & StreamChunk | { "type": "stream_end" } & StreamEnd | { "type": "phase" } & Phase | { "type": "new_message" } & NewMessage | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "send_image" } & SendImage | { "type": "subagent_status" } & SubagentStatus | { "type": "cache_warning" } & CacheWarning | { "type": "provider_fallback_warning" } & ProviderFallbackWarning | { "type": "usage_warning" } & UsageWarning | { "type": "config_warning" } & ConfigWarning;

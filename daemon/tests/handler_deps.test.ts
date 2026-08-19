@@ -161,6 +161,7 @@ function withResearch(app: ReturnType<typeof defaultAppConfig>): void {
     tools: [],
     model: undefined,
     max_iterations: undefined,
+    timeout: undefined,
   });
 }
 

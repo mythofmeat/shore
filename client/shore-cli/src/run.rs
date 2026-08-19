@@ -572,6 +572,9 @@ async fn follow_log_stream(
             continue;
         }
         match &msg {
+            ServerMessage::SubagentStatus(status) => {
+                output::print_subagent_status(status);
+            }
             ServerMessage::NewMessage(nm) if log_role_matches(role, &nm.message.role) => {
                 output::print_new_message(nm, nm.character.as_deref().unwrap_or(follow_char));
             }
@@ -1336,6 +1339,10 @@ async fn recv_streaming_response(
             ServerMessage::SendImage(img) => {
                 output::print_send_image(img);
             }
+            ServerMessage::SubagentStatus(status) => {
+                spinner.clear().await;
+                output::print_subagent_status(status);
+            }
             ServerMessage::Phase(phase) => {
                 if spinner.is_active() {
                     spinner.set_phase(&phase.phase);
@@ -1401,6 +1408,7 @@ async fn recv_command_data(
             | ServerMessage::History(_)
             | ServerMessage::Shutdown(_)
             | ServerMessage::Ping(_)
+            | ServerMessage::SubagentStatus(_)
             | ServerMessage::StreamStart(_)
             | ServerMessage::StreamChunk(_)
             | ServerMessage::StreamEnd(_)
@@ -1623,17 +1631,20 @@ mod tests {
         vec![
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 text: text.into(),
                 content_type: "text".into(),
             }),
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -1786,23 +1797,27 @@ mod tests {
         let responses = vec![
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 text: "Let me think...".into(),
                 content_type: "thinking".into(),
             }),
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 text: "Here's the answer.".into(),
                 content_type: "text".into(),
             }),
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: None,
                 revision: None,

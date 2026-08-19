@@ -4,6 +4,7 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import fixture from "./tools_fixtures/dispatch.json" with { type: "json" };
 
 import {
+  DEFAULT_SUBAGENT_TIMEOUT_MS,
   annotateDeferredEdit,
   applyDefaultSearchMode,
   deferEditTo,
@@ -11,12 +12,15 @@ import {
   dispatchWithinDeadline,
   resultCharsFor,
   timeoutFor,
+  toolLimitsFrom,
   truncateToolResult,
   windowToolResult,
   type RetrievalMode,
   type ToolContext,
   type ToolLimitsView,
 } from "../src/tools/dispatch.ts";
+import { ConfigDuration } from "../src/config/duration.ts";
+import { defaultToolsConfig, type SubagentConfig } from "../src/config/app.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import type { Embedder } from "../src/llm/embed.ts";
 
@@ -574,6 +578,73 @@ describe("per-tool limits", () => {
   });
 });
 
+describe("sub-agent deadlines", () => {
+  const subagent = (timeout?: ConfigDuration): SubagentConfig => ({
+    description: "d",
+    prompt: "p",
+    tools: [],
+    model: undefined,
+    max_iterations: undefined,
+    timeout,
+  });
+
+  const toolsConfig = (
+    overrides: Record<string, { max_result_chars?: number; timeout?: ConfigDuration }>,
+  ) => ({
+    ...defaultToolsConfig(),
+    config: new Map(
+      Object.entries(overrides).map(([name, o]) => [
+        name,
+        { max_result_chars: o.max_result_chars ?? undefined, timeout: o.timeout ?? undefined },
+      ]),
+    ),
+  });
+
+  test("a configured sub-agent gets the long default, not the 300s tool default", () => {
+    const limits = toolLimitsFrom(toolsConfig({}), new Map([["research", subagent()]]));
+    expect(timeoutFor(limits, "ask_research")).toBe(DEFAULT_SUBAGENT_TIMEOUT_MS);
+    expect(timeoutFor(limits, "read")).toBe(300_000);
+  });
+
+  test("the sub-agent's own timeout beats the default", () => {
+    const limits = toolLimitsFrom(
+      toolsConfig({}),
+      new Map([["research", subagent(ConfigDuration.fromSecs(7_200))]]),
+    );
+    expect(timeoutFor(limits, "ask_research")).toBe(7_200_000);
+  });
+
+  test("an explicit tools.config override beats the sub-agent's own timeout", () => {
+    const limits = toolLimitsFrom(
+      toolsConfig({ ask_research: { timeout: ConfigDuration.fromSecs(90) } }),
+      new Map([["research", subagent(ConfigDuration.fromSecs(7_200))]]),
+    );
+    expect(timeoutFor(limits, "ask_research")).toBe(90_000);
+  });
+
+  test("an override carrying only max_result_chars still gets the sub-agent deadline", () => {
+    const limits = toolLimitsFrom(
+      toolsConfig({ ask_research: { max_result_chars: 1_000 } }),
+      new Map([["research", subagent()]]),
+    );
+    expect(timeoutFor(limits, "ask_research")).toBe(DEFAULT_SUBAGENT_TIMEOUT_MS);
+    expect(resultCharsFor(limits, "ask_research")).toBe(1_000);
+  });
+
+  test("a sub-agent timeout of zero disables the deadline", () => {
+    const limits = toolLimitsFrom(
+      toolsConfig({}),
+      new Map([["research", subagent(ConfigDuration.fromSecs(0))]]),
+    );
+    expect(timeoutFor(limits, "ask_research")).toBeUndefined();
+  });
+
+  test("an ask_ tool with no matching sub-agent keeps the global default", () => {
+    const limits = toolLimitsFrom(toolsConfig({}), new Map());
+    expect(timeoutFor(limits, "ask_ghost")).toBe(300_000);
+  });
+});
+
 describe("dispatch deadline", () => {
   function hangingContext(): ToolContext {
     return bareContext({
@@ -619,6 +690,35 @@ describe("dispatch deadline", () => {
     });
     await expect(dispatchWithinDeadline("mcp__slow__thing", {}, ctx, 50)).rejects.toThrow();
     expect(aborted).toBe(true);
+  });
+
+  test("a background-capable context starts the sub-agent instead of awaiting it", async () => {
+    let foregroundCalled = false;
+    const ctx = bareContext({
+      startSubagent: (name, query, toolUseId) => {
+        expect({ name, query, toolUseId }).toEqual({
+          name: "researcher",
+          query: "tides",
+          toolUseId: undefined,
+        });
+        return "started sa_1";
+      },
+      runSubagent: async () => {
+        foregroundCalled = true;
+        return "blocking";
+      },
+    });
+    expect(await dispatchTool("ask_researcher", { query: "tides" }, ctx)).toBe("started sa_1");
+    expect(foregroundCalled).toBe(false);
+  });
+
+  test("without a starter the sub-agent still runs in the foreground", async () => {
+    const ctx = bareContext({
+      runSubagent: async (name, query) => `blocking ${name}:${query}`,
+    });
+    expect(await dispatchTool("ask_researcher", { query: "tides" }, ctx)).toBe(
+      "blocking researcher:tides",
+    );
   });
 
   test("a sub-agent receives the same signal", async () => {

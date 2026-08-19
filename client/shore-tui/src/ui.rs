@@ -69,6 +69,10 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         draw_alt_picker_inline(frame, app, chunks[2]);
     }
 
+    if app.subagent_panel.is_some() {
+        draw_subagent_panel(frame, app, size);
+    }
+
     if app.show_help {
         draw_help(frame, size);
     }
@@ -1101,6 +1105,16 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
             Color::Magenta,
         ));
     }
+    let running_subagents = app.running_subagent_count();
+    if running_subagents > 0 {
+        indicators.push((
+            format!(
+                "{running_subagents} sub-agent{} running \u{2014} press S",
+                if running_subagents == 1 { "" } else { "s" }
+            ),
+            SUBAGENT_COLOR,
+        ));
+    }
     if let Some(budget) = app.focused_budget() {
         let show = match app.usage_display {
             crate::app::UsageDisplay::Off => false,
@@ -1130,6 +1144,481 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
 
     if app.input.mode == InputMode::Insert {
         frame.set_cursor_position((area.x + cx as u16, area.y + 1 + cy - input_scroll));
+    }
+}
+
+fn subagent_status_glyph(task: &crate::app::SubagentTaskView) -> (&'static str, Color) {
+    match task.status.as_str() {
+        "done" => ("\u{2713}", Color::Green),
+        "running" => ("\u{25cf}", Color::Yellow),
+        _ => ("\u{2716}", Color::Red),
+    }
+}
+
+fn draw_subagent_panel(frame: &mut Frame, app: &mut App, area: Rect) {
+    let Some(selected) = app.subagent_panel else {
+        return;
+    };
+    if app.subagent_tasks.is_empty() {
+        return;
+    }
+
+    let running = app.running_subagent_count();
+    let title = if running == 0 {
+        format!(" Sub-agents ({}) ", app.subagent_tasks.len())
+    } else {
+        format!(
+            " Sub-agents ({} of {} running) ",
+            running,
+            app.subagent_tasks.len()
+        )
+    };
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .title(title)
+        .border_style(Style::default().fg(SUBAGENT_COLOR));
+    let inner = outer.inner(area);
+    frame.render_widget(Clear, area);
+    frame.render_widget(outer, area);
+
+    if inner.height < 4 || inner.width < 8 {
+        return;
+    }
+
+    let visible_rows = (inner.height as usize / 3)
+        .clamp(1, 8)
+        .min(app.subagent_tasks.len());
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(visible_rows as u16),
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
+        .split(inner);
+
+    let window_start =
+        completion_window_start(Some(selected), visible_rows, app.subagent_tasks.len());
+    let mut selector_lines: Vec<Line<'static>> = Vec::new();
+    for (idx, task) in app
+        .subagent_tasks
+        .iter()
+        .enumerate()
+        .skip(window_start)
+        .take(visible_rows)
+    {
+        let (glyph, color) = subagent_status_glyph(task);
+        let is_selected = idx == selected;
+        let marker = if is_selected { " \u{25b8} " } else { "   " };
+        let label_style = if is_selected {
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Gray)
+        };
+        let budget = inner.width.saturating_sub(7) as usize;
+        selector_lines.push(Line::from(vec![
+            Span::styled(marker.to_string(), Style::default().fg(SUBAGENT_COLOR)),
+            Span::styled(format!("{glyph} "), Style::default().fg(color)),
+            Span::styled(
+                truncate_display(&task.selector_label(), budget),
+                label_style,
+            ),
+        ]));
+    }
+    frame.render_widget(Paragraph::new(Text::from(selector_lines)), chunks[0]);
+
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "\u{2500}".repeat(inner.width as usize),
+            Style::default().fg(Color::DarkGray),
+        ))),
+        chunks[1],
+    );
+
+    let body_area = chunks[2];
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let Some(task) = app.subagent_tasks.get(selected) else {
+        return;
+    };
+    if !task.query.is_empty() {
+        let wrap_w = body_area.width.saturating_sub(2) as usize;
+        for chunk in wrap_plain(&task.query, wrap_w) {
+            lines.push(Line::from(Span::styled(
+                format!("  {chunk}"),
+                Style::default()
+                    .fg(SUBAGENT_COLOR)
+                    .add_modifier(Modifier::ITALIC),
+            )));
+        }
+        lines.push(Line::from(""));
+    }
+    render_blocks(&mut lines, &task.blocks, true, true, true, body_area.width);
+    if !task.is_running()
+        && let Some(detail) = &task.detail
+    {
+        lines.push(Line::from(Span::styled(
+            format!("  {} result", task.status),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )));
+        let wrap_w = body_area.width.saturating_sub(2) as usize;
+        for chunk in wrap_plain(detail, wrap_w) {
+            lines.push(Line::from(Span::styled(
+                format!("  {chunk}"),
+                Style::default().fg(Color::Gray),
+            )));
+        }
+    }
+    if lines.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  waiting for the sub-agent to report",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
+    let total = lines.len() as u16;
+    let max_scroll = total.saturating_sub(body_area.height);
+    let Some(task) = app.subagent_tasks.get_mut(selected) else {
+        return;
+    };
+    if task.follow {
+        task.scroll = max_scroll;
+    } else {
+        task.scroll = task.scroll.min(max_scroll);
+        if task.scroll == max_scroll {
+            task.follow = true;
+        }
+    }
+    let scroll = task.scroll;
+
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).scroll((scroll, 0)),
+        body_area,
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "  Tab/h/l switch  j/k scroll  G bottom  Esc close",
+            Style::default().fg(Color::DarkGray),
+        ))),
+        chunks[3],
+    );
+}
+
+fn truncate_display(text: &str, budget: usize) -> String {
+    if budget == 0 {
+        return String::new();
+    }
+    if unicode_width::UnicodeWidthStr::width(text) <= budget {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    let mut used = 0usize;
+    for ch in text.chars() {
+        let w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+        if used + w + 1 > budget {
+            break;
+        }
+        used += w;
+        out.push(ch);
+    }
+    out.push('\u{2026}');
+    out
+}
+
+fn wrap_plain(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![];
+    }
+    let mut out: Vec<String> = Vec::new();
+    for raw in text.lines() {
+        let mut current = String::new();
+        for word in raw.split_whitespace() {
+            let candidate_len = unicode_width::UnicodeWidthStr::width(current.as_str())
+                + usize::from(!current.is_empty())
+                + unicode_width::UnicodeWidthStr::width(word);
+            if !current.is_empty() && candidate_len > width {
+                out.push(std::mem::take(&mut current));
+            }
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(word);
+        }
+        out.push(current);
+    }
+    out
+}
+
+#[cfg(test)]
+mod subagent_panel_tests {
+    use super::scenario_tests::Harness;
+    use crossterm::event::{KeyCode, KeyModifiers};
+    use shore_common::protocol::server_msg::{
+        ServerMessage, StreamChunk, SubagentStatus, ToolCall, ToolResult,
+    };
+
+    fn status(h: &mut Harness, task_id: &str, name: &str, query: &str, state: &str) {
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::SubagentStatus(SubagentStatus {
+                task_id: task_id.into(),
+                character: "poppy".into(),
+                name: name.into(),
+                query: query.into(),
+                status: state.into(),
+                detail: if state == "running" {
+                    None
+                } else {
+                    Some(format!("{name} reported back"))
+                },
+            }),
+        );
+    }
+
+    fn open_panel(h: &mut Harness) {
+        h.press(KeyCode::Esc);
+        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char('S'));
+    }
+
+    fn chunk(h: &mut Harness, task_id: &str, name: &str, text: &str) {
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamChunk(StreamChunk {
+                rid: None,
+                text: text.into(),
+                content_type: "text".into(),
+                subagent: Some(name.into()),
+                task_id: Some(task_id.into()),
+            }),
+        );
+    }
+
+    fn tool(h: &mut Harness, task_id: &str, name: &str, tool_name: &str) {
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolCall(ToolCall {
+                rid: None,
+                tool_id: "t1".into(),
+                tool_name: tool_name.into(),
+                input: serde_json::json!({"query": "tide tables"}),
+                subagent: Some(name.into()),
+                task_id: Some(task_id.into()),
+            }),
+        );
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolResult(ToolResult {
+                rid: None,
+                tool_id: "t1".into(),
+                tool_name: tool_name.into(),
+                output: "high tide at 14:05".into(),
+                is_error: false,
+                subagent: Some(name.into()),
+                task_id: Some(task_id.into()),
+            }),
+        );
+    }
+
+    #[test]
+    fn a_running_task_never_lands_in_the_conversation() {
+        let mut h = Harness::new();
+        status(
+            &mut h,
+            "sa_1",
+            "research",
+            "find the tide tables",
+            "running",
+        );
+        chunk(&mut h, "sa_1", "research", "checking the almanac");
+        tool(&mut h, "sa_1", "research", "web_search");
+
+        assert!(
+            h.app.entries.is_empty(),
+            "background sub-agent frames must not append to the conversation"
+        );
+        assert_eq!(h.app.subagent_tasks.len(), 1);
+        assert_eq!(h.app.subagent_tasks[0].blocks.len(), 3);
+    }
+
+    #[test]
+    fn the_input_border_says_how_many_are_running() {
+        let mut h = Harness::new();
+        status(
+            &mut h,
+            "sa_1",
+            "research",
+            "find the tide tables",
+            "running",
+        );
+        let frame = h.render("one running");
+        assert!(frame.contains("1 sub-agent running"), "frame: {frame}");
+        assert!(frame.contains("press S"), "frame: {frame}");
+
+        status(&mut h, "sa_2", "cook", "plan dinner", "running");
+        let frame = h.render("two running");
+        assert!(frame.contains("2 sub-agents running"), "frame: {frame}");
+
+        status(&mut h, "sa_1", "research", "find the tide tables", "done");
+        let frame = h.render("one settled");
+        assert!(frame.contains("1 sub-agent running"), "frame: {frame}");
+    }
+
+    #[test]
+    fn the_panel_opens_on_shift_s_and_shows_the_selected_task() {
+        let mut h = Harness::new();
+        status(
+            &mut h,
+            "sa_1",
+            "research",
+            "find the tide tables",
+            "running",
+        );
+        chunk(&mut h, "sa_1", "research", "checking the almanac");
+        tool(&mut h, "sa_1", "research", "web_search");
+
+        open_panel(&mut h);
+        assert_eq!(h.app.subagent_panel, Some(0));
+
+        let frame = h.render("panel open");
+        assert!(frame.contains("Sub-agents"), "frame: {frame}");
+        assert!(frame.contains("research"), "frame: {frame}");
+        assert!(frame.contains("find the tide tables"), "frame: {frame}");
+        assert!(frame.contains("checking the almanac"), "frame: {frame}");
+        assert!(frame.contains("web_search"), "frame: {frame}");
+
+        h.press(KeyCode::Esc);
+        assert_eq!(h.app.subagent_panel, None);
+    }
+
+    #[test]
+    fn shift_s_with_no_tasks_says_so_instead_of_opening_an_empty_panel() {
+        let mut h = Harness::new();
+        open_panel(&mut h);
+        assert_eq!(h.app.subagent_panel, None);
+    }
+
+    #[test]
+    fn tab_switches_between_tasks_by_name_and_query() {
+        let mut h = Harness::new();
+        status(
+            &mut h,
+            "sa_1",
+            "research",
+            "find the tide tables",
+            "running",
+        );
+        chunk(&mut h, "sa_1", "research", "checking the almanac");
+        status(&mut h, "sa_2", "cook", "plan dinner for six", "running");
+        chunk(&mut h, "sa_2", "cook", "counting the plates");
+
+        open_panel(&mut h);
+        let frame = h.render("first task selected");
+        assert!(frame.contains("checking the almanac"), "frame: {frame}");
+        assert!(!frame.contains("counting the plates"), "frame: {frame}");
+
+        h.press(KeyCode::Tab);
+        assert_eq!(h.app.subagent_panel, Some(1));
+        let frame = h.render("second task selected");
+        assert!(frame.contains("counting the plates"), "frame: {frame}");
+        assert!(frame.contains("plan dinner for six"), "frame: {frame}");
+
+        h.press(KeyCode::Tab);
+        assert_eq!(h.app.subagent_panel, Some(0), "selection wraps around");
+    }
+
+    #[test]
+    fn a_settled_task_shows_its_status_and_result() {
+        let mut h = Harness::new();
+        status(
+            &mut h,
+            "sa_1",
+            "research",
+            "find the tide tables",
+            "running",
+        );
+        status(&mut h, "sa_1", "research", "find the tide tables", "error");
+
+        open_panel(&mut h);
+        let frame = h.render("errored task");
+        assert!(frame.contains("error result"), "frame: {frame}");
+        assert!(frame.contains("research reported back"), "frame: {frame}");
+        assert_eq!(h.app.running_subagent_count(), 0);
+    }
+
+    #[test]
+    fn a_tagged_frame_without_a_status_still_creates_the_task() {
+        let mut h = Harness::new();
+        chunk(&mut h, "sa_9", "research", "arriving before the status did");
+
+        assert_eq!(h.app.subagent_tasks.len(), 1);
+        assert_eq!(h.app.subagent_tasks[0].name, "research");
+        assert!(h.app.entries.is_empty());
+
+        status(&mut h, "sa_9", "research", "the late query", "running");
+        assert_eq!(
+            h.app.subagent_tasks.len(),
+            1,
+            "the status upserts, not appends"
+        );
+        assert_eq!(h.app.subagent_tasks[0].query, "the late query");
+    }
+
+    #[test]
+    fn an_untagged_subagent_frame_keeps_the_legacy_inline_path() {
+        let mut h = Harness::new();
+        let _ = crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamChunk(StreamChunk {
+                rid: None,
+                text: "inline as before".into(),
+                content_type: "text".into(),
+                subagent: Some("research".into()),
+                task_id: None,
+            }),
+        );
+
+        assert!(h.app.subagent_tasks.is_empty());
+        assert!(
+            !h.app.entries.is_empty(),
+            "an untagged sub-agent frame still renders in the conversation"
+        );
+    }
+
+    #[test]
+    fn scrolling_stops_following_and_g_resumes_it() {
+        let mut h = Harness::new();
+        status(
+            &mut h,
+            "sa_1",
+            "research",
+            "find the tide tables",
+            "running",
+        );
+        for i in 0..60 {
+            chunk(&mut h, "sa_1", "research", &format!("line {i}\n"));
+        }
+
+        open_panel(&mut h);
+        let _ = h.render("following the tail");
+        assert!(h.app.subagent_tasks[0].follow);
+        assert!(
+            h.app.subagent_tasks[0].scroll > 0,
+            "the tail is scrolled to"
+        );
+
+        h.press(KeyCode::Char('k'));
+        let _ = h.render("scrolled up");
+        assert!(!h.app.subagent_tasks[0].follow);
+
+        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char('G'));
+        let _ = h.render("back to the tail");
+        assert!(h.app.subagent_tasks[0].follow);
     }
 }
 
@@ -1206,6 +1695,10 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         )),
         Line::from(Span::styled(
             "    o               fullscreen image viewer",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "    S               background sub-agent panel",
             Style::default().fg(Color::White),
         )),
         Line::from(""),
@@ -1587,7 +2080,7 @@ fn draw_alt_picker_inline(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 #[cfg(test)]
-mod scenario_tests {
+pub(crate) mod scenario_tests {
     #![expect(
         clippy::print_stderr,
         reason = "these scenarios dump rendered frames and diffs for `cargo test -- --nocapture`"
@@ -1651,14 +2144,14 @@ mod scenario_tests {
         }
     }
 
-    struct Harness {
+    pub(crate) struct Harness {
         terminal: Terminal<TestBackend>,
-        app: App,
+        pub(crate) app: App,
         frames: Vec<String>,
     }
 
     impl Harness {
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             Self::with_size(W, H)
         }
 
@@ -1672,7 +2165,7 @@ mod scenario_tests {
             }
         }
 
-        fn render(&mut self, label: &str) -> String {
+        pub(crate) fn render(&mut self, label: &str) -> String {
             let _ = self
                 .terminal
                 .draw(|frame| draw(frame, &mut self.app))
@@ -1716,7 +2209,7 @@ mod scenario_tests {
             text
         }
 
-        fn press(&mut self, code: KeyCode) {
+        pub(crate) fn press(&mut self, code: KeyCode) {
             let _ = self.press_action(code);
         }
 
@@ -1724,7 +2217,7 @@ mod scenario_tests {
             self.press_mod_action(KeyModifiers::NONE, code)
         }
 
-        fn press_mod(&mut self, mods: KeyModifiers, code: KeyCode) {
+        pub(crate) fn press_mod(&mut self, mods: KeyModifiers, code: KeyCode) {
             let _ = self.press_mod_action(mods, code);
         }
 
@@ -3611,6 +4104,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
@@ -3619,6 +4113,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 text: "PHASE1_THOUGHT".into(),
                 content_type: "thinking".into(),
@@ -3628,6 +4123,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3654,6 +4150,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
@@ -3733,6 +4230,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
@@ -3741,6 +4239,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3754,6 +4253,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
@@ -3776,6 +4276,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::ToolResult(ToolResult {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
@@ -3788,6 +4289,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
@@ -3796,6 +4298,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 text: "hey! what's up?".into(),
                 content_type: "text".into(),
@@ -3805,6 +4308,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3938,6 +4442,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
@@ -3946,6 +4451,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 text: "PRETOOL_LIVE".into(),
                 content_type: "text".into(),
@@ -3961,6 +4467,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3974,6 +4481,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "do_tool".into(),
@@ -4076,6 +4584,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
@@ -4084,6 +4593,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 text: reply.into(),
                 content_type: "text".into(),
@@ -4152,6 +4662,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: Some("m_1".into()),
                 revision: Some(1),
@@ -4226,6 +4737,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
@@ -4298,6 +4810,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 regen: false,
             }),
@@ -4307,6 +4820,7 @@ mod scenario_tests {
                 &mut h.app,
                 ServerMessage::StreamChunk(StreamChunk {
                     subagent: None,
+                    task_id: None,
                     rid: None,
                     text: std::str::from_utf8(chunk).unwrap().into(),
                     content_type: "text".into(),
@@ -4364,6 +4878,7 @@ mod scenario_tests {
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
+                task_id: None,
                 rid: None,
                 msg_id: Some("m_1".into()),
                 revision: Some(1),

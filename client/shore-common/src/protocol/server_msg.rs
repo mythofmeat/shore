@@ -74,6 +74,8 @@ pub struct StreamStart {
     pub regen: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
@@ -86,6 +88,8 @@ pub struct StreamChunk {
     pub content_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 fn default_content_type() -> String {
@@ -110,6 +114,8 @@ pub struct StreamEnd {
     pub is_final: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -151,6 +157,8 @@ pub struct ToolCall {
     pub input: serde_json::Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
@@ -165,6 +173,8 @@ pub struct ToolResult {
     pub is_error: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
@@ -179,6 +189,20 @@ pub struct SendImage {
     pub data: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct SubagentStatus {
+    pub task_id: String,
+    pub character: String,
+    pub name: String,
+    pub query: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
@@ -251,6 +275,7 @@ pub enum ServerMessage {
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     SendImage(SendImage),
+    SubagentStatus(SubagentStatus),
     CacheWarning(CacheWarning),
     ProviderFallbackWarning(ProviderFallbackWarning),
     UsageWarning(UsageWarning),
@@ -270,6 +295,33 @@ impl ServerMessage {
             ServerMessage::ToolCall(m) => m.subagent.as_deref(),
             ServerMessage::ToolResult(m) => m.subagent.as_deref(),
             ServerMessage::SendImage(m) => m.subagent.as_deref(),
+            ServerMessage::Hello(_)
+            | ServerMessage::History(_)
+            | ServerMessage::Shutdown(_)
+            | ServerMessage::Ping(_)
+            | ServerMessage::CommandOutput(_)
+            | ServerMessage::Error(_)
+            | ServerMessage::Phase(_)
+            | ServerMessage::NewMessage(_)
+            | ServerMessage::SubagentStatus(_)
+            | ServerMessage::CacheWarning(_)
+            | ServerMessage::ProviderFallbackWarning(_)
+            | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
+            | ServerMessage::Unknown => None,
+        }
+    }
+
+    #[must_use]
+    pub fn task_id(&self) -> Option<&str> {
+        match self {
+            ServerMessage::StreamStart(m) => m.task_id.as_deref(),
+            ServerMessage::StreamChunk(m) => m.task_id.as_deref(),
+            ServerMessage::StreamEnd(m) => m.task_id.as_deref(),
+            ServerMessage::ToolCall(m) => m.task_id.as_deref(),
+            ServerMessage::ToolResult(m) => m.task_id.as_deref(),
+            ServerMessage::SendImage(m) => m.task_id.as_deref(),
+            ServerMessage::SubagentStatus(m) => Some(m.task_id.as_str()),
             ServerMessage::Hello(_)
             | ServerMessage::History(_)
             | ServerMessage::Shutdown(_)
@@ -303,6 +355,7 @@ impl ServerMessage {
             | ServerMessage::Error(_)
             | ServerMessage::Phase(_)
             | ServerMessage::NewMessage(_)
+            | ServerMessage::SubagentStatus(_)
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
@@ -337,6 +390,7 @@ mod tests {
             text: "hi".into(),
             content_type: "text".into(),
             subagent: None,
+            task_id: None,
         });
         chunk.set_subagent("research");
         assert_eq!(chunk.subagent(), Some("research"));
@@ -358,6 +412,7 @@ mod tests {
             tool_name: "search".into(),
             input: serde_json::json!({}),
             subagent: None,
+            task_id: None,
         });
         call.set_subagent("research");
         let wire = serde_json::to_string(&call).unwrap();
@@ -374,8 +429,59 @@ mod tests {
             tool_name: "search".into(),
             input: serde_json::json!({}),
             subagent: None,
+            task_id: None,
         });
         let wire = serde_json::to_string(&call).unwrap();
         assert!(!wire.contains("subagent"), "wire: {wire}");
+    }
+
+    #[test]
+    fn task_id_survives_wire_round_trip_and_is_omitted_when_absent() {
+        let tagged = ServerMessage::StreamChunk(StreamChunk {
+            rid: None,
+            text: "hi".into(),
+            content_type: "text".into(),
+            subagent: Some("research".into()),
+            task_id: Some("sa_1".into()),
+        });
+        let wire = serde_json::to_string(&tagged).unwrap();
+        assert!(wire.contains("\"task_id\":\"sa_1\""), "wire: {wire}");
+        let back: ServerMessage = serde_json::from_str(&wire).unwrap();
+        assert_eq!(back.task_id(), Some("sa_1"));
+
+        let plain = ServerMessage::StreamChunk(StreamChunk {
+            rid: None,
+            text: "hi".into(),
+            content_type: "text".into(),
+            subagent: None,
+            task_id: None,
+        });
+        let untagged_wire = serde_json::to_string(&plain).unwrap();
+        assert!(!untagged_wire.contains("task_id"), "wire: {untagged_wire}");
+    }
+
+    #[test]
+    fn subagent_status_round_trip() {
+        let msg = ServerMessage::SubagentStatus(SubagentStatus {
+            task_id: "sa_1".into(),
+            character: "poppy".into(),
+            name: "research".into(),
+            query: "find the tide tables".into(),
+            status: "done".into(),
+            detail: None,
+        });
+        let wire = serde_json::to_string(&msg).unwrap();
+        assert!(
+            wire.contains("\"type\":\"subagent_status\""),
+            "wire: {wire}"
+        );
+        assert!(!wire.contains("detail"), "wire: {wire}");
+        let back: ServerMessage = serde_json::from_str(&wire).unwrap();
+        assert_eq!(back.task_id(), Some("sa_1"));
+        let ServerMessage::SubagentStatus(status) = back else {
+            panic!("expected subagent_status");
+        };
+        assert_eq!(status.character, "poppy");
+        assert_eq!(status.status, "done");
     }
 }

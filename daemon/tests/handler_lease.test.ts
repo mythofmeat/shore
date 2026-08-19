@@ -113,6 +113,41 @@ describe("resolving it", () => {
   });
 });
 
+describe("sending to whoever holds it", () => {
+  test("the holder receives, even with no issuer in play", async () => {
+    const leases = new StreamLeases();
+    const sessions = router(1);
+    leases.observe("Alice", 1, "message", T0);
+
+    const send = leases.sendForCharacter("Alice", sessions, T0);
+    expect(send).toBeDefined();
+    await send!(probe("result"));
+    expect(sessions.names(1)).toEqual(["result"]);
+  });
+
+  test("nobody holding it means nobody to send to", () => {
+    const leases = new StreamLeases();
+    expect(leases.sendForCharacter("Alice", router(1), T0)).toBeUndefined();
+  });
+
+  test("a lapsed lease yields nobody, and is evicted", () => {
+    const leases = new StreamLeases();
+    const sessions = router(1);
+    leases.observe("Alice", 1, "message", T0);
+
+    expect(leases.sendForCharacter("Alice", sessions, T0 + LEASE_TTL_MS)).toBeUndefined();
+    expect(leases.sendForCharacter("Alice", sessions, T0)).toBeUndefined();
+  });
+
+  test("a disconnected holder yields nobody, and is evicted", () => {
+    const leases = new StreamLeases();
+    leases.observe("Alice", 99, "message", T0);
+
+    expect(leases.sendForCharacter("Alice", router(1), T0)).toBeUndefined();
+    expect(leases.sendForCharacter("Alice", router(99), T0)).toBeUndefined();
+  });
+});
+
 describe("the fanout", () => {
   test("delivers to the lease holder as well as the issuer", async () => {
     const leases = new StreamLeases();
