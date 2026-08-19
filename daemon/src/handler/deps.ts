@@ -36,8 +36,7 @@ import { McpRegistry } from "../tools/mcp_registry.ts";
 import { pluginsDir } from "../config/dirs.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
-import { deferEditTo, type ToolContext } from "../tools/dispatch.ts";
-import { subagentRunner } from "../tools/subagent_loop.ts";
+import { deferEditTo } from "../tools/dispatch.ts";
 import { makeDispatchCommand, type CommandPathDeps, type SessionCache } from "./commands.ts";
 import type { DispatchRuntime, ReloadSummary } from "./command_dispatch.ts";
 import {
@@ -149,21 +148,13 @@ export function chatToolDeps(
 ): ToolContextDeps {
   const { runtime } = a;
   return {
-    ...sharedToolDeps(runtime.config, runtime.mcp),
-    runSubagent: (parent: ToolContext) =>
-      subagentRunner({
-      config: runtime.registry.effectiveConfig(charName),
-      ctx: parent,
+    ...sharedToolDeps(runtime.config, runtime.mcp, {
       providers: a.providers,
+      registry: runtime.registry,
       ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
-      mcpRegistry: runtime.mcp.current,
-      sendDirect: turn.send,
-      conversation: turn.conversation,
       ...(a.env === undefined ? {} : { env: a.env }),
-      ...(turn.rid === undefined ? {} : { rid: turn.rid }),
-      now: turn.now,
-      newMessageId: turn.newMessageId,
-      }),
+      turn,
+    }),
     deferEdit: deferEditTo(
       characterDataDir(runtime.config.dirs.data, charName),
       queueDeferredEdit,
