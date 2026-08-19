@@ -44,7 +44,14 @@ export async function persistHeartbeatMessage(
   deps: Pick<HeartbeatTickDeps, "engine" | "emit" | "notify" | "newId" | "nowIso">,
   note: (kind: HeartbeatEventKind, detail: string) => void,
 ): Promise<void> {
-  if (loop.sendMessageText === undefined && loop.images.length === 0) {
+  if (loop.failedRound !== undefined) {
+    note(
+      "call_failed",
+      `Model call failed on round ${loop.failedRound} — tick ended early ` +
+        `(shore trace calls for the provider's reason)`,
+    );
+    if (loop.sendMessageText === undefined && loop.images.length === 0) return;
+  } else if (loop.sendMessageText === undefined && loop.images.length === 0) {
     note("message_skipped", "Tick completed — no message sent");
     return;
   }

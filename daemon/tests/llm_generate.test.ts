@@ -291,6 +291,27 @@ describe("calling the model", () => {
     expect(keys).toEqual(["seed"]);
   });
 
+  test("a request the cache left keyless is given the provider's key, not called empty", async () => {
+    const keys: string[] = [];
+    const out = await generate(
+      request({ model: "dyn-model", api_key: "" }),
+      deps(recordingProvider(keys)),
+    );
+
+    expect(keys).toEqual(["primary-secret"]);
+    expect(out.fallbacks).toEqual([]);
+  });
+
+  test("a keyless request rotates through the provider's keys like any other", async () => {
+    const keys: string[] = [];
+    const provider = recordingProvider(keys, (n) => (n === 0 ? unauthorized() : ok()));
+
+    const out = await generate(request({ model: "dyn-model", api_key: "" }), deps(provider));
+
+    expect(keys).toEqual(["primary-secret", "spare-secret"]);
+    expect(out.fallbacks.length).toBe(1);
+  });
+
   test("an sdk with no adapter is a plain failure", async () => {
     await expect(
       generate(request({ sdk: "gemini", model: "dyn-model" }), deps(recordingProvider([]))),

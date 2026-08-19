@@ -583,7 +583,7 @@ pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
             "message_sent" | "wake" | "recap_written" => Tone::Good,
             "message_skipped" => Tone::Muted,
             "tool_use" => Tone::Active,
-            "dormant" => COLOR_ERROR,
+            "dormant" | "call_failed" => COLOR_ERROR,
             "recap_missing" => Tone::Warn,
             _ => Tone::Heading,
         };

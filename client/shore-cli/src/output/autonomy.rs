@@ -288,7 +288,7 @@ fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
             "message_sent" | "wake" => Tone::Good,
             "message_skipped" => Tone::Muted,
             "tool_use" => Tone::Active,
-            "dormant" => COLOR_ERROR,
+            "dormant" | "call_failed" => COLOR_ERROR,
             "dormant_ping" => Tone::Thinking,
             "timeout" => Tone::Warn,
             _ => Tone::Heading,

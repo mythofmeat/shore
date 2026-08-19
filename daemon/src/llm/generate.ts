@@ -159,6 +159,14 @@ export async function generate(
   if (resolved !== undefined) {
     return await generateWithCredentialFallback(request, resolved, deps, signal);
   }
+  if (request.api_key === "") {
+    return await generateWithCredentialFallback(
+      request,
+      { providerKey: request.provider_key ?? request.sdk },
+      deps,
+      signal,
+    );
+  }
   console.debug(
     `shore: ${request.provider_key ?? request.sdk}/${request.model} is not in the static catalog; ` +
       `calling with the request's own key`,

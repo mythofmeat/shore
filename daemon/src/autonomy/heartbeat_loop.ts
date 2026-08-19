@@ -51,6 +51,7 @@ export interface HeartbeatLoopDeps {
 export interface HeartbeatLoopResult {
   sendMessageText: string | undefined;
   images: ImageRef[];
+  failedRound?: number | undefined;
 }
 
 function toolUsesOf(blocks: readonly ContentBlock[]): ToolUse[] {
@@ -123,6 +124,7 @@ export async function runHeartbeatToolLoop(
   );
 
   let sendMessageText: string | undefined;
+  let failedRound: number | undefined;
   const images: ImageRef[] = [];
 
   const clock = deps.monotonicMs ?? Date.now;
@@ -145,7 +147,10 @@ export async function runHeartbeatToolLoop(
 
     const callType = iteration === 0 ? "heartbeat" : "heartbeat_tool_loop";
     const resp = await deps.generate(request, iteration, callType);
-    if (resp === undefined) break;
+    if (resp === undefined) {
+      failedRound = iteration;
+      break;
+    }
 
     const tagged = extractSendMessage(responseText(resp));
     if (tagged !== undefined) sendMessageText = tagged;
@@ -175,5 +180,5 @@ export async function runHeartbeatToolLoop(
     if (!hasTools) break;
   }
 
-  return { sendMessageText, images };
+  return { sendMessageText, images, failedRound };
 }

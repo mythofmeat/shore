@@ -4,6 +4,7 @@ export const HEARTBEAT_LOG_CAPACITY = 100;
 
 export type HeartbeatEventKind =
   | "tick_fired"
+  | "call_failed"
   | "message_sent"
   | "message_skipped"
   | "tool_use"
@@ -17,6 +18,7 @@ export type HeartbeatEventKind =
 
 const KNOWN_KINDS = new Set<string>([
   "tick_fired",
+  "call_failed",
   "message_sent",
   "message_skipped",
   "tool_use",

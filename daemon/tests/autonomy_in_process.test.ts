@@ -115,7 +115,44 @@ function scriptedProvider(rounds: GenerateResponse[], seen: SidecarRequest[] = [
 
 const NO_HOOKS: TickHooks = { scheduleNextWake: () => 1 };
 
+function cachedChatRequest(): SidecarRequest {
+  return {
+    sdk: "anthropic",
+    model: "discovered-opus",
+    api_key: "",
+    provider_key: "anthropic",
+    messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+    max_tokens: 1024,
+    replay_prior_thinking: "off",
+  } as unknown as SidecarRequest;
+}
+
 describe("running a heartbeat", () => {
+  test("a tick on the cached chat request calls the provider with a key", async () => {
+    const config = await world();
+    config.providers = ProviderRegistry.fromSection({
+      anthropic: { api_key_env: KEY_ENV },
+    });
+    const cache = new LastRequestCache();
+    cache.set("ada", cachedChatRequest(), undefined);
+
+    const seen: SidecarRequest[] = [];
+    const executor = new InProcessAutonomyExecutor({
+      registry: registryFor(config),
+      cache,
+      providers: {
+        anthropic: scriptedProvider([response([{ type: "text", text: "quiet tick" }])], seen),
+      },
+      env: { [KEY_ENV]: "secret" },
+    });
+
+    await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+    expect(seen.length).toBe(1);
+    expect(seen[0]?.model).toBe("discovered-opus");
+    expect(seen[0]?.api_key).toBe("secret");
+  });
+
   test("delivers what the tick asked to say", async () => {
     const config = await world();
     const appended: Message[] = [];
@@ -205,7 +242,7 @@ describe("running a heartbeat", () => {
     expect(output).toBe("Scheduled next moment in 48.0 hours.");
   });
 
-  test("a failed model call ends the tick without throwing", async () => {
+  test("a failed model call ends the tick without throwing, and is logged as a failure", async () => {
     const config = await world();
     const executor = new InProcessAutonomyExecutor({
       registry: registryFor(config),
@@ -215,9 +252,8 @@ describe("running a heartbeat", () => {
 
     const result = await executor.runHeartbeatTick("ada", NO_HOOKS);
 
-    expect(result.events).toEqual([
-      { kind: "message_skipped", detail: "Tick completed — no message sent" },
-    ]);
+    expect(result.events.length).toBe(1);
+    expect(result.events[0]?.kind).toBe("call_failed");
     expect(result.failed).toBeUndefined();
   });
 

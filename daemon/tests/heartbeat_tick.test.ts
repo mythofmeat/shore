@@ -215,6 +215,22 @@ describe("delivering what a tick asked to say", () => {
     ]);
   });
 
+  test("a failed call says so instead of passing for a quiet tick", async () => {
+    const notes: { kind: string; detail: string }[] = [];
+
+    await persistHeartbeatMessage(
+      "ada",
+      request(),
+      { sendMessageText: undefined, images: [], failedRound: 0 },
+      { engine: async () => recordingEngine([]) },
+      (kind, detail) => notes.push({ kind, detail }),
+    );
+
+    expect(notes.length).toBe(1);
+    expect(notes[0]?.kind).toBe("call_failed");
+    expect(notes[0]?.detail).toContain("round 0");
+  });
+
   test("an empty <sendMessage> is still a message, not a skip", async () => {
     const notes: { kind: string; detail: string }[] = [];
     const appended: Message[] = [];
