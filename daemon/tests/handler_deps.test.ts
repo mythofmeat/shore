@@ -32,10 +32,11 @@ import {
   type ShoreRuntime,
 } from "../src/runtime.ts";
 import { buildToolContext, type ToolContextDeps } from "../src/handler/tool_context.ts";
-import { dispatchTool } from "../src/tools/dispatch.ts";
+import { DEFAULT_SUBAGENT_TIMEOUT_MS, dispatchTool } from "../src/tools/dispatch.ts";
 import {
   SubagentTaskManager,
   type SubagentTaskRecord,
+  type SubagentTaskStart,
 } from "../src/tools/subagent_tasks.ts";
 import type { McpRegistry } from "../src/tools/mcp_registry.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
@@ -163,15 +164,44 @@ function turnFor(): Parameters<typeof chatToolDeps>[2] {
   };
 }
 
-function withResearch(app: ReturnType<typeof defaultAppConfig>): void {
+function withResearch(
+  app: ReturnType<typeof defaultAppConfig>,
+  timeout?: ConfigDuration,
+): void {
   app.subagents.set("research", {
     description: "reads things",
     prompt: "you look things up",
     tools: [],
     model: undefined,
     max_iterations: undefined,
-    timeout: undefined,
+    timeout,
   });
+}
+
+function deadlineCapture(): { tasks: SubagentTaskManager; deadline: () => number | undefined } {
+  let seen: number | undefined;
+  const tasks = {
+    start: (init: SubagentTaskStart) => {
+      seen = init.timeoutMs;
+      return "started";
+    },
+  } as unknown as SubagentTaskManager;
+  return { tasks, deadline: () => seen };
+}
+
+async function subagentDeadline(
+  runtime: ShoreRuntime,
+  character: string,
+): Promise<number | undefined> {
+  const { tasks, deadline } = deadlineCapture();
+  const ctx = await buildToolContext(
+    runtime.config,
+    runtime.config.dirs.data,
+    character,
+    chatToolDeps(assemblyFor(runtime, tasks), character, turnFor()),
+  );
+  await dispatchTool("ask_research", { query: "what is the time" }, ctx);
+  return deadline();
 }
 
 function taskCapture(): { tasks: SubagentTaskManager; settled: Promise<SubagentTaskRecord> } {
@@ -288,6 +318,36 @@ describe("the tool backends a character's turn gets", () => {
       );
 
       expect(await subagentFailure(runtime, "ada")).toContain("chosen-by-ada");
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a background subagent gets the hour, not the 300s deadline the other tools share", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-subagent-deadline-", withResearch, [
+      "ada",
+    ]);
+    try {
+      expect(runtime.config.app.tools.timeout.asMillis()).toBe(300_000);
+      expect(await subagentDeadline(runtime, "ada")).toBe(DEFAULT_SUBAGENT_TIMEOUT_MS);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a subagent's deadline comes from the character's config, not the global one", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-subagent-deadline-char-", withResearch, [
+      "ada",
+    ]);
+    try {
+      runtime.registry.setRuntimeEffectiveConfig(
+        "ada",
+        configFor(root, (app) => withResearch(app, ConfigDuration.fromSecs(7_200))),
+      );
+
+      expect(await subagentDeadline(runtime, "ada")).toBe(7_200_000);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
