@@ -256,11 +256,18 @@ test("the fixture exercises dispatch, blocked tools, rejections and rollback", (
   const dispatched = passes.filter((p) => (p.dispatches as Json[]).length > 0);
   expect(dispatched.length).toBeGreaterThan(10);
 
-  const withRejections = passes.filter(
-    (p) =>
-      p.outcome !== null &&
-      Array.isArray((p.outcome as Json).rejected_paths) &&
-      ((p.outcome as Json).rejected_paths as string[]).length > 0,
+  const withRejections = passes.filter((p) =>
+    ((p.final_request_messages as Json[] | null) ?? []).some(
+      (m) =>
+        m.role === "user" &&
+        Array.isArray(m.content) &&
+        (m.content as Json[]).some(
+          (block) =>
+            block.type === "tool_result" &&
+            typeof block.content === "string" &&
+            block.content.includes("blocked: compaction may only write"),
+        ),
+    ),
   );
   expect(withRejections.length).toBeGreaterThan(0);
 
@@ -627,8 +634,6 @@ function camelOutcome(outcome: Json): CompactionOutcome {
     would_write_files: "wouldWriteFiles",
     file_ops_preview: "fileOpsPreview",
     markdown_preview: "markdownPreview",
-    rejected_paths: "rejectedPaths",
-    max_rounds_hit: "maxRoundsHit",
   };
   const out: Json = {};
   for (const [k, v] of Object.entries(outcome)) out[map[k] ?? k] = v;
@@ -650,8 +655,6 @@ function snakeOutcome(outcome: Json): Json {
     wouldWriteFiles: "would_write_files",
     fileOpsPreview: "file_ops_preview",
     markdownPreview: "markdown_preview",
-    rejectedPaths: "rejected_paths",
-    maxRoundsHit: "max_rounds_hit",
   };
   const out: Json = {};
   for (const [k, v] of Object.entries(outcome)) out[map[k] ?? k] = v;

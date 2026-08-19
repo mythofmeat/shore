@@ -156,13 +156,13 @@ describe("the single-flight latch", () => {
   test("a second tick does not re-fire compaction", async () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({ dir, config: {} });
-      executor.results.set("compaction:max_turns", { events: [], turnCount: 4 });
+      executor.results.set("compaction:idle", { events: [], turnCount: 4 });
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
 
-      expect((await runner.tick()).compaction).toBe("max_turns");
+      expect((await runner.tick()).compaction).toBe("idle");
       expect((await runner.tick()).compaction, "already fired").toBeUndefined();
-      expect(compactions(executor)).toEqual(["compaction:max_turns"]);
+      expect(compactions(executor)).toEqual(["compaction:idle"]);
     });
   });
 
@@ -177,8 +177,8 @@ describe("the single-flight latch", () => {
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
 
-      expect((await runner.tick()).compaction).toBe("max_turns");
-      expect(compactions(executor)).toEqual(["compaction:max_turns", "compaction:max_turns"]);
+      expect((await runner.tick()).compaction).toBe("idle");
+      expect(compactions(executor)).toEqual(["compaction:idle", "compaction:idle"]);
     });
   });
 });
@@ -395,7 +395,6 @@ describe("the compaction the handler runs", () => {
       });
 
       expect(runner.shouldCompactNow(10, 0)).toBe(true);
-      expect(runner.inputs(0).maxTurns).toBe(10);
       expect(runner.inputs(0).idleTriggerSecs).toBe(5);
       expect(runner.inputs(0).autonomyEnabled).toBe(true);
     });
@@ -628,39 +627,8 @@ describe("a completed compaction", () => {
 
       runner.onCompactionComplete(50, time.now);
       time.now += 2 * HOUR;
-      expect((await runner.tick()).compaction).toBe("max_turns");
+      expect((await runner.tick()).compaction).toBe("idle");
       expect(executor.calls.filter((c) => c.startsWith("compaction:")).length).toBe(2);
-    });
-  });
-});
-
-describe("pausing", () => {
-  test("stops the heartbeat and nothing else", async () => {
-    await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({ dir, config: {} });
-      runner.onUserMessage(50, time.now);
-      time.now += 4 * HOUR;
-      runner.pause();
-
-      const outcome = await runner.tick();
-      expect(outcome.heartbeat).toBe("none");
-      expect(executor.calls).toEqual(["compaction:max_turns"]);
-    });
-  });
-
-  test("resuming lets it run again", async () => {
-    await inTempDir(async (dir) => {
-      const { runner, time } = build({
-        dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0 },
-      });
-      runner.onUserMessage(1, time.now);
-      runner.pause();
-      time.now += 4 * HOUR;
-      expect((await runner.tick()).heartbeat, "paused").toBe("none");
-
-      runner.resume();
-      await driveToHeartbeat(runner, time);
     });
   });
 });
@@ -758,11 +726,11 @@ describe("when the daemon cannot be reached", () => {
         dir,
         config: {},
       });
-      executor.unreachable.add("compaction:max_turns");
+      executor.unreachable.add("compaction:idle");
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
 
-      await expect(runner.tick()).rejects.toThrow("compaction:max_turns unreachable");
+      await expect(runner.tick()).rejects.toThrow("compaction:idle unreachable");
       expect(executor.calls, "dreaming never ran").not.toContain("dream");
     });
   });
@@ -771,15 +739,16 @@ describe("when the daemon cannot be reached", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { idleTriggerSecs: 0 },
+        config: {},
       });
-      executor.unreachable.add("compaction:max_turns");
+      executor.unreachable.add("compaction:idle");
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
       await expect(runner.tick()).rejects.toThrow();
 
       executor.unreachable.clear();
-      expect((await runner.tick()).compaction).toBe("max_turns");
+      time.now += 2 * HOUR;
+      expect((await runner.tick()).compaction).toBe("idle");
     });
   });
 
@@ -834,14 +803,14 @@ describe("what an action reports back", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { idleTriggerSecs: 0 },
+        config: {},
       });
-      executor.results.set("compaction:max_turns", { events: [], turnCount: 4 });
+      executor.results.set("compaction:idle", { events: [], turnCount: 3 });
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
       await runner.tick();
 
-      expect(runner.snapshot().coveredTurnCount).toBe(4);
+      expect(runner.snapshot().coveredTurnCount).toBe(3);
       time.now += 2 * HOUR;
       expect((await runner.tick()).compaction).toBeUndefined();
     });
@@ -851,17 +820,17 @@ describe("what an action reports back", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { idleTriggerSecs: 0 },
+        config: {},
       });
-      executor.failing.add("compaction:max_turns");
-      executor.results.set("compaction:max_turns", { events: [], turnCount: 4 });
+      executor.failing.add("compaction:idle");
+      executor.results.set("compaction:idle", { events: [], turnCount: 4 });
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
       await runner.tick();
 
       expect(runner.snapshot().coveredTurnCount, "nothing was compacted").toBe(0);
       time.now += 2 * HOUR;
-      expect((await runner.tick()).compaction).toBe("max_turns");
+      expect((await runner.tick()).compaction).toBe("idle");
       expect(executor.calls.filter((c) => c.startsWith("compaction:")).length).toBe(2);
     });
   });

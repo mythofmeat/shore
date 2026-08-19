@@ -954,23 +954,24 @@ fn parse_command(app: &mut App, input: &str) -> Action {
 
         "edit" => {
             if arg.is_empty() || arg == "cancel" {
-                if app.editing_ref.is_some() {
+                if app.editing_ref.is_some() || app.pending_edit_prefill.is_some() {
                     app.editing_ref = None;
+                    app.cancel_edit_prefill();
                     app.input.text.clear();
                     app.input.cursor = 0;
                     app.set_status("edit cancelled");
                 } else {
-                    app.set_status("usage: :edit <ref>  (e.g. last, -1, -2)");
+                    app.set_status("usage: :edit <ref>  (e.g. last, -1, 3, m_...)");
                 }
                 Action::Redraw
-            } else if let Some(content) = app.resolve_ref_content(arg) {
-                app.editing_ref = Some(arg.to_string());
-                app.input.set_text(content);
-                app.input.mode = InputMode::Insert;
-                Action::Redraw
             } else {
-                app.set_error(format!("message not found: {arg}"));
-                Action::Redraw
+                let rid = app.begin_edit_prefill(arg);
+                app.set_status(format!("loading {arg}..."));
+                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
+                    rid: Some(rid),
+                    name: "get".into(),
+                    args: serde_json::json!({ "ref": arg }),
+                })))
             }
         }
 
@@ -1505,6 +1506,38 @@ mod tests {
             }
             _ => panic!("expected single delete send"),
         }
+    }
+
+    #[test]
+    fn edit_command_asks_the_daemon_to_resolve_the_ref() {
+        let mut app = App::default();
+        match parse_command(&mut app, "edit 3") {
+            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => {
+                assert_eq!(cmd.name, "get");
+                assert_eq!(cmd.args["ref"], "3");
+                assert!(cmd.rid.is_some());
+                assert!(app.editing_ref.is_none());
+                assert!(app.pending_edit_prefill.is_some());
+            }
+            _ => panic!("expected a get request for the message being edited"),
+        }
+    }
+
+    #[test]
+    fn edit_cancel_drops_a_prefill_still_in_flight() {
+        let mut app = App::default();
+        let _ = parse_command(&mut app, "edit 3");
+
+        let action = parse_command(&mut app, "edit cancel");
+
+        assert!(matches!(action, Action::Redraw));
+        assert!(app.pending_edit_prefill.is_none());
+        assert!(
+            app.notifications
+                .iter()
+                .any(|n| n.content == "edit cancelled"),
+            "cancelling an in-flight prefill should say so"
+        );
     }
 
     #[test]

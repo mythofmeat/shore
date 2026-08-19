@@ -131,7 +131,6 @@ describe("registering", () => {
       await service.register(registration("nova", characterDir(root, "nova")));
       expect(service.status("nova")).toEqual({
         character: "nova",
-        paused: false,
         heartbeat_state: "Active",
         ticks_without_user: 0,
         covered_turn_count: 0,
@@ -213,8 +212,8 @@ describe("ticking", () => {
       now.value += 2 * HOUR;
       await service.tick();
       expect(executor.calls.filter((c) => c.includes("compaction")).sort()).toEqual([
-        "iris:compaction:max_turns",
-        "nova:compaction:max_turns",
+        "iris:compaction:idle",
+        "nova:compaction:idle",
       ]);
     });
   });
@@ -234,7 +233,7 @@ describe("ticking", () => {
       now.value += 2 * HOUR;
       await service.tick();
 
-      expect(executor.calls).toEqual(["nova:compaction:max_turns"]);
+      expect(executor.calls).toEqual(["nova:compaction:idle"]);
       void first;
     });
   });
@@ -250,7 +249,7 @@ describe("ticking", () => {
 
       now.value += 2 * HOUR;
       await service.tick();
-      expect(executor.calls).toContain("iris:compaction:max_turns");
+      expect(executor.calls).toContain("iris:compaction:idle");
     });
   });
 
@@ -268,8 +267,8 @@ describe("ticking", () => {
       now.value += 2 * HOUR;
       await service.tick();
       expect(executor.calls).toEqual([
-        "nova:compaction:max_turns",
-        "nova:compaction:max_turns",
+        "nova:compaction:idle",
+        "nova:compaction:idle",
       ]);
     });
   });
@@ -304,22 +303,11 @@ describe("what the daemon reports", () => {
   test("notifying a character nobody registered is ignored, not an error", async () => {
     const { service } = build();
     expect(() => service.onUserMessage("ghost", 1, LOCAL_AT)).not.toThrow();
-    expect(service.setPaused("ghost", true)).toBeUndefined();
     expect(service.log("ghost", 10)).toEqual([]);
   });
 });
 
 describe("the surface the daemon drives", () => {
-  test("pause round-trips, and reports the state it set", async () => {
-    await inTempDir(async (root) => {
-      const { service } = build();
-      await service.register(registration("nova", characterDir(root, "nova")));
-
-      expect(service.setPaused("nova", true)).toBe(true);
-      expect(service.setPaused("nova", false)).toBe(false);
-    });
-  });
-
   test("the log reads back the events a tick wrote", async () => {
     await inTempDir(async (root) => {
       const { service, now } = build();
@@ -368,7 +356,7 @@ describe("the surface the daemon drives", () => {
       service.onCompactionFailed("nova");
       now.value += 3 * HOUR;
       await service.tick();
-      expect(executor.calls).toEqual(["nova:compaction:max_turns"]);
+      expect(executor.calls).toEqual(["nova:compaction:idle"]);
     });
   });
 

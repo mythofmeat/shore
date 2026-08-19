@@ -84,7 +84,12 @@ export async function persistAndNotify(
     .filter((msg) => msg.role === "assistant")
     .map((msg) => msg.msg_id);
 
-  const generatedMessages = [...params.toolIntermediateMessages, ...responseMessages];
+  const generatedMessages = [
+    ...params.toolIntermediateMessages.map((m) =>
+      stampProvenance(m, mintingProvider, mintingModel),
+    ),
+    ...responseMessages,
+  ];
   await applyGeneratedMessagesToEngine(engine, generatedMessages, {
     regenAlt: params.regenAlt,
     responseEventIds,
@@ -193,6 +198,15 @@ export function emitNewMessageEvent(
     character,
     ...wireMsg,
   } as unknown as ServerMessage);
+}
+
+function stampProvenance(message: Message, providerKey: string, model: string): Message {
+  if (message.role !== "assistant") return message;
+  return {
+    ...message,
+    provider_key: providerKey,
+    ...(model === "" ? {} : { model }),
+  };
 }
 
 export function messageFromResponse(

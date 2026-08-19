@@ -14,6 +14,7 @@ import type {
   Usage,
 } from "../types.ts";
 import { marksFirstToken } from "./anthropic.ts";
+import { pushAssistantBlocks } from "../request.ts";
 
 interface ProviderTurn {
   blocks: ContentBlock[];
@@ -234,7 +235,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
   }
 
   async dispatch(turn: ProviderTurn, uses: ToolUseEvent[]): Promise<void> {
-    this.req.messages.push({ role: "assistant", content: turn.blocks });
+    pushAssistantBlocks(this.req, turn.blocks);
 
     this.recordPriorResults();
     this.tools.recordTurn("assistant", turn.blocks);

@@ -7,7 +7,6 @@ const HOUR_MS = 3_600_000;
 function quietTick(overrides: Partial<TickInputs> = {}): TickInputs {
   return {
     autonomyEnabled: true,
-    paused: false,
     heartbeatEnabled: true,
 
     compactionEnabled: true,
@@ -15,7 +14,6 @@ function quietTick(overrides: Partial<TickInputs> = {}): TickInputs {
     deepArchiveDone: false,
     activeTurnCount: 10,
     minTurns: 4,
-    maxTurns: 20,
     idleSecs: 0,
     idleTriggerSecs: 3600,
     archiveAfterSecs: 86_400,
@@ -34,12 +32,12 @@ describe("a quiet tick", () => {
 });
 
 describe("compaction", () => {
-  test("both triggers fire exactly at their thresholds", () => {
-    expect(tickDecision(quietTick({ activeTurnCount: 20 })).compaction).toBe("max_turns");
-    expect(tickDecision(quietTick({ activeTurnCount: 19 })).compaction).toBeUndefined();
-
+  test("the idle trigger fires exactly at its threshold; turn count alone never fires", () => {
     expect(tickDecision(quietTick({ idleSecs: 3600 })).compaction).toBe("idle");
     expect(tickDecision(quietTick({ idleSecs: 3599 })).compaction).toBeUndefined();
+
+    expect(tickDecision(quietTick({ activeTurnCount: 10_000, idleSecs: 0 })).compaction)
+      .toBeUndefined();
   });
 
   test("a zero threshold is an off switch, not an always-on one", () => {
@@ -47,10 +45,10 @@ describe("compaction", () => {
     expect(tickDecision(quietTick(flooded)).compaction).toBeDefined();
 
     expect(
-      tickDecision(quietTick({ ...flooded, maxTurns: 0, idleTriggerSecs: 0 })).compaction,
+      tickDecision(quietTick({ ...flooded, idleTriggerSecs: 0 })).compaction,
     ).toBeUndefined();
     expect(
-      tickDecision(quietTick({ ...flooded, maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 0 }))
+      tickDecision(quietTick({ ...flooded, idleTriggerSecs: 0, archiveAfterSecs: 0 }))
         .deepArchive,
     ).toBe(false);
   });
@@ -61,9 +59,9 @@ describe("compaction", () => {
     expect(tickDecision(short).deepArchive).toBe(true);
   });
 
-  test("max turns wins when both triggers are satisfied", () => {
+  test("a conversation past its turn ceiling still compacts once the user goes idle", () => {
     expect(tickDecision(quietTick({ activeTurnCount: 50, idleSecs: 10_000 })).compaction).toBe(
-      "max_turns",
+      "idle",
     );
   });
 });
@@ -77,7 +75,7 @@ describe("the deep archive", () => {
 
   test("yields to a compaction firing on the same tick", () => {
     const both = quietTick({ activeTurnCount: 50, idleSecs: 10_000_000, archiveAfterSecs: 5 });
-    expect(tickDecision(both).compaction).toBe("max_turns");
+    expect(tickDecision(both).compaction).toBe("idle");
     expect(tickDecision(both).deepArchive).toBe(false);
   });
 
@@ -98,18 +96,6 @@ describe("the deep archive", () => {
 });
 
 describe("the master switches", () => {
-  test("pausing stops the heartbeat and nothing else", () => {
-    const d = tickDecision(
-      quietTick({
-        paused: true,
-        activeTurnCount: 50,
-        idleSecs: 10_000_000,
-      }),
-    );
-    expect(d.heartbeatMayTick).toBe(false);
-    expect(d.compaction).toBe("max_turns");
-  });
-
   test("disabling autonomy stops every trigger at once", () => {
     const d = tickDecision(
       quietTick({
@@ -136,9 +122,8 @@ describe("the master switches", () => {
     expect(d.heartbeatMayTick).toBe(true);
   });
 
-  test("the heartbeat gate reads all three switches", () => {
+  test("the heartbeat gate reads both switches", () => {
     expect(tickDecision(quietTick()).heartbeatMayTick).toBe(true);
-    expect(tickDecision(quietTick({ paused: true })).heartbeatMayTick).toBe(false);
     expect(tickDecision(quietTick({ autonomyEnabled: false })).heartbeatMayTick).toBe(false);
     expect(tickDecision(quietTick({ heartbeatEnabled: false })).heartbeatMayTick).toBe(false);
   });
@@ -162,37 +147,33 @@ describe("the background retry backoff", () => {
 function* everyTick(): Generator<TickInputs> {
   const bools = [false, true];
   for (const autonomyEnabled of bools)
-    for (const paused of bools)
-      for (const heartbeatEnabled of bools)
-        for (const compactionEnabled of bools)
-          for (const compactionTriggered of bools)
-            for (const deepArchiveDone of bools)
-              for (const activeTurnCount of [0, 4, 5, 19, 20])
-                for (const minTurns of [0, 4, 20])
-                  for (const maxTurns of [0, 20])
-                    for (const idleSecs of [0, 100, 86_400])
-                      for (const idleTriggerSecs of [0, 100])
-                        for (const archiveAfterSecs of [0, 86_400])
-                          yield {
-                            autonomyEnabled,
-                            paused,
-                            heartbeatEnabled,
-                            compactionEnabled,
-                            compactionTriggered,
-                            deepArchiveDone,
-                            activeTurnCount,
-                            minTurns,
-                            maxTurns,
-                            idleSecs,
-                            idleTriggerSecs,
-                            archiveAfterSecs,
-                          };
+    for (const heartbeatEnabled of bools)
+      for (const compactionEnabled of bools)
+        for (const compactionTriggered of bools)
+          for (const deepArchiveDone of bools)
+            for (const activeTurnCount of [0, 4, 5, 19, 20])
+              for (const minTurns of [0, 4, 20])
+                for (const idleSecs of [0, 100, 86_400])
+                  for (const idleTriggerSecs of [0, 100])
+                    for (const archiveAfterSecs of [0, 86_400])
+                      yield {
+                        autonomyEnabled,
+                        heartbeatEnabled,
+                        compactionEnabled,
+                        compactionTriggered,
+                        deepArchiveDone,
+                        activeTurnCount,
+                        minTurns,
+                        idleSecs,
+                        idleTriggerSecs,
+                        archiveAfterSecs,
+                      };
 }
 
 describe("the sweep", () => {
   test("it is as big as it claims and every case is distinct", () => {
     const all = [...everyTick()];
-    expect(all.length).toBe(23_040);
+    expect(all.length).toBe(5_760);
     expect(new Set(all.map((i) => JSON.stringify(i))).size).toBe(all.length);
   });
 
@@ -204,11 +185,9 @@ describe("the sweep", () => {
     }
     expect([...seen].sort()).toEqual([
       "false|idle|false",
-      "false|max_turns|false",
       "false|none|false",
       "false|none|true",
       "true|idle|false",
-      "true|max_turns|false",
       "true|none|false",
       "true|none|true",
     ]);
@@ -231,21 +210,11 @@ describe("the sweep", () => {
     }
   });
 
-  test("the heartbeat gate reads only its own three switches", () => {
+  test("the heartbeat gate reads only its own two switches", () => {
     for (const i of everyTick()) {
       expect(tickDecision(i).heartbeatMayTick, JSON.stringify(i)).toBe(
-        i.autonomyEnabled && i.heartbeatEnabled && !i.paused,
+        i.autonomyEnabled && i.heartbeatEnabled,
       );
-    }
-  });
-
-  test("pausing stops the heartbeat and nothing else", () => {
-    for (const i of everyTick()) {
-      if (i.paused) continue;
-      const paused = tickDecision({ ...i, paused: true });
-      const running = tickDecision(i);
-      expect(paused.compaction, JSON.stringify(i)).toBe(running.compaction);
-      expect(paused.deepArchive, JSON.stringify(i)).toBe(running.deepArchive);
     }
   });
 
@@ -269,9 +238,6 @@ describe("the sweep", () => {
 
   test("every trigger has an off switch at zero", () => {
     for (const i of everyTick()) {
-      if (tickDecision({ ...i, maxTurns: 0 }).compaction === "max_turns") {
-        throw new Error(`maxTurns=0 still fired: ${JSON.stringify(i)}`);
-      }
       if (tickDecision({ ...i, idleTriggerSecs: 0 }).compaction === "idle") {
         throw new Error(`idleTriggerSecs=0 still fired: ${JSON.stringify(i)}`);
       }
@@ -281,17 +247,16 @@ describe("the sweep", () => {
     }
   });
 
-  test("max_turns outranks idle when both thresholds are met", () => {
-    let both = 0;
+  test("idle still fires for a conversation over any turn count", () => {
+    let fired = 0;
     for (const i of everyTick()) {
-      const maxMet = i.maxTurns > 0 && i.activeTurnCount >= i.maxTurns;
       const idleMet = i.idleTriggerSecs > 0 && i.idleSecs >= i.idleTriggerSecs;
-      if (!(maxMet && idleMet && i.activeTurnCount >= i.minTurns)) continue;
+      if (!(idleMet && i.activeTurnCount >= i.minTurns)) continue;
       if (!(i.autonomyEnabled && i.compactionEnabled && !i.compactionTriggered)) continue;
-      both += 1;
-      expect(tickDecision(i).compaction, JSON.stringify(i)).toBe("max_turns");
+      fired += 1;
+      expect(tickDecision(i).compaction, JSON.stringify(i)).toBe("idle");
     }
-    expect(both, "no case reached the tie-break").toBeGreaterThan(0);
+    expect(fired, "no case reached the trigger").toBeGreaterThan(0);
   });
 
   test("both compaction triggers respect the minimum turn count", () => {
@@ -302,15 +267,11 @@ describe("the sweep", () => {
   });
 
   test("the thresholds are inclusive", () => {
-    const base = quietTick({ minTurns: 4, maxTurns: 20, idleTriggerSecs: 100, idleSecs: 0 });
-    expect(tickDecision({ ...base, activeTurnCount: 19 }).compaction).toBeUndefined();
-    expect(tickDecision({ ...base, activeTurnCount: 20 }).compaction).toBe("max_turns");
-
-    const idle = quietTick({ minTurns: 4, maxTurns: 0, idleTriggerSecs: 100, activeTurnCount: 10 });
+    const idle = quietTick({ minTurns: 4, idleTriggerSecs: 100, activeTurnCount: 10 });
     expect(tickDecision({ ...idle, idleSecs: 99 }).compaction).toBeUndefined();
     expect(tickDecision({ ...idle, idleSecs: 100 }).compaction).toBe("idle");
 
-    const arch = quietTick({ archiveAfterSecs: 86_400, maxTurns: 0, idleTriggerSecs: 0 });
+    const arch = quietTick({ archiveAfterSecs: 86_400, idleTriggerSecs: 0 });
     expect(tickDecision({ ...arch, idleSecs: 86_399 }).deepArchive).toBe(false);
     expect(tickDecision({ ...arch, idleSecs: 86_400 }).deepArchive).toBe(true);
   });

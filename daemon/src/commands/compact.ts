@@ -114,25 +114,6 @@ export async function buildCompactionResponse(
     };
   }
 
-  if (outcome.kind === "no_memory_writes") {
-    console.warn(
-      `shore: compaction produced no memory writes for ${character} — conversation NOT archived ` +
-        `(tool_rounds=${outcome.toolRounds}, rejected=${outcome.rejectedPaths.length}, ` +
-        `max_rounds_hit=${outcome.maxRoundsHit})`,
-    );
-    return {
-      status: "no_memory_writes",
-      character,
-      message_count: outcome.messageCount,
-      turn_count: outcome.compactedTurns,
-      compacted_turns: outcome.compactedTurns,
-      tool_rounds: outcome.toolRounds,
-      tools_called: outcome.toolsCalled,
-      rejected_paths: outcome.rejectedPaths,
-      max_rounds_hit: outcome.maxRoundsHit,
-    };
-  }
-
   if (outcome.kind === "truncated") {
     console.warn(
       `shore: compaction for ${character} hit the token ceiling ` +

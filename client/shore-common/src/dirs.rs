@@ -124,6 +124,10 @@ pub fn runtime_dir() -> PathBuf {
     ShoreDirs::resolve().runtime
 }
 
+pub fn data_dir() -> PathBuf {
+    ShoreDirs::resolve().data
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

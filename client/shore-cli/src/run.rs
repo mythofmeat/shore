@@ -90,8 +90,6 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
                 .into());
     }
 
-    pre_apply_active_model(&mut conn).await;
-
     match &cli.command {
         CliCommand::Send { .. } => handle_send_command(&mut conn, &cli.command).await?,
         CliCommand::Regen => {
@@ -794,9 +792,6 @@ async fn apply_model_change(
         .send_command(command, serde_json::Value::Object(args))
         .await?;
     let data = recv_command_data(conn).await?;
-    if background.is_none() {
-        _ = state::clear_active_model();
-    }
     if *json {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else {
@@ -814,37 +809,6 @@ async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::erro
         return Some(Ok(()));
     }
     None
-}
-
-async fn pre_apply_active_model(conn: &mut SWPConnection) {
-    let Some(model) = state::read_active_model() else {
-        return;
-    };
-    if let Err(e) = conn
-        .send_command("switch_model", serde_json::json!({ "name": &model }))
-        .await
-    {
-        debug!(error = %e, model = %model, "failed to pre-apply active model");
-        return;
-    }
-    match conn.recv().await {
-        Ok(ServerMessage::CommandOutput(_)) => {
-            debug!(model = %model, "pre-applied active model");
-        }
-        Ok(ServerMessage::Error(err)) => {
-            debug!(
-                model = %model,
-                error = %err.message,
-                "stale active-model state file, ignoring",
-            );
-        }
-        Ok(other) => {
-            debug!(?other, "unexpected reply to pre-apply switch_model");
-        }
-        Err(e) => {
-            debug!(error = %e, "error draining pre-apply switch_model reply");
-        }
-    }
 }
 
 async fn handle_switch_character(

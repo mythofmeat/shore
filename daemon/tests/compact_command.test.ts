@@ -203,18 +203,6 @@ function outcomeFor(data: Record<string, unknown>): CompactionOutcome {
       toolsCalled: s("tools_called"),
     };
   }
-  if (data["status"] === "no_memory_writes") {
-    return {
-      kind: "no_memory_writes",
-      conversationId: "ada",
-      messageCount: n("message_count"),
-      compactedTurns: n("compacted_turns"),
-      toolRounds: n("tool_rounds"),
-      toolsCalled: s("tools_called"),
-      rejectedPaths: s("rejected_paths"),
-      maxRoundsHit: data["max_rounds_hit"] as boolean,
-    };
-  }
   return {
     kind: "dry_run",
     wouldWriteFiles: n("would_write_files"),
