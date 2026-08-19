@@ -71,6 +71,7 @@ impl Turn {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn joined_text(&self) -> String {
         let parts: Vec<&str> = self
             .blocks
