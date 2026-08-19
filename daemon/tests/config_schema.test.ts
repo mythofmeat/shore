@@ -102,6 +102,11 @@ describe("configSchema", () => {
     expect(byKey.get("tools.enabled_subagents")?.source).toBe("subagents");
   });
 
+  test("map keys say what their names are drawn from", () => {
+    expect(byKey.get("tools.config")?.key_source).toBe("tools");
+    expect(byKey.get("mcp")?.key_source).toBeUndefined();
+  });
+
   test("the keys that need a daemon restart say so", () => {
     expect(byKey.get("daemon.addr")?.restart_required).toBe(true);
     expect(byKey.get("cache.forensics")?.restart_required).toBe(true);

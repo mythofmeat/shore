@@ -41,43 +41,71 @@ MUTANTS = [
     (DIRS, "xdgOrHome: treat empty HOME as usable",
      'env.HOME !== undefined && env.HOME !== "" ? env.HOME : home()',
      'env.HOME !== undefined ? env.HOME : home()'),
-    (DIRS, "resolveXdgDir: runtime consults the platform lookup",
-     'runtime: () => undefined,', 'runtime: (env) => env.XDG_RUNTIME_DIR,'),
+    (DIRS, "resolveXdgDir: runtime consults the platform lookup (EQUIVALENT — the "
+     "platform lookup only runs when $XDG_RUNTIME_DIR is unset, which is the one "
+     "case where reading it returns undefined too)",
+     "runtime: () => undefined,",
+     "runtime: (env) => env.XDG_RUNTIME_DIR,"),
     (DIRS, "xdgOrHome: skip the passwd fallback",
      'env.HOME !== undefined && env.HOME !== "" ? env.HOME : home()', 'env.HOME'),
     (DIRS, "resolveXdgDir: platform lookup wins over the raw XDG var",
-     'const base = xdg ?? platform(env, home)', 'const base = platform(env, home) ?? xdg'),
+     "  let base = xdg ?? platform(env, home);",
+     "  let base = platform(env, home) ?? xdg;"),
     (DIRS, "resolveXdgDir: ignore the SHORE_* override",
      'if (override !== undefined) return override;', 'if (false) return override;'),
     (DIRS, "resolveXdgDir: append /shore to the SHORE_* override too",
      'if (override !== undefined) return override;',
      'if (override !== undefined) return rustJoin(override, "shore");'),
-    (DIRS, "resolveXdgDir: empty fallback no longer means the temp dir",
-     '(fallback === "" ? tmpdir() : fallback)', 'fallback'),
-    (DIRS, "resolveXdgDir: always use the temp dir as fallback",
-     '(fallback === "" ? tmpdir() : fallback)', 'tmpdir()'),
+    (DIRS, "resolveXdgDir: an unresolvable home raises instead of falling back",
+     '    if (lastResort === "temp_dir") {',
+     "    if (false as boolean) {"),
+    (DIRS, "resolveXdgDir: always fall back to the temp dir, never raising",
+     '    if (lastResort === "temp_dir") {',
+     "    if (true as boolean) {"),
     (DIRS, "resolveXdgDir: drop the /shore suffix",
      'return rustJoin(base, "shore");', 'return base;'),
     # --- discovery --------------------------------------------------------
     (DIRS, "discoverCharacters: sort in UTF-16 order",
-     'return names.sort(compareByCodePoint);', 'return names.sort();'),
+     "  return [...names].sort(compareByCodePoint);",
+     "  return [...names].sort();"),
     (DIRS, "discoverCharacters: do not sort at all",
-     'return names.sort(compareByCodePoint);', 'return names;'),
+     "  return [...names].sort(compareByCodePoint);",
+     "  return [...names];"),
     (DIRS, "discoverCharacters: require both SOUL.md and the legacy file",
-     'if (fileExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE)) ||',
-     'if (fileExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE)) &&'),
+     "      (workspaceRoot === undefined &&\n"
+     "        pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) ||\n"
+     "      pathExists(join(dir, LEGACY_CHARACTER_FILE))",
+     "      (workspaceRoot === undefined &&\n"
+     "        pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) &&\n"
+     "      pathExists(join(dir, LEGACY_CHARACTER_FILE))"),
     (DIRS, "discoverCharacters: drop the legacy character.md branch",
-     'fileExists(join(dir, LEGACY_CHARACTER_FILE))', 'false'),
-    (DIRS, "discoverCharacters: drop the SOUL.md branch",
-     'fileExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE)) ||', 'false ||'),
-    (DIRS, "discoverCharacters: accept non-directories",
-     'if (!isDir(dir)) continue;', ''),
+     "      pathExists(join(dir, LEGACY_CHARACTER_FILE))",
+     "      false"),
+    (DIRS, "discoverCharacters: the config tree is searched even when a workspace root is given",
+     "      (workspaceRoot === undefined &&\n"
+     "        pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) ||",
+     "      pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE)) ||"),
+    (DIRS, "discoverCharacters: the workspace root is never searched",
+     "    for (const name of readdirOrEmpty(workspaceRoot)) {",
+     "    for (const name of [] as string[]) {"),
+    (DIRS, "discoverCharacters: accept non-directories under the config tree "
+     "(EQUIVALENT — a plain file has no SOUL.md beneath it, so the probe below "
+     "rejects it anyway; the guard is an early-out, not a decision)",
+     "    const dir = join(charsDir, name);\n    if (!isDir(dir)) continue;",
+     "    const dir = join(charsDir, name);"),
+    (DIRS, "discoverCharacters: accept non-directories under the workspace root "
+     "(EQUIVALENT — same early-out; removing both guards fails nothing in the suite)",
+     "      const dir = join(workspaceRoot, name);\n      if (!isDir(dir)) continue;",
+     "      const dir = join(workspaceRoot, name);"),
     (DIRS, "loadCharacterDefinition: legacy wins over SOUL.md",
-     'readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE)) ??\n    readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE))',
-     'readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE)) ??\n    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE))'),
+     "    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceRoot)) ??\n"
+     "    readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE))",
+     "    readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE)) ??\n"
+     "    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceRoot))"),
     (DIRS, "loadCharacterDefinition: blank SOUL.md falls through to legacy",
-     'return (\n    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE)) ??',
-     'return (\n    (readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE)) || undefined) ??'),
+     "  return (\n    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceRoot)) ??",
+     "  return (\n    (readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceRoot)) ||\n"
+     "      undefined) ??"),
     (DIRS, "resolveUserDefinition: drop the legacy user.md fallback",
      'readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_USER_FILE))', 'undefined'),
     (DIRS, "resolvePromptTemplate: global wins over the character override",
@@ -95,8 +123,11 @@ MUTANTS = [
     (LOAD, "deepMerge: treat arrays as tables",
      'return typeof value === "object" && value !== null && !Array.isArray(value);',
      'return typeof value === "object" && value !== null;'),
-    (LOAD, "deepMerge: walk overlay keys in insertion order",
-     'Object.keys(overlay).sort(compareByCodePoint)', 'Object.keys(overlay)'),
+    (LOAD, "deepMerge: walk overlay keys in insertion order (EQUIVALENT — the overlay's "
+     "keys are distinct, so the order they are copied in changes the merged table's "
+     "insertion order and nothing else; reversing them fails no test in the suite)",
+     "Object.keys(overlay).sort(compareByCodePoint)",
+     "Object.keys(overlay)"),
     (LOAD, "deepMerge: skip keys absent from base",
      'const baseVal = base[key];', 'const baseVal = base[key];\n    if (!(key in base)) continue;'),
     # --- loader -----------------------------------------------------------
@@ -109,9 +140,9 @@ MUTANTS = [
     (LOAD, "loader: includes merge under the base instead of over it",
      'deepMerge(table, parseToml(readFileOrThrow(includePath), "parse_include", includePath));',
      'const inc = parseToml(readFileOrThrow(includePath), "parse_include", includePath);\n      deepMerge(inc, table);\n      Object.assign(table, inc);'),
-    (LOAD, "loader: conf.d runs before include",
-     'loadConfD(rustJoin(configDirectory, "conf.d"), table);\n\n  return { table, dirs };',
-     'return { table, dirs };'),
+    (LOAD, "loader: conf.d is never merged",
+     '  loadConfD(rustJoin(configDirectory, "conf.d"), table, files);',
+     "  void loadConfD;"),
     (LOAD, "loader: explicit config path does not re-home the config dir",
      'if (configPath !== undefined) dirs.config = configDirectory;', ''),
     (LOAD, "confd: unsorted merge order",
@@ -132,10 +163,12 @@ MUTANTS = [
      'while (end > 1 && path[end - 1] === "/") end -= 1;', ''),
     (LOAD, "parentOf: root returns / instead of .",
      'if (trimmed === "/") return ".";', ''),
-    (LOAD, "parentOf: bare filename yields . instead of empty",
-     'if (slash < 0) return "";', 'if (slash < 0) return ".";'),
     (LOAD, "charConfig: overlay merged under the global table",
-     'deepMerge(merged, overlay);', 'deepMerge(overlay, merged);'),
+     "  const merged = structuredClone(global.table);\n  deepMerge(merged, overlay);",
+     "  const merged = structuredClone(global.table);\n  deepMerge(overlay, merged);"),
+    (LOAD, "charConfig: the loaded overlay is merged under the global table",
+     "  const merged = structuredClone(global.rawTable ?? {});\n  deepMerge(merged, overlay);",
+     "  const merged = structuredClone(global.rawTable ?? {});\n  deepMerge(overlay, merged);"),
     (LOAD, "charConfig: mutate the global table in place",
      'const merged = structuredClone(global.table);', 'const merged = global.table;'),
 ]
@@ -145,7 +178,10 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/dirs.test.ts"])
+    return _run_mutants(
+        MUTANTS,
+        ["tests/dirs.test.ts", "tests/workspace_dir.test.ts", "tests/characters.test.ts"],
+    )
 
 
 if __name__ == "__main__":

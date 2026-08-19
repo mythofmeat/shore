@@ -151,15 +151,11 @@ MUTANTS = [
      "    if (source === undefined) {",
      "    if (false as boolean) {"),
     ("standin: the image is never encoded in tool_pair mode", WIRE,
-     '      mode === "tool_pair"\n'
-     "        ? await encodeImageBlock(img, maxImageSize, cacheDir, resize)\n"
-     "        : undefined;",
+     '      mode === "tool_pair"\n        ? await encodeImageBlock(img)\n        : undefined;',
      "      undefined;"),
     ("standin: the image IS encoded in text_standin mode", WIRE,
-     '      mode === "tool_pair"\n'
-     "        ? await encodeImageBlock(img, maxImageSize, cacheDir, resize)\n"
-     "        : undefined;",
-     "      await encodeImageBlock(img, maxImageSize, cacheDir, resize);"),
+     '      mode === "tool_pair"\n        ? await encodeImageBlock(img)\n        : undefined;',
+     "      await encodeImageBlock(img);"),
 
     # --- empty-block filtering --------------------------------------------
     ("filter: empty text blocks ship", WIRE,
@@ -183,10 +179,7 @@ MUTANTS = [
 
     # --- pending tool_results ---------------------------------------------
     ("pending: a dropped turn takes its predecessor's owed results with it", WIRE,
-     "    if (rendered === undefined) {\n"
-     "      // Dropped empty turn; anything owed survives to the next emitted message.\n"
-     "      continue;\n"
-     "    }",
+     "    if (rendered === undefined) {\n      continue;\n    }",
      "    if (rendered === undefined) {\n      pending = [];\n      continue;\n    }"),
     ("pending: owed results are appended to the next user turn, not prepended", WIRE,
      "        content = [...owed, ...content];",
@@ -255,14 +248,16 @@ MUTANTS = [
      "  const systemPrompt = await loadActivePromptFile(characterDataDir, TOOLS_FILE);\n"
      "  const toolsGuidance = await loadActivePromptFile(characterDataDir, AGENTS_FILE);"),
     ("context: the memory index is not loaded", CONTEXT,
-     "  const memoryIndex = await loadMemoryIndex(characterDataDir, config.dirs.config, character);",
+     "  const memoryIndex = await loadMemoryIndex(\n"
+     "    characterDataDir,\n    config.dirs.config,\n    character,\n    config.dirs.workspace,\n  );",
      "  const memoryIndex = undefined as string | undefined;"),
     ("context: the memory index reads the data dir as its config dir", CONTEXT,
-     "  const memoryIndex = await loadMemoryIndex(characterDataDir, config.dirs.config, character);",
-     "  const memoryIndex = await loadMemoryIndex(characterDataDir, characterDataDir, character);"),
+     "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    config.dirs.config,",
+     "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    characterDataDir,"),
     ("context: the snapshot is never ensured", CONTEXT,
-     "    await ensureActivePromptSnapshot(characterDataDir, config.dirs.config, character);",
-     "    if (false as boolean) await ensureActivePromptSnapshot(characterDataDir, config.dirs.config, character);"),
+     "    await ensureActivePromptSnapshot(\n"
+     "      characterDataDir,\n      config.dirs.config,\n      character,\n      config.dirs.workspace,\n    );",
+     "    void ensureActivePromptSnapshot;"),
     ("context: a failed snapshot is fatal", CONTEXT,
      "  } catch (e) {\n"
      "    console.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);\n"
@@ -316,9 +311,6 @@ MUTANTS = [
     ("context: the mode is computed before the tools fork is known", CONTEXT,
      "    assistantImageModeForRequest(resolved.sdk, toolsAvailable),",
      "    assistantImageModeForRequest(resolved.sdk, true),"),
-    ("context: the cache dir is the config dir", CONTEXT,
-     "    config.dirs.cache,",
-     "    config.dirs.config,"),
     ("context: the context and output token caps are swapped", CONTEXT,
      "    max_context_tokens: resolved.maxContextTokens,\n"
      "    max_output_tokens: resolved.maxOutputTokens,",

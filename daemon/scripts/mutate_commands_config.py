@@ -110,19 +110,13 @@ MUTANTS = [
      "    valid: warnings.length === 0,",
      "    valid: true as boolean,"),
     ("check: the no-models warning is info instead",
-     "    warnings.push(\n"
-     '      "No chat models configured. Add a [providers.*] entry and set " +\n'
-     '        "[defaults].model to a provider:model_id.",\n'
-     "    );",
-     "    info.push(\n"
-     '      "No chat models configured. Add a [providers.*] entry and set " +\n'
-     '        "[defaults].model to a provider:model_id.",\n'
-     "    );"),
+     "    warnings.push(NO_CHAT_MODELS_MESSAGE);",
+     "    info.push(NO_CHAT_MODELS_MESSAGE);"),
     ("check: a resolvable default model warns rather than informs",
-     "    if (found) info.push(`Default model: ${defaultModel}`);\n"
-     "    else warnings.push(`Default model \"${defaultModel}\" not found in catalog`);",
-     "    if (found) warnings.push(`Default model: ${defaultModel}`);\n"
-     "    else info.push(`Default model \"${defaultModel}\" not found in catalog`);"),
+     "    if (defaultResolves) info.push(`Default model: ${defaultModel}`);\n    else {\n"
+     '      warnings.push(`Default model "${defaultModel}" not found in catalog`);',
+     "    if (defaultResolves) warnings.push(`Default model: ${defaultModel}`);\n    else {\n"
+     '      info.push(`Default model "${defaultModel}" not found in catalog`);'),
     ("check: an unset default warns even with an empty catalog",
      "  } else if (ctx.config.models.chat.size > 0) {",
      "  } else if (true) {"),
@@ -146,47 +140,51 @@ MUTANTS = [
     ("read: a non-string key is coerced rather than ignored",
      '  const key = asStr(args["key"]);',
      '  const key = args["key"] === undefined ? undefined : String(args["key"]);'),
-    ("read: an unknown section returns null instead of failing",
-     "  if (!(key in app)) throw notFound(`Config section not found: ${key}`);",
-     "  if (false) throw notFound(`Config section not found: ${key}`);"),
+    ("read: an unknown key returns null instead of failing",
+     "  const found = walkConfigKey(app, key);\n  if (found === undefined) throw notFound(notFoundMessage(key));",
+     "  const found = walkConfigKey(app, key) ?? { value: null };"),
+    ("read: a settable-only alias is reported as a plain miss",
+     "  const readable = KEY_ALIASES.get(key);\n"
+     "  if (readable === undefined || readable === key) return `Config section not found: ${key}`;",
+     "  const readable = KEY_ALIASES.get(key);\n"
+     "  if (true as boolean) return `Config section not found: ${key}`;\n  void readable;"),
     ("read: the defaults baseline is the effective config",
-     "  const defaults = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;",
-     "  const defaults = serializeConfigValue(ctx.config.app) as Record<string, unknown>;"),
-    ("read: the section read returns the whole default baseline",
-     "  return { key, config: app[key], defaults: defaults[key] ?? null };",
-     "  return { key, config: app[key], defaults };"),
-    ("read: the section read returns the default in place of the effective value",
-     "  return { key, config: app[key], defaults: defaults[key] ?? null };",
-     "  return { key, config: defaults[key], defaults: defaults[key] ?? null };"),
+     "  const out = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;",
+     "  const out = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;\n"
+     "  return out;"),
+    ("read: the key read returns the whole default baseline",
+     "  return { key, config: found.value, defaults: walkConfigKey(defaults, key)?.value ?? null };",
+     "  return { key, config: found.value, defaults };"),
+    ("read: the key read returns the default in place of the effective value",
+     "  return { key, config: found.value, defaults: walkConfigKey(defaults, key)?.value ?? null };",
+     "  return {\n"
+     "    key,\n"
+     "    config: walkConfigKey(defaults, key)?.value ?? null,\n"
+     "    defaults: walkConfigKey(defaults, key)?.value ?? null,\n"
+     "  };"),
+    ("read: the walk accepts a prefix of the key it was asked for",
+     "    if (!(segment in table)) return undefined;\n    current = table[segment];",
+     "    if (!(segment in table)) return { value: current };\n    current = table[segment];"),
 
     # --- config set -----------------------------------------------------------
     ("set: the model is not validated against the catalog",
-     "      try {\n        findModel(ctx.config.models, value);\n      } catch (e) {\n        throw notFound(message(e));\n      }",
-     "      try {\n        void value;\n      } catch (e) {\n        throw notFound(message(e));\n      }"),
+     "  if (entry.source === \"chat_models\") {\n    try {\n      findModel(ctx.config.models, trimmed);",
+     "  if (false as boolean) {\n    try {\n      findModel(ctx.config.models, trimmed);"),
+    ("set: nothing is checked against its source at all",
+     "  checkAgainstSource(ctx, entry, value);",
+     "  void checkAgainstSource;"),
+    ("set: a list value is checked against its source item by item",
+     '  if (entry.source === undefined || entry.kind === "list") return;',
+     "  if (entry.source === undefined) return;"),
     ("set: a bad model reports invalid_request rather than not_found",
-     "        throw notFound(message(e));",
-     "        throw invalidRequest(message(e));"),
-    ("set: the pre-resolved model survives a model change",
-     "      ctx.activeModel = value;\n      ctx.activeResolvedModel = undefined;",
-     "      ctx.activeModel = value;"),
-    ("set: the model arm echoes the canonical key rather than the spelling",
-     '      return { set: key, value };',
-     '      return { set: "defaults.model", value };'),
-    ("set: the autonomy arm echoes the spelling rather than the canonical key",
-     '      return { set: "autonomy.enabled", value: v };',
-     "      return { set: key, value: v };"),
-    ("set: stream is stored but the echo is the raw string",
-     "      ctx.config.app.defaults.stream = v;\n      return { set: key, value: v };",
-     "      ctx.config.app.defaults.stream = v;\n      return { set: key, value };"),
-    ("set: stream writes to the autonomy flag",
-     "      ctx.config.app.defaults.stream = v;",
-     "      ctx.config.app.behavior.autonomy.enabled = v;"),
-    ("set: autonomy writes to the stream flag",
-     "      ctx.config.app.behavior.autonomy.enabled = v;",
-     "      ctx.config.app.defaults.stream = v;"),
-    ("set: the bool parse accepts anything truthy",
-     '  if (value === "true") return true;\n  if (value === "false") return false;',
-     '  if (value !== "false") return true;\n  if (value === "false") return false;'),
+     "      findModel(ctx.config.models, trimmed);\n    } catch (e) {\n      throw notFound(message(e));",
+     "      findModel(ctx.config.models, trimmed);\n    } catch (e) {\n      throw invalidRequest(message(e));"),
+    ("set: a value the schema rejects is a not_found rather than a bad request",
+     "    if (e instanceof SchemaValueError) throw invalidRequest(`${key}: ${e.message}`);",
+     "    if (e instanceof SchemaValueError) throw notFound(`${key}: ${e.message}`);"),
+    ("set: the echo is the spelling that was sent, not the canonical key",
+     "  const key = canonicalKey(rawKey);\n  const entry = findSchemaEntry(schemaOf(ctx), key);",
+     "  const key = rawKey;\n  const entry = findSchemaEntry(schemaOf(ctx), canonicalKey(rawKey));"),
 
     # --- config_reload --------------------------------------------------------
     ("reload: apply defaults to true rather than false",
@@ -196,7 +194,7 @@ MUTANTS = [
      "const asBool = (v: unknown): boolean => v === true;",
      "const asBool = (v: unknown): boolean => Boolean(v);"),
     ("reload: the character overlays are not validated",
-     "  for (const name of discoverCharacters(fresh.dirs.config)) {",
+     "  for (const name of discoverCharacters(fresh.dirs.config, fresh.dirs.workspace)) {",
      "  for (const name of [] as string[]) {"),
     ("reload: the environment is not threaded, so the dirs re-resolve",
      "const loaderOptions = (ctx: ConfigContext): { env?: Env } =>\n"

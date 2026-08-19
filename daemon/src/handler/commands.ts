@@ -1,7 +1,7 @@
 import type { Command } from "../protocol/Command.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import { configView, resolveActiveModelAndOverlay } from "../config/preferences.ts";
+import { configView, savedModelForCharacter } from "../config/preferences.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import { CharacterError } from "../characters.ts";
@@ -189,7 +189,7 @@ function characterSession(
   character: string,
   config: LoadedConfig,
 ): CommandSession {
-  const { model } = resolveActiveModelAndOverlay(
+  const saved = savedModelForCharacter(
     configView(config),
     character,
     (view, cacheDir, name, includeHidden) =>
@@ -201,7 +201,7 @@ function characterSession(
     configPath: deps.configPath,
     dataDir: deps.dataDir,
     characterName: character,
-    activeModel: model?.qualifiedName,
+    activeModel: saved?.qualifiedName,
     runtime: deps.runtime,
     ...(deps.env === undefined ? {} : { env: deps.env }),
   };

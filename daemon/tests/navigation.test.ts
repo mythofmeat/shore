@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/navigation.json" with { type: "json" };
@@ -409,5 +409,49 @@ describe("characterMetadata", () => {
       world.root,
       () => characterMetadata(world.config, "direct"),
     );
+  });
+});
+
+describe("a workspace root outside the config tree", () => {
+  const world = async (): Promise<World & { workspace: string }> => {
+    const built = await build([
+      ["config/characters/filed/workspace/SOUL.md", "Filed"],
+      ["workspace/roaming/SOUL.md", "Roaming"],
+    ]);
+    return { ...built, workspace: join(built.root, "workspace") };
+  };
+
+  test("the standalone listing carries it through", async () => {
+    const w = await world();
+
+    const names = listCharactersStandalone(w.config, w.workspace).characters.map((c) => c.name);
+
+    expect(names).toEqual(["roaming"]);
+  });
+
+  test("a character that lives only there is not a miss", async () => {
+    const w = await world();
+
+    const info = (await characterInfo(
+      { configDir: w.config, dataDir: w.data, active: "filed", workspaceRoot: w.workspace },
+      { name: "roaming" },
+    )) as Record<string, unknown>;
+
+    expect(info["name"]).toBe("roaming");
+    expect(info["has_definition"]).toBe(true);
+  });
+
+  test("an avatar that cannot be read is skipped, not fatal", async () => {
+    const built = await build([
+      ["config/characters/ada/workspace/SOUL.md", "Ada"],
+      ["config/characters/ada/avatar.png", "png-bytes"],
+      ["config/characters/ada/avatar.jpg", "jpeg-bytes"],
+    ]);
+    await chmod(join(built.config, "characters", "ada", "avatar.png"), 0o000);
+
+    expect(characterMetadata(built.config, "ada")).toEqual({
+      name: "ada",
+      avatar: { mime_type: "image/jpeg", data: Buffer.from("jpeg-bytes").toString("base64") },
+    });
   });
 });

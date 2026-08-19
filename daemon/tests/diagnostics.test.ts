@@ -128,3 +128,25 @@ test("an absent optional field is omitted, not written as null", () => {
   expect(Object.keys(present)).toContain("to_key");
   expect(Object.keys(present)).toContain("status");
 });
+
+test("a field that is present but falsy is kept", () => {
+  const d = new Diagnostics();
+  d.key_fallbacks.push({
+    timestamp: "2026-01-01T00:02:01Z",
+    rid: "",
+    provider: "openai",
+    model: "gpt",
+    character: "wren",
+    from_key: "only",
+    to_key: "",
+    kind: "transport",
+    status: 0,
+    reason: "no response",
+  });
+
+  const row = d.toJson(10).key_fallbacks.recent[0] as Record<string, unknown>;
+
+  expect(row["status"]).toBe(0);
+  expect(row["to_key"]).toBe("");
+  expect(row["rid"]).toBe("");
+});

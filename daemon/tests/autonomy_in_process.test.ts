@@ -308,7 +308,7 @@ describe("running a heartbeat", () => {
     const config = await world();
     const cache = new LastRequestCache();
     const seen: SidecarRequest[] = [];
-    const ledgerPath = join(config.dirs.data, "ledger.db");
+    const ledgerPath = join(config.dirs.data, "cached-ledger.db");
     Ledger.create(ledgerPath).close();
     cache.set("ada", {
       sdk: "anthropic",

@@ -94,16 +94,12 @@ MUTANTS = [
     # --- reported spend stays the ledger's ------------------------------------
     ("reporting: the projection folded into current_cost, so usage disagrees",
      BUDGET,
+     "        action: status.action,\n"
      "        current_cost: status.current_cost,\n"
-     "        cost_limit: status.cost_limit,\n"
-     "        period: status.period,\n"
-     "        reset_at: status.reset_at,\n"
-     "        scope: \"budget\",",
+     "        cost_limit: status.cost_limit,",
+     "        action: status.action,\n"
      "        current_cost: status.current_cost + projected,\n"
-     "        cost_limit: status.cost_limit,\n"
-     "        period: status.period,\n"
-     "        reset_at: status.reset_at,\n"
-     "        scope: \"budget\","),
+     "        cost_limit: status.cost_limit,"),
     ("reporting: a pre-flight refusal claims the budget is already over limit",
      BUDGET,
      "  if (projected !== undefined && projected > 0) {",

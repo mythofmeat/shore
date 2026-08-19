@@ -43,7 +43,15 @@ interface WireError {
 interface Setup {
   catalog: string;
   defaults: string;
-  discovery: { provider: string; models: { model_id: string; visible: boolean }[] }[];
+  discovery: {
+    provider: string;
+    models: {
+      model_id: string;
+      visible: boolean;
+      supported_parameters?: string[];
+      effort_levels?: string[];
+    }[];
+  }[];
   character: string | null;
   global_prefs: string | null;
   character_prefs: string | null;
@@ -123,6 +131,10 @@ async function buildContext(setup: Setup): Promise<ModelsContext> {
         discovered_at: "2026-07-01T00:00:00Z",
         context_length: 250_000,
         max_output_tokens: 32_000,
+        ...(m.supported_parameters === undefined
+          ? {}
+          : { supported_parameters: m.supported_parameters }),
+        ...(m.effort_levels === undefined ? {} : { effort_levels: m.effort_levels }),
       })),
     };
     const path = cachePath(dirs.cache, d.provider);
@@ -557,5 +569,107 @@ describe("targeting every sub-agent at once", () => {
     const shown = modelSettings(ctx, { subagent: "all" }) as Record<string, unknown>;
     expect(shown["model_id"]).toBe("beta-id");
     expect(shown["subagent"]).toBe("all");
+  });
+});
+
+describe("a session with no character falls back to the configured default", () => {
+  const twoModels =
+    '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
+    '[chat.anthropic.beta]\nmodel_id = "beta-id"\n';
+
+  const characterless = (defaults: string): Setup => ({
+    catalog: twoModels,
+    defaults,
+    discovery: [],
+    character: null,
+    global_prefs: null,
+    character_prefs: null,
+    active_model: null,
+  });
+
+  test("the default is preferred over the first catalog entry", async () => {
+    const ctx = await buildContext(characterless('[defaults]\nmodel = "beta"\n'));
+
+    expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.beta");
+    expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
+      "chat.anthropic.beta",
+    );
+  });
+
+  test("the first catalog entry answers only when no default is configured", async () => {
+    const ctx = await buildContext(characterless("[defaults]\n"));
+
+    expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.alpha");
+  });
+
+  test("a default that resolves nowhere is reported as written", async () => {
+    const ctx = await buildContext(characterless('[defaults]\nmodel = "ghost"\n'));
+
+    expect((listModels(ctx, {}) as { active: string }).active).toBe("ghost");
+  });
+
+  test("a hidden default still resolves", async () => {
+    const ctx = await buildContext({
+      catalog: twoModels,
+      defaults: '[defaults]\nmodel = "vendor/hidden"\n',
+      discovery: [
+        {
+          provider: "openrouter",
+          models: [
+            { model_id: "vendor/hidden", visible: false },
+            { model_id: "vendor/shown", visible: true },
+          ],
+        },
+      ],
+      character: null,
+      global_prefs: null,
+      character_prefs: null,
+      active_model: null,
+    });
+
+    expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
+      "openrouter:vendor/hidden",
+    );
+  });
+});
+
+describe("a discovered model's capabilities reach the settings table", () => {
+  const discovered = async (): Promise<ModelsContext> =>
+    await buildContext({
+      catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n',
+      defaults: "[defaults]\n",
+      discovery: [
+        {
+          provider: "openrouter",
+          models: [
+            {
+              model_id: "vendor/narrow",
+              visible: true,
+              supported_parameters: ["top_p"],
+              effort_levels: ["low", "high"],
+            },
+          ],
+        },
+      ],
+      character: "Tester",
+      global_prefs: null,
+      character_prefs: null,
+      active_model: null,
+    });
+
+  test("supported_parameters decides which samplers are honored", async () => {
+    const ctx = await discovered();
+    const shown = modelSettings(ctx, { name: "vendor/narrow" }) as Record<string, unknown>;
+    const applicability = shown["applicability"] as Record<string, string>;
+
+    expect(applicability["top_p"]).toBe("honored");
+    expect(applicability["temperature"]).toBe("rejected");
+  });
+
+  test("effort_levels narrows the reasoning effort domain", async () => {
+    const ctx = await discovered();
+    const shown = modelSettings(ctx, { name: "vendor/narrow" }) as Record<string, unknown>;
+
+    expect(shown["reasoning_effort_domain"]).toEqual(["low", "high"]);
   });
 });

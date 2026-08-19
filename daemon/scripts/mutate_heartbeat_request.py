@@ -118,15 +118,17 @@ MUTANTS = [
      "  const copy: SidecarRequest = { ...request };"),
     ("prepare: the stale chat request id rides along into every heartbeat round",
      H,
-     "  if (copy.context !== undefined) {\n"
      "    const { rid: _rid, ...rest } = copy.context;\n"
-     "    copy.context = rest;\n"
-     "  }",
-     "  void 0;"),
+     '    copy.context = { ...rest, call_type: "heartbeat" };',
+     '    copy.context = { ...copy.context, call_type: "heartbeat" };'),
+    ("prepare: the tick is not labelled a heartbeat in the ledger",
+     H,
+     '    copy.context = { ...rest, call_type: "heartbeat" };',
+     "    copy.context = { ...rest };"),
     ("prepare: a cold rebuild is not cached, so keepalive pings no-op until a user speaks",
      H,
-     "    deps.cache.set(character, source, deps.rebuild?.keepaliveIntervalMs);",
-     "    void source;"),
+     "    deps.cache.set(character, source, rebuilt.keepalive_interval_ms);",
+     "    void rebuilt.keepalive_interval_ms;"),
     ("prepare: the body carrying the heartbeat prompt is what gets cached",
      H,
      "  pushInlineSystem(request, prompt);",
@@ -134,13 +136,15 @@ MUTANTS = [
      "  deps.cache.set(character, request, deps.rebuild?.keepaliveIntervalMs);"),
     ("prepare: a mid-turn conversation ticks anyway on an empty body",
      H,
-     "    if (source === undefined) {\n"
+     "    if (rebuilt === undefined) {\n"
      "      console.info(\n"
      "        `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,\n"
      "      );\n"
      "      return undefined;\n"
      "    }",
-     "    if (source === undefined) source = { messages: [] } as never;"),
+     "    if (rebuilt === undefined) {\n"
+     "      source = { messages: [] } as never;\n"
+     "    } else {"),
     ("prepare: the round cap always comes from the chat model, not the one running",
      H, CAP,
      "    resolveChatModelForCharacter(configView(config), character, (v, c, n, h) =>\n"

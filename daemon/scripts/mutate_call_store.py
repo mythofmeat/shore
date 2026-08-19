@@ -156,32 +156,34 @@ MUTANTS = [
      '    model: optText(row["model"]),\n    provider: optText(row["provider"]),',
      '    model: optText(row["provider"]),\n    provider: optText(row["model"]),'),
     ("summary: call_id reports the row id",
-     '    call_id: text(row["call_id"]),',
-     '    call_id: String(row["id"]),'),
+     '    call_id: text(row["call_id"]),\n    ts: text(row["ts"]),',
+     '    call_id: String(row["id"]),\n    ts: text(row["ts"]),'),
     ("summary: call_type and character are swapped",
      '    call_type: optText(row["call_type"]),\n    character: optText(row["character"]),',
      '    call_type: optText(row["character"]),\n    character: optText(row["call_type"]),'),
     ("summary: the two blob sizes are swapped",
-     '    request_bytes: count(row["request_bytes"]),\n'
-     '    response_bytes: count(row["response_bytes"]),',
-     '    request_bytes: count(row["response_bytes"]),\n'
-     '    response_bytes: count(row["request_bytes"]),'),
+     '    request_bytes: uncompressedBytes(row["request_size"], row["request_zstd"]),\n'
+     '    response_bytes: uncompressedBytes(row["response_size"], row["response_zstd"]),',
+     '    request_bytes: uncompressedBytes(row["response_size"], row["response_zstd"]),\n'
+     '    response_bytes: uncompressedBytes(row["request_size"], row["request_zstd"]),'),
     ("summary: an absent duration reads as 0 rather than null",
-     '    duration_ms: optCount(row["duration_ms"]),',
-     '    duration_ms: count(row["duration_ms"]),'),
+     '    duration_ms: optCount(row["duration_ms"]),\n    error: optText(row["error"]),',
+     '    duration_ms: count(row["duration_ms"]),\n    error: optText(row["error"]),'),
     ("summary: a zero duration reads as null",
      "function optCount(v: unknown): number | null {\n"
      "  return typeof v === \"number\" && Number.isFinite(v) ? Math.max(v, 0) : null;\n}",
      "function optCount(v: unknown): number | null {\n"
      "  return typeof v === \"number\" && Number.isFinite(v) && v > 0 ? v : null;\n}"),
     ("summary: an absent error reads as an empty string rather than null",
-     '    error: optText(row["error"]),',
-     '    error: text(row["error"]),'),
-    ("payload: the two bodies are swapped",
-     '      request: blobToText(row["request_zstd"]),\n'
-     '      response: blobToText(row["response_zstd"]),',
-     '      request: blobToText(row["response_zstd"]),\n'
-     '      response: blobToText(row["request_zstd"]),'),
+     '    duration_ms: optCount(row["duration_ms"]),\n    error: optText(row["error"]),',
+     '    duration_ms: optCount(row["duration_ms"]),\n    error: text(row["error"]),'),
+    ("payload: the two http bodies are swapped",
+     '      request_body: this.#bodyText(row["request_payload_id"], row["request_body_zstd"]),\n'
+     '      response_headers: headersFrom(row["response_headers_zstd"]),\n'
+     '      response_body: this.#bodyText(row["response_payload_id"], row["response_body_zstd"]),',
+     '      request_body: this.#bodyText(row["response_payload_id"], row["response_body_zstd"]),\n'
+     '      response_headers: headersFrom(row["response_headers_zstd"]),\n'
+     '      response_body: this.#bodyText(row["request_payload_id"], row["request_body_zstd"]),'),
     ("transcript: the iteration reports the row id",
      '      iteration: count(row["iteration"]),',
      '      iteration: count(row["id"]),'),
@@ -191,8 +193,12 @@ MUTANTS = [
      '      source: text(row["call_type"]),\n      character: optText(row["character"]),\n'
      '      call_type: optText(row["source"]),'),
     ("transcript: an absent character reads as an empty string",
-     '      character: optText(row["character"]),',
-     '      character: text(row["character"]),'),
+     '      character: optText(row["character"]),\n'
+     '      call_type: optText(row["call_type"]),\n'
+     '      iteration: count(row["iteration"]),',
+     '      character: text(row["character"]),\n'
+     '      call_type: optText(row["call_type"]),\n'
+     '      iteration: count(row["iteration"]),'),
 
     # --- writing --------------------------------------------------------------
     ("write: the sort key is the wall clock rather than the record's timestamp",
@@ -211,16 +217,19 @@ MUTANTS = [
      "  return Math.floor(ts.getTime() / 1000);",
      "  return Math.round(ts.getTime() / 1000);"),
     ("write: an absent response body is stored as an empty one",
-     "    const responseBlob =\n"
+     "    const responsePayload =\n"
      "      call.response_body === undefined || call.response_body === null\n"
-     "        ? null\n        : zstdCompress(call.response_body);",
-     '    const responseBlob = zstdCompress(call.response_body ?? "");'),
+     "        ? null\n"
+     "        : this.storePayload(call.response_body);",
+     '    const responsePayload = this.storePayload(call.response_body ?? "");'),
     ("write: an empty response body is stored as absent",
-     "    const responseBlob =\n"
+     "    const responsePayload =\n"
      "      call.response_body === undefined || call.response_body === null\n"
-     "        ? null\n        : zstdCompress(call.response_body);",
-     "    const responseBlob = call.response_body\n"
-     "      ? zstdCompress(call.response_body)\n      : null;"),
+     "        ? null\n"
+     "        : this.storePayload(call.response_body);",
+     "    const responsePayload = call.response_body\n"
+     "      ? this.storePayload(call.response_body)\n"
+     "      : null;"),
     ("write: the transcript's token counts are shifted by one column",
      "        entry.usage.input_tokens,\n        entry.usage.output_tokens,\n"
      "        entry.usage.cache_read_tokens,",
@@ -255,11 +264,13 @@ MUTANTS = [
      '      "DELETE FROM transcripts WHERE ts_unix < ?1",\n      cutoffUnix,\n    );',
      "    const agedTranscripts = 0;"),
     ("rotate: the age counter omits transcripts",
-     "      deleted_by_age: agedCalls + agedTranscripts,",
-     "      deleted_by_age: agedCalls,"),
+     "      deleted_by_age: agedCalls + agedTranscripts + agedHttp,",
+     "      deleted_by_age: agedCalls + agedHttp,"),
     ("rotate: the two counters are swapped",
-     "      deleted_by_age: agedCalls + agedTranscripts,\n      deleted_by_size: sized,",
-     "      deleted_by_age: sized,\n      deleted_by_size: agedCalls + agedTranscripts,"),
+     "      deleted_by_age: agedCalls + agedTranscripts + agedHttp,\n"
+     "      deleted_by_size: sized + orphaned,",
+     "      deleted_by_age: sized + orphaned,\n"
+     "      deleted_by_size: agedCalls + agedTranscripts + agedHttp,"),
     ("rotate: the size backstop keeps the oldest rows rather than the newest",
      "                          OVER (ORDER BY ts_unix DESC, id DESC",
      "                          OVER (ORDER BY ts_unix ASC, id ASC"),
@@ -274,8 +285,10 @@ MUTANTS = [
      "             AND id != (SELECT id FROM calls ORDER BY ts_unix DESC, id DESC LIMIT 1)",
      "             AND id != (SELECT id FROM calls ORDER BY ts_unix ASC, id ASC LIMIT 1)"),
     ("rotate: the running total counts only the request blob",
-     "                      SUM(COALESCE(LENGTH(request_zstd), 0) + COALESCE(LENGTH(response_zstd), 0))",
-     "                      SUM(COALESCE(LENGTH(request_zstd), 0))"),
+     '                      SUM(COALESCE(request_stored, LENGTH(request_zstd), 0)\n'
+     "                          + COALESCE(response_stored, LENGTH(response_zstd), 0)\n"
+     "                          + COALESCE(wire.bytes, 0))",
+     '                      SUM(COALESCE(request_stored, LENGTH(request_zstd), 0))'),
     ("rotate: the size backstop is skipped entirely",
      "    const sized = this.#changes(\n      `DELETE FROM calls WHERE id IN (",
      "    const sized = this.#changes(\n      `DELETE FROM calls WHERE 0 AND id IN ("),
@@ -309,7 +322,11 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/call_store.test.ts"], src=SRC)
+    return _run_mutants(
+        MUTANTS,
+        ["tests/call_store.test.ts", "tests/wire_capture.test.ts"],
+        src=SRC,
+    )
 
 
 if __name__ == "__main__":

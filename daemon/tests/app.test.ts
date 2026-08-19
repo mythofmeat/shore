@@ -299,6 +299,15 @@ describe("AppConfig::default", () => {
     if ("err" in parsed) throw new Error(parsed.err);
     expect(canonical(parsed.ok)).toEqual(canonical(defaultAppConfig()));
   });
+
+  test("the values an unconfigured shore runs on", () => {
+    const app = defaultAppConfig();
+
+    expect(app.defaults.stream).toBe(true);
+    expect(app.memory.compaction.archive_after.asSecs()).toBe(0n);
+    expect(app.notifications.events.message_complete).toBe(true);
+    expect(app.usage.allow_compaction_over_budget).toBe(false);
+  });
 });
 
 function expectationFor(want: unknown, toml: string): unknown {

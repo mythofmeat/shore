@@ -55,14 +55,17 @@ MUTANTS = [
      "      characterDataDir(runtime.config.dirs.data, charName),\n"
      "      queueDeferredEdit,\n    ),",
      "    deferEdit: undefined,"),
-    ("tools: the heatmap always reads the same character's tracker",
-     D,
-     "      const report = runtime.autonomy.activityStats(charName, Date.now());",
-     '      const report = runtime.autonomy.activityStats("ada", Date.now());'),
-    ("tools: the heatmap is never wired, so every character reads as inactive",
-     D,
-     "    activityStats: () => {",
-     "    activityStats: undefined as unknown as () => undefined,\n    _unused: () => {"),
+    ("tools: the heatmap always reads the same character's tracker", D,
+     "      const report = runtime.autonomy.activityStats(\n        charName,",
+     '      const report = runtime.autonomy.activityStats(\n        "ada",'),
+    ("tools: the heatmap is never wired, so every character reads as inactive", D,
+     "      return report === undefined\n"
+     "        ? undefined\n"
+     "        : { stats: report.stats, turnCount: report.messageCount };",
+     "      void report;\n      return undefined;"),
+    ("tools: the heatmap ignores the window it was asked for", D,
+     "        localWallClock(Date.now()),\n        days,",
+     "        localWallClock(Date.now()),\n        undefined,"),
     ("tools: the turn count is dropped on the rename, so the heatmap has no total",
      D,
      "        : { stats: report.stats, turnCount: report.messageCount };",
@@ -73,40 +76,46 @@ MUTANTS = [
      "    ...{},"),
 
     # --- the autonomy surface -------------------------------------------------
-    ("autonomy: the cached body is queued behind registration, leaving a live prefix unarmed",
-     D,
-     "    notifyLastRequest: (character, request) => {\n"
-     "      cache.set(character, request as SidecarRequest);\n    },",
-     "    notifyLastRequest: (character, request) => {\n"
+    ("autonomy: the cached body is queued behind registration, leaving a live prefix unarmed", D,
+     "    notifyLastRequest: (character, request, keepaliveIntervalMs) => {\n"
+     "      cache.set(character, request as SidecarRequest, keepaliveIntervalMs);\n    },",
+     "    notifyLastRequest: (character, request, keepaliveIntervalMs) => {\n"
      "      void bridge.settled(character).then(() => {\n"
-     "        cache.set(character, request as SidecarRequest);\n      });\n    },"),
+     "        cache.set(character, request as SidecarRequest, keepaliveIntervalMs);\n"
+     "      });\n    },"),
     ("autonomy: the assistant turn is reported to nobody",
      D,
      "    notifyAssistantMessage: (character, turnCount) => {\n"
      "      bridge.onAssistantMessage(character, turnCount);\n    },",
      "    notifyAssistantMessage: () => {},"),
-    ("autonomy: only the model and the messages are cached, dropping the prefix's key",
-     D,
-     "      cache.set(character, request as SidecarRequest);",
-     "      cache.set(character, { model: request.model, messages: request.messages } as SidecarRequest);"),
+    ("autonomy: only the model and the messages are cached, dropping the prefix's key", D,
+     "      cache.set(character, request as SidecarRequest, keepaliveIntervalMs);",
+     "      cache.set(\n"
+     "        character,\n"
+     "        { model: request.model, messages: request.messages } as SidecarRequest,\n"
+     "        keepaliveIntervalMs,\n      );"),
+    ("autonomy: the keepalive interval is dropped, so the armed prefix has no cadence", D,
+     "      cache.set(character, request as SidecarRequest, keepaliveIntervalMs);",
+     "      cache.set(character, request as SidecarRequest, undefined);"),
 
     # --- the inline compaction ------------------------------------------------
-    ("compaction: the pass is never given a cached body, so every one rebuilds from disk",
-     D,
-     "    cachedRequest: (character) => runtime.cache.get(character),\n"
-     "    tools: sharedToolDeps(",
-     "    cachedRequest: () => undefined,\n    tools: sharedToolDeps("),
-    ("compaction: every pass extends the same character's body",
-     D,
-     "    cachedRequest: (character) => runtime.cache.get(character),\n"
-     "    tools: sharedToolDeps(",
-     '    cachedRequest: () => runtime.cache.get("ada"),\n    tools: sharedToolDeps('),
+    ("compaction: the pass is given a cache of its own, so it never sees the live body", D,
+     "    cache: runtime.cache,\n    rebuild: { mcpRegistry: runtime.mcp.current },",
+     "    cache: { get: () => undefined, set: () => {} } as never,\n"
+     "    rebuild: { mcpRegistry: runtime.mcp.current },"),
+    ("compaction: the rebuild is given no tool surface, so its prefix cannot match chat's", D,
+     "    cache: runtime.cache,\n    rebuild: { mcpRegistry: runtime.mcp.current },",
+     "    cache: runtime.cache,\n    rebuild: {},"),
 
     # --- what is read live ----------------------------------------------------
-    ("live: the usage config is captured at assembly, so a new budget never applies",
-     D,
-     "  const usage = () => usageConfigView(global().app.usage);",
-     "  const captured = usageConfigView(global().app.usage);\n  const usage = () => captured;"),
+    ("live: the usage config is captured at assembly, so a new budget never applies", D,
+     "  const usage = (character: string) =>\n"
+     "    usageConfigView(runtime.registry.effectiveConfig(character).app.usage);",
+     "  const captured = usageConfigView(global().app.usage);\n"
+     "  const usage = (_character: string) => captured;"),
+    ("live: every character is budgeted against the global config, not its own overlay", D,
+     "    usageConfigView(runtime.registry.effectiveConfig(character).app.usage);",
+     "    usageConfigView(global().app.usage);"),
     ("live: the keepalive ceiling is captured at assembly and never moves again",
      D,
      "    keepaliveMaxSecs: () =>\n"
@@ -157,10 +166,6 @@ MUTANTS = [
      "      } catch (e) {\n"
      "        throw e;\n      }\n      // eslint-disable-next-line\n      try {\n"
      "        throw new Error();\n      } catch (e) {"),
-    ("reset: only one session forgets its active model",
-     D,
-     "    clearActiveModel: () => {\n      sessions.clear();\n    },",
-     "    clearActiveModel: () => {\n      sessions.setActiveModel(1, undefined);\n    },"),
     ("set: the runtime override never reaches the registry, so the loop reads the old one",
      D,
      "      runtime.registry.setRuntimeEffectiveConfig(character, config);",
@@ -187,10 +192,9 @@ MUTANTS = [
      D,
      '      runtime.cache.invalidate(character, "prompt_reload");',
      "      void character;"),
-    ("compact: `shore compact` rebuilds from disk rather than extending the live body",
-     D,
-     "      cachedRequest: (character) => runtime.cache.get(character),\n    },\n    keepalive: {",
-     "      cachedRequest: () => undefined,\n    },\n    keepalive: {"),
+    ("compact: the repoint reprimes from the daemon's config, not the command's", D,
+     "        await runtime.cache.reprimeFromDisk(character, config.dirs.data, config, {",
+     "        await runtime.cache.reprimeFromDisk(character, config.dirs.data, runtime.config, {"),
     ("keepalive: the ping diagnostic is armed against a second, empty cache",
      D,
      "      lastRequest: runtime.cache,",

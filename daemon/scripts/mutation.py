@@ -17,6 +17,11 @@ separately here, and the score is over the mutants that actually applied.
 
 **One entry point.** `bun run mutate [module]`, so the whole set can be run
 rather than remembered.
+
+A mutant is normally one edit. `(label, [(find, replace), ...])` is the shape for
+one that only means anything as a set — two clamps that cover each other are
+each individually equivalent, and only removing the pair is a change worth
+catching.
 """
 import pathlib
 import subprocess
@@ -29,20 +34,31 @@ INAPPLICABLE = "inapplicable"
 
 
 def _normalize(mutant, default_src):
-    """Accept the three tuple shapes the passes were written in."""
+    """Accept the four tuple shapes the passes were written in.
+
+    Returns `(label, [(path, find, replace), ...])`. Most mutants are a single
+    edit; `(label, [(find, replace), ...])` is one that only means something as
+    a set, which is what a pair of clamps that cover each other needs — remove
+    either and another catches it, remove both and the bound is gone.
+    """
+    if len(mutant) == 2:
+        label, edits = mutant
+        if default_src is None:
+            raise ValueError(f"compound mutant needs a default source: {label}")
+        return label, [(default_src, find, replace) for find, replace in edits]
     if len(mutant) == 3:
         label, find, replace = mutant
         if default_src is None:
             raise ValueError(f"three-part mutant needs a default source: {label}")
-        return label, default_src, find, replace
+        return label, [(default_src, find, replace)]
     if len(mutant) != 4:
         raise ValueError(f"unrecognised mutant shape: {mutant!r}")
     a, b, find, replace = mutant
     # `(label, path, ...)` and `(path, label, ...)` both occur; the path is the
     # one that names a file that exists.
     if (ROOT / str(a)).is_file() and not (ROOT / str(b)).is_file():
-        return str(b), ROOT / str(a), find, replace
-    return str(a), ROOT / str(b), find, replace
+        return str(b), [(ROOT / str(a), find, replace)]
+    return str(a), [(ROOT / str(b), find, replace)]
 
 
 def run(mutants, tests, src=None, timeout=180):
@@ -71,20 +87,26 @@ def run(mutants, tests, src=None, timeout=180):
     applied = 0
 
     for i, mutant in enumerate(mutants, 1):
-        label, path, find, replace = _normalize(mutant, src)
-        original = path.read_text()
-        matches = original.count(find)
-        if matches != 1:
-            inapplicable.append((label, matches))
-            print(f"{i:3d}. ---- {label} — pattern matched {matches}x")
+        label, edits = _normalize(mutant, src)
+        originals = {path: path.read_text() for path, _, _ in edits}
+        counts = [originals[path].count(find) for path, find, _ in edits]
+        if any(count != 1 for count in counts):
+            worst = next(count for count in counts if count != 1)
+            inapplicable.append((label, worst))
+            print(f"{i:3d}. ---- {label} — pattern matched {worst}x")
             continue
 
         applied += 1
-        path.write_text(original.replace(find, replace, 1))
+        mutated = dict(originals)
+        for path, find, replace in edits:
+            mutated[path] = mutated[path].replace(find, replace, 1)
+        for path, text in mutated.items():
+            path.write_text(text)
         try:
             killed = not suite()
         finally:
-            path.write_text(original)
+            for path, text in originals.items():
+                path.write_text(text)
         print(f"{i:3d}. {'kill' if killed else 'LIVE'}  {label}")
         if not killed:
             survivors.append(label)

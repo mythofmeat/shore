@@ -16,7 +16,7 @@ A mutant is KILLED if `bun test tests/conversation.test.ts` fails with it
 applied; a survivor means either the fixture cannot see that decision, or the
 code is equivalent under it.
 
-The first pass was 70/87, the second 79/88. Six of the nine first-pass survivors
+The first pass was 70/87, the second 79/88, and the fourth is 81/90. Six of the nine first-pass survivors
 were real gaps, and the shape was the usual one — the case was present and
 nothing in it was load-bearing:
 
@@ -179,7 +179,7 @@ MUTANTS = [
     ("pageStartByTurns: assistant turns are counted too",
      '    if (messages[idx]!.role === "user") {',
      "    if (true as boolean) {"),
-    ("pageStartByTurns: the end bound is not clamped to the list",
+    ("pageStartByTurns: the end bound is not clamped to the list (EQUIVALENT — resolveHistoryBefore already clamped it)",
      "  const end = Math.min(endBound, messages.length);",
      "  const end = endBound;"),
     ("countUserTurns: counts every message",
@@ -210,7 +210,7 @@ MUTANTS = [
      "const DEFAULT_LOG_TURNS = 1;"),
 
     # --- role filtering ----------------------------------------------------
-    ("roleFilter: an absent role is not distinguished from a bad one",
+    ("roleFilter: an absent role is not distinguished from a bad one (EQUIVALENT — decoded JSON never carries a present-but-undefined key)",
      '  if (!("role" in args)) return undefined;',
      "  if (args[\"role\"] === undefined) return undefined;"),
     ("roleFilter: any string is accepted",
@@ -230,7 +230,7 @@ MUTANTS = [
     ('before: "active" is read as a literal cursor',
      '  if (before === "active") return activeStart;',
      "  if (false as boolean) return activeStart;"),
-    ("before: an out-of-range cursor is not clamped",
+    ("before: an out-of-range cursor is not clamped (EQUIVALENT — pageStartByTurns clamps the same bound)",
      "  return Math.min(index, total);",
      "  return index;"),
     ("bounds: BOTH redundant clamps removed at once",
@@ -243,10 +243,10 @@ MUTANTS = [
      "  if (index === undefined) return total;"),
 
     # --- the page payload --------------------------------------------------
-    ("payload: the page is not clamped to the list",
+    ("payload: the page is not clamped to the list (EQUIVALENT — the caller clamped it)",
      "  const start = Math.min(startIdx, messages.length);",
      "  const start = startIdx;"),
-    ("payload: end is allowed below start",
+    ("payload: end is allowed below start (EQUIVALENT — the caller's clamp keeps end above start)",
      "  const end = Math.max(Math.min(endIdx, messages.length), start);",
      "  const end = Math.min(endIdx, messages.length);"),
     ("payload: the local active boundary is the global one",
@@ -263,7 +263,7 @@ MUTANTS = [
     ("payload: the archived end is not clamped to the page end",
      "  const archivedEnd = Math.max(Math.min(globalActiveStart, end), start);",
      "  const archivedEnd = Math.max(globalActiveStart, start);"),
-    ("payload: the archived end is not clamped to the page start",
+    ("payload: the archived end is not clamped to the page start (EQUIVALENT — the page start already bounds it)",
      "  const archivedEnd = Math.max(Math.min(globalActiveStart, end), start);",
      "  const archivedEnd = Math.min(globalActiveStart, end);"),
     ("payload: has_more_before is inclusive of the first page",
@@ -339,27 +339,32 @@ MUTANTS = [
      '    throw invalidRequest("Missing required argument: refs");',
      "    rawRefs = [];"),
     ("delete: refs are resolved lazily, one at a time",
-     "  const merged = mergeToolLoopMessages([...engine.messages()]);\n"
-     "  const resolved = rawRefs.map((r) => resolveRef(merged, r));\n"
-     "\n"
+     "  const turns = rawRefs.map((r) => turnMsgIds(raw, resolveRef(merged, r)));\n\n"
      "  const deleted: string[] = [];\n"
-     "  for (const msgId of resolved) {",
+     "  const gone = new Set<string>();\n"
+     "  for (const turn of turns) {",
      "  const deleted: string[] = [];\n"
-     "  for (const raw of rawRefs) {\n"
-     "    const msgId = resolveRef(mergeToolLoopMessages([...engine.messages()]), raw);"),
-    ("delete: a failure rolls the whole call back",
-     "    } catch (e) {\n"
-     "      throw engineError(e);\n"
-     "    }\n"
-     "    deleted.push(msgId);",
-     "    } catch (e) {\n"
-     "      void e;\n"
-     "      continue;\n"
-     "    }\n"
-     "    deleted.push(msgId);"),
+     "  const gone = new Set<string>();\n"
+     "  for (const rawRef of rawRefs) {\n"
+     "    const turn = turnMsgIds(\n"
+     "      [...engine.messages()],\n"
+     "      resolveRef(mergeToolLoopMessages([...engine.messages()]), rawRef),\n"
+     "    );\n"
+     "    void raw;\n"
+     "    void merged;"),
+    ("delete: a ref names one message rather than the whole turn it sits in",
+     "  const turns = rawRefs.map((r) => turnMsgIds(raw, resolveRef(merged, r)));",
+     "  const turns = rawRefs.map((r) => [resolveRef(merged, r)]);"),
+    ("delete: a message already deleted by an earlier ref is deleted again",
+     "    const pending = turn.filter((msgId) => !gone.has(msgId));\n"
+     "    if (pending.length === 0) continue;",
+     "    const pending = turn;"),
+    ("delete: a failure is swallowed and the rest of the refs go ahead",
+     "      await engine.deleteMessages(pending);\n    } catch (e) {\n      throw engineError(e);\n    }",
+     "      await engine.deleteMessages(pending);\n    } catch (e) {\n      void e;\n      continue;\n    }"),
 
     # --- alternatives -------------------------------------------------------
-    ("alternatives: the stored index is not clamped",
+    ("alternatives: the stored index is not clamped (EQUIVALENT — Message.normalize clamps alt_index on load, so no stored value is out of range)",
      "  const current = Math.min(msg.alt_index ?? 0, Math.max(0, altCount - 1));",
      "  const current = msg.alt_index ?? 0;"),
     ("alternatives: position is 0-based",
@@ -381,7 +386,7 @@ MUTANTS = [
     ("alt: an empty alternative list is not rejected",
      "  if (altCount === 0) throw invalidRequest(`message ${msgId} has no alternate responses`);",
      "  if (false as boolean) throw invalidRequest(`message ${msgId} has no alternate responses`);"),
-    ("alt: the stored index is not clamped before stepping",
+    ("alt: the stored index is not clamped before stepping (EQUIVALENT — Message.normalize clamps alt_index on load)",
      "  const current = Math.min(msg.alt_index ?? 0, altCount - 1);",
      "  const current = msg.alt_index ?? 0;"),
     ("alt target: position wins over index",
@@ -413,7 +418,7 @@ MUTANTS = [
      "  if (index !== undefined) {",
      '  const index = args["direction"] === undefined ? asU64(args["index"]) : undefined;\n'
      "  if (index !== undefined) {"),
-    ("alt target: the index bound is inclusive",
+    ("alt target: the index bound is inclusive (EQUIVALENT — MessageStore.selectAlt re-checks and raises the identical message)",
      "    if (index >= count) {",
      "    if (index > count) {"),
     ("alt target: the index error reports the raw index",

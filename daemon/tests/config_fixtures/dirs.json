@@ -413,7 +413,7 @@
         },
         {
           "path": "conf.d/🎵.toml",
-          "content": "u = 1"
+          "content": "u = 1\nv = 9"
         },
         {
           "path": "conf.d/ﬀ.toml",
@@ -424,7 +424,7 @@
       "ok": {
         "table": {
           "u": 1,
-          "v": 1
+          "v": 9
         },
         "config_dir_rel": ""
       }

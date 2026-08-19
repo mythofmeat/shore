@@ -6,10 +6,11 @@ overlay *beside* it rather than folded into it. Every step of the chain it runs
 is already pinned by the frozen `preferences_parity.json`; what is not is the
 composition, so that is what these mutants attack:
 
-- **The chain's inputs.** Character preferences over global, the legacy
-  `runtime_state.json` read from the character's own directory, the configured
+- **The chain's inputs.** Character preferences over global, the configured
   default passed through, and a preferences file that will not parse being a
-  warning rather than a dead character.
+  warning rather than a dead character. The two mutants over the legacy
+  `runtime_state.json` are gone with it: 82cab7e3 dropped its last reader, and
+  `resolveActiveForCharacter` no longer takes a `legacyActiveModel` at all.
 - **The static default.** The one argument that separates this from
   `resolveChatModelForCharacter`: `undefined`, so the overlay holds only what
   preferences set. Folding the catalog in would let a catalog value arrive as a
@@ -21,7 +22,8 @@ composition, so that is what these mutants attack:
 A mutant is KILLED if `bun test tests/handler_active_model.test.ts
 tests/preferences.test.ts` fails with it applied.
 
-This is **13/13**, from 12/14 on the first full pass.
+This is **11/11**, from 12/14 on the first full pass and 13/13 before the
+legacy file went.
 
 One survivor was a real gap and is now covered: the overlay's `(provider,
 model_id)` key could be swapped, because every case set preferences under
@@ -60,37 +62,27 @@ PREFS = "src/config/preferences.ts"
 # (label, find, replace)
 MUTANTS = [
     # --- the chain's inputs ---------------------------------------------------
-    ("chain: the legacy file is read from the data root, not the character's directory",
-     "  const legacy = loadActiveModel(join(config.dirs.data, character));",
-     "  const legacy = loadActiveModel(config.dirs.data);"),
-    ("chain: the legacy file is never read",
-     "  const legacy = loadActiveModel(join(config.dirs.data, character));",
-     "  const legacy = undefined;"),
     ("chain: global preferences outrank the character's",
      "  const resolved = resolveActiveForCharacter(\n"
      "    config,\n"
      "    global,\n"
-     "    charPrefs,\n"
-     "    legacy,",
+     "    charPrefs,\n",
      "  const resolved = resolveActiveForCharacter(\n"
      "    config,\n"
      "    charPrefs,\n"
-     "    global,\n"
-     "    legacy,"),
+     "    global,\n"),
     ("chain: character preferences are dropped from the selection",
      "  const resolved = resolveActiveForCharacter(\n"
      "    config,\n"
      "    global,\n"
-     "    charPrefs,\n"
-     "    legacy,",
+     "    charPrefs,\n",
      "  const resolved = resolveActiveForCharacter(\n"
      "    config,\n"
      "    global,\n"
-     "    emptyPreferences(),\n"
-     "    legacy,"),
+     "    emptyPreferences(),\n"),
     ("chain: the configured default model is not passed through",
-     "    legacy,\n    config.app.defaults.model,",
-     "    legacy,\n    undefined,"),
+     "    charPrefs,\n    config.app.defaults.model,",
+     "    charPrefs,\n    undefined,"),
     ("chain: a preferences file that will not parse takes the character down",
      "  let global = emptyPreferences();\n"
      "  let charPrefs = emptyPreferences();\n"
@@ -105,8 +97,8 @@ MUTANTS = [
      "  const [global, charPrefs] = loadForCharacter(config.dirs.data, character);\n"
      "  void op;\n"),
     ("chain: preferences are loaded for the wrong character",
-     "    [global, charPrefs] = loadForCharacter(config.dirs.data, character);",
-     '    [global, charPrefs] = loadForCharacter(config.dirs.data, "other");'),
+     "    [global, charPrefs] = loadForCharacter(config.dirs.data, character);\n  } catch (e) {",
+     '    [global, charPrefs] = loadForCharacter(config.dirs.data, "other");\n  } catch (e) {'),
 
     # --- the static default, which is the whole divergence --------------------
     ("overlay: the catalog is folded in, as the chat path does",

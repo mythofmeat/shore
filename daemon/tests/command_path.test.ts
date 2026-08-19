@@ -311,6 +311,7 @@ test("switch_character establishes an ambiguous unpinned session", async () => {
   );
 
   expect(frame.type).toBe("command_output");
+  if (frame.type === "command_output") expect(frame.rid).toBe("r-switch");
   expect(selected).toEqual([[1, "poppy"]]);
   expect(sent).toHaveLength(1);
   expect(sent[0]).toMatchObject({ type: "history", selected_character: "poppy" });
@@ -335,6 +336,38 @@ test("the character path is given the character's effective config", async () =>
   if (frame.type === "command_output") {
     expect((frame.data as Record<string, unknown>)["active_model"]).toBe("chat.spare");
   }
+});
+
+async function setDefaultModel(h: Harness, value: string): Promise<Record<string, unknown>> {
+  const frame = await dispatchCommand(
+    h.deps,
+    { rid: null, name: "config", args: { key: "defaults.model", value } },
+    meta("ada", null),
+  );
+  expect(frame.type).toBe("command_output");
+  return frame.type === "command_output" ? (frame.data as Record<string, unknown>) : {};
+}
+
+test("a character with nothing saved masks no default", async () => {
+  const h = await harness(["ada"]);
+  await writeFile(h.deps.configPath, '[defaults]\nmodel = "fixture"\n');
+
+  expect(h.savedModel("ada")).toBeUndefined();
+  expect((await setDefaultModel(h, "spare"))["masked_by_preference"]).toBeNull();
+});
+
+test("a saved model preference masks the default under its qualified name", async () => {
+  const h = await harness(["ada"]);
+  await writeFile(h.deps.configPath, '[defaults]\nmodel = "spare"\n');
+
+  await dispatchCommand(
+    h.deps,
+    { rid: null, name: "switch_model", args: { name: "spare" } },
+    meta("ada", null),
+  );
+  expect(h.savedModel("ada")).toBe("anthropic:claude-spare");
+
+  expect((await setDefaultModel(h, "fixture"))["masked_by_preference"]).toBe("chat.spare");
 });
 
 test("config_reload adopts the config the command re-read, not the one it started from", async () => {

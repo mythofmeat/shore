@@ -83,11 +83,11 @@ MUTANTS = [
      "    void info;"),
 
     # --- ordering -------------------------------------------------------------
-    ("order: the policy is checked after the socket is opened",
+    ("order: the bind address is taken from the config rather than the command line",
      R,
-     "  const cli = parseArgs(options.argv ?? []);\n  const startup = resolveStartup(cli, env);",
-     "  const cli = parseArgs(options.argv ?? []);\n"
-     "  const startup = resolveStartup({ ...cli, addr: \"127.0.0.1:0\" }, env);"),
+     "  const cli = parseArgs(options.argv ?? []);\n  const startup = resolveStartup(cli, env, {",
+     '  const cli = parseArgs(options.argv ?? []);\n'
+     '  const startup = resolveStartup({ ...cli, addr: undefined }, env, {'),
     ("order: nothing drains the route stream, so a client is answered by nobody",
      R,
      "  const handlerDone = handler.run(server.routes());",
@@ -169,21 +169,22 @@ MUTANTS = [
      "      console.warn(\n"
      "        `shore: config hot reload failed, keeping the running config — ${where}: ${String(e)}`,\n"
      "      );\n"
+     "      a.emitEvent(configWarning(a.runtime.configPath, undefined, e));\n"
      "      return;",
      "      console.warn(String(e));\n"
      "      config = a.runtime.config;"),
     ("reload: per-character overlays are not validated before the global is committed",
      D,
-     "    for (const name of discoverCharacters(config.dirs.config)) {",
+     "    for (const name of discoverCharacters(config.dirs.config, config.dirs.workspace)) {",
      "    for (const name of [] as string[]) {"),
     ("reload: a broken overlay warns and the config is adopted anyway",
      D,
-     "        console.warn(\n"
-     "          `shore: config hot reload failed on ${name}'s overlay, keeping the running config — ` +\n"
-     "            `${where}: ${String(e)}`,\n"
-     "        );\n"
-     "        return;",
-     "        console.warn(String(e));"),
+     "        a.emitEvent(\n"
+     '          configWarning(rustJoin(characterConfigDir(config.dirs.config, name), "config.toml"), name, e),\n'
+     "        );\n        return;",
+     "        a.emitEvent(\n"
+     '          configWarning(rustJoin(characterConfigDir(config.dirs.config, name), "config.toml"), name, e),\n'
+     "        );"),
     ("reload: the watcher path never adopts what it loaded",
      D,
      "    await applyReloadedConfig(a, config);",

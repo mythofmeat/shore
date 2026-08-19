@@ -18,7 +18,26 @@ wrong quietly:
 A mutant is KILLED if `bun test tests/model_commands.test.ts` fails with
 it applied.
 
-The first pass was 55/70 and the second is 69/69. Fourteen of the fifteen
+The first pass was 55/70, the second 69/69, and the fourth is 67/67 over a
+rewritten set.
+
+Three deletions moved this surface underneath the mutants. 58338805 removed
+`ProcessSessionCache` and with it `activeResolvedModel` and the writes
+`switch_model` and `reset_model` made to the session object, so five mutants
+over the parked model and the in-memory selection had nothing left to change.
+`resolveActiveModel` and `activeName` now start from the character's saved
+preference via `effectiveChatModel`, which reaches their `[defaults].model` and
+first-catalog-entry fallbacks only when no character is attached. Nothing
+exercised that: the one characterless scenario configured `model = "alpha"`,
+which was also the first catalog entry, so "consult the default" and "take the
+first entry" agreed. Four hand-written cases separate them.
+
+beddae67 deleted the model-id rule table, so `applicability`'s `modelId` is a
+parameter nothing reads and mutating it is equivalent. The live input is
+`ModelCapabilities`, which reaches the table only from a discovery cache; the
+recorded caches carried neither `supported_parameters` nor `effort_levels`, so
+both the applicability table and the effort domain answered the same with and
+without them. The setup shape accepts both now, and two cases pin them. Fourteen of the fifteen
 first-pass survivors were real gaps, and the shape never varied: the case was
 present and nothing in it was load-bearing.
 
@@ -75,8 +94,10 @@ MUTANTS = [
      '  const includeHidden = asBool(args["include_hidden"]) ?? false;\n  const view = configView(ctx.config);',
      '  const includeHidden = asBool(args["include_hidden"]) ?? true;\n  const view = configView(ctx.config);'),
     ("switch_model always opts past hidden",
-     '  const includeHidden = asBool(args["include_hidden"]) ?? false;\n  const resolved = resolve(ctx, name, includeHidden);',
-     "  const resolved = resolve(ctx, name, true);"),
+     '  const includeHidden = asBool(args["include_hidden"]) ?? false;\n'
+     "  const resolved = resolve(ctx, name, includeHidden);\n\n"
+     "  const character = requireCharacter(ctx);",
+     "  const resolved = resolve(ctx, name, true);\n\n  const character = requireCharacter(ctx);"),
 
     # --- error mapping ------------------------------------------------------
     ("catalog errors: hidden reports invalid_request",
@@ -87,18 +108,17 @@ MUTANTS = [
      "  return notFound(e.message);"),
 
     # --- resolveActiveModel -------------------------------------------------
-    ("active: the pre-resolved model is ignored",
-     "  if (ctx.activeResolvedModel !== undefined) return ctx.activeResolvedModel;",
-     "  if (false as boolean) return ctx.activeResolvedModel!;"),
-    ("active: the config default beats the session",
-     "  const name = ctx.activeModel ?? ctx.config.app.defaults.model;",
-     "  const name = ctx.config.app.defaults.model ?? ctx.activeModel;"),
+    ("active: the character's saved model is ignored, so the config default wins",
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName);\n"
+     "  if (resolved !== undefined) return resolved;",
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName);\n  void resolved;"),
     ("active: the config default is never consulted",
-     "  const name = ctx.activeModel ?? ctx.config.app.defaults.model;",
-     "  const name = ctx.activeModel;"),
+     "  const fallback = ctx.config.app.defaults.model;\n"
+     "  if (fallback !== undefined) return resolve(ctx, fallback, true);",
+     "  const fallback = ctx.config.app.defaults.model;\n  void fallback;"),
     ("active: hidden models are excluded from the fallback",
-     "  return resolve(ctx, name, true);\n}\n\nconst BACKGROUND_TASKS",
-     "  return resolve(ctx, name, false);\n}\n\nconst BACKGROUND_TASKS"),
+     "  if (fallback !== undefined) return resolve(ctx, fallback, true);",
+     "  if (fallback !== undefined) return resolve(ctx, fallback, false);"),
 
     # --- background tasks ---------------------------------------------------
     ("background: dreaming is still a task",
@@ -120,11 +140,13 @@ MUTANTS = [
      "  const fallbackName = ctx.config.app.defaults.model;\n"
      "  const inherited = fallbackName === undefined ? undefined : resolve(ctx, fallbackName, true);"),
     ('background: "all" accepts differing models',
-     "  if (same) return first;",
-     "  if (true as boolean) return first;"),
+     "  if (same) return first;\n\n  const mapping = resolved.map(([task, m])",
+     "  if (true as boolean) return first;\n\n  const mapping = resolved.map(([task, m])"),
     ('background: "all" compares qualified names rather than identity',
-     "    ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,",
-     "    ([, m]) => m.qualifiedName === first.qualifiedName,"),
+     "    ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,\n"
+     "  );\n  if (same) return first;\n\n  const mapping = resolved.map(([task, m])",
+     "    ([, m]) => m.qualifiedName === first.qualifiedName,\n"
+     "  );\n  if (same) return first;\n\n  const mapping = resolved.map(([task, m])"),
     ("background: the mismatch message loses the mapping",
      "  const mapping = resolved.map(([task, m]) => `${task} → ${m.qualifiedName}`).join(\", \");",
      '  const mapping = "";'),
@@ -132,46 +154,43 @@ MUTANTS = [
     # --- settingTarget ------------------------------------------------------
     ("target: an explicit name beats the background selector",
      '  const selector = asStr(args["background_task"]);\n'
-     "  if (selector !== undefined) return backgroundSettingTarget(ctx, selector);\n"
-     "\n"
+     "  if (selector !== undefined) {\n"
+     '    return { kind: "model", model: backgroundSettingTarget(ctx, selector) };\n'
+     "  }\n\n"
      '  const name = asName(args["name"]);\n'
-     "  if (name !== undefined) return resolve(ctx, name, true);",
+     '  if (name !== undefined) return { kind: "model", model: resolve(ctx, name, true) };',
      '  const name = asName(args["name"]);\n'
-     "  if (name !== undefined) return resolve(ctx, name, true);\n"
-     "\n"
+     '  if (name !== undefined) return { kind: "model", model: resolve(ctx, name, true) };\n\n'
      '  const selector = asStr(args["background_task"]);\n'
-     "  if (selector !== undefined) return backgroundSettingTarget(ctx, selector);"),
+     "  if (selector !== undefined) {\n"
+     '    return { kind: "model", model: backgroundSettingTarget(ctx, selector) };\n'
+     "  }"),
     ("target: an explicit name is ignored",
-     '  const name = asName(args["name"]);\n  if (name !== undefined) return resolve(ctx, name, true);',
-     '  const name = asName(args["name"]);\n  if (false as boolean) return resolve(ctx, name!, true);'),
+     '  const name = asName(args["name"]);\n'
+     '  if (name !== undefined) return { kind: "model", model: resolve(ctx, name, true) };',
+     '  const name = asName(args["name"]);\n  void name;'),
+    ("target: a sub-agent selector is ignored",
+     '  const subagent = asName(args["subagent"]);\n'
+     "  if (subagent !== undefined) return subagentSettingTarget(ctx, subagent);",
+     '  const subagent = asName(args["subagent"]);\n  void subagent;'),
 
     # --- background_models --------------------------------------------------
     ("rows: an unresolvable pin errors instead of echoing the name",
-     "      } catch {\n"
-     "        // Keep the name the user wrote.\n"
-     "      }",
-     "      } catch (e) {\n"
-     "        throw catalogError(e);\n"
-     "      }"),
+     "  } catch {\n    return name;\n  }\n}",
+     "  } catch (e) {\n    throw catalogError(e);\n  }\n}"),
     ("rows: the source always says blanket",
-     '        source: perTask !== undefined ? `config: background.${task}` : "config: background.model",',
-     '        source: "config: background.model",'),
+     '    return { role: task, model: qualify(ctx, perTask), source: `defaults.background.${task}` };',
+     '    return { role: task, model: qualify(ctx, perTask), source: "defaults.background.model" };'),
     ("rows: the source always says per-task",
-     '        source: perTask !== undefined ? `config: background.${task}` : "config: background.model",',
-     "        source: `config: background.${task}`,"),
-    ("rows: an unresolved inherit is reported as absent",
-     '      model: inherited?.qualifiedName ?? "(unresolved)",',
-     "      model: inherited?.qualifiedName ?? null,"),
+     '    return { role: task, model: qualify(ctx, bg.model), source: "defaults.background.model" };',
+     '    return { role: task, model: qualify(ctx, bg.model), source: `defaults.background.${task}` };'),
+    ("rows: an unresolved inherit still claims to inherit",
+     '  return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };',
+     '  return { role: task, model: chat.model, source: "inherits chat" };'),
     ("rows: a characterless session still inherits",
-     "    const inherited =\n"
-     "      ctx.characterName === undefined\n"
-     "        ? undefined\n"
-     "        : resolveChatModelForCharacter(configView(ctx.config), ctx.characterName, findEffective);",
-     "    const inherited = resolveChatModelForCharacter(\n"
-     "      configView(ctx.config),\n"
-     '      ctx.characterName ?? "",\n'
-     "      findEffective,\n"
-     "    );"),
+     "  if (character === undefined) return undefined;\n"
+     "  return resolveChatModelForCharacter(configView(config), character, findEffective);",
+     '  return resolveChatModelForCharacter(configView(config), character ?? "", findEffective);'),
 
     # --- list_models --------------------------------------------------------
     ("list: the hidden count is of what this call returned",
@@ -197,24 +216,23 @@ MUTANTS = [
      "    hidden: false,"),
 
     # --- activeName ---------------------------------------------------------
-    ("active name: the pre-resolved model is re-resolved",
-     "  if (ctx.activeResolvedModel !== undefined) return ctx.activeResolvedModel.qualifiedName;\n",
-     "  const parked = ctx.activeResolvedModel;\n"),
     ("active name: an unresolvable string becomes no active model",
-     "    } catch {\n      return name;\n    }",
+     "    } catch {\n      return fallback;\n    }",
      '    } catch {\n      return "";\n    }'),
     ("active name: the config default is not a fallback",
      "  const fallback = ctx.config.app.defaults.model;\n"
-     '  if (fallback !== undefined && fallback !== "") return byName(fallback);',
+     '  if (fallback !== undefined && fallback !== "") {\n    try {',
      "  const fallback = ctx.config.app.defaults.model;\n"
-     "  void fallback;"),
+     "  if (false as boolean) {\n    try {"),
     ("active name: the first entry is not a fallback",
      "  return entries[0]?.resolved.qualifiedName;",
      "  return undefined;"),
     ("active name: the first entry beats the config default",
-     "  const fallback = ctx.config.app.defaults.model;",
+     "  const fallback = ctx.config.app.defaults.model;\n"
+     '  if (fallback !== undefined && fallback !== "") {\n    try {',
      "  if (entries[0] !== undefined) return entries[0].resolved.qualifiedName;\n"
-     "  const fallback = ctx.config.app.defaults.model;"),
+     "  const fallback = ctx.config.app.defaults.model;\n"
+     '  if (fallback !== undefined && fallback !== "") {\n    try {'),
 
     # --- model_info ---------------------------------------------------------
     ("info: the sampler view is attached without a character",
@@ -245,35 +263,35 @@ MUTANTS = [
 
     # --- switch_model / reset_model -----------------------------------------
     ("switch: a missing name is an error rather than a report",
-     "  const name = asStr(args[\"name\"]);\n  if (name === undefined) return { active: ctx.activeModel ?? null };",
-     '  const name = asStr(args["name"]);\n  if (name === undefined) throw invalidRequest("Missing required argument: name");'),
+     '  const name = asStr(args["name"]);\n'
+     "  if (name === undefined) {\n"
+     "    return { active: effectiveChatModel(ctx.config, ctx.characterName)?.qualifiedName ?? null };\n"
+     "  }",
+     '  const name = asStr(args["name"]);\n'
+     '  if (name === undefined) throw invalidRequest("Missing required argument: name");'),
     ("switch: the qualified name is persisted instead of the pair",
      "  prefs.selected.provider = resolved.providerKey;\n  prefs.selected.modelId = resolved.modelId;",
      "  prefs.selected.provider = resolved.providerKey;\n  prefs.selected.modelId = resolved.qualifiedName;"),
-    ("switch: the session keeps the canonical name, not what was typed",
-     "  ctx.activeModel = name;\n  ctx.activeResolvedModel = resolved;",
-     "  ctx.activeModel = resolved.qualifiedName;\n  ctx.activeResolvedModel = resolved;"),
-    ("switch: the resolved model is not parked",
-     "  ctx.activeModel = name;\n  ctx.activeResolvedModel = resolved;",
-     "  ctx.activeModel = name;"),
+    ("switch: the report gives the canonical name, not what was typed",
+     "  return {\n    active: name,\n    qualified_name: resolved.qualifiedName,",
+     "  return {\n    active: resolved.qualifiedName,\n    qualified_name: resolved.qualifiedName,"),
     ("switch: preferences are written before the model resolves",
      "  const resolved = resolve(ctx, name, includeHidden);\n\n  const character = requireCharacter(ctx);",
      "  const character = requireCharacter(ctx);\n  const resolved = resolve(ctx, name, includeHidden);"),
     ("switch: the write goes to the global file",
-     "  saveCharacter(ctx, character, prefs);\n\n  ctx.activeModel = name;",
-     "  saveGlobal(ctx, prefs);\n\n  ctx.activeModel = name;"),
+     "  saveCharacter(ctx, character, prefs);\n\n  return {\n    active: name,",
+     "  saveGlobal(ctx, prefs);\n\n  return {\n    active: name,"),
     ("reset: the selection is not cleared on disk",
      "  prefs.selected = {};\n  saveCharacter(ctx, character, prefs);",
      "  saveCharacter(ctx, character, prefs);"),
-    ("reset: the session selection survives",
-     "  ctx.activeModel = undefined;\n  ctx.activeResolvedModel = undefined;",
-     "  ctx.activeResolvedModel = undefined;"),
-    ("reset: the parked model survives",
-     "  ctx.activeModel = undefined;\n  ctx.activeResolvedModel = undefined;",
-     "  ctx.activeModel = undefined;"),
-    ("reset: it reports the new selection as the previous one",
-     "    previous: previousActive ?? null,",
-     "    previous: ctx.activeModel ?? null,"),
+    ("reset: the saved selection survives",
+     "  const previous = { ...prefs.selected };\n"
+     "  prefs.selected = {};\n"
+     "  saveCharacter(ctx, character, prefs);",
+     "  const previous = { ...prefs.selected };\n  saveCharacter(ctx, character, prefs);"),
+    ("reset: it reports the cleared selection as the previous one",
+     "  const previous = { ...prefs.selected };\n  prefs.selected = {};",
+     "  prefs.selected = {};\n  const previous = { ...prefs.selected };"),
 
     # --- set_model_setting --------------------------------------------------
     ("set: the key is not trimmed",
@@ -296,13 +314,13 @@ MUTANTS = [
      '  if (scope !== "character" && scope !== "global") {',
      "  if (false as boolean) {"),
     ("set: the capability check never runs",
-     "  const failure = capabilityCheck(target.sdk, target.modelId, key, value);\n"
+     "  const failure = capabilityCheck(model.sdk, model.modelId, key, value, model.capabilities);\n"
      "  if (failure !== undefined) throw failure;",
      "  void capabilityCheck;"),
     ("set: the capability check runs against the active model, not the target",
-     "  const failure = capabilityCheck(target.sdk, target.modelId, key, value);",
+     "  const failure = capabilityCheck(model.sdk, model.modelId, key, value, model.capabilities);",
      "  const active = resolveActiveModel(ctx);\n"
-     "  const failure = capabilityCheck(active.sdk, active.modelId, key, value);"),
+     "  const failure = capabilityCheck(active.sdk, active.modelId, key, value, active.capabilities);"),
     ("set: a character scope does not require a character",
      '  const character = scope === "character" ? requireCharacter(ctx) : undefined;',
      '  const character = scope === "character" ? ctx.characterName : undefined;'),
@@ -310,17 +328,20 @@ MUTANTS = [
      "  if (character === undefined) saveGlobal(ctx, prefs);\n  else saveCharacter(ctx, character, prefs);",
      "  saveCharacter(ctx, character ?? requireCharacter(ctx), prefs);"),
     ("set: the emptied entry is left behind",
-     "  if (samplerIsEmpty(entry.sampler)) prefs.models.delete(entryKey);\n  else prefs.models.set(entryKey, entry);",
-     "  prefs.models.set(entryKey, entry);"),
+     "  if (samplerIsEmpty(entry.sampler)) slot.delete(entryKey);\n  else slot.set(entryKey, entry);",
+     "  slot.set(entryKey, entry);"),
     ("set: every entry is dropped, not just the emptied one",
-     "  if (samplerIsEmpty(entry.sampler)) prefs.models.delete(entryKey);",
-     "  if (samplerIsEmpty(entry.sampler)) prefs.models.clear();"),
+     "  if (samplerIsEmpty(entry.sampler)) slot.delete(entryKey);",
+     "  if (samplerIsEmpty(entry.sampler)) slot.clear();"),
     ("set: the entry is keyed by qualified name",
-     "  const entryKey = preferenceKey(target.providerKey, target.modelId);",
-     "  const entryKey = target.qualifiedName;"),
+     '    target.kind === "subagent" ? target.subagent : preferenceKey(model.providerKey, model.modelId);',
+     '    target.kind === "subagent" ? target.subagent : model.qualifiedName;'),
     ("set: an existing entry is overwritten rather than extended",
-     "  const entry = prefs.models.get(entryKey) ?? { sampler: {} };",
+     "  const entry = slot.get(entryKey) ?? { sampler: {} };",
      "  const entry = { sampler: {} };"),
+    ("set: a sub-agent setting lands in the model slot",
+     '      ? prefs.subagents\n      : target.kind === "subagent_model"',
+     '      ? prefs.models\n      : target.kind === "subagent_model"'),
 
     # --- model_settings -----------------------------------------------------
     ("settings: a characterless session still reads the global file",
@@ -339,12 +360,12 @@ MUTANTS = [
     ("settings: reports the ten info scopes rather than fourteen",
      "    scopes: scopesJson(scopes, SETTINGS_SCOPE_FIELDS),",
      "    scopes: scopesJson(scopes, INFO_SCOPE_FIELDS),"),
-    ("settings: the applicability table ignores the model id",
-     "    applicability: keyApplicability(target.sdk, target.modelId),",
-     '    applicability: keyApplicability(target.sdk, ""),'),
-    ("settings: the effort domain ignores the model id",
-     "    reasoning_effort_domain: reasoningDomain(target.sdk, target.modelId),",
-     "    reasoning_effort_domain: reasoningDomain(target.sdk),"),
+    ("settings: the applicability table ignores the model's capabilities",
+     "    applicability: keyApplicability(model.sdk, model.modelId, model.capabilities),",
+     '    applicability: keyApplicability(model.sdk, model.modelId, undefined),'),
+    ("settings: the effort domain ignores the model's capabilities",
+     "    reasoning_effort_domain: reasoningDomain(model.sdk, model.capabilities),",
+     "    reasoning_effort_domain: reasoningDomain(model.sdk, undefined),"),
 ]
 
 

@@ -113,28 +113,27 @@ MUTANTS = [
      "      : [characterMetadata(configDir, active)];"),
     ("list: the active character is appended rather than led with",
      "  const characters = active === undefined ? [] : [characterMetadata(configDir, active)];\n"
-     "  for (const name of discoverCharacters(configDir)) {\n"
-     "    if (name !== active) characters.push(characterMetadata(configDir, name));\n"
-     "  }",
+     "  for (const name of discoverCharacters(configDir, workspaceRoot)) {\n"
+     "    if (name !== active) characters.push(characterMetadata(configDir, name));\n  }",
      "  const characters: CharacterInfo[] = [];\n"
-     "  for (const name of discoverCharacters(configDir)) {\n"
-     "    if (name !== active) characters.push(characterMetadata(configDir, name));\n"
-     "  }\n"
+     "  for (const name of discoverCharacters(configDir, workspaceRoot)) {\n"
+     "    if (name !== active) characters.push(characterMetadata(configDir, name));\n  }\n"
      "  if (active !== undefined) characters.push(characterMetadata(configDir, active));"),
     ("list: the active character is not deduplicated out of discovery",
      "    if (name !== active) characters.push(characterMetadata(configDir, name));",
      "    characters.push(characterMetadata(configDir, name));"),
     ("list: discovery is dropped, only the active character is listed",
-     "  for (const name of discoverCharacters(configDir)) {",
+     "  for (const name of discoverCharacters(configDir, workspaceRoot)) {",
      "  for (const name of [] as string[]) {"),
     ("list: the listing is re-sorted, losing the active character's lead",
      "  return { characters };",
      "  return { characters: [...characters].sort((a, b) => (a.name < b.name ? -1 : 1)) };"),
     ("standalone: prepends the active character after all",
-     "export const listCharactersStandalone = (configDir: string): { characters: CharacterInfo[] } =>\n"
-     "  listCharacters(configDir);",
-     "export const listCharactersStandalone = (configDir: string): { characters: CharacterInfo[] } =>\n"
-     '  listCharacters(configDir, "ghost-active");'),
+     "): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, workspaceRoot);",
+     '): { characters: CharacterInfo[] } => listCharacters(configDir, "ghost-active", workspaceRoot);'),
+    ("standalone: the workspace root is dropped, so workspace-only characters vanish",
+     "): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, workspaceRoot);",
+     "): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, undefined);"),
 
     # --- character_info: which name -------------------------------------------
     ("info: an empty name argument is a name",
@@ -149,14 +148,14 @@ MUTANTS = [
 
     # --- character_info: the not-found gate -----------------------------------
     ("info: a missing directory is a miss even for the active character",
-     "  if (!pathExists(charDir) && name !== ctx.active) {",
-     "  if (!pathExists(charDir)) {"),
-    ("info: the miss is gated on being a discoverable character",
-     "  if (!pathExists(charDir) && name !== ctx.active) {",
-     "  if (!discoverCharacters(ctx.configDir).includes(name) && name !== ctx.active) {"),
+     "  if (!pathExists(charDir) && !pathExists(workspaceDir) && name !== ctx.active) {",
+     "  if (!pathExists(charDir) && !pathExists(workspaceDir)) {"),
+    ("info: a character with only a workspace is a miss",
+     "  if (!pathExists(charDir) && !pathExists(workspaceDir) && name !== ctx.active) {",
+     "  if (!pathExists(charDir) && name !== ctx.active) {"),
     ("info: nothing is ever a miss",
-     "  if (!pathExists(charDir) && name !== ctx.active) {",
-     "  if (false) {"),
+     "  if (!pathExists(charDir) && !pathExists(workspaceDir) && name !== ctx.active) {",
+     "  if (false as boolean) {"),
 
     # --- character_info: the definition ---------------------------------------
     ("info: has_definition asks whether SOUL.md is readable, not present",
@@ -178,7 +177,7 @@ MUTANTS = [
      "    bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE].toSorted().filter((file) =>"),
     ("info: bootstrap files are not filtered by what is present",
      "    bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE].filter((file) =>\n"
-     "      pathExists(characterWorkspaceFile(ctx.configDir, name, file)),\n"
+     "      pathExists(characterWorkspaceFile(ctx.configDir, name, file, ctx.workspaceRoot)),\n"
      "    ),",
      "    bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE],"),
     ("info: the config override is looked for in the workspace",
@@ -196,28 +195,26 @@ MUTANTS = [
 
     # --- switch_character -----------------------------------------------------
     ("switch: a non-string name is used rather than treated as missing",
-     '  const name = asStr(args["name"]);',
-     '  const name = args["name"] === undefined ? undefined : String(args["name"]);'),
+     '  const name = asStr(args["name"]);\n'
+     '  if (name === undefined) throw invalidRequest("Missing required argument: name");',
+     '  const name = args["name"] === undefined ? undefined : String(args["name"]);\n'
+     '  if (name === undefined) throw invalidRequest("Missing required argument: name");'),
     ("switch: an empty name is a missing argument",
      "  if (name === undefined) throw invalidRequest(\"Missing required argument: name\");",
      '  if (name === undefined || name === "") throw invalidRequest("Missing required argument: name");'),
-    ("switch: the same-name check runs after the directory probe",
+    ("switch: the same-name check runs after the discovery probe",
      "  if (name === active) return { character: name, changed: false };\n\n"
-     "  if (!pathExists(characterConfigDir(configDir, name))) {\n"
-     "    throw notFound(`Character not found: ${name}`);\n"
-     "  }\n"
-     "  return { character: name, changed: true };",
-     "  if (!pathExists(characterConfigDir(configDir, name))) {\n"
-     "    throw notFound(`Character not found: ${name}`);\n"
-     "  }\n"
-     "  if (name === active) return { character: name, changed: false };\n"
-     "  return { character: name, changed: true };"),
-    ("switch: a missing directory is accepted",
-     "  if (!pathExists(characterConfigDir(configDir, name))) {",
-     "  if (false) {"),
-    ("switch: existence is gated on being a discoverable character",
-     "  if (!pathExists(characterConfigDir(configDir, name))) {",
-     "  if (!discoverCharacters(configDir).includes(name)) {"),
+     "  if (!discoverCharacters(configDir, workspaceRoot).includes(name)) {\n"
+     "    throw notFound(`Character not found: ${name}`);\n  }",
+     "  if (!discoverCharacters(configDir, workspaceRoot).includes(name)) {\n"
+     "    throw notFound(`Character not found: ${name}`);\n  }\n"
+     "  if (name === active) return { character: name, changed: false };"),
+    ("switch: an undiscoverable character is accepted",
+     "  if (!discoverCharacters(configDir, workspaceRoot).includes(name)) {",
+     "  if (false as boolean) {"),
+    ("switch: existence is gated on the config directory rather than discovery",
+     "  if (!discoverCharacters(configDir, workspaceRoot).includes(name)) {",
+     "  if (!pathExists(characterConfigDir(configDir, name))) {"),
     ("switch: changed is always true",
      "  if (name === active) return { character: name, changed: false };",
      "  if (name === active) return { character: name, changed: true };"),

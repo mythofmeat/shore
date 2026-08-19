@@ -43,18 +43,18 @@ TESTS = ["tests/autonomy_in_process.test.ts", "tests/transcript_capture.test.ts"
 # (label, file, find, replace)
 MUTANTS = [
     # --- what the ledger is told ----------------------------------------------
-    ("ledger: every round is labelled a first call, so the loop's cost is invisible",
+    ("ledger: every round is labelled a heartbeat, so the loop's cost is misattributed",
      P,
-     "        request.context = { ...request.context, character, call_type: callType } as never;",
-     '        request.context = { ...request.context, character, call_type: "heartbeat" } as never;'),
+     "    call_type: callType,",
+     '    call_type: "heartbeat",'),
     ("ledger: the character is dropped, so rows cannot be attributed",
      P,
-     "        request.context = { ...request.context, character, call_type: callType } as never;",
-     "        request.context = { ...request.context, call_type: callType } as never;"),
+     "    character,\n    call_type: callType,",
+     "    call_type: callType,"),
     ("ledger: the existing context is discarded, taking the ledger path with it",
      P,
-     "        request.context = { ...request.context, character, call_type: callType } as never;",
-     "        request.context = { character, call_type: callType } as never;"),
+     "  request.context = {\n    ...request.context,\n    ledger: request.context?.ledger ?? rustJoin(config.dirs.data, \"ledger.db\"),",
+     '  request.context = {\n    ledger: rustJoin(config.dirs.data, "ledger.db"),'),
 
     # --- which action runs ----------------------------------------------------
     ("action: a max_turns compaction runs here too, compacting the same turns twice",
@@ -97,10 +97,10 @@ MUTANTS = [
      "        : { notify: this.#deps.notifyAutonomousMessage }),"),
     ("notify: the deep archive announces nothing at all",
      P,
-     "      ...(this.#deps.notifyCompactionComplete === undefined\n"
-     "        ? {}\n"
-     "        : { notify: this.#deps.notifyCompactionComplete }),",
-     "      ...({} as Record<string, never>),"),
+     "        ...(this.#deps.notifyCompactionComplete === undefined\n"
+     "          ? {}\n"
+     "          : { notify: this.#deps.notifyCompactionComplete }),",
+     "        ...({} as Record<string, never>),"),
 
     # --- the tool surface -----------------------------------------------------
     ("tools: a tool failure is reported to the model as a success",

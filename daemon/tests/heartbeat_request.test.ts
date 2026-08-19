@@ -329,7 +329,9 @@ describe("preparing a heartbeat body", () => {
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(prepared?.request.context?.rid).toBeUndefined();
+    expect(prepared?.request.context?.call_type).toBe("heartbeat");
     expect(cached.context?.rid).toBe("r_1");
+    expect(cached.context?.call_type).toBe("message");
   });
 
   test("rebuilds from disk when nothing is cached, and caches what it rebuilt", async () => {

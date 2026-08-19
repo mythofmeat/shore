@@ -30,7 +30,7 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-I = "src/instances.ts"
+I = "src/daemon/instances.ts"
 
 TESTS = ["tests/instances.test.ts"]
 

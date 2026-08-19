@@ -330,6 +330,16 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
     expect(orphanedToolResults(engine.messages())).toEqual([]);
   });
 
+  test("two refs inside one tool loop delete it once", async () => {
+    const engine = await engineOver(wedgeShape);
+    const result = (await deleteMessages(engine, { refs: ["m_31", "m_32"] })) as {
+      deleted: string[];
+    };
+
+    expect(result.deleted.sort()).toEqual(["m_31", "m_32"]);
+    expect(engine.messages().map((m) => m.msg_id)).toEqual(["m_29", "m_30"]);
+  });
+
   test("deleting the assistant by raw msg_id takes its tool results too", async () => {
     const engine = await engineOver(wedgeShape);
     await deleteMessages(engine, { refs: "m_31" });

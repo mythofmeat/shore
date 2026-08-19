@@ -586,11 +586,10 @@ function synthesizeSelectedProviderModel(
   );
 }
 
-export function resolveActiveForCharacter(
+function selectedForCharacter(
   config: LoadedConfigView,
   global: ModelPreferences,
   character: ModelPreferences,
-  appDefaultModel: string | undefined,
   findEffective: FindEffectiveModel,
 ): ResolvedModel | undefined {
   for (const prefs of [character, global]) {
@@ -599,6 +598,33 @@ export function resolveActiveForCharacter(
     const resolved = resolveProviderModel(config, pair[0], pair[1], findEffective);
     if (resolved !== undefined) return resolved;
   }
+  return undefined;
+}
+
+export function savedModelForCharacter(
+  config: LoadedConfigView,
+  character: string,
+  findEffective: FindEffectiveModel,
+): ResolvedModel | undefined {
+  let global: ModelPreferences;
+  let charPrefs: ModelPreferences;
+  try {
+    [global, charPrefs] = loadForCharacter(config.dirs.data, character);
+  } catch {
+    return undefined;
+  }
+  return selectedForCharacter(config, global, charPrefs, findEffective);
+}
+
+export function resolveActiveForCharacter(
+  config: LoadedConfigView,
+  global: ModelPreferences,
+  character: ModelPreferences,
+  appDefaultModel: string | undefined,
+  findEffective: FindEffectiveModel,
+): ResolvedModel | undefined {
+  const selected = selectedForCharacter(config, global, character, findEffective);
+  if (selected !== undefined) return selected;
 
   if (appDefaultModel !== undefined) {
     try {

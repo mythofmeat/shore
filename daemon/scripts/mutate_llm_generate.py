@@ -84,17 +84,11 @@ MUTANTS = [
      "  );",
      "  const candidates = resolveKeyCandidates(resolved.providerKey, undefined, resolved.apiKeyEnv);"),
     ("rotation: a credential failure is retried on the same key instead of rotating",
-     G, ATTEMPT,
-     "      streamWithRetry(\n"
-     "        () => {\n"
-     "          request.api_key = apiKey;\n"
-     "          if (request.context !== undefined) request.context.api_key_name = candidate.name;\n"
-     "          return callProvider(request, deps, signal);\n"
-     "        },\n"
+     G,
+     "        deps.retry ?? DEFAULT_RETRY,\n        undefined,\n        deps.sleep,",
      "        deps.retry ?? DEFAULT_RETRY,\n"
      "        (_e, attempt, max) => attempt < max,\n"
-     "        deps.sleep,\n"
-     "      ),"),
+     "        deps.sleep,"),
     ("rotation: the key is never applied, so every attempt runs on the seed credential",
      G,
      "          request.api_key = apiKey;",
@@ -126,26 +120,37 @@ MUTANTS = [
     ("call: the budget gate is skipped",
      G,
      "  const blocked = budgetBlockFor(request);\n"
-     "  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope);",
-     "  void request;"),
+     "  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);",
+     "  void budgetBlockFor;"),
     ("call: a successful call is not recorded",
      G,
-     "    recordGenerate(request.context, request, response);",
+     "    recordGenerate(request.context, request, response, attempt);",
      "    void response;"),
+    ("call: a successful call is recorded as a fresh attempt",
+     G,
+     "    recordGenerate(request.context, request, response, attempt);",
+     "    recordGenerate(request.context, request, response, undefined);"),
     ("call: a failed call leaves no row, so the ledger reads as a quiet period",
      G,
-     "    recordGenerateError(request.context, request, startedAt, clock);\n"
-     "    throw e;",
-     "    void startedAt;\n"
-     "    throw e;"),
+     "    recordGenerateError(request.context, request, startedAt, clock, attempt);\n    throw e;",
+     "    void startedAt;\n    throw e;"),
     ("call: a failure is swallowed and reported as an empty response",
      G,
-     "    recordGenerateError(request.context, request, startedAt, clock);\n"
-     "    throw e;",
-     "    recordGenerateError(request.context, request, startedAt, clock);\n"
-     "    return { content: '', content_blocks: [], finish_reason: 'error',\n"
-     "      usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },\n"
-     "      timing: { total_ms: 0, time_to_first_token_ms: 0 }, model: request.model };"),
+     "    recordGenerateError(request.context, request, startedAt, clock, attempt);\n    throw e;",
+     "    recordGenerateError(request.context, request, startedAt, clock, attempt);\n"
+     "    return {\n"
+     "      content: \"\",\n"
+     "      content_blocks: [],\n"
+     '      finish_reason: "error",\n'
+     "      usage: {\n"
+     "        input_tokens: 0,\n"
+     "        output_tokens: 0,\n"
+     "        cache_read_tokens: 0,\n"
+     "        cache_creation_tokens: 0,\n"
+     "      },\n"
+     "      timing: { total_ms: 0, time_to_first_token_ms: 0 },\n"
+     "      model: request.model,\n"
+     "    } as never;"),
 ]
 
 

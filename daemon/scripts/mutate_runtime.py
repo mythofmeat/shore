@@ -67,8 +67,8 @@ MUTANTS = [
     # --- directories ----------------------------------------------------------
     ("dirs: the plugins root is not created, so relative [mcp.*] paths resolve nowhere",
      R,
-     "    pluginsDir(config.dirs.data),\n",
-     ""),
+     "    config.dirs.data,\n    pluginsDir(config.dirs.data),\n    config.dirs.cache,",
+     "    config.dirs.data,\n    config.dirs.cache,"),
     ("dirs: created without recursion, so a fresh install stops at the first parent",
      R,
      "    mkdirSync(dir, { recursive: true });",
@@ -81,11 +81,10 @@ MUTANTS = [
     # --- wiring ---------------------------------------------------------------
     ("keepalive: an unknown sdk pings nothing and reports success",
      R,
-     "    const provider = options.providers[req.sdk];\n"
-     "    if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);\n"
-     "    return provider.generate(req, signal);",
-     "    const provider = options.providers[req.sdk];\n"
-     "    return provider?.generate(req, signal) as never;"),
+     "      const provider = providers[req.sdk];\n"
+     "      if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);\n"
+     "      return provider.generate(",
+     "      const provider = providers[req.sdk];\n      return provider?.generate("),
     # `KeepaliveService` calls its sender as `this.#send(ping)` at both sites,
     # so the signal parameter is never populated and dropping it changes
     # nothing. Kept as a recorded equivalent rather than deleted: it is the
@@ -102,8 +101,8 @@ MUTANTS = [
      "      env: { ...server.env },"),
     ("mcp: servers resolve against the data dir rather than its plugins root",
      R,
-     "  return await McpRegistry.fromConfig(servers, pluginsDir(config.dirs.data), connect);",
-     "  return await McpRegistry.fromConfig(servers, config.dirs.data, connect);"),
+     "    mcpConfigView(config),\n    pluginsDir(config.dirs.data),\n    connect,",
+     "    mcpConfigView(config),\n    config.dirs.data,\n    connect,"),
     ("registry: discovery walks the data dir instead of the config dir",
      R,
      "    config.dirs.config,\n    config.dirs.data,\n    config,",

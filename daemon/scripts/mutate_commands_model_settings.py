@@ -110,15 +110,15 @@ MUTANTS = [
     # --- sdk ----------------------------------------------------------------
     ("sdk: any string is stored", SETTINGS,
      "    return sdkFromWire(s) === undefined\n"
-     '      ? { error: `sdk must be one of "anthropic", "openai", "gemini", "zai"; got ${show(s)}` }\n'
+     "      ? { error: `sdk must be one of ${SDK_VARIANTS.map(show).join(\", \")}; got ${show(s)}` }\n"
      "      : { value: s };",
      "    return { value: s };"),
     ("sdk: the canonical form is stored, not what the user typed", SETTINGS,
      "      : { value: s };\n  },\n\n  replay_prior_thinking:",
      "      : { value: sdkFromWire(s) };\n  },\n\n  replay_prior_thinking:"),
     ("sdk: the rejection message is unquoted", SETTINGS,
-     'gemini", "zai"; got ${show(s)}`',
-     'gemini", "zai"; got ${s}`'),
+     "got ${show(s)}` }",
+     "got ${s}` }"),
 
     # --- replay_prior_thinking ----------------------------------------------
     ("replay: the legacy bool is inverted", SETTINGS,
@@ -239,52 +239,42 @@ MUTANTS = [
 
     # --- keyApplicability -----------------------------------------------------
     ("table: matrix-less keys report honored rather than always", SETTINGS,
-     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field);',
-     '    out[key] = field === undefined ? "honored" : applicability(sdk, modelId, field);'),
-    ("table: the model id is ignored", SETTINGS,
-     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field);',
-     '    out[key] = field === undefined ? "always" : applicability(sdk, "", field);'),
+     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, capabilities);',
+     '    out[key] = field === undefined ? "honored" : applicability(sdk, modelId, field, capabilities);'),
+    ("table: the model's capabilities are ignored", SETTINGS,
+     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, capabilities);',
+     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, undefined);'),
     ("table: every key is reported as always", SETTINGS,
-     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field);',
+     '    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, capabilities);',
      '    out[key] = "always";'),
 
     # --- capabilities.ts: supportsReasoningOff --------------------------------
-    ("off-switch: openai is included", CAPS,
-     '  return sdk === "anthropic" || sdk === "deepseek" || sdk === "moonshot" || sdk === "openrouter" || sdk === "zai";',
-     '  return sdk !== "gemini";'),
-    ("off-switch: gemini is included", CAPS,
-     '  return sdk === "anthropic" || sdk === "deepseek" || sdk === "moonshot" || sdk === "openrouter" || sdk === "zai";',
-     '  return sdk !== "openai";'),
-    ("off-switch: zai is excluded", CAPS,
-     ' || sdk === "openrouter" || sdk === "zai";',
-     ' || sdk === "openrouter";'),
-    ("off-switch: anthropic is excluded", CAPS,
-     '  return sdk === "anthropic" || sdk === "deepseek"',
-     '  return sdk === "deepseek"'),
+    ("off-switch: every sdk honors it", CAPS,
+     '  return sdk !== "gemini";',
+     "  return true as boolean;"),
+    ("off-switch: only gemini honors it", CAPS,
+     '  return sdk !== "gemini";',
+     '  return sdk === "gemini";'),
     ("off-switch: nobody honors it", CAPS,
-     '  return sdk === "anthropic" || sdk === "deepseek" || sdk === "moonshot" || sdk === "openrouter" || sdk === "zai";',
+     '  return sdk !== "gemini";',
      "  return false as boolean;"),
 
     # --- capabilities.ts: validate --------------------------------------------
     ("validate: an ignored field is settable", CAPS,
-     '  if (applicability(sdk, modelId, field) !== "honored") {',
-     '  if (applicability(sdk, modelId, field) === "rejected") {'),
+     '  if (applicability(sdk, modelId, field, caps) !== "honored") {',
+     '  if (applicability(sdk, modelId, field, caps) === "rejected") {'),
     ("validate: a rejected field is settable", CAPS,
-     '  if (applicability(sdk, modelId, field) !== "honored") {',
-     '  if (applicability(sdk, modelId, field) === "ignored") {'),
+     '  if (applicability(sdk, modelId, field, caps) !== "honored") {',
+     '  if (applicability(sdk, modelId, field, caps) === "ignored") {'),
     ("validate: applicability is never checked", CAPS,
-     '  if (applicability(sdk, modelId, field) !== "honored") {\n'
-     "    return new CapabilityError(`\\`${field}\\` is not applicable to the \\`${sdk}\\` sdk for this model`);\n"
-     "  }",
-     "  if (false as boolean) {\n"
-     "    return new CapabilityError(`\\`${field}\\` is not applicable to the \\`${sdk}\\` sdk for this model`);\n"
-     "  }"),
+     '  if (applicability(sdk, modelId, field, caps) !== "honored") {',
+     "  if (false as boolean) {"),
     ("validate: the effort domain is not checked", CAPS,
      '  if (field === "reasoning_effort" && probe !== true) {',
      "  if (false as boolean) {"),
-    ("validate: the effort domain ignores the model id", CAPS,
-     "    const domain = reasoningDomain(sdk, modelId);",
-     "    const domain = reasoningDomain(sdk);"),
+    ("validate: the effort domain ignores the model's capabilities", CAPS,
+     "    const domain = reasoningDomain(sdk, caps);",
+     "    const domain = reasoningDomain(sdk, undefined);"),
     ("validate: a non-string effort is domain-checked too", CAPS,
      '  if (field === "reasoning_effort" && probe !== true) {',
      '  if (field === "reasoning_effort") {'),
@@ -313,7 +303,10 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/model_settings.test.ts"])
+    return _run_mutants(
+        MUTANTS,
+        ["tests/model_settings.test.ts", "tests/capabilities.test.ts"],
+    )
 
 
 if __name__ == "__main__":

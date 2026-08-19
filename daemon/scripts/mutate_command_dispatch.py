@@ -53,29 +53,23 @@ CONNECTION = "src/swp/connection.ts"
 MUTANTS = [
     # --- which sections need a restart ----------------------------------------
     ("restart: the listener is not startup-owned", RESTART,
-     '  if (!same(a.daemon, b.daemon)) changes.push("[daemon]");',
-     "  void 0;"),
+     '  "daemon",\n  "notifications",',
+     '  "notifications",'),
     ("restart: notifications are not startup-owned", RESTART,
-     '  if (!same(a.notifications, b.notifications)) changes.push("[notifications]");',
-     "  void 0;"),
-    ("restart: the payload-logging switch is not reported", RESTART,
-     "  if (a.advanced.api_payload_logging !== b.advanced.api_payload_logging) {\n"
-     '    changes.push("[advanced].api_payload_logging");\n'
-     "  }",
-     "  void 0;"),
+     '  "notifications",\n  "connections",',
+     '  "connections",'),
+    ("restart: the connections table is not startup-owned", RESTART,
+     '  "connections",\n  "cache.forensics",',
+     '  "cache.forensics",'),
     ("restart: the forensics switch is not reported", RESTART,
-     "  if (a.cache.forensics !== b.cache.forensics) {\n"
-     '    changes.push("[cache].forensics");\n'
-     "  }",
-     "  void 0;"),
-    ("restart: the sidecar is not reported", RESTART,
-     "  if (!same(a.advanced.llm_sidecar, b.advanced.llm_sidecar)) {\n"
-     '    changes.push("[advanced].llm_sidecar");\n'
-     "  }",
-     "  void 0;"),
+     '  "cache.forensics",\n] as const;',
+     "] as const;"),
+    ("restart: a nested key under a restart-owned path does not count", RESTART,
+     "  return RESTART_REQUIRED_PATHS.some((path) => key === path || key.startsWith(`${path}.`));",
+     "  return RESTART_REQUIRED_PATHS.some((path) => key === path);"),
     ("restart: the fresh config is compared against itself", RESTART,
-     "  if (!same(a.daemon, b.daemon))",
-     "  if (!same(b.daemon, b.daemon))"),
+     "  return RESTART_REQUIRED_PATHS.filter((path) => !same(at(old, path), at(fresh, path))).map(",
+     "  return RESTART_REQUIRED_PATHS.filter((path) => !same(at(fresh, path), at(fresh, path))).map("),
 
     # --- the structural comparison --------------------------------------------
     ("equal: sections are compared by identity, so a duration never matches", RESTART,
@@ -118,11 +112,8 @@ MUTANTS = [
      "  ctx.runtime.reloadRuntimeConfig(ctx.config);",
      "  ctx.runtime.reloadRuntimeConfig(ctx.config);\n"
      "  await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);"),
-    ("effects: a reset leaves the cached active model in place", DISPATCH,
-     "  ctx.runtime.clearActiveModel();\n",
-     ""),
     ("effects: a reset adopts the daemon's config instead of the command's", DISPATCH,
-     "  const summary = await ctx.runtime.applyReloadedConfig(ctx.config);",
+     "  const summary = await ctx.runtime.applyReloadedConfig(fresh);",
      "  const summary = await ctx.runtime.applyReloadedConfig(ctx.runtime.globalConfig());"),
     ("effects: restart_required is computed after the adoption", DISPATCH,
      "  const restart = { restart_required: restartRequiredChanges(ctx.runtime.globalConfig(), fresh) };\n"
@@ -137,10 +128,11 @@ MUTANTS = [
      "  const fresh = applied ? ctx.config : ctx.runtime.reloadGlobalConfig();",
      "  const fresh = ctx.config;"),
     ("effects: the session is moved after its history is taken", DISPATCH,
-     "  ctx.router.setSelectedCharacter(ctx.sessionId, selected);\n"
-     "  const snapshot = await ctx.handshake.history(selected);",
-     "  const snapshot = await ctx.handshake.history(selected);\n"
-     "  ctx.router.setSelectedCharacter(ctx.sessionId, selected);"),
+     "  ctx.router.setSelectedCharacter(ctx.sessionId, selected);\n\n  let snapshot: HistorySnapshot;",
+     "  let snapshot: HistorySnapshot;"),
+    ("effects: a history that will not load leaves the session moved anyway", DISPATCH,
+     "    ctx.router.setSelectedCharacter(ctx.sessionId, previous);\n    throw e;",
+     "    throw e;"),
     ("effects: the switched-to history is never pushed", DISPATCH,
      "  await ctx.router.sendToSession(ctx.sessionId, historyMessage(snapshot, ctx.rid));\n",
      ""),
@@ -150,14 +142,8 @@ MUTANTS = [
      '  const prev = isRecord(data) && isRecord(data["invalidated"]) ? data["invalidated"] : {};',
      "  const prev = {};"),
     ("annotate: discovery is always reported as changed", DISPATCH,
-     "    character_discovery: summary.characterDiscoveryChanged,\n"
-     "    merged_character_configs: true,\n"
-     "    removed_character_engines: summary.droppedEngines,\n"
-     "  });",
-     "    character_discovery: true,\n"
-     "    merged_character_configs: true,\n"
-     "    removed_character_engines: summary.droppedEngines,\n"
-     "  });"),
+     "      character_discovery: summary.characterDiscoveryChanged,",
+     "      character_discovery: true,"),
     ("annotate: a missing active_model comes back absent rather than null", DISPATCH,
      '    active_model: (isRecord(config) ? config["active_model"] : undefined) ?? null,',
      '    active_model: isRecord(config) ? config["active_model"] : undefined,'),

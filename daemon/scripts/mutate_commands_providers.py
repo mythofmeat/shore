@@ -125,9 +125,9 @@ MUTANTS = [
     ("listing: discovery_enabled reports the provider's enabled flag",
      "      discovery_enabled: entry.discovery.enabled,",
      "      discovery_enabled: entry.enabled,"),
-    ("listing: an unset sdk reports as its default rather than null",
-     "      sdk: entry.sdk ?? null,",
-     "      sdk: entry.sdk ?? defaultSdk(name),"),
+    ("listing: an unset sdk is reported as null rather than the default it will use",
+     "      sdk: entry.sdk ?? defaultSdk(name),",
+     "      sdk: entry.sdk ?? null,"),
 
     # --- refreshOne guards ----------------------------------------------------
     ("refresh: an unconfigured provider is an invalid request",
@@ -171,10 +171,7 @@ MUTANTS = [
 
     # --- the cache write ------------------------------------------------------
     ("refresh: a failed discovery still writes a cache",
-     '  if ("err" in discovered) {\n'
-     "    // The previous cache stands.\n"
-     "    throw internalError(describeDiscoveryError(discovered.err));\n"
-     "  }",
+     '  if ("err" in discovered) {\n    throw internalError(describeDiscoveryError(discovered.err));\n  }',
      '  if ("err" in discovered) {\n'
      "    await writeCache(cachePath(cacheDir, provider), {\n"
      "      version: CACHE_VERSION,\n"
@@ -183,8 +180,7 @@ MUTANTS = [
      "      base_url: baseUrl,\n"
      "      models: [],\n"
      "    });\n"
-     "    throw internalError(describeDiscoveryError(discovered.err));\n"
-     "  }"),
+     "    throw internalError(describeDiscoveryError(discovered.err));\n  }"),
     ("refresh: the discovery error message is replaced",
      "    throw internalError(describeDiscoveryError(discovered.err));",
      '    throw internalError("discovery failed");'),
@@ -249,9 +245,12 @@ MUTANTS = [
      "    return { provider, discovered: [], hidden: [], static: [], include_hidden: includeHidden,\n"
      "      cache: { fetched_at: null, model_count: 0 } };\n  }\n\n  const cache"),
     ("models: hidden entries are dropped instead of split out",
-     "    if (visible || includeHidden) discovered.push(discoveredToJson(m));\n"
-     "    else hidden.push(discoveredToJson(m));",
-     "    if (visible || includeHidden) discovered.push(discoveredToJson(m));"),
+     "    if (visible || includeHidden) discovered.push(discoveredToJson(m, learned));\n"
+     "    else hidden.push(discoveredToJson(m, learned));",
+     "    if (visible || includeHidden) discovered.push(discoveredToJson(m, learned));"),
+    ("models: learned image support is not carried onto the rows",
+     "  const learned = readLearnedImageSupport(ctx.config.dirs.cache, provider);",
+     "  const learned = undefined;"),
     ("models: the ignore rules are not applied",
      "    const visible = entry === undefined || isVisible(entry.discovery, m.model_id);",
      "    const visible = true as boolean;"),

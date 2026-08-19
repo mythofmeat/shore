@@ -101,13 +101,8 @@ MUTANTS = [
      '          text: "",\n          stream: msg.stream,',
      '          text: "",\n          stream: true,'),
     ("a regen drops its rid",
-     "      ? {\n"
-     "          // A regen replaces the last assistant turn, so it carries no user\n"
-     "          // content — the turn it would append is already in the conversation.\n"
-     "          // Only `rid` and `stream` survive from the frame.\n"
-     "          rid: msg.rid ?? null,",
-     "      ? {\n"
-     "          rid: null,"),
+     '      ? {\n          rid: msg.rid ?? null,\n          text: "",',
+     '      ? {\n          rid: null,\n          text: "",'),
 
     # ── the lease ───────────────────────────────────────────────────────
     ("every engine message takes the lease",

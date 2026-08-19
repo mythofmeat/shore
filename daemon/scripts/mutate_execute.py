@@ -97,24 +97,20 @@ MUTANTS = [
 
     # ── the cap ─────────────────────────────────────────────────────────
     ("the result is not capped at all",
-     "const output = truncateToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));",
-     "const output = rawOutput;"),
+     "  const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));",
+     "  const windowed = windowToolResult(rawOutput, 0);"),
     ("the cap ignores the per-tool override",
-     "const output = truncateToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));",
-     "const output = truncateToolResult(rawOutput, exec.limits.max_result_chars);"),
+     "  const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));",
+     "  const windowed = windowToolResult(rawOutput, exec.limits.max_result_chars);"),
     ("the block carries the uncapped result",
      'block: { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError },',
      'block: { type: "tool_result", tool_use_id: toolUse.id, content: rawOutput, is_error: isError },'),
     ("the frame carries the uncapped result",
-     "  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError);\n"
      "  emitToolResult(exec, toolUse, output, isError);",
-     "  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError);\n"
      "  emitToolResult(exec, toolUse, rawOutput, isError);"),
-    ("the diagnostics row carries the uncapped result",
-     "  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError);\n"
-     "  emitToolResult(exec, toolUse, output, isError);",
-     "  recordToolDiagnostics(exec, toolUse, dispatchMs, rawOutput, isError);\n"
-     "  emitToolResult(exec, toolUse, output, isError);"),
+    ("the block carries the uncapped result, so the next turn resends it in full",
+     "    block: { type: \"tool_result\", tool_use_id: toolUse.id, content: output, is_error: isError },",
+     "    block: { type: \"tool_result\", tool_use_id: toolUse.id, content: rawOutput, is_error: isError },"),
     ("the deadline is ignored",
      "      timeoutFor(exec.limits, toolUse.name),",
      "      undefined,"),
@@ -130,8 +126,24 @@ MUTANTS = [
     # announced *before* the tool runs means relocating it past everything the
     # tool does, and that is the span between the two positions.
     ("the tool_call frame is sent after the tool ran, not before",
-     '  exec.sendDirect({\n    type: "tool_call",\n    ...(exec.rid !== undefined ? { rid: exec.rid } : {}),\n    tool_id: toolUse.id,\n    tool_name: toolUse.name,\n    input: toolUse.input,\n  });\n\n  const clock = exec.monotonicMs ?? Date.now;\n  const startedAt = clock();\n  let rawOutput: string;\n  let isError: boolean;\n  let okValue: unknown;\n  try {\n    const value = await dispatchWithinDeadline(\n      toolUse.name,\n      toolUse.input,\n      exec.ctx,\n      timeoutFor(exec.limits, toolUse.name),\n    );\n    // A string result is the model\'s text as-is; anything else is serialized.\n    // `unwrap_or_default()` in the Rust, which cannot fail on a `Value` — here\n    // it can, for a value `JSON.stringify` returns nothing for, and empty is\n    // the same answer.\n    rawOutput = typeof value === "string" ? value : (JSON.stringify(value) ?? "");\n    isError = false;\n    okValue = value;\n  } catch (e) {\n    // `ToolError`\'s `Display`, which the model reads as the failure: the\n    // variant prefixes (`invalid args: `, `io: `) are part of the contract, so\n    // it is the message and not the `Error: `-prefixed `String(e)`.\n    rawOutput = e instanceof Error ? e.message : String(e);\n    isError = true;\n  }\n  const dispatchMs = clock() - startedAt;\n\n  const output = truncateToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));\n\n  if (!isError && toolUse.name === "generate_image") {\n    attachGeneratedImage(okValue, intermediateMessages, exec);\n  }\n\n',
-     '  const clock = exec.monotonicMs ?? Date.now;\n  const startedAt = clock();\n  let rawOutput: string;\n  let isError: boolean;\n  let okValue: unknown;\n  try {\n    const value = await dispatchWithinDeadline(\n      toolUse.name,\n      toolUse.input,\n      exec.ctx,\n      timeoutFor(exec.limits, toolUse.name),\n    );\n    // A string result is the model\'s text as-is; anything else is serialized.\n    // `unwrap_or_default()` in the Rust, which cannot fail on a `Value` — here\n    // it can, for a value `JSON.stringify` returns nothing for, and empty is\n    // the same answer.\n    rawOutput = typeof value === "string" ? value : (JSON.stringify(value) ?? "");\n    isError = false;\n    okValue = value;\n  } catch (e) {\n    // `ToolError`\'s `Display`, which the model reads as the failure: the\n    // variant prefixes (`invalid args: `, `io: `) are part of the contract, so\n    // it is the message and not the `Error: `-prefixed `String(e)`.\n    rawOutput = e instanceof Error ? e.message : String(e);\n    isError = true;\n  }\n  const dispatchMs = clock() - startedAt;\n\n  const output = truncateToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));\n\n  if (!isError && toolUse.name === "generate_image") {\n    attachGeneratedImage(okValue, intermediateMessages, exec);\n  }\n\n  exec.sendDirect({\n    type: "tool_call",\n    ...(exec.rid !== undefined ? { rid: exec.rid } : {}),\n    tool_id: toolUse.id,\n    tool_name: toolUse.name,\n    input: toolUse.input,\n  });\n\n'),
+     [("  exec.sendDirect({\n"
+       '    type: "tool_call",\n'
+       "    ...(exec.rid !== undefined ? { rid: exec.rid } : {}),\n"
+       "    tool_id: toolUse.id,\n"
+       "    tool_name: toolUse.name,\n"
+       "    input: toolUse.input,\n"
+       "  });\n\n"
+       "  const clock = exec.monotonicMs ?? Date.now;",
+       "  const clock = exec.monotonicMs ?? Date.now;"),
+      ("  emitToolResult(exec, toolUse, output, isError);",
+       "  exec.sendDirect({\n"
+       '    type: "tool_call",\n'
+       "    ...(exec.rid !== undefined ? { rid: exec.rid } : {}),\n"
+       "    tool_id: toolUse.id,\n"
+       "    tool_name: toolUse.name,\n"
+       "    input: toolUse.input,\n"
+       "  });\n"
+       "  emitToolResult(exec, toolUse, output, isError);")]),
     ("an absent rid is sent as null on the tool_call frame",
      "    type: \"tool_call\",\n    ...(exec.rid !== undefined ? { rid: exec.rid } : {}),",
      "    type: \"tool_call\",\n    rid: exec.rid ?? null,"),
@@ -155,23 +167,6 @@ MUTANTS = [
      'block: { type: "tool_result", tool_use_id: toolUse.name, content: output,'),
 
     # ── the diagnostics row ─────────────────────────────────────────────
-    ("the diagnostics row is not appended",
-     "  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError);",
-     "  void [exec, dispatchMs];"),
-    ("the diagnostics row reports success on a failure",
-     "    success: !isError,",
-     "    success: true,"),
-    ("the input summary is not truncated",
-     'input_summary: truncateSummary(JSON.stringify(toolUse.input) ?? "", SUMMARY_CHARS),',
-     'input_summary: JSON.stringify(toolUse.input) ?? "",'),
-    ("the summary cap is 100 rather than 200",
-     "const SUMMARY_CHARS = 200;",
-     "const SUMMARY_CHARS = 100;"),
-    ("the input and output summaries are swapped",
-     'input_summary: truncateSummary(JSON.stringify(toolUse.input) ?? "", SUMMARY_CHARS),\n'
-     "    output_summary: truncateSummary(output, SUMMARY_CHARS),",
-     "input_summary: truncateSummary(output, SUMMARY_CHARS),\n"
-     '    output_summary: truncateSummary(JSON.stringify(toolUse.input) ?? "", SUMMARY_CHARS),'),
 
     # ── the image side channel ──────────────────────────────────────────
     ("any successful tool can attach an image",

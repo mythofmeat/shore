@@ -63,53 +63,31 @@ REPORT = "src/ledger/usage.ts"
 # (label, file, find, replace)
 MUTANTS = [
     # --- the refresh flag -----------------------------------------------------
-    ("flag: any truthy value asks for a refresh",
-     COMMAND,
-     '    if (args["refresh_pricing"] === true) clearPricingCache(ctx.ledger);',
-     '    if (args["refresh_pricing"]) clearPricingCache(ctx.ledger);'),
-    ("flag: the key's presence asks for a refresh, whatever it says",
-     COMMAND,
-     '    if (args["refresh_pricing"] === true) clearPricingCache(ctx.ledger);',
-     '    if (args["refresh_pricing"] !== undefined) clearPricingCache(ctx.ledger);'),
-    ("flag: nothing is ever refreshed",
-     COMMAND,
-     '    if (args["refresh_pricing"] === true) clearPricingCache(ctx.ledger);',
-     '    if (false) clearPricingCache(ctx.ledger);'),
 
     # --- what the refresh empties ---------------------------------------------
-    ("refresh: the table survives, so the next process reads stale prices",
-     ENGINE,
-     "  clearCache(): void {\n    this.#store.clear();\n    this.#memory.clear();",
-     "  clearCache(): void {\n    this.#memory.clear();"),
-    ("refresh: the memory survives, which is the bug that split the halves",
-     ENGINE,
-     "  clearCache(): void {\n    this.#store.clear();\n    this.#memory.clear();",
-     "  clearCache(): void {\n    this.#store.clear();"),
-    ("refresh: the delete matches no rows",
+    ("refresh: the table survives, so the next process reads stale prices", ENGINE,
+     "  clearCache(): void {\n    this.#store.clear();\n  }",
+     "  clearCache(): void {}"),
+    ("refresh: the delete matches no rows (UNKILLABLE — the only route to this "
+     "statement is PricingEngine.clearCache, which 861b0f0c left with no caller "
+     "when `shore usage --refresh-pricing` went; pricing.test.ts drives clearCache "
+     "against a fake store, so the real DELETE never runs)",
      STORE,
      '      db.run("DELETE FROM pricing");',
      '      db.run("DELETE FROM pricing WHERE 0");'),
 
     # --- the mode chain -------------------------------------------------------
-    ("mode: refresh_pricing answers under another mode's name",
-     REPORT,
-     '    return { mode: "refresh_pricing" };',
-     '    return { mode: "recalculate" };'),
-    ("mode: refresh_pricing outranks budget, so the report is the wrong one",
-     REPORT,
-     '  if (flag(args, "budget")) {\n    return budgetPayload(db, config, now, opts);\n  }',
-     '  if (flag(args, "refresh_pricing")) {\n    return { mode: "refresh_pricing" };\n  }\n'
-     '  if (flag(args, "budget")) {\n    return budgetPayload(db, config, now, opts);\n  }'),
 
     # --- the forward ----------------------------------------------------------
-    ("forward: the args are dropped, so every request is the default summary",
-     COMMAND,
-     "    return await usageReport({ ledger: ctx.ledger, args, usage: ctx.usage });",
-     "    return await usageReport({ ledger: ctx.ledger, args: {}, usage: ctx.usage });"),
-    ("forward: the session's usage config is dropped",
-     COMMAND,
-     "    return await usageReport({ ledger: ctx.ledger, args, usage: ctx.usage });",
-     "    return await usageReport({ ledger: ctx.ledger, args, usage: {} });"),
+    ("forward: the args are dropped, so every request is the default summary", COMMAND,
+     "      args,\n      usage: ctx.usage,",
+     "      args: {},\n      usage: ctx.usage,"),
+    ("forward: the session's usage config is dropped", COMMAND,
+     "      args,\n      usage: ctx.usage,",
+     "      args,\n      usage: {} as never,"),
+    ("forward: the rate-limit readings are dropped, so `shore usage` shows none", COMMAND,
+     "      ...(store === undefined ? {} : { rateLimits: () => store.latestRateLimits() }),",
+     "      ...({} as Record<string, never>),"),
 
     # --- the failures ---------------------------------------------------------
     ("errors: a failure is reported as a bad request",
@@ -120,14 +98,6 @@ MUTANTS = [
      COMMAND,
      "    throw internalError(e instanceof Error ? e.message : String(e));",
      '    throw internalError("usage report failed");'),
-    ("errors: the refresh throws past the mapping, as a bare Error",
-     COMMAND,
-     "  try {\n"
-     '    if (args["refresh_pricing"] === true) clearPricingCache(ctx.ledger);\n'
-     "    return await usageReport({ ledger: ctx.ledger, args, usage: ctx.usage });",
-     '  if (args["refresh_pricing"] === true) clearPricingCache(ctx.ledger);\n'
-     "  try {\n"
-     "    return await usageReport({ ledger: ctx.ledger, args, usage: ctx.usage });"),
 ]
 
 # `invalidRequest` is not imported by the command; one mutant needs it to be.

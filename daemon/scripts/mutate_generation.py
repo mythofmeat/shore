@@ -120,8 +120,9 @@ MUTANTS = [
      "    regen: false,\n    mcpRegistry: deps.mcpRegistry,"),
     ("inputs: the rid is not put on the call labels",
      GEN,
-     "    ...(rid === null ? {} : { rid }),\n    ...(usage === undefined ? {} : { usage }),",
-     "    ...(usage === undefined ? {} : { usage }),"),
+     "    ...(rid === null ? {} : { rid }),\n"
+     "    ...((usage.budgets ?? []).length === 0 ? {} : { usage }),",
+     "    ...((usage.budgets ?? []).length === 0 ? {} : { usage }),"),
     ("inputs: every call is labelled a keepalive rather than a message",
      GEN,
      '    call_type: "message",',
@@ -158,15 +159,15 @@ MUTANTS = [
      "    imageDir: charDataDir,"),
     ("context: the workspace is resolved under data rather than config",
      CTX,
-     "  const workspaceDir = characterWorkspaceDir(configDir, charName);",
-     "  const workspaceDir = characterWorkspaceDir(dataDir, charName);"),
+     "  const workspaceDir = characterWorkspaceDir(configDir, charName, config.dirs.workspace);",
+     "  const workspaceDir = characterWorkspaceDir(dataDir, charName, config.dirs.workspace);"),
     ("context: the memory index is resolved under config rather than cache",
      CTX,
      "    memoryIndexPath: indexPath(config.dirs.cache, charName),",
      "    memoryIndexPath: indexPath(config.dirs.config, charName),"),
     ("context: the active-prompt snapshot is never written",
      CTX,
-     "    await ensureActivePromptSnapshot(charDataDir, configDir, charName);",
+     "    await ensureActivePromptSnapshot(charDataDir, configDir, charName, config.dirs.workspace);",
      "    void ensureActivePromptSnapshot;"),
     ("context: an embedder failure fails the turn instead of degrading",
      CTX,
@@ -217,7 +218,7 @@ MUTANTS = [
     ("gate: a chat turn is not budget-checked at all",
      GEN,
      "    const blocked = budgetBlockFor(call);\n"
-     "    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope);",
+     "    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);",
      "    void budgetBlockFor;"),
     ("gate: the check is hoisted above the rotation, before the key is known",
      GEN,
@@ -233,8 +234,9 @@ MUTANTS = [
      '    case "budget_blocked":\n      return RETRY;'),
     ("gate: a refusal is treated as a credential failure",
      CREDS,
-     '    case "budget_blocked":\n      return "not_credential_failure";',
-     '    case "budget_blocked":\n      return "quota_exhausted";'),
+     '    case "budget_blocked":\n    case "aborted":\n      return "not_credential_failure";',
+     '    case "budget_blocked":\n      return "quota_exhausted";\n'
+     '    case "aborted":\n      return "not_credential_failure";'),
 ]
 
 

@@ -38,19 +38,23 @@ TESTS = ["tests/daemon_hot_reload.test.ts"]
 # (label, file, find, replace)
 MUTANTS = [
     # --- reloading too much ---------------------------------------------------
-    ("workspace: prompts and memory trigger reloads, making a save a prompt boundary",
-     S,
-     '  if (first === "characters" && parts[2] === "workspace") return false;',
-     "  // dropped"),
+    ("workspace: a workspace save reloads whatever the file is", S,
+     "  if (first === \"characters\" && parts[2] === CHARACTER_WORKSPACE_DIR) {\n"
+     "    const name = parts[1];\n    return (\n"
+     "      parts.length === 4 &&\n"
+     "      parts[3] === SOUL_FILE &&",
+     "  if (first === \"characters\" && parts[2] === CHARACTER_WORKSPACE_DIR) {\n"
+     "    const name = parts[1];\n    return (\n"
+     "      true &&\n"
+     "      true &&"),
     ("workspace: the check is on the wrong depth, so it never matches",
      S,
-     '  if (first === "characters" && parts[2] === "workspace") return false;',
-     '  if (first === "characters" && parts[1] === "workspace") return false;'),
-    ("workspace: the check runs after the character rules, so memory .toml gets through",
+     '  if (first === "characters" && parts[2] === CHARACTER_WORKSPACE_DIR) {',
+     '  if (first === "characters" && parts[1] === CHARACTER_WORKSPACE_DIR) {'),
+    ("workspace: a SOUL.md for a character the daemon already knows still reloads",
      S,
-     '  if (first === "characters" && parts[2] === "workspace") return false;\n\n'
-     '  if (parts.length === 1 && first === ".env") return true;',
-     '  if (parts.length === 1 && first === ".env") return true;'),
+     "      knownCharacter !== undefined &&\n      !knownCharacter(name)",
+     "      knownCharacter !== undefined"),
     ("filter: everything under the tree reloads",
      S,
      "  return hasTomlExtension(path);\n}\n\nfunction absolutize",
@@ -96,9 +100,8 @@ MUTANTS = [
     # --- the watcher ----------------------------------------------------------
     ("watcher: no debounce, so a burst is one reload per event",
      S,
-     "      if (timer !== undefined) clearTimeout(timer);\n"
-     "      timer = setTimeout(fire, debounceMs);",
-     "      timer = setTimeout(fire, debounceMs);"),
+     "    if (timer !== undefined) clearTimeout(timer);\n    timer = setTimeout(fire, debounceMs);",
+     "    timer = setTimeout(fire, debounceMs);"),
     ("watcher: the accumulated paths are dropped, so a reload cannot say what moved",
      S,
      "    const changedPaths = [...pending].sort();",
@@ -113,15 +116,14 @@ MUTANTS = [
      "    stop: () => {\n      void 0;"),
     ("watcher: the filter is not applied to what the watch reports",
      S,
-     "      if (!pathTriggersReload(options.configDir, options.configPath, path)) return;",
-     "      // dropped"),
+     "        if (triggers(path)) note(path);",
+     "        void triggers;\n        note(path);"),
     ("watcher: a directory that cannot be watched throws instead of warning",
      S,
-     "  } catch (e) {\n"
-     '    options.log?.warn?.("Config hot reload watcher could not start", {',
-     "  } catch (e) {\n"
-     "    throw e;\n"
-     '    options.log?.warn?.("Config hot reload watcher could not start", {'),
+     "    } catch (e) {\n"
+     '      options.log?.warn?.("Config hot reload watcher could not start", {',
+     "    } catch (e) {\n      throw e;\n"
+     '      options.log?.warn?.("Config hot reload watcher could not start", {'),
 ]
 
 

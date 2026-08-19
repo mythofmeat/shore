@@ -15,7 +15,8 @@ A mutant is KILLED if `bun test tests/setup.test.ts` fails with it
 applied; a survivor means either the fixture cannot see that decision, or the
 code is equivalent under it.
 
-The first pass was 26/33; the third is 32/33. Five of the seven first-pass
+The first pass was 26/33; the fourth is 25/26, over 26 mutants rather than the
+original 33. Five of the seven first-pass
 survivors were real gaps, and again the shape was "reachable but invisible":
 
 - Nothing exercised model *discovery* at all — every case resolved a static
@@ -40,6 +41,12 @@ and then writes only the fields the overlay sets, so applying an empty overlay
 returns a value-identical model. The Rust's short-circuit saves a clone, not a
 behaviour, and is kept because it says which of the two branches is the
 interesting one.
+
+Seven mutants over the per-message `overrides` field are gone. 9d3f6dac deleted
+the field from the wire along with the `shore send --temperature/--top-p
+/--thinking` flags that were its only writer, so `withOverrides` and the branch
+that called it no longer exist to mutate. The durable equivalents live under
+`shore model setting`, and `mutate_commands_model_settings.py` covers them.
 
 Run from the repository root:
     python3 daemon/scripts/mutate_handler_setup.py
@@ -76,14 +83,15 @@ MUTANTS = [
      "      base = findEffectiveModel(configView(config), config.dirs.cache, name, true);",
      "      base = findEffectiveModel(configView(config), config.dirs.data, name, true);"),
     ("chain: an empty catalog resolves to something instead of failing",
-     '      if (first === undefined) throw new NoModelError("No model configured");',
-     "      if (first === undefined) return { } as ResolvedModel;"),
+     "      if (first === undefined) throw new NoModelError(NO_CHAT_MODELS_MESSAGE);",
+     "      if (first === undefined) return {} as ResolvedModel;"),
     ("chain: the no-model error says something else",
-     '      if (first === undefined) throw new NoModelError("No model configured");',
+     "      if (first === undefined) throw new NoModelError(NO_CHAT_MODELS_MESSAGE);",
      '      if (first === undefined) throw new NoModelError("no model");'),
 
     # --- the overlay -------------------------------------------------------
-    ("overlay: applied even when empty",
+    ("overlay: applied even when empty (EQUIVALENT — applySamplerOverlay writes only "
+     "the fields the overlay sets, so an empty one returns a value-identical copy)",
      "  return samplerIsEmpty(overlay) ? base : applySamplerOverlay(base, overlay);",
      "  return applySamplerOverlay(base, overlay);"),
     ("overlay: never applied",
@@ -144,8 +152,8 @@ MUTANTS = [
 
     # --- the request -------------------------------------------------------
     ("request: an api key is baked in",
-     '  const built = buildRequestWithResolvedKey(toRequestModel(resolved), "", {',
-     '  const built = buildRequestWithResolvedKey(toRequestModel(resolved), "baked", {'),
+     '  return buildRequestWithResolvedKey(toRequestModel(resolved), "", {',
+     '  return buildRequestWithResolvedKey(toRequestModel(resolved), "baked", {'),
     ("request: the tool surface is dropped",
      "    ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),",
      "    ...{},"),
@@ -159,37 +167,6 @@ MUTANTS = [
      "    replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),",
      '    replay: "none" as const,'),
 
-    # --- overrides ---------------------------------------------------------
-    ("overrides: not applied at all",
-     "  return params.overrides === undefined\n"
-     "    ? built\n"
-     "    : { ...built, request: withOverrides(built.request, params.overrides) };",
-     "  return built;"),
-    ("overrides: temperature is applied unconditionally",
-     "  if (overrides.temperature !== undefined) out.temperature = overrides.temperature;",
-     "  out.temperature = overrides.temperature;"),
-    ("overrides: top_p is applied unconditionally",
-     "  if (overrides.top_p !== undefined) out.top_p = overrides.top_p;",
-     "  out.top_p = overrides.top_p;"),
-    ("overrides: temperature and top_p are swapped",
-     "  if (overrides.temperature !== undefined) out.temperature = overrides.temperature;\n"
-     "  if (overrides.top_p !== undefined) out.top_p = overrides.top_p;",
-     "  if (overrides.top_p !== undefined) out.temperature = overrides.top_p;\n"
-     "  if (overrides.temperature !== undefined) out.top_p = overrides.temperature;"),
-    ("overrides: the thinking budget is ignored",
-     "  if (overrides.thinking_budget !== undefined) {",
-     "  if (false as boolean) {"),
-    ("overrides: provider_options is replaced rather than extended",
-     "    out.provider_options = { ...out.provider_options, budget_tokens: overrides.thinking_budget };",
-     "    out.provider_options = { budget_tokens: overrides.thinking_budget };"),
-    ("overrides: provider_options is created even with no budget",
-     "  if (overrides.thinking_budget !== undefined) {\n"
-     "    out.provider_options = { ...out.provider_options, budget_tokens: overrides.thinking_budget };\n"
-     "  }",
-     "  out.provider_options = {\n"
-     "    ...out.provider_options,\n"
-     "    ...(overrides.thinking_budget === undefined ? {} : { budget_tokens: overrides.thinking_budget }),\n"
-     "  };"),
 ]
 
 

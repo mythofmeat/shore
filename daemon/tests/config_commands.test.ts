@@ -536,6 +536,20 @@ describe("config set", () => {
     );
   });
 
+  test("a list is not checked against its source as one string", async () => {
+    const w = await build("mid", FURNISHED);
+
+    const result = config(w.ctx, {
+      key: "tools.enabled_subagents",
+      value: "researcher,idle",
+    }) as { value: unknown };
+
+    expect(result.value).toEqual(["researcher", "idle"]);
+    expect(await readFile(w.ctx.configPath, "utf8")).toContain(
+      'enabled_subagents = ["researcher", "idle"]',
+    );
+  });
+
   test("the file keeps its comments and untouched lines", async () => {
     const w = await build("mid", FURNISHED);
     const before = await readFile(w.ctx.configPath, "utf8");

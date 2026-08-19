@@ -21,8 +21,20 @@ struct or map was expected, no unknown key in a one-field struct, and no
 middle-star pattern whose name extended past the star), and one was a mutant
 aimed at a file this harness did not open. Filling those found `visit_seq`
 entirely — the Rust accepts `autonomy = []` as a struct of defaults, and the
-port had been rejecting it. Final state is 84/85 with one documented equivalent,
-noted at its site in the source.
+port had been rejecting it. Final state is 76/78 with two documented
+equivalents, both of them dead branches the Rust had: no spec declares its
+required fields out of sorted order, and `expectedList`'s empty-list arm is
+unreachable now that its only caller builds `known` from a spec's own fields.
+
+Eight mutants went with features that were deliberately deleted rather than
+moved — `readPath` (8031bbe2), `readFlattenOnly` (3e9c5209),
+`normalizeDeprecatedAliases` and the `defaults.heartbeat` alias (910dc436), and
+the sidecar keys (20f2c48f).
+
+The four default *values* were surviving because the only test of them compared
+`defaultAppConfig()` against itself, which moves with any edit. They are spelled
+out now. `tools.config`'s `keySource` had no assertion anywhere, so this pass
+runs `config_schema.test.ts` alongside `app.test.ts`.
 
 Run from the repository root:
     python3 daemon/scripts/mutate_config_app.py
@@ -45,12 +57,28 @@ MUTANTS = [
      "for (const key of sortedKeys(value)) {\n    const read =",
      "for (const key of Object.keys(value).sort()) {\n    const read ="),
     ("readStruct: check every unknown field before reading any value",
-     "  for (const key of sortedKeys(value)) {\n    const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];\n    if (read === undefined) return { err: unknownField(key, known) };",
-     "  for (const key of sortedKeys(value)) {\n    if (!known.includes(key)) return { err: unknownField(key, known) };\n  }\n  for (const key of sortedKeys(value)) {\n    const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];\n    if (read === undefined) return { err: unknownField(key, known) };"),
+     "  for (const key of sortedKeys(value)) {\n"
+     "    const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];\n"
+     "    if (read === undefined) {",
+     "  for (const key of sortedKeys(value)) {\n"
+     "    if (!known.includes(key)) return { err: unknownField(key, known) };\n"
+     "  }\n"
+     "  for (const key of sortedKeys(value)) {\n"
+     "    const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];\n"
+     "    if (read === undefined) {"),
     ("readStruct: accept unknown fields",
-     "if (read === undefined) return { err: unknownField(key, known) };",
-     "if (read === undefined) continue;"),
-    ("readStruct: report missing fields in sorted order",
+     "      return { err: unknownField(key, known) };\n"
+     "    }\n"
+     "    const parsed = read(value[key]);",
+     "      continue;\n"
+     "    }\n"
+     "    const parsed = read(value[key]);"),
+    ("readStruct: a removed field is reported as merely unknown",
+     "      const moved = spec.removed?.[key];\n"
+     "      if (moved !== undefined) return { err: `\\`${key}\\` was removed — ${moved}` };",
+     "      const moved = spec.removed?.[key];\n      void moved;"),
+    ("readStruct: report missing fields in sorted order (EQUIVALENT — no spec "
+     "declares its required fields out of sorted order, so the two agree)",
      "for (const key of spec.required ?? []) {",
      "for (const key of [...(spec.required ?? [])].sort()) {"),
     ("readStruct: skip the required-field check",
@@ -69,7 +97,9 @@ MUTANTS = [
     ("expectedList: no one-field branch",
      "if (known.length === 1) return `\\`${known[0]}\\``;",
      "if (false) return `\\`${known[0]}\\``;"),
-    ("expectedList: an empty field list still prints a clause",
+    ("expectedList: an empty field list still prints a clause (EQUIVALENT — "
+     "unreachable; the sole caller builds `known` from a spec's own fields, and "
+     "every spec declares at least one)",
      "if (known.length === 0) return undefined;",
      "if (known.length === 0) return `one of `;"),
     ("readEnum: use the document path's wrong-type message",
@@ -87,21 +117,15 @@ MUTANTS = [
      "return { err: `invalid value: integer \\`${v}\\`, expected ${name}` };",
      "return { err: invalidType(v, name) };"),
     ("readF64: an integer no longer widens",
-     'typeof v === "number" ? { ok: v } : { err: invalidType(v, "f64") };',
-     'typeof v === "number" && !Number.isInteger(v) ? { ok: v } : { err: invalidType(v, "f64") };'),
-    ("readPath: a path is spelled like any other string",
-     'typeof v === "string" ? { ok: v } : { err: invalidType(v, "path string") };',
-     'typeof v === "string" ? { ok: v } : { err: invalidType(v, "a string") };'),
+     '  (v) => (typeof v === "number" ? { ok: v } : { err: invalidType(v, "f64") }),',
+     '  (v) =>\n'
+     '    typeof v === "number" && !Number.isInteger(v)\n'
+     "      ? { ok: v }\n"
+     '      : { err: invalidType(v, "f64") },'),
     ("models: invalidType: sequences and maps carry a rendering after all",
      "  if (Array.isArray(value) || isTable(value)) return undefined;",
      "  if (false) return undefined;"),
     # --- flatten-only structs ---------------------------------------------
-    ("readFlattenOnly: keys land in the flattened map instead of erroring",
-     "for (const key of sortedKeys(value)) return { err: unknownField(key, []) };",
-     "return { ok: new Map(Object.entries(value)) };"),
-    ("readFlattenOnly: the unknown-field error lists fields",
-     "for (const key of sortedKeys(value)) return { err: unknownField(key, []) };",
-     'for (const key of sortedKeys(value)) return { err: unknownField(key, ["extra"]) };'),
     # --- the positional (visit_seq) path ----------------------------------
     ("readStructFromSeq: an array is a type error, not a positional struct",
      "  if (Array.isArray(value)) return readStructFromSeq(spec, value);\n",
@@ -126,11 +150,11 @@ MUTANTS = [
      "  const keys = Object.keys(spec.fields).sort();\n  const noDefault"),
     # --- maps -------------------------------------------------------------
     ("readMap: insertion order instead of code point order",
-     "    for (const key of sortedKeys(v)) {\n      const parsed = inner(v[key]);",
-     "    for (const key of Object.keys(v)) {\n      const parsed = inner(v[key]);"),
+     "      for (const key of sortedKeys(v)) {\n        const parsed = inner(v[key]);",
+     "      for (const key of Object.keys(v)) {\n        const parsed = inner(v[key]);"),
     ("readMap: UTF-16 order",
-     "    for (const key of sortedKeys(v)) {\n      const parsed = inner(v[key]);",
-     "    for (const key of Object.keys(v).sort()) {\n      const parsed = inner(v[key]);"),
+     "      for (const key of sortedKeys(v)) {\n        const parsed = inner(v[key]);",
+     "      for (const key of Object.keys(v).sort()) {\n        const parsed = inner(v[key]);"),
     ("readMap: a non-table is not a type error",
      'if (!isTable(v)) return { err: invalidType(v, "a map") };',
      'if (!isTable(v)) return { ok: new Map() };'),
@@ -177,9 +201,6 @@ MUTANTS = [
     ("resolveBackgroundModelName: defaults.model is a background fallback",
      "return defaults.background[task] ?? defaults.background.model;",
      "return defaults.background[task] ?? defaults.background.model ?? defaults.model;"),
-    ("resolveBackgroundModelName: the deprecated alias is consulted",
-     "return defaults.background[task] ?? defaults.background.model;",
-     "return defaults.background[task] ?? defaults.heartbeat ?? defaults.background.model;"),
     ("resolveDisplayName: $USER wins over the configured name",
      'return defaults.display_name ?? env["USER"] ?? "User";',
      'return env["USER"] ?? defaults.display_name ?? "User";'),
@@ -189,15 +210,6 @@ MUTANTS = [
     ("resolveDisplayName: no ultimate fallback",
      'return defaults.display_name ?? env["USER"] ?? "User";',
      'return defaults.display_name ?? env["USER"] ?? "";'),
-    ("normalizeDeprecatedAliases: the alias wins over the new key",
-     "if (defaults.background.heartbeat === undefined) {",
-     "if (true) {"),
-    ("normalizeDeprecatedAliases: the alias is not cleared",
-     "defaults.heartbeat = undefined;",
-     ""),
-    ("normalizeDeprecatedAliases: an empty alias is treated as absent",
-     "if (value === undefined) return;",
-     "if (value === undefined || value === \"\") return;"),
     # --- compaction validation --------------------------------------------
     ("validateCompaction: a disabled config is still validated",
      "if (!compaction.enabled) return undefined;",
@@ -258,8 +270,9 @@ MUTANTS = [
      "return BUDGET_WEEKDAYS.indexOf(day);",
      "return (BUDGET_WEEKDAYS.indexOf(day) + 1) % 7;"),
     # --- defaults ---------------------------------------------------------
-    ("defaults: message_complete follows the stale doc comment",
-     "  message_complete: false,", "  message_complete: true,"),
+    ("defaults: message_complete is off",
+     "  message_complete: true,\n  usage_warning: false,",
+     "  message_complete: false,\n  usage_warning: false,"),
     ("defaults: stream is off",
      "  stream: true,", "  stream: false,"),
     ("defaults: the tool deadline is unlimited",
@@ -271,27 +284,24 @@ MUTANTS = [
     ("defaults: archive_after is on",
      "  archive_after: ConfigDuration.fromSecs(0),",
      "  archive_after: ConfigDuration.fromSecs(86_400),"),
-    ("defaults: the sidecar is off",
-     "  enabled: true,\n  socket_path: undefined,",
-     "  enabled: false,\n  socket_path: undefined,"),
     ("defaults: budgets warn at a single threshold",
      "    warn_at: [0.8, 1.0],", "    warn_at: [1.0],"),
-    ("defaults: allow_compaction_over_budget is off",
-     "  allow_compaction_over_budget: true,",
-     "  allow_compaction_over_budget: false,"),
+    ("defaults: allow_compaction_over_budget is on",
+     '  timezone: "local",\n  allow_compaction_over_budget: false,',
+     '  timezone: "local",\n  allow_compaction_over_budget: true,'),
     # --- schema shape -----------------------------------------------------
     ("schema: AppConfig field order changes the expected list",
-     "    daemon: (v) => readStruct(DAEMON, v),\n    defaults: (v) => readStruct(DEFAULTS, v),",
-     "    defaults: (v) => readStruct(DEFAULTS, v),\n    daemon: (v) => readStruct(DAEMON, v),"),
+     "    daemon: struct(DAEMON),\n    defaults: struct(DEFAULTS),",
+     "    defaults: struct(DEFAULTS),\n    daemon: struct(DAEMON),"),
     ("schema: SubagentConfig requires only description",
      'required: ["description", "prompt"],', 'required: ["description"],'),
     ("schema: SubagentConfig lists prompt first",
      'required: ["description", "prompt"],', 'required: ["prompt", "description"],'),
     ("schema: cost_usd is optional",
      '  required: ["cost_usd"],', ""),
-    ("schema: tools.config is a plain table, not a per-tool map",
-     "    config: readMap((v) => readStruct(TOOL_OVERRIDE, v)),",
-     "    config: (v) => ({ ok: new Map() }) as ReturnType<Reader<Map<string, ToolOverride>>>,"),
+    ("schema: tools.config is keyed like any other map, not by tool name",
+     '    config: readMap(struct(TOOL_OVERRIDE), "tools"),',
+     "    config: readMap(struct(TOOL_OVERRIDE)),"),
 ]
 
 
@@ -305,7 +315,11 @@ def main() -> int:
         else (label, find, replace)
         for label, find, replace in MUTANTS
     ]
-    return _run_mutants(routed, ["tests/app.test.ts"], src=APP)
+    return _run_mutants(
+        routed,
+        ["tests/app.test.ts", "tests/config_schema.test.ts"],
+        src=APP,
+    )
 
 
 if __name__ == "__main__":

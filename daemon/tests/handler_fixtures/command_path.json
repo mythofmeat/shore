@@ -314,10 +314,8 @@
       "name": "refresh_provider_models has its own bypass",
       "note": "character-agnostic like the others, but async, so it does not share their path",
       "input": {
-        "characters_on_disk": [
-          "ada"
-        ],
-        "selected_character": "ada",
+        "characters_on_disk": [],
+        "selected_character": null,
         "rid": "r-10",
         "command": "refresh_provider_models",
         "args": {
@@ -335,12 +333,8 @@
           "code": "not_found",
           "message": "provider \"anthropic\" is not configured"
         },
-        "saved_models_before": {
-          "ada": null
-        },
-        "saved_models_after": {
-          "ada": null
-        }
+        "saved_models_before": {},
+        "saved_models_after": {}
       }
     },
     {

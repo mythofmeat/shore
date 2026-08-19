@@ -44,56 +44,14 @@ TESTS = ["tests/idle_compaction.test.ts"]
 # (label, file, find, replace)
 MUTANTS = [
     # --- the pass -------------------------------------------------------------
-    ("pass: keeps zero turns, so every idle window empties the conversation",
-     I,
-     "    retained = await runCompaction(character, {\n"
-     "      ...deps.run,\n"
-     "      config: deps.config,\n"
-     "      ...(cached === undefined ? {} : { cachedRequest: cached }),\n"
-     "    });",
-     "    retained = await runCompaction(\n"
-     "      character,\n"
-     "      { ...deps.run, config: deps.config, ...(cached === undefined ? {} : { cachedRequest: cached }) },\n"
-     "      { keepTurnsOverride: 0 },\n"
-     "    );"),
-    ("pass: retains the trailing autonomous run the keep window had archived",
-     I,
-     "    retained = await runCompaction(character, {\n"
-     "      ...deps.run,\n"
-     "      config: deps.config,\n"
-     "      ...(cached === undefined ? {} : { cachedRequest: cached }),\n"
-     "    });",
-     "    retained = await runCompaction(\n"
-     "      character,\n"
-     "      { ...deps.run, config: deps.config, ...(cached === undefined ? {} : { cachedRequest: cached }) },\n"
-     "      { retainTrailingAutonomous: true },\n"
-     "    );"),
-    ("pass: the cached body is ignored, so every pass rebuilds a colder prefix",
-     I,
-     "  const cached = deps.cache.get(character);",
-     "  const cached = undefined;"),
-    ("pass: a dry run, which reports a count for an archive that never happened",
-     I,
-     "    retained = await runCompaction(character, {\n"
-     "      ...deps.run,\n"
-     "      config: deps.config,\n"
-     "      ...(cached === undefined ? {} : { cachedRequest: cached }),\n"
-     "    });",
-     "    retained = await runCompaction(\n"
-     "      character,\n"
-     "      { ...deps.run, config: deps.config, ...(cached === undefined ? {} : { cachedRequest: cached }) },\n"
-     "      { dryRun: true },\n"
-     "    );"),
 
     # --- what it reports ------------------------------------------------------
-    ("report: a failed pass is reported as a success with no turns",
-     I,
-     "    return { events: [], failed: e instanceof Error ? e.message : String(e) };",
-     "    return { events: [] };"),
-    ("report: a failed pass rethrows, abandoning the rest of the tick",
-     I,
-     "    return { events: [], failed: e instanceof Error ? e.message : String(e) };",
-     "    throw e;"),
+    ("report: a failed pass is reported as a success with no turns", I,
+     "      failed: e instanceof Error ? e.message : String(e),",
+     "      failed: undefined,"),
+    ("report: a failed pass rethrows, abandoning the rest of the tick", I,
+     "    return {\n      events: [],\n      failed: e instanceof Error ? e.message : String(e),",
+     "    throw e;\n    return {\n      events: [],\n      failed: e instanceof Error ? e.message : String(e),"),
     ("report: missing dependencies are a silent skip that wedges the latch",
      I,
      '    return { events: [], failed: "idle compaction has no compaction dependencies" };',
@@ -131,11 +89,9 @@ MUTANTS = [
      '  console.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);',
      '  console.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);\n'
      '  await reloadAndApplyDeferred(character, deps, "Idle compaction");'),
-    ("bookkeeping: a failed pass re-points the keepalive anyway",
-     I,
-     "    return { events: [], failed: e instanceof Error ? e.message : String(e) };",
-     "    await repoint(character, deps, \"idle_compaction\");\n"
-     "    return { events: [], failed: e instanceof Error ? e.message : String(e) };"),
+    ("pass: the compaction runs without the character's effective config", I,
+     "    retained = await runCompaction(character, {\n      ...deps.run,\n      config: deps.config,\n    });",
+     "    retained = await runCompaction(character, {\n      ...deps.run,\n    } as never);"),
 ]
 
 

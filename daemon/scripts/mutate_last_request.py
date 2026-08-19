@@ -68,8 +68,8 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-B = "src/autonomy/rebuild.ts"
-L = "src/autonomy/last_request.ts"
+B = "src/cache/rebuild.ts"
+L = "src/cache/last_request.ts"
 K = "src/commands/keepalive.ts"
 
 # (label, file, find, replace)
@@ -155,16 +155,17 @@ MUTANTS = [
     # --- the reprime ----------------------------------------------------------
     ("reprime: a failed rebuild leaves the old body armed",
      L,
-     "  return rebuilt === undefined ? { kind: \"disarm\" } : { kind: \"push\", request: rebuilt };",
-     "  return rebuilt === undefined ? { kind: \"push\", request: {} as never } : { kind: \"push\", request: rebuilt };"),
+     '  return rebuilt === undefined\n    ? { kind: "disarm" }',
+     '  return false\n    ? { kind: "disarm" }'),
     ("reprime: a successful rebuild disarms",
      L,
-     "  return rebuilt === undefined ? { kind: \"disarm\" } : { kind: \"push\", request: rebuilt };",
-     '  return { kind: "disarm" };'),
+     '  return rebuilt === undefined\n    ? { kind: "disarm" }\n    : {',
+     '  return true\n    ? { kind: "disarm" }\n    : {'),
     ("reprime: the rebuilt body is not re-cached",
      L,
-     "      this.#bodies.set(character, decision.request);\n      this.#keepalive?.arm(toPrefix(character, decision.request, deps.keepaliveIntervalMs));",
-     "      this.#keepalive?.arm(toPrefix(character, decision.request, deps.keepaliveIntervalMs));"),
+     "      this.#bodies.set(character, decision.request);\n"
+     "      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepaliveIntervalMs));",
+     "      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepaliveIntervalMs));"),
 
     # --- the cache ------------------------------------------------------------
     ("cache: invalidating also disarms, collapsing the two decisions",
