@@ -109,6 +109,39 @@ function scriptedProvider(text: string): SidecarProvider {
   } as unknown as SidecarProvider;
 }
 
+function heldProvider(held: Promise<void>, text: string): SidecarProvider {
+  return {
+    async *stream(req: SidecarRequest) {
+      yield { type: "start", model: req.model };
+      await held;
+      yield { type: "text", text };
+      yield {
+        type: "done",
+        content: text,
+        finish_reason: "end_turn",
+        usage: {
+          input_tokens: 4,
+          output_tokens: 2,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+        },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      };
+    },
+    generate: () => {
+      throw new Error("this test never calls generate");
+    },
+  } as unknown as SidecarProvider;
+}
+
+async function until(holds: () => boolean, complaint: string, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!holds()) {
+    if (Date.now() > deadline) throw new Error(complaint);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 async function instances(place: Layout): Promise<InstanceInfo[]> {
   return JSON.parse(await readFile(place.instancesPath, "utf8")) as InstanceInfo[];
 }
@@ -469,6 +502,57 @@ describe("going down", () => {
     await bounded(never, "wedged", { warn: (msg) => warnings.push(msg) }, 20);
 
     expect(warnings).toEqual(["Shutdown step timed out"]);
+  });
+
+  test("a turn still in flight is waited for, not abandoned mid-write", async () => {
+    const place = await layout(MODEL_CONFIG);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const daemon = await start(place, [], { anthropic: heldProvider(held, "late") });
+    const client = await Client.open(daemon.port, "ada");
+    const engine = await daemon.runtime.registry.getOrCreate("ada");
+    try {
+      await client.awaitFrame("hello");
+      client.send({ type: "message", text: "hi", stream: true, images: [] });
+      await client.awaitFrame("stream_start");
+
+      daemon.stop();
+      setTimeout(release, 100);
+      await daemon.done;
+      running.length = 0;
+
+      expect(engine.historySnapshot({}).messages.map((m) => m.content)).toEqual(["hi", "late"]);
+    } finally {
+      client.close();
+    }
+  });
+
+  test("the clocks stop with the daemon, so no keepalive ticks after the exit", async () => {
+    const place = await layout();
+    const daemon = await startDaemon({
+      argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"],
+      env: place.env,
+      providers: {},
+      instancesPath: place.instancesPath,
+      clockIntervals: { keepaliveMs: 5 },
+    });
+    running.push(daemon);
+
+    let ticks = 0;
+    daemon.runtime.keepalive.tick = async () => {
+      ticks += 1;
+    };
+    await until(() => ticks > 0, "the keepalive clock never ticked");
+
+    daemon.stop();
+    await daemon.done;
+    running.length = 0;
+
+    const atExit = ticks;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(ticks).toBe(atExit);
   });
 
   test("the port is free afterwards", async () => {

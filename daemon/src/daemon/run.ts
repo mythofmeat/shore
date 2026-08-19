@@ -12,7 +12,12 @@ import { MessageHandler } from "../handler/router.ts";
 import { ensureAndBackfillAutonomy } from "../handler/turn.ts";
 import { Instances, type InstanceInfo } from "./instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
-import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../runtime.ts";
+import {
+  createRuntime,
+  startRuntimeClocks,
+  type RuntimeClockIntervals,
+  type ShoreRuntime,
+} from "../runtime.ts";
 import { DEFAULT_PROVIDERS } from "../llm/providers/table.ts";
 import type { ServerMessage } from "../protocol/ServerMessage";
 import type { Logger } from "../swp/connection.ts";
@@ -79,6 +84,7 @@ export interface DaemonOptions {
   newInstanceId?: (() => string) | undefined;
   watchConfig?: boolean | undefined;
   autoDiscovery?: boolean | undefined;
+  clockIntervals?: RuntimeClockIntervals | undefined;
 }
 
 export interface RunningDaemon {
@@ -205,7 +211,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   };
   await registerKnownCharacters(runtime, assembly.autonomy, log);
   seedActivityInBackground(runtime, assembly.autonomy, log);
-  const clocks = startRuntimeClocks(runtime);
+  const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
 
   const handler = new MessageHandler(buildMessageHandlerDeps(assembly));
 

@@ -225,7 +225,14 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   };
 }
 
-export function startRuntimeClocks(runtime: ShoreRuntime): { stop: () => void } {
+export interface RuntimeClockIntervals {
+  keepaliveMs?: number | undefined;
+}
+
+export function startRuntimeClocks(
+  runtime: ShoreRuntime,
+  intervals: RuntimeClockIntervals = {},
+): { stop: () => void } {
   setCallObserver((ctx, model, callType, req) => {
     runtime.keepalive.observe(
       ctx.character,
@@ -235,7 +242,7 @@ export function startRuntimeClocks(runtime: ShoreRuntime): { stop: () => void } 
       prefixFingerprint(req),
     );
   });
-  const keepaliveTimer = startKeepaliveTimer(runtime.keepalive);
+  const keepaliveTimer = startKeepaliveTimer(runtime.keepalive, intervals.keepaliveMs);
   const autonomyTimer = startAutonomyTimer(runtime.autonomy);
   const rotation = startCallStoreRotation(runtime.callStore);
   const costBackfill = startCostBackfill(

@@ -129,6 +129,7 @@ export class MessageHandler {
     for await (const routed of routes) {
       await this.handleRouted(routed);
     }
+    await this.drain();
     this.#deps.log?.info?.("message handler shutting down (route stream closed)");
   }
 
