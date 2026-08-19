@@ -18,17 +18,14 @@ import {
 } from "../src/commands/models.ts";
 import { defaultAppConfig, parseAppConfig, type AppConfig } from "../src/config/app.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
-import { findEffectiveModel } from "../src/config/effective_catalog.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import {
   catalogFromSections,
   emptyCatalog,
-  resolvedModelToWire,
   type ModelCatalog,
 } from "../src/config/models.ts";
 import {
   characterPreferencesPath,
-  configView,
   globalPreferencesPath,
   loadPreferences,
   type ModelPreferences,
@@ -51,12 +48,6 @@ interface Setup {
   global_prefs: string | null;
   character_prefs: string | null;
   active_model: string | null;
-  pre_resolved: string | null;
-}
-
-interface Session {
-  active_model: string | null;
-  active_resolved_model: Record<string, unknown> | null;
 }
 
 interface Prefs {
@@ -71,7 +62,6 @@ interface Step {
   args: Record<string, unknown>;
   ok?: unknown;
   err?: WireError;
-  session: Session;
   prefs: Prefs;
 }
 
@@ -79,7 +69,7 @@ interface Scenario {
   name: string;
   note: string;
   setup: Setup;
-  initial: { session: Session; prefs: Prefs };
+  initial: { prefs: Prefs };
   steps: Step[];
 }
 
@@ -161,10 +151,6 @@ async function buildContext(setup: Setup): Promise<ModelsContext> {
     dataDir: dirs.data,
     characterName: setup.character ?? undefined,
     activeModel: setup.active_model ?? undefined,
-    activeResolvedModel:
-      setup.pre_resolved === null
-        ? undefined
-        : findEffectiveModel(configView(config), dirs.cache, setup.pre_resolved, true),
   };
 }
 
@@ -220,14 +206,6 @@ function readPrefs(ctx: ModelsContext, expected: Prefs): Prefs {
   return out;
 }
 
-function readSession(ctx: ModelsContext): Session {
-  return {
-    active_model: ctx.activeModel ?? null,
-    active_resolved_model:
-      ctx.activeResolvedModel === undefined ? null : resolvedModelToWire(ctx.activeResolvedModel),
-  };
-}
-
 function runStep(ctx: ModelsContext, step: Step): unknown {
   switch (step.op) {
     case "list_models":
@@ -254,9 +232,6 @@ describe("model commands", () => {
     test(scenario.name, async () => {
       const ctx = await buildContext(scenario.setup);
 
-      expect(readSession(ctx), "initial session").toEqual(
-        scenario.initial.session as never,
-      );
       expect(readPrefs(ctx, scenario.initial.prefs), "initial prefs").toEqual(
         scenario.initial.prefs as never,
       );
@@ -280,9 +255,6 @@ describe("model commands", () => {
           expect(result, label).toEqual(step.ok as never);
         }
 
-        expect(readSession(ctx), `${label} — session`).toEqual(
-          step.session as never,
-        );
         expect(readPrefs(ctx, step.prefs), `${label} — prefs`).toEqual(
           step.prefs as never,
         );
@@ -301,7 +273,6 @@ test("the active model is the one generation resolves, not the session's", async
     global_prefs: null,
     character_prefs: '[selected]\nprovider = "anthropic"\nmodel_id = "beta-id"\n',
     active_model: "chat.anthropic.alpha",
-    pre_resolved: null,
   });
 
   expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.beta");
@@ -320,7 +291,6 @@ async function rolesFor(defaults: string) {
     global_prefs: null,
     character_prefs: '[selected]\nprovider = "anthropic"\nmodel_id = "alpha-id"\n',
     active_model: null,
-    pre_resolved: null,
   });
   const byRole = new Map(modelRoles(ctx).map((r) => [r.role, r]));
   return byRole;
@@ -398,7 +368,6 @@ describe("targeting a sub-agent's own settings", () => {
     global_prefs: null,
     character_prefs: null,
     active_model: null,
-    pre_resolved: null,
     ...overrides,
   });
 
@@ -507,7 +476,6 @@ describe("targeting every sub-agent at once", () => {
     global_prefs: null,
     character_prefs: null,
     active_model: null,
-    pre_resolved: null,
   });
 
   const character = (ctx: ModelsContext): ModelPreferences =>

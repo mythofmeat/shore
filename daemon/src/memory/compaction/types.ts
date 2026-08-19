@@ -38,16 +38,6 @@ export interface DryRunResult {
   toolsCalled: string[];
 }
 
-export interface NoMemoryWritesResult {
-  conversationId: string;
-  messageCount: number;
-  compactedTurns: number;
-  toolRounds: number;
-  toolsCalled: string[];
-  rejectedPaths: string[];
-  maxRoundsHit: boolean;
-}
-
 export interface PausedCompactionResult {
   conversationId: string;
   checkpointId: string;
@@ -73,7 +63,6 @@ export interface TruncatedCompactionResult {
 export type CompactionOutcome =
   | ({ kind: "compacted" } & CompactionResult)
   | ({ kind: "dry_run" } & DryRunResult)
-  | ({ kind: "no_memory_writes" } & NoMemoryWritesResult)
   | ({ kind: "truncated" } & TruncatedCompactionResult)
   | ({ kind: "paused" } & PausedCompactionResult);
 

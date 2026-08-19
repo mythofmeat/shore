@@ -56,7 +56,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -159,7 +158,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 2,
           "dormant_after_heartbeat_turns": 3,
@@ -292,7 +290,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 1,
           "dormant_after_heartbeat_turns": 3,
@@ -399,7 +396,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Dormant",
           "ticks_without_user": 5,
           "dormant_after_heartbeat_turns": 3,
@@ -502,7 +498,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Dormant",
           "ticks_without_user": 3,
           "dormant_after_heartbeat_turns": 3,
@@ -589,109 +584,6 @@
       }
     },
     {
-      "case": "paused",
-      "ok": {
-        "character": "poppy",
-        "message_count": 0,
-        "turn_count": 0,
-        "active_model": null,
-        "config_dir": "<tmp>/config",
-        "data_dir": "<tmp>/data",
-        "cache_dir": "<tmp>/cache",
-        "pending_deferred_edit_count": 0,
-        "pending_deferred_edits": [],
-        "tokens": {
-          "input": 0,
-          "output": 0,
-          "cache_read": 0,
-          "cache_write": 0
-        },
-        "autonomy": {
-          "paused": true,
-          "heartbeat_state": "Active",
-          "ticks_without_user": 0,
-          "dormant_after_heartbeat_turns": 3,
-          "effective_interval_secs": 3600,
-          "minimum_heartbeat_latency_secs": 3600,
-          "dormant_after_idle_time_secs": 172800,
-          "recent_events": []
-        },
-        "activity": {
-          "hour_histogram": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "hour_classifications": [
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "normal"
-          ],
-          "has_sufficient_heatmap": false,
-          "engagement_score": 0.2,
-          "sessions_per_day": 0.0,
-          "message_count": 0,
-          "turn_count": 0
-        },
-        "keepalive_halted": null,
-        "sections": [
-          "tokens",
-          "autonomy",
-          "activity",
-          "index"
-        ],
-        "index": null
-      },
-      "volatile": {
-        "wake_at_secs": null,
-        "wake_until_secs": null,
-        "user_at_secs": null,
-        "user_since_secs": null
-      }
-    },
-    {
       "case": "custom_bounds",
       "ok": {
         "character": "poppy",
@@ -710,7 +602,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 7,
@@ -813,7 +704,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -916,7 +806,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -1019,7 +908,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -1122,7 +1010,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -1227,7 +1114,6 @@
           "cache_write": 512
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -1334,7 +1220,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -1437,7 +1322,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -1542,7 +1426,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,
@@ -1647,7 +1530,6 @@
           "cache_write": 0
         },
         "autonomy": {
-          "paused": false,
           "heartbeat_state": "Active",
           "ticks_without_user": 0,
           "dormant_after_heartbeat_turns": 3,

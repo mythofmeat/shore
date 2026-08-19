@@ -115,6 +115,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     for (const character of available) {
       const effective = registry.effectiveConfig(character);
       let embedder;
+      let embedderError;
       try {
         embedder = resolveEmbedder({
           ...(effective.app.defaults.embedding === undefined
@@ -123,7 +124,9 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
           embedding: Object.fromEntries(effective.models.embedding),
           providers: providerRecord(effective),
         });
-      } catch {}
+      } catch (e) {
+        embedderError = e instanceof Error ? e.message : String(e);
+      }
       historyIndex?.register({
         character,
         characterDataDir: characterDataDir(effective.dirs.data, character),
@@ -140,6 +143,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         indexPath: workspaceIndexPath(effective.dirs.cache, character),
         retrievalConfig: retrievalView(effective.app.memory.retrieval),
         ...(embedder === undefined ? {} : { embedder }),
+        ...(embedderError === undefined ? {} : { embedderError }),
       });
     }
   };

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { genericToolLoopEvents } from "../src/llm/providers/generic_loop.ts";
+import { replayableMessagesWithDrops } from "../src/llm/replay.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
@@ -364,5 +365,39 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
       name: "read",
       input: {},
     });
+  });
+
+  test("the turn the loop appends is stamped, so replay does not call its reasoning foreign", async () => {
+    const tools = fakePhase();
+    const provider = new FakeProvider([
+      {
+        kind: "tools",
+        calls: [{ id: "tu_1", name: "read", input: {} }],
+        thinking: "let me check",
+        reasoning: "raw chain",
+      },
+      {
+        kind: "tools",
+        calls: [{ id: "tu_2", name: "read", input: {} }],
+        thinking: "again",
+        reasoning: "more chain",
+      },
+      { kind: "text", text: "done" },
+    ]);
+
+    await collect(genericToolLoopEvents(provider, request(), tools.phase));
+
+    const third = provider.requests[2];
+    if (third === undefined) throw new Error("expected a third call");
+    expect(third.messages.filter((m) => m.role === "assistant").map((m) => m.model)).toEqual([
+      "deepseek-chat",
+      "deepseek-chat",
+    ]);
+
+    const { messages, drops } = replayableMessagesWithDrops(third);
+    expect(drops.unportable).toBe(0);
+    expect(
+      messages.flatMap((m) => m.content.filter((b) => b.type === "thinking")).length,
+    ).toBe(2);
   });
 });

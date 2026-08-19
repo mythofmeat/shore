@@ -1598,7 +1598,9 @@
                 "input": {}
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "timestamp": "<minted_timestamp>",
+            "provider_key": "anthropic",
+            "model": "claude-fixture"
           },
           {
             "msg_id": "<minted_id>",

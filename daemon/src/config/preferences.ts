@@ -2,7 +2,6 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  findModel,
   firstChatModel,
   hardcodedProviderDefaults,
   defaultSdk,
@@ -16,11 +15,10 @@ import {
   type ResolvedModel,
   type Sdk,
 } from "./models.ts";
-import { CatalogError, invalidType } from "./models.ts";
+import { invalidType } from "./models.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ProviderRegistry } from "./providers.ts";
-import { loadActiveModel } from "./runtime_state.ts";
 import { resolveBackgroundModelName, type DefaultsConfig } from "./app.ts";
 
 const PREFERENCES_DIR = "preferences";
@@ -592,7 +590,6 @@ export function resolveActiveForCharacter(
   config: LoadedConfigView,
   global: ModelPreferences,
   character: ModelPreferences,
-  legacyActiveModel: string | undefined,
   appDefaultModel: string | undefined,
   findEffective: FindEffectiveModel,
 ): ResolvedModel | undefined {
@@ -601,14 +598,6 @@ export function resolveActiveForCharacter(
     if (pair === undefined) continue;
     const resolved = resolveProviderModel(config, pair[0], pair[1], findEffective);
     if (resolved !== undefined) return resolved;
-  }
-
-  if (legacyActiveModel !== undefined) {
-    try {
-      return findModel(config.models, legacyActiveModel);
-    } catch (e) {
-      if (!(e instanceof CatalogError)) throw e;
-    }
   }
 
   if (appDefaultModel !== undefined) {
@@ -814,12 +803,10 @@ function activeSelection(
     );
   }
 
-  const legacy = loadActiveModel(join(config.dirs.data, character));
   const resolved = resolveActiveForCharacter(
     config,
     global,
     charPrefs,
-    legacy,
     config.app.defaults.model,
     findEffective,
   );

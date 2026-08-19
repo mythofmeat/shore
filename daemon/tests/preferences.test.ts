@@ -107,7 +107,6 @@ interface ActiveRow {
   name: string;
   global_toml: string;
   character_toml: string;
-  legacy_active_model: string | null;
   app_default_model: string | null;
   qualified_name: string | null;
 }
@@ -636,7 +635,6 @@ describe("resolveActiveForCharacter", () => {
         config,
         prefsFrom(row.global_toml),
         prefsFrom(row.character_toml),
-        row.legacy_active_model ?? undefined,
         row.app_default_model ?? undefined,
         findEffectiveModel,
       );
@@ -658,7 +656,6 @@ describe("resolveActiveForCharacter", () => {
         config,
         emptyPreferences(),
         emptyPreferences(),
-        undefined,
         "nosuchprovider:nosuchmodel",
         findEffectiveModel,
       );
@@ -680,7 +677,6 @@ describe("resolveActiveForCharacter", () => {
         config,
         emptyPreferences(),
         emptyPreferences(),
-        undefined,
         undefined,
         findEffectiveModel,
       ),
@@ -755,13 +751,6 @@ describe("resolveBackgroundModel", () => {
         join(root, "data", "ashe", "preferences", "models.toml"),
         row.character_prefs,
       );
-      if (row.name.includes("legacy")) {
-        writeFileSync(
-          join(root, "data", "ashe", "runtime_state.json"),
-          '{"active_model": "sonnet"}',
-        );
-      }
-
       const app = parseToml(row.background_toml) as
         | { defaults?: { background?: Record<string, string> } }
         | undefined;

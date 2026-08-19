@@ -37,7 +37,7 @@ import { pluginsDir } from "../config/dirs.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo } from "../tools/dispatch.ts";
-import { makeDispatchCommand, type CommandPathDeps, type SessionCache } from "./commands.ts";
+import { makeDispatchCommand, type CommandPathDeps } from "./commands.ts";
 import type { DispatchRuntime, ReloadSummary } from "./command_dispatch.ts";
 import {
   generationEngine,
@@ -52,7 +52,6 @@ import type {
   HandlerRegistry,
   MessageHandlerDeps,
 } from "./router.ts";
-import type { SessionTokens } from "./persistence.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
 import { indexPath as workspaceIndexPath } from "../memory/workspace_index.ts";
 
@@ -61,7 +60,6 @@ export interface GenerationAssembly {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   autonomy: TurnAutonomyBridge;
   emitEvent: (message: ServerMessage) => void;
-  sessionTokens: SessionTokens;
   diagnostics: Diagnostics;
   env?: NodeJS.ProcessEnv | undefined;
   now?: (() => number) | undefined;
@@ -82,7 +80,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
     autonomy: turnAutonomy(a.autonomy, runtime.cache),
     notifier: runtime.notifier,
-    sessionTokens: a.sessionTokens,
     diagnostics: a.diagnostics,
     emitEvent: a.emitEvent,
     mcpRegistry: {
@@ -205,10 +202,19 @@ export function usageBudgetWarnings(
 
 export interface HandlerAssembly
   extends Omit<GenerationAssembly, "emitEvent">,
-    Omit<CommandAssembly, "runtime" | "autonomy" | "sessionTokens" | "diagnostics" | "providers" | "env"> {
+    Omit<CommandAssembly, "runtime" | "autonomy" | "diagnostics" | "providers" | "env"> {
   runtime: ShoreRuntime;
   emitEvent: (message: ServerMessage) => void;
   log?: MessageHandlerDeps["log"];
+}
+
+function beginIndexForeground(a: HandlerAssembly): () => void {
+  const endHistory = a.runtime.historyIndex.beginForeground();
+  const endWorkspace = a.runtime.workspaceIndex.beginForeground();
+  return () => {
+    endHistory();
+    endWorkspace();
+  };
 }
 
 export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps {
@@ -220,7 +226,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     registry: handlerRegistry(a.runtime.registry),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta) => {
-      const endForeground = a.runtime.historyIndex.beginForeground();
+      const endForeground = beginIndexForeground(a);
       try {
         return await dispatchCommand(command, meta);
       } finally {
@@ -228,7 +234,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
       }
     },
     runGeneration: async (params) => {
-      const endForeground = a.runtime.historyIndex.beginForeground();
+      const endForeground = beginIndexForeground(a);
       try {
         await runGeneration(params);
       } finally {
@@ -266,7 +272,6 @@ export function handlerNotifier(
 export interface CommandAssembly {
   runtime: ShoreRuntime;
   autonomy: TurnAutonomyBridge;
-  sessionTokens: SessionTokens;
   diagnostics: Diagnostics;
   router: SessionRouter;
   handshake: HandshakeProvider;
@@ -276,42 +281,18 @@ export interface CommandAssembly {
 
 export function buildCommandPathDeps(a: CommandAssembly): CommandPathDeps {
   const { runtime } = a;
-  const sessions = new ProcessSessionCache();
   return {
     registry: runtime.registry,
     globalConfig: () => runtime.registry.globalConfig(),
     configPath: runtime.configPath,
     dataDir: runtime.config.dirs.data,
-    sessions,
     commands: commandDeps(a),
     runtime: configRuntime(a),
-    dispatchRuntime: dispatchRuntime(a, sessions),
+    dispatchRuntime: dispatchRuntime(a),
     router: a.router,
     handshake: a.handshake,
     ...(a.env === undefined ? {} : { env: a.env }),
   };
-}
-
-class ProcessSessionCache implements SessionCache {
-  readonly #models = new Map<string, string>();
-
-  static #key(sessionId: number, character: string | undefined): string {
-    return `${sessionId}\0${character ?? ""}`;
-  }
-
-  activeModel(sessionId: number, character: string | undefined): string | undefined {
-    return this.#models.get(ProcessSessionCache.#key(sessionId, character));
-  }
-
-  setActiveModel(sessionId: number, character: string | undefined, model: string | undefined): void {
-    const key = ProcessSessionCache.#key(sessionId, character);
-    if (model === undefined) this.#models.delete(key);
-    else this.#models.set(key, model);
-  }
-
-  clear(): void {
-    this.#models.clear();
-  }
 }
 
 function configRuntime(a: CommandAssembly): ConfigRuntime {
@@ -335,10 +316,7 @@ function configRuntime(a: CommandAssembly): ConfigRuntime {
   };
 }
 
-function dispatchRuntime(
-  a: CommandAssembly,
-  sessions: ProcessSessionCache,
-): DispatchRuntime {
+function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
   const { runtime } = a;
   return {
     globalConfig: () => runtime.registry.globalConfig(),
@@ -515,7 +493,6 @@ function commandDeps(a: CommandAssembly): CommandDeps {
   const { runtime } = a;
   const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");
   return {
-    sessionTokens: a.sessionTokens,
     autonomy: runtime.autonomy,
     diagnostics: a.diagnostics,
     callStore: runtime.callStore,

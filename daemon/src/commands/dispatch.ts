@@ -2,7 +2,6 @@ import { describeError } from "../llm/errors.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import type { ResolvedModel } from "../config/models.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { CallStore } from "../call_store.ts";
 import type { Diagnostics } from "../diagnostics.ts";
@@ -64,7 +63,7 @@ import {
   status,
 } from "./status.ts";
 import { usage } from "./usage.ts";
-import type { SessionTokens } from "../handler/persistence.ts";
+import { conversationTokens } from "../ledger/conversation_spend.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 
@@ -74,13 +73,11 @@ export interface CommandSession {
   dataDir: string;
   characterName: string | undefined;
   activeModel: string | undefined;
-  activeResolvedModel: ResolvedModel | undefined;
   runtime: ConfigRuntime;
   env?: NodeJS.ProcessEnv;
 }
 
 export interface CommandDeps {
-  sessionTokens: SessionTokens;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
   callStore: CallStore | undefined;
@@ -305,7 +302,11 @@ function statusContext(
     turnCount: engine.turnCount(),
     activeModel: effectiveChatModel(session.config, engine.characterName)?.qualifiedName,
     config: { app: { defaults: { model: session.config.app.defaults.model } }, dirs: session.config.dirs },
-    sessionTokens: deps.sessionTokens,
+    conversationTokens: conversationTokens(
+      deps.ledgerPath,
+      engine.characterName,
+      engine.startedAt(),
+    ),
     autonomy: deps.autonomy,
     diagnostics: deps.diagnostics,
     now: deps.now ?? Date.now,

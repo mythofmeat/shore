@@ -54,7 +54,6 @@ import {
   persistAndNotify,
   type PersistContext,
   type PersistEngine,
-  type SessionTokens,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
 import {
@@ -119,7 +118,6 @@ export interface GenerationDeps {
   callStore?: CallRecorder | undefined;
   autonomy: TurnAutonomy & PersistContext["autonomy"];
   notifier: PersistContext["notifier"];
-  sessionTokens: SessionTokens;
   diagnostics: GenerationDiagnostics;
   emitEvent: (message: ServerMessage) => void;
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered" | "call">;
@@ -276,7 +274,6 @@ export async function runGeneration(
     sendDirect: params.send,
     autonomy: deps.autonomy,
     notifier: deps.notifier,
-    sessionTokens: deps.sessionTokens,
     newlyCrossedUsageBudgetWarnings: deps.newlyCrossedUsageBudgetWarnings,
     now,
     newMessageId,

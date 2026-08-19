@@ -14,13 +14,6 @@ export interface CompletedResponseMessage {
   content_blocks: ContentBlock[];
 }
 
-export interface SessionTokens {
-  input: number;
-  output: number;
-  cache_read: number;
-  cache_write: number;
-}
-
 export interface PersistEngine {
   appendMessage(msg: Message): Promise<void>;
   replaceAfterLastUserTurn(newMessages: Message[]): Promise<number>;
@@ -49,7 +42,6 @@ export interface PersistContext {
   sendDirect: (message: ServerMessage) => void;
   autonomy: PersistAutonomy;
   notifier: NotificationService;
-  sessionTokens: SessionTokens;
   newlyCrossedUsageBudgetWarnings: (character: string) => Promise<UsageBudgetWarningEvent[]>;
   now: () => string;
   newMessageId: () => string;
@@ -73,8 +65,6 @@ export async function persistAndNotify(
 ): Promise<void> {
   const { charName, result, request, resolvedProviderKey } = params;
 
-  accumulateSessionTokens(ctx, result);
-
   const completedMessages = completedResponseMessages(result);
 
   ctx.autonomy.notifyLastRequest(
@@ -94,7 +84,12 @@ export async function persistAndNotify(
     .filter((msg) => msg.role === "assistant")
     .map((msg) => msg.msg_id);
 
-  const generatedMessages = [...params.toolIntermediateMessages, ...responseMessages];
+  const generatedMessages = [
+    ...params.toolIntermediateMessages.map((m) =>
+      stampProvenance(m, mintingProvider, mintingModel),
+    ),
+    ...responseMessages,
+  ];
   await applyGeneratedMessagesToEngine(engine, generatedMessages, {
     regenAlt: params.regenAlt,
     responseEventIds,
@@ -155,19 +150,6 @@ export async function applyGeneratedMessagesToEngine(
   }
 }
 
-function accumulateSessionTokens(ctx: PersistContext, result: StreamResult): void {
-  const tokens = ctx.sessionTokens;
-  tokens.input = saturatingAdd(tokens.input, result.usage.input_tokens);
-  tokens.output = saturatingAdd(tokens.output, result.usage.output_tokens);
-  tokens.cache_read = saturatingAdd(tokens.cache_read, result.usage.cache_read_tokens);
-  tokens.cache_write = saturatingAdd(tokens.cache_write, result.usage.cache_creation_tokens);
-}
-
-function saturatingAdd(a: number, b: number): number {
-  const sum = a + b;
-  return sum > Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : sum;
-}
-
 async function emitUsageBudgetWarnings(
   ctx: PersistContext,
   charName: string,
@@ -216,6 +198,15 @@ export function emitNewMessageEvent(
     character,
     ...wireMsg,
   } as unknown as ServerMessage);
+}
+
+function stampProvenance(message: Message, providerKey: string, model: string): Message {
+  if (message.role !== "assistant") return message;
+  return {
+    ...message,
+    provider_key: providerKey,
+    ...(model === "" ? {} : { model }),
+  };
 }
 
 export function messageFromResponse(

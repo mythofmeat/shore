@@ -1,13 +1,27 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tracing::debug;
 
 pub fn active_character_path() -> PathBuf {
+    crate::dirs::data_dir().join("active_character")
+}
+
+fn legacy_active_character_path() -> PathBuf {
     crate::dirs::runtime_dir().join("active_character")
 }
 
 pub fn read_active_character() -> Option<String> {
-    let content = std::fs::read_to_string(active_character_path()).ok()?;
+    read_from(&active_character_path(), &legacy_active_character_path())
+}
+
+pub fn write_active_character(name: &str) -> std::io::Result<()> {
+    write_to(&active_character_path(), name)
+}
+
+fn read_from(primary: &Path, legacy: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(primary)
+        .or_else(|_| std::fs::read_to_string(legacy))
+        .ok()?;
     let trimmed = content.trim();
     if trimmed.is_empty() {
         debug!("No active character in state file");
@@ -17,45 +31,77 @@ pub fn read_active_character() -> Option<String> {
     Some(trimmed.to_owned())
 }
 
-pub fn write_active_character(name: &str) -> std::io::Result<()> {
-    let path = active_character_path();
+fn write_to(path: &Path, name: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     debug!(character = name, "Writing active character to state file");
-    std::fs::write(&path, name)
+    std::fs::write(path, name)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_env::{set_env, unset_env};
 
-    #[test]
-    fn path_ends_with_active_character() {
-        assert!(active_character_path().ends_with("active_character"));
+    struct Paths {
+        _tmp: tempfile::TempDir,
+        primary: PathBuf,
+        legacy: PathBuf,
+    }
+
+    fn paths() -> Paths {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let primary = tmp.path().join("data").join("active_character");
+        let legacy = tmp.path().join("run").join("active_character");
+        Paths {
+            _tmp: tmp,
+            primary,
+            legacy,
+        }
     }
 
     #[test]
-    fn round_trip_through_the_runtime_dir() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        set_env("SHORE_RUNTIME_DIR", tmp.path().join("shore"));
-        let result = std::panic::catch_unwind(|| {
-            assert!(read_active_character().is_none(), "missing file is None");
+    fn the_choice_is_kept_in_the_data_dir() {
+        assert_eq!(
+            active_character_path(),
+            crate::dirs::data_dir().join("active_character"),
+        );
+        assert_eq!(
+            legacy_active_character_path(),
+            crate::dirs::runtime_dir().join("active_character"),
+        );
+    }
 
-            write_active_character("alice").unwrap();
-            assert_eq!(read_active_character().as_deref(), Some("alice"));
+    #[test]
+    fn round_trips_through_the_data_dir() {
+        let p = paths();
+        assert!(read_from(&p.primary, &p.legacy).is_none(), "missing file");
 
-            write_active_character("bob").unwrap();
-            assert_eq!(read_active_character().as_deref(), Some("bob"));
+        write_to(&p.primary, "alice").unwrap();
+        assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("alice"));
 
-            std::fs::write(active_character_path(), "").unwrap();
-            assert!(read_active_character().is_none(), "empty file is None");
+        write_to(&p.primary, "bob").unwrap();
+        assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("bob"));
 
-            std::fs::write(active_character_path(), "  carol  \n").unwrap();
-            assert_eq!(read_active_character().as_deref(), Some("carol"));
-        });
-        unset_env("SHORE_RUNTIME_DIR");
-        result.unwrap();
+        std::fs::write(&p.primary, "").unwrap();
+        assert!(read_from(&p.primary, &p.legacy).is_none(), "empty file");
+
+        std::fs::write(&p.primary, "  carol  \n").unwrap();
+        assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("carol"));
+    }
+
+    #[test]
+    fn a_choice_left_in_the_runtime_dir_is_still_read() {
+        let p = paths();
+        std::fs::create_dir_all(p.legacy.parent().unwrap()).unwrap();
+        std::fs::write(&p.legacy, "dana").unwrap();
+        assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("dana"));
+
+        write_to(&p.primary, "erin").unwrap();
+        assert_eq!(
+            read_from(&p.primary, &p.legacy).as_deref(),
+            Some("erin"),
+            "the data dir wins once it has an answer",
+        );
     }
 }

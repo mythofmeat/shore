@@ -12,14 +12,11 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import { AutonomyService } from "../src/autonomy/service.ts";
 import { dispatchCommand, type CommandPathDeps } from "../src/handler/commands.ts";
+import { characterPreferencesPath, loadPreferences } from "../src/config/preferences.ts";
 import type { RequestMeta } from "../src/swp/session.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const RID_DROPPED = new Set(["list_characters", "list_models", "list_providers"]);
-
-const SESSION_ID = 1;
-
-const DEFAULT_MODEL = "chat.fixture";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -36,7 +33,7 @@ const FIXTURE_MODEL = {
 
 interface Harness {
   deps: CommandPathDeps;
-  activeModel(character: string | undefined): string | undefined;
+  savedModel(character: string): string | undefined;
   configDir: string;
 }
 
@@ -74,8 +71,6 @@ async function harness(characters: readonly string[]): Promise<Harness> {
   };
 
   const engines = new Map<string, ConversationEngine>();
-  const activeModels = new Map<string, string>();
-  const modelKey = (id: number, character: string | undefined) => `${id} ${character ?? ""}`;
 
   const deps: CommandPathDeps = {
     registry: {
@@ -93,15 +88,7 @@ async function harness(characters: readonly string[]): Promise<Harness> {
     globalConfig: () => config,
     configPath: join(dirs.config, "config.toml"),
     dataDir: dirs.data,
-    sessions: {
-      activeModel: (id, character) => activeModels.get(modelKey(id, character)),
-      setActiveModel: (id, character, model) => {
-        if (model === undefined) activeModels.delete(modelKey(id, character));
-        else activeModels.set(modelKey(id, character), model);
-      },
-    },
     commands: {
-      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
       autonomy: new AutonomyService(
         { run: async () => ({ ok: false, detail: "unwired" }) } as never,
       ),
@@ -137,9 +124,19 @@ async function harness(characters: readonly string[]): Promise<Harness> {
 
   return {
     deps,
-    activeModel: (character) => activeModels.get(modelKey(SESSION_ID, character)),
+    savedModel: (character) => savedSelection(dirs.data, character),
     configDir: dirs.config,
   };
+}
+
+function charactersInPlay(input: Record<string, unknown>): string[] {
+  return (input["characters_on_disk"] as string[]).slice().sort();
+}
+
+function savedSelection(dataDir: string, character: string): string | undefined {
+  const selected = loadPreferences(characterPreferencesPath(dataDir, character)).selected;
+  if (selected.provider === undefined || selected.modelId === undefined) return undefined;
+  return `${selected.provider}:${selected.modelId}`;
 }
 
 function resolveCharacter(
@@ -219,7 +216,9 @@ describe("dispatchCommand", () => {
           meta(prior, null),
         );
       }
-      const activeModelBefore = h.activeModel(selected ?? undefined);
+      const savedBefore = charactersInPlay(input).map(
+        (name) => [name, h.savedModel(name) ?? null] as const,
+      );
 
       const frame = await dispatchCommand(
         h.deps,
@@ -239,32 +238,23 @@ describe("dispatchCommand", () => {
         expect(got["rid"]).toBe(want["rid"] as string | null);
       }
 
-      const crossCharacter = prior !== selected;
-
       if (want["kind"] === "error") {
         expect(got["code"]).toBe(want["code"] as never);
         expect(got["message"]).toBe(expectedMessage(want["message"] as string, h.configDir));
       } else {
         expect(got["name"]).toBe(want["name"] as string);
         expect(got["data_keys"]).toEqual(expect.arrayContaining(want["data_keys"] as string[]));
-        expect(got["data_active"]).toEqual(
-          crossCharacter ? DEFAULT_MODEL : (want["data_active"] ?? null),
-        );
+        expect(got["data_active"]).toEqual(want["data_active"] ?? null);
       }
 
-      if (crossCharacter) {
-        expect(activeModelBefore).toBeUndefined();
-        expect(h.activeModel(selected ?? undefined)).toBeUndefined();
-        expect(h.activeModel(prior ?? undefined) ?? null).toEqual(
-          out["active_model_after"] ?? null,
-        );
-        return;
-      }
-
-      expect(activeModelBefore ?? null).toEqual(out["active_model_before"] ?? null);
-      expect(h.activeModel(selected ?? undefined) ?? null).toEqual(
-        out["active_model_after"] ?? null,
+      expect(Object.fromEntries(savedBefore)).toEqual(
+        (out["saved_models_before"] ?? {}) as never,
       );
+      expect(
+        Object.fromEntries(
+          charactersInPlay(input).map((name) => [name, h.savedModel(name) ?? null] as const),
+        ),
+      ).toEqual((out["saved_models_after"] ?? {}) as never);
     });
   }
 });

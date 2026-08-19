@@ -5,9 +5,3 @@ pub(crate) fn set_env<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, value: V) {
     // SAFETY: tests touching env run single-threaded
     unsafe { std::env::set_var(key, value) }
 }
-
-#[expect(unsafe_code, reason = "env::remove_var is unsafe as of edition 2024")]
-pub(crate) fn unset_env<K: AsRef<OsStr>>(key: K) {
-    // SAFETY: tests touching env run single-threaded
-    unsafe { std::env::remove_var(key) }
-}

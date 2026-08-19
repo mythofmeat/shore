@@ -265,7 +265,7 @@ describe("session_activate", () => {
 
     const first = await h.activate();
     expect(first.registered).toBe(true);
-    expect(first.heartbeat).toMatchObject({ state: "Active", paused: false });
+    expect(first.heartbeat).toMatchObject({ state: "Active" });
 
     const second = await h.activate();
     expect(second.registered).toBe(false);

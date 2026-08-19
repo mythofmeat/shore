@@ -4,7 +4,7 @@ import { HeartbeatLog, type HeartbeatEvent } from "../autonomy/heartbeat_log.ts"
 import type { HourClassification } from "../autonomy/activity.ts";
 import type { ShoreDirs } from "../config/dirs.ts";
 import type { Diagnostics } from "../diagnostics.ts";
-import type { SessionTokens } from "../handler/persistence.ts";
+import type { ConversationTokens } from "../ledger/conversation_spend.ts";
 import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
 import { invalidRequest } from "./errors.ts";
 import { workspaceIndexSection, type WorkspaceIndexSource } from "./workspace_index.ts";
@@ -20,7 +20,7 @@ export interface StatusContext {
   turnCount: number;
   activeModel: string | undefined;
   config: StatusConfigView;
-  sessionTokens: SessionTokens;
+  conversationTokens: ConversationTokens;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
   now: () => number;
@@ -48,7 +48,6 @@ export function autonomyWire(status: AutonomyStatus, now: number): Json {
   const wake = status.next_wake_at;
   const user = status.last_user_at;
   return {
-    paused: status.paused,
     heartbeat_state: status.heartbeat_state,
     ticks_without_user: status.ticks_without_user,
     dormant_after_heartbeat_turns: status.max_idle_ticks,
@@ -95,7 +94,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
   const characterDataDir = `${ctx.config.dirs.data}/${ctx.characterName}`;
   const pending = await pendingDeferredEditPaths(characterDataDir).catch(() => []);
 
-  const tokens = ctx.sessionTokens;
+  const tokens = ctx.conversationTokens;
   const halt = ctx.autonomy.keepaliveHalt();
   const sections = {
     tokens: {

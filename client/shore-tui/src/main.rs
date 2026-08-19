@@ -1449,6 +1449,20 @@ fn blocks_from_content(
     blocks
 }
 
+fn editable_text(msg: &Message) -> String {
+    if msg.content_blocks.is_empty() {
+        return msg.content.clone();
+    }
+    msg.content_blocks
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::Text { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<&str>>()
+        .join("\n")
+}
+
 fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
     if msg.role == Role::System {
         entries.push(ConversationEntry::System {
@@ -2076,6 +2090,16 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 "usage" => {
                     app.apply_usage_budgets(&co.data);
                 }
+                "get" => {
+                    if let Some(msg_ref) = app.take_edit_prefill(co.rid.as_deref()) {
+                        match serde_json::from_value::<Message>(co.data.clone()) {
+                            Ok(msg) => app.start_editing(msg_ref, editable_text(&msg)),
+                            Err(e) => {
+                                app.set_error(format!("could not read message {msg_ref}: {e}"));
+                            }
+                        }
+                    }
+                }
                 _ => {
                     app.set_status(format!("cmd:{} completed", co.name));
                 }
@@ -2087,6 +2111,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if app.alt_picker.is_some() {
                 app.cancel_alt_picker();
             }
+            let _ = app.take_edit_prefill(err.rid.as_deref());
             let sampler_settings_error = app.sampler_settings_loading
                 && app.sampler_settings_rid_matches(err.rid.as_deref());
             if sampler_settings_error {
@@ -3127,6 +3152,79 @@ mod redraw_tests {
                 .contains(&"temperature = 0.7".into())
         );
         assert_eq!(app.completion.selected, Some(0));
+    }
+
+    fn stored_message(msg_id: &str, text: &str) -> serde_json::Value {
+        serde_json::json!({
+            "msg_id": msg_id,
+            "role": "user",
+            "content": text,
+            "content_blocks": [{ "type": "text", "text": text }],
+            "timestamp": "2026-08-19T10:00:00+10:00"
+        })
+    }
+
+    #[test]
+    fn a_get_response_prefills_the_edit_buffer() {
+        let mut app = App::default();
+        let rid = app.begin_edit_prefill("3");
+
+        let effect = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(rid),
+                name: "get".into(),
+                data: stored_message("m_abc", "the third message"),
+            }),
+        );
+
+        assert_eq!(effect.redraw, RedrawEffect::Immediate);
+        assert_eq!(app.editing_ref.as_deref(), Some("3"));
+        assert_eq!(app.input.text, "the third message");
+        assert_eq!(app.input.mode, crate::app::InputMode::Insert);
+        assert!(app.pending_edit_prefill.is_none());
+    }
+
+    #[test]
+    fn a_get_response_for_someone_else_leaves_the_editor_alone() {
+        let mut app = App::default();
+        let _ = app.begin_edit_prefill("3");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "get".into(),
+                data: stored_message("m_abc", "not mine"),
+            }),
+        );
+
+        assert!(app.editing_ref.is_none());
+        assert!(app.input.text.is_empty());
+        assert!(app.pending_edit_prefill.is_some());
+    }
+
+    #[test]
+    fn a_refused_ref_reports_the_daemon_error_and_arms_no_edit() {
+        let mut app = App::default();
+        let rid = app.begin_edit_prefill("99");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::Error(CommandError {
+                rid: Some(rid),
+                code: ErrorCode::NotFound,
+                message: "Message index 99 out of range (conversation has 4 messages)".into(),
+            }),
+        );
+
+        assert!(app.pending_edit_prefill.is_none());
+        assert!(app.editing_ref.is_none());
+        assert!(
+            app.error_log
+                .iter()
+                .any(|e| e.contains("Message index 99 out of range"))
+        );
     }
 
     #[test]

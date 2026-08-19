@@ -27,17 +27,11 @@ export interface CommandRegistry {
   effectiveConfig(name: string): LoadedConfig;
 }
 
-export interface SessionCache {
-  activeModel(sessionId: number, character: string | undefined): string | undefined;
-  setActiveModel(sessionId: number, character: string | undefined, model: string | undefined): void;
-}
-
 export interface CommandPathDeps {
   registry: CommandRegistry;
   globalConfig(): LoadedConfig;
   configPath: string;
   dataDir: string;
-  sessions: SessionCache;
   commands: CommandDeps;
   runtime: ConfigRuntime;
   dispatchRuntime: DispatchRuntime;
@@ -107,7 +101,6 @@ export async function dispatchCommand(
     frame = commandFrame(cmd.name, { err: e });
   }
 
-  deps.sessions.setActiveModel(sessionId, selected, session.activeModel);
   return frameWithRid(frame, rid);
 }
 
@@ -157,8 +150,7 @@ async function characterlessCommand(
     configPath: deps.configPath,
     dataDir: deps.dataDir,
     characterName: undefined,
-    activeModel: deps.sessions.activeModel(sessionId, selected),
-    activeResolvedModel: undefined,
+    activeModel: undefined,
     runtime: deps.runtime,
     ...(deps.env === undefined ? {} : { env: deps.env }),
   };
@@ -210,7 +202,6 @@ function characterSession(
     dataDir: deps.dataDir,
     characterName: character,
     activeModel: model?.qualifiedName,
-    activeResolvedModel: model,
     runtime: deps.runtime,
     ...(deps.env === undefined ? {} : { env: deps.env }),
   };

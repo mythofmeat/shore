@@ -41,7 +41,7 @@ function renderStatus(data: Json): string | undefined {
   if (isJson(tokens)) {
     const get = (key: string) => num(tokens, key) ?? 0;
     lines.push(
-      `- session tokens: ${get("input")} in / ${get("output")} out ` +
+      `- conversation tokens: ${get("input")} in / ${get("output")} out ` +
         `(cache ${get("cache_read")} read / ${get("cache_write")} write)`,
     );
   }

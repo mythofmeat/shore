@@ -88,6 +88,10 @@ export class ConversationEngine {
     return this.#messages.turnCount();
   }
 
+  startedAt(): string | undefined {
+    return this.#messages.startedAt();
+  }
+
   segments(): SegmentReader {
     return this.#segments;
   }

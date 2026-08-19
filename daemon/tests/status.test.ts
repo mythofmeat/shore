@@ -55,7 +55,6 @@ interface Setup {
   persisted?: [number, number | undefined, number | undefined, number];
   log?: boolean;
   dormant?: boolean;
-  paused?: boolean;
   customBounds?: boolean;
   activeModel?: string;
   configModel?: string;
@@ -74,7 +73,6 @@ const SETUPS: Record<string, Setup> = {
   overdue: { persisted: [1, -45, -7200, 0] },
   restored_no_times: { persisted: [5, undefined, undefined, 9] },
   dormant: { persisted: [0, 1800, -60, 0], dormant: true },
-  paused: { paused: true },
   future_user: { persisted: [0, undefined, 600, 0] },
   custom_bounds: { customBounds: true },
   model_override: { activeModel: "claude-sonnet", configModel: "claude-opus" },
@@ -222,9 +220,6 @@ async function build(name: string): Promise<StatusContext> {
     if (s.dormant === true) {
       expect(autonomy.forceHeartbeatState(CHARACTER, "dormant")).toBe(true);
     }
-    if (s.paused === true) {
-      expect(autonomy.setPaused(CHARACTER, true)).toBe(true);
-    }
   }
 
   const diag = new Diagnostics();
@@ -236,7 +231,7 @@ async function build(name: string): Promise<StatusContext> {
     turnCount: s.turns ?? 0,
     activeModel: s.activeModel,
     config: { app: { defaults: { model: s.configModel } }, dirs },
-    sessionTokens: {
+    conversationTokens: {
       input,
       output,
       cache_read: cacheRead,
@@ -425,7 +420,6 @@ describe("the clock arithmetic", () => {
     return autonomyWire(
       {
         character: CHARACTER,
-        paused: false,
         heartbeat_state: "Active",
         ticks_without_user: 0,
         covered_turn_count: 0,

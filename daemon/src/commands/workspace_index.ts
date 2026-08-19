@@ -32,7 +32,7 @@ export async function workspaceIndexSection(
     ...(stats.unusableReason === undefined ? {} : { unusable: stats.unusableReason }),
     files: stats.files,
     embedded: stats.embedded,
-    pending: progress?.pending ?? stats.pending,
+    pending: progress?.sweptAt === undefined ? stats.pending : progress.pending,
     skipped: stats.skipped,
     skip_reasons: stats.skipReasons,
     vectors: stats.vectors,
@@ -48,6 +48,7 @@ function backgroundView(progress: WorkspaceIndexProgress | undefined, now: numbe
   return {
     registered: true,
     swept: progress.sweptAt !== undefined,
+    ...(progress.embedderError === undefined ? {} : { embedder_error: progress.embedderError }),
     failures: progress.failures,
     ...(progress.lastError === undefined ? {} : { last_error: progress.lastError }),
     ...(progress.retryAt > now

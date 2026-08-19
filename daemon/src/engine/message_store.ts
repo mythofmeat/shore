@@ -314,6 +314,13 @@ export class MessageStore {
     return this.#messages.filter(isRealUserTurn).length;
   }
 
+  startedAt(): string | undefined {
+    const oldest = this.#messages[0];
+    if (oldest === undefined) return undefined;
+    const at = new Date(oldest.timestamp);
+    return Number.isNaN(at.getTime()) ? undefined : at.toISOString();
+  }
+
   messagesThroughLastUserTurn(): Message[] {
     return this.#messages.slice(0, this.#keepIndex());
   }

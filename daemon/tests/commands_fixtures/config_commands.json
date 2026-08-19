@@ -4,7 +4,6 @@
       "name": "the furnished surface, with every warning kind",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -109,13 +108,12 @@
       "name": "an empty config still lists every registered tool",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": true,
         "autonomy_enabled": false,
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The roster is the registry's, not the config's \u2014 only `main` changes.",
+      "note": "The roster is the registry's, not the config's — only `main` changes.",
       "ok": {
         "tools": [
           {
@@ -190,7 +188,6 @@
       "name": "a config with a missing api key env var",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -217,13 +214,12 @@
       "name": "no models at all",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": true,
         "autonomy_enabled": false,
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The no-models warning fires and the no-default-model warning does not \u2014 it is gated on the catalog being non-empty.",
+      "note": "The no-models warning fires and the no-default-model warning does not — it is gated on the catalog being non-empty.",
       "ok": {
         "valid": false,
         "warnings": [
@@ -241,7 +237,6 @@
       "name": "an api key env var that is set but empty",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": true,
         "autonomy_enabled": false,
         "defaults_model": null,
@@ -267,7 +262,6 @@
       "name": "a default model that is not in the catalog",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": true,
         "autonomy_enabled": false,
         "defaults_model": "nonexistent",
@@ -293,7 +287,6 @@
       "name": "models but no default set",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": true,
         "autonomy_enabled": false,
         "defaults_model": null,
@@ -322,7 +315,6 @@
       "name": "the whole config and the whole default baseline",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -596,7 +588,6 @@
       "name": "one section by key",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -643,7 +634,6 @@
       "name": "a map-valued section",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -681,7 +671,6 @@
       "name": "an unknown section",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -696,7 +685,6 @@
       "name": "a non-string key is no key at all",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -970,7 +958,6 @@
       "name": "a value without a key is still a read",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1245,13 +1232,12 @@
       "name": "defaults.model is written to the config file",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "secondary",
         "chat_models": 2
       },
-      "note": "The session's active model is untouched; `set` moves the persistent default.",
+      "note": "The character's saved model is untouched; `set` moves the persistent default.",
       "ok": {
         "set": "defaults.model",
         "value": "secondary",
@@ -1259,20 +1245,19 @@
         "file": "<root>/config/config.toml",
         "action": "replaced",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     },
     {
-      "name": "a session model override still masks the new default",
+      "name": "a saved model preference still masks the new default",
       "state_after": {
         "active_model": "primary",
-        "active_resolved_model": "chat.anthropic.primary",
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "secondary",
         "chat_models": 2
       },
-      "note": "`shore model use` wins over the file until it is reset; `masked_by_session` says so.",
+      "note": "`shore model use` wins over the file until it is reset; `masked_by_character's saved preference` says so.",
       "ok": {
         "set": "defaults.model",
         "value": "secondary",
@@ -1280,14 +1265,13 @@
         "file": "<root>/config/config.toml",
         "action": "replaced",
         "restart_required": [],
-        "masked_by_session": "primary"
+        "masked_by_preference": "primary"
       }
     },
     {
       "name": "model is an alias for defaults.model",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "secondary",
@@ -1301,14 +1285,13 @@
         "file": "<root>/config/config.toml",
         "action": "replaced",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     },
     {
       "name": "a model that is not in the catalog",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1324,7 +1307,6 @@
       "name": "defaults.stream parses the value as a bool",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": true,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1338,14 +1320,13 @@
         "file": "<root>/config/config.toml",
         "action": "replaced",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     },
     {
       "name": "yes is accepted as a bool",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": true,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1359,14 +1340,13 @@
         "file": "<root>/config/config.toml",
         "action": "replaced",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     },
     {
       "name": "a value that is not a bool",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1381,7 +1361,6 @@
       "name": "autonomy.enabled echoes the canonical key",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": false,
         "defaults_model": "primary",
@@ -1395,14 +1374,13 @@
         "file": "<root>/config/config.toml",
         "action": "replaced",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     },
     {
       "name": "the long spelling of autonomy.enabled",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": false,
         "defaults_model": "primary",
@@ -1415,14 +1393,13 @@
         "file": "<root>/config/config.toml",
         "action": "replaced",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     },
     {
       "name": "a key that is not in the schema",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1437,7 +1414,6 @@
       "name": "a table is not settable as a whole",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1453,7 +1429,6 @@
       "name": "an enum rejects a value outside its variants",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1468,7 +1443,6 @@
       "name": "a duration is normalised before it is written",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1482,14 +1456,13 @@
         "file": "<root>/config/config.toml",
         "action": "added-section",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     },
     {
       "name": "a new key is added to an existing section",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1502,14 +1475,13 @@
         "file": "<root>/config/config.toml",
         "action": "added-to-section",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     },
     {
       "name": "a list is set from a comma separated value",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1527,7 +1499,7 @@
         "file": "<root>/config/config.toml",
         "action": "replaced",
         "restart_required": [],
-        "masked_by_session": null
+        "masked_by_preference": null
       }
     }
   ],
@@ -1536,13 +1508,12 @@
       "name": "check mode reports without applying",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "No `prompts_refreshed` field at all in check mode \u2014 not `false`.",
+      "note": "No `prompts_refreshed` field at all in check mode — not `false`.",
       "ok": {
         "applied": false,
         "config_path": "<root>/config/config.toml",
@@ -1554,7 +1525,6 @@
       "name": "a truthy non-boolean apply is not an apply",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1572,7 +1542,6 @@
       "name": "apply adopts the config on disk",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": true,
         "autonomy_enabled": false,
         "defaults_model": "third",
@@ -1591,13 +1560,12 @@
       "name": "a broken config aborts before adopting anything",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "`state_after` still shows the original config \u2014 the failure is before any mutation.",
+      "note": "`state_after` still shows the original config — the failure is before any mutation.",
       "err": {
         "code": "invalid_request",
         "message": "Config error: failed to parse config.toml: TOML parse error at line 1, column 6\n  |\n1 | this is not toml [[[\n  |      ^\nexpected `.`, `=`\n"
@@ -1607,7 +1575,6 @@
       "name": "a broken character overlay aborts the reload",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1623,7 +1590,6 @@
       "name": "reload with no character context",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1638,7 +1604,6 @@
       "name": "check mode lists the prompt files that differ",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1658,7 +1623,6 @@
       "name": "a prompt file with no snapshot at all is changed",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1677,7 +1641,6 @@
       "name": "apply with refresh_prompts activates the pending edits",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1699,7 +1662,6 @@
       "name": "apply without refresh_prompts leaves the snapshot alone",
       "state_after": {
         "active_model": null,
-        "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
         "defaults_model": "primary",
@@ -1718,44 +1680,6 @@
       "changed_after": [
         "SOUL.md"
       ]
-    }
-  ],
-  "config_reset": [
-    {
-      "name": "reset drops runtime overrides and reloads from disk",
-      "state_after": {
-        "active_model": null,
-        "active_resolved_model": null,
-        "defaults_stream": false,
-        "autonomy_enabled": true,
-        "defaults_model": "primary",
-        "chat_models": 2
-      },
-      "note": "`defaults_stream` goes back to the file's `false`, and `active_model` back to null.",
-      "ok": {
-        "reset": true,
-        "message": "Configuration reloaded from disk",
-        "config_path": "<root>/config/config.toml",
-        "invalidated": {
-          "runtime_overrides": true
-        }
-      }
-    },
-    {
-      "name": "reset with a broken config on disk",
-      "state_after": {
-        "active_model": null,
-        "active_resolved_model": null,
-        "defaults_stream": false,
-        "autonomy_enabled": true,
-        "defaults_model": "primary",
-        "chat_models": 2
-      },
-      "note": "`internal_error` here, where `config_reload` reports `invalid_request` for the same file.",
-      "err": {
-        "code": "internal_error",
-        "message": "Failed to reload config: failed to parse config.toml: TOML parse error at line 1, column 6\n  |\n1 | this is not toml [[[\n  |      ^\nexpected `.`, `=`\n"
-      }
     }
   ]
 }

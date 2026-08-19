@@ -46,7 +46,6 @@ async function world(
     configPath,
     characterName: "mid",
     activeModel: undefined,
-    activeResolvedModel: undefined,
     runtime: runtime(),
     env,
   };

@@ -923,17 +923,9 @@ fn session_activate_heartbeat(h: &serde_json::Value) -> String {
     let Some(state) = h["state"].as_str() else {
         return "no state (registration failed)".to_owned();
     };
-    let paused = if h["paused"].as_bool().unwrap_or(false) {
-        ", paused"
-    } else {
-        ""
-    };
     match h["seconds_until_wake"].as_i64() {
-        Some(secs) => format!(
-            "{state}{paused}, next wake in {}",
-            format_duration_compact(secs)
-        ),
-        None => format!("{state}{paused}, no wake scheduled"),
+        Some(secs) => format!("{state}, next wake in {}", format_duration_compact(secs)),
+        None => format!("{state}, no wake scheduled"),
     }
 }
 
@@ -1315,7 +1307,6 @@ pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Val
         "dry_run" => "dry run",
         "compacted" => "",
         "paused" => "paused",
-        "no_memory_writes" => "nothing written",
         "truncated" => "cut off",
         other => other,
     };
@@ -1362,24 +1353,6 @@ pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Val
             }
             kept_row(out, data);
             write_row(out, "Start over", "shore compact --restart");
-        }
-        "no_memory_writes" => {
-            write_row_colored(
-                out,
-                "Outcome",
-                "the pass wrote no memory, so nothing was archived",
-                Tone::Warn,
-            );
-            let rounds = data["tool_rounds"].as_u64().unwrap_or(0);
-            write_row(out, "Tool rounds", &rounds.to_string());
-            let rejected = string_list(data, "rejected_paths");
-            if !rejected.is_empty() {
-                write_row(out, "Rejected", &rejected.join(", "));
-            }
-            if data["max_rounds_hit"].as_bool().unwrap_or(false) {
-                write_row_colored(out, "Note", "hit the tool-round ceiling", Tone::Warn);
-            }
-            kept_row(out, data);
         }
         "truncated" => {
             write_row_colored(
@@ -2263,17 +2236,6 @@ mod tests {
                 }),
             ),
             (
-                "NOTHING WRITTEN (shore compact)",
-                serde_json::json!({
-                    "status": "no_memory_writes",
-                    "character": "qifei",
-                    "compacted_turns": 13,
-                    "tool_rounds": 4,
-                    "rejected_paths": ["../escape.md"],
-                    "max_rounds_hit": true,
-                }),
-            ),
-            (
                 "CUT OFF (shore compact)",
                 serde_json::json!({
                     "status": "truncated",
@@ -2371,28 +2333,6 @@ mod tests {
         assert!(
             !rendered.contains("Memory files"),
             "a paused pass has no written-file count to report: {rendered}"
-        );
-    }
-
-    #[test]
-    fn a_pass_that_wrote_no_memory_says_so() {
-        let rendered = rendered_compaction(&serde_json::json!({
-            "status": "no_memory_writes",
-            "character": "qifei",
-            "message_count": 34,
-            "compacted_turns": 13,
-            "tool_rounds": 4,
-            "tools_called": ["read"],
-            "rejected_paths": ["../escape.md"],
-            "max_rounds_hit": true,
-        }));
-
-        assert!(rendered.contains("wrote no memory"), "{rendered}");
-        assert!(rendered.contains("../escape.md"), "{rendered}");
-        assert!(rendered.contains("tool-round ceiling"), "{rendered}");
-        assert!(
-            rendered.contains("13 planned, all still in the conversation"),
-            "{rendered}"
         );
     }
 

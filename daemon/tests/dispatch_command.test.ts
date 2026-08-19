@@ -117,7 +117,6 @@ async function harness(): Promise<{
     dataDir: dirs.data,
     characterName: "ada",
     activeModel: undefined,
-    activeResolvedModel: undefined,
     runtime: {
       reloadRuntimeConfig: () => {},
       setUsageConfig: () => {},
@@ -127,7 +126,6 @@ async function harness(): Promise<{
   };
 
   const deps: CommandDeps = {
-    sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
     autonomy: await autonomyWithState(dirs.data),
     diagnostics: new Diagnostics(),
     callStore: undefined,
@@ -227,18 +225,13 @@ function namesOf(items: unknown[]): string[] | undefined {
   return names;
 }
 
-async function run(
-  name: string,
-  args: unknown,
-): Promise<{ frame: ReturnType<typeof commandFrame>; activeModelAfter: string | undefined }> {
+async function run(name: string, args: unknown): Promise<ReturnType<typeof commandFrame>> {
   const { engine, session, deps } = await harness();
-  let frame: ReturnType<typeof commandFrame>;
   try {
-    frame = commandFrame(name, { ok: await runCommand(engine, session, deps, { rid: null, name, args }) });
+    return commandFrame(name, { ok: await runCommand(engine, session, deps, { rid: null, name, args }) });
   } catch (e) {
-    frame = commandFrame(name, { err: e });
+    return commandFrame(name, { err: e });
   }
-  return { frame, activeModelAfter: session.activeModel };
 }
 
 describe("runCommand", () => {
@@ -248,7 +241,7 @@ describe("runCommand", () => {
 
   for (const c of fixture.dispatch) {
     test(c.name === "" ? "(the empty name)" : c.name, async () => {
-      const { frame, activeModelAfter } = await run(c.name, c.args);
+      const frame = await run(c.name, c.args);
       const got = envelope(frame);
       const want = c.output as Record<string, unknown>;
 
@@ -281,8 +274,6 @@ describe("runCommand", () => {
         expect(got["data_keys"]).toEqual(expect.arrayContaining(want["data_keys"] as string[]));
         expect(got["data_shape"]).toMatchObject(want["data_shape"] as object);
       }
-
-      expect(activeModelAfter ?? null).toEqual(c.active_model_after ?? null);
     });
   }
 });

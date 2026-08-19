@@ -362,7 +362,6 @@ describe("the compaction a long turn runs inline", () => {
         providers: {},
         autonomy: new TurnAutonomyBridge(recordingService()),
         emitEvent: () => {},
-        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
@@ -437,7 +436,6 @@ describe("what the assembly hands the driver", () => {
         providers: {},
         autonomy: new TurnAutonomyBridge(recordingService()),
         emitEvent: () => {},
-        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
@@ -462,7 +460,6 @@ describe("what the assembly hands the driver", () => {
         providers: {},
         autonomy: new TurnAutonomyBridge(recordingService()),
         emitEvent: () => {},
-        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
@@ -495,7 +492,6 @@ describe("what the assembly hands the driver", () => {
         providers: {},
         autonomy: new TurnAutonomyBridge(recordingService()),
         emitEvent: () => {},
-        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
@@ -565,7 +561,6 @@ describe("the handler, whole", () => {
     return {
       runtime,
       autonomy: new TurnAutonomyBridge(recordingService()),
-      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
       diagnostics: { api_calls: { push: () => {} } } as never,
       router: new SessionRouter(),
       handshake: {
@@ -587,6 +582,45 @@ describe("the handler, whole", () => {
       expect(typeof deps.dispatchCommand).toBe("function");
       expect(typeof deps.runGeneration).toBe("function");
       expect(deps.leases).toBeDefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("with no embedding model configured the indexer says so instead of waiting", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-noembed-", () => {}, ["ada"]);
+    try {
+      const progress = runtime.workspaceIndex.progress("ada");
+      expect(progress?.sweptAt).toBeUndefined();
+      expect(progress?.embedderError).toContain("no embedding model configured");
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a chat turn holds the workspace indexer off, not just the history one", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-foreground-");
+    try {
+      const held: string[] = [];
+      const released: string[] = [];
+      const watch = (name: string, service: { beginForeground: () => () => void }) => {
+        service.beginForeground = () => {
+          held.push(name);
+          return () => released.push(name);
+        };
+      };
+      watch("history", runtime.historyIndex);
+      watch("workspace", runtime.workspaceIndex);
+
+      const deps = buildMessageHandlerDeps(handlerAssembly(runtime));
+      await deps
+        .dispatchCommand({ name: "status" } as never, {} as never)
+        .catch(() => undefined);
+
+      expect(held).toEqual(["history", "workspace"]);
+      expect(released).toEqual(["history", "workspace"]);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
@@ -665,7 +699,6 @@ describe("the command path", () => {
     return {
       runtime,
       autonomy: new TurnAutonomyBridge(recordingService()),
-      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
       diagnostics: { api_calls: { push: () => {} } } as never,
       router: new SessionRouter(),
       handshake: { hello: () => ({}) as never, history: () => Promise.resolve({} as never) },
@@ -795,20 +828,6 @@ describe("the command path", () => {
     }
   });
 
-  test("one session's active model is remembered per character, not per session", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-cmd-switch-");
-    try {
-      const deps = buildCommandPathDeps(commandAssembly(runtime));
-      deps.sessions.setActiveModel(1, "ada", "anthropic:a");
-
-      expect(deps.sessions.activeModel(1, "nova")).toBeUndefined();
-      expect(deps.sessions.activeModel(1, "ada")).toBe("anthropic:a");
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
   test("a refreshed prompt snapshot drops the cached body", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-prompt-");
     try {
@@ -885,7 +904,6 @@ describe("reloading [mcp]", () => {
     return {
       runtime,
       autonomy: new TurnAutonomyBridge(recordingService()),
-      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
       diagnostics: { api_calls: { push: () => {} } } as never,
       router: new SessionRouter(),
       handshake: { hello: () => ({}) as never, history: () => Promise.resolve({} as never) },

@@ -10,14 +10,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -160,10 +155,6 @@
             ],
             "include_hidden": false,
             "hidden_count": 0
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -309,10 +300,6 @@
             "include_hidden": true,
             "hidden_count": 0
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -424,10 +411,6 @@
               "replay_prior_thinking": null,
               "max_tool_iterations": null
             }
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -543,10 +526,6 @@
               "max_tool_iterations": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -610,10 +589,6 @@
           "err": {
             "code": "not_found",
             "message": "model \"nope\" not found in static catalog or discovered models"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -729,10 +704,6 @@
               "max_tool_iterations": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -858,10 +829,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -985,10 +952,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -1047,10 +1010,6 @@
         {
           "op": "switch_model",
           "args": {},
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -1121,34 +1080,6 @@
             "model_id": "beta-id",
             "changed": true
           },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -1291,34 +1222,6 @@
             "include_hidden": false,
             "hidden_count": 0
           },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -1429,34 +1332,6 @@
               "sdk": "static_default",
               "replay_prior_thinking": null,
               "max_tool_iterations": null
-            }
-          },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
             }
           },
           "prefs": {
@@ -1582,34 +1457,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -1673,34 +1520,6 @@
           "err": {
             "code": "not_found",
             "message": "model \"nope\" not found in static catalog or discovered models"
-          },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
           },
           "prefs": {
             "global_exists": false,
@@ -1766,34 +1585,6 @@
             "code": "not_found",
             "message": "model \"openai:gamma-id\" not found in static catalog or discovered models"
           },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -1935,34 +1726,6 @@
             ],
             "include_hidden": false,
             "hidden_count": 0
-          },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
           },
           "prefs": {
             "global_exists": false,
@@ -2023,15 +1786,10 @@
           "op": "reset_model",
           "args": {},
           "ok": {
-            "previous": "beta",
             "previous_provider": "anthropic",
             "previous_model_id": "beta-id",
             "active": null,
             "reset_to": "config default"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -2174,10 +1932,6 @@
             ],
             "include_hidden": false,
             "hidden_count": 0
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -2291,10 +2045,6 @@
               "max_tool_iterations": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -2354,15 +2104,10 @@
           "op": "reset_model",
           "args": {},
           "ok": {
-            "previous": null,
             "previous_provider": null,
             "previous_model_id": null,
             "active": null,
             "reset_to": "config default"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -2489,10 +2234,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -2616,10 +2357,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -2685,10 +2422,6 @@
           "err": {
             "code": "invalid_request",
             "message": "`zai_clear_thinking` is not applicable to the `anthropic` sdk for this model"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -2760,10 +2493,6 @@
             "model_id": "gemini-3.1-pro",
             "key": "gemini_generation",
             "value": 2
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -2848,10 +2577,6 @@
             "code": "invalid_request",
             "message": "`reasoning_effort` value \"max\" is out of domain; allowed: minimal, low, medium, high"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -2928,7 +2653,7 @@
     },
     {
       "name": "a model id that two providers both discovered",
-      "note": "the only route to the catalog's Ambiguous error, which is the one kind it reports as a bad request rather than a miss \u2014 a bare id has to be unique across every enabled provider's cache",
+      "note": "the only route to the catalog's Ambiguous error, which is the one kind it reports as a bad request rather than a miss — a bare id has to be unique across every enabled provider's cache",
       "setup": {
         "catalog": "\n[chat.anthropic.shared]\nmodel_id = \"a-id\"\nsdk = \"anthropic\"\n\n[chat.openai.shared]\nmodel_id = \"o-id\"\nsdk = \"openai\"\n",
         "defaults": "[defaults]\n",
@@ -2955,14 +2680,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -3028,10 +2748,6 @@
             "code": "invalid_request",
             "message": "model name \"shared/id\" is ambiguous across providers: groq:shared/id, openrouter:shared/id"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -3096,10 +2812,6 @@
             "code": "invalid_request",
             "message": "model name \"shared/id\" is ambiguous across providers: groq:shared/id, openrouter:shared/id"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -3163,10 +2875,6 @@
           "err": {
             "code": "invalid_request",
             "message": "model name \"shared/id\" is ambiguous across providers: groq:shared/id, openrouter:shared/id"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -3282,10 +2990,6 @@
               "max_tool_iterations": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -3352,10 +3056,6 @@
             "code": "invalid_request",
             "message": "model name \"shared/id\" is ambiguous across providers: groq:shared/id, openrouter:shared/id"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -3420,10 +3120,6 @@
             "code": "not_found",
             "message": "model \"shared\" not found in static catalog or discovered models"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -3483,7 +3179,7 @@
     },
     {
       "name": "two catalog names for one model id",
-      "note": "`all` collapses on (provider, model_id) identity, not on qualified_name \u2014 these two differ by name and are the same model",
+      "note": "`all` collapses on (provider, model_id) identity, not on qualified_name — these two differ by name and are the same model",
       "setup": {
         "catalog": "\n[chat.anthropic.one]\nmodel_id = \"same-id\"\nsdk = \"anthropic\"\n\n[chat.anthropic.two]\nmodel_id = \"same-id\"\nsdk = \"anthropic\"\n",
         "defaults": "[defaults]\nmodel = \"one\"\n\n[defaults.background]\nheartbeat = \"one\"\ncompaction = \"two\"\n",
@@ -3491,14 +3187,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -3590,10 +3281,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -3719,10 +3406,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -3798,10 +3481,6 @@
             ],
             "key": "temperature",
             "value": 0.6
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -3961,10 +3640,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -4041,7 +3716,7 @@
     },
     {
       "name": "a background pin that does not resolve",
-      "note": "a diagnostic, so the row echoes the name the user wrote rather than failing \u2014 but a settings command targeting that task still errors",
+      "note": "a diagnostic, so the row echoes the name the user wrote rather than failing — but a settings command targeting that task still errors",
       "setup": {
         "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
         "defaults": "[defaults]\nmodel = \"alpha\"\n\n[defaults.background]\nheartbeat = \"ghost\"\n",
@@ -4049,14 +3724,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -4148,10 +3818,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -4216,10 +3882,6 @@
             "code": "not_found",
             "message": "model \"ghost\" not found in static catalog or discovered models"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -4283,10 +3945,6 @@
           "err": {
             "code": "not_found",
             "message": "model \"ghost\" not found in static catalog or discovered models"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -4355,14 +4013,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": "ghost",
-        "pre_resolved": null
+        "active_model": "ghost"
       },
       "initial": {
-        "session": {
-          "active_model": "ghost",
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -4422,10 +4075,6 @@
         {
           "op": "list_models",
           "args": {},
-          "session": {
-            "active_model": "ghost",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -4568,10 +4217,6 @@
         {
           "op": "model_info",
           "args": {},
-          "session": {
-            "active_model": "ghost",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -4684,10 +4329,6 @@
         {
           "op": "model_settings",
           "args": {},
-          "session": {
-            "active_model": "ghost",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -4843,10 +4484,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": "ghost",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -4928,14 +4565,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": "openrouter:vendor/hidden",
-        "pre_resolved": null
+        "active_model": "openrouter:vendor/hidden"
       },
       "initial": {
-        "session": {
-          "active_model": "openrouter:vendor/hidden",
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -4995,10 +4627,6 @@
         {
           "op": "list_models",
           "args": {},
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -5105,10 +4733,6 @@
         {
           "op": "model_info",
           "args": {},
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -5171,10 +4795,6 @@
         {
           "op": "model_settings",
           "args": {},
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -5239,10 +4859,6 @@
           "args": {
             "key": "max_output_tokens",
             "value": 256
-          },
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -5315,14 +4931,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -5420,10 +5031,6 @@
             "include_hidden": false,
             "hidden_count": 0
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -5486,10 +5093,6 @@
             "code": "invalid_request",
             "message": "No model specified and no active model set"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -5551,10 +5154,6 @@
           "err": {
             "code": "invalid_request",
             "message": "No model specified and no active model set"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -5646,10 +5245,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -5714,10 +5309,6 @@
             "code": "not_found",
             "message": "model \"alpha\" not found in static catalog or discovered models"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -5777,15 +5368,10 @@
           "op": "reset_model",
           "args": {},
           "ok": {
-            "previous": null,
             "previous_provider": null,
             "previous_model_id": null,
             "active": null,
             "reset_to": "config default"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -5851,10 +5437,6 @@
           "err": {
             "code": "invalid_request",
             "message": "No model specified and no active model set"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -5937,14 +5519,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -6051,10 +5628,6 @@
             ],
             "include_hidden": false,
             "hidden_count": 1
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -6173,10 +5746,6 @@
             "include_hidden": true,
             "hidden_count": 1
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -6291,10 +5860,6 @@
               "max_tool_iterations": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -6409,10 +5974,6 @@
               "max_tool_iterations": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -6476,10 +6037,6 @@
           "err": {
             "code": "not_found",
             "message": "model \"openrouter:vendor/hidden\" is hidden by [providers.openrouter.discovery.ignore]; pass include_hidden=true or update the ignore rules to allow it"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -6548,34 +6105,6 @@
             "provider": "openrouter",
             "model_id": "vendor/hidden",
             "changed": true
-          },
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": {
-              "name": "vendor/hidden",
-              "qualified_name": "openrouter:vendor/hidden",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/hidden",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
           },
           "prefs": {
             "global_exists": false,
@@ -6683,34 +6212,6 @@
             "include_hidden": false,
             "hidden_count": 1
           },
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": {
-              "name": "vendor/hidden",
-              "qualified_name": "openrouter:vendor/hidden",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/hidden",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -6821,34 +6322,6 @@
               "sdk": "static_default",
               "replay_prior_thinking": null,
               "max_tool_iterations": null
-            }
-          },
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": {
-              "name": "vendor/hidden",
-              "qualified_name": "openrouter:vendor/hidden",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/hidden",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
             }
           },
           "prefs": {
@@ -6974,34 +6447,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": {
-              "name": "vendor/hidden",
-              "qualified_name": "openrouter:vendor/hidden",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/hidden",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -7071,34 +6516,6 @@
             "model_id": "vendor/hidden",
             "key": "reasoning_effort",
             "value": "high"
-          },
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": {
-              "name": "vendor/hidden",
-              "qualified_name": "openrouter:vendor/hidden",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/hidden",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
           },
           "prefs": {
             "global_exists": false,
@@ -7256,34 +6673,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": "openrouter:vendor/hidden",
-            "active_resolved_model": {
-              "name": "vendor/hidden",
-              "qualified_name": "openrouter:vendor/hidden",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/hidden",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -7378,38 +6767,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": "chat.openrouter.vendor/visible",
-        "pre_resolved": "openrouter:vendor/visible"
+        "active_model": "chat.openrouter.vendor/visible"
       },
       "initial": {
-        "session": {
-          "active_model": "chat.openrouter.vendor/visible",
-          "active_resolved_model": {
-            "name": "vendor/visible",
-            "qualified_name": "openrouter:vendor/visible",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "anthropic",
-            "model_id": "vendor/visible",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 250000,
-            "max_output_tokens": 32000,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null
-          }
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -7517,34 +6877,6 @@
             "include_hidden": false,
             "hidden_count": 0
           },
-          "session": {
-            "active_model": "chat.openrouter.vendor/visible",
-            "active_resolved_model": {
-              "name": "vendor/visible",
-              "qualified_name": "openrouter:vendor/visible",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/visible",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -7603,34 +6935,6 @@
         {
           "op": "model_info",
           "args": {},
-          "session": {
-            "active_model": "chat.openrouter.vendor/visible",
-            "active_resolved_model": {
-              "name": "vendor/visible",
-              "qualified_name": "openrouter:vendor/visible",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/visible",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -7693,34 +6997,6 @@
         {
           "op": "model_settings",
           "args": {},
-          "session": {
-            "active_model": "chat.openrouter.vendor/visible",
-            "active_resolved_model": {
-              "name": "vendor/visible",
-              "qualified_name": "openrouter:vendor/visible",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/visible",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -7815,34 +7091,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": "chat.openrouter.vendor/visible",
-            "active_resolved_model": {
-              "name": "vendor/visible",
-              "qualified_name": "openrouter:vendor/visible",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/visible",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -7903,34 +7151,6 @@
           "args": {
             "key": "max_output_tokens",
             "value": 1024
-          },
-          "session": {
-            "active_model": "chat.openrouter.vendor/visible",
-            "active_resolved_model": {
-              "name": "vendor/visible",
-              "qualified_name": "openrouter:vendor/visible",
-              "category": "chat",
-              "provider_key": "openrouter",
-              "sdk": "anthropic",
-              "model_id": "vendor/visible",
-              "api_key_env": null,
-              "base_url": "https://openrouter.ai/api/v1",
-              "max_context_tokens": 250000,
-              "max_output_tokens": 32000,
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
           },
           "prefs": {
             "global_exists": false,
@@ -8003,14 +7223,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -8102,10 +7317,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -8230,10 +7441,6 @@
               "zai_clear_thinking": null,
               "zai_subscription": null
             }
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -8360,10 +7567,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -8426,11 +7629,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "background tasks use different models (heartbeat \u2192 chat.openai.gamma, compaction \u2192 chat.anthropic.beta); target a specific task instead of `all`"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
+            "message": "background tasks use different models (heartbeat → chat.openai.gamma, compaction → chat.anthropic.beta); target a specific task instead of `all`"
           },
           "prefs": {
             "global_exists": false,
@@ -8496,10 +7695,6 @@
             "code": "invalid_request",
             "message": "unknown background task: dreaming; expected all, heartbeat, or compaction"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -8563,10 +7758,6 @@
           "err": {
             "code": "invalid_request",
             "message": "unknown background task: bogus; expected all, heartbeat, or compaction"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -8638,10 +7829,6 @@
             "model_id": "gamma-id",
             "key": "temperature",
             "value": 0.1
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -8724,11 +7911,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "background tasks use different models (heartbeat \u2192 chat.openai.gamma, compaction \u2192 chat.anthropic.beta); target a specific task instead of `all`"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
+            "message": "background tasks use different models (heartbeat → chat.openai.gamma, compaction → chat.anthropic.beta); target a specific task instead of `all`"
           },
           "prefs": {
             "global_exists": false,
@@ -8888,10 +8071,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -8980,10 +8159,6 @@
             "model_id": "beta-id",
             "key": "top_p",
             "value": 0.3
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -9159,10 +8334,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -9263,14 +8434,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -9362,10 +8528,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -9491,10 +8653,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -9565,10 +8723,6 @@
             "model_id": "beta-id",
             "key": "budget_tokens",
             "value": 4096
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -9728,10 +8882,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -9816,14 +8966,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -9915,10 +9060,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -10044,10 +9185,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -10114,34 +9251,6 @@
             "provider": "anthropic",
             "model_id": "beta-id",
             "changed": true
-          },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
           },
           "prefs": {
             "global_exists": false,
@@ -10233,34 +9342,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -10386,34 +9467,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": {
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "category": "chat",
-              "provider_key": "anthropic",
-              "sdk": "anthropic",
-              "model_id": "beta-id",
-              "api_key_env": "ANTHROPIC_API_KEY",
-              "base_url": null,
-              "max_context_tokens": 200000,
-              "max_output_tokens": 32768,
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null
-            }
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -10481,14 +9534,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -10613,10 +9661,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -10686,10 +9730,6 @@
             "model_id": "alpha-id",
             "key": "temperature",
             "value": 0.9
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -10778,10 +9818,6 @@
             "model_id": "beta-id",
             "key": "budget_tokens",
             "value": 2048
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": false,
@@ -10955,10 +9991,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -11062,10 +10094,6 @@
             "model_id": "alpha-id",
             "key": "top_p",
             "value": 0.8
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -11272,10 +10300,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -11395,10 +10419,6 @@
             "model_id": "alpha-id",
             "key": "temperature",
             "value": null
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -11572,10 +10592,6 @@
               "zai_clear_thinking": null,
               "zai_subscription": null
             }
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -11682,10 +10698,6 @@
             "key": "top_p",
             "value": null
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -11826,10 +10838,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -11917,10 +10925,6 @@
             "model_id": "beta-id",
             "key": "max_output_tokens",
             "value": 512
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -12080,10 +11084,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -12224,10 +11224,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -12308,10 +11304,6 @@
           "err": {
             "code": "invalid_request",
             "message": "missing key"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -12399,10 +11391,6 @@
             "key": "max_output_tokens",
             "value": null
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -12484,10 +11472,6 @@
           "err": {
             "code": "invalid_request",
             "message": "unknown setting key: frobnicate; supported: temperature, top_p, reasoning_effort, budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, sdk, replay_prior_thinking, max_tool_iterations, openrouter_provider, gemini_generation, zai_clear_thinking, zai_subscription, supports_images"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -12575,10 +11559,6 @@
             "model_id": "alpha-id",
             "key": "temperature",
             "value": 0.4
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -12679,10 +11659,6 @@
             "code": "invalid_request",
             "message": "scope must be \"character\" or \"global\", got \"session\""
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -12780,10 +11756,6 @@
           "err": {
             "code": "invalid_request",
             "message": "`gemini_generation` is not applicable to the `anthropic` sdk for this model"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -12883,10 +11855,6 @@
             "code": "invalid_request",
             "message": "`reasoning_effort` value \"banana\" is out of domain; allowed: adaptive, low, medium, high, xhigh, max"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -12984,10 +11952,6 @@
           "err": {
             "code": "invalid_request",
             "message": "temperature must be a number, got \"hot\""
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -13087,10 +12051,6 @@
           "err": {
             "code": "not_found",
             "message": "model \"nope\" not found in static catalog or discovered models"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -13264,10 +12224,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -13368,14 +12324,9 @@
         "character": "Tester",
         "global_prefs": "[defaults.sampler]\ntemperature = 0.11\ntop_p = 0.22\n\n[models.\"anthropic:alpha-id\"]\ntemperature = 0.33\nbudget_tokens = 1024\n",
         "character_prefs": "[defaults.sampler]\ntemperature = 0.44\nreasoning_effort = \"low\"\n\n[models.\"anthropic:alpha-id\"]\nmax_output_tokens = 2048\n",
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": true,
           "global": {
@@ -13566,10 +12517,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -13662,10 +12609,6 @@
         {
           "op": "model_info",
           "args": {},
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -13879,10 +12822,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -14031,10 +12970,6 @@
               "max_tool_iterations": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -14138,10 +13073,6 @@
             "model_id": "alpha-id",
             "key": "temperature",
             "value": null
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -14332,10 +13263,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -14437,14 +13364,9 @@
         "character": null,
         "global_prefs": "[models.\"anthropic:alpha-id\"]\ntemperature = 0.33\n",
         "character_prefs": null,
-        "active_model": null,
-        "pre_resolved": null
+        "active_model": null
       },
       "initial": {
-        "session": {
-          "active_model": null,
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": true,
           "global": {
@@ -14579,10 +13501,6 @@
             "include_hidden": false,
             "hidden_count": 0
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -14664,10 +13582,6 @@
               "source": null
             }
           ],
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -14742,10 +13656,6 @@
             "max_tool_iterations": null,
             "supports_images": null
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -14860,10 +13770,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -14918,10 +13824,6 @@
           "err": {
             "code": "invalid_request",
             "message": "this command requires an attached character"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -14978,10 +13880,6 @@
             "code": "not_found",
             "message": "model \"ghost\" not found in static catalog or discovered models"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -15033,10 +13931,6 @@
           "args": {},
           "ok": {
             "active": null
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -15090,10 +13984,6 @@
           "err": {
             "code": "invalid_request",
             "message": "this command requires an attached character"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -15157,10 +14047,6 @@
             "key": "temperature",
             "value": 0.7
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -15217,10 +14103,6 @@
             "code": "invalid_request",
             "message": "this command requires an attached character"
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -15275,10 +14157,6 @@
           "err": {
             "code": "invalid_request",
             "message": "this command requires an attached character"
-          },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
           },
           "prefs": {
             "global_exists": true,
@@ -15394,10 +14272,6 @@
               "zai_subscription": null
             }
           },
-          "session": {
-            "active_model": null,
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": true,
             "global": {
@@ -15456,14 +14330,9 @@
         "character": "Tester",
         "global_prefs": null,
         "character_prefs": null,
-        "active_model": "beta",
-        "pre_resolved": null
+        "active_model": "beta"
       },
       "initial": {
-        "session": {
-          "active_model": "beta",
-          "active_resolved_model": null
-        },
         "prefs": {
           "global_exists": false,
           "global": {
@@ -15523,10 +14392,6 @@
         {
           "op": "list_models",
           "args": {},
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -15669,10 +14534,6 @@
         {
           "op": "model_info",
           "args": {},
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -15785,10 +14646,6 @@
         {
           "op": "model_settings",
           "args": {},
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {
@@ -15912,10 +14769,6 @@
         {
           "op": "switch_model",
           "args": {},
-          "session": {
-            "active_model": "beta",
-            "active_resolved_model": null
-          },
           "prefs": {
             "global_exists": false,
             "global": {

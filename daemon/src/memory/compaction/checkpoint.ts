@@ -17,7 +17,6 @@ export type CompactionPauseReason =
 
 export interface CheckpointLoopState {
   writesApplied: AppliedCompactionWrite[];
-  rejectedPaths: string[];
   toolsCalled: string[];
   dryRunPreviews: { path: string; content: string }[];
   toolRounds: number;
@@ -78,7 +77,6 @@ export function newCompactionCheckpoint(
     request,
     loop: {
       writesApplied: [],
-      rejectedPaths: [],
       toolsCalled: [],
       dryRunPreviews: [],
       toolRounds: 0,

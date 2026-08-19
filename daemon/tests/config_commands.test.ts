@@ -16,7 +16,6 @@ import {
 } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { loadConfig } from "../src/config/loader.ts";
-import { findModel } from "../src/config/models.ts";
 import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -122,7 +121,6 @@ async function build(
       configPath,
       characterName: character,
       activeModel: undefined,
-      activeResolvedModel: undefined,
       runtime: recorder(calls),
       env,
     },
@@ -136,7 +134,6 @@ const stateOf = (w: World): unknown =>
   scrub(
     {
       active_model: w.ctx.activeModel ?? null,
-      active_resolved_model: w.ctx.activeResolvedModel?.qualifiedName ?? null,
       defaults_stream: w.ctx.config.app.defaults.stream,
       autonomy_enabled: w.ctx.config.app.behavior.autonomy.enabled,
       defaults_model: w.ctx.config.app.defaults.model ?? null,
@@ -529,12 +526,11 @@ describe("config set", () => {
     });
   }
 
-  test("a session model override still masks the new default", async () => {
+  test("a saved model preference still masks the new default", async () => {
     const w = await build("mid", FURNISHED);
     w.ctx.activeModel = "primary";
-    w.ctx.activeResolvedModel = findModel(w.ctx.config.models, "primary");
     await check(
-      row("config_set", "a session model override still masks the new default"),
+      row("config_set", "a saved model preference still masks the new default"),
       w,
       () => config(w.ctx, { key: "defaults.model", value: "secondary" }),
     );
