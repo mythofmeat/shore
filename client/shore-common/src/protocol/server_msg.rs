@@ -195,18 +195,6 @@ pub struct SendImage {
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
-pub struct SubagentStatus {
-    pub task_id: String,
-    pub character: String,
-    pub name: String,
-    pub query: String,
-    pub status: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CacheWarning {
     pub expected_tokens: u32,
     pub message: String,
@@ -275,7 +263,6 @@ pub enum ServerMessage {
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     SendImage(SendImage),
-    SubagentStatus(SubagentStatus),
     CacheWarning(CacheWarning),
     ProviderFallbackWarning(ProviderFallbackWarning),
     UsageWarning(UsageWarning),
@@ -303,7 +290,6 @@ impl ServerMessage {
             | ServerMessage::Error(_)
             | ServerMessage::Phase(_)
             | ServerMessage::NewMessage(_)
-            | ServerMessage::SubagentStatus(_)
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
@@ -321,7 +307,6 @@ impl ServerMessage {
             ServerMessage::ToolCall(m) => m.task_id.as_deref(),
             ServerMessage::ToolResult(m) => m.task_id.as_deref(),
             ServerMessage::SendImage(m) => m.task_id.as_deref(),
-            ServerMessage::SubagentStatus(m) => Some(m.task_id.as_str()),
             ServerMessage::Hello(_)
             | ServerMessage::History(_)
             | ServerMessage::Shutdown(_)
@@ -355,7 +340,6 @@ impl ServerMessage {
             | ServerMessage::Error(_)
             | ServerMessage::Phase(_)
             | ServerMessage::NewMessage(_)
-            | ServerMessage::SubagentStatus(_)
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
@@ -458,30 +442,5 @@ mod tests {
         });
         let untagged_wire = serde_json::to_string(&plain).unwrap();
         assert!(!untagged_wire.contains("task_id"), "wire: {untagged_wire}");
-    }
-
-    #[test]
-    fn subagent_status_round_trip() {
-        let msg = ServerMessage::SubagentStatus(SubagentStatus {
-            task_id: "sa_1".into(),
-            character: "poppy".into(),
-            name: "research".into(),
-            query: "find the tide tables".into(),
-            status: "done".into(),
-            detail: None,
-        });
-        let wire = serde_json::to_string(&msg).unwrap();
-        assert!(
-            wire.contains("\"type\":\"subagent_status\""),
-            "wire: {wire}"
-        );
-        assert!(!wire.contains("detail"), "wire: {wire}");
-        let back: ServerMessage = serde_json::from_str(&wire).unwrap();
-        assert_eq!(back.task_id(), Some("sa_1"));
-        let ServerMessage::SubagentStatus(status) = back else {
-            panic!("expected subagent_status");
-        };
-        assert_eq!(status.character, "poppy");
-        assert_eq!(status.status, "done");
     }
 }

@@ -68,7 +68,6 @@ export interface SubagentDeps {
   rid?: string | undefined;
   now?: (() => string) | undefined;
   newMessageId?: (() => string) | undefined;
-  taskId?: string | undefined;
 }
 
 export function subagentRunner(
@@ -175,7 +174,7 @@ export async function runSubagent(
     },
   };
 
-  const send = taggedSink(name, deps.sendDirect, deps.taskId);
+  const send = taggedSink(name, deps.sendDirect, toolUseId);
   const messages: Message[] = [];
   const phase = toolPhase({
     sendDirect: send,
@@ -252,7 +251,7 @@ export async function runSubagent(
 }
 
 export function nestedContext(ctx: ToolContext, signal?: AbortSignal): ToolContext {
-  const { runSubagent: _dropped, startSubagent: _alsoDropped, ...rest } = ctx;
+  const { runSubagent: _dropped, ...rest } = ctx;
   return { ...rest, ...(signal === undefined ? {} : { signal }) };
 }
 

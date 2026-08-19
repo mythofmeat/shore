@@ -32,12 +32,7 @@ import {
   type ShoreRuntime,
 } from "../src/runtime.ts";
 import { buildToolContext, type ToolContextDeps } from "../src/handler/tool_context.ts";
-import { DEFAULT_SUBAGENT_TIMEOUT_MS, dispatchTool } from "../src/tools/dispatch.ts";
-import {
-  SubagentTaskManager,
-  type SubagentTaskRecord,
-  type SubagentTaskStart,
-} from "../src/tools/subagent_tasks.ts";
+import { dispatchTool } from "../src/tools/dispatch.ts";
 import type { McpRegistry } from "../src/tools/mcp_registry.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -142,15 +137,11 @@ function recordingService(gate?: Promise<void>) {
   };
 }
 
-function assemblyFor(
-  runtime: ShoreRuntime,
-  subagentTasks?: SubagentTaskManager,
-): Parameters<typeof chatToolDeps>[0] {
+function assemblyFor(runtime: ShoreRuntime): Parameters<typeof chatToolDeps>[0] {
   return {
     runtime,
     providers: {},
     diagnostics: new Diagnostics(),
-    ...(subagentTasks === undefined ? {} : { subagentTasks }),
   } as unknown as Parameters<typeof chatToolDeps>[0];
 }
 
@@ -164,85 +155,29 @@ function turnFor(): Parameters<typeof chatToolDeps>[2] {
   };
 }
 
-function withResearch(
-  app: ReturnType<typeof defaultAppConfig>,
-  timeout?: ConfigDuration,
-): void {
+function withResearch(app: ReturnType<typeof defaultAppConfig>): void {
   app.subagents.set("research", {
     description: "reads things",
     prompt: "you look things up",
     tools: [],
     model: undefined,
     max_iterations: undefined,
-    timeout,
+    timeout: undefined,
   });
 }
 
-function deadlineCapture(): { tasks: SubagentTaskManager; deadline: () => number | undefined } {
-  let seen: number | undefined;
-  const tasks = {
-    start: (init: SubagentTaskStart) => {
-      seen = init.timeoutMs;
-      return "started";
-    },
-  } as unknown as SubagentTaskManager;
-  return { tasks, deadline: () => seen };
-}
-
-async function subagentDeadline(
-  runtime: ShoreRuntime,
-  character: string,
-): Promise<number | undefined> {
-  const { tasks, deadline } = deadlineCapture();
-  const ctx = await buildToolContext(
-    runtime.config,
-    runtime.config.dirs.data,
-    character,
-    chatToolDeps(assemblyFor(runtime, tasks), character, turnFor()),
-  );
-  await dispatchTool("ask_research", { query: "what is the time" }, ctx);
-  return deadline();
-}
-
-function taskCapture(): { tasks: SubagentTaskManager; settled: Promise<SubagentTaskRecord> } {
-  let announce!: (task: SubagentTaskRecord) => void;
-  const settled = new Promise<SubagentTaskRecord>((resolve) => {
-    announce = resolve;
-  });
-  const tasks = new SubagentTaskManager({
-    emit: () => {},
-    onSettled: (task) => announce(task),
-  });
-  return { tasks, settled };
-}
-
-async function failureFrom(
-  runtime: ShoreRuntime,
-  deps: ToolContextDeps,
-  settled?: Promise<SubagentTaskRecord>,
-): Promise<string> {
+async function failureFrom(runtime: ShoreRuntime, deps: ToolContextDeps): Promise<string> {
   const ctx = await buildToolContext(runtime.config, runtime.config.dirs.data, "ada", deps);
-  if (settled !== undefined && ctx.startSubagent === undefined) {
-    return "the turn never reached the background-task path";
-  }
   try {
     await dispatchTool("ask_research", { query: "what is the time" }, ctx);
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
   }
-  if (settled === undefined) return "the subagent somehow ran";
-
-  const task = await settled;
-  return task.status === "error" ? (task.detail ?? "") : "the subagent somehow ran";
+  return "the subagent somehow ran";
 }
 
 async function subagentFailure(runtime: ShoreRuntime, character: string): Promise<string> {
-  const { tasks, settled } = taskCapture();
-  return await failureFrom(
-    runtime,
-    chatToolDeps(assemblyFor(runtime, tasks), character, turnFor()),
-    settled,
-  );
+  return await failureFrom(runtime, chatToolDeps(assemblyFor(runtime), character, turnFor()));
 }
 
 describe("the tool backends a character's turn gets", () => {
@@ -324,36 +259,6 @@ describe("the tool backends a character's turn gets", () => {
     }
   });
 
-  test("a background subagent gets the hour, not the 300s deadline the other tools share", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-subagent-deadline-", withResearch, [
-      "ada",
-    ]);
-    try {
-      expect(runtime.config.app.tools.timeout.asMillis()).toBe(300_000);
-      expect(await subagentDeadline(runtime, "ada")).toBe(DEFAULT_SUBAGENT_TIMEOUT_MS);
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  test("a subagent's deadline comes from the character's config, not the global one", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-subagent-deadline-char-", withResearch, [
-      "ada",
-    ]);
-    try {
-      runtime.registry.setRuntimeEffectiveConfig(
-        "ada",
-        configFor(root, (app) => withResearch(app, ConfigDuration.fromSecs(7_200))),
-      );
-
-      expect(await subagentDeadline(runtime, "ada")).toBe(7_200_000);
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
   test("the heartbeat resolves it the same way the chat path a turn really takes does", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-subagent-parity-", withResearch, [
       "ada",
@@ -367,15 +272,14 @@ describe("the tool backends a character's turn gets", () => {
         }),
       );
 
-      const { tasks, settled } = taskCapture();
-      const chat = chatToolDeps(assemblyFor(runtime, tasks), "ada", turnFor());
+      const chat = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
       const heartbeat = sharedToolDeps(runtime.config, runtime.mcp, {
         providers: {},
         registry: runtime.registry,
       });
 
       const fromHeartbeat = await failureFrom(runtime, heartbeat);
-      expect(fromHeartbeat).toEqual(await failureFrom(runtime, chat, settled));
+      expect(fromHeartbeat).toEqual(await failureFrom(runtime, chat));
       expect(fromHeartbeat).not.toContain("has no model");
     } finally {
       await runtime.shutdown();

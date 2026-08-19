@@ -48,7 +48,6 @@ export interface ToolContext {
     toolUseId?: string,
   ) => Promise<unknown>;
 
-  startSubagent?: (name: string, query: string, toolUseId?: string) => unknown;
 
   toolUseId?: string;
 
@@ -209,9 +208,6 @@ export async function dispatchTool(
         const query = args["query"];
         if (typeof query !== "string") {
           throw new InvalidArgs(`${name} requires a string \`query\``);
-        }
-        if (ctx.startSubagent !== undefined) {
-          return ctx.startSubagent(agent, query, ctx.toolUseId);
         }
         if (ctx.runSubagent === undefined) throw new NotImplemented(`ask_${agent}`);
         return await ctx.runSubagent(agent, query, ctx.signal, ctx.toolUseId);

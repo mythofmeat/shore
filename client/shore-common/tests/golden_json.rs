@@ -1045,7 +1045,6 @@ fn request_scoped_server_messages_missing_rid_default_to_none() {
             | ServerMessage::Shutdown(_)
             | ServerMessage::Ping(_)
             | ServerMessage::NewMessage(_)
-            | ServerMessage::SubagentStatus(_)
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
