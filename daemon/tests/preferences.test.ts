@@ -29,6 +29,7 @@ import {
   resolveSamplerScopes,
   resolveSamplerSettings,
   resolveSelectedModel,
+  resolveSubagentBaseModel,
   resolveSubagentModelSettings,
   resolveSubagentSampler,
   resolveSubagentScopes,
@@ -917,6 +918,85 @@ describe("sub-agent settings stand on their own", () => {
     mkdirSync(join(root, "ashe", "preferences"), { recursive: true });
     const model = resolveSubagentModelSettings(root, "ashe", "librarian", catalogModel());
     expect(model.temperature).toBe(0.55);
+  });
+});
+
+describe("which model a sub-agent runs on", () => {
+  function configWithSubagentDefault(
+    root: string,
+    subagentModel?: string,
+    defaultModel?: string,
+  ): LoadedConfigView {
+    const config = buildConfig(STATIC_CHAT, "", root, () => undefined, defaultModel);
+    if (subagentModel !== undefined) config.app.defaults.subagent_model = subagentModel;
+    return config;
+  }
+
+  test("the sub-agent's own model wins over defaults.subagent_model", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    const config = configWithSubagentDefault(root, "sonnet", "sonnet");
+
+    const model = resolveSubagentBaseModel(config, "ashe", "opus", findEffectiveModel);
+    expect(model?.modelId).toBe("claude-opus-4-6");
+  });
+
+  test("defaults.subagent_model wins over the chat model", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    const config = configWithSubagentDefault(root, "opus", "sonnet");
+
+    const model = resolveSubagentBaseModel(config, "ashe", undefined, findEffectiveModel);
+    expect(model?.modelId).toBe("claude-opus-4-6");
+  });
+
+  test("with neither set it is the character's chat model, saved choice included", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });
+    writeFileSync(
+      join(root, "data", "ashe", "preferences", "models.toml"),
+      '[selected]\nprovider = "anthropic"\nmodel_id = "claude-opus-4-6"\n',
+    );
+    const config = configWithSubagentDefault(root, undefined, "sonnet");
+
+    const model = resolveSubagentBaseModel(config, "ashe", undefined, findEffectiveModel);
+    expect(model?.modelId).toBe("claude-opus-4-6");
+  });
+
+  test("the inherited chat model arrives without the chat model's saved settings", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });
+    writeFileSync(
+      join(root, "data", "ashe", "preferences", "models.toml"),
+      '[models."anthropic:claude-sonnet-4-6"]\nmax_output_tokens = 32000\n',
+    );
+    const config = configWithSubagentDefault(root, undefined, "sonnet");
+
+    const inherited = resolveSubagentBaseModel(config, "ashe", undefined, findEffectiveModel);
+    const chat = resolveChatModelForCharacter(config, "ashe", findEffectiveModel);
+
+    expect(chat?.maxOutputTokens).toBe(32000);
+    expect(inherited?.maxOutputTokens).not.toBe(32000);
+  });
+
+  test("with no character there is no chat model to inherit", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    const config = configWithSubagentDefault(root, undefined, "sonnet");
+
+    expect(
+      resolveSubagentBaseModel(config, undefined, undefined, findEffectiveModel),
+    ).toBeUndefined();
+  });
+
+  test("an explicitly empty model is a configuration error, not an unset value", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    const config = configWithSubagentDefault(root, undefined, "sonnet");
+
+    expect(() => resolveSubagentBaseModel(config, "ashe", "", findEffectiveModel)).toThrow();
   });
 });
 

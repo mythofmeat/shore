@@ -1,7 +1,11 @@
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { resolveDisplayName } from "../config/app.ts";
-import { configView, resolveSubagentModelSettings } from "../config/preferences.ts";
+import {
+  configView,
+  resolveSubagentBaseModel,
+  resolveSubagentModelSettings,
+} from "../config/preferences.ts";
 import { resolvedReplayPriorThinking, toRequestModel } from "../config/models.ts";
 import { renderTemplate } from "../engine/prompt.ts";
 import type { Message } from "../engine/types.ts";
@@ -37,7 +41,6 @@ import {
   expandPromptMacros,
   MAX_HISTORY_MESSAGES,
   missingModelMessage,
-  resolveSubagentModel,
   subagentToolSubset,
   templateVars,
 } from "./subagent.ts";
@@ -86,33 +89,28 @@ export async function runSubagent(
   const spec = config.app.subagents.get(name);
   if (spec === undefined) throw new NotImplemented(`ask_${name}`);
 
-  const modelName = resolveSubagentModel(spec.model, {
-    ...(config.app.defaults.subagent_model === undefined
-      ? {}
-      : { subagent_model: config.app.defaults.subagent_model }),
-    ...(config.app.defaults.model === undefined ? {} : { model: config.app.defaults.model }),
-  });
-  if (modelName === undefined) throw new InvalidArgs(missingModelMessage(name));
-
+  const charName = deps.ctx.characterName;
   let catalogModel;
   try {
-    catalogModel = findEffectiveModel(configView(config), config.dirs.cache, modelName, true);
+    catalogModel = resolveSubagentBaseModel(
+      configView(config),
+      charName,
+      spec.model,
+      (view, cacheDir, model, includeHidden) =>
+        findEffectiveModel(view, cacheDir, model, includeHidden),
+    );
   } catch (e) {
-    throw new InvalidArgs(`subagent '${name}' model '${modelName}': ${String(e)}`);
+    throw new InvalidArgs(`subagent '${name}': ${String(e)}`);
   }
-  const resolved = resolveSubagentModelSettings(
-    config.dirs.data,
-    deps.ctx.characterName,
-    name,
-    catalogModel,
-  );
+  if (catalogModel === undefined) throw new InvalidArgs(missingModelMessage(name, charName));
+
+  const resolved = resolveSubagentModelSettings(config.dirs.data, charName, name, catalogModel);
 
   const provider = deps.providers[resolved.sdk];
   if (provider === undefined && resolved.sdk !== "anthropic") {
     throw new InvalidArgs(`unsupported sdk: ${resolved.sdk}`);
   }
 
-  const charName = deps.ctx.characterName;
   const displayName = resolveDisplayName(config.app.defaults, deps.env);
   const vars = templateVars(charName, displayName);
 

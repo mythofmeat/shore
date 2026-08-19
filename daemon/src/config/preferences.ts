@@ -513,6 +513,7 @@ export interface LoadedConfigView {
   app: {
     defaults: {
       model?: string;
+      subagent_model?: string;
       backgroundModelName: (task: BackgroundTask) => string | undefined;
     };
   };
@@ -533,6 +534,9 @@ export function configView(config: {
     app: {
       defaults: {
         ...(config.app.defaults.model === undefined ? {} : { model: config.app.defaults.model }),
+        ...(config.app.defaults.subagent_model === undefined
+          ? {}
+          : { subagent_model: config.app.defaults.subagent_model }),
         backgroundModelName: (task) => resolveBackgroundModelName(config.app.defaults, task),
       },
     },
@@ -708,6 +712,20 @@ function overlayForCharacter(
     base,
   );
   return applySamplerOverlay(base, overlay);
+}
+
+export function resolveSubagentBaseModel(
+  config: LoadedConfigView,
+  character: string | undefined,
+  specModel: string | undefined,
+  findEffective: FindEffectiveModel,
+): ResolvedModel | undefined {
+  const configured = specModel ?? config.app.defaults.subagent_model;
+  if (configured !== undefined) {
+    return findEffective(config, config.dirs.cache, configured, true);
+  }
+  if (character === undefined) return undefined;
+  return activeSelection(config, character, findEffective, "resolve_subagent_model").resolved;
 }
 
 export function resolveSubagentModelSettings(

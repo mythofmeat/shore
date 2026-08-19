@@ -32,6 +32,11 @@ import {
   type ShoreRuntime,
 } from "../src/runtime.ts";
 import { buildToolContext, type ToolContextDeps } from "../src/handler/tool_context.ts";
+import { dispatchTool } from "../src/tools/dispatch.ts";
+import {
+  SubagentTaskManager,
+  type SubagentTaskRecord,
+} from "../src/tools/subagent_tasks.ts";
 import type { McpRegistry } from "../src/tools/mcp_registry.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -136,11 +141,15 @@ function recordingService(gate?: Promise<void>) {
   };
 }
 
-function assemblyFor(runtime: ShoreRuntime): Parameters<typeof chatToolDeps>[0] {
+function assemblyFor(
+  runtime: ShoreRuntime,
+  subagentTasks?: SubagentTaskManager,
+): Parameters<typeof chatToolDeps>[0] {
   return {
     runtime,
     providers: {},
     diagnostics: new Diagnostics(),
+    ...(subagentTasks === undefined ? {} : { subagentTasks }),
   } as unknown as Parameters<typeof chatToolDeps>[0];
 }
 
@@ -165,21 +174,44 @@ function withResearch(app: ReturnType<typeof defaultAppConfig>): void {
   });
 }
 
-async function failureFrom(runtime: ShoreRuntime, deps: ToolContextDeps): Promise<string> {
+function taskCapture(): { tasks: SubagentTaskManager; settled: Promise<SubagentTaskRecord> } {
+  let announce!: (task: SubagentTaskRecord) => void;
+  const settled = new Promise<SubagentTaskRecord>((resolve) => {
+    announce = resolve;
+  });
+  const tasks = new SubagentTaskManager({
+    emit: () => {},
+    onSettled: (task) => announce(task),
+  });
+  return { tasks, settled };
+}
+
+async function failureFrom(
+  runtime: ShoreRuntime,
+  deps: ToolContextDeps,
+  settled?: Promise<SubagentTaskRecord>,
+): Promise<string> {
   const ctx = await buildToolContext(runtime.config, runtime.config.dirs.data, "ada", deps);
-  if (ctx.runSubagent === undefined) return "no subagent runner was wired";
+  if (settled !== undefined && ctx.startSubagent === undefined) {
+    return "the turn never reached the background-task path";
+  }
   try {
-    await ctx.runSubagent("research", "what is the time");
-    return "the subagent somehow ran";
+    await dispatchTool("ask_research", { query: "what is the time" }, ctx);
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
   }
+  if (settled === undefined) return "the subagent somehow ran";
+
+  const task = await settled;
+  return task.status === "error" ? (task.detail ?? "") : "the subagent somehow ran";
 }
 
 async function subagentFailure(runtime: ShoreRuntime, character: string): Promise<string> {
+  const { tasks, settled } = taskCapture();
   return await failureFrom(
     runtime,
-    chatToolDeps(assemblyFor(runtime), character, turnFor()),
+    chatToolDeps(assemblyFor(runtime, tasks), character, turnFor()),
+    settled,
   );
 }
 
@@ -262,7 +294,7 @@ describe("the tool backends a character's turn gets", () => {
     }
   });
 
-  test("the heartbeat's runner resolves it the same way a chat turn's does", async () => {
+  test("the heartbeat resolves it the same way the chat path a turn really takes does", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-subagent-parity-", withResearch, [
       "ada",
     ]);
@@ -275,14 +307,15 @@ describe("the tool backends a character's turn gets", () => {
         }),
       );
 
-      const chat = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
+      const { tasks, settled } = taskCapture();
+      const chat = chatToolDeps(assemblyFor(runtime, tasks), "ada", turnFor());
       const heartbeat = sharedToolDeps(runtime.config, runtime.mcp, {
         providers: {},
         registry: runtime.registry,
       });
 
       const fromHeartbeat = await failureFrom(runtime, heartbeat);
-      expect(fromHeartbeat).toEqual(await failureFrom(runtime, chat));
+      expect(fromHeartbeat).toEqual(await failureFrom(runtime, chat, settled));
       expect(fromHeartbeat).not.toContain("has no model");
     } finally {
       await runtime.shutdown();

@@ -18,6 +18,7 @@ import {
   resolveChatModelForCharacter,
   resolveSamplerSettings,
   resolveSamplerScopes,
+  resolveSubagentBaseModel,
   resolveSubagentSampler,
   resolveSubagentScopes,
   samplerIsEmpty,
@@ -32,7 +33,7 @@ import {
   type SamplerSettings,
 } from "../config/preferences.ts";
 import { reasoningDomain } from "../llm/capabilities.ts";
-import { missingModelMessage, resolveSubagentModel } from "../tools/subagent.ts";
+import { missingModelMessage } from "../tools/subagent.ts";
 import type { Env } from "../config/dirs.ts";
 import {
   clearConfigKey,
@@ -156,7 +157,7 @@ export type SettingTarget =
 
 const ALL_SUBAGENTS = "all";
 
-function subagentModelName(ctx: ModelsContext, subagent: string): string {
+function subagentTargetModel(ctx: ModelsContext, subagent: string): ResolvedModel {
   const spec = ctx.config.app.subagents.get(subagent);
   if (spec === undefined) {
     const known = [...ctx.config.app.subagents.keys()].sort();
@@ -164,16 +165,21 @@ function subagentModelName(ctx: ModelsContext, subagent: string): string {
     throw notFound(`unknown sub-agent: ${subagent}; ${suffix}`);
   }
 
-  const modelName = resolveSubagentModel(spec.model, {
-    ...(ctx.config.app.defaults.subagent_model === undefined
-      ? {}
-      : { subagent_model: ctx.config.app.defaults.subagent_model }),
-    ...(ctx.config.app.defaults.model === undefined
-      ? {}
-      : { model: ctx.config.app.defaults.model }),
-  });
-  if (modelName === undefined) throw invalidRequest(missingModelMessage(subagent));
-  return modelName;
+  let model: ResolvedModel | undefined;
+  try {
+    model = resolveSubagentBaseModel(
+      configView(ctx.config),
+      ctx.characterName,
+      spec.model,
+      findEffective,
+    );
+  } catch (e) {
+    throw catalogError(e);
+  }
+  if (model === undefined) {
+    throw invalidRequest(missingModelMessage(subagent, ctx.characterName));
+  }
+  return model;
 }
 
 function targetableSubagents(ctx: ModelsContext): string[] {
@@ -188,7 +194,7 @@ function sharedSubagentModel(ctx: ModelsContext): ResolvedModel {
   const names = targetableSubagents(ctx);
   if (names.length === 0) throw notFound("no sub-agents are configured");
 
-  const resolved = names.map((name) => [name, resolve(ctx, subagentModelName(ctx, name), true)] as const);
+  const resolved = names.map((name) => [name, subagentTargetModel(ctx, name)] as const);
   const first = resolved[0]![1];
   const same = resolved.every(
     ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,
@@ -208,7 +214,7 @@ function subagentSettingTarget(ctx: ModelsContext, subagent: string): SettingTar
   return {
     kind: "subagent",
     subagent,
-    model: resolve(ctx, subagentModelName(ctx, subagent), true),
+    model: subagentTargetModel(ctx, subagent),
   };
 }
 
@@ -270,28 +276,24 @@ function backgroundRole(ctx: ModelsContext, task: BackgroundTask, chat: ModelRol
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
 }
 
-function subagentRole(ctx: ModelsContext): ModelRole {
-  const defaults = ctx.config.app.defaults;
+function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
+  const subagentModel = ctx.config.app.defaults.subagent_model;
   const overrides = [...ctx.config.app.subagents.values()].filter(
     (sub) => sub.model !== undefined,
   ).length;
   const suffix = overrides === 0 ? "" : ` · ${overrides} override`;
 
-  if (defaults.subagent_model !== undefined) {
+  if (subagentModel !== undefined) {
     return {
       role: "sub-agents",
-      model: qualify(ctx, defaults.subagent_model),
+      model: qualify(ctx, subagentModel),
       source: `defaults.subagent_model${suffix}`,
     };
   }
-  if (defaults.model !== undefined && defaults.model !== "") {
-    return {
-      role: "sub-agents",
-      model: qualify(ctx, defaults.model),
-      source: `defaults.model${suffix}`,
-    };
+  if (chat.model === null) {
+    return { role: "sub-agents", model: null, source: overrides === 0 ? null : suffix.trim() };
   }
-  return { role: "sub-agents", model: null, source: overrides === 0 ? null : suffix.trim() };
+  return { role: "sub-agents", model: chat.model, source: `inherits chat${suffix}` };
 }
 
 function configuredRole(ctx: ModelsContext, role: string, key: string): ModelRole {
@@ -305,7 +307,7 @@ export function modelRoles(ctx: ModelsContext): ModelRole[] {
   return [
     chat,
     ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, chat)),
-    subagentRole(ctx),
+    subagentRole(ctx, chat),
     configuredRole(ctx, "embedding", "embedding"),
     configuredRole(ctx, "images", "image_generation"),
   ];

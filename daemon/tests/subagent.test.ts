@@ -10,7 +10,6 @@ import {
   messageDisplayText,
   missingModelMessage,
   renderHistorySlice,
-  resolveSubagentModel,
   subagentToolSubset,
   templateVars,
   type RegisteredTool,
@@ -491,25 +490,17 @@ describe("templateVars", () => {
   });
 });
 
-describe("resolveSubagentModel", () => {
-  test("spec wins over both defaults", () => {
-    expect(resolveSubagentModel("cheap", { subagent_model: "mid", model: "big" })).toBe("cheap");
+describe("missingModelMessage", () => {
+  test("it names the character whose chat model there was nothing to inherit from", () => {
+    expect(missingModelMessage("research", "ada")).toBe(
+      "subagent 'research' has no model: subagents.research.model and defaults.subagent_model " +
+        "are unset, and ada has no chat model to inherit",
+    );
   });
 
-  test("falls back to subagent_model, then model", () => {
-    expect(resolveSubagentModel(undefined, { subagent_model: "mid", model: "big" })).toBe("mid");
-    expect(resolveSubagentModel(undefined, { model: "big" })).toBe("big");
-  });
-
-  test("an explicitly empty model is a configuration error, not an unset value", () => {
-    expect(resolveSubagentModel("", { subagent_model: "mid", model: "big" })).toBe("");
-    expect(resolveSubagentModel(undefined, { subagent_model: "", model: "big" })).toBe("");
-  });
-
-  test("stops at defaults.model rather than inheriting the chat model", () => {
-    expect(resolveSubagentModel(undefined, {})).toBeUndefined();
-    expect(missingModelMessage("research")).toBe(
-      "subagent 'research' has no model; set subagents.research.model or defaults.subagent_model",
+  test("with no character attached it says so rather than naming one", () => {
+    expect(missingModelMessage("research", undefined)).toContain(
+      "no character is attached to inherit a chat model from",
     );
   });
 });

@@ -140,7 +140,7 @@
               {
                 "role": "sub-agents",
                 "model": "chat.anthropic.beta",
-                "source": "defaults.model"
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",
@@ -284,7 +284,7 @@
               {
                 "role": "sub-agents",
                 "model": "chat.anthropic.beta",
-                "source": "defaults.model"
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",
@@ -1206,7 +1206,7 @@
               {
                 "role": "sub-agents",
                 "model": "chat.anthropic.beta",
-                "source": "defaults.model"
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",
@@ -1711,7 +1711,7 @@
               {
                 "role": "sub-agents",
                 "model": "chat.anthropic.beta",
-                "source": "defaults.model"
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",
@@ -1917,7 +1917,7 @@
               {
                 "role": "sub-agents",
                 "model": "chat.anthropic.beta",
-                "source": "defaults.model"
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",
@@ -3268,7 +3268,7 @@
             {
               "role": "sub-agents",
               "model": "chat.anthropic.one",
-              "source": "defaults.model"
+              "source": "inherits chat"
             },
             {
               "role": "embedding",
@@ -3805,7 +3805,7 @@
             {
               "role": "sub-agents",
               "model": "chat.anthropic.alpha",
-              "source": "defaults.model"
+              "source": "inherits chat"
             },
             {
               "role": "embedding",
@@ -4197,7 +4197,7 @@
               {
                 "role": "sub-agents",
                 "model": "chat.anthropic.alpha",
-                "source": "defaults.model"
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",
@@ -4471,7 +4471,7 @@
             {
               "role": "sub-agents",
               "model": "chat.anthropic.alpha",
-              "source": "defaults.model"
+              "source": "inherits chat"
             },
             {
               "role": "embedding",
@@ -6195,8 +6195,8 @@
               },
               {
                 "role": "sub-agents",
-                "model": null,
-                "source": null
+                "model": "openrouter:vendor/hidden",
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",
@@ -7304,7 +7304,7 @@
             {
               "role": "sub-agents",
               "model": "chat.anthropic.alpha",
-              "source": "defaults.model"
+              "source": "inherits chat"
             },
             {
               "role": "embedding",
@@ -8515,7 +8515,7 @@
             {
               "role": "sub-agents",
               "model": "chat.anthropic.alpha",
-              "source": "defaults.model"
+              "source": "inherits chat"
             },
             {
               "role": "embedding",
@@ -9047,7 +9047,7 @@
             {
               "role": "sub-agents",
               "model": "chat.anthropic.alpha",
-              "source": "defaults.model"
+              "source": "inherits chat"
             },
             {
               "role": "embedding",
@@ -9328,8 +9328,8 @@
             },
             {
               "role": "sub-agents",
-              "model": "chat.anthropic.alpha",
-              "source": "defaults.model"
+              "model": "chat.anthropic.beta",
+              "source": "inherits chat"
             },
             {
               "role": "embedding",
@@ -13485,7 +13485,7 @@
               {
                 "role": "sub-agents",
                 "model": "chat.anthropic.alpha",
-                "source": "defaults.model"
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",
@@ -13569,7 +13569,7 @@
             {
               "role": "sub-agents",
               "model": "chat.anthropic.alpha",
-              "source": "defaults.model"
+              "source": "inherits chat"
             },
             {
               "role": "embedding",
@@ -14514,7 +14514,7 @@
               {
                 "role": "sub-agents",
                 "model": "chat.anthropic.alpha",
-                "source": "defaults.model"
+                "source": "inherits chat"
               },
               {
                 "role": "embedding",

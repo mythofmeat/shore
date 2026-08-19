@@ -220,17 +220,46 @@ describe("resolution", () => {
     );
   });
 
-  test("the model chain stops at defaults.model rather than the chat model", async () => {
+  test("with nothing configured the sub-agent runs on the character's chat model", async () => {
+    const seen: SidecarRequest[] = [];
     const { config, root } = await configWith({ researcher: spec() }, (app) => {
       app.defaults.model = undefined;
       app.defaults.subagent_model = undefined;
     });
+
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.model).toBe("cheap");
+  });
+
+  test("the chat model it inherits is the saved choice, not just defaults.model", async () => {
+    const seen: SidecarRequest[] = [];
+    const { config, root } = await configWith({ researcher: spec() }, (app) => {
+      app.defaults.subagent_model = undefined;
+    });
+    const prefs = join(root, "data", "ada", "preferences");
+    await mkdir(prefs, { recursive: true });
+    await writeFile(
+      join(prefs, "models.toml"),
+      '[selected]\nprovider = "openrouter"\nmodel_id = "picked-by-hand"\n',
+    );
+
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.model).toBe("picked-by-hand");
+  });
+
+  test("with no chat model to inherit either, it says so and names the character", async () => {
+    const { config, root } = await configWith({ researcher: spec() }, (app) => {
+      app.defaults.model = undefined;
+      app.defaults.subagent_model = undefined;
+    });
+    config.models = emptyCatalog();
 
     const err = await run(config, root, "researcher", scriptedProvider("x")).catch(
       (e: unknown) => e,
     );
     expect(err).toBeInstanceOf(InvalidArgs);
     expect(String(err)).toContain("subagents.researcher.model");
+    expect(String(err)).toContain("ada has no chat model to inherit");
   });
 
   test("defaults.subagent_model is used when the spec names none", async () => {

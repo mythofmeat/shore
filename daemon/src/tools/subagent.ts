@@ -215,18 +215,13 @@ export function subagentToolSubset(
   return defs;
 }
 
-export interface SubagentModelDefaults {
-  subagent_model?: string;
-  model?: string;
-}
-
-export function resolveSubagentModel(
-  specModel: string | undefined,
-  defaults: SubagentModelDefaults,
-): string | undefined {
-  return specModel ?? defaults.subagent_model ?? defaults.model;
-}
-
-export function missingModelMessage(name: string): string {
-  return `subagent '${name}' has no model; set subagents.${name}.model or defaults.subagent_model`;
+export function missingModelMessage(name: string, character: string | undefined): string {
+  const inherit =
+    character === undefined
+      ? "no character is attached to inherit a chat model from"
+      : `${character} has no chat model to inherit`;
+  return (
+    `subagent '${name}' has no model: subagents.${name}.model and defaults.subagent_model ` +
+    `are unset, and ${inherit}`
+  );
 }
