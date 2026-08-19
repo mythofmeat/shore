@@ -224,6 +224,7 @@
           "character",
           "config_dir",
           "data_dir",
+          "history_index",
           "index",
           "keepalive_halted",
           "message_count",
@@ -247,7 +248,8 @@
           "autonomy": "object",
           "activity": "object",
           "index": "null",
-          "sections": "array[4]"
+          "history_index": "null",
+          "sections": "array[5]"
         }
       }
     },

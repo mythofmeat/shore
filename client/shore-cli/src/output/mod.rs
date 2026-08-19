@@ -2,6 +2,7 @@ pub(crate) mod autonomy;
 pub(crate) mod catalog;
 pub(crate) mod commands;
 pub(crate) mod config;
+pub(crate) mod history;
 pub(crate) mod spinner;
 pub(crate) mod status;
 pub(crate) mod styling;

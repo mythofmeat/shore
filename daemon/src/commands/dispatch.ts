@@ -64,6 +64,7 @@ import {
 } from "./status.ts";
 import { usage } from "./usage.ts";
 import { conversationTokens } from "../ledger/conversation_spend.ts";
+import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 
@@ -90,6 +91,7 @@ export interface CommandDeps {
   activate?: Pick<SessionActivateContext, "register">;
   runTool?: Pick<RunToolContext, "tools" | "mcpTools">;
   workspaceIndex?: WorkspaceIndexSource;
+  historyIndex?: HistoryIndexSource;
 }
 
 const CHARACTERLESS = new Set([
@@ -315,6 +317,10 @@ function statusContext(
       deps.workspaceIndex === undefined
         ? undefined
         : { ...deps.workspaceIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
+    historyIndex:
+      deps.historyIndex === undefined
+        ? undefined
+        : { ...deps.historyIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
   };
 }
 

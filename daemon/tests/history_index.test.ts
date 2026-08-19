@@ -339,6 +339,73 @@ describe("history search index", () => {
     index.close();
   });
 
+  test("every chunk of a multi-chunk message gets embedded", async () => {
+    const long = `${"orchard ".repeat(200)}\n\n${"harbour ".repeat(200)}\n\n${"lantern ".repeat(200)}`;
+    expect(chunkVisibleText(long).length).toBeGreaterThan(1);
+    const dir = await character([
+      message("u1", "user", long, "2026-08-13T00:00:00Z"),
+      message("u2", "user", "short tail", "2026-08-13T00:01:00Z"),
+    ]);
+    const path = join(dir, HISTORY_SEARCH_DB_FILE);
+    const embedder = new FakeEmbedder();
+    const index = HistorySearchIndex.open({ characterDataDir: dir, path });
+    await index.reconcile();
+    const total = index.diagnostics(embedder).total_chunks;
+    expect(total).toBeGreaterThan(2);
+    while ((await index.embedPending(embedder)) > 0) {}
+    expect(index.diagnostics(embedder)).toEqual({
+      indexed_chunks: total,
+      total_chunks: total,
+      pending_chunks: 0,
+    });
+    index.close();
+  });
+
+  test("a stalled character does not starve the others", async () => {
+    const firstDir = await character([message("u1", "user", "first corpus", "2026-08-13T00:00:00Z")]);
+    const secondDir = await character([message("u2", "user", "second corpus", "2026-08-13T00:00:00Z")]);
+    const seen: string[] = [];
+    const embedderFor = (name: string): Embedder => ({
+      modelId: "fan-model",
+      dimensions: 2,
+      embed: async (inputs) => {
+        seen.push(name);
+        return inputs.map(() => [0, 1]);
+      },
+    });
+    let now = 0;
+    const service = new HistoryIndexService({ now: () => now, idleDelayMs: 30_000, batchPauseMs: 1 });
+    service.register({
+      character: "one",
+      characterDataDir: firstDir,
+      indexPath: join(firstDir, HISTORY_SEARCH_DB_FILE),
+      embedder: embedderFor("one"),
+    });
+    service.register({
+      character: "two",
+      characterDataDir: secondDir,
+      indexPath: join(secondDir, HISTORY_SEARCH_DB_FILE),
+      embedder: embedderFor("two"),
+    });
+    const settled = HistorySearchIndex.open({
+      characterDataDir: firstDir,
+      path: join(firstDir, HISTORY_SEARCH_DB_FILE),
+    });
+    await settled.reconcile();
+    const warm = embedderFor("one");
+    while ((await settled.embedPending(warm)) > 0) {}
+    settled.close();
+    seen.length = 0;
+
+    await service.reconcileAll();
+    now = 31_000;
+    await service.runOnce();
+    now = 31_002;
+    await service.runOnce();
+    await service.shutdown();
+    expect(seen).toContain("two");
+  });
+
   test("chunking is deterministic, overlapped, and bounded around paragraph breaks", () => {
     const text = `${"a".repeat(700)}\n\n${"b".repeat(700)}\n\n${"c".repeat(700)}`;
     const first = chunkVisibleText(text);

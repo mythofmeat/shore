@@ -26,9 +26,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -128,9 +130,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -260,9 +264,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": 3600,
@@ -366,9 +372,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": 3600,
@@ -468,9 +476,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -572,9 +582,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -674,9 +686,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -776,9 +790,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -878,9 +894,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -980,9 +998,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1084,9 +1104,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1186,9 +1208,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1292,9 +1316,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1396,9 +1422,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1500,9 +1528,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1628,9 +1658,11 @@
           "tokens",
           "autonomy",
           "activity",
-          "index"
+          "index",
+          "history_index"
         ],
-        "index": null
+        "index": null,
+        "history_index": null
       },
       "volatile": {
         "wake_at_secs": null,

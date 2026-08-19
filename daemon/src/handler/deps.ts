@@ -639,5 +639,8 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       },
       progressFor: (character) => runtime.workspaceIndex.progress(character),
     },
+    historyIndex: {
+      progressFor: (character) => runtime.historyIndex.progress(character),
+    },
   };
 }

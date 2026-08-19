@@ -15,6 +15,8 @@ export const HISTORY_CHUNK_OVERLAP = 120;
 export const HISTORY_EMBED_BATCH_ITEMS = 32;
 export const HISTORY_EMBED_BATCH_CHARS = 96_000;
 
+const EMBED_CURSOR = "embed_cursor";
+
 const SCHEMA = `
 CREATE TABLE metadata (
   key TEXT PRIMARY KEY,
@@ -328,40 +330,55 @@ export class HistorySearchIndex {
 
   async embedPending(embedder: Embedder): Promise<number> {
     const identity = embeddingIdentity(embedder);
-    this.#db.query(
+    const invalidated = this.#db.query(
       "DELETE FROM embeddings WHERE model <> ?1 OR (?2 IS NOT NULL AND dimensions <> ?2)",
     ).run(identity, embedder.dimensions ?? null);
-    const pending = this.#db.query(
+    if (invalidated.changes > 0) this.#setMetadata(EMBED_CURSOR, "0");
+    const cursor = Number(this.#metadata(EMBED_CURSOR) ?? 0);
+    const batchCandidates = this.#db.query(
       `SELECT c.id AS chunk_id, c.ordinal AS chunk_ordinal, c.content_hash,
               m.id, m.segment, m.ordinal, m.msg_id, m.role,
               m.timestamp, m.model
        FROM chunks c JOIN messages m ON m.id = c.message_id
-       WHERE NOT EXISTS (
+       WHERE c.id > ?3 AND NOT EXISTS (
          SELECT 1 FROM embeddings e
          WHERE e.content_hash = c.content_hash AND e.model = ?1
            AND (?2 IS NULL OR e.dimensions = ?2)
-       ) ORDER BY c.id`,
-    ).all(identity, embedder.dimensions ?? null) as (IndexedMessage & {
+       ) ORDER BY c.id LIMIT ?4`,
+    ).all(
+      identity,
+      embedder.dimensions ?? null,
+      cursor,
+      HISTORY_EMBED_BATCH_ITEMS,
+    ) as (IndexedMessage & {
       chunk_id: number;
       chunk_ordinal: number;
     })[];
-    if (pending.length === 0) return 0;
+    if (batchCandidates.length === 0) {
+      if (cursor > 0) this.#setMetadata(EMBED_CURSOR, "0");
+      return 0;
+    }
 
-    const chosen: typeof pending = [];
+    const chosen: typeof batchCandidates = [];
     const texts: string[] = [];
     let chars = 0;
-    const batchCandidates = pending.slice(0, HISTORY_EMBED_BATCH_ITEMS);
-    const loaded = await loadCanonicalTexts(this.characterDataDir, batchCandidates);
+    let lastAttempted = cursor;
+    const loaded = await loadMessageTexts(this.characterDataDir, batchCandidates);
     for (const row of batchCandidates) {
       const full = loaded.get(row.id);
       const text = full === undefined ? undefined : chunkVisibleText(full)[row.chunk_ordinal];
-      if (text === undefined || contentHash(text) !== row.content_hash) continue;
-      if (chosen.length > 0 && chars + text.length > HISTORY_EMBED_BATCH_CHARS) break;
-      chosen.push(row);
-      texts.push(text);
-      chars += text.length;
+      if (text !== undefined && contentHash(text) === row.content_hash) {
+        if (chosen.length > 0 && chars + text.length > HISTORY_EMBED_BATCH_CHARS) break;
+        chosen.push(row);
+        texts.push(text);
+        chars += text.length;
+      }
+      lastAttempted = row.chunk_id;
     }
-    if (texts.length === 0) return 0;
+    if (texts.length === 0) {
+      this.#setMetadata(EMBED_CURSOR, String(lastAttempted));
+      return 0;
+    }
     const vectors = await embedder.embed(texts);
     if (vectors.length !== texts.length) {
       throw new Error(`embedding count mismatch: got ${vectors.length}, expected ${texts.length}`);
@@ -382,6 +399,7 @@ export class HistorySearchIndex {
       vectors.forEach((vector, i) => {
         put.run(chosen[i]!.content_hash, identity, vector.length, vectorToBytes(vector));
       });
+      this.#setMetadata(EMBED_CURSOR, String(lastAttempted));
     })();
     return vectors.length;
   }
@@ -428,7 +446,7 @@ function lastSentenceBoundary(text: string, end: number, floor: number): number 
   return -1;
 }
 
-export async function loadCanonicalTexts(
+export async function loadMessageTexts(
   characterDataDir: string,
   rows: readonly IndexedMessage[],
 ): Promise<Map<number, string>> {
@@ -447,11 +465,24 @@ export async function loadCanonicalTexts(
         const message = messages[row.ordinal];
         if (message === undefined) continue;
         const text = visibleText(message);
-        if (text !== undefined && contentHash(text) === row.content_hash) out.set(row.id, text);
+        if (text !== undefined) out.set(row.id, text);
       }
     }
   } finally {
     reader.close();
+  }
+  return out;
+}
+
+export async function loadCanonicalTexts(
+  characterDataDir: string,
+  rows: readonly IndexedMessage[],
+): Promise<Map<number, string>> {
+  const loaded = await loadMessageTexts(characterDataDir, rows);
+  const out = new Map<number, string>();
+  for (const row of rows) {
+    const text = loaded.get(row.id);
+    if (text !== undefined && contentHash(text) === row.content_hash) out.set(row.id, text);
   }
   return out;
 }

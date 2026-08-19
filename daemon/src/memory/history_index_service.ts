@@ -15,11 +15,22 @@ export interface HistoryIndexServiceOptions {
   timerIntervalMs?: number;
 }
 
+export interface HistoryIndexProgress {
+  character: string;
+  characterDataDir: string;
+  indexPath: string;
+  embedder: Embedder | undefined;
+  failures: number;
+  retryAt: number;
+  lastError: string | undefined;
+}
+
 interface Entry extends HistoryIndexRegistration {
   dirty: boolean;
   retryAt: number;
   failures: number;
   nextBatchAt: number;
+  lastError: string | undefined;
 }
 
 export class HistoryIndexService {
@@ -29,6 +40,7 @@ export class HistoryIndexService {
   readonly #batchPauseMs: number;
   readonly #timerIntervalMs: number;
   #idleSince: number;
+  #lastPicked: string | undefined;
   #foreground = 0;
   #timer: ReturnType<typeof setInterval> | undefined;
   #running: Promise<void> | undefined;
@@ -55,6 +67,7 @@ export class HistoryIndexService {
       retryAt: identityChanged ? 0 : previous?.retryAt ?? 0,
       failures: identityChanged ? 0 : previous?.failures ?? 0,
       nextBatchAt: previous?.nextBatchAt ?? 0,
+      lastError: identityChanged ? undefined : previous?.lastError,
     });
   }
 
@@ -64,6 +77,20 @@ export class HistoryIndexService {
 
   registeredCharacters(): string[] {
     return [...this.#entries.keys()];
+  }
+
+  progress(character: string): HistoryIndexProgress | undefined {
+    const entry = this.#entries.get(character);
+    if (entry === undefined) return undefined;
+    return {
+      character,
+      characterDataDir: entry.characterDataDir,
+      indexPath: entry.indexPath,
+      embedder: entry.embedder,
+      failures: entry.failures,
+      retryAt: entry.retryAt,
+      lastError: entry.lastError,
+    };
   }
 
   async start(): Promise<void> {
@@ -117,10 +144,15 @@ export class HistoryIndexService {
     }
     const now = this.#now();
     if (this.#foreground > 0 || now - this.#idleSince < this.#idleDelayMs) return;
-    for (const entry of this.#entries.values()) {
+    const characters = [...this.#entries.keys()];
+    const after = this.#lastPicked === undefined ? -1 : characters.indexOf(this.#lastPicked);
+    for (let step = 1; step <= characters.length; step += 1) {
+      const name = characters[(after + step) % characters.length]!;
+      const entry = this.#entries.get(name)!;
       if (entry.embedder === undefined || now < entry.retryAt || now < entry.nextBatchAt) continue;
+      this.#lastPicked = name;
       try {
-        const embedded = await withHistoryIndexLock(entry.indexPath, async () => {
+        await withHistoryIndexLock(entry.indexPath, async () => {
           const index = HistorySearchIndex.open({
             characterDataDir: entry.characterDataDir,
             path: entry.indexPath,
@@ -134,12 +166,14 @@ export class HistoryIndexService {
         });
         entry.failures = 0;
         entry.retryAt = 0;
-        if (embedded > 0) entry.nextBatchAt = now + this.#batchPauseMs;
+        entry.lastError = undefined;
+        entry.nextBatchAt = this.#now() + this.#batchPauseMs;
       } catch (error) {
         entry.failures += 1;
+        entry.lastError = error instanceof Error ? error.message : String(error);
         entry.retryAt = now + Math.min(1_000 * 2 ** (entry.failures - 1), 60_000);
         console.warn(
-          `shore: history embedding backfill failed for ${entry.character}; retrying later: ${String(error)}`,
+          `shore: history embedding backfill failed for ${entry.character}; retrying later: ${entry.lastError}`,
         );
       }
       break;

@@ -116,6 +116,7 @@ fn not_started(name: &str) -> &'static str {
         "autonomy" => "not started \u{00b7} the heartbeat is scheduled on your first message",
         "activity" => "nothing recorded yet \u{00b7} activity is learned from your messages",
         "index" => "no workspace configured for this character",
+        "history_index" => "no history index for this character",
         _ => "not started",
     }
 }
@@ -140,6 +141,10 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
     }
     if name == "index" {
         super::workspace::write_index_section(out, value);
+        return true;
+    }
+    if name == "history_index" {
+        super::history::write_history_section(out, value);
         return true;
     }
     section(out, name, None);
