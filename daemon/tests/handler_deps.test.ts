@@ -25,7 +25,13 @@ import { SessionRouter } from "../src/swp/session.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { CharacterError } from "../src/characters.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
-import { createRuntime, mcpConfigView, type ShoreRuntime } from "../src/runtime.ts";
+import {
+  createRuntime,
+  mcpConfigView,
+  sharedToolDeps,
+  type ShoreRuntime,
+} from "../src/runtime.ts";
+import { buildToolContext, type ToolContextDeps } from "../src/handler/tool_context.ts";
 import type { McpRegistry } from "../src/tools/mcp_registry.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -148,6 +154,34 @@ function turnFor(): Parameters<typeof chatToolDeps>[2] {
   };
 }
 
+function withResearch(app: ReturnType<typeof defaultAppConfig>): void {
+  app.subagents.set("research", {
+    description: "reads things",
+    prompt: "you look things up",
+    tools: [],
+    model: undefined,
+    max_iterations: undefined,
+  });
+}
+
+async function failureFrom(runtime: ShoreRuntime, deps: ToolContextDeps): Promise<string> {
+  const ctx = await buildToolContext(runtime.config, runtime.config.dirs.data, "ada", deps);
+  if (ctx.runSubagent === undefined) return "no subagent runner was wired";
+  try {
+    await ctx.runSubagent("research", "what is the time");
+    return "the subagent somehow ran";
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function subagentFailure(runtime: ShoreRuntime, character: string): Promise<string> {
+  return await failureFrom(
+    runtime,
+    chatToolDeps(assemblyFor(runtime), character, turnFor()),
+  );
+}
+
 describe("the tool backends a character's turn gets", () => {
   test("a deferred edit lands in the character's own directory", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-defer-");
@@ -201,6 +235,54 @@ describe("the tool backends a character's turn gets", () => {
         chatToolDeps(assemblyFor(stubbed), "nova", turnFor()).activityStats?.(7),
       ).toBeUndefined();
       expect(asked).toEqual(["ada:30", "nova:7"]);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a subagent's model comes from the character's config, not the global one", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-subagent-model-", withResearch, [
+      "ada",
+    ]);
+    try {
+      runtime.registry.setRuntimeEffectiveConfig(
+        "ada",
+        configFor(root, (app) => {
+          withResearch(app);
+          app.defaults.subagent_model = "chosen-by-ada";
+        }),
+      );
+
+      expect(await subagentFailure(runtime, "ada")).toContain("chosen-by-ada");
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the heartbeat's runner resolves it the same way a chat turn's does", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-subagent-parity-", withResearch, [
+      "ada",
+    ]);
+    try {
+      runtime.registry.setRuntimeEffectiveConfig(
+        "ada",
+        configFor(root, (app) => {
+          withResearch(app);
+          app.defaults.subagent_model = "chosen-by-ada";
+        }),
+      );
+
+      const chat = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
+      const heartbeat = sharedToolDeps(runtime.config, runtime.mcp, {
+        providers: {},
+        registry: runtime.registry,
+      });
+
+      const fromHeartbeat = await failureFrom(runtime, heartbeat);
+      expect(fromHeartbeat).toEqual(await failureFrom(runtime, chat));
+      expect(fromHeartbeat).not.toContain("has no model");
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

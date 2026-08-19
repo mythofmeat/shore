@@ -70,10 +70,15 @@ MUTANTS = [
      D,
      "        : { stats: report.stats, turnCount: report.messageCount };",
      "        : { stats: report.stats, turnCount: 0 };"),
-    ("tools: the shared backends are dropped, so chat is offered less than a heartbeat",
-     D,
-     "    ...sharedToolDeps(runtime.config, runtime.mcp),",
-     "    ...{},"),
+    ("tools: the shared backends are dropped, so chat is offered less than a heartbeat", D,
+     "    ...sharedToolDeps(runtime.config, runtime.mcp, {\n"
+     "      providers: a.providers,\n"
+     "      registry: runtime.registry,\n"
+     "      ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),\n"
+     "      ...(a.env === undefined ? {} : { env: a.env }),\n"
+     "      turn,\n"
+     "    }),",
+     "    ...({} as Record<string, never>),"),
 
     # --- the autonomy surface -------------------------------------------------
     ("autonomy: the cached body is queued behind registration, leaving a live prefix unarmed", D,

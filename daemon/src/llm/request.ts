@@ -253,6 +253,10 @@ export function pushAssistantTurn(request: SidecarRequest, resp: GenerateRespons
   } else {
     content = resp.content_blocks;
   }
+  pushAssistantBlocks(request, content);
+}
+
+export function pushAssistantBlocks(request: SidecarRequest, content: ContentBlock[]): void {
   request.messages.push({
     role: "assistant",
     content,
