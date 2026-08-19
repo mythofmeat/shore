@@ -19,6 +19,12 @@ pub(crate) use notifications::*;
 pub(crate) use stream::*;
 pub(crate) use usage::*;
 
+#[derive(Clone)]
+pub(crate) struct PendingEditPrefill {
+    pub rid: String,
+    pub msg_ref: String,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConnectionStatus {
     Disconnected,
@@ -277,6 +283,8 @@ pub(crate) struct App {
     pub pending_images: Vec<String>,
     pub paste_temp_paths: Vec<std::path::PathBuf>,
     pub editing_ref: Option<String>,
+    pub pending_edit_prefill: Option<PendingEditPrefill>,
+    pub edit_prefill_seq: u64,
     pub image_index: Vec<ImageEntry>,
     pub fullscreen: Option<usize>,
     pub spinner_frame: usize,
@@ -337,6 +345,8 @@ impl Default for App {
             pending_images: Vec::new(),
             paste_temp_paths: Vec::new(),
             editing_ref: None,
+            pending_edit_prefill: None,
+            edit_prefill_seq: 0,
             image_index: Vec::new(),
             fullscreen: None,
             spinner_frame: 0,
@@ -535,29 +545,32 @@ impl App {
         self.scroll_to_bottom();
     }
 
-    pub(crate) fn resolve_ref_content(&self, raw_ref: &str) -> Option<String> {
-        let messages: Vec<&Turn> = self
-            .entries
-            .iter()
-            .filter_map(ConversationEntry::as_turn)
-            .filter(|turn| {
-                matches!(turn.role, Role::User | Role::Assistant) && !turn.is_streaming()
-            })
-            .collect();
+    pub(crate) fn begin_edit_prefill(&mut self, msg_ref: &str) -> String {
+        self.edit_prefill_seq = self.edit_prefill_seq.wrapping_add(1);
+        let rid = format!("tui_edit_prefill_{}", self.edit_prefill_seq);
+        self.pending_edit_prefill = Some(PendingEditPrefill {
+            rid: rid.clone(),
+            msg_ref: msg_ref.to_string(),
+        });
+        rid
+    }
 
-        let turn = match raw_ref {
-            "last" => messages.last().copied(),
-            s if s.starts_with('-') => {
-                let n: usize = s[1..].parse().ok()?;
-                if n == 0 || n > messages.len() {
-                    return None;
-                }
-                Some(messages[messages.len() - n])
-            }
-            _ => None,
-        };
+    pub(crate) fn take_edit_prefill(&mut self, rid: Option<&str>) -> Option<String> {
+        let pending = self.pending_edit_prefill.as_ref()?;
+        if rid? != pending.rid {
+            return None;
+        }
+        self.pending_edit_prefill.take().map(|p| p.msg_ref)
+    }
 
-        turn.map(Turn::joined_text)
+    pub(crate) fn cancel_edit_prefill(&mut self) {
+        self.pending_edit_prefill = None;
+    }
+
+    pub(crate) fn start_editing(&mut self, msg_ref: String, content: String) {
+        self.editing_ref = Some(msg_ref);
+        self.input.set_text(content);
+        self.input.mode = InputMode::Insert;
     }
 
     pub(crate) fn set_status(&mut self, msg: impl Into<String>) {
