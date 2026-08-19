@@ -6,6 +6,8 @@ import {
   backfillLedgerCosts,
   budgetWarnings,
   modelHistory,
+  parseLastPeriod,
+  usageReport,
 } from "../src/ledger/usage.ts";
 import { setSubscriptionProviders } from "../src/ledger/store.ts";
 import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "../src/config/providers.ts";
@@ -257,4 +259,52 @@ test("a ledger that will not open is an error, not an empty report", () => {
   expect(() => modelHistory({ ledger: "/nonexistent/ledger.db", character: "aria" })).toThrow(
     /cannot open ledger/,
   );
+});
+
+const PERIOD_NOW = Date.parse("2026-05-13T16:20:00+00:00");
+
+async function summaryFor(ledger: string, last: string): Promise<{ summary: unknown[] }> {
+  return (await usageReport({ ledger, args: { last } }, { localZone: "utc", now: PERIOD_NOW })) as {
+    summary: unknown[];
+  };
+}
+
+test("a month back is the same window as thirty days back", () => {
+  expect(parseLastPeriod("1M", PERIOD_NOW, "utc", { now: PERIOD_NOW })).toBe(
+    parseLastPeriod("30d", PERIOD_NOW, "utc", { now: PERIOD_NOW }),
+  );
+  expect(parseLastPeriod("2M", PERIOD_NOW, "utc", { now: PERIOD_NOW })).toBe(
+    parseLastPeriod("60d", PERIOD_NOW, "utc", { now: PERIOD_NOW }),
+  );
+});
+
+test("`1M` reports the month it names, not the whole ledger", async () => {
+  const ledger = ledgerWith([
+    { ts: "2026-05-12T10:00:00+00:00", total_cost: 1 },
+    { ts: "2024-01-01T10:00:00+00:00", total_cost: 500 },
+  ]);
+
+  const month = await summaryFor(ledger, "1M");
+  const thirty = await summaryFor(ledger, "30d");
+  const everything = await summaryFor(ledger, "all");
+
+  expect(month.summary).toEqual(thirty.summary as never);
+  expect(month.summary.length).toBe(1);
+  expect(everything.summary.length).toBe(1);
+  expect(month.summary).not.toEqual(everything.summary as never);
+});
+
+test("a period nobody recognises is refused instead of quietly meaning all time", async () => {
+  const ledger = ledgerWith([{ ts: "2024-01-01T10:00:00+00:00", total_cost: 500 }]);
+
+  for (const last of ["1m", "1mo", "banana", "", "M"]) {
+    await expect(summaryFor(ledger, last), `'${last}' must be refused`).rejects.toThrow(
+      `unknown usage period '${last}' (expected today, week, month, all, or a count like 4h, 7d, 2w, 1M)`,
+    );
+  }
+});
+
+test("`all` still means all time, and is not mistaken for a bad period", async () => {
+  const ledger = ledgerWith([{ ts: "2024-01-01T10:00:00+00:00", total_cost: 500 }]);
+  expect((await summaryFor(ledger, "all")).summary.length).toBe(1);
 });

@@ -103,7 +103,12 @@ const RELATIVE_UNITS: ReadonlyArray<readonly [string, number]> = [
   ["h", HOUR_MS],
   ["d", DAY_MS],
   ["w", 7 * DAY_MS],
+  ["M", 30 * DAY_MS],
 ];
+
+const PERIOD_FORMS = "today, week, month, all, or a count like 4h, 7d, 2w, 1M";
+
+export class UsageArgumentError extends Error {}
 
 export function parseLastPeriod(
   last: string,
@@ -163,6 +168,11 @@ function buildFilter(
     budgetWindow === undefined
       ? parseLastPeriod(last, now, timezone, opts)
       : toRfc3339(budgetWindow.start);
+  if (requested !== undefined && requested !== "all" && since === undefined) {
+    throw new UsageArgumentError(
+      `unknown usage period '${requested}' (expected ${PERIOD_FORMS})`,
+    );
+  }
 
   const scoped = {
     character: str(args, "character"),
@@ -202,7 +212,7 @@ export async function usageReport(
   const dimension = str(args, "group_by");
   if (dimension !== undefined) {
     if (!isUsageDimension(dimension)) {
-      throw new Error(
+      throw new UsageArgumentError(
         `unknown usage dimension '${dimension}' (expected one of ${USAGE_DIMENSIONS.join(", ")})`,
       );
     }

@@ -139,6 +139,22 @@ test("a ledger that will not open is an internal error", async () => {
   }
 });
 
+test("a period the parser does not know is the caller's mistake, not shore's", async () => {
+  const ledger = ledgerWithOneCall();
+  for (const [args, expected] of [
+    [{ last: "1m" }, "unknown usage period '1m'"],
+    [{ group_by: "banana" }, "unknown usage dimension 'banana'"],
+  ] as const) {
+    const failed = await usage(ctxFor(ledger), args).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(failed).toBeInstanceOf(CommandError);
+    expect((failed as CommandError).code).toBe("invalid_request");
+    expect((failed as CommandError).message).toContain(expected);
+  }
+});
+
 test("the call store's rate-limit readings reach the report", async () => {
   const ledger = ledgerWithOneCall();
   const reading = { host: "api.anthropic.com", limit: 1000, remaining: 12 };

@@ -469,8 +469,9 @@ pub(crate) enum CliCommand {
         #[command(subcommand)]
         subcommand: Option<UsageCommand>,
 
-        /// Time period: "today", "4h", "7d", "30d", "all". Defaults to the
-        /// current budget window when a budget is configured, else today
+        /// Time period: "today", "week", "month", "all", or a count back like
+        /// "4h", "7d", "2w", "1M". Defaults to the current budget window when
+        /// a budget is configured, else today
         #[arg(long, global = true)]
         last: Option<String>,
 

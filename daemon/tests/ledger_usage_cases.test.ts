@@ -62,6 +62,8 @@ const MODES: Record<string, Record<string, unknown>> = {
   anomalies: { anomalies: true },
 };
 
+const REFUSED_SINCE_127 = new Set(["banana", "", "d"]);
+
 const FILTERS: Record<string, Record<string, unknown>> = {
   none: {},
   character: { character: "aria" },
@@ -164,6 +166,17 @@ test("every recorded usage payload comes back the same", async () => {
     const filter = FILTERS[c.filter];
     expect(mode, `fixture mode "${c.mode}" has no local definition`).toBeDefined();
     expect(filter, `fixture filter "${c.filter}" has no local definition`).toBeDefined();
+
+    if (REFUSED_SINCE_127.has(c.last)) {
+      await expect(
+        usageReport(
+          { ledger, args: { last: c.last, ...mode, ...filter }, usage: config(c.timezone) },
+          opts,
+        ),
+        `${c.timezone}/${c.mode}/${JSON.stringify(c.last)} is refused now, not reported as all time`,
+      ).rejects.toThrow("unknown usage period");
+      continue;
+    }
 
     const actual = await usageReport(
       {
