@@ -58,20 +58,6 @@ export function handleCompactionOutcome(
     return outcome.retainedTurns;
   }
 
-  if (outcome.kind === "no_memory_writes") {
-    console.warn(
-      `shore: background compaction produced no memory writes for ${character} — conversation ` +
-        `NOT archived (tool_rounds=${outcome.toolRounds}, rejected=${outcome.rejectedPaths.length}, ` +
-        `max_rounds_hit=${outcome.maxRoundsHit}, tools_called=${JSON.stringify(outcome.toolsCalled)})`,
-    );
-    notify(
-      `Shore — ${character}`,
-      `Compaction ran but wrote no memory (${outcome.toolRounds} tool round` +
-        `${outcome.toolRounds === 1 ? "" : "s"}). Conversation kept; will retry on next trigger.`,
-    );
-    return 0;
-  }
-
   if (outcome.kind === "truncated") {
     console.warn(
       `shore: background compaction for ${character} was cut off at the token ceiling ` +

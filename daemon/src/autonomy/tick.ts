@@ -4,7 +4,6 @@ export type CompactionReason =
 
 export interface TickInputs {
   readonly autonomyEnabled: boolean;
-  readonly paused: boolean;
   readonly heartbeatEnabled: boolean;
 
   readonly compactionEnabled: boolean;
@@ -12,7 +11,6 @@ export interface TickInputs {
   readonly deepArchiveDone: boolean;
   readonly activeTurnCount: number;
   readonly minTurns: number;
-  readonly maxTurns: number;
   readonly idleSecs: number;
   readonly idleTriggerSecs: number;
   readonly archiveAfterSecs: number;
@@ -29,7 +27,7 @@ export function tickDecision(i: TickInputs): TickDecision {
   const compaction = compactionReason(i);
 
   return {
-    heartbeatMayTick: i.autonomyEnabled && i.heartbeatEnabled && !i.paused,
+    heartbeatMayTick: i.autonomyEnabled && i.heartbeatEnabled,
     compaction,
     deepArchive:
       i.autonomyEnabled &&
@@ -45,9 +43,6 @@ export function tickDecision(i: TickInputs): TickDecision {
 function compactionReason(i: TickInputs): CompactionReason | undefined {
   if (!(i.autonomyEnabled && i.compactionEnabled && !i.compactionTriggered)) {
     return undefined;
-  }
-  if (i.maxTurns > 0 && i.activeTurnCount >= i.maxTurns && i.activeTurnCount >= i.minTurns) {
-    return "max_turns";
   }
   if (
     i.activeTurnCount >= i.minTurns &&

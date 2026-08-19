@@ -23,7 +23,7 @@ character tells them apart.
 A mutant is KILLED if `bun test tests/compact_command.test.ts` fails
 with it applied.
 
-This is **29/29**, from 28/29 on the first pass. One survivor, and it is the
+This is **26/26**, from 28/29 on the first pass. One survivor, and it is the
 shape this project has been caught by five times running — the case was there
 and nothing in it was load-bearing:
 
@@ -118,8 +118,8 @@ MUTANTS = [
      '  return internalError("compaction failed");'),
     ("errors: the llm prefix is dropped",
      "src/memory/compaction/types.ts",
-     '    return new CompactionError("llm", `llm: ${detail}`);',
-     '    return new CompactionError("llm", detail);'),
+     '    return new CompactionError("llm", `llm: ${detail}`, { cause });',
+     '    return new CompactionError("llm", detail, { cause });'),
     ("errors: the busy message picks up a prefix",
      "src/memory/compaction/types.ts",
      '    return new CompactionError("busy", `Compaction already running for ${character}`);',
@@ -134,14 +134,6 @@ MUTANTS = [
      C,
      "      turn_count: outcome.compactedTurns,\n      compacted_turns: outcome.compactedTurns,\n      retained_count: outcome.retainedCount,\n      retained_turns: outcome.retainedTurns,\n      new_conversation_id: outcome.newConversationId,",
      "      compacted_turns: outcome.compactedTurns,\n      retained_count: outcome.retainedCount,\n      retained_turns: outcome.retainedTurns,\n      new_conversation_id: outcome.newConversationId,"),
-    ("renderings: no_memory_writes reports the rejected count rather than the paths",
-     C,
-     "      rejected_paths: outcome.rejectedPaths,",
-     "      rejected_paths: outcome.rejectedPaths.length,"),
-    ("renderings: max_rounds_hit is always false",
-     C,
-     "      max_rounds_hit: outcome.maxRoundsHit,",
-     "      max_rounds_hit: false,"),
     ("renderings: the dry run reports the preview length rather than the count",
      C,
      "    would_write_files: outcome.wouldWriteFiles,",
@@ -176,10 +168,6 @@ MUTANTS = [
      C,
      "    await completeCompaction(engine, ctx, character, outcome.retainedTurns);",
      "    await completeCompaction(engine, ctx, character, outcome.compactedTurns);"),
-    ("completion: the non-archiving arms complete too",
-     C,
-     '  if (outcome.kind === "no_memory_writes") {',
-     '  if (outcome.kind === "no_memory_writes") {\n    await completeCompaction(engine, ctx, character, outcome.compactedTurns);'),
 ]
 
 
