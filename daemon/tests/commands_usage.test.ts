@@ -138,3 +138,17 @@ test("a ledger that will not open is an internal error", async () => {
     expect((failed as CommandError).message).toBe(`cannot open ledger at ${MISSING}`);
   }
 });
+
+test("the call store's rate-limit readings reach the report", async () => {
+  const ledger = ledgerWithOneCall();
+  const reading = { host: "api.anthropic.com", limit: 1000, remaining: 12 };
+  const store = { latestRateLimits: () => [reading] } as never;
+
+  const withStore = (await usage({ ledger, usage: {}, callStore: store }, {})) as {
+    rate_limits: unknown[];
+  };
+  expect(withStore.rate_limits).toEqual([reading]);
+
+  const without = (await usage(ctxFor(ledger), {})) as { rate_limits: unknown[] };
+  expect(without.rate_limits, "no store is an empty list, not a missing key").toEqual([]);
+});

@@ -164,7 +164,9 @@ MUTANTS = [
     ("filter: whitespace is not trimmed before the emptiness test", WIRE,
      '    blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text.trim() === "")));',
      '    blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text === "")));'),
-    ("filter: every block type is filtered, not just text", WIRE,
+    ("filter: every block type is filtered, not just text (EQUIVALENT — `text` is "
+     "declared on exactly one arm of ContentBlock, so `\"text\" in b` and "
+     "`b.type === \"text\"` select the same blocks)", WIRE,
      '    blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text.trim() === "")));',
      '    blocks.push(...m.content_blocks.filter((b) => !("text" in b && b.text.trim() === "")));'),
     ("fallback: a turn whose blocks all filtered out ships nothing", WIRE,
@@ -303,7 +305,9 @@ MUTANTS = [
      "          displayName,\n"
      "        ),\n"
      "        renderToolDefs(config.app.tools, character, displayName),"),
-    ("context: the character name is passed where the display name goes", CONTEXT,
+    ("context: the character name is passed where the display name goes (EQUIVALENT "
+     "— no description in ALL_TOOLS references {{user}}, so the second argument to "
+     "renderToolDefs reaches no template; the day one does, this starts failing)", CONTEXT,
      "        renderToolDefs(config.app.tools, character, displayName),",
      "        renderToolDefs(config.app.tools, character, character),"),
 

@@ -383,3 +383,46 @@ describe("minted values", () => {
     expect(observed["generated_path"]).toMatch(/\/generated\/\d{8}_\d{6}\.png$/);
   });
 });
+
+describe("the cap a tool result is held to", () => {
+  const LONG = "x".repeat(120);
+
+  async function run(limits: ToolLimitsView) {
+    const ctx = scriptedContext("ask_research", { ok: LONG });
+    const { exec, frames } = harness(null, limits, ctx);
+    const out = await runToolUse(
+      { id: "tu_cap", name: "ask_research", input: { query: "who" } },
+      exec,
+      [],
+    );
+    const frame = frames.find((f) => f.type === "tool_result") as
+      | { output: string }
+      | undefined;
+    return { content: (out.block as { content: string }).content, frame, window: out.window };
+  }
+
+  test("a per-tool override is used in place of the global cap", async () => {
+    const { content, window } = await run({
+      max_result_chars: 1000,
+      timeout_ms: 300_000,
+      config: { ask_research: { max_result_chars: 40 } },
+    });
+
+    expect(window?.truncated, "40 is the tool's own cap; the global 1000 would not truncate").toBe(
+      true,
+    );
+    expect(window?.originalChars).toBe(LONG.length);
+    expect(content).not.toBe(LONG);
+  });
+
+  test("the frame the client sees carries the capped result, not the raw one", async () => {
+    const { content, frame } = await run({
+      max_result_chars: 40,
+      timeout_ms: 300_000,
+      config: {},
+    });
+
+    expect(frame?.output).toBe(content);
+    expect(frame?.output).not.toBe(LONG);
+  });
+});

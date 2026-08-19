@@ -243,7 +243,7 @@ MUTANTS = [
     ("zstd: an absent blob decompresses to an empty string rather than null",
      "  if (!(blob instanceof Uint8Array)) return null;",
      '  if (!(blob instanceof Uint8Array)) return "";'),
-    ("zstd: bodies are stored as latin-1 rather than UTF-8",
+    ("zstd: headers and transcript entries are stored as latin-1 rather than UTF-8",
      '  return zstdCompressSync(Buffer.from(data, "utf8"), {',
      '  return zstdCompressSync(Buffer.from(data, "latin1"), {'),
 

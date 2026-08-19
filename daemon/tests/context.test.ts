@@ -161,6 +161,34 @@ describe("buildLlmMessages", () => {
     });
   }
 
+  test("an uncaptioned image carries no caption key at all", async () => {
+    const dir = await images();
+    const files = (await readdir(dir)).filter((f) => !f.startsWith("."));
+    const path = join(dir, files[0] as string);
+
+    const got = await buildLlmMessages(
+      {
+        system: [],
+        messages: [
+          { role: "assistant", content: "here", images: [{ path }], content_blocks: [] },
+        ],
+      },
+      "tool_pair",
+    );
+
+    const toolUse = got.messages
+      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .find((b) => (b as { type?: string }).type === "tool_use") as
+      | { input: Record<string, unknown> }
+      | undefined;
+
+    expect(toolUse, "tool_pair mode renders an image as a generate_image pair").toBeDefined();
+    expect(
+      Object.keys(toolUse?.input ?? {}),
+      "an absent caption is an absent key, not a key holding undefined",
+    ).toEqual([]);
+  });
+
   test("every case renders identically on a second call", async () => {
     const dir = await images();
     for (const c of buildCases) {

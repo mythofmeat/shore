@@ -372,3 +372,45 @@ test("an omitted filter field matches everything, like an explicit null", () => 
   expect(store.queryCalls(omitted).length).toBe(5);
   store.close();
 });
+
+test("headers and transcript entries survive characters that are not latin-1", () => {
+  const store = CallStore.openInMemory();
+  const marker = "réponse ✅ 你好 \u{1f600}";
+
+  store.recordTranscript({
+    ts: new Date("2026-08-10T12:00:00.000Z"),
+    source: "heartbeat",
+    character: "poppy",
+    call_type: "heartbeat",
+    iteration: 0,
+    model: "claude-x",
+    provider: "anthropic",
+    finish_reason: "end_turn",
+    usage: ZERO_USAGE,
+    entry_json: JSON.stringify({ marker }),
+  });
+
+  store.recordHttpCall({
+    call_id: "call-utf8",
+    seq: 0,
+    ts: new Date("2026-08-10T12:00:00.000Z"),
+    character: "poppy",
+    call_type: "heartbeat",
+    rid: null,
+    method: "POST",
+    url: "https://example.invalid/v1/messages",
+    status: 200,
+    status_text: "OK",
+    duration_ms: 1,
+    error: null,
+    request_headers: [["x-note", marker]],
+    request_body: null,
+    response_headers: [],
+    response_body: null,
+  });
+
+  expect(store.queryTranscripts("heartbeat", "poppy", 0)[0]?.entry).toEqual({ marker });
+  expect(store.httpCallsFor("call-utf8")[0]?.request_headers).toEqual([["x-note", marker]]);
+
+  store.close();
+});

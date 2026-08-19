@@ -259,3 +259,102 @@ describe("keyApplicability", () => {
     );
   });
 });
+
+describe("what a rejection says, and what a value is stored as", () => {
+  function refusal(key: string, value: unknown): string {
+    const sampler: SamplerSettings = {};
+    try {
+      applySamplerValue(sampler, key, value);
+    } catch (e) {
+      return (e as CommandError).message;
+    }
+    throw new Error(`${key} accepted ${String(value)}`);
+  }
+
+  test("each key is refused under its own name", () => {
+    expect(refusal("temperature", "warm")).toContain("temperature must be a number");
+    expect(refusal("top_p", "wide")).toContain("top_p must be a number");
+    expect(refusal("zai_clear_thinking", "yes")).toContain("zai_clear_thinking must be a boolean");
+    expect(refusal("zai_subscription", "yes")).toContain("zai_subscription must be a boolean");
+  });
+
+  test("the offending value is quoted, so an empty string is visible", () => {
+    expect(refusal("sdk", "nope")).toContain('got "nope"');
+    expect(refusal("sdk", "")).toContain('got ""');
+  });
+
+  test("a keepalive that will not parse says which key it was", () => {
+    expect(refusal("cache_keepalive", "soon")).toContain("cache_keepalive: ");
+  });
+
+  test("cache_ttl is stored as written — it is not a keepalive", () => {
+    const sampler: SamplerSettings = {};
+    applySamplerValue(sampler, "cache_ttl", "banana");
+    expect(sampler.cacheTtl, "cache_ttl takes any string; the provider validates it").toBe(
+      "banana",
+    );
+  });
+
+  test("an sdk is stored as the user spelled it, not canonicalised", () => {
+    const sampler: SamplerSettings = {};
+    applySamplerValue(sampler, "sdk", "moonshotai");
+    expect(sampler.sdk).toBe("moonshotai");
+  });
+
+  test("a u32 takes its whole range and nothing past it", () => {
+    const sampler: SamplerSettings = {};
+    applySamplerValue(sampler, "budget_tokens", 0xff_ff_ff_ff);
+    expect(sampler.budgetTokens).toBe(0xff_ff_ff_ff);
+    expect(refusal("budget_tokens", 0x1_00_00_00_00)).toContain("fitting in u32");
+  });
+
+  test("one tool iteration is a legal setting; zero is not", () => {
+    const sampler: SamplerSettings = {};
+    applySamplerValue(sampler, "max_tool_iterations", 1);
+    expect(sampler.maxToolIterations).toBe(1);
+    expect(refusal("max_tool_iterations", 0)).toBeTruthy();
+  });
+
+  test("a null anywhere in a provider preference is refused, at any depth", () => {
+    expect(refusal("openrouter_provider", { order: [null] })).toBeTruthy();
+    expect(refusal("openrouter_provider", { order: { first: null } })).toBeTruthy();
+    expect(refusal("openrouter_provider", { nested: { deeper: [null] } })).toBeTruthy();
+  });
+
+  test("clearing one key leaves the others alone", () => {
+    const sampler: SamplerSettings = {};
+    applySamplerValue(sampler, "temperature", 0.7);
+    applySamplerValue(sampler, "top_p", 0.9);
+    applySamplerValue(sampler, "temperature", null);
+
+    expect(sampler.temperature).toBeUndefined();
+    expect(sampler.topP).toBe(0.9);
+  });
+});
+
+describe("the keys with no applicability matrix", () => {
+  test("they answer `always`, not a verdict they never had", () => {
+    const table = keyApplicability("anthropic", "claude-opus-4-8");
+    for (const key of ["sdk", "max_tool_iterations", "supports_images"]) {
+      expect(table[key], `${key} has no Field, so no sdk can have an opinion`).toBe("always");
+    }
+    expect(table["temperature"]).toBe("honored");
+  });
+});
+
+describe("capabilityCheck, past the honored/ignored split", () => {
+  test("a rejected key is refused, not merely reported", () => {
+    const rejectsSampling = { supported_parameters: ["reasoning", "max_tokens"] };
+    expect(
+      capabilityCheck("openrouter", "openai/o3", "temperature", 0.7, rejectsSampling),
+    ).toBeInstanceOf(CommandError);
+  });
+
+  test("`off` is a reasoning_effort sentinel, and not a licence for other keys", () => {
+    expect(capabilityCheck("anthropic", "claude-opus-4-8", "reasoning_effort", "off")).toBeUndefined();
+    expect(
+      capabilityCheck("anthropic", "claude-opus-4-8", "cache_keepalive", "off"),
+      "`off` is a real keepalive value and must still go through its own parse",
+    ).toBeUndefined();
+  });
+});

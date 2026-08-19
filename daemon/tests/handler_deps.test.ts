@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -224,20 +225,23 @@ describe("the tool backends a character's turn gets", () => {
 
 describe("the autonomy surface a turn drives", () => {
   test("the cached request is set at once, without waiting on a registration", () => {
-    const cached: string[] = [];
+    const cached: Array<[string, number | undefined]> = [];
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
     const bridge = new TurnAutonomyBridge(recordingService(gate));
     const autonomy = turnAutonomy(bridge, {
-      set: (character: string) => cached.push(character),
-    });
+      set: (character: string, _request: unknown, keepaliveIntervalMs?: number) =>
+        cached.push([character, keepaliveIntervalMs]),
+    } as never);
 
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
-    autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, undefined);
+    autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, 55 * 60_000);
 
-    expect(cached).toEqual(["ada"]);
+    expect(cached, "the cadence rides along, or the armed prefix has none").toEqual([
+      ["ada", 55 * 60_000],
+    ]);
     release();
   });
 
@@ -310,9 +314,30 @@ describe("the budget check", () => {
         console.error = real;
       }
       expect(errors).toEqual([]);
+      expect(
+        existsSync(join(root, "absent.db")),
+        "an empty budget list must not cost a file open",
+      ).toBe(false);
     } finally {
       closeLedgers();
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a ledger that cannot be opened reports no warnings rather than failing the turn", async () => {
+    const errors: string[] = [];
+    const real = console.error;
+    console.error = (msg: unknown) => errors.push(String(msg));
+    try {
+      const warnings = usageBudgetWarnings(
+        "/nonexistent-shore-dir/nested/absent.db",
+        () => ({ budgets: [{ cost_usd: 5 }] }),
+        undefined,
+      );
+      expect(await warnings("aria")).toEqual([]);
+    } finally {
+      console.error = real;
+      closeLedgers();
     }
   });
 

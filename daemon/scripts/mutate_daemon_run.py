@@ -138,16 +138,19 @@ MUTANTS = [
      R,
      "      instances.unregister(instanceId);",
      "      void instanceId;"),
-    ("shutdown: the handler is not waited for, so a turn may still be writing",
-     R,
+    ("shutdown: the handler is not waited for, so a turn may still be writing "
+     "(NEEDS A SEAM — the difference only shows with a turn in flight when stop() "
+     "lands, and nothing here can hold one open across the shutdown)", R,
      '    await bounded(handlerDone, "message handler", log);',
      "    void handlerDone;"),
     ("shutdown: the runtime is never let go, so MCP children outlive the daemon",
      R,
      '    await bounded(runtime.shutdown(), "runtime", log);',
      "    void 0;"),
-    ("shutdown: the clocks keep running, so the keepalive spends after the exit",
-     R,
+    ("shutdown: the clocks keep running, so the keepalive spends after the exit "
+     "(NEEDS A SEAM — all four timers are unref'd, so leaving them armed holds "
+     "nothing open, and startRuntimeClocks forwards no interval a test could "
+     "shorten to catch one firing)", R,
      "    clocks.stop();",
      "    void clocks;"),
     ("shutdown: a step that overruns wedges the exit instead of being abandoned",

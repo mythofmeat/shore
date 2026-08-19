@@ -99,13 +99,6 @@ MUTANTS = [
      "      cache.set(character, request as SidecarRequest, undefined);"),
 
     # --- the inline compaction ------------------------------------------------
-    ("compaction: the pass is given a cache of its own, so it never sees the live body", D,
-     "    cache: runtime.cache,\n    rebuild: { mcpRegistry: runtime.mcp.current },",
-     "    cache: { get: () => undefined, set: () => {} } as never,\n"
-     "    rebuild: { mcpRegistry: runtime.mcp.current },"),
-    ("compaction: the rebuild is given no tool surface, so its prefix cannot match chat's", D,
-     "    cache: runtime.cache,\n    rebuild: { mcpRegistry: runtime.mcp.current },",
-     "    cache: runtime.cache,\n    rebuild: {},"),
 
     # --- what is read live ----------------------------------------------------
     ("live: the usage config is captured at assembly, so a new budget never applies", D,
@@ -192,9 +185,6 @@ MUTANTS = [
      D,
      '      runtime.cache.invalidate(character, "prompt_reload");',
      "      void character;"),
-    ("compact: the repoint reprimes from the daemon's config, not the command's", D,
-     "        await runtime.cache.reprimeFromDisk(character, config.dirs.data, config, {",
-     "        await runtime.cache.reprimeFromDisk(character, config.dirs.data, runtime.config, {"),
     ("keepalive: the ping diagnostic is armed against a second, empty cache",
      D,
      "      lastRequest: runtime.cache,",

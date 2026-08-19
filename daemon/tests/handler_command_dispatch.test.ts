@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { defaultAppConfig } from "../src/config/app.ts";
+import { defaultAppConfig, defaultMatrixConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
-import { restartRequiredChanges } from "../src/config/restart.ts";
+import { requiresRestart, restartRequiredChanges } from "../src/config/restart.ts";
 import {
   afterCommand,
   type DispatchContext,
@@ -159,6 +159,29 @@ describe("restartRequiredChanges", () => {
     ]);
   });
 
+  test("a connection the daemon opens at startup", () => {
+    expect(changes((c) => (c.app.connections.matrix = defaultMatrixConfig()))).toEqual([
+      "[connections]",
+    ]);
+  });
+
+  test("every key beneath a startup-owned section needs a restart, not just the section", () => {
+    for (const key of [
+      "daemon",
+      "daemon.addr",
+      "notifications",
+      "notifications.events.error",
+      "connections",
+      "connections.matrix.homeserver",
+      "cache.forensics",
+    ]) {
+      expect(requiresRestart(key), key).toBe(true);
+    }
+    for (const key of ["cache", "cache.keepalive_max", "defaults.stream", "daemonish"]) {
+      expect(requiresRestart(key), key).toBe(false);
+    }
+  });
+
   test("all three at once, in the order a client prints them", () => {
     expect(
       changes((c) => {
@@ -258,6 +281,32 @@ describe("a config_reload", () => {
     });
     expect(f.log.adopted).toEqual([f.ctx.config]);
     expect(f.log.order).toEqual(["adopt"]);
+  });
+
+  test("discovery that did not change is reported as unchanged", async () => {
+    const f = fakes({ summary: { characterDiscoveryChanged: false, droppedEngines: 0 } });
+
+    const out = await afterCommand("config_reload", { apply: true }, apply, f.ctx);
+
+    expect((out as { invalidated: Record<string, unknown> }).invalidated).toEqual({
+      character_discovery: false,
+      merged_character_configs: true,
+      removed_character_engines: 0,
+    });
+  });
+
+  test("what the command already invalidated is kept, not replaced", async () => {
+    const f = fakes({ summary: { characterDiscoveryChanged: false, droppedEngines: 0 } });
+    const carried = { ...apply, invalidated: { prompt_snapshots: true } };
+
+    const out = await afterCommand("config_reload", { apply: true }, carried, f.ctx);
+
+    expect((out as { invalidated: Record<string, unknown> }).invalidated).toEqual({
+      prompt_snapshots: true,
+      character_discovery: false,
+      merged_character_configs: true,
+      removed_character_engines: 0,
+    });
   });
 
   test("restart_required is computed before the adoption, not after", async () => {

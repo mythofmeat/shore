@@ -77,7 +77,9 @@ MUTANTS = [
      "  return equal(serializeConfigValue(a), serializeConfigValue(b));",
      "function same(a: unknown, b: unknown): boolean {\n"
      "  return a === b;"),
-    ("equal: arrays of different length can match", RESTART,
+    ("equal: arrays of different length can match (EQUIVALENT — no field under a "
+     "restart-owned path holds a sequence, so the array arm is unreachable from "
+     "restartRequiredChanges; it is there because `equal` is generic)", RESTART,
      "      a.length === b.length &&\n      a.every((v, i) => equal(v, b[i]))",
      "      a.every((v, i) => equal(v, b[i]))"),
     # --- the gates -------------------------------------------------------------
