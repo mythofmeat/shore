@@ -4,6 +4,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
+use shore_common::duration::format_duration_ms;
 use shore_common::protocol::tool_display::{format_tool_input, format_tool_output};
 use shore_common::protocol::types::Role;
 
@@ -754,12 +755,12 @@ fn render_turn(
                 {
                     lines.push(Line::from(Span::styled(
                         format!(
-                            "  [{} | in:{} out:{} cache:{} | {}ms]",
+                            "  [{} | in:{} out:{} cache:{} | {}]",
                             meta.model,
                             meta.tokens.input,
                             meta.tokens.output,
                             meta.tokens.cache_read,
-                            meta.timing.total_ms,
+                            format_duration_ms(u64::from(meta.timing.total_ms)),
                         ),
                         Style::default().fg(Color::DarkGray),
                     )));
@@ -2761,6 +2762,61 @@ pub(crate) mod scenario_tests {
     }
 
     #[test]
+    fn a_slow_turn_reads_in_minutes_rather_than_five_digits_of_milliseconds() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        let mut meta = metadata("glm-5.3");
+        meta.tokens = TokenCounts {
+            input: 48,
+            output: 3319,
+            cache_read: 18304,
+            cache_write: 0,
+        };
+        meta.timing.total_ms = 60_499;
+        h.app.entries.push(ConversationEntry::assistant(
+            Some("m1".into()),
+            "hello".into(),
+            vec![],
+            "2026-01-15T10:30:00Z".into(),
+            Some(meta),
+        ));
+
+        let f = h.render("a slow turn");
+        let line = f
+            .lines()
+            .find(|l| l.contains("glm-5.3"))
+            .expect("the metadata line is on screen");
+        assert!(
+            line.contains("| 1.00m]"),
+            "a minute-long turn must read in minutes: {line}"
+        );
+        assert!(
+            !line.contains("60499"),
+            "the raw millisecond reading is what this replaced: {line}"
+        );
+    }
+
+    #[test]
+    fn a_quick_turn_still_reads_in_milliseconds() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.entries.push(ConversationEntry::assistant(
+            Some("m1".into()),
+            "hello".into(),
+            vec![],
+            "2026-01-15T10:30:00Z".into(),
+            Some(metadata("test-model")),
+        ));
+
+        let f = h.render("a quick turn");
+        let line = f
+            .lines()
+            .find(|l| l.contains("test-model"))
+            .expect("the metadata line is on screen");
+        assert!(line.contains("| 44ms]"), "{line}");
+    }
+
+    #[test]
     fn scenario_command_palette() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
@@ -4424,9 +4480,10 @@ pub(crate) mod scenario_tests {
             f.contains(&stats_expected),
             "expected summed stats '{stats_expected}' in frame\n{f}"
         );
+        let timing_expected = format_duration_ms(u64::from(expected_total_ms));
         assert!(
-            f.contains(&format!("{expected_total_ms}ms")),
-            "expected summed timing '{expected_total_ms}ms' in frame\n{f}"
+            f.contains(&timing_expected),
+            "expected summed timing '{timing_expected}' in frame\n{f}"
         );
 
         assert!(

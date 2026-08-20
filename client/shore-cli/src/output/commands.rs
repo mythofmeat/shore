@@ -1,6 +1,7 @@
 use std::io::{self, Write};
 
 use crossterm::style::{Attribute, SetAttribute};
+use shore_common::duration::format_duration_ms;
 
 use super::transcript::{character_color, format_time};
 use super::vocab::{COLOR_ERROR, Tone, indent_to, paint, wrap_line};
@@ -873,18 +874,6 @@ fn print_run_tool_calls(out: &mut impl Write, data: &serde_json::Value, width: u
             _ = writeln!(out);
         }
     }
-}
-
-const MILLIS_PER_SECOND: u64 = 1_000;
-const MILLIS_PER_TENTH: u64 = 100;
-
-fn format_duration_ms(ms: u64) -> String {
-    if ms < MILLIS_PER_SECOND {
-        return format!("{ms}ms");
-    }
-    let seconds = checked_div_u64(ms, MILLIS_PER_SECOND);
-    let tenths = checked_div_u64(checked_rem_u64(ms, MILLIS_PER_SECOND), MILLIS_PER_TENTH);
-    format!("{seconds}.{tenths}s")
 }
 
 fn session_activate_keepalive(k: &serde_json::Value) -> String {
@@ -2045,14 +2034,6 @@ mod tests {
                 .join(" ")
                 .contains("not on this character's tool surface")
         );
-    }
-
-    #[test]
-    fn format_duration_ms_switches_to_seconds_past_a_second() {
-        assert_eq!(format_duration_ms(0), "0ms");
-        assert_eq!(format_duration_ms(999), "999ms");
-        assert_eq!(format_duration_ms(1_000), "1.0s");
-        assert_eq!(format_duration_ms(8_240), "8.2s");
     }
 
     #[test]
