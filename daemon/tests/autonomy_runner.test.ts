@@ -791,7 +791,7 @@ describe("what an action reports back", () => {
       await runner.tick();
 
       const lines = (await Bun.file(join(dir, "heartbeat.jsonl")).text()).trimEnd().split("\n");
-      expect(lines.map((l) => JSON.parse(l).kind)).toEqual([
+      expect(lines.map((l) => (JSON.parse(l) as { kind: string }).kind)).toEqual([
         "tick_fired",
         "tool_use",
         "message_sent",

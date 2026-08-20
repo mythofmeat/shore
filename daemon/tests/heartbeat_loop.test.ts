@@ -431,7 +431,7 @@ describe("the tools the loop answers itself", () => {
 
     expect(dispatched).toEqual([]);
     const content = (out.results[0] as { content: string }).content;
-    expect(JSON.parse(content).status).toBe("delivered");
+    expect((JSON.parse(content) as { status: string }).status).toBe("delivered");
     expect(out.results[0]).toMatchObject({ is_error: false });
   });
 

@@ -295,7 +295,10 @@ describe("running a heartbeat", () => {
 
     const results = seen[1]?.messages.at(-1)?.content ?? [];
     expect(results[0]).toMatchObject({ type: "tool_result", is_error: true });
-    expect(JSON.parse(rows[0]?.entry_json ?? "{}").tool_calls[0].is_error).toBe(true);
+    const entry = JSON.parse(rows[0]?.entry_json ?? "{}") as {
+      tool_calls: { is_error: boolean }[];
+    };
+    expect(entry.tool_calls[0]?.is_error).toBe(true);
   });
 
   test("an image the tick generated rides out on the message it sends", async () => {

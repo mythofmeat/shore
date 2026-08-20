@@ -214,7 +214,7 @@ describe("what a connection produces", () => {
       const routes = server.routes();
       const first = await routes.next();
       expect(first.done).toBe(false);
-      expect(first.value?.kind).toBe("command");
+      expect((first.value as { kind?: string } | undefined)?.kind).toBe("command");
 
       socket.destroy();
     } finally {

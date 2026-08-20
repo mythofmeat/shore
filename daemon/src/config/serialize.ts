@@ -5,9 +5,10 @@ export function serializeConfigValue(value: unknown): unknown {
   if (value === undefined || value === null) return null;
   if (value instanceof ConfigDuration) return value.toString();
   if (value instanceof Map) {
+    const map = value as ReadonlyMap<string, unknown>;
     const out: Record<string, unknown> = {};
-    for (const key of [...value.keys()].sort(compareByCodePoint)) {
-      out[key] = serializeConfigValue(value.get(key));
+    for (const key of [...map.keys()].sort(compareByCodePoint)) {
+      out[key] = serializeConfigValue(map.get(key));
     }
     return out;
   }

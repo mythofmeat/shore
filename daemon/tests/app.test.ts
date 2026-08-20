@@ -36,8 +36,9 @@ function canonical(value: unknown): unknown {
   if (value === undefined) return null;
   if (value instanceof ConfigDuration) return value.toString();
   if (value instanceof Map) {
+    const map = value as ReadonlyMap<string, unknown>;
     const out: Record<string, unknown> = {};
-    for (const [k, v] of value) out[k] = canonical(v);
+    for (const [k, v] of map) out[k] = canonical(v);
     return out;
   }
   if (Array.isArray(value)) return value.map(canonical);

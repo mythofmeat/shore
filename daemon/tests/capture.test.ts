@@ -131,7 +131,11 @@ describe("call capture", () => {
 
     const lines = (store.rows[0]!.response_body ?? "").split("\n");
     expect(lines).toHaveLength(3);
-    expect(lines.map((l) => JSON.parse(l).type)).toEqual(["start", "text", "done"]);
+    expect(lines.map((l) => (JSON.parse(l) as { type: string }).type)).toEqual([
+      "start",
+      "text",
+      "done",
+    ]);
   });
 
   test("the credential is masked and the call context is not stored", async () => {
@@ -241,10 +245,11 @@ describe("call capture", () => {
       const payload = store.getCall(index[0]!.id);
       expect(payload?.request).not.toContain("sk-ant-super-secret");
       expect(payload?.request).toContain(REDACTED);
-      expect((payload?.response ?? "").split("\n").map((l) => JSON.parse(l).type)).toEqual([
-        "start",
-        "done",
-      ]);
+      expect(
+        (payload?.response ?? "")
+          .split("\n")
+          .map((l) => (JSON.parse(l) as { type: string }).type),
+      ).toEqual(["start", "done"]);
     } finally {
       store.close();
     }
