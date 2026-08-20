@@ -127,9 +127,9 @@ function errorBody(e: unknown): string {
   if (typeof err.body === "string") return err.body;
   if (err.body !== undefined) {
     try {
-      return JSON.stringify(err.body);
+      return JSON.stringify(err.body) ?? "[an error body that does not serialize]";
     } catch {
-      return String(err.body);
+      return "[an error body that does not serialize]";
     }
   }
   return e instanceof Error ? e.message : String(e);

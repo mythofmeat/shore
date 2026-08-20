@@ -5,6 +5,7 @@ import {
   type ToolUseEvent,
 } from "../../engine/tool_loop.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
+import { describeError } from "../errors.ts";
 import { isAbortError } from "../abort.ts";
 import type {
   SidecarProvider,
@@ -308,7 +309,7 @@ export async function* genericToolLoopEvents(
   if (failure !== undefined) {
     yield {
       type: "error",
-      message: String(failure instanceof Error ? failure.message : failure),
+      message: describeError(failure),
       usage: driver.usage,
       timing: timing(),
       ...(isAbortError(failure) || signal?.aborted === true ? { aborted: true } : {}),

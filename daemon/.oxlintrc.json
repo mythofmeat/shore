@@ -24,7 +24,7 @@
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
     "typescript/no-misused-spread": "warn",
-    "typescript/no-base-to-string": "warn",
+    "typescript/no-base-to-string": "error",
     "typescript/restrict-template-expressions": "error",
     "typescript/restrict-plus-operands": "error",
     "typescript/no-duplicate-type-constituents": "error",

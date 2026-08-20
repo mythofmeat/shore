@@ -185,8 +185,8 @@ export function preview(content: string, maxChars: number): string {
 
 function scalar(value: unknown): string {
   if (typeof value === "string") return value;
-  if (value === null) return "—";
-  return JSON.stringify(value) ?? String(value);
+  if (value === null || value === undefined) return "—";
+  return JSON.stringify(value) ?? "—";
 }
 
 function isJson(value: unknown): value is Json {

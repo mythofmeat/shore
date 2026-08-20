@@ -11,6 +11,7 @@ import {
   type SearchConfigView,
 } from "../src/tools/web.ts";
 import { decodeDataUrl, handleGenerateImage } from "../src/tools/images.ts";
+import { requestBody } from "./support/fetch.ts";
 
 const fx = fixture as unknown as {
   strip_html: { label: string; input: string; output: string }[];
@@ -227,7 +228,7 @@ describe("handleWebSearch", () => {
   test("max_results falls back to the configured limit", async () => {
     let sentBody: Record<string, unknown> = {};
     const capture: FetchLike = async (_u, init) => {
-      sentBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      sentBody = JSON.parse(requestBody(init)) as Record<string, unknown>;
       return jsonResponse({ results: [] });
     };
     await handleWebSearch({ query: "q" }, searchConfig, { TAVILY_KEY: "k" }, capture);

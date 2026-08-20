@@ -38,6 +38,7 @@ describe("isLlmError", () => {
 
 describe("describeError", () => {
   test("an LlmError gets its Display text, not `[object Object]`", () => {
+    // oxlint-disable-next-line typescript/no-base-to-string
     expect(String(MISSING)).toBe("[object Object]");
     expect(describeError(MISSING)).toBe(
       "API key environment variable ANTHROPIC_API_KEY is not set",

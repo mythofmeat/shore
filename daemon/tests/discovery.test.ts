@@ -22,6 +22,7 @@ import {
   type DiscoveredModel,
   type ProviderModelsCache,
 } from "../src/llm/discovery";
+import { requestUrl } from "./support/fetch.ts";
 import { testTmp } from "./support/tmp.ts";
 
 interface UrlCase {
@@ -132,7 +133,7 @@ describe("the fixture is real", () => {
     for (const c of fixture.map_entry.cases) {
       if (c.expect === null) continue;
       const v = c.expect.supports_tools;
-      states.add(v === undefined ? "unknown" : String(v));
+      states.add(v === undefined ? "unknown" : JSON.stringify(v));
     }
     expect(states).toEqual(new Set(["unknown", "true", "false"]));
   });
@@ -391,7 +392,7 @@ describe("the fetchers", () => {
     const calls: { url: string; headers: Record<string, string> }[] = [];
     const impl = (async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({
-        url: String(url),
+        url: requestUrl(url),
         headers: (init?.headers ?? {}) as Record<string, string>,
       });
       return new Response(body, { status });

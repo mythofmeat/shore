@@ -28,6 +28,12 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
+function scalarText(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return "";
+}
+
 function toolCall(id: string, name: string, argsJson: string): CoalescedToolCall {
   if (argsJson.length === 0) return { id, name, arguments: {} };
   try {
@@ -248,8 +254,8 @@ function coalesceStreamEvents(events: readonly Obj[]): CoalescedStream | undefin
         break;
       case "tool_use":
         calls.push({
-          id: String(event["id"] ?? ""),
-          name: String(event["name"] ?? ""),
+          id: scalarText(event["id"]),
+          name: scalarText(event["name"]),
           arguments: event["input"] ?? null,
           ...(str(event["input_error"]) === undefined
             ? {}

@@ -23,6 +23,7 @@ import { ConfigDuration } from "../src/config/duration.ts";
 import { defaultToolsConfig, type SubagentConfig } from "../src/config/app.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import type { Embedder } from "../src/llm/embed.ts";
+import { requestBody, requestUrl } from "./support/fetch.ts";
 
 afterAll(restoreTestEnv);
 
@@ -319,7 +320,7 @@ describe("context fields reach their handler argument", () => {
         include_answer: false,
       },
       fetchImpl: async (_input, init) => {
-        seen.push(JSON.parse(String(init?.body)));
+        seen.push(JSON.parse(requestBody(init)));
         return new Response(JSON.stringify({ results: [] }), {
           headers: { "content-type": "application/json" },
         });
@@ -346,7 +347,7 @@ describe("context fields reach their handler argument", () => {
     const seen: string[] = [];
     const ctx = bareContext({
       fetchImpl: async (input) => {
-        seen.push(String(input));
+        seen.push(requestUrl(input));
         return new Response("<p>hi</p>", { headers: { "content-type": "text/html" } });
       },
     });
