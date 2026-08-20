@@ -118,7 +118,11 @@ function fakePhase(
       order.push(`run:${use.name}`);
       runs.push(use);
       const delay = opts.delays?.[use.name] ?? 0;
-      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      if (delay > 0) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, delay);
+        });
+      }
       completionOrder.push(use.name);
       return {
         type: "tool_result",

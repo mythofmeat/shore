@@ -149,7 +149,9 @@ async function helloWith(
 
 async function waitFor(done: () => boolean): Promise<void> {
   for (let i = 0; i < 200 && !done(); i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
   }
 }
 

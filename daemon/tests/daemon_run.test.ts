@@ -146,7 +146,9 @@ async function until(holds: () => boolean, complaint: string, timeoutMs = 5_000)
   const deadline = Date.now() + timeoutMs;
   while (!holds()) {
     if (Date.now() > deadline) throw new Error(complaint);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
   }
 }
 
@@ -208,7 +210,9 @@ class Client {
           )}`,
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 10);
+      });
     }
   }
 
@@ -405,7 +409,9 @@ describe("hot reload", () => {
     const deadline = Date.now() + timeoutMs;
     while (!check()) {
       if (Date.now() > deadline) throw new Error("the config was never adopted");
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 20);
+      });
     }
   }
 
@@ -433,7 +439,9 @@ describe("hot reload", () => {
     );
 
     await writeFile(place.configPath, "[tools]\nmax_result_chars = ");
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 900);
+    });
 
     expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
   });
@@ -451,7 +459,9 @@ describe("hot reload", () => {
       "[behavior]\nnot_a_field = ",
     );
     await writeFile(place.configPath, `[tools]\nmax_result_chars = 9999\n`);
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 900);
+    });
 
     expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
   });
@@ -564,7 +574,9 @@ describe("going down", () => {
     running.length = 0;
 
     const atExit = ticks;
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 60);
+    });
     expect(ticks).toBe(atExit);
   });
 
@@ -581,7 +593,9 @@ describe("going down", () => {
       probe.once("error", reject);
       probe.listen(port, "127.0.0.1", resolve);
     });
-    await new Promise<void>((resolve) => probe.close(() => resolve()));
+    await new Promise<void>((resolve) => {
+      probe.close(() => resolve());
+    });
   });
 });
 
@@ -625,7 +639,9 @@ addr = "0.0.0.0:0"
     } catch (e) {
       caught = e;
     } finally {
-      await new Promise<void>((resolve) => taken.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        taken.close(() => resolve());
+      });
     }
 
     expect((caught as StartupError).kind).toBe("server_run");
@@ -645,7 +661,9 @@ describe("a Matrix homeserver that never answers", () => {
   test("does not keep the daemon from accepting clients", async () => {
     const stalled: Socket[] = [];
     const blackHole = createServer((socket) => stalled.push(socket));
-    await new Promise<void>((resolve) => blackHole.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => {
+      blackHole.listen(0, "127.0.0.1", resolve);
+    });
     const address = blackHole.address();
     if (address === null || typeof address === "string") {
       throw new Error(`expected a TCP address, got ${JSON.stringify(address)}`);
@@ -667,7 +685,9 @@ describe("a Matrix homeserver that never answers", () => {
       }
     } finally {
       for (const socket of stalled) socket.destroy();
-      await new Promise<void>((resolve) => blackHole.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        blackHole.close(() => resolve());
+      });
     }
   });
 });

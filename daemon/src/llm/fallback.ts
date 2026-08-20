@@ -129,7 +129,10 @@ export type Attempt<T> = () => Promise<T>;
 
 export type Sleep = (ms: number) => Promise<void>;
 
-const realSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const realSleep: Sleep = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 export async function sleepUnlessAborted(
   sleep: Sleep,

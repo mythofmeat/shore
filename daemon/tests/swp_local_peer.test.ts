@@ -44,7 +44,11 @@ async function fixture(characters: string[] = ["ada", "bee"]) {
 }
 
 async function settle(): Promise<void> {
-  for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 1));
+  for (let i = 0; i < 8; i += 1) {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1);
+    });
+  }
 }
 
 async function socketClient(addr: string): Promise<Socket> {

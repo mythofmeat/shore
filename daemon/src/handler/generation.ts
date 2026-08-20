@@ -146,7 +146,9 @@ export interface GenerationDeps {
 const defaultNow = (): string => new Date().toISOString();
 const defaultMessageId = (): string => `m_${crypto.randomUUID()}`;
 const realSleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 export function makeRunGeneration(deps: GenerationDeps): RunGeneration {
   return (params: GenerationParams) => runGeneration(deps, params);

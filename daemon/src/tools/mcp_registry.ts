@@ -70,7 +70,10 @@ export function toSpec(
 
 export type Sleep = (ms: number) => Promise<void>;
 
-const realSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const realSleep: Sleep = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 const HTTP_CONNECT_RETRY_DELAYS_MS: readonly number[] = [200, 500, 1000, 2000, 4000];
 

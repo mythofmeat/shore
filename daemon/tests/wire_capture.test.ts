@@ -30,7 +30,9 @@ function textOf(body: Uint8Array | null): string {
 }
 
 async function settle(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  await new Promise((resolve) => {
+    setTimeout(resolve, 25);
+  });
 }
 
 function scope(callId = "call-1") {

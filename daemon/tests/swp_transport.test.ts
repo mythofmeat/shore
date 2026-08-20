@@ -448,7 +448,9 @@ describe("message loop", () => {
   test("pings fire on the interval", async () => {
     const h = harness(10);
     const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    await new Promise((resolve) => setTimeout(resolve, 55));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 55);
+    });
     h.shutdown();
     await done;
     const pings = h.frames().filter((f) => f.type === "ping");
@@ -463,7 +465,9 @@ describe("message loop", () => {
     for (;;) {
       if (Date.now() >= until) break;
     }
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
     h.shutdown();
     await done;
     const pings = h.frames().filter((f) => f.type === "ping").length;

@@ -280,7 +280,9 @@ describe("call capture", () => {
         yield DONE;
       }),
     );
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 25);
+    });
     await server.stop(true);
 
     expect(store.rows).toHaveLength(1);

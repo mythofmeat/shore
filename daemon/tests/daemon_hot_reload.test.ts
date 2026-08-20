@@ -26,7 +26,9 @@ async function until(check: () => boolean, timeoutMs = 3_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!check()) {
     if (Date.now() > deadline) throw new Error("condition never held");
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
   }
 }
 
@@ -119,7 +121,9 @@ describe("the watcher", () => {
     await writeFile(configPath, "a = 2\n");
 
     await until(() => reloads.length > 0);
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 150);
+    });
 
     expect(reloads).toHaveLength(1);
     expect(reloads[0]).toEqual([configPath, join(dir, "models.toml")].sort());
@@ -143,13 +147,19 @@ describe("the watcher", () => {
     stoppers.push(() => watcher?.stop());
 
     await writeFile(configPath, "a = 1\n");
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 80);
+    });
     await writeFile(join(dir, "models.toml"), "b = 2\n");
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 80);
+    });
     await writeFile(configPath, "a = 2\n");
 
     await until(() => reloads.length > 0);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 300);
+    });
 
     expect(reloads).toHaveLength(1);
     expect(reloads[0]).toEqual([configPath, join(dir, "models.toml")].sort());
@@ -204,11 +214,15 @@ describe("the watcher", () => {
     await until(() => calls === 1);
 
     await writeFile(join(dir, "models.toml"), "b = 2\n");
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 120);
+    });
 
     watcher?.stop();
     release();
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 150);
+    });
 
     expect(calls).toBe(1);
   });
@@ -234,7 +248,9 @@ describe("the watcher", () => {
 
     await writeFile(join(workspace, "facts.toml"), "x = 1\n");
     await writeFile(join(dir, "characters", "ada", "workspace", "SOUL.md"), "hi\n");
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 250);
+    });
 
     expect(reloads).toBe(0);
   });
@@ -256,9 +272,13 @@ describe("the watcher", () => {
     });
 
     await writeFile(configPath, "a = 1\n");
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 30);
+    });
     watcher?.stop();
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 250);
+    });
 
     expect(reloads).toBe(0);
   });

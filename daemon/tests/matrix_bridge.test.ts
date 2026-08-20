@@ -196,7 +196,11 @@ async function harness(
   const pump = bridge.run();
 
   const settle = async () => {
-    for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 1));
+    for (let i = 0; i < 8; i += 1) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 1);
+      });
+    }
   };
   await settle();
 

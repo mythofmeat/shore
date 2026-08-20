@@ -347,7 +347,9 @@ describe("hybridSearch", () => {
           case "socket": {
             await mkdir(dirname(join(ws, step.path)), { recursive: true });
             const server = createServer();
-            await new Promise<void>((resolve) => server.listen(join(ws, step.path), resolve));
+            await new Promise<void>((resolve) => {
+              server.listen(join(ws, step.path), resolve);
+            });
             sockets.push(server);
             break;
           }

@@ -426,7 +426,9 @@ describe("what gets recorded", () => {
     await runToDone(
       turnEvents({ callStore: store }, unusableProvider(), req, phase, new AbortController().signal),
     );
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
 
     const calls = store.queryCalls({ character: "poppy", limit: 10 });
     expect(calls).toHaveLength(1);

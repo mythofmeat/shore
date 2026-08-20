@@ -296,5 +296,7 @@ function nextTick(started: number, period: number, tick: number): number {
 
 function sleepUntil(deadline: number): Promise<void> {
   const delay = Math.max(0, deadline - Date.now());
-  return new Promise((resolve) => setTimeout(resolve, delay));
+  return new Promise((resolve) => {
+    setTimeout(resolve, delay);
+  });
 }

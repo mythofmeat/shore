@@ -234,7 +234,9 @@ describe("the loop", () => {
     try {
       const deadline = Date.now() + 2_000;
       while (asked.length === 0 && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 5);
+        });
       }
       expect(asked).toHaveLength(1);
     } finally {
@@ -258,13 +260,17 @@ describe("the loop", () => {
       intervalMs: 20,
       fetchImpl: (async (url: string | URL) => {
         asked.push(url.toString());
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 100);
+        });
         throw new Error("still going");
       }) as unknown as typeof fetch,
       log: { warn: () => {} },
     });
     try {
-      await new Promise((resolve) => setTimeout(resolve, 260));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 260);
+      });
     } finally {
       loop.stop();
     }
@@ -290,12 +296,16 @@ describe("the loop", () => {
     });
     const deadline = Date.now() + 2_000;
     while (asked.length === 0 && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 5);
+      });
     }
     loop.stop();
 
     await writeFile(cachePath(cacheDir, "upstream"), "");
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
 
     expect(asked).toHaveLength(1);
   });

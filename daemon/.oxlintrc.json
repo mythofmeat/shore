@@ -53,7 +53,7 @@
     "eslint/no-shadow": "error",
     "eslint/eqeqeq": "error",
     "eslint/no-throw-literal": "off",
-    "eslint/no-promise-executor-return": "warn",
+    "eslint/no-promise-executor-return": "error",
     "eslint/no-loop-func": "error",
     "eslint/no-sequences": "error",
     "eslint/no-eq-null": "error",
