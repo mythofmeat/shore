@@ -20,9 +20,9 @@ describe("the curated entry", () => {
   test("splits reasoning, text and tool calls", () => {
     const entry = buildEntry(
       response([
-        { type: "thinking", thinking: "let me look" } as ContentBlock,
+        { type: "thinking", thinking: "let me look" },
         { type: "text", text: "checking now" },
-        { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } } as ContentBlock,
+        { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
       ]),
       [{ name: "read", input: { path: "a.md" }, output: "contents", isError: false }],
     );
@@ -49,8 +49,8 @@ describe("the curated entry", () => {
   test("drops blank thinking but keeps redacted thinking as a placeholder", () => {
     const entry = buildEntry(
       response([
-        { type: "thinking", thinking: "   " } as ContentBlock,
-        { type: "redacted_thinking", data: "blob" } as ContentBlock,
+        { type: "thinking", thinking: "   " },
+        { type: "redacted_thinking", data: "blob" },
       ]),
       [],
     );

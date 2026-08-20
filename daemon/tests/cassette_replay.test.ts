@@ -152,7 +152,7 @@ describe("record once, replay with nothing listening", () => {
       provider_options: { cache_ttl: "1h" },
       system: [{ text: "x".repeat(6000), label: "system" }],
       messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
-    } as SidecarRequest;
+    };
   }
 
   test("the second identical request reads the cache the first one wrote", async () => {

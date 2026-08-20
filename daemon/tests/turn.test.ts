@@ -311,7 +311,7 @@ describe("emitPostPersistStreamEnd", () => {
           timing: { total_ms: 0, time_to_first_token_ms: 0 },
           tool_uses: [],
           content_blocks: [],
-        } as unknown as StreamResult;
+        };
 
         emitPostPersistStreamEnd(rec.ctx, engine, input["rid"] ?? undefined, result);
 

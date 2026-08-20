@@ -143,7 +143,7 @@ function assemblyFor(runtime: ShoreRuntime): Parameters<typeof chatToolDeps>[0] 
     runtime,
     providers: {},
     diagnostics: new Diagnostics(),
-  } as unknown as Parameters<typeof chatToolDeps>[0];
+  };
 }
 
 function turnFor(): Parameters<typeof chatToolDeps>[2] {
@@ -245,7 +245,7 @@ function dicerollingProvider(seen: SidecarRequest[]): SidecarProvider {
     generate: () => {
       throw new Error("a sub-agent streams");
     },
-  } as unknown as SidecarProvider;
+  };
 }
 
 function streamingAssembly(
@@ -257,7 +257,7 @@ function streamingAssembly(
     providers: { openrouter: provider },
     diagnostics: new Diagnostics(),
     env: { [SUBAGENT_KEY_ENV]: "sk-test" },
-  } as unknown as Parameters<typeof chatToolDeps>[0];
+  };
 }
 
 describe("the tool backends a character's turn gets", () => {
@@ -460,7 +460,7 @@ describe("the autonomy surface a turn drives", () => {
     const autonomy = turnAutonomy(bridge, {
       set: (character: string, _request: unknown, keepaliveIntervalMs?: number) =>
         cached.push([character, keepaliveIntervalMs]),
-    } as never);
+    });
 
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
     autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, 55 * 60_000);
@@ -1105,7 +1105,7 @@ describe("reloading [mcp]", () => {
       cwd: undefined,
       url: undefined,
       headers: new Map(),
-    } as never);
+    });
   }
 
   async function runtimeWithMcp(server: ReturnType<typeof fakeServer>, command = "hue-server") {
@@ -1190,7 +1190,7 @@ describe("reloading [mcp]", () => {
       const second = fakeServer("set_light");
       const fresh = configFor(root, (app) => withServer(app, "hue", "hue-server-v2"));
       await applyReloadedConfig(
-        assemblyOf({ ...runtime, connectMcp: second.connect } as ShoreRuntime),
+        assemblyOf({ ...runtime, connectMcp: second.connect }),
         fresh,
       );
 

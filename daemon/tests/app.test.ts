@@ -369,8 +369,8 @@ describe("parsing config.toml", () => {
         "ok" in c
           ? { ok: c.ok }
           : "table" in c
-            ? (c.table as { ok: unknown } | { err: string })
-            : { err: c.table_err as string };
+            ? (c.table)
+            : { err: c.table_err };
 
       if ("err" in want) {
         if ("ok" in parsed) throw new Error("expected a parse error, got a config");
@@ -680,7 +680,7 @@ describe("the tool allowlist and per-tool resolution", () => {
   );
 
   const current = defaultToolsConfig();
-  const currentTimeoutMs = Number(current.timeout?.asMillisExact() ?? NaN);
+  const currentTimeoutMs = Number(current.timeout?.asMillisExact() ?? Number.NaN);
 
   const inherited = (
     set: ReadonlySet<string>,
@@ -709,7 +709,7 @@ describe("the tool allowlist and per-tool resolution", () => {
           name: t.name,
           enabled: toolEnabled(tools, t.name),
           result_chars: resultCharsFor(tools, t.name),
-          timeout_ms: Number(timeoutFor(tools, t.name)?.asMillisExact() ?? NaN),
+          timeout_ms: Number(timeoutFor(tools, t.name)?.asMillisExact() ?? Number.NaN),
         }).toEqual({
           name: t.name,
           enabled: t.enabled,
@@ -723,7 +723,7 @@ describe("the tool allowlist and per-tool resolution", () => {
           ),
           timeout_ms:
             t.timeout_ms === undefined || t.timeout_ms === null
-              ? NaN
+              ? Number.NaN
               : inherited(set, t.name, "timeout", t.timeout_ms, recordedTimeoutMs, currentTimeoutMs),
         });
       }

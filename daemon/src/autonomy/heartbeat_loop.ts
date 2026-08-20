@@ -140,7 +140,7 @@ export async function runHeartbeatToolLoop(
     );
     if (action === "break") break;
     if (action === "nudge") {
-      appendWrapUpNudge(request.messages as never);
+      appendWrapUpNudge(request.messages);
       wrapUpNudged = true;
       deps.note("Wrap-up nudge: budget reached, model asked to summarize");
     }

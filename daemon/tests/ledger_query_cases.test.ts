@@ -43,7 +43,7 @@ function withoutToolSurface<T extends { tool_surface: unknown }>(rows: T[]): Rec
       thinking_dropped?: unknown;
       cache_state_reason?: unknown;
     };
-    return rest as Record<string, unknown>;
+    return rest;
   });
 }
 

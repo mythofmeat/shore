@@ -67,15 +67,15 @@ describe("stripHtml", () => {
   test("block matching is ASCII-case-insensitive only", () => {
     expect(stripHtml("<SCRIPT>x</SCRIPT>y")).toBe("y");
     expect(stripHtml("<ScRiPt>x</ScRiPt>after")).toBe("after");
-    expect(stripHtml("<\u{ff53}cript>x</\u{ff53}cript>y")).toBe("x y");
+    expect(stripHtml("<\u{FF53}cript>x</\u{FF53}cript>y")).toBe("x y");
   });
 
   test("whitespace collapse uses Rust's set, not JavaScript's", () => {
-    expect(stripHtml("a\u{a0}b")).toBe("a b");
+    expect(stripHtml("a\u{A0}b")).toBe("a b");
     expect(stripHtml("a\u{3000}b")).toBe("a b");
     expect(stripHtml("a\u{85}b")).toBe("a b");
-    expect(stripHtml("a\u{feff}b")).toBe("a\u{feff}b");
-    expect(stripHtml("\u{feff}text")).toBe("\u{feff}text");
+    expect(stripHtml("a\u{FEFF}b")).toBe("a\u{FEFF}b");
+    expect(stripHtml("\u{FEFF}text")).toBe("\u{FEFF}text");
   });
 
   test("the tag search lowercases in ASCII, so offsets stay aligned", () => {
@@ -112,7 +112,7 @@ describe("truncateToBytes", () => {
   });
 
   test("the real limit, on a body that straddles it", () => {
-    const straddle = `${"a".repeat(49_999)}é${"tail"}`;
+    const straddle = `${"a".repeat(49_999)}étail`;
     const out = truncateToBytes(straddle, MAX_CONTENT_BYTES);
     expect(utf8(straddle)).toBe(fx.truncate_at_real_limit.input_bytes);
     expect(utf8(out.content)).toBe(fx.truncate_at_real_limit.content_bytes);
@@ -129,7 +129,7 @@ describe("decodeDataUrl", () => {
       expect([...out.bytes]).toEqual(c.ok.bytes);
       expect(out.extension).toBe(c.ok.extension);
     } else {
-      expect(() => decodeDataUrl(c.input)).toThrow(c.err as string);
+      expect(() => decodeDataUrl(c.input)).toThrow(c.err);
     }
   });
 

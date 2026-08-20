@@ -204,7 +204,7 @@ MUTANTS = [
      "    hour_histogram: stats.hourHistogram,",
      "    hour_histogram: stats.hourClassifications,"),
     ("activity: the classifications are dropped",
-     "    hour_classifications: stats.hourClassifications as readonly HourClassification[],",
+     "    hour_classifications: stats.hourClassifications,",
      "    hour_classifications: [],"),
     ("activity: the heatmap sufficiency flag is inverted",
      "    has_sufficient_heatmap: stats.hasSufficientHeatmap,",

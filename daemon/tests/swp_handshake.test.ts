@@ -72,7 +72,7 @@ function registry(
     effectiveConfig: parts.globalConfig,
     getOrCreate: () => Promise.reject(new Error("character not found")),
     ...parts,
-  } as HandshakeRegistry;
+  };
 }
 
 describe("the hello snapshot", () => {

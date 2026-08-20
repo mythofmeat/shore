@@ -204,7 +204,7 @@ export function buildCall(
 
   const routing = req.provider_options?.openrouter_provider;
   if (routing && typeof routing === "object") {
-    chatRequest.provider = routing as ChatRequest["provider"];
+    chatRequest.provider = routing;
   }
 
   return { client, chatRequest };
@@ -219,7 +219,7 @@ function toTools(tools: ToolDefinition[] | undefined): ChatFunctionTool[] {
       description: t.description,
       parameters: t.input_schema ?? EMPTY_TOOL_SCHEMA,
     },
-  } as ChatFunctionTool));
+  }));
 }
 
 function buildMessages(req: SidecarRequest): ChatMessages[] {

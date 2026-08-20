@@ -92,7 +92,7 @@ describe("executeToolUse", () => {
 
     expect(block).toMatchObject({ type: "tool_result", tool_use_id: "t1", is_error: true });
     expect((block as { content: string }).content).toContain("was not run");
-    expect(frames.some((f) => f.type === "tool_result" && f.is_error === true)).toBe(true);
+    expect(frames.some((f) => f.type === "tool_result" &&  f.is_error)).toBe(true);
   });
 
   test("a call missing a required argument is refused before dispatch", async () => {

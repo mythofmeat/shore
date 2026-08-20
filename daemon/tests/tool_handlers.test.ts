@@ -37,7 +37,7 @@ describe("parseDiceNotation", () => {
       if (c.ok !== undefined) {
         expect(parseDiceNotation(c.input)).toEqual(c.ok);
       } else {
-        expect(() => parseDiceNotation(c.input)).toThrow(new DiceParseError(c.err as string));
+        expect(() => parseDiceNotation(c.input)).toThrow(new DiceParseError(c.err));
       }
     },
   );
@@ -112,18 +112,18 @@ describe("executeDiceRoll", () => {
 
 describe("handleRollDice", () => {
   test("missing notation", () => {
-    expect(() => handleRollDice({})).toThrow(fx.handle_roll_dice["missing_notation"]?.err as string);
+    expect(() => handleRollDice({})).toThrow(fx.handle_roll_dice["missing_notation"]?.err);
   });
 
   test("a non-string notation reports as missing", () => {
     expect(() => handleRollDice({ notation: 6 })).toThrow(
-      fx.handle_roll_dice["notation_not_a_string"]?.err as string,
+      fx.handle_roll_dice["notation_not_a_string"]?.err,
     );
   });
 
   test("a parse failure is wrapped, keeping the inner message", () => {
     expect(() => handleRollDice({ notation: "abc" })).toThrow(
-      fx.handle_roll_dice["parse_failure_is_wrapped"]?.err as string,
+      fx.handle_roll_dice["parse_failure_is_wrapped"]?.err,
     );
   });
 

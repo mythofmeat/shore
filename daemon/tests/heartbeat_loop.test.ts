@@ -38,7 +38,7 @@ function text(t: string): ContentBlock {
 }
 
 function toolUse(id: string, name: string, input: unknown): ContentBlock {
-  return { type: "tool_use", id, name, input } as ContentBlock;
+  return { type: "tool_use", id, name, input };
 }
 
 interface World {

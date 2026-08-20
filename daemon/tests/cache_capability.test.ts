@@ -83,14 +83,14 @@ describe("which endpoints honour a 1h TTL", () => {
 describe("the built request follows the capability", () => {
   test("Anthropic's own endpoint gets 1h markers", () => {
     const { params } = buildAnthropicPlan(request());
-    const markers = markersIn(params as never);
+    const markers = markersIn(params);
     expect(markers.length).toBeGreaterThan(0);
     expect(markers[0]).toEqual({ type: "ephemeral", ttl: "1h" });
   });
 
   test("a proxy gets markers, but not the 1h TTL it would ignore", () => {
     const { params } = buildAnthropicPlan(request({ base_url: "https://openrouter.ai/api/v1" }));
-    const markers = markersIn(params as never);
+    const markers = markersIn(params);
     expect(markers.length).toBeGreaterThan(0);
     expect(markers[0]).toEqual({ type: "ephemeral" });
   });
@@ -102,7 +102,7 @@ describe("the built request follows the capability", () => {
       thinking_enabled: false,
       cache_ttl: "1h",
     };
-    buildAnthropicPlan(request({ base_url: "https://openrouter.ai/api/v1", context }) as never);
+    buildAnthropicPlan(request({ base_url: "https://openrouter.ai/api/v1", context }));
     expect(context.cache_ttl).toBe("5m");
   });
 });

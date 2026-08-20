@@ -55,12 +55,12 @@ afterAll(() => {
   for (const d of roots) rmSync(d, { recursive: true, force: true });
 });
 
-const passwdHome = () => fixture.passwd_home as string;
+const passwdHome = () => fixture.passwd_home;
 
 describe("ShoreDirs.resolve", () => {
   for (const c of fixture.shore_dirs) {
     test(c.name, () => {
-      const got = resolveShoreDirs(c.env as Env, passwdHome);
+      const got = resolveShoreDirs(c.env, passwdHome);
       expect(got.config).toBe(c.config);
       expect(got.data).toBe(c.data);
       expect(got.runtime).toBe(c.runtime);

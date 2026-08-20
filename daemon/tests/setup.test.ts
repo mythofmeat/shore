@@ -27,7 +27,7 @@ import {
 } from "../src/handler/setup.ts";
 import { testTmp } from "./support/tmp.ts";
 
-const ZONE = fixture.timezone as string;
+const ZONE = fixture.timezone;
 
 interface WireModel {
   name: string;

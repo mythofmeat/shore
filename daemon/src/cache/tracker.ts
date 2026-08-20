@@ -96,7 +96,7 @@ export class CacheTracker {
     lastCacheRead: number,
     ttlSecs: number,
     now: number = Date.now(),
-    lastToolSurface?: string | undefined,
+    lastToolSurface?: string,
   ): CacheTracker {
     const tracker = new CacheTracker(ttlSecs);
     const parsed = parseTs(lastTs);

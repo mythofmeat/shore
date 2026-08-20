@@ -56,7 +56,7 @@ export function characterMetadata(configDir: string, name: string): CharacterInf
 export function listCharacters(
   configDir: string,
   active?: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): { characters: CharacterInfo[] } {
   const characters = active === undefined ? [] : [characterMetadata(configDir, active)];
   for (const name of discoverCharacters(configDir, workspaceRoot)) {
@@ -67,7 +67,7 @@ export function listCharacters(
 
 export const listCharactersStandalone = (
   configDir: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, workspaceRoot);
 
 const PREVIEW_CHARS = 500;
@@ -135,7 +135,7 @@ export const scaffoldedFiles = (
 export function createCharacter(
   configDir: string,
   args: Args,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): unknown {
   const name = asStr(args["name"]);
   if (name === undefined || name === "") {
@@ -175,7 +175,7 @@ export function switchCharacter(
   configDir: string,
   active: string | undefined,
   args: Args,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): CharacterSwitch {
   const name = asStr(args["name"]);
   if (name === undefined) throw invalidRequest("Missing required argument: name");

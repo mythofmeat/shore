@@ -117,7 +117,7 @@ async function refusal(call: () => Promise<unknown>): Promise<Record<string, unk
 describe("parseCompactArgs", () => {
   for (const c of fixture.parse_args) {
     test(c.note, () => {
-      const got = parseCompactArgs(c.args as Record<string, unknown>);
+      const got = parseCompactArgs(c.args);
       expect(got.dryRun).toBe(c.dry_run);
       expect(got.restart).toBe(("restart" in c ? c.restart : false) as never);
       expect(got.keepTurnsOverride).toBe((c.keep_turns ?? undefined) as never);

@@ -471,7 +471,7 @@ describe("running a tick", () => {
           round += 1;
           return round === 1
             ? response(
-                [{ type: "tool_use", id: "t1", name: "edit", input: { path: "a.md" } } as ContentBlock],
+                [{ type: "tool_use", id: "t1", name: "edit", input: { path: "a.md" } }],
                 "tool_use",
               )
             : response([{ type: "text", text: "HEARTBEAT_OK" }]);
@@ -499,7 +499,7 @@ describe("running a tick", () => {
           calls += 1;
           if (calls > 20) return undefined;
           return response(
-            [{ type: "tool_use", id: "t1", name: "edit", input: { path: "a.md" } } as ContentBlock],
+            [{ type: "tool_use", id: "t1", name: "edit", input: { path: "a.md" } }],
             "tool_use",
           );
         },
@@ -543,7 +543,7 @@ describe("running a tick", () => {
           round += 1;
           return round === 1
             ? response(
-                [{ type: "tool_use", id: "t1", name: "edit", input: { path: "a.md" } } as ContentBlock],
+                [{ type: "tool_use", id: "t1", name: "edit", input: { path: "a.md" } }],
                 "tool_use",
               )
             : response([{ type: "text", text: "done" }]);

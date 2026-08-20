@@ -96,7 +96,7 @@ describe("starting", () => {
       login: (() => {
         attempted = true;
         throw new Error("should not be reached");
-      }) as never,
+      }),
     });
     expect(outcome.kind).toBe("off");
     expect(attempted).toBe(false);
@@ -109,7 +109,7 @@ describe("starting", () => {
       env: { [ACCESS_TOKEN_ENV]: "t" },
       login: (() => {
         throw new Error("should not be reached");
-      }) as never,
+      }),
     });
     expect(outcome.kind).toBe("off");
   });
@@ -123,7 +123,7 @@ describe("starting", () => {
       log: { warn: (message: string) => warnings.push(message) },
       login: (() => {
         throw new Error("should not be reached");
-      }) as never,
+      }),
     });
     expect(outcome.kind).toBe("off");
     expect(warnings.join("\n")).toContain("cannot create");
@@ -138,7 +138,7 @@ describe("starting", () => {
       log: { warn: (message: string) => warnings.push(message) },
       login: (() => {
         throw new Error("should not be reached");
-      }) as never,
+      }),
     });
     expect(outcome.kind).toBe("off");
     expect(warnings.join("\n")).toContain("not started");
@@ -152,7 +152,7 @@ describe("starting", () => {
       server: server(),
       env: { [ACCESS_TOKEN_ENV]: "t" },
       log: { warn: () => {} },
-      login: (() => Promise.reject(new Error("homeserver unreachable"))) as never,
+      login: (() => Promise.reject(new Error("homeserver unreachable"))),
     });
     expect(existsSync(join(config.dirs.data, "matrix"))).toBe(true);
     expect(existsSync(join(config.dirs.config, "matrix"))).toBe(false);
@@ -165,7 +165,7 @@ describe("starting", () => {
       server: server(),
       env: { [ACCESS_TOKEN_ENV]: "t" },
       log: { warn: (message: string) => warnings.push(message) },
-      login: (() => Promise.reject(new Error("homeserver unreachable"))) as never,
+      login: (() => Promise.reject(new Error("homeserver unreachable"))),
     });
     expect(outcome.kind).toBe("failed");
     expect(warnings.join("\n")).toContain("homeserver unreachable");
@@ -178,7 +178,7 @@ describe("starting", () => {
         server: server(),
         env: { [ACCESS_TOKEN_ENV]: "t" },
         log: { warn: () => {} },
-        login: (() => Promise.reject(error)) as never,
+        login: (() => Promise.reject(error)),
       });
 
     expect((await attempt(new Error("ECONNREFUSED"))).kind).toBe("failed");

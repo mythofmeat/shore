@@ -9,7 +9,7 @@ import {
 } from "./alt_audit.ts";
 import { backupBeforeWrite, quarantineLines } from "./backup.ts";
 import { mergeToolLoopMessages } from "./merge";
-import type { ContentBlock, ImageRef, Message, MessageAlternative, Role } from "./types";
+import type { ContentBlock, ImageRef, Message, MessageAlternative } from "./types";
 
 export class MessageNotFound extends Error {
   constructor(msgId: string) {
@@ -213,7 +213,7 @@ function messageFromAlternative(template: Message, index: number): Message | und
   const model = alt.model ?? template.model;
   return normalizeMessage({
     msg_id: template.msg_id,
-    role: "assistant" as Role,
+    role: "assistant",
     content: alt.content,
     images: alt.images,
     content_blocks: alt.content_blocks,

@@ -82,7 +82,7 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
       enabled: true,
       call: presentCall(payload),
       wire: presentWire(wire, bodies),
-      diff: diff as unknown as Json,
+      diff: diff as unknown,
     };
   }
 

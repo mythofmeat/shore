@@ -145,7 +145,7 @@ export async function* openAIStreamEvents(
 
       if (choice.finish_reason) finishReason = choice.finish_reason;
     }
-    if (chunk.usage) usage = extractUsage(chunk.usage as RawUsage);
+    if (chunk.usage) usage = extractUsage(chunk.usage);
   }
 
   for (const tc of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {

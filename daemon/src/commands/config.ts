@@ -171,7 +171,7 @@ export function config(ctx: ConfigContext, args: Args): unknown {
 }
 
 function catalogSections(ctx: ConfigContext): Record<string, unknown> {
-  const raw = ctx.config.rawTable as Record<string, unknown> | undefined;
+  const raw = ctx.config.rawTable;
   const out: Record<string, unknown> = {};
   for (const section of CATALOG_SECTIONS) {
     out[section] = serializeConfigValue(raw?.[section] ?? null);
@@ -232,7 +232,7 @@ function liveInstances(ctx: ConfigContext): LiveInstances {
       const found = walkConfigKey(app, key);
       const table = found?.value;
       if (table === null || typeof table !== "object" || Array.isArray(table)) return [];
-      return Object.keys(table as Record<string, unknown>);
+      return Object.keys(table);
     },
   };
 }

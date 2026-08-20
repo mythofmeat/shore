@@ -74,7 +74,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
 
       dispatch: async (name, input, toolUseId) => {
         try {
-          const value = await dispatchTool(name, input as Record<string, unknown>, {
+          const value = await dispatchTool(name, input, {
             ...toolCtx,
             ...(toolUseId === undefined ? {} : { toolUseId }),
           });

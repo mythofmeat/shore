@@ -87,10 +87,10 @@ function countingProvider(): { calls: number; provider: SidecarProvider } {
           cache_creation_tokens: 0,
         },
         timing: { total_ms: 1, time_to_first_token_ms: 1 },
-      } as StreamEvent;
+      };
     },
-  } as unknown as SidecarProvider;
-  return state as { calls: number; provider: SidecarProvider };
+  };
+  return state;
 }
 
 const BLOCKING_BUDGET = {
@@ -126,17 +126,22 @@ function req(ledger: string, usage?: unknown): SidecarRequest {
   } as unknown as SidecarRequest;
 }
 
+function withoutContext(request: SidecarRequest): SidecarRequest {
+  const copy = { ...request };
+  delete copy.context;
+  return copy;
+}
+
 test("a generate with missing labels is attached to the daemon ledger before sending", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-budget-unaccounted-"));
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const config = await chatConfig(root, false);
   const counting = countingProvider();
-  const request = req(spentLedger(), undefined);
-  delete request.context;
+  const request = withoutContext(req(spentLedger(), undefined));
 
   await generate(request, { providers: { openai: counting.provider }, config });
   expect(counting.calls).toBe(1);
-  const labeled = (request as SidecarRequest).context;
+  const labeled = request.context;
   expect(labeled?.ledger).toBe(join(config.dirs.data, "ledger.db"));
   const ledger = Ledger.open(labeled!.ledger!);
   expect(ledger.database.query("SELECT COUNT(*) AS n FROM call_attempts").get()).toEqual({ n: 1 });
@@ -214,7 +219,7 @@ function loopReq(ledger: string, usage: unknown, iterations: number): SidecarReq
     ...req(ledger, usage),
     max_tool_iterations: iterations,
     tools: [{ name: "read", description: "", input_schema: {} }],
-  } as unknown as SidecarRequest;
+  };
 }
 
 const RECENT_WINDOW_BUDGET = {
@@ -270,7 +275,7 @@ test("no cost history means no projection, so a new model is not refused on a gu
   const other = {
     ...loopReq(ledger, TEN_DOLLAR_BUDGET, 10),
     model: "openai/gpt-unseen",
-  } as SidecarRequest;
+  };
 
   expect(budgetBlockFor(other)).toBeUndefined();
 });
@@ -413,7 +418,7 @@ function chatModel(): ResolvedModel {
     apiKeyEnv: CHAT_KEY_ENV,
     maxContextTokens: 100_000,
     maxOutputTokens: 1024,
-  } as ResolvedModel;
+  };
 }
 
 async function chatConfig(root: string, spareKey: boolean): Promise<LoadedConfig> {
@@ -487,7 +492,7 @@ async function chatTurn(
       onCompactionFailed: noop,
       notifyLastRequest: noop,
       notifyAssistantMessage: noop,
-    } as unknown as GenerationDeps["autonomy"],
+    },
     notifier: { notifyMessageComplete: noop } as unknown as GenerationDeps["notifier"],
     diagnostics: {
       api_calls: { push: noop },

@@ -97,7 +97,7 @@ MUTANTS = [
      "      wrapUpNudged = false;"),
     ("budget: the nudge text is never appended, so the model is not told to wrap up",
      L,
-     "      appendWrapUpNudge(request.messages as never);",
+     "      appendWrapUpNudge(request.messages);",
      "      void request;"),
     ("budget: the deadline is ignored, so a slow tick runs to the round cap",
      L,

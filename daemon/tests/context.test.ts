@@ -70,7 +70,7 @@ interface ContextCase {
   active_after: { name: string; content: string }[] | null;
 }
 
-const ZONE = fixture.timezone as string;
+const ZONE = fixture.timezone;
 
 function expectJson(got: unknown, want: unknown): void {
   expect(JSON.parse(JSON.stringify(got))).toEqual(want as never);

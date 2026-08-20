@@ -137,7 +137,7 @@ describe("the fixture is real", () => {
       (c) =>
         "ok" in c.expect &&
         typeof c.input.max_results === "number" &&
-        (c.expect.ok.count as number) === Math.max(1, c.input.max_results as number),
+        (c.expect.ok.count as number) === Math.max(1, c.input.max_results),
     );
     expect(truncated.length).toBeGreaterThan(0);
   });
@@ -208,7 +208,7 @@ describe("scoring", () => {
       }
       const rustChars = [...Buffer.from(lower, "utf8").subarray(0, c.earliest_index).toString("utf8")]
         .length;
-      const tsChars = [...lower.slice(0, got)].length;
+      const tsChars = Array.from(lower.slice(0, got)).length;
       expect(tsChars, JSON.stringify([c.query, c.content])).toBe(rustChars);
     }
   });

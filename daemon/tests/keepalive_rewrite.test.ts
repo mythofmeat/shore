@@ -43,7 +43,7 @@ function prefix(): KeepalivePrefix {
     messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
     keepalive_interval_ms: 1000,
     context: { character: "Rhia", call_type: "message", thinking_enabled: false },
-  } as KeepalivePrefix;
+  };
 }
 
 function harness(read: number, write: number) {

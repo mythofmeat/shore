@@ -39,7 +39,7 @@ export class CharacterError extends Error {
     );
   }
 
-  static noneAvailable(configDir: string, workspaceRoot?: string | undefined): CharacterError {
+  static noneAvailable(configDir: string, workspaceRoot?: string): CharacterError {
     const soul = characterWorkspaceFile(configDir, "<name>", SOUL_FILE, workspaceRoot);
     return new CharacterError(
       "none_available",
@@ -200,7 +200,7 @@ export class CharacterRegistry {
     const afterSet = new Set(after);
 
     let droppedEngines = 0;
-    for (const name of [...this.#engines.keys()]) {
+    for (const name of Array.from(this.#engines.keys())) {
       if (!afterSet.has(name)) {
         this.#engines.delete(name);
         droppedEngines += 1;
@@ -238,9 +238,10 @@ export class CharacterRegistry {
     }
     const held = this.selectedCharacter();
     if (held !== undefined) return held;
-    if (this.#available.length === 1) {
-      this.#selected = this.#available[0] as string;
-      return this.#selected;
+    const only = this.#available.length === 1 ? this.#available[0] : undefined;
+    if (only !== undefined) {
+      this.#selected = only;
+      return only;
     }
     throw CharacterError.ambiguous(this.#available);
   }

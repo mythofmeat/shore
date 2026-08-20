@@ -8,7 +8,6 @@ import type { ImageRequest, ImageResponse } from "./types.ts";
 import { compareRustStrings } from "../memory/lines.ts";
 
 type RequestOptions = { signal?: AbortSignal };
-type ImageSize = NonNullable<ImageGenerateParams["size"]>;
 type ImageQuality = NonNullable<ImageGenerateParams["quality"]>;
 
 interface OpenRouterImageMessage {
@@ -44,7 +43,7 @@ export async function generateImage(
     model: req.model,
     prompt: req.prompt,
   };
-  if (req.size !== undefined) params.size = req.size as ImageSize;
+  if (req.size !== undefined) params.size = req.size;
   if (req.quality !== undefined) {
     params.quality = req.quality as ImageQuality;
   }

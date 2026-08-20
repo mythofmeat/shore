@@ -34,7 +34,7 @@ function config(root: string, workspace?: string): LoadedConfig {
       ...(workspace === undefined ? {} : { workspace }),
     },
     rawTable: undefined,
-  } as LoadedConfig;
+  };
 }
 
 describe("CharacterError.noneAvailable", () => {

@@ -135,11 +135,11 @@ async function turnPersisted(
     newMessageId: () => "m_1",
   } as unknown as PersistContext;
 
-  await persistAndNotify(ctx, new CountingEngine() as never, {
+  await persistAndNotify(ctx, new CountingEngine(), {
     charName: CHARACTER,
     resolvedProviderKey: "anthropic",
     result: streamResult(),
-    request: sentBody as never,
+    request: sentBody,
     keepaliveIntervalMs: intervalMs,
     toolIntermediateMessages: [],
     wallClockMs: 10,

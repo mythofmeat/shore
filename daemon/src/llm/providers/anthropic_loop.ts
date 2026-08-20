@@ -155,7 +155,7 @@ export async function* anthropicToolLoopEvents(
         const system = (prev.system ?? []) as BetaTextBlockParam[];
         placeContinuationBreakpoints(
           messages as never,
-          system as never,
+          system,
           labelled,
           cacheTtl,
         );

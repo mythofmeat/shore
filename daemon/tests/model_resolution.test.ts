@@ -277,7 +277,7 @@ describe("Field keys", () => {
 
 describe("hardcodedProviderDefaults", () => {
   for (const row of fx.provider_defaults) {
-    test(`${row.provider || "<empty>"}`, () => {
+    test(row.provider || "<empty>", () => {
       expect(fieldsToWire(hardcodedProviderDefaults(row.provider).fields)).toEqual(row.fields);
       expect(defaultSdk(row.provider)).toBe(row.default_sdk as Sdk);
     });

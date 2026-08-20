@@ -27,12 +27,12 @@
     "typescript/no-base-to-string": "warn",
     "typescript/restrict-template-expressions": "warn",
     "typescript/restrict-plus-operands": "error",
-    "typescript/no-duplicate-type-constituents": "warn",
+    "typescript/no-duplicate-type-constituents": "error",
     "typescript/no-redundant-type-constituents": "warn",
-    "typescript/no-unnecessary-type-assertion": "warn",
+    "typescript/no-unnecessary-type-assertion": "error",
     "typescript/no-unnecessary-type-conversion": "warn",
-    "typescript/no-unnecessary-boolean-literal-compare": "warn",
-    "typescript/no-unnecessary-template-expression": "warn",
+    "typescript/no-unnecessary-boolean-literal-compare": "error",
+    "typescript/no-unnecessary-template-expression": "error",
     "typescript/require-array-sort-compare": "warn",
     "typescript/only-throw-error": "warn",
     "typescript/prefer-promise-reject-errors": "warn",
@@ -75,15 +75,15 @@
     "eslint/no-console": "warn",
     "unicorn/no-process-exit": "warn",
     "unicorn/no-new-array": "warn",
-    "unicorn/no-useless-spread": "warn",
+    "unicorn/no-useless-spread": "error",
     "unicorn/no-useless-length-check": "warn",
     "unicorn/no-array-fill-with-reference-type": "warn",
     "unicorn/no-immediate-mutation": "warn",
-    "unicorn/no-unnecessary-array-splice-count": "warn",
+    "unicorn/no-unnecessary-array-splice-count": "error",
     "unicorn/no-object-as-default-parameter": "warn",
     "unicorn/new-for-builtins": "warn",
-    "unicorn/prefer-number-properties": "warn",
-    "unicorn/escape-case": "warn",
+    "unicorn/prefer-number-properties": "error",
+    "unicorn/escape-case": "error",
     "promise/no-return-wrap": "error",
     "promise/param-names": "warn",
     "import/no-self-import": "error",
@@ -100,8 +100,7 @@
       "rules": {
         "eslint/no-console": "off",
         "unicorn/no-process-exit": "off",
-        "typescript/no-explicit-any": "warn",
-        "typescript/no-unnecessary-type-assertion": "warn"
+        "typescript/no-explicit-any": "warn"
       }
     }
   ]

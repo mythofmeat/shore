@@ -144,7 +144,7 @@ export class MessageHandler {
         await this.handleEngine(routed.msg, routed.meta);
         return;
       case "all_clients_disconnected": {
-        for (const sessionId of [...this.#sessions.keys()]) {
+        for (const sessionId of this.#sessions.keys()) {
           await this.cancelGeneration(sessionId, null, "all clients disconnected");
         }
         this.#deps.leases.clear();
@@ -268,7 +268,7 @@ export class MessageHandler {
 
   async drain(): Promise<void> {
     while (this.#inFlight.size > 0) {
-      await Promise.allSettled([...this.#inFlight]);
+      await Promise.allSettled(this.#inFlight);
     }
   }
 

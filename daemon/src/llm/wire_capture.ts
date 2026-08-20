@@ -176,7 +176,7 @@ function headerPairs(headers: Headers): [string, string][] {
 }
 
 async function readRequestBody(request: Request): Promise<Uint8Array | null> {
-  if (request.body === null && request.bodyUsed === false) {
+  if (request.body === null && ! request.bodyUsed) {
     const buffer = await request.clone().arrayBuffer();
     return buffer.byteLength === 0 ? null : new Uint8Array(buffer);
   }
@@ -195,7 +195,7 @@ async function drain(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done === true) break;
+      if (done) break;
       if (value !== undefined) {
         chunks.push(value);
         total += value.byteLength;

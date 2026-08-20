@@ -41,7 +41,7 @@ function request(messages: WireMessage[], over: Partial<SidecarRequest> = {}): S
     replay_prior_thinking: "none",
     messages,
     ...over,
-  } as SidecarRequest;
+  };
 }
 
 describe("the strip policy stops at a tool-use turn", () => {

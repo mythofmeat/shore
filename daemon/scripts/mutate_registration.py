@@ -144,7 +144,7 @@ MUTANTS = [
      '          compactionConfigFor(effectiveConfig("ada")),\n        );'),
     ("reload: nobody is told, so an edited threshold waits for a restart",
      R,
-     "    for (const character of [...this.#registered.keys()]) {",
+     "    for (const character of Array.from(this.#registered.keys())) {",
      "    for (const character of [] as string[]) {"),
     ("reload: the push runs before the registration it belongs to",
      R,

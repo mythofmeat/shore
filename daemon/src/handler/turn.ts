@@ -185,7 +185,7 @@ export interface CompactionRunner {
     characterDataDir: string,
     configDir: string,
     charName: string,
-    workspaceRoot?: string | undefined,
+    workspaceRoot?: string,
   ): Promise<void>;
   repoint?(charName: string, config: LoadedConfig): Promise<void>;
 }

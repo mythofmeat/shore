@@ -8,7 +8,7 @@ const TEXT: ContentBlock = { type: "text", text: "an answer" };
 const IMAGE: ContentBlock = {
   type: "image",
   source: { type: "base64", media_type: "image/png", data: "AAAA" },
-} as ContentBlock;
+};
 const TOOL_USE: ContentBlock = { type: "tool_use", id: "t1", name: "read", input: {} };
 const TOOL_RESULT: ContentBlock = {
   type: "tool_result",
@@ -25,7 +25,7 @@ function assistant(blocks: ContentBlock[]): Message {
     images: [],
     content_blocks: blocks,
     timestamp: "2026-08-12T00:00:00Z",
-  } as Message;
+  };
 }
 
 describe("cannotTravelInAlternative", () => {

@@ -30,7 +30,7 @@ export async function subagentTrace(ctx: SubagentTraceContext, args: Args): Prom
   return {
     character: ctx.characterName,
     ...(ids === undefined ? {} : { requested_ids: ids }),
-    entries: traces as unknown as Json,
+    entries: traces as unknown,
   };
 }
 

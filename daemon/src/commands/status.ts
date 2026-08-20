@@ -69,7 +69,7 @@ export function autonomyWire(status: AutonomyStatus, now: number): Json {
 function activityWire(stats: ActivitySource, recorded: number): Json {
   return {
     hour_histogram: stats.hourHistogram,
-    hour_classifications: stats.hourClassifications as readonly HourClassification[],
+    hour_classifications: stats.hourClassifications,
     has_sufficient_heatmap: stats.hasSufficientHeatmap,
     engagement_score: stats.engagementScore,
     sessions_per_day: stats.sessionsPerDay,

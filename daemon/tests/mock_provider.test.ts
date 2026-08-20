@@ -119,10 +119,7 @@ describe("streaming", () => {
       ],
     });
     const events = await collect(new OpenAIProvider().stream(request(m.url)));
-    const toolUses = events.filter((e) => e.type === "tool_use") as Extract<
-      StreamEvent,
-      { type: "tool_use" }
-    >[];
+    const toolUses = events.filter((e) => e.type === "tool_use");
 
     expect(toolUses.map((e) => e.name)).toEqual(["read", "search"]);
     expect(toolUses[0]!.input).toEqual({ path: "a" });
@@ -171,7 +168,7 @@ describe("the harness itself", () => {
       request(m.url, {
         system: [{ text: "You are a test.", label: "system" }],
         messages: [{ role: "user", content: [{ type: "text", text: "what is 2+2?" }] }],
-      } as Partial<SidecarRequest>),
+      }),
     );
 
     expect(m.requests).toHaveLength(1);

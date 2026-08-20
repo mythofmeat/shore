@@ -23,7 +23,7 @@ function req(over: Partial<SidecarRequest>): SidecarRequest {
     replay_prior_thinking: "all",
     messages: [],
     ...over,
-  } as SidecarRequest;
+  };
 }
 
 const anthropicSigned = { type: "thinking", thinking: "minted by claude", signature: "ErUBCkYIBRg" };

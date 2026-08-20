@@ -255,7 +255,7 @@ describe("call capture", () => {
 
     const seen = await drain(
       capturedEvents(store, req(), async function* () {
-        yield { type: "start", model: "m" } as StreamEvent;
+        yield { type: "start", model: "m" };
         yield DONE;
       }),
     );
@@ -274,7 +274,7 @@ describe("call capture", () => {
 
     await drain(
       capturedEvents(store, req(), async function* () {
-        yield { type: "start", model: "m" } as StreamEvent;
+        yield { type: "start", model: "m" };
         await fetch(`http://localhost:${server.port}/v1/messages`, { method: "POST", body: "{}" });
         await fetch(`http://localhost:${server.port}/v1/messages`, { method: "POST", body: "{}" });
         yield DONE;

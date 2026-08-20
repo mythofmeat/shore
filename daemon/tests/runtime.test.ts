@@ -45,7 +45,7 @@ function recordingProvider(seen: string[]): SidecarProvider {
     stream: () => {
       throw new Error("not used");
     },
-  } as unknown as SidecarProvider;
+  };
 }
 
 const NO_MCP = () => Promise.reject(new Error("no MCP server should be connected"));
@@ -154,7 +154,7 @@ describe("what assembly wires together", () => {
     const events: string[] = [];
     const notify = autonomousMessageNotifier({
       notify: (event: string) => events.push(event),
-    } as never);
+    });
 
     notify("Shore — ada", "thinking about the tide");
     expect(events).toEqual(["autonomous_message"]);
@@ -164,7 +164,7 @@ describe("what assembly wires together", () => {
     const events: string[] = [];
     const notify = compactionCompleteNotifier({
       notify: (event: string) => events.push(event),
-    } as never);
+    });
 
     notify("Shore — ada", "Idle conversation archived (12 messages, no LLM pass needed)");
     expect(events).toEqual(["compaction_complete"]);

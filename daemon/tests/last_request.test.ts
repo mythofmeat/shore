@@ -224,7 +224,7 @@ describe("idleAnchorMessage", () => {
 
   test("the id is `m_` plus a v4 uuid, which is the length the fixture recorded", () => {
     const id = idleAnchorMessage().msg_id;
-    expect(id.slice(0, 2)).toBe(a.msg_id_prefix as string);
+    expect(id.slice(0, 2)).toBe(a.msg_id_prefix);
     expect(id).toHaveLength(a.msg_id_len);
   });
 });
@@ -312,7 +312,7 @@ describe("LastRequestCache", () => {
       max_tokens: 10,
       replay_prior_thinking: "all",
       context: { character: "ada", call_type: "message", thinking_enabled: false },
-    }) as SidecarRequest;
+    });
 
   test("caching arms the keepalive from the body, with the cadence beside it", () => {
     const k = spy();
@@ -350,7 +350,7 @@ describe("LastRequestCache", () => {
   test("a body with no context at all still arms under the right character", () => {
     const k = spy();
     const { context: _dropped, ...bare } = body("claude-fixture");
-    new LastRequestCache(k.service as never).set("ada", bare as SidecarRequest, undefined);
+    new LastRequestCache(k.service as never).set("ada", bare, undefined);
     expect(k.armed[0]?.context?.character).toBe("ada");
     expect(k.armed[0]?.context?.call_type).toBe("keepalive");
   });
@@ -446,9 +446,9 @@ describe("classify", () => {
                 output_tokens: 0,
                 cache_read_tokens: c.outcome.cache_read_tokens as number,
                 cache_creation_tokens: c.outcome.cache_creation_tokens as number,
-              } as never,
+              },
             }
-          : { detail: (c.outcome.detail as string | undefined) ?? "" }),
+          : { detail: (c.outcome.detail) ?? "" }),
       };
 
       const got = classify(c.from_cached_request, outcome);
@@ -505,7 +505,7 @@ describe("keepalivePingNowCommand", () => {
   const sent = (cold: boolean, read: number, write: number): PingNowOutcome => ({
     status: "sent",
     cold,
-    usage: { input_tokens: 1200, output_tokens: 0, cache_read_tokens: read, cache_creation_tokens: write } as never,
+    usage: { input_tokens: 1200, output_tokens: 0, cache_read_tokens: read, cache_creation_tokens: write },
   });
 
   for (const c of fixture.ping_command) {
@@ -546,7 +546,7 @@ describe("keepalivePingNowCommand", () => {
 
       if (c.output.kind === "err") {
         await expect(keepalivePingNowCommand("ada", world_.ctx)).rejects.toThrow(
-          c.output.message as string,
+          c.output.message,
         );
         return;
       }

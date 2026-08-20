@@ -146,7 +146,7 @@ async function manifestAfter(characterDir: string): Promise<unknown> {
 describe("deepArchivePlan", () => {
   for (const [i, kase] of fixture.plan.entries()) {
     test(`case ${i}: ${kase.note}`, async () => {
-      const messages = await loadThroughStore(kase.input as Shape[]);
+      const messages = await loadThroughStore(kase.input);
       expect(deepArchivePlan(messages, kase.covered_turn_count)).toEqual(kase.plan as never);
     });
   }
@@ -298,7 +298,7 @@ describe("runDeepIdleArchive", () => {
     expect(typeof result.failed).toBe("string");
     expect(result.deepArchiveDone).toBe(false);
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(
-      kase.active_before as string,
+      kase.active_before,
     );
   });
 
@@ -424,7 +424,7 @@ describe("runDeepIdleArchive", () => {
         run: {
           generate: (() => {
             throw new Error("unused");
-          }) as never,
+          }),
         },
       }),
       kase.covered_turn_count,

@@ -50,7 +50,7 @@ function model(supportsImages: boolean | undefined): ResolvedModel {
     maxContextTokens: 200_000,
     maxOutputTokens: 4096,
     ...(supportsImages === undefined ? {} : { supportsImages }),
-  } as ResolvedModel;
+  };
 }
 
 async function loadedConfig(root: string, supportsImages: boolean | undefined): Promise<LoadedConfig> {
@@ -215,7 +215,7 @@ function userTurnWithImage(): Message {
     ],
     alternatives: [],
     timestamp: "2026-08-16T05:40:00.000Z",
-  } as Message;
+  };
 }
 
 function assistantTurn(): Message {
@@ -227,7 +227,7 @@ function assistantTurn(): Message {
     content_blocks: [{ type: "text", text: "sure" }],
     alternatives: [],
     timestamp: "2026-08-16T05:41:00.000Z",
-  } as Message;
+  };
 }
 
 function imageBlocksIn(request: SidecarRequest | undefined): number {

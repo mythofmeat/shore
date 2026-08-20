@@ -113,7 +113,7 @@ function deps(config: LoadedConfig, over: Partial<IdleCompactionDeps> = {}): Idl
   return {
     config,
     cache: new LastRequestCache(),
-    run: { generate: writingModel() as never },
+    run: { generate: writingModel() },
     ...over,
   };
 }
@@ -198,7 +198,7 @@ describe("runIdleCompaction: the pass", () => {
 
     const seen: { messages: unknown[] }[] = [];
     await withKey(() =>
-      runIdleCompaction("ada", deps(config, { cache, run: { generate: writingModel(seen) as never } })),
+      runIdleCompaction("ada", deps(config, { cache, run: { generate: writingModel(seen) } })),
     );
 
     const sent = JSON.stringify(seen[0]?.messages);

@@ -80,7 +80,7 @@ describe("thinking survives regeneration", () => {
 
     MessageStore.attachGeneratedAlt(messages, []);
 
-    const kept = messages[1]!.alternatives![0]!.content_blocks!.map((b) => b.type);
+    const kept = messages[1]!.alternatives![0]!.content_blocks.map((b) => b.type);
     expect(kept).toEqual(["thinking", "text"]);
   });
 
@@ -90,7 +90,7 @@ describe("thinking survives regeneration", () => {
     MessageStore.attachGeneratedAlt(messages, []);
 
     const alt = messages[1]!.alternatives![0]!;
-    expect(alt.content_blocks!.map((b) => b.type)).toEqual(["thinking", "text"]);
+    expect(alt.content_blocks.map((b) => b.type)).toEqual(["thinking", "text"]);
     expect(alt.content).toBe("hi");
   });
 

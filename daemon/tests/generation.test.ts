@@ -161,7 +161,7 @@ function model(): ResolvedModel {
     maxContextTokens: 200_000,
     maxOutputTokens: 4096,
     maxToolIterations: 4,
-  } as ResolvedModel;
+  };
 }
 
 async function tempRoot(name: string): Promise<string> {

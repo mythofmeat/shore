@@ -78,7 +78,7 @@ function cacheControlOf(block: unknown): { ttl?: string } | undefined {
   if (typeof block !== "object" || block === null) return undefined;
   const cc = (block as { cache_control?: unknown }).cache_control;
   if (typeof cc !== "object" || cc === null) return undefined;
-  return cc as { ttl?: string };
+  return cc;
 }
 
 function ttlMsOf(cc: { ttl?: string }): number {

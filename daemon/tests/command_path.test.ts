@@ -176,7 +176,7 @@ function meta(selected: string | null, rid: string | null): RequestMeta {
     },
     rid,
     kind: "command",
-  } as RequestMeta;
+  };
 }
 
 function envelope(frame: Awaited<ReturnType<typeof dispatchCommand>>): Record<string, unknown> {

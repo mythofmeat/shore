@@ -154,7 +154,7 @@ describe("migration", () => {
 });
 
 const BIG_REQUEST = "context line that repeats and compresses away\n";
-const UNICODE_RESPONSE = "réponse ✅ 你好 \u{1f600}";
+const UNICODE_RESPONSE = "réponse ✅ 你好 \u{1F600}";
 
 function at(secs: number, millis = 0): Date {
   return new Date(Date.parse("2026-01-15T12:00:00Z") + secs * 1000 + millis);
@@ -375,7 +375,7 @@ test("an omitted filter field matches everything, like an explicit null", () => 
 
 test("headers and transcript entries survive characters that are not latin-1", () => {
   const store = CallStore.openInMemory();
-  const marker = "réponse ✅ 你好 \u{1f600}";
+  const marker = "réponse ✅ 你好 \u{1F600}";
 
   store.recordTranscript({
     ts: new Date("2026-08-10T12:00:00.000Z"),

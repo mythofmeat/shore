@@ -208,7 +208,7 @@ export async function* zaiStreamEvents(
 
       if (choice.finish_reason) finishReason = choice.finish_reason;
     }
-    if (chunk.usage) usage = extractUsage(chunk.usage as RawUsage);
+    if (chunk.usage) usage = extractUsage(chunk.usage);
   }
 
   yield* sendStart();

@@ -87,9 +87,9 @@ function byProviderGuarded(
           ? input.href
           : (input as { url: string }).url;
     for (const [marker, kind] of Object.entries(map)) {
-      if (url.includes(marker)) return await upstream(kind)(url as string, init);
+      if (url.includes(marker)) return await upstream(kind)(url, init);
     }
-    return await upstream("openai", requiredKey)(url as string, init);
+    return await upstream("openai", requiredKey)(url, init);
   }) as typeof fetch;
 }
 

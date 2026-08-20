@@ -108,7 +108,7 @@ function supervisor(
       const next = logins[Math.min(attempts, logins.length - 1)];
       attempts += 1;
       return next!();
-    }) as never,
+    }),
     retry: { baseMs: 1, capMs: 2, stableMs: 1_000, now: () => 0 },
   };
   return { options, attempts: () => attempts, warnings };

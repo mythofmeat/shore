@@ -23,7 +23,7 @@ function request(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
     replay_prior_thinking: "all",
     context: { character: "poppy", call_type: "message", thinking_enabled: false },
     ...overrides,
-  } as SidecarRequest;
+  };
 }
 
 function provider(): SidecarProvider {
@@ -33,7 +33,7 @@ function provider(): SidecarProvider {
     usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
     timing: { total_ms: 1, time_to_first_token_ms: 1 },
     finish_reason: "end_turn",
-  } as StreamEvent;
+  };
   return {
     async *stream() {
       yield done;

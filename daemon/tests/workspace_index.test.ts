@@ -88,7 +88,7 @@ class TopicEmbedder implements Embedder {
   }
 
   takeCalls(): string[][] {
-    return this.calls.splice(0, this.calls.length);
+    return this.calls.splice(0);
   }
 }
 

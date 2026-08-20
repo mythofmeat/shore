@@ -87,7 +87,7 @@ describe("shell_escape", () => {
 
 describe("command_template", () => {
   for (const c of f["command_template"] as Row[]) {
-    test(`${c["template"] as string}`, () => {
+    test(c["template"] as string, () => {
       expect(
         renderCommandTemplate(c["template"] as string, c["title"] as string, c["body"] as string),
       ).toBe(c["rendered"] as string);
@@ -292,7 +292,7 @@ describe("[notifications] parsing", () => {
         expected["events"],
         recordedEventDefaults,
         { ...defaultNotificationEvents() },
-        pathsSetBy((table["events"] ?? {}) as Record<string, unknown>),
+        pathsSetBy((table["events"] ?? {})),
       );
       expect(configToFixtureShape((parsed as { ok: NotificationsConfig }).ok)).toEqual(expected);
     });
@@ -790,7 +790,7 @@ describe("last_request_with_response", () => {
   }
 
   test("append_response_messages_to_request appends in place", () => {
-    const row = f["append_in_place"] as Row;
+    const row = f["append_in_place"];
     const request: WireRequest = {
       model: "claude-opus-5",
       provider_key: "p",

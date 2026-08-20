@@ -340,7 +340,7 @@ describe("route_client_message", () => {
       const routed = c.routed;
       const msg: ClientMessage =
         routed === null
-          ? ({ type: "hello", client_type: "tui", client_name: "t", capabilities: [] } as ClientMessage)
+          ? ({ type: "hello", client_type: "tui", client_name: "t", capabilities: [] })
           : routed.kind === "command"
             ? ({ type: "command", ...(routed.cmd as object) } as ClientMessage)
             : (routed.msg as ClientMessage);

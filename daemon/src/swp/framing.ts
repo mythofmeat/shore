@@ -113,7 +113,7 @@ function decodeClientMessage(value: unknown): ClientMessage {
   const bool = (key: string): boolean => raw[key] === true;
   const arr = <T,>(key: string): T[] => (Array.isArray(raw[key]) ? (raw[key] as T[]) : []);
   const opt = <T,>(key: string, v: T | undefined): Record<string, T> =>
-    v === undefined ? {} : ({ [key]: v } as Record<string, T>);
+    v === undefined ? {} : ({ [key]: v });
 
   switch (raw.type) {
     case "hello":
@@ -134,7 +134,7 @@ function decodeClientMessage(value: unknown): ClientMessage {
         images: arr<string>("images"),
         image_data: arr("image_data"),
         ...opt("absence_seconds", numberOrUndefined(raw.absence_seconds, "absence_seconds")),
-      } as ClientMessage;
+      };
     case "regen":
       return {
         type: "regen",

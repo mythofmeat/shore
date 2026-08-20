@@ -7,7 +7,7 @@ import { streamWithRetry } from "../src/llm/fallback.ts";
 import { shouldRetryError } from "../src/llm/retry.ts";
 import { StreamAccumulator } from "../src/llm/stream.ts";
 import { streamErrorEvent } from "../src/llm/types.ts";
-import type { StreamEvent, Usage } from "../src/llm/types.ts";
+import type { Usage } from "../src/llm/types.ts";
 
 const usage: Usage = {
   input_tokens: 0,
@@ -65,7 +65,7 @@ describe("the abort survives the flattening chain", () => {
     const event = streamErrorEvent(new Error("overloaded_error"), usage, 0, 0, () => 1);
     expect((event as { aborted?: boolean }).aborted).toBeUndefined();
 
-    const step = new StreamAccumulator().handle(event as StreamEvent, false, () => {});
+    const step = new StreamAccumulator().handle(event, false, () => {});
     const error = (step as { error: LlmError }).error;
     expect(error.kind).toBe("stream_errored");
     expect(shouldRetryError(error, 0, { max_retries: 2 })).toEqual({ decision: "retry" });

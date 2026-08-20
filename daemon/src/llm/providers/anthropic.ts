@@ -331,7 +331,7 @@ function normalizeMessages(messages: WireMessage[]): MessageParam[] {
   return messages.map((m): MessageParam => {
     const blocks = m.content.map(toContentBlockParam);
     for (const b of blocks) delete (b as { cache_control?: unknown }).cache_control;
-    return { role: m.role as "user" | "assistant", content: blocks };
+    return { role: m.role, content: blocks };
   });
 }
 
@@ -615,7 +615,7 @@ function convertInlineSystemMessages(
 }
 
 function toMessageParam(m: WireMessage): MessageParam {
-  return { role: m.role as "user" | "assistant", content: m.content.map(toContentBlockParam) };
+  return { role: m.role, content: m.content.map(toContentBlockParam) };
 }
 
 function toContentBlockParam(b: ContentBlock): ContentBlockParam {
@@ -627,7 +627,7 @@ function toContentBlockParam(b: ContentBlock): ContentBlockParam {
     case "redacted_thinking":
       return { type: "redacted_thinking", data: b.data };
     case "tool_use":
-      return { type: "tool_use", id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> };
+      return { type: "tool_use", id: b.id, name: b.name, input: (b.input ?? {}) };
     case "tool_result": {
       const content: NonNullable<ToolResultBlockParam["content"]> =
         typeof b.content === "string"

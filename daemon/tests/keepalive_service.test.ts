@@ -365,7 +365,7 @@ describe("arming and disarming", () => {
     h.service.arm(
       prefix({ context: { ...prefix().context!, keepalive_max_secs: 6 * 3600 } }),
     );
-    expect(h.service.scheduleFor(CHARACTER)).toEqual(before!);
+    expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
 
     h.clock.advance(minutes(56));
     await h.service.tick();
@@ -385,7 +385,7 @@ describe("the on-demand ping", () => {
     expect(outcome.status).toBe("sent");
     expect(outcome.cold).toBe(false);
     expect(outcome.usage?.cache_read_tokens).toBe(2200);
-    expect(h.service.scheduleFor(CHARACTER)).toEqual(before!);
+    expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
   });
 
   test("a cold on-demand ping reports cold without disarming", async () => {
@@ -396,7 +396,7 @@ describe("the on-demand ping", () => {
     const outcome = await h.service.pingNow(CHARACTER);
     expect(outcome.status).toBe("sent");
     expect(outcome.cold).toBe(true);
-    expect(h.service.scheduleFor(CHARACTER)).toEqual(before!);
+    expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
   });
 
   test("says so when there is nothing to ping from", async () => {

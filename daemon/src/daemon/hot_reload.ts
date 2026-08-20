@@ -106,7 +106,7 @@ export function startConfigWatcher(
 export function workspacePathTriggersReload(
   workspaceDirIn: string,
   pathIn: string,
-  knownCharacter?: ((name: string) => boolean) | undefined,
+  knownCharacter?: ((name: string) => boolean),
 ): boolean {
   const relative = stripPrefix(absolutize(workspaceDirIn), absolutize(pathIn));
   if (relative === undefined) return false;
@@ -125,7 +125,7 @@ export function pathTriggersReload(
   configDirIn: string,
   configPathIn: string,
   pathIn: string,
-  knownCharacter?: ((name: string) => boolean) | undefined,
+  knownCharacter?: ((name: string) => boolean),
 ): boolean {
   const configDir = absolutize(configDirIn);
   const configPath = absolutize(configPathIn);

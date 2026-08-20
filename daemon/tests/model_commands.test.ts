@@ -98,7 +98,7 @@ async function buildContext(setup: Setup): Promise<ModelsContext> {
 
   let app: AppConfig = defaultAppConfig();
   if (setup.defaults.trim() !== "") {
-    const parsed = parseAppConfig(parseToml(setup.defaults) as never);
+    const parsed = parseAppConfig(parseToml(setup.defaults));
     if ("err" in parsed) throw new Error(`fixture defaults do not parse: ${parsed.err}`);
     app = parsed.ok;
   }

@@ -18,7 +18,7 @@ export function splitJsonPayload(text: string): string[] | null {
   const points = [...new Set([0, ...cuts, text.length])].sort((a, b) => a - b);
   const parts: string[] = [];
   for (let i = 0; i + 1 < points.length; i++) {
-    const part = text.slice(points[i]!, points[i + 1]!);
+    const part = text.slice(points[i], points[i + 1]);
     if (part.length > 0) parts.push(part);
   }
   return parts.length > 1 ? parts : null;

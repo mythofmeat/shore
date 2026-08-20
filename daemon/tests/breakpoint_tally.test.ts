@@ -7,7 +7,7 @@ import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 const CC = { type: "ephemeral", ttl: "1h" } as never;
 
 function turn(role: "user" | "assistant", text: string): WireMessage {
-  return { role, content: [{ type: "text", text }] } as WireMessage;
+  return { role, content: [{ type: "text", text }] };
 }
 
 function request(over: Partial<SidecarRequest> = {}): SidecarRequest {

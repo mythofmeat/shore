@@ -220,9 +220,7 @@ describe("buildCall against the ai SDK's own prompt validation", () => {
       },
     });
     const call = buildCall(req);
-    await generateText({ ...call, model: model as unknown as LanguageModel } as Parameters<
-      typeof generateText
-    >[0]);
+    await generateText({ ...call, model: model as unknown as LanguageModel });
     return seen;
   }
 

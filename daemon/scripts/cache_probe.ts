@@ -82,7 +82,7 @@ function applyStrip(history: WireMessage[], mode: Mode, completedLen: number): W
   if (mode === "all") return out;
   const keepFrom = mode === "last_turn" ? mostRecentTurnStart(out, completedLen) : completedLen;
   for (let i = 0; i < completedLen; i++) {
-    if (i < keepFrom || mode === "none") stripThinking(out[i]!);
+    if (i < keepFrom || mode === "none") stripThinking(out[i]);
   }
   return out;
 }
@@ -137,7 +137,7 @@ async function call(
 ): Promise<{ usage: Usage; content: ContentBlock[] }> {
   const messages = applyStrip(history, mode, completedLen);
   const req: SidecarRequest = {
-    sdk: "anthropic" as SidecarRequest["sdk"],
+    sdk: "anthropic",
     model: MODEL,
     api_key: "",
     messages,
@@ -191,7 +191,7 @@ async function captureRun(
 
   for (let turn = 0; turn < TURNS; turn++) {
     const completedLen = history.length;
-    push({ role: "user", content: [{ type: "text", text: PROMPTS[turn % PROMPTS.length]! }] });
+    push({ role: "user", content: [{ type: "text", text: PROMPTS[turn % PROMPTS.length] }] });
 
     let r = await call(client, system, history, completedLen, "last_turn", shape);
     rows.push({ turn, step: "init", ...r.usage });
@@ -257,8 +257,8 @@ async function main() {
 
     process.stderr.write(`  --- ${shape}: create(off) - create(on), identical content ---\n`);
     for (let i = 0; i < cap.rows.length; i++) {
-      const on = cap.rows[i]!;
-      const o = off[i]!;
+      const on = cap.rows[i];
+      const o = off[i];
       process.stderr.write(
         `  t${on.turn} ${on.step.padEnd(10)} on=${String(on.cache_creation).padStart(6)} ` +
           `off=${String(o.cache_creation).padStart(6)} Δ=${String(o.cache_creation - on.cache_creation).padStart(6)}\n`,

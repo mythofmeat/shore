@@ -29,7 +29,7 @@ function message(over: Partial<Message> = {}): Message {
     content_blocks: [THINKING, TEXT],
     timestamp: "2026-08-12T00:00:00Z",
     ...over,
-  } as Message;
+  };
 }
 
 function alt(blocks: ContentBlock[], content = "an answer") {

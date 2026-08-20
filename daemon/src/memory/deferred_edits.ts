@@ -45,7 +45,7 @@ Use tools when they materially help.
 export const memoryIndexPath = (
   configDir: string,
   charName: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ) => join(characterWorkspaceDir(configDir, charName, workspaceRoot), MEMORY_INDEX_FILE);
 
 async function exists(p: string): Promise<boolean> {
@@ -79,14 +79,14 @@ export const loadActivePromptFile = (characterDataDir: string, name: string) =>
 export const loadCanonicalMemoryIndex = (
   configDir: string,
   charName: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ) => effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
 
 export async function loadMemoryIndex(
   characterDataDir: string,
   configDir: string,
   charName: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): Promise<string | undefined> {
   const active = activePromptFile(characterDataDir, MEMORY_INDEX_FILE);
   if (await exists(active)) return effectiveContent(active);
@@ -151,7 +151,7 @@ export async function changedPromptFiles(
   characterDataDir: string,
   configDir: string,
   charName: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): Promise<string[]> {
   const changed: string[] = [];
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
@@ -193,7 +193,7 @@ export async function ensureCharacterWorkspace(
   characterDataDir: string,
   configDir: string,
   charName: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): Promise<void> {
   const charConfigDir = characterConfigDir(configDir, charName);
   const workspaceDir = characterWorkspaceDir(configDir, charName, workspaceRoot);
@@ -235,7 +235,7 @@ export async function ensureActivePromptSnapshot(
   characterDataDir: string,
   configDir: string,
   charName: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): Promise<void> {
   await ensureCharacterWorkspace(characterDataDir, configDir, charName, workspaceRoot);
 
@@ -256,7 +256,7 @@ export async function refreshActivePromptSnapshot(
   characterDataDir: string,
   configDir: string,
   charName: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): Promise<void> {
   await ensureCharacterWorkspace(characterDataDir, configDir, charName, workspaceRoot);
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
@@ -268,7 +268,7 @@ export async function applyDeferredEdits(
   characterDataDir: string,
   configDir: string,
   charName: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): Promise<void> {
   await refreshActivePromptSnapshot(characterDataDir, configDir, charName, workspaceRoot);
   await rm(join(characterDataDir, QUEUE_FILE), { force: true });

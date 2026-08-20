@@ -16,7 +16,7 @@ function imageTurn(): TurnMessage {
       { type: "image", source: { type: "base64", media_type: "image/png", data: PNG_B64 } },
       { type: "text", text: "what is this?" },
     ],
-  } as TurnMessage;
+  };
 }
 
 const DATA_URL = `data:image/png;base64,${PNG_B64}`;
@@ -51,7 +51,7 @@ describe("inlined image blocks reach the wire", () => {
   });
 
   test("gemini: image block → inlineData part, before the text", () => {
-    const contents = translateMessages([imageTurn() as never]);
+    const contents = translateMessages([imageTurn()]);
     expect(contents).toHaveLength(1);
     expect(contents[0]?.parts).toEqual([
       { inlineData: { mimeType: "image/png", data: PNG_B64 } },

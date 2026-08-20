@@ -110,7 +110,7 @@ function scriptedProvider(rounds: GenerateResponse[], seen: SidecarRequest[] = [
     stream: () => {
       throw new Error("not used");
     },
-  } as unknown as SidecarProvider;
+  };
 }
 
 const NO_HOOKS: TickHooks = { scheduleNextWake: () => 1 };
@@ -185,7 +185,7 @@ describe("running a heartbeat", () => {
         anthropic: scriptedProvider(
           [
             response(
-              [{ type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } } as ContentBlock],
+              [{ type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } }],
               "tool_use",
             ),
             response([{ type: "text", text: "done" }]),
@@ -218,7 +218,7 @@ describe("running a heartbeat", () => {
                   id: "t1",
                   name: "set_next_wake",
                   input: { hours_from_now: 900, reason: "the essay" },
-                } as ContentBlock,
+                },
               ],
               "tool_use",
             ),
@@ -264,7 +264,7 @@ describe("running a heartbeat", () => {
     const executor = new InProcessAutonomyExecutor({
       registry: registryFor(config),
       cache: new LastRequestCache(),
-      callStore: { recordTranscript: (r) => (rows.push(r as never), 1) },
+      callStore: { recordTranscript: (r) => (rows.push(r), 1) },
       providers: {
         anthropic: scriptedProvider(
           [
@@ -275,7 +275,7 @@ describe("running a heartbeat", () => {
                   id: "t1",
                   name: "read",
                   input: { path: "../../etc/passwd" },
-                } as ContentBlock,
+                },
               ],
               "tool_use",
             ),
@@ -324,7 +324,7 @@ describe("running a heartbeat", () => {
                 id: "t1",
                 name: "generate_image",
                 input: { prompt: "a boat" },
-              } as ContentBlock,
+              },
             ],
             "tool_use",
           ),
@@ -386,7 +386,7 @@ describe("running a heartbeat", () => {
       providers: {
         anthropic: scriptedProvider([
           response(
-            [{ type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } } as ContentBlock],
+            [{ type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } }],
             "tool_use",
           ),
           response([{ type: "text", text: "done" }]),

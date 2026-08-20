@@ -142,7 +142,7 @@ export const characterConfigDir = (config: string, name: string): string =>
 export const characterWorkspaceDir = (
   config: string,
   name: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): string =>
   workspaceRoot === undefined
     ? rustJoin(characterConfigDir(config, name), CHARACTER_WORKSPACE_DIR)
@@ -152,13 +152,13 @@ export const characterWorkspaceFile = (
   config: string,
   name: string,
   file: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): string => rustJoin(characterWorkspaceDir(config, name, workspaceRoot), file);
 
 export const characterMemoryDir = (
   config: string,
   name: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): string => rustJoin(characterWorkspaceDir(config, name, workspaceRoot), MEMORY_DIR);
 
 export const characterDataDir = (data: string, name: string): string => rustJoin(data, name);
@@ -197,7 +197,7 @@ export function readOrUndefined(path: string): string | undefined {
   }
 }
 
-export function discoverCharacters(config: string, workspaceRoot?: string | undefined): string[] {
+export function discoverCharacters(config: string, workspaceRoot?: string): string[] {
   const names = new Set<string>();
 
   const charsDir = rustJoin(config, "characters");
@@ -235,7 +235,7 @@ function readdirOrEmpty(dir: string): string[] {
 export function loadCharacterDefinition(
   config: string,
   name: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): string | undefined {
   return (
     readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceRoot)) ??
@@ -246,7 +246,7 @@ export function loadCharacterDefinition(
 export function resolveUserDefinition(
   config: string,
   name: string,
-  workspaceRoot?: string | undefined,
+  workspaceRoot?: string,
 ): string | undefined {
   return (
     readOrUndefined(characterWorkspaceFile(config, name, USER_FILE, workspaceRoot)) ??

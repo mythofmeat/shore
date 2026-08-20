@@ -1,4 +1,4 @@
-import type { ContentBlock, Message, Role } from "./types";
+import type { ContentBlock, Message } from "./types";
 
 function isToolLoopAssistant(msg: Message): boolean {
   return msg.role === "assistant" && msg.content_blocks.some((b) => b.type === "tool_use");
@@ -122,7 +122,7 @@ function mergeGroup(group: Message[]): Message {
 
   return {
     msg_id: lastAssistant.msg_id,
-    role: "assistant" as Role,
+    role: "assistant",
     content: deriveContentTextOnly(mergedBlocks),
     images: lastAssistant.images,
     content_blocks: mergedBlocks,

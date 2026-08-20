@@ -700,7 +700,7 @@ function overlayForCharacter(
   } catch (e) {
     console.warn(
       `shore: preferences load failed for ${character} (${op}); using raw model settings: ` +
-        `${(e as Error).message}`,
+        (e as Error).message,
     );
     return base;
   }

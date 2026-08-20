@@ -248,7 +248,7 @@ export function excerptFor(
   }
 
   const leading = Math.min(Math.floor(excerptChars / 4), 80);
-  const startChar = Math.max([...contentLower.slice(0, idx)].length - leading, 0);
+  const startChar = Math.max(Array.from(contentLower.slice(0, idx)).length - leading, 0);
 
   let excerpt = chars.slice(startChar, startChar + excerptChars).join("");
   if (startChar > 0) excerpt = `...${excerpt}`;

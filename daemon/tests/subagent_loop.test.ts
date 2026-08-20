@@ -118,7 +118,7 @@ function scriptedProvider(text: string, seen: SidecarRequest[] = []): SidecarPro
     generate: () => {
       throw new Error("a sub-agent streams");
     },
-  } as unknown as SidecarProvider;
+  };
 }
 
 async function run(
@@ -188,7 +188,7 @@ function dicerollingProvider(): SidecarProvider {
     generate: () => {
       throw new Error("a sub-agent streams");
     },
-  } as unknown as SidecarProvider;
+  };
 }
 
 function failingProvider(message: string): SidecarProvider {
@@ -211,7 +211,7 @@ function failingProvider(message: string): SidecarProvider {
     generate: () => {
       throw new Error("a sub-agent streams");
     },
-  } as unknown as SidecarProvider;
+  };
 }
 
 describe("resolution", () => {
@@ -458,7 +458,7 @@ describe("the forwarder", () => {
     const out: ServerMessage[] = [];
     const send = taggedSink("researcher", (m) => out.push(m));
 
-    send({ type: "stream_chunk", text: "hi", content_type: "text" } as ServerMessage);
+    send({ type: "stream_chunk", text: "hi", content_type: "text" });
     send({ type: "phase", phase: "thinking" } as unknown as ServerMessage);
 
     expect((out[0] as { subagent?: string }).subagent).toBe("researcher");
@@ -469,7 +469,7 @@ describe("the forwarder", () => {
     const out: ServerMessage[] = [];
     const send = taggedSink("researcher", (m) => out.push(m), "sa_7");
 
-    send({ type: "stream_chunk", text: "hi", content_type: "text" } as ServerMessage);
+    send({ type: "stream_chunk", text: "hi", content_type: "text" });
     send({ type: "phase", phase: "thinking" } as unknown as ServerMessage);
 
     expect((out[0] as { task_id?: string }).task_id).toBe("sa_7");
@@ -480,7 +480,7 @@ describe("the forwarder", () => {
     const out: ServerMessage[] = [];
     const send = taggedSink("researcher", (m) => out.push(m));
 
-    send({ type: "stream_chunk", text: "hi", content_type: "text" } as ServerMessage);
+    send({ type: "stream_chunk", text: "hi", content_type: "text" });
 
     expect("task_id" in (out[0] as object)).toBe(false);
   });

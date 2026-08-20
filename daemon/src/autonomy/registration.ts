@@ -106,7 +106,7 @@ export class TurnAutonomyBridge {
   }
 
   reloadConfig(effectiveConfig: (character: string) => LoadedConfig): void {
-    for (const character of [...this.#registered.keys()]) {
+    for (const character of Array.from(this.#registered.keys())) {
       this.#after(character, () => {
         this.#service.setCompactionConfig(
           character,

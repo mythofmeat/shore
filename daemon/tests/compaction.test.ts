@@ -167,7 +167,7 @@ describe("appending turns", () => {
         pushAssistantTurn(req, responseFor(rec.name as string));
       }
       expect(normalizeMessages(req.messages)).toEqual(
-        normalizeMessages(rec.messages as unknown as WireMessage[]),
+        normalizeMessages(rec.messages as WireMessage[]),
       );
     });
   }

@@ -269,7 +269,7 @@ describe("ContentBlock variants", () => {
 });
 
 describe("the census survives the real code paths", () => {
-  const everyBlock = Object.values(wire.wire_block) as ContentBlock[];
+  const everyBlock = Object.values(wire.wire_block);
   const uncarried = (b: ContentBlock): boolean =>
     b.type === "thinking" && b.signature === undefined && b.reasoning_details === undefined &&
     b.reasoning_content === undefined;

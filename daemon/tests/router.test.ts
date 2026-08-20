@@ -10,7 +10,7 @@ import {
   type HandlerRegistry,
 } from "../src/handler/router.ts";
 import { StreamLeases } from "../src/handler/lease.ts";
-import { SessionRouter, type RequestMeta, type RoutedMessage } from "../src/swp/session.ts";
+import { SessionRouter, type RequestMeta } from "../src/swp/session.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { NoModelError } from "../src/handler/setup.ts";
@@ -145,7 +145,7 @@ describe("routed messages", () => {
       kind: "engine",
       msg: { type: "cancel" },
       meta: meta("Alice", 1, "r1", "cancel"),
-    } as RoutedMessage);
+    });
 
     expect(stripAbsent({ frames: h.frames.get(1), generation_running: false })).toEqual(
       c.output as never,
@@ -163,7 +163,7 @@ describe("routed messages", () => {
       kind: "engine",
       msg: message("r1", "hi", false),
       meta: meta("Alice", 1, "r1", "message"),
-    } as RoutedMessage);
+    });
     const launched = h.started.length === 1;
     const leaseTaken = h.leases.spectator("Alice", 2, h.router) !== undefined;
 
@@ -171,7 +171,7 @@ describe("routed messages", () => {
       kind: "engine",
       msg: { type: "cancel" },
       meta: meta("Alice", 1, "r2", "cancel"),
-    } as RoutedMessage);
+    });
 
     const received = h.frames.get(1) ?? [];
     expect(
@@ -192,7 +192,7 @@ describe("routed messages", () => {
       kind: "engine",
       msg: { type: "regen", rid: "r1", stream: true },
       meta: meta("Alice", 1, "r1", "regen"),
-    } as RoutedMessage);
+    });
 
     expect({
       generation_running: h.started.length === 1,
@@ -208,7 +208,7 @@ describe("routed messages", () => {
       kind: "engine",
       msg: message("r1", "hi", false),
       meta: meta("Nobody", 1, "r1", "message"),
-    } as RoutedMessage);
+    });
 
     expect(
       stripAbsent({
@@ -227,7 +227,7 @@ describe("routed messages", () => {
         kind: "engine",
         msg: message("r1", "hi", false),
         meta: meta("Alice", id, "r1", "message"),
-      } as RoutedMessage);
+      });
     }
     const before = [h.started.length >= 1, h.started.length >= 2];
 
@@ -252,14 +252,14 @@ describe("routed messages", () => {
       kind: "engine",
       msg: message("r1", "first", false),
       meta: meta("Alice", 1, "r1", "message"),
-    } as RoutedMessage);
+    });
     const firstSignal = h.started[0];
 
     await h.handler.handleRouted({
       kind: "engine",
       msg: message("r2", "second", false),
       meta: meta("Alice", 1, "r2", "message"),
-    } as RoutedMessage);
+    });
 
     expect({ generation_running: h.started.length === 2 }).toEqual(c.output as never);
     expect(firstSignal).toBeDefined();
@@ -278,7 +278,7 @@ describe("routed messages", () => {
         capabilities: [],
       },
       meta: meta("Alice", 1, "r1", "message"),
-    } as RoutedMessage);
+    });
 
     expect(
       stripAbsent({ frames: h.frames.get(1), generation_running: h.started.length > 0 }),
@@ -294,7 +294,7 @@ describe("routed messages", () => {
       kind: "engine",
       msg: message("r1", "hi", false),
       meta: meta("Alice", 1, "r1", "message"),
-    } as RoutedMessage);
+    });
 
     expect({ generation_running: h.started.length > 0 }).toEqual(c.output as never);
   });
@@ -314,7 +314,7 @@ describe("routed messages", () => {
         kind: "engine",
         msg: message(c.input.rid, "hi", false),
         meta: meta("Alice", 1, c.input.rid, "message"),
-      } as RoutedMessage);
+      });
 
       expect(h.started[0]?.rid ?? null).toEqual(c.output.first_frame_rid);
     });
@@ -329,12 +329,12 @@ describe("what a generation is handed", () => {
       kind: "engine",
       msg: message("r1", "hi", false),
       meta: meta("Alice", 2, "r1", "message"),
-    } as RoutedMessage);
+    });
     await h.handler.handleRouted({
       kind: "engine",
       msg: { type: "regen", rid: "r2", stream: true },
       meta: meta("Alice", 1, "r2", "regen"),
-    } as RoutedMessage);
+    });
 
     const regenParams = h.started.at(-1);
     expect(regenParams?.regen).toBe(true);
@@ -353,7 +353,7 @@ describe("what a generation is handed", () => {
       kind: "engine",
       msg: message("r1", "first", false),
       meta: meta("Alice", 1, "r1", "message"),
-    } as RoutedMessage);
+    });
     const first = h.started[0];
     expect(first?.signal.aborted).toBe(false);
 
@@ -361,7 +361,7 @@ describe("what a generation is handed", () => {
       kind: "engine",
       msg: message("r2", "second", false),
       meta: meta("Alice", 1, "r2", "message"),
-    } as RoutedMessage);
+    });
     expect(first?.signal.aborted).toBe(true);
 
     const second = h.started[1];
@@ -370,7 +370,7 @@ describe("what a generation is handed", () => {
       kind: "engine",
       msg: { type: "cancel" },
       meta: meta("Alice", 1, "r3", "cancel"),
-    } as RoutedMessage);
+    });
     expect(second?.signal.aborted).toBe(true);
   });
 });
@@ -414,7 +414,7 @@ describe("the regen body", () => {
         kind: "engine",
         msg: { type: "regen", rid: c.input.rid, stream: c.input.stream },
         meta: meta("Alice", 1, c.input.rid, "regen"),
-      } as RoutedMessage);
+      });
 
       const body = h.started[0]?.body;
       expect({
@@ -434,7 +434,7 @@ describe("a generation that throws", () => {
       kind: "engine",
       msg: message(null, "hello", true),
       meta: meta("Alice", 1, null, "message"),
-    } as RoutedMessage);
+    });
     await h.handler.drain();
     return h.frames.get(1)?.find((f) => f.type === "error");
   }

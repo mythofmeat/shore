@@ -143,7 +143,7 @@ const REACTIONS = new Map<string, ReactionControl>([
   ["➡", "alt_next"],
 ]);
 
-const VARIATION_SELECTOR_16 = "\u{fe0f}";
+const VARIATION_SELECTOR_16 = "\u{FE0F}";
 
 export function parseReaction(key: string): ReactionControl | undefined {
   return REACTIONS.get([...key].filter((c) => c !== VARIATION_SELECTOR_16).join(""));
@@ -157,6 +157,6 @@ export function splitLines(content: string): string[] {
 export function formatUserMirror(content: string): string {
   const lines = splitLines(content);
   const first = lines.shift();
-  if (first === undefined) return "> \u{1f464}";
-  return [`> \u{1f464} ${first}`, ...lines.map((line) => `> ${line}`)].join("\n");
+  if (first === undefined) return "> \u{1F464}";
+  return [`> \u{1F464} ${first}`, ...lines.map((line) => `> ${line}`)].join("\n");
 }

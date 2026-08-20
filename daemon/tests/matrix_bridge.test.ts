@@ -234,7 +234,7 @@ function assistant(overrides: Partial<NewMessage> = {}): ServerMessage {
     timestamp: "2026-08-08T00:00:00Z",
     origin: "assistant_reply",
   };
-  return { type: "new_message", ...message, ...overrides } as ServerMessage;
+  return { type: "new_message", ...message, ...overrides };
 }
 
 describe("an unbound room", () => {
@@ -422,7 +422,7 @@ describe("replies coming back", () => {
 
     h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$v", text: "!view thinking on" });
     await h.settle();
-    h.broadcast(assistant({ ...withThinking, msg_id: "m2" } as Partial<NewMessage>));
+    h.broadcast(assistant({ ...withThinking, msg_id: "m2" }));
     await h.settle();
     expect(h.bot.texts().at(-1)).toBe("> let me consider\n\nthe reply");
   });
@@ -437,7 +437,7 @@ describe("mirroring other clients", () => {
     );
     await h.settle();
 
-    expect(h.bot.notices().at(-1)).toBe("> \u{1f464} from the cli");
+    expect(h.bot.notices().at(-1)).toBe("> \u{1F464} from the cli");
     expect(h.events.byMsgId("m_user")?.origin).toBe("mirrored_user");
   });
 

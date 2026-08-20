@@ -284,7 +284,7 @@ export class MatrixBot {
           return;
         }
         if (data?.liveEvent === false) return;
-        this.#push(event.getEffectiveEvent() as RawEvent, room.roomId);
+        this.#push(event.getEffectiveEvent(), room.roomId);
       },
     );
   }

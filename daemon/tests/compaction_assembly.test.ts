@@ -227,8 +227,8 @@ describe("renderToolOutcome", () => {
     test(c.name, async () => {
       const answer = answers[c.name]!;
       const out = await renderToolOutcome(async () => answer());
-      expect(out.output).toBe(c.output as string);
-      expect(out.isError).toBe(c.is_error as boolean);
+      expect(out.output).toBe(c.output);
+      expect(out.isError).toBe(c.is_error);
     });
   }
 });

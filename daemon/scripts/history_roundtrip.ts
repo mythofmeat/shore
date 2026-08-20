@@ -27,8 +27,8 @@ function deepEqual(a: unknown, b: unknown, path: string): string | null {
     return null;
   }
   if (typeof a === "object" && typeof b === "object") {
-    const ka = Object.keys(a as object).sort();
-    const kb = Object.keys(b as object).sort();
+    const ka = Object.keys(a).sort();
+    const kb = Object.keys(b).sort();
     if (ka.join(",") !== kb.join(",")) return `${path}: keys [${ka}] vs [${kb}]`;
     for (const k of ka) {
       const left = (a as Record<string, unknown>)[k];
@@ -88,7 +88,7 @@ files.forEach((file, idx) => {
     {
       file: file.slice(segmentsDir.length + 1),
       message_count: expected.length,
-      compacted_at: expected[0]!.timestamp,
+      compacted_at: expected[0].timestamp,
     },
     expected,
   );

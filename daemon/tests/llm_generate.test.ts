@@ -110,7 +110,7 @@ function recordingProvider(
     stream: () => {
       throw new Error("not used");
     },
-  } as SidecarProvider;
+  };
 }
 
 function deps(provider: SidecarProvider, over: Partial<GenerateDeps> = {}): GenerateDeps {

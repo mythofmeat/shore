@@ -21,9 +21,9 @@ async function mock(...args: Parameters<typeof startMockAnthropic>): Promise<Moc
 }
 
 const user = (text: string): WireMessage =>
-  ({ role: "user", content: [{ type: "text", text }] }) as WireMessage;
+  ({ role: "user", content: [{ type: "text", text }] });
 const assistant = (text: string): WireMessage =>
-  ({ role: "assistant", content: [{ type: "text", text }] }) as WireMessage;
+  ({ role: "assistant", content: [{ type: "text", text }] });
 
 function request(
   url: string,

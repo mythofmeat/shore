@@ -48,8 +48,8 @@ const registry = McpRegistry.fromTools([
   toolDef("alpha", "z"),
   toolDef("alpha", "a"),
   toolDef("multi__part", "tool__name"),
-  toolDef("\u{1f3b5}drum", "play"),
-  toolDef("\u{fb00}ute", "play"),
+  toolDef("\u{1F3B5}drum", "play"),
+  toolDef("\u{FB00}ute", "play"),
   toolDef("hue", "set"),
 ]);
 
@@ -177,8 +177,8 @@ describe("the pinned sort", () => {
 
   test("order follows UTF-8 bytes, not UTF-16 code units", () => {
     const names = registry.allTools().map((t) => t.full_name);
-    const flute = names.indexOf("mcp__\u{fb00}ute__play");
-    const drum = names.indexOf("mcp__\u{1f3b5}drum__play");
+    const flute = names.indexOf("mcp__\u{FB00}ute__play");
+    const drum = names.indexOf("mcp__\u{1F3B5}drum__play");
     expect(flute).toBeGreaterThan(-1);
     expect(drum).toBeGreaterThan(-1);
     expect(flute).toBeLessThan(drum);

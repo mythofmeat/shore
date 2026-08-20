@@ -130,7 +130,7 @@ MUTANTS = [
      "        this.#deps.leases.clear();",
      "        void 0;"),
     ("the disconnect sweep cancels nothing",
-     "        for (const sessionId of [...this.#sessions.keys()]) {\n"
+     "        for (const sessionId of this.#sessions.keys()) {\n"
      '          await this.cancelGeneration(sessionId, null, "all clients disconnected");\n'
      "        }",
      "        void 0;"),

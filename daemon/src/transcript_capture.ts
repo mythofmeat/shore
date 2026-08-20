@@ -1,5 +1,4 @@
 import type { CallStore, TranscriptRecord } from "./call_store.ts";
-import type { ContentBlock } from "./engine/types.ts";
 import type { GenerateResponse } from "./llm/types.ts";
 
 export interface CapturedTool {
@@ -21,7 +20,7 @@ export function buildEntry(
 ): TranscriptEntry {
   const reasoning: string[] = [];
   let text = "";
-  for (const block of resp.content_blocks as ContentBlock[]) {
+  for (const block of resp.content_blocks) {
     if (block.type === "thinking") {
       if (block.thinking.trim() !== "") reasoning.push(block.thinking);
     } else if (block.type === "redacted_thinking") {

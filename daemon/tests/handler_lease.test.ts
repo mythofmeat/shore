@@ -11,7 +11,7 @@ function client(id: number): ClientInfo {
 }
 
 function probe(name: string): ServerMessage {
-  return { type: "command_output", rid: null, name, data: {} } as ServerMessage;
+  return { type: "command_output", rid: null, name, data: {} };
 }
 
 function router(...sessionIds: number[]) {

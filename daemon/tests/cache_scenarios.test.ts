@@ -27,9 +27,9 @@ async function mock(script?: Parameters<typeof startMockAnthropic>[0]): Promise<
 const MINUTE = 60 * 1000;
 
 const user = (text: string): WireMessage =>
-  ({ role: "user", content: [{ type: "text", text }] }) as WireMessage;
+  ({ role: "user", content: [{ type: "text", text }] });
 const assistant = (text: string): WireMessage =>
-  ({ role: "assistant", content: [{ type: "text", text }] }) as WireMessage;
+  ({ role: "assistant", content: [{ type: "text", text }] });
 
 function request(url: string, messages: WireMessage[], character = "ada"): SidecarRequest {
   return {
@@ -194,7 +194,7 @@ function fakePhase(output: string): ToolPhase {
         images: [],
         content_blocks: blocks,
         timestamp: "2026-01-01T00:00:00-05:00",
-      } as Message);
+      });
     },
     runTool: (use) =>
       Promise.resolve({ type: "tool_result", tool_use_id: use.id, content: output } as ContentBlock),

@@ -736,7 +736,7 @@ describe("the layer order exists once", () => {
       const winner = [...LAYERS].reverse().find((l) => set.has(l))!;
       expect(scopes.temperature, `mask ${mask} attributed the wrong layer`).toBe(winner);
       expect(settings.temperature, `mask ${mask} resolved the wrong value`).toBe(
-        VALUE_OF[winner]!,
+        VALUE_OF[winner],
       );
     }
   });

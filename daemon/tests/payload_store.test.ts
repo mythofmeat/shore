@@ -30,7 +30,7 @@ describe("payload splitting", () => {
     ["a plain request", body([turn("user", "hi")])],
     ["nested braces inside strings", body([turn("user", '} ] { [ "quoted" \\ end')])],
     ["escaped quotes and backslashes", body([turn("user", 'she said \\"no\\" \\\\ ok')])],
-    ["unicode and emoji", body([turn("user", "réponse ✅ 你好 \u{1f600}")])],
+    ["unicode and emoji", body([turn("user", "réponse ✅ 你好 \u{1F600}")])],
     ["an empty messages array", body([])],
     ["whitespace between members", '{ "messages" : [ {"a":1} , {"b":2} ] , "x" : 3 }'],
     ["numbers and literals", '{"messages":[1,-2.5e10,true,false,null],"n":0}'],

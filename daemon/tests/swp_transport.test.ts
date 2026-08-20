@@ -423,7 +423,7 @@ describe("message loop", () => {
     for (let i = 0; i < 10; i += 1) await Promise.resolve();
 
     expect(h.frames()).toEqual([
-      { type: "error", code: "protocol_error", message: "Duplicate hello" } as ServerMessage,
+      { type: "error", code: "protocol_error", message: "Duplicate hello" },
     ]);
     expect(h.routed).toEqual([]);
 

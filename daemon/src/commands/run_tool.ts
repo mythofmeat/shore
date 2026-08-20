@@ -329,7 +329,7 @@ function unknownMcpTool(name: string, mcpTools: readonly McpSchemaView[]): strin
   return mcpTools.length === 0
     ? `No MCP tools are connected, so ${name} does not exist`
     : `There is no MCP tool named '${name}'. Connected: ` +
-        `${mcpTools.map((t) => t.full_name).join(", ")}`;
+        mcpTools.map((t) => t.full_name).join(", ");
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

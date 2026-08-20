@@ -22,7 +22,7 @@ function newMessage(overrides: Partial<NewMessage> = {}): ServerMessage {
     content_blocks: [],
     timestamp: "2026-01-01T00:00:00Z",
   };
-  return { type: "new_message", ...message, ...overrides } as ServerMessage;
+  return { type: "new_message", ...message, ...overrides };
 }
 
 describe("mirror_all routing", () => {
@@ -251,13 +251,13 @@ describe("reactions", () => {
 
 describe("mirrored prompt formatting", () => {
   test("it blockquotes and prefixes every line", () => {
-    expect(formatUserMirror("hello")).toBe("> \u{1f464} hello");
-    expect(formatUserMirror("line one\nline two")).toBe("> \u{1f464} line one\n> line two");
+    expect(formatUserMirror("hello")).toBe("> \u{1F464} hello");
+    expect(formatUserMirror("line one\nline two")).toBe("> \u{1F464} line one\n> line two");
   });
 
   test("a trailing newline does not become an empty quoted line", () => {
     expect(splitLines("a\n")).toEqual(["a"]);
-    expect(formatUserMirror("a\n")).toBe("> \u{1f464} a");
-    expect(formatUserMirror("")).toBe("> \u{1f464}");
+    expect(formatUserMirror("a\n")).toBe("> \u{1F464} a");
+    expect(formatUserMirror("")).toBe("> \u{1F464}");
   });
 });

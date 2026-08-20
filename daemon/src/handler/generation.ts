@@ -11,7 +11,7 @@ import {
   textOnlyReason,
 } from "../llm/image_support.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
-import type { ContentBlock, Message } from "../engine/types.ts";
+import type { Message } from "../engine/types.ts";
 import {
   DEFAULT_BACKOFF_BASE_MS,
   DEFAULT_MAX_RETRIES,
@@ -235,11 +235,9 @@ export async function runGeneration(
   const request: SidecarRequest = {
     ...built.request,
     messages: droppedHistoryImages(built.request.messages, imageSupport, resolved),
-    context: callContext(deps, config, charName, params.rid, {
-      ...(built.request.provider_options === undefined
+    context: callContext(deps, config, charName, params.rid, (built.request.provider_options === undefined
         ? {}
-        : { options: built.request.provider_options }),
-    }),
+        : { options: built.request.provider_options })),
   };
 
   const subagentHistory: Message[] =
@@ -513,7 +511,7 @@ export function applyIntermediateMessages(
   for (const message of intermediate) {
     const wire: WireMessage = {
       role: message.role === "assistant" ? "assistant" : "user",
-      content: message.content_blocks as ContentBlock[],
+      content: message.content_blocks,
       ...(request.provider_key === undefined ? {} : { provider_key: request.provider_key }),
       ...(mintedModel === undefined ? {} : { model: mintedModel }),
     };

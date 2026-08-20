@@ -271,7 +271,7 @@ export class Server {
     this.#config.log?.info?.("Server shutting down");
 
     await new Promise<void>((resolve) => listener.close(() => resolve()));
-    await Promise.allSettled([...this.#connections]);
+    await Promise.allSettled(this.#connections);
     this.#events.close();
     this.#routes.close();
   }

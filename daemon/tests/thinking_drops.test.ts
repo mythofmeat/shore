@@ -30,7 +30,7 @@ function request(over: Partial<SidecarRequest> = {}): SidecarRequest {
     replay_prior_thinking: "all",
     messages: [],
     ...over,
-  } as SidecarRequest;
+  };
 }
 
 function context(): CallContext {

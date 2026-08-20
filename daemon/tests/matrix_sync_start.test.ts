@@ -25,7 +25,7 @@ class FakeClient {
   }
 
   emit(state: SyncState, data?: SyncStateData): void {
-    for (const listener of [...this.#listeners]) listener(state, null, data);
+    for (const listener of Array.from(this.#listeners)) listener(state, null, data);
   }
 
   asClient(): MatrixClient {
@@ -34,8 +34,7 @@ class FakeClient {
 }
 
 const unknownToken = (): SyncStateData =>
-  ({ error: Object.assign(new Error("[401] Invalid token"), { errcode: "M_UNKNOWN_TOKEN" }) }) as
-    SyncStateData;
+  ({ error: Object.assign(new Error("[401] Invalid token"), { errcode: "M_UNKNOWN_TOKEN" }) });
 
 describe("waiting for the first sync", () => {
   test("a prepared sync resolves and unsubscribes", async () => {
@@ -103,7 +102,7 @@ describe("watching a sync that already started", () => {
     const faults: Error[] = [];
     watchForSyncDeath(client.asClient(), (fault) => faults.push(fault));
     client.emit(SyncState.Reconnecting);
-    client.emit(SyncState.Error, { error: new Error("connection reset") } as SyncStateData);
+    client.emit(SyncState.Error, { error: new Error("connection reset") });
     client.emit(SyncState.Catchup);
     client.emit(SyncState.Syncing);
     expect(faults).toHaveLength(0);

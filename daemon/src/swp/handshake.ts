@@ -49,7 +49,7 @@ export function helloSnapshot(registry: HandshakeRegistry): HelloSnapshot {
 export async function buildSessionHistorySnapshot(
   registry: HandshakeRegistry,
   selectedCharacter: string | null,
-  activeModel?: string | undefined,
+  activeModel?: string,
 ): Promise<HistorySnapshot> {
   const config =
     selectedCharacter === null
