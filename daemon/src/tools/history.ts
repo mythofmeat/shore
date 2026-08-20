@@ -318,7 +318,7 @@ export function matchesTimeRange(
   return rangeContains(range, parsed);
 }
 
-function candidate(
+function scoredCandidate(
   relevance: number,
   coverage: number,
   text: string,
@@ -352,7 +352,7 @@ function collectMatches(
     const relevance = relevanceFor(matcher, text);
     if (relevance === undefined || !matchesTimeRange(message.timestamp, range, stats)) continue;
     candidates.push(
-      candidate(relevance, matcher?.coverage(text) ?? 0, text, message.timestamp, {
+      scoredCandidate(relevance, matcher?.coverage(text) ?? 0, text, message.timestamp, {
         msg_id: message.msg_id,
         role: roleLabel(message.role),
         timestamp: message.timestamp,

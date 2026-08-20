@@ -106,7 +106,7 @@ class FakeBot implements BridgeBot {
   }
 }
 
-interface Harness {
+interface BridgeHarness {
   bot: FakeBot;
   rooms: RoomBindings;
   events: EventMap;
@@ -117,10 +117,10 @@ interface Harness {
   stop(): Promise<void>;
 }
 
-const harnesses: Harness[] = [];
+const harnesses: BridgeHarness[] = [];
 
 afterEach(async () => {
-  for (const harness of harnesses.splice(0)) await harness.stop();
+  for (const activeHarness of harnesses.splice(0)) await activeHarness.stop();
 });
 
 async function harness(
@@ -130,7 +130,7 @@ async function harness(
     characters?: string[];
     bindings?: [roomId: string, character: string][];
   } = {},
-): Promise<Harness> {
+): Promise<BridgeHarness> {
   const names = options.characters ?? ["ada", "bee"];
   const server = new Server({
     addr: "127.0.0.1:0",
@@ -200,7 +200,7 @@ async function harness(
   };
   await settle();
 
-  const built: Harness = {
+  const built: BridgeHarness = {
     bot,
     rooms,
     events,

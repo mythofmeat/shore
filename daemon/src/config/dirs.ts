@@ -142,24 +142,24 @@ export const characterConfigDir = (config: string, name: string): string =>
 export const characterWorkspaceDir = (
   config: string,
   name: string,
-  workspaceRoot?: string,
+  workspaceDir?: string,
 ): string =>
-  workspaceRoot === undefined
+  workspaceDir === undefined
     ? rustJoin(characterConfigDir(config, name), CHARACTER_WORKSPACE_DIR)
-    : rustJoin(workspaceRoot, name);
+    : rustJoin(workspaceDir, name);
 
 export const characterWorkspaceFile = (
   config: string,
   name: string,
   file: string,
-  workspaceRoot?: string,
-): string => rustJoin(characterWorkspaceDir(config, name, workspaceRoot), file);
+  workspaceDir?: string,
+): string => rustJoin(characterWorkspaceDir(config, name, workspaceDir), file);
 
 export const characterMemoryDir = (
   config: string,
   name: string,
-  workspaceRoot?: string,
-): string => rustJoin(characterWorkspaceDir(config, name, workspaceRoot), MEMORY_DIR);
+  workspaceDir?: string,
+): string => rustJoin(characterWorkspaceDir(config, name, workspaceDir), MEMORY_DIR);
 
 export const characterDataDir = (data: string, name: string): string => rustJoin(data, name);
 
@@ -197,7 +197,7 @@ export function readOrUndefined(path: string): string | undefined {
   }
 }
 
-export function discoverCharacters(config: string, workspaceRoot?: string): string[] {
+export function discoverCharacters(config: string, workspaceDir?: string): string[] {
   const names = new Set<string>();
 
   const charsDir = rustJoin(config, "characters");
@@ -205,7 +205,7 @@ export function discoverCharacters(config: string, workspaceRoot?: string): stri
     if (!isUsableCharacterName(name)) continue;
     const dir = join(charsDir, name);
     if (
-      (workspaceRoot === undefined &&
+      (workspaceDir === undefined &&
         pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) ||
       pathExists(join(dir, LEGACY_CHARACTER_FILE))
     ) {
@@ -213,10 +213,10 @@ export function discoverCharacters(config: string, workspaceRoot?: string): stri
     }
   }
 
-  if (workspaceRoot !== undefined) {
-    for (const name of readdirOrEmpty(workspaceRoot)) {
+  if (workspaceDir !== undefined) {
+    for (const name of readdirOrEmpty(workspaceDir)) {
       if (!isUsableCharacterName(name)) continue;
-      const dir = join(workspaceRoot, name);
+      const dir = join(workspaceDir, name);
       if (pathExists(join(dir, SOUL_FILE))) names.add(name);
     }
   }
@@ -235,10 +235,10 @@ function readdirOrEmpty(dir: string): string[] {
 export function loadCharacterDefinition(
   config: string,
   name: string,
-  workspaceRoot?: string,
+  workspaceDir?: string,
 ): string | undefined {
   return (
-    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceRoot)) ??
+    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir)) ??
     readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE))
   );
 }
@@ -246,10 +246,10 @@ export function loadCharacterDefinition(
 export function resolveUserDefinition(
   config: string,
   name: string,
-  workspaceRoot?: string,
+  workspaceDir?: string,
 ): string | undefined {
   return (
-    readOrUndefined(characterWorkspaceFile(config, name, USER_FILE, workspaceRoot)) ??
+    readOrUndefined(characterWorkspaceFile(config, name, USER_FILE, workspaceDir)) ??
     readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_USER_FILE))
   );
 }

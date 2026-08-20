@@ -148,8 +148,8 @@ function fakeAnthropic(turns: Turn[]): FakeAnthropic {
   let next = 0;
   const server = Bun.serve({
     port: 0,
-    async fetch(request) {
-      requests.push((await request.json()) as Record<string, unknown>);
+    async fetch(incomingRequest) {
+      requests.push((await incomingRequest.json()) as Record<string, unknown>);
       const turn = turns[next++] ?? { kind: "text" as const, text: "(exhausted)" };
       return new Response(sseForTurn(turn), {
         headers: { "content-type": "text/event-stream" },

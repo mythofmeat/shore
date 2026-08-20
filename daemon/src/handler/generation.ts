@@ -423,10 +423,10 @@ async function streamTurn(
       call,
       events,
       initialAttempt,
-      (request, callType) => {
+      (nextRequest, callType) => {
         const continued = {
-          ...request,
-          context: { ...request.context!, call_type: callType },
+          ...nextRequest,
+          context: { ...nextRequest.context!, call_type: callType },
         };
         const nextBlock = budgetBlockFor(continued);
         if (nextBlock) {

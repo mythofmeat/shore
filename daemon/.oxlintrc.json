@@ -50,7 +50,7 @@
     "typescript/no-unsafe-member-access": "warn",
     "typescript/no-unsafe-return": "warn",
     "eslint/no-unsafe-optional-chaining": "error",
-    "eslint/no-shadow": "warn",
+    "eslint/no-shadow": "error",
     "eslint/eqeqeq": "error",
     "eslint/no-throw-literal": "off",
     "eslint/no-promise-executor-return": "warn",

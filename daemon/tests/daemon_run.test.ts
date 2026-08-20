@@ -401,7 +401,7 @@ describe("what a client gets", () => {
 });
 
 describe("hot reload", () => {
-  async function until(check: () => boolean, timeoutMs = 5_000): Promise<void> {
+  async function untilAdopted(check: () => boolean, timeoutMs = 5_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (!check()) {
       if (Date.now() > deadline) throw new Error("the config was never adopted");
@@ -418,7 +418,7 @@ describe("hot reload", () => {
 
     await writeFile(place.configPath, `[tools]\nmax_result_chars = 4242\n`);
 
-    await until(
+    await untilAdopted(
       () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
     expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
@@ -428,7 +428,7 @@ describe("hot reload", () => {
     const place = await layout();
     const daemon = await start(place);
     await writeFile(place.configPath, `[tools]\nmax_result_chars = 4242\n`);
-    await until(
+    await untilAdopted(
       () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
 
@@ -442,7 +442,7 @@ describe("hot reload", () => {
     const place = await layout();
     const daemon = await start(place);
     await writeFile(place.configPath, `[tools]\nmax_result_chars = 4242\n`);
-    await until(
+    await untilAdopted(
       () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
 
@@ -466,7 +466,7 @@ describe("hot reload", () => {
     await writeFile(join(staged, "SOUL.md"), "# nova\n");
     await rename(join(place.root, "staged"), join(place.root, "config", "characters", "nova"));
 
-    await until(() => daemon.runtime.registry.availableCharacters().length === 2);
+    await untilAdopted(() => daemon.runtime.registry.availableCharacters().length === 2);
     expect(daemon.runtime.registry.availableCharacters()).toEqual(["ada", "nova"]);
   });
 });

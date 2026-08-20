@@ -46,23 +46,23 @@ export const untilSecs = (at: number, now: number): number => Math.trunc((at - n
 
 const sinceSecs = (at: number, now: number): number => Math.max(0, Math.trunc((now - at) / 1000));
 
-export function autonomyWire(status: AutonomyStatus, now: number): Json {
-  const wake = status.next_wake_at;
-  const user = status.last_user_at;
+export function autonomyWire(autonomy: AutonomyStatus, now: number): Json {
+  const wake = autonomy.next_wake_at;
+  const user = autonomy.last_user_at;
   return {
-    heartbeat_state: status.heartbeat_state,
-    ticks_without_user: status.ticks_without_user,
-    dormant_after_heartbeat_turns: status.max_idle_ticks,
-    effective_interval_secs: asSecs(status.default_interval_ms),
+    heartbeat_state: autonomy.heartbeat_state,
+    ticks_without_user: autonomy.ticks_without_user,
+    dormant_after_heartbeat_turns: autonomy.max_idle_ticks,
+    effective_interval_secs: asSecs(autonomy.default_interval_ms),
     ...(wake === undefined
       ? {}
       : { next_wake_at: rfc3339(wake), seconds_until_wake: untilSecs(wake, now) }),
     ...(user === undefined
       ? {}
       : { last_user_at: rfc3339(user), seconds_since_user: sinceSecs(user, now) }),
-    minimum_heartbeat_latency_secs: asSecs(status.min_wake_interval_ms),
-    dormant_after_idle_time_secs: asSecs(status.max_silent_ms),
-    recent_events: status.recent_events,
+    minimum_heartbeat_latency_secs: asSecs(autonomy.min_wake_interval_ms),
+    dormant_after_idle_time_secs: asSecs(autonomy.max_silent_ms),
+    recent_events: autonomy.recent_events,
   };
 }
 

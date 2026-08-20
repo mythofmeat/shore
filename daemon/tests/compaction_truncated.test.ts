@@ -134,14 +134,14 @@ function options(
 
 function conversation(): ConversationMessage[] {
   return [
-    message("user", "old question"),
-    message("assistant", "old answer"),
-    message("user", "recent question"),
-    message("assistant", "recent answer"),
+    conversationMessage("user", "old question"),
+    conversationMessage("assistant", "old answer"),
+    conversationMessage("user", "recent question"),
+    conversationMessage("assistant", "recent answer"),
   ];
 }
 
-function message(role: string, content: string): ConversationMessage {
+function conversationMessage(role: string, content: string): ConversationMessage {
   return {
     role,
     content,

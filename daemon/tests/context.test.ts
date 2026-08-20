@@ -133,14 +133,14 @@ function expandPath(path: string, dir: string): string {
 }
 
 function promptMessage(m: FixturePromptMessage, dir: string): PromptMessage {
-  const images: ImageRef[] = m.images.map((i) => ({
+  const imageRefs: ImageRef[] = m.images.map((i) => ({
     path: expandPath(i.path, dir),
     ...(i.caption === null ? {} : { caption: i.caption }),
   }));
   return {
     role: m.role,
     content: m.content,
-    images,
+    images: imageRefs,
     content_blocks: m.content_blocks,
     ...(m.provider_key === null ? {} : { provider_key: m.provider_key }),
     ...(m.model === null ? {} : { model: m.model }),

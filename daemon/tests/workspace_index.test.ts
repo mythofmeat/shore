@@ -307,7 +307,7 @@ const CORRECTED = new Set([
 ]);
 
 describe("hybridSearch", () => {
-  for (const c of fixture.cases.filter((c) => !CORRECTED.has(c.name))) {
+  for (const c of fixture.cases.filter((entry) => !CORRECTED.has(entry.name))) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       const idx = join(root, "cache/workspace_index.db");
@@ -553,7 +553,7 @@ function expectedIndexShape(index: any): Record<string, unknown> {
 }
 
 describe("refreshIndexEntries", () => {
-  for (const c of fixture.refresh_index_entries.filter((c) => !CORRECTED.has(c.name))) {
+  for (const c of fixture.refresh_index_entries.filter((entry) => !CORRECTED.has(entry.name))) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       await mkdir(ws, { recursive: true });

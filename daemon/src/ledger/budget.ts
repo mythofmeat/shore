@@ -1248,7 +1248,7 @@ function fractionToPercent(fraction: number): number {
 
 function recordBudgetWarningThreshold(
   db: Database,
-  budgetName: string,
+  name: string,
   scope: BudgetScope,
   periodStart: string,
   threshold: number,
@@ -1261,6 +1261,6 @@ function recordBudgetWarningThreshold(
                (budget_name, period_start, threshold, created_at)
                VALUES (?1, ?2, ?3, ?4)`,
     )
-    .run(budgetName, periodStart, thresholdKey, toRfc3339(now));
+    .run(name, periodStart, thresholdKey, toRfc3339(now));
   return changes.changes > 0;
 }

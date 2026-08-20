@@ -220,9 +220,9 @@ export async function indexPendingBatch(
   });
 }
 
-export async function workspaceIndexStats(indexPath: string) {
-  return await withWorkspaceIndexLock(indexPath, async () => {
-    const store = WorkspaceIndexStore.open(indexPath);
+export async function workspaceIndexStats(dbPath: string) {
+  return await withWorkspaceIndexLock(dbPath, async () => {
+    const store = WorkspaceIndexStore.open(dbPath);
     try {
       return store.stats();
     } finally {
@@ -655,8 +655,8 @@ export async function embedDocuments(embedder: Embedder, docs: string[]): Promis
   return vectors;
 }
 
-export function skipTag(size: number, mtimeSecs: number): string {
-  return `mtime:${mtimeSecs}:${size}`;
+export function skipTag(size: number, modifiedAtSecs: number): string {
+  return `mtime:${modifiedAtSecs}:${size}`;
 }
 
 export function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): number {

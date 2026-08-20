@@ -255,16 +255,16 @@ export function listAlternatives(engine: ConversationEngine, args: Args): Json {
   const alts = msg.alternatives ?? [];
   const altCount = alts.length;
   const current = Math.min(msg.alt_index ?? 0, Math.max(0, altCount - 1));
-  const alternatives = alts.map((alt, index) => {
-    const images: ImageRef[] = structuredClone(alt.images);
+  const alternatives = alts.map((alternative, index) => {
+    const images: ImageRef[] = structuredClone(alternative.images);
     embedImageData(images);
     return {
       index,
       position: index + 1,
       active: index === current,
-      content: alt.content,
+      content: alternative.content,
       images,
-      timestamp: alt.timestamp,
+      timestamp: alternative.timestamp,
     };
   });
 

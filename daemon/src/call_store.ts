@@ -873,9 +873,9 @@ function decodeLossy(bytes: Uint8Array): string {
 }
 
 function chunkPayload(bytes: Uint8Array): Uint8Array[] {
-  const text = decodeUtf8(bytes);
-  if (text === null) return [bytes];
-  const parts = splitJsonPayload(text);
+  const decoded = decodeUtf8(bytes);
+  if (decoded === null) return [bytes];
+  const parts = splitJsonPayload(decoded);
   if (parts === null) return [bytes];
 
   const chunks = parts.map((part) => Buffer.from(part, "utf8") as Uint8Array);

@@ -201,7 +201,7 @@ describe("buildCall against the ai SDK's own prompt validation", () => {
     replay_prior_thinking: "all",
   } as unknown as SidecarRequest;
 
-  async function promptSeenByProvider(req: SidecarRequest): Promise<unknown> {
+  async function promptSeenByProvider(sidecarRequest: SidecarRequest): Promise<unknown> {
     let seen: unknown;
     const model = new MockLanguageModelV3({
       doGenerate: async (
@@ -219,7 +219,7 @@ describe("buildCall against the ai SDK's own prompt validation", () => {
         };
       },
     });
-    const call = buildCall(req);
+    const call = buildCall(sidecarRequest);
     await generateText({ ...call, model: model as unknown as LanguageModel });
     return seen;
   }

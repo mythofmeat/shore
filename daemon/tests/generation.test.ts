@@ -175,19 +175,23 @@ async function tempRoot(name: string): Promise<string> {
 describe("applyIntermediateMessages", () => {
   for (const c of fixture.apply_intermediate_messages) {
     test(c.name, () => {
-      const input = c.input as Record<string, any>;
+      const caseInput = c.input as Record<string, any>;
       seededTimestamps = new Set(
-        (input["messages"] as Message[]).map((m) => m.timestamp),
+        (caseInput["messages"] as Message[]).map((m) => m.timestamp),
       );
 
       const base: WireMessage = { role: "user", content: [{ type: "text", text: "hello" }] };
       const request = {
         model: "claude-fixture",
         messages: [base],
-        ...(input["provider_key"] === null ? {} : { provider_key: input["provider_key"] }),
+        ...(caseInput["provider_key"] === null ? {} : { provider_key: caseInput["provider_key"] }),
       } as SidecarRequest;
 
-      applyIntermediateMessages(request, input["messages"] as Message[], input["result_model"]);
+      applyIntermediateMessages(
+        request,
+        caseInput["messages"] as Message[],
+        caseInput["result_model"],
+      );
 
       expect(shaped(request.messages)).toEqual(shaped(c.output.messages));
     });
@@ -197,15 +201,15 @@ describe("applyIntermediateMessages", () => {
 describe("buildToolContext", () => {
   for (const c of fixture.build_tool_context) {
     test(c.name, async () => {
-      const input = c.input as Record<string, any>;
+      const caseInput = c.input as Record<string, any>;
       const out = c.output as Record<string, any>;
       const root = await tempRoot("tc");
-      const config = await loadedConfig(root, input as Knobs);
+      const config = await loadedConfig(root, caseInput as Knobs);
 
       await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
       const workspace = join(config.dirs.config, "characters", "ada", "workspace");
       await mkdir(workspace, { recursive: true });
-      for (const name of input["prompt_files"] as string[]) {
+      for (const name of caseInput["prompt_files"] as string[]) {
         await writeFile(join(workspace, name), `# ${name}`);
       }
       await mkdir(join(config.dirs.data, "ada"), { recursive: true });
@@ -238,7 +242,7 @@ describe("buildToolContext", () => {
       }
 
       expect(ctx.searchConfig.search_depth).toBe(
-        (input as Knobs).search_depth ?? defaultSearchConfig().search_depth,
+        (caseInput as Knobs).search_depth ?? defaultSearchConfig().search_depth,
       );
       expect(ctx.searchConfig.result_limit).toBe(defaultSearchConfig().result_limit);
       expect(ctx.retrievalConfig.maxFileBytes).toBe(
@@ -286,13 +290,15 @@ async function* scriptedLoop(
 }
 
 async function replayTurn(c: Record<string, any>): Promise<Run> {
-  const input = c["input"] as Record<string, any>;
+  const turnInput = c["input"] as Record<string, any>;
   const root = await tempRoot("run");
   const config = await loadedConfig(root, {
     with_model: true,
-    tools_enabled: input["tools_enabled"],
-    subagent: input["subagent"],
-    ...(input["max_retries"] === undefined ? {} : { max_retries: input["max_retries"] }),
+    tools_enabled: turnInput["tools_enabled"],
+    subagent: turnInput["subagent"],
+    ...(turnInput["max_retries"] === undefined
+      ? {}
+      : { max_retries: turnInput["max_retries"] }),
   });
   setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
@@ -301,7 +307,7 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
   const charDir = join(config.dirs.data, "ada");
   await mkdir(charDir, { recursive: true });
 
-  const history = input["history"] as Message[];
+  const history = turnInput["history"] as Message[];
   seededTimestamps = new Set(history.map((m) => m.timestamp));
   if (history.length > 0) {
     await writeFile(
@@ -313,8 +319,8 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
   const direct: ServerMessage[] = [];
   const broadcast: ServerMessage[] = [];
   const requests: SidecarRequest[] = [];
-  const steps = input["tool_steps"] as Record<string, any>[];
-  const events = input["events"] as StreamEvent[];
+  const steps = turnInput["tool_steps"] as Record<string, any>[];
+  const events = turnInput["events"] as StreamEvent[];
 
   const provider: SidecarProvider = {
     // eslint-disable-next-line require-yield
@@ -400,19 +406,19 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
           capabilities: ["streaming"],
           selectedCharacter: "ada",
         },
-        rid: input["rid"],
+        rid: turnInput["rid"],
         kind: "message",
       } as never,
       body: {
-        rid: input["rid"] ?? null,
-        text: input["body"]["text"],
+        rid: turnInput["rid"] ?? null,
+        text: turnInput["body"]["text"],
         stream: true,
-        images: input["body"]["images"] ?? [],
-        image_data: input["body"]["image_data"] ?? [],
+        images: turnInput["body"]["images"] ?? [],
+        image_data: turnInput["body"]["image_data"] ?? [],
       },
-      regen: input["regen"] as boolean,
+      regen: turnInput["regen"] as boolean,
       charName: "ada",
-      rid: input["rid"] ?? null,
+      rid: turnInput["rid"] ?? null,
       send: async (m) => {
         direct.push(m);
       },
