@@ -79,8 +79,32 @@ function sourceFor(overrides: Partial<WorkspaceIndexSource> = {}): WorkspaceInde
 const section = async (
   source: WorkspaceIndexSource | undefined = sourceFor(),
   character = "qifei",
-): Promise<Record<string, any> | null> =>
-  (await workspaceIndexSection(source, character)) as Record<string, any> | null;
+): Promise<IndexSection | null> =>
+  (await workspaceIndexSection(source, character)) as IndexSection | null;
+
+interface IndexSection {
+  background?: {
+    active?: boolean;
+    embedder_error?: string;
+    failures?: number;
+    last_error?: string;
+    registered?: boolean;
+    retry_in_secs?: number;
+    swept?: boolean;
+  };
+  bytes?: number;
+  embedded?: number;
+  error?: string;
+  files?: number;
+  last_indexed_at?: string | null;
+  models?: string[];
+  path?: string;
+  pending?: number;
+  skip_reasons?: Record<string, number>;
+  skipped?: number;
+  unusable?: string;
+  vectors?: number;
+}
 
 describe("the status index section", () => {
   test("it counts what is embedded, pending and skipped, and why", async () => {

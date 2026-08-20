@@ -9,7 +9,12 @@ import { ConversationEngine } from "../src/engine/conversation.ts";
 import { characterActiveJsonl } from "../src/config/dirs.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import { defaultAppConfig, defaultSearchConfig, type AppConfig } from "../src/config/app.ts";
+import {
+  defaultAppConfig,
+  defaultSearchConfig,
+  type AppConfig,
+  type RetrievalMode,
+} from "../src/config/app.ts";
 import { emptyCatalog, NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -94,8 +99,53 @@ interface Knobs {
   embedding?: string | null;
   embedding_key_set?: boolean;
   search_depth?: string | null;
-  max_retries?: number;
+  max_retries?: number | null;
   with_model?: boolean;
+}
+
+interface BuildToolContextOutput {
+  active_prompt_snapshot: string[];
+  character_data_dir: string;
+  character_name: string;
+  config_dir: string;
+  embedder: boolean;
+  image_dir: string;
+  image_gen_config: null | {
+    api_key_present: boolean;
+    model_id: string;
+    provider: string;
+    size: string;
+  };
+  mcp_registry: boolean;
+  memory_index_path: string;
+  memory_retrieval_config: { max_file_bytes: number; mode: RetrievalMode };
+  subagent_runtime: boolean;
+  workspace_dir: string;
+}
+
+interface ToolStep {
+  input?: unknown;
+  kind: string;
+  messages?: { content_blocks: ContentBlock[]; role: Message["role"] }[];
+  name?: string;
+  tool_id?: string;
+}
+
+interface GenerationInput {
+  body: { image_data?: unknown[]; images?: string[]; text: string };
+  events: StreamEvent[];
+  history: Message[];
+  max_retries: number | null;
+  regen: boolean;
+  rid: string | null;
+  subagent: string | null;
+  tool_steps: ToolStep[];
+  tools_enabled: string[] | null;
+}
+
+interface GenerationCase {
+  input: GenerationInput;
+  output: Record<string, unknown>;
 }
 
 function present<T>(value: T | null | undefined): value is T {
@@ -126,7 +176,7 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
   if (present(knobs.image_generation)) app.defaults.image_generation = knobs.image_generation;
   if (present(knobs.embedding)) app.defaults.embedding = knobs.embedding;
   if (present(knobs.search_depth)) app.tools.web_search.search_depth = knobs.search_depth;
-  if (knobs.max_retries !== undefined) app.advanced.max_retries = knobs.max_retries;
+  if (present(knobs.max_retries)) app.advanced.max_retries = knobs.max_retries;
 
   const models = emptyCatalog();
   if (knobs.with_model === true) {
@@ -175,10 +225,12 @@ async function tempRoot(name: string): Promise<string> {
 describe("applyIntermediateMessages", () => {
   for (const c of fixture.apply_intermediate_messages) {
     test(c.name, () => {
-      const caseInput = c.input as Record<string, any>;
-      seededTimestamps = new Set(
-        (caseInput["messages"] as Message[]).map((m) => m.timestamp),
-      );
+      const caseInput = c.input as {
+        messages: Message[];
+        provider_key: string | null;
+        result_model: string;
+      };
+      seededTimestamps = new Set(caseInput.messages.map((m) => m.timestamp));
 
       const base: WireMessage = { role: "user", content: [{ type: "text", text: "hello" }] };
       const request = {
@@ -189,7 +241,7 @@ describe("applyIntermediateMessages", () => {
 
       applyIntermediateMessages(
         request,
-        caseInput["messages"] as Message[],
+        caseInput.messages,
         caseInput["result_model"],
       );
 
@@ -201,15 +253,15 @@ describe("applyIntermediateMessages", () => {
 describe("buildToolContext", () => {
   for (const c of fixture.build_tool_context) {
     test(c.name, async () => {
-      const caseInput = c.input as Record<string, any>;
-      const out = c.output as Record<string, any>;
+      const caseInput = c.input as Knobs & { prompt_files: string[] };
+      const out = c.output as BuildToolContextOutput;
       const root = await tempRoot("tc");
-      const config = await loadedConfig(root, caseInput as Knobs);
+      const config = await loadedConfig(root, caseInput);
 
       await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
       const workspace = join(config.dirs.config, "characters", "ada", "workspace");
       await mkdir(workspace, { recursive: true });
-      for (const name of caseInput["prompt_files"] as string[]) {
+      for (const name of caseInput.prompt_files) {
         await writeFile(join(workspace, name), `# ${name}`);
       }
       await mkdir(join(config.dirs.data, "ada"), { recursive: true });
@@ -225,7 +277,7 @@ describe("buildToolContext", () => {
       expect(stripRoot(ctx.configDir, root)).toBe(out["config_dir"]);
       expect(ctx.characterName).toBe(out["character_name"]);
       expect(stripRoot(ctx.memoryIndexPath ?? "", root)).toBe(
-        String(out["memory_index_path"]).replace(/workspace_index\.json$/, "workspace_index.db"),
+        out.memory_index_path.replace(/workspace_index\.json$/, "workspace_index.db"),
       );
       expect(ctx.embedder !== undefined).toBe(out["embedder"]);
       expect(ctx.mcpCall !== undefined).toBe(out["mcp_registry"]);
@@ -234,15 +286,15 @@ describe("buildToolContext", () => {
       if (out["image_gen_config"] === null) {
         expect(ctx.imageGenConfig).toBeUndefined();
       } else {
-        const cfg = out["image_gen_config"] as Record<string, unknown>;
-        expect(ctx.imageGenConfig?.provider).toBe(cfg["provider"] as string);
-        expect(ctx.imageGenConfig?.model_id).toBe(cfg["model_id"] as string);
-        expect((ctx.imageGenConfig?.api_key ?? "") !== "").toBe(cfg["api_key_present"] as boolean);
-        expect(ctx.imageGenConfig?.size).toBe(cfg["size"] as string);
+        const cfg = out.image_gen_config;
+        expect(ctx.imageGenConfig?.provider).toBe(cfg.provider);
+        expect(ctx.imageGenConfig?.model_id).toBe(cfg.model_id);
+        expect((ctx.imageGenConfig?.api_key ?? "") !== "").toBe(cfg.api_key_present);
+        expect(ctx.imageGenConfig?.size).toBe(cfg.size);
       }
 
       expect(ctx.searchConfig.search_depth).toBe(
-        (caseInput as Knobs).search_depth ?? defaultSearchConfig().search_depth,
+        caseInput.search_depth ?? defaultSearchConfig().search_depth,
       );
       expect(ctx.searchConfig.result_limit).toBe(defaultSearchConfig().result_limit);
       expect(ctx.retrievalConfig.maxFileBytes).toBe(
@@ -251,7 +303,7 @@ describe("buildToolContext", () => {
       expect(ctx.retrievalMode).toBe(out["memory_retrieval_config"]["mode"]);
 
       const snapshot = readdirSync(join(config.dirs.data, "ada", "active_prompt")).sort();
-      expect(snapshot).toEqual(out["active_prompt_snapshot"] as string[]);
+      expect(snapshot).toEqual(out.active_prompt_snapshot);
     });
   }
 });
@@ -269,7 +321,7 @@ interface Run {
 }
 
 async function* scriptedLoop(
-  steps: readonly Record<string, any>[],
+  steps: readonly ToolStep[],
   events: readonly StreamEvent[],
   phase: ToolPhase,
 ): AsyncIterable<StreamEvent> {
@@ -289,8 +341,8 @@ async function* scriptedLoop(
   yield* events;
 }
 
-async function replayTurn(c: Record<string, any>): Promise<Run> {
-  const turnInput = c["input"] as Record<string, any>;
+async function replayTurn(c: GenerationCase): Promise<Run> {
+  const turnInput = c.input;
   const root = await tempRoot("run");
   const config = await loadedConfig(root, {
     with_model: true,
@@ -307,7 +359,7 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
   const charDir = join(config.dirs.data, "ada");
   await mkdir(charDir, { recursive: true });
 
-  const history = turnInput["history"] as Message[];
+  const history = turnInput.history;
   seededTimestamps = new Set(history.map((m) => m.timestamp));
   if (history.length > 0) {
     await writeFile(
@@ -319,8 +371,8 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
   const direct: ServerMessage[] = [];
   const broadcast: ServerMessage[] = [];
   const requests: SidecarRequest[] = [];
-  const steps = turnInput["tool_steps"] as Record<string, any>[];
-  const events = turnInput["events"] as StreamEvent[];
+  const steps = turnInput.tool_steps;
+  const events = turnInput.events;
 
   const provider: SidecarProvider = {
     // eslint-disable-next-line require-yield
@@ -416,7 +468,7 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
         images: turnInput["body"]["images"] ?? [],
         image_data: turnInput["body"]["image_data"] ?? [],
       },
-      regen: turnInput["regen"] as boolean,
+      regen: turnInput.regen,
       charName: "ada",
       rid: turnInput["rid"] ?? null,
       send: async (m) => {
@@ -461,8 +513,8 @@ function dropFalseIsError(v: unknown): unknown {
   return v;
 }
 
-function input(c: unknown): Record<string, any> {
-  return (c as Record<string, any>)["input"] as Record<string, any>;
+function input(c: unknown): GenerationInput {
+  return (c as GenerationCase).input;
 }
 
 async function readBack(dataDir: string): Promise<readonly Message[]> {
@@ -473,8 +525,8 @@ async function readBack(dataDir: string): Promise<readonly Message[]> {
 describe("runGeneration", () => {
   for (const c of fixture.handle_generation) {
     test(c.name, async () => {
-      const run = await replayTurn(c as Record<string, any>);
-      const out = c.output as Record<string, any>;
+      const run = await replayTurn(c as unknown as GenerationCase);
+      const out = c.output as Record<string, unknown>;
 
       expect(shaped(run.direct)).toEqual(shaped(out["direct_frames"]));
 
@@ -502,11 +554,10 @@ describe("runGeneration", () => {
       expect(shaped(dropFalseIsError(cached))).toEqual(shaped(expectedCached));
 
       const expectedCalls = ["ensureState"];
-      const body = input(c)["body"] as Record<string, unknown>;
+      const body = input(c).body;
       const fresh =
-        (c.input as Record<string, any>)["regen"] !== true &&
-        ((body["text"] as string) !== "" ||
-          ((body["images"] as unknown[] | undefined)?.length ?? 0) > 0);
+        !input(c).regen &&
+        (body.text !== "" || (body.images?.length ?? 0) > 0);
       if (fresh) expectedCalls.push("onUserMessage");
       if ((out["result"] as Record<string, unknown>)["error"] === undefined) {
         expectedCalls.push("notifyLastRequest", "notifyAssistantMessage", "shouldCompactNow");

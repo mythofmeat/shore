@@ -43,7 +43,11 @@ function request(
   } as SidecarRequest;
 }
 
-async function drive(url: string, messages: WireMessage[], ...rest: any[]): Promise<StreamEvent[]> {
+async function drive(
+  url: string,
+  messages: WireMessage[],
+  ...rest: [system?: { text: string; label: string }[], ttl?: string]
+): Promise<StreamEvent[]> {
   const out: StreamEvent[] = [];
   for await (const e of new AnthropicProvider().stream(request(url, messages, ...rest))) out.push(e);
   return out;

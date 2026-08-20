@@ -183,7 +183,7 @@ describe("resolveTool", () => {
 describe("describeTool", () => {
   test("a built-in comes back with the description the character is sent", async () => {
     const { ctx } = await world({ enabledTools: ["roll_dice"] });
-    const out = describeTool("ada", ctx, { tool: "roll_dice" }) as Record<string, any>;
+    const out = describeTool("ada", ctx, { tool: "roll_dice" }) as DescribedTool;
 
     expect(out["mode"]).toBe("tool_definition");
     expect(out["tool"]).toBe("roll_dice");
@@ -196,7 +196,7 @@ describe("describeTool", () => {
 
   test("template variables are rendered, so it is what the model reads", async () => {
     const { ctx } = await world({ enabledTools: ["activity_heatmap"] });
-    const out = describeTool("ada", ctx, { tool: "activity_heatmap" }) as Record<string, any>;
+    const out = describeTool("ada", ctx, { tool: "activity_heatmap" }) as DescribedTool;
 
     expect(String(out["description"])).not.toContain("{user}");
     expect(String(out["description"])).not.toContain("{char}");
@@ -204,7 +204,7 @@ describe("describeTool", () => {
 
   test("a tool off the surface is described and flagged, not hidden", async () => {
     const { ctx } = await world({ enabledTools: [] });
-    const out = describeTool("ada", ctx, { tool: "roll_dice" }) as Record<string, any>;
+    const out = describeTool("ada", ctx, { tool: "roll_dice" }) as DescribedTool;
 
     expect(out["enabled"]).toBe(false);
     expect(String(out["description"]).length).toBeGreaterThan(0);
@@ -215,7 +215,7 @@ describe("describeTool", () => {
       enabledSubagents: ["librarian"],
       subagent: () => Promise.resolve("read the shelves"),
     });
-    const out = describeTool("ada", ctx, { tool: "ask_librarian" }) as Record<string, any>;
+    const out = describeTool("ada", ctx, { tool: "ask_librarian" }) as DescribedTool;
 
     expect(out["kind"]).toBe("subagent");
     expect(out["description"]).toBe("reads the shelves");
@@ -228,6 +228,16 @@ describe("describeTool", () => {
     expect(() => describeTool("ada", ctx, { tool: "ask_ghost" })).toThrow("ask_ghost does not exist");
   });
 });
+
+interface DescribedTool extends Record<string, unknown> {
+  description?: string;
+  enabled?: boolean;
+  input_schema?: {
+    properties?: { notation?: unknown };
+    required?: string[];
+  };
+  kind?: string;
+}
 
 describe("coercePairs", () => {
   test("values take the type the tool declared", () => {

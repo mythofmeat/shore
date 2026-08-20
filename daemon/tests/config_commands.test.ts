@@ -32,17 +32,25 @@ const REMOVED = [
 
 function stripRemoved(blob: unknown): unknown {
   if (blob === null || typeof blob !== "object") return blob;
-  const out = structuredClone(blob) as Record<string, any>;
+  const out = structuredClone(blob) as Record<string, unknown>;
   for (const path of REMOVED) {
     const parts = path.split(".");
-    let node: any = out;
+    let node: Record<string, unknown> | undefined = out;
     for (const part of parts.slice(0, -1)) {
-      if (node === null || typeof node !== "object") break;
-      node = node[part];
+      const next: unknown = node?.[part];
+      if (!isRecord(next)) {
+        node = undefined;
+        break;
+      }
+      node = next;
     }
-    if (node !== null && typeof node === "object") delete node[parts[parts.length - 1] as string];
+    if (node !== undefined) delete node[parts[parts.length - 1] as string];
   }
   return out;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stripSection(section: string, blob: unknown): unknown {
@@ -55,7 +63,7 @@ interface Row {
   note?: string;
   state_after: Record<string, unknown>;
   changed_after?: string[];
-  ok?: any;
+  ok?: unknown;
   err?: { code: string; message: string };
 }
 
@@ -159,8 +167,8 @@ async function check(
   r: Row,
   w: World,
   run: () => unknown,
-  normalize: (ok: any) => unknown = (v) => v,
-  normalizeResult: (actual: any) => unknown = normalize,
+  normalize: (ok: unknown) => unknown = (v) => v,
+  normalizeResult: (actual: unknown) => unknown = normalize,
 ): Promise<void> {
   let result: unknown;
   let thrown: unknown;
@@ -339,21 +347,27 @@ describe("config read", () => {
   const liveSectionDefaults = (section: string) =>
     stripSection(section, reportedDefaults()[section]);
 
-  const actualWhole = (ok: any) => ({
-    config: stripRemoved(ok.config),
-    defaults: stripRemoved(ok.defaults),
-  });
+  const actualWhole = (ok: unknown) => {
+    const whole = ok as { config: unknown; defaults: unknown };
+    return {
+      config: stripRemoved(whole.config),
+      defaults: stripRemoved(whole.defaults),
+    };
+  };
   const explicit = pathsSetBy(Bun.TOML.parse(FURNISHED));
 
-  const recordedWhole = (ok: any) => ({
-    config: replayOntoCurrentDefaults(
-      stripRemoved(ok.config),
-      stripRemoved(ok.defaults),
-      liveDefaults(),
-      explicit,
-    ),
-    defaults: liveDefaults(),
-  });
+  const recordedWhole = (ok: unknown) => {
+    const whole = ok as { config: unknown; defaults: unknown };
+    return {
+      config: replayOntoCurrentDefaults(
+        stripRemoved(whole.config),
+        stripRemoved(whole.defaults),
+        liveDefaults(),
+        explicit,
+      ),
+      defaults: liveDefaults(),
+    };
+  };
 
   test("the whole config and the whole default baseline", async () => {
     const w = await build("mid", FURNISHED);
@@ -377,21 +391,27 @@ describe("config read", () => {
         row("config_read", name),
         w,
         () => config(w.ctx, args),
-        (ok) => ({
-          ...ok,
-          config: replayOntoCurrentDefaults(
-            stripSection(section, ok.config),
-            stripSection(section, ok.defaults),
-            liveSectionDefaults(section),
-            new Set([...explicit].flatMap((p) => (p.startsWith(`${section}.`) ? [p.slice(section.length + 1)] : []))),
-          ),
-          defaults: liveSectionDefaults(section),
-        }),
-        (ok) => ({
-          ...ok,
-          config: stripSection(section, ok.config),
-          defaults: stripSection(section, ok.defaults),
-        }),
+        (ok) => {
+          const whole = ok as Record<string, unknown> & { config: unknown; defaults: unknown };
+          return {
+            ...whole,
+            config: replayOntoCurrentDefaults(
+              stripSection(section, whole.config),
+              stripSection(section, whole.defaults),
+              liveSectionDefaults(section),
+              new Set([...explicit].flatMap((p) => (p.startsWith(`${section}.`) ? [p.slice(section.length + 1)] : []))),
+            ),
+            defaults: liveSectionDefaults(section),
+          };
+        },
+        (ok) => {
+          const whole = ok as Record<string, unknown> & { config: unknown; defaults: unknown };
+          return {
+            ...whole,
+            config: stripSection(section, whole.config),
+            defaults: stripSection(section, whole.defaults),
+          };
+        },
       );
     });
   }
@@ -677,4 +697,3 @@ describe("configReload", () => {
     expect(w.calls).not.toContain("notifyPromptSnapshotRefreshed:mid");
   });
 });
-

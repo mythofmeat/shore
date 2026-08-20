@@ -7,6 +7,7 @@ import fixture from "./handler_fixtures/turn.json" with { type: "json" };
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { StreamResult } from "../src/llm/stream.ts";
+import type { Usage } from "../src/llm/types.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import {
   appendUserTurn,
@@ -151,7 +152,11 @@ describe("appendUserTurn", () => {
     test(c.name, async () => {
       const root = await tempRoot();
       try {
-        const input = c.input as Record<string, any>;
+        const input = c.input as {
+          body: { image_data?: Parameters<typeof appendUserTurn>[4]["image_data"]; images?: string[]; text: string };
+          history: unknown[];
+          regen: boolean;
+        };
         const dataDir = await seedCharacter(root, rehydrate(input["history"]));
 
         const srcDir = join(root, "client_files");
@@ -194,7 +199,7 @@ describe("appendUserTurn", () => {
     let checked = 0;
     for (const c of fixture.append_user_turn) {
       if (c.output.events.length === 0) continue;
-      const observed = (c as Record<string, any>)["_observed"];
+      const observed = (c as unknown as { _observed: { msg_id: string; timestamp: string } })._observed;
       checked += 1;
       expect(observed.msg_id).toMatch(/^m_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-/);
       expect(MINTED_ID).toMatch(/^m_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-/);
@@ -210,7 +215,13 @@ describe("ensureAndBackfillAutonomy", () => {
     test(c.name, async () => {
       const root = await tempRoot();
       try {
-        const input = c.input as Record<string, any>;
+        const input = c.input as {
+          active: unknown[];
+          activity_seeded?: boolean;
+          archived: unknown[];
+          now: string;
+          state_exists: boolean;
+        };
         const dataDir = await seedCharacter(root, rehydrate(input["active"]));
         const charDir = join(dataDir, "ada");
 
@@ -254,9 +265,9 @@ describe("ensureAndBackfillAutonomy", () => {
           character: b.character,
           timestamps: b.timestamps.map((t) => t.getTime()).sort((a, b2) => a - b2),
         }));
-        const expected = (c.output.backfill_calls as any[]).map((b) => ({
+        const expected = (c.output.backfill_calls as { character: string; timestamps: string[] }[]).map((b) => ({
           character: b.character,
-          timestamps: (b.timestamps as string[])
+          timestamps: b.timestamps
             .map((t) => new Date(`${t.replace(" ", "T")}Z`).getTime())
             .sort((a, b2) => a - b2),
         }));
@@ -283,7 +294,7 @@ describe("contextTokensFor", () => {
         cache_read_tokens: i["cache_read_tokens"]!,
         cache_creation_tokens: i["cache_creation_tokens"]!,
       };
-      expect(contextTokensFor(usage as any)).toBe(c.output.context_tokens);
+      expect(contextTokensFor(usage as Usage)).toBe(c.output.context_tokens);
     });
   }
 });
@@ -293,7 +304,7 @@ describe("emitPostPersistStreamEnd", () => {
     test(c.name, async () => {
       const root = await tempRoot();
       try {
-        const input = c.input as Record<string, any>;
+        const input = c.input as { history: unknown[]; rid?: string | null };
         const dataDir = await seedCharacter(root, rehydrate(input["history"]));
         const rec = recorder();
         const engine = await ConversationEngine.load("ada", dataDir);

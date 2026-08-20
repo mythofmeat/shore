@@ -36,11 +36,18 @@ export interface SeenBreakpoint {
 }
 
 export interface AnthropicRequestRecord {
-  body: any;
+  body: AnthropicRequestBody;
   streaming: boolean;
   headers: Record<string, string>;
   breakpoints: SeenBreakpoint[];
   usage: AnthropicUsage;
+}
+
+export interface AnthropicRequestBody extends Record<string, unknown> {
+  messages: unknown[];
+  model?: unknown;
+  stream?: unknown;
+  system?: unknown;
 }
 
 export interface MockAnthropicOptions {
@@ -71,6 +78,14 @@ function isTextBlock(block: unknown): block is { type: "text"; text: string } {
   if (typeof block !== "object" || block === null) return false;
   const maybe = block as { type?: unknown; text?: unknown };
   return maybe.type === "text" && typeof maybe.text === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isUserMessage(value: unknown): value is { role: "user"; content?: unknown } {
+  return isRecord(value) && value["role"] === "user";
 }
 
 function estimateTokens(value: unknown): number {
@@ -189,9 +204,14 @@ export async function startMockAnthropic(
       const url = new URL(request.url);
       if (!url.pathname.endsWith("/messages")) return new Response("not found", { status: 404 });
 
-      const body: any = await request.json().catch(() => undefined);
-      const streaming = body?.stream === true;
-      const { usage: inputUsage, breakpoints } = cache.account(body?.system, body?.messages ?? []);
+      const decoded: unknown = await request.json().catch(() => undefined);
+      const rawBody = isRecord(decoded) ? decoded : {};
+      const body: AnthropicRequestBody = {
+        ...rawBody,
+        messages: Array.isArray(rawBody["messages"]) ? rawBody["messages"] : [],
+      };
+      const streaming = body.stream === true;
+      const { usage: inputUsage, breakpoints } = cache.account(body.system, body.messages);
 
       const record: AnthropicRequestRecord = {
         body,
@@ -232,7 +252,7 @@ export async function startMockAnthropic(
       requests.push(record);
       options.onRequest?.(record);
 
-      const model = typeof body?.model === "string" ? body.model : "claude-mock";
+      const model = typeof body.model === "string" ? body.model : "claude-mock";
       return streaming
         ? streamResponse(reply, model, usage, chunkChars)
         : Response.json(messageResponse(reply, model, usage));
@@ -284,8 +304,8 @@ function nextReply(
 }
 
 function echoLastUserMessage(record: AnthropicRequestRecord): AnthropicReply {
-  const messages = Array.isArray(record.body?.messages) ? record.body.messages : [];
-  const lastUser = [...messages].reverse().find((m: any) => m?.role === "user");
+  const messages = record.body.messages;
+  const lastUser = [...messages].reverse().find(isUserMessage);
   const content = lastUser?.content;
   const text =
     typeof content === "string"
@@ -304,8 +324,8 @@ function toolUseId(use: MockToolUse, index: number): string {
   return use.id ?? `toolu_${index}`;
 }
 
-function blocksOf(reply: AnthropicReply): any[] {
-  const blocks: any[] = [];
+function blocksOf(reply: AnthropicReply): unknown[] {
+  const blocks: unknown[] = [];
   if (reply.thinking) {
     blocks.push({
       type: "thinking",

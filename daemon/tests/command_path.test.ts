@@ -203,8 +203,8 @@ function envelope(frame: Awaited<ReturnType<typeof dispatchCommand>>): Record<st
 describe("dispatchCommand", () => {
   for (const c of fixture.dispatch_command) {
     test(c.name, async () => {
-      const input = c.input as Record<string, any>;
-      const out = c.output as Record<string, any>;
+      const input = c.input as Record<string, unknown>;
+      const out = c.output as Record<string, unknown>;
       const h = await harness(input["characters_on_disk"] as string[]);
       const selected = (input["selected_character"] as string | null) ?? null;
       const prior = (input["prior_selected"] as string | null) ?? selected;

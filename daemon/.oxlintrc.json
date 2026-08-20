@@ -39,7 +39,7 @@
     "typescript/use-unknown-in-catch-callback-variable": "error",
     "typescript/switch-exhaustiveness-check": ["error", { "considerDefaultExhaustiveForUnions": true }],
     "typescript/no-dynamic-delete": "off",
-    "typescript/no-explicit-any": "warn",
+    "typescript/no-explicit-any": "error",
     "typescript/no-var-requires": "error",
     "typescript/no-require-imports": "error",
     "typescript/no-deprecated": "error",

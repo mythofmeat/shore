@@ -28,8 +28,15 @@ export interface RecordedRequest {
   path: string;
   method: string;
   headers: Record<string, string>;
-  body: any;
+  body: MockRequestBody;
   streaming: boolean;
+}
+
+export interface MockRequestBody extends Record<string, unknown> {
+  messages: unknown[];
+  model?: unknown;
+  stream?: unknown;
+  tools?: unknown[];
 }
 
 export interface MockProviderOptions {
@@ -67,14 +74,19 @@ export async function startMockProvider(
     idleTimeout: 0,
     async fetch(request) {
       const url = new URL(request.url);
-      const body: any =
+      const decoded: unknown =
         request.method === "POST" ? await request.json().catch(() => undefined) : undefined;
+      const rawBody = isRecord(decoded) ? decoded : {};
+      const body: MockRequestBody = {
+        ...rawBody,
+        messages: Array.isArray(rawBody["messages"]) ? rawBody["messages"] : [],
+      };
       const recorded: RecordedRequest = {
         path: url.pathname,
         method: request.method,
         headers: Object.fromEntries(request.headers.entries()),
         body,
-        streaming: body?.stream === true,
+        streaming: body.stream === true,
       };
       requests.push(recorded);
       options.onRequest?.(recorded);
@@ -107,7 +119,7 @@ export async function startMockProvider(
         );
       }
 
-      const model = typeof body?.model === "string" ? body.model : models[0]!;
+      const model = typeof body.model === "string" ? body.model : models[0]!;
       return recorded.streaming
         ? streamResponse(reply, model, chunkChars)
         : Response.json(completionResponse(reply, model));
@@ -142,10 +154,18 @@ function nextReply(
 }
 
 function echoLastUserMessage(request: RecordedRequest): MockReply {
-  const messages = Array.isArray(request.body?.messages) ? request.body.messages : [];
-  const lastUser = [...messages].reverse().find((m: any) => m?.role === "user");
+  const messages = request.body.messages;
+  const lastUser = [...messages].reverse().find(isUserMessage);
   const text = typeof lastUser?.content === "string" ? lastUser.content : contentText(lastUser?.content);
   return { text: `mock reply to: ${text || "(nothing)"}` };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isUserMessage(value: unknown): value is { role: "user"; content?: unknown } {
+  return isRecord(value) && value["role"] === "user";
 }
 
 function isTextBlock(block: unknown): block is { type: "text"; text: string } {

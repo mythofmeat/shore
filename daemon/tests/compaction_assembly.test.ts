@@ -51,8 +51,8 @@ function msgIds(content: string): string[] {
 describe("archiveAndRetain", () => {
   for (const c of fixture.archive_and_retain) {
     test(c.name, async () => {
-      const input = c.input as Record<string, any>;
-      const out = c.output as Record<string, any>;
+      const input = c.input as Record<string, unknown>;
+      const out = c.output as Record<string, unknown>;
       const root = await tempRoot();
       const characterDir = join(root, "ada");
       await mkdir(characterDir, { recursive: true });
@@ -95,7 +95,7 @@ describe("archiveAndRetain", () => {
           lines: msgIds(await readFile(join(segmentsDir, file), "utf8")),
         })),
       );
-      expect(segments).toEqual(out["segments"]);
+      expect(segments).toEqual(out["segments"] as { file: string; lines: string[] }[]);
 
       const manifestRaw = await readFile(join(characterDir, "compaction.json"), "utf8").catch(
         () => undefined,
@@ -140,8 +140,8 @@ function normaliseStamps(v: unknown): unknown {
 describe("resolveCompactionDeps", () => {
   for (const c of fixture.resolve_compaction_deps) {
     test(c.name, async () => {
-      const input = c.input as Record<string, any>;
-      const out = c.output as Record<string, any>;
+      const input = c.input as Record<string, unknown>;
+      const out = c.output as Record<string, unknown>;
       const root = await tempRoot();
       const dirs = {
         config: join(root, "config"),
@@ -185,10 +185,10 @@ describe("resolveCompactionDeps", () => {
       };
 
       expect(resolvePromptTemplate(dirs.config, "ada", "compact_system.md") ?? null).toBe(
-        out["system_template_override"],
+        out["system_template_override"] as string | null,
       );
       expect(resolvePromptTemplate(dirs.config, "ada", "compact.md") ?? null).toBe(
-        out["prompt_template_override"],
+        out["prompt_template_override"] as string | null,
       );
 
       const model = resolveBackgroundModel(
@@ -197,13 +197,15 @@ describe("resolveCompactionDeps", () => {
         "ada",
         (v, cache, n, hidden) => findEffectiveModel(v, cache, n, hidden),
       );
-      expect(model?.qualifiedName ?? null).toBe(out["model"]);
-      expect(model?.maxToolIterations ?? null).toBe(out["max_tool_iterations"]);
+      expect(model?.qualifiedName ?? null).toBe(out["model"] as string | null);
+      expect(model?.maxToolIterations ?? null).toBe(out["max_tool_iterations"] as number | null);
       if (model !== undefined) {
-        expect(toRequestModel(model).max_tool_iterations ?? null).toBe(out["max_tool_iterations"]);
+        expect(toRequestModel(model).max_tool_iterations ?? null).toBe(
+          out["max_tool_iterations"] as number | null,
+        );
       }
 
-      expect(resolveDisplayName(config.app.defaults)).toBe(out["display_name"]);
+      expect(resolveDisplayName(config.app.defaults)).toBe(out["display_name"] as string);
       expect(config.app.memory.compaction.min_turns).toBe(defaultCompactionConfig().min_turns);
       expect(config.app.memory.compaction.max_turns).toBe(defaultCompactionConfig().max_turns);
     });

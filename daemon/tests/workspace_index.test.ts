@@ -470,10 +470,27 @@ async function expectIndexOnDisk(
   expectIndexMatches(storedEntries(path, model), expectedEntries(expected));
 }
 
-function storedEntries(path: string, model: string): Record<string, unknown> {
+interface ComparableIndexEntry {
+  embedded: boolean;
+  embedding?: number[];
+  modified_at_secs: number;
+  reason: string | null;
+  size: number;
+}
+
+interface FixtureIndexEntry extends ComparableIndexEntry {
+  max_embed_chars_per_file?: number;
+  model_id?: string;
+}
+
+interface FixtureIndex {
+  entries: Record<string, FixtureIndexEntry>;
+}
+
+function storedEntries(path: string, model: string): Record<string, ComparableIndexEntry> {
   const store = WorkspaceIndexStore.open(path);
   try {
-    const out: Record<string, unknown> = {};
+    const out: Record<string, ComparableIndexEntry> = {};
     for (const [displayPath, row] of store.files()) {
       const vector = row.embedded
         ? store.vectorsFor(model, [row.document_hash]).get(row.document_hash)
@@ -493,8 +510,8 @@ function storedEntries(path: string, model: string): Record<string, unknown> {
 }
 
 function expectIndexMatches(
-  got: Record<string, any>,
-  want: Record<string, unknown>,
+  got: Record<string, ComparableIndexEntry>,
+  want: Record<string, ComparableIndexEntry>,
 ): void {
   const named = Object.fromEntries(Object.keys(want).map((k) => [k, got[k]]));
   expect(named).toEqual(want);
@@ -504,9 +521,9 @@ function expectIndexMatches(
   }
 }
 
-function expectedEntries(expected: any): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [path, e] of Object.entries(expected.entries as Record<string, any>)) {
+function expectedEntries(expected: unknown): Record<string, ComparableIndexEntry> {
+  const out: Record<string, ComparableIndexEntry> = {};
+  for (const [path, e] of Object.entries((expected as FixtureIndex).entries)) {
     out[path] = {
       size: e.size,
       modified_at_secs: e.modified_at_secs,
@@ -528,8 +545,8 @@ function seededHash(fsPath: string, displayPath: string, cap: number): string {
   return documentHash(documentForEmbedding(displayPath, text, cap));
 }
 
-function indexShape(rows: Map<string, FileRow>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+function indexShape(rows: Map<string, FileRow>): Record<string, ComparableIndexEntry> {
+  const out: Record<string, ComparableIndexEntry> = {};
   for (const [path, row] of rows) {
     out[path] = {
       size: row.size,
@@ -541,9 +558,9 @@ function indexShape(rows: Map<string, FileRow>): Record<string, unknown> {
   return out;
 }
 
-function expectedIndexShape(index: any): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [path, e] of Object.entries(index.entries as Record<string, any>)) {
+function expectedIndexShape(index: unknown): Record<string, ComparableIndexEntry> {
+  const out: Record<string, ComparableIndexEntry> = {};
+  for (const [path, e] of Object.entries((index as FixtureIndex).entries)) {
     out[path] = {
       size: e.size,
       modified_at_secs: e.modified_at_secs,
@@ -569,8 +586,8 @@ describe("refreshIndexEntries", () => {
 
       const existing = new Map<string, FileRow>();
       const vectors = new Set<string>();
-      for (const [path, raw] of Object.entries(c.pre_index.entries as Record<string, any>)) {
-        const embedded = raw.embedded === true && raw.model_id === "topic-v1";
+      for (const [path, raw] of Object.entries((c.pre_index as FixtureIndex).entries)) {
+        const embedded = raw.embedded && raw.model_id === "topic-v1";
         const hash =
           embedded && raw.max_embed_chars_per_file === config.maxEmbedCharsPerFile
             ? seededHash(join(ws, path), path, config.maxEmbedCharsPerFile)
@@ -590,7 +607,7 @@ describe("refreshIndexEntries", () => {
       const out = await refreshIndexEntries(candidates, existing, config, (h) => vectors.has(h));
 
       expect(out.stale.map((s) => s.row.display_path)).toEqual(
-        c.out.stale.map((s: any[]) => s[0]),
+        (c.out.stale as [string, unknown, unknown][]).map((s) => s[0]),
       );
       expect(out.staleDocs).toEqual(c.out.stale_docs);
       expect(out.skippedBinaryOrLarge).toBe(c.out.skipped_binary_or_large);
@@ -611,18 +628,18 @@ describe("refreshIndexEntries", () => {
 
   test("a read failure is what the vanished-file cases actually exercise", () => {
     const cases = fixture.refresh_index_entries.filter(
-      (c: any) => c.delete_after_walk.length > 0,
+      (c) => c.delete_after_walk.length > 0,
     );
     expect(cases.length).toBeGreaterThan(0);
     const readable = cases.filter(
-      (c: any) => !c.out.candidates.some((f: any) => f.skip_reason === "oversize"),
+      (c) => !c.out.candidates.some((f) => f.skip_reason === "oversize"),
     );
     expect(readable.length).toBeGreaterThan(0);
     for (const c of readable) {
-      expect(c.out.candidates.some((f: any) => f.skip_reason === "read failed")).toBe(true);
+      expect(c.out.candidates.some((f) => f.skip_reason === "read failed")).toBe(true);
     }
-    expect(readable.map((c: any) => c.out.dirty)).toContain(true);
-    expect(readable.map((c: any) => c.out.dirty)).toContain(false);
+    expect(readable.map((c) => c.out.dirty)).toContain(true);
+    expect(readable.map((c) => c.out.dirty)).toContain(false);
   });
 });
 
