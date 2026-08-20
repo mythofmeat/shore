@@ -109,7 +109,7 @@
         "eslint/no-console": "off",
         "eslint/no-loop-func": "off",
         "unicorn/no-process-exit": "off",
-        "typescript/no-explicit-any": "warn"
+        "typescript/no-explicit-any": "error"
       }
     }
   ]
