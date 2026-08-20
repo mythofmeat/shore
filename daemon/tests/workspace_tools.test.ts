@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readlink, lstat, readFile, symlink, utimes, writeFile } from "node:fs/promises";
@@ -108,10 +110,10 @@ async function makeCase(
     }
     await mkdir(dirname(path), { recursive: true });
     if (node.kind === "symlink") {
-      await symlink(node.target!, path);
+      await symlink(required(node.target), path);
       continue;
     }
-    await writeFile(path, node.bytes !== undefined ? Buffer.from(node.bytes) : node.content!);
+    await writeFile(path, node.bytes !== undefined ? Buffer.from(node.bytes) : required(node.content));
     if (node.mtime_secs !== undefined) {
       await utimes(path, node.mtime_secs, node.mtime_secs);
     }
@@ -124,7 +126,7 @@ async function snapshot(root: string): Promise<TreeNode[]> {
   const out: TreeNode[] = [];
   const pending = [root];
   while (pending.length > 0) {
-    const dir = pending.pop()!;
+    const dir = required(pending.pop());
     let names: string[];
     try {
       names = await readdir(dir);
@@ -283,7 +285,7 @@ async function substituteStamp(expected: Outcome, dataDir: string): Promise<Outc
   expect(stamps).toHaveLength(1);
   expect(stamps[0]).toMatch(new RegExp(`^${STAMP.source}$`));
 
-  return { ok: { ...ok, trashed_to: ok.trashed_to.replace(STAMP, stamps[0]!) } };
+  return { ok: { ...ok, trashed_to: ok.trashed_to.replace(STAMP, required(stamps[0])) } };
 }
 
 async function snapshotTrash(dataDir: string, withDataDir: boolean): Promise<TreeNode[]> {

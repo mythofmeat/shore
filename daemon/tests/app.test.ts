@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./config_fixtures/app.json" with { type: "json" };
@@ -186,7 +188,7 @@ function withCacheSectionMoved(value: unknown): unknown {
 
   return {
     ...(value as object),
-    behavior: { ...v!.behavior, autonomy: trimmedAutonomy },
+    behavior: { ...required(v).behavior, autonomy: trimmedAutonomy },
     advanced: trimmedAdvanced,
     cache: {
       keepalive_max: autonomy.cache_keepalive_max,
@@ -389,7 +391,7 @@ describe("parsing config.toml", () => {
     const c = fixture.parse.find((x) => x.name === "the daemon section");
     expect(c).toBeDefined();
 
-    const parsed = parseAppConfig(parseToml(c!.toml));
+    const parsed = parseAppConfig(parseToml(required(c).toml));
     expect("err" in parsed).toBe(true);
     expect((parsed as { err: string }).err).toBe(
       "unknown field `allowed_hosts`, expected `addr`",
@@ -404,7 +406,7 @@ describe("parsing config.toml", () => {
     const c = fixture.parse.find((x) => x.name === "usage budgets and spike warnings");
     expect(c).toBeDefined();
 
-    const parsed = parseAppConfig(parseToml(c!.toml));
+    const parsed = parseAppConfig(parseToml(required(c).toml));
     expect("err" in parsed).toBe(true);
     expect((parsed as { err: string }).err).toBe(
       "unknown field `spike_warnings`, expected one of `timezone`, " +
@@ -416,7 +418,7 @@ describe("parsing config.toml", () => {
     const c = fixture.parse.find((x) => x.name === "the advanced section");
     expect(c).toBeDefined();
 
-    const parsed = parseAppConfig(parseToml(c!.toml));
+    const parsed = parseAppConfig(parseToml(required(c).toml));
     expect("err" in parsed).toBe(true);
     expect((parsed as { err: string }).err).toBe(
       "unknown field `api_payload_logging`, expected `max_retries` or `retry_backoff`",
@@ -511,9 +513,9 @@ describe("parsing config.toml", () => {
   test("the matrix connection the fixture rejects now parses, in its external-only shape", () => {
     const c = fixture.parse.find((x) => x.name === "the removed matrix connection is rejected");
     expect(c).toBeDefined();
-    expect(c!.table_err).toBe("unknown field `matrix`, expected `telegram` or `discord`");
+    expect(required(c).table_err).toBe("unknown field `matrix`, expected `telegram` or `discord`");
 
-    const parsed = parseAppConfig(parseToml(c!.toml));
+    const parsed = parseAppConfig(parseToml(required(c).toml));
     if ("err" in parsed) throw new Error(`expected a parse, got: ${parsed.err}`);
     expect(parsed.ok.connections.matrix).toEqual({
       enabled: true,
@@ -548,7 +550,7 @@ describe("parsing config.toml", () => {
     );
     expect(c).toBeDefined();
 
-    const parsed = parseAppConfig(parseToml(c!.toml));
+    const parsed = parseAppConfig(parseToml(required(c).toml));
     expect("err" in parsed).toBe(true);
     expect((parsed as { err: string }).err).toBe(
       "unknown field `embedded`, expected one of `enabled`, `homeserver`, " +

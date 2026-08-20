@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import type { ServerMessage } from "../src/protocol/ServerMessage";
@@ -120,7 +122,7 @@ describe("the fanout", () => {
     leases.observe("Alice", 2, "message", T0);
 
     const issuer = sessions.senderFor(1);
-    await leases.fanout("Alice", 1, issuer!, sessions, T0)(probe("chunk"));
+    await leases.fanout("Alice", 1, required(issuer), sessions, T0)(probe("chunk"));
 
     expect(sessions.names(1)).toEqual(["chunk"]);
     expect(sessions.names(2)).toEqual(["chunk"]);
@@ -132,7 +134,7 @@ describe("the fanout", () => {
     leases.observe("Alice", 1, "message", T0);
 
     const issuer = sessions.senderFor(1);
-    await leases.fanout("Alice", 1, issuer!, sessions, T0)(probe("chunk"));
+    await leases.fanout("Alice", 1, required(issuer), sessions, T0)(probe("chunk"));
 
     expect(sessions.names(1)).toEqual(["chunk"]);
     expect(sessions.names(2)).toEqual([]);
@@ -143,7 +145,7 @@ describe("the fanout", () => {
     const sessions = router(1, 2);
 
     const issuer = sessions.senderFor(1);
-    await leases.fanout("Alice", 1, issuer!, sessions, T0)(probe("chunk"));
+    await leases.fanout("Alice", 1, required(issuer), sessions, T0)(probe("chunk"));
 
     expect(sessions.names(1)).toEqual(["chunk"]);
     expect(sessions.names(2)).toEqual([]);
@@ -154,7 +156,7 @@ describe("the fanout", () => {
     const sessions = router(1, 2);
     leases.observe("Alice", 2, "message", T0);
 
-    const send = leases.fanout("Alice", 1, sessions.senderFor(1)!, sessions, T0);
+    const send = leases.fanout("Alice", 1, required(sessions.senderFor(1)), sessions, T0);
     leases.clear();
     await send(probe("chunk"));
 
@@ -167,7 +169,7 @@ describe("the fanout", () => {
     leases.observe("Alice", 2, "message", T0);
     sessions.breaks(2);
 
-    const send = leases.fanout("Alice", 1, sessions.senderFor(1)!, sessions, T0);
+    const send = leases.fanout("Alice", 1, required(sessions.senderFor(1)), sessions, T0);
 
     await send(probe("chunk"));
     expect(sessions.names(1)).toEqual(["chunk"]);
@@ -181,7 +183,7 @@ describe("the fanout", () => {
 
     const leases = new StreamLeases();
     leases.observe("Alice", 2, "message", T0);
-    await leases.fanout("Alice", 1, real.senderFor(1)!, real, T0)(probe("chunk"));
+    await leases.fanout("Alice", 1, required(real.senderFor(1)), real, T0)(probe("chunk"));
     expect(delivered).toEqual(["two", "one"]);
 
     real.unregisterSession(2);
@@ -194,7 +196,7 @@ describe("the fanout", () => {
     leases.observe("Alice", 2, "message", T0);
     sessions.breaks(1);
 
-    const send = leases.fanout("Alice", 1, sessions.senderFor(1)!, sessions, T0);
+    const send = leases.fanout("Alice", 1, required(sessions.senderFor(1)), sessions, T0);
 
     await send(probe("chunk"));
     expect(sessions.names(2)).toEqual(["chunk"]);

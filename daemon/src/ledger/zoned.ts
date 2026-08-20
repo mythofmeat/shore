@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 declare const NaiveBrand: unique symbol;
 
 export type Naive = number & { readonly [NaiveBrand]: true };
@@ -71,10 +73,10 @@ function candidatesFor(naive: Naive, timeZone: string): number[] {
 export function resolveInZone(naive: Naive, timeZone: string): number {
   const direct = candidatesFor(naive, timeZone);
   if (direct.length > 0) {
-    return direct[direct.length - 1]!;
+    return required(direct[direct.length - 1]);
   }
   const shifted = candidatesFor(asNaive(naive + HOUR_MS), timeZone);
-  return shifted.length > 0 ? shifted[0]! : naive;
+  return shifted.length > 0 ? required(shifted[0]) : naive;
 }
 
 export interface NaiveParts {

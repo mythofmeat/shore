@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -274,8 +276,8 @@ describe("ensureAndBackfillAutonomy", () => {
 
         expect(actual.length).toBe(expected.length);
         for (const [i, call] of actual.entries()) {
-          expect(call.character).toBe(expected[i]!.character);
-          expect(call.timestamps.length).toBe(expected[i]!.timestamps.length);
+          expect(call.character).toBe(required(expected[i]).character);
+          expect(call.timestamps.length).toBe(required(expected[i]).timestamps.length);
         }
       } finally {
         await rm(root, { recursive: true, force: true });
@@ -289,10 +291,10 @@ describe("contextTokensFor", () => {
     test(c.name, () => {
       const i = c.input as Record<string, number>;
       const usage = {
-        input_tokens: i["input_tokens"]!,
+        input_tokens: required(i["input_tokens"]),
         output_tokens: 0,
-        cache_read_tokens: i["cache_read_tokens"]!,
-        cache_creation_tokens: i["cache_creation_tokens"]!,
+        cache_read_tokens: required(i["cache_read_tokens"]),
+        cache_creation_tokens: required(i["cache_creation_tokens"]),
       };
       expect(contextTokensFor(usage as Usage)).toBe(c.output.context_tokens);
     });

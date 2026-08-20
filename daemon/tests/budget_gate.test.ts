@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -143,7 +145,7 @@ test("a generate with missing labels is attached to the daemon ledger before sen
   expect(counting.calls).toBe(1);
   const labeled = request.context;
   expect(labeled?.ledger).toBe(join(config.dirs.data, "ledger.db"));
-  const ledger = Ledger.open(labeled!.ledger!);
+  const ledger = Ledger.open(required(required(labeled).ledger));
   expect(ledger.database.query("SELECT COUNT(*) AS n FROM call_attempts").get()).toEqual({ n: 1 });
   ledger.close();
 });

@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { mergeToolLoopMessages } from "../src/engine/merge";
@@ -31,7 +33,7 @@ describe("merge parity", () => {
       const got = mergeToolLoopMessages(c.input.map(hydrate));
       expect(got.length).toBe(c.expect.length);
       got.forEach((have, i) => {
-        expect(wire(have)).toEqual(wire(hydrate(c.expect[i]!)));
+        expect(wire(have)).toEqual(wire(hydrate(required(c.expect[i]))));
       });
     });
   }
@@ -67,15 +69,15 @@ describe("the two asymmetries, stated on their own", () => {
 
   test("a whitespace-only text block survives only in the closing message", () => {
     const merged = mergeToolLoopMessages(loop([{ type: "text", text: "   " }]));
-    expect(merged[0]!.content_blocks.filter((b) => b.type === "text")).toHaveLength(1);
-    expect(merged[0]!.content).toBe("");
+    expect(required(merged[0]).content_blocks.filter((b) => b.type === "text")).toHaveLength(1);
+    expect(required(merged[0]).content).toBe("");
   });
 
   test("a tool_use in the closing message is never paired", () => {
     const merged = mergeToolLoopMessages(
       loop([{ type: "tool_use", id: "t2", name: "read", input: {} }]),
     );
-    const kinds = merged[0]!.content_blocks.map((b) => b.type);
+    const kinds = required(merged[0]).content_blocks.map((b) => b.type);
     expect(kinds).toEqual(["tool_use", "tool_result", "tool_use"]);
   });
 });

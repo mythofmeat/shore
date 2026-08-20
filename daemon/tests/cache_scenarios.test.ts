@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
@@ -92,7 +94,7 @@ describe("the keepalive ping", () => {
 
     expect(m.lastUsage.cache_read_input_tokens).toBe(wrote);
     const systemAnchor = m.lastBreakpoints.find((b) => b.where === "system");
-    expect(m.lastUsage.cache_read_input_tokens).toBeGreaterThan(systemAnchor!.prefixTokens);
+    expect(m.lastUsage.cache_read_input_tokens).toBeGreaterThan(required(systemAnchor).prefixTokens);
   });
 
   test("without the ping, that same turn is cold", async () => {
@@ -115,11 +117,11 @@ describe("the keepalive ping", () => {
     const ping = buildKeepalivePing(prefix);
     await turn(ping);
 
-    const sent = m.requests.at(-1)!.body.messages as WireMessage[];
+    const sent = required(m.requests.at(-1)).body.messages as WireMessage[];
     expect(sent).toHaveLength(prefix.messages.length + 1);
-    expect(sent.at(-1)!.role).toBe("user");
+    expect(required(sent.at(-1)).role).toBe("user");
     expect(ping.context?.call_type).toBe("keepalive");
-    expect(m.requests.at(-1)!.body.context).toBeUndefined();
+    expect(required(m.requests.at(-1)).body.context).toBeUndefined();
   });
 });
 
@@ -157,7 +159,7 @@ describe("a prefix-rewriting pass", () => {
     const systemAnchor = m.lastBreakpoints.find((b) => b.where === "system");
     expect(systemAnchor).toBeDefined();
     expect(m.lastUsage.cache_read_input_tokens).toBeGreaterThanOrEqual(
-      systemAnchor!.prefixTokens,
+      required(systemAnchor).prefixTokens,
     );
   });
 });
@@ -220,13 +222,13 @@ describe("a tool loop", () => {
 
     expect(m.requests).toHaveLength(2);
     const [first, second] = m.requests;
-    expect(first!.usage.cache_read_input_tokens).toBe(0);
-    expect(second!.usage.cache_read_input_tokens).toBe(
-      first!.usage.cache_creation_input_tokens,
+    expect(required(first).usage.cache_read_input_tokens).toBe(0);
+    expect(required(second).usage.cache_read_input_tokens).toBe(
+      required(first).usage.cache_creation_input_tokens,
     );
-    expect(second!.breakpoints.at(-1)?.hit).toBe(false);
-    expect(second!.breakpoints.at(-1)?.prefixTokens).toBeGreaterThan(
-      first!.usage.cache_creation_input_tokens,
+    expect(required(second).breakpoints.at(-1)?.hit).toBe(false);
+    expect(required(second).breakpoints.at(-1)?.prefixTokens).toBeGreaterThan(
+      required(first).usage.cache_creation_input_tokens,
     );
     const completed = events.filter((e) => e.type === "call_complete");
     expect(completed).toHaveLength(2);
@@ -245,7 +247,7 @@ describe("a tool loop", () => {
     } as SidecarRequest;
     for await (const _ of anthropicToolLoopEvents(req, fakePhase("hello"))) void _;
 
-    const loopTail = m.requests.at(-1)!.body.messages as WireMessage[];
+    const loopTail = required(m.requests.at(-1)).body.messages as WireMessage[];
     await turn({ ...req, messages: [...loopTail, user("thanks")] });
 
     expect(m.lastUsage.cache_read_input_tokens).toBeGreaterThan(0);

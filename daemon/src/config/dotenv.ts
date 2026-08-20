@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { readFileSync } from "node:fs";
 
 export class DotenvError extends Error {
@@ -17,7 +19,7 @@ export function parseDotenv(
 
   let i = 0;
   while (i < content.length) {
-    while (i < content.length && isSpace(content[i]!)) i += 1;
+    while (i < content.length && isSpace(required(content[i]))) i += 1;
     if (i >= content.length) break;
 
     if (content[i] === "#") {
@@ -36,7 +38,7 @@ export function parseDotenv(
     if (key === "") throw new DotenvError("line has an empty key");
     i += 1;
 
-    while (i < content.length && isBlank(content[i]!)) i += 1;
+    while (i < content.length && isBlank(required(content[i]))) i += 1;
 
     let value: string;
     const quote = content[i];
@@ -84,8 +86,8 @@ function endOfLine(content: string, from: number): number {
 function skipExport(content: string, from: number): number {
   if (!content.startsWith("export", from)) return from;
   let i = from + "export".length;
-  if (i >= content.length || !isBlank(content[i]!)) return from;
-  while (i < content.length && isBlank(content[i]!)) i += 1;
+  if (i >= content.length || !isBlank(required(content[i]))) return from;
+  while (i < content.length && isBlank(required(content[i]))) i += 1;
   return i;
 }
 
@@ -103,7 +105,7 @@ function readDoubleQuoted(
   let out = "";
   let i = from;
   while (i < content.length) {
-    const c = content[i]!;
+    const c = required(content[i]);
     if (c === '"') return [out, i + 1];
     if (c === "\\") {
       const next = content[i + 1];
@@ -133,7 +135,7 @@ function readUnquoted(
   let pending = "";
   let i = from;
   while (i < content.length) {
-    const c = content[i]!;
+    const c = required(content[i]);
     if (c === "\n") break;
     if (isBlank(c)) {
       pending += c;
@@ -176,7 +178,7 @@ function readSubstitution(
   }
 
   let i = from + 1;
-  while (i < content.length && isNameChar(content[i]!, i === from + 1)) i += 1;
+  while (i < content.length && isNameChar(required(content[i]), i === from + 1)) i += 1;
   if (i === from + 1) return ["$", from + 1];
   return [resolve(content.slice(from + 1, i)), i];
 }

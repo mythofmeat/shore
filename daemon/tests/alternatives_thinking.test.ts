@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,7 +57,7 @@ describe("thinking survives regeneration", () => {
     const attached = MessageStore.attachGeneratedAlt(messages, []);
 
     expect(attached).toEqual([0, 1]);
-    const alt = messages[1]!.alternatives![0]!;
+    const alt = required(required(required(messages[1]).alternatives)[0]);
     expect(thinkingIn(alt.content_blocks)).toEqual([THINKING]);
     expect(alt.content).toBe("hi");
   });
@@ -66,7 +68,7 @@ describe("thinking survives regeneration", () => {
 
     MessageStore.attachGeneratedAlt(messages, []);
 
-    expect(thinkingIn(messages[1]!.alternatives![0]!.content_blocks)).toEqual([redacted]);
+    expect(thinkingIn(required(required(required(messages[1]).alternatives)[0]).content_blocks)).toEqual([redacted]);
   });
 
   test("tool_use blocks are still dropped, since their results are not carried", () => {
@@ -80,7 +82,7 @@ describe("thinking survives regeneration", () => {
 
     MessageStore.attachGeneratedAlt(messages, []);
 
-    const kept = messages[1]!.alternatives![0]!.content_blocks.map((b) => b.type);
+    const kept = required(required(required(messages[1]).alternatives)[0]).content_blocks.map((b) => b.type);
     expect(kept).toEqual(["thinking", "text"]);
   });
 
@@ -89,7 +91,7 @@ describe("thinking survives regeneration", () => {
 
     MessageStore.attachGeneratedAlt(messages, []);
 
-    const alt = messages[1]!.alternatives![0]!;
+    const alt = required(required(required(messages[1]).alternatives)[0]);
     expect(alt.content_blocks.map((b) => b.type)).toEqual(["thinking", "text"]);
     expect(alt.content).toBe("hi");
   });
@@ -102,7 +104,7 @@ describe("thinking survives regeneration", () => {
 
       const pending = store.pendingRegenAlt();
 
-      expect(thinkingIn(pending!.alternatives[0]!.content_blocks)).toEqual([THINKING]);
+      expect(thinkingIn(required(required(pending).alternatives[0]).content_blocks)).toEqual([THINKING]);
     });
   });
 
@@ -112,7 +114,7 @@ describe("thinking survives regeneration", () => {
       await store.append(user("hey"));
       await store.append(assistant([THINKING, { type: "text", text: "first" }], "first"));
 
-      const prior = store.pendingRegenAlt()!.alternatives;
+      const prior = required(store.pendingRegenAlt()).alternatives;
       const second: ContentBlock = {
         type: "thinking",
         thinking: "try a warmer opening",
@@ -125,13 +127,13 @@ describe("thinking survives regeneration", () => {
       const back = await store.selectAlt("m_1", 0);
       expect(back.content).toBe("first");
 
-      const live = store.messages().find((m) => m.role === "assistant")!;
+      const live = required(store.messages().find((m) => m.role === "assistant"));
       expect(thinkingIn(live.content_blocks)).toEqual([THINKING]);
 
       const reloaded = await MessageStore.load(path);
-      const persisted = reloaded.messages().find((m) => m.role === "assistant")!;
+      const persisted = required(reloaded.messages().find((m) => m.role === "assistant"));
       expect(thinkingIn(persisted.content_blocks)).toEqual([THINKING]);
-      expect(thinkingIn(persisted.alternatives![1]!.content_blocks)).toEqual([second]);
+      expect(thinkingIn(required(required(persisted.alternatives)[1]).content_blocks)).toEqual([second]);
     });
   });
 });

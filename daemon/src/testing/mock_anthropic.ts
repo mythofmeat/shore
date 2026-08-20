@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { shoreLog } from "../log.ts";
 
 import { createHash } from "node:crypto";
@@ -154,8 +156,8 @@ export class PrefixCache {
     const total = cumulative;
     let read = 0;
     for (let i = breakpoints.length - 1; i >= 0; i--) {
-      if (breakpoints[i]!.hit) {
-        read = breakpoints[i]!.prefixTokens;
+      if (required(breakpoints[i]).hit) {
+        read = required(breakpoints[i]).prefixTokens;
         break;
       }
     }

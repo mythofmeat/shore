@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
@@ -422,7 +424,7 @@ async function replayRun(run: Run, ctx: RunContext): Promise<void> {
     return;
   }
   if (error !== undefined) throw error;
-  const got = result!;
+  const got = required(result);
 
   expect(got.searchedFiles).toBe(run.outcome.searched_files);
   expect(got.embeddedFiles).toBe(run.outcome.embedded_files);
@@ -439,7 +441,7 @@ async function replayRun(run: Run, ctx: RunContext): Promise<void> {
     run.outcome.files.map((f) => f.display_path),
   );
   for (const [i, expected] of run.outcome.files.entries()) {
-    const actual = got.files[i]!;
+    const actual = required(got.files[i]);
     expect(actual.fsPath).toBe(expected.fs_path.replace("<tmp>", root));
     expect(actual.content).toBe(expected.content ?? undefined);
     expect(actual.lexicalScore).toBe(expected.lexical_score);
@@ -700,9 +702,9 @@ describe("cosineSimilarity", () => {
     let na = 0;
     let nb = 0;
     for (let i = 0; i < a.length; i += 1) {
-      dot += a[i]! * b[i]!;
-      na += a[i]! * a[i]!;
-      nb += b[i]! * b[i]!;
+      dot += required(a[i]) * required(b[i]);
+      na += required(a[i]) * required(a[i]);
+      nb += required(b[i]) * required(b[i]);
     }
     expect(dot / (Math.sqrt(na) * Math.sqrt(nb))).not.toBe(toF32(c.out));
     expect(cosineSimilarity(a, b)).toBe(toF32(c.out));
@@ -883,9 +885,9 @@ describe("resolveEmbedder", () => {
       expect(call()).toBe(embedder);
 
       const parts = c.outcome.cache_key.split("::");
-      const keyDimensions = parts.at(-1)!;
-      const keyBaseUrl = parts.at(-2)!;
-      expect(parts[0]).toBe(splitOnce(c.default_ref ?? Object.keys(embedding)[0]!, ":")[0]);
+      const keyDimensions = required(parts.at(-1));
+      const keyBaseUrl = required(parts.at(-2));
+      expect(parts[0]).toBe(splitOnce(c.default_ref ?? required(Object.keys(embedding)[0]), ":")[0]);
       expect(parts.slice(1, -2).join("::")).toBe(c.outcome.model_id);
       expect(keyDimensions).toBe(
         c.outcome.dimensions === null ? "native" : String(c.outcome.dimensions),
@@ -916,7 +918,7 @@ describe("resolveEmbedder", () => {
       resolveEmbedder({
         defaultRef: target,
         embedding: dims === undefined ? {} : { [target]: { dimensions: dims } },
-        providers: { acme: { ...providers.acme!, baseUrl } },
+        providers: { acme: { ...required(providers.acme), baseUrl } },
       });
 
     const a = build("acme:m", undefined, "https://acme.test/v1");
@@ -1047,8 +1049,8 @@ describe("freshness keyed on the document, not the tuple", () => {
 
     await writeAt(join(ws, "a.md"), "tea bbb", 1000);
     const second = await enumerateFiles(ws, config);
-    expect(second[0]!.size).toBe(first[0]!.size);
-    expect(second[0]!.modifiedAtSecs).toBe(first[0]!.modifiedAtSecs);
+    expect(required(second[0]).size).toBe(required(first[0]).size);
+    expect(required(second[0]).modifiedAtSecs).toBe(required(first[0]).modifiedAtSecs);
 
     const after = await refreshIndexEntries(second, embedded, config, (h) => vectors.has(h));
     expect(after.staleDocs).toEqual(["path: a.md\n\ntea bbb"]);
@@ -1291,6 +1293,6 @@ describe("enumerateFiles", () => {
       maxEmbedCharsPerFile: 100,
       binary: "skip",
     });
-    expect(got[0]!.modifiedAtSecs).toBe(0);
+    expect(required(got[0]).modifiedAtSecs).toBe(0);
   });
 });

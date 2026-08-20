@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -94,7 +96,7 @@ describe("prompt parity: assemble_prompt", () => {
       expect(got.messages.length).toBe(c.expect.messages.length);
 
       c.expect.messages.forEach((want, i) => {
-        const have = got.messages[i]!;
+        const have = required(got.messages[i]);
         expect(have.role).toBe(want.role);
         expect(have.content).toBe(want.content);
         expect(have.content_blocks).toEqual(want.content_blocks as never);
@@ -171,7 +173,7 @@ describe("render_template: the one deliberate divergence", () => {
     };
     const seen = new Set<string>();
     for (let i = 0; i < 500; i++) {
-      seen.add(assemblePrompt(base, ZONE).system[0]!.content);
+      seen.add(required(assemblePrompt(base, ZONE).system[0]).content);
     }
     expect([...seen]).toEqual(["I am {{user}} talking to Dana."]);
   });
@@ -179,7 +181,7 @@ describe("render_template: the one deliberate divergence", () => {
 
 describe("timezone is a parameter, not the host's", () => {
   const at = (ts: string, zone: string): string =>
-    assemblePrompt(
+    required(assemblePrompt(
       {
         character_name: "Ada",
         display_name: "Dana",
@@ -197,7 +199,7 @@ describe("timezone is a parameter, not the host's", () => {
         user_timestamp_mode: "always",
       },
       zone,
-    ).messages[0]!.content;
+    ).messages[0]).content;
 
   test("the same instant reads differently in two zones", () => {
     const instant = "2026-04-04T12:00:00+00:00";

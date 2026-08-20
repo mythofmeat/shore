@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -21,7 +23,7 @@ const MEASURED: Corpus[] = [
   { host: "openrouter.ai", samples: 8, minRatio: 0.808, medianRatio: 0.956, maxRatio: 1.0 },
 ];
 
-const anthropic = MEASURED[0]!;
+const anthropic = required(MEASURED[0]);
 
 describe("the estimator's scale constant", () => {
   test("four bytes per token under-counted, which is what made it worth changing", () => {
@@ -34,7 +36,7 @@ describe("the estimator's scale constant", () => {
   });
 
   test("nor on the worst OpenRouter one", () => {
-    const openrouter = MEASURED[2]!;
+    const openrouter = required(MEASURED[2]);
     expect(BYTES_PER_TOKEN).toBeLessThanOrEqual(4 * openrouter.minRatio);
   });
 

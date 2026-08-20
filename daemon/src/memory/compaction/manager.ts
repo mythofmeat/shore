@@ -1,3 +1,5 @@
+import { required } from "../../util/required.ts";
+
 import { shoreLog } from "../../log.ts";
 
 import { dirname, join } from "node:path";
@@ -130,7 +132,7 @@ export function findTurnSplit(messages: ConversationMessage[], keepTurns: number
   if (keepTurns === 0) return messages.length;
   let turnsSeen = 0;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (isRealUserTurn(messages[i]!)) {
+    if (isRealUserTurn(required(messages[i]))) {
       turnsSeen += 1;
       if (turnsSeen >= keepTurns) return i;
     }
@@ -145,7 +147,7 @@ export function countTurns(messages: ConversationMessage[]): number {
 export function trailingAutonomousLen(messages: ConversationMessage[]): number {
   let n = 0;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const msg = messages[i]!;
+    const msg = required(messages[i]);
     if (msg.role !== "assistant" || !msg.isAutonomous) break;
     n += 1;
   }
@@ -356,12 +358,12 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
   async dispatch(_turn: GenerateResponse, uses: ToolUseEvent[]): Promise<void> {
     this.#pending = this.state.pendingResults.map((result, index) => ({
       type: "tool_result" as const,
-      tool_use_id: uses[index]!.id,
+      tool_use_id: required(uses[index]).id,
       content: result.output,
       is_error: result.isError,
     }));
     for (let i = this.state.pendingUseCount; i < uses.length; i += 1) {
-      const use = uses[i]!;
+      const use = required(uses[i]);
       this.state.toolsCalled.push(use.name);
       const result = await dispatchCompactionTool(
         use.name,
@@ -425,7 +427,7 @@ async function writeWorkspaceFile(path: string, content: string): Promise<void> 
 
 async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<void> {
   for (let i = writes.length - 1; i >= 0; i -= 1) {
-    const write = writes[i]!;
+    const write = required(writes[i]);
     if (write.previousContent !== undefined) {
       try {
         await writeWorkspaceFile(write.resolvedPath, write.previousContent);

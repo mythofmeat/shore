@@ -43,7 +43,7 @@
     "typescript/no-var-requires": "error",
     "typescript/no-require-imports": "error",
     "typescript/no-deprecated": "error",
-    "typescript/no-non-null-assertion": "warn",
+    "typescript/no-non-null-assertion": "error",
     "typescript/no-unsafe-assignment": "error",
     "typescript/no-unsafe-argument": "error",
     "typescript/no-unsafe-call": "error",

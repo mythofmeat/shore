@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { generateText, type LanguageModel } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
@@ -242,7 +244,7 @@ describe("buildCall against the ai SDK's own prompt validation", () => {
 
   test("a request with no system prompt still validates", async () => {
     const { system: _system, ...rest } = conversation;
-    const bare: SidecarRequest = { ...rest, messages: [conversation.messages[0]!] };
+    const bare: SidecarRequest = { ...rest, messages: [required(conversation.messages[0])] };
     expect(await promptSeenByProvider(bare)).toEqual([
       { role: "user", content: [{ type: "text", text: "hi" }] },
     ]);

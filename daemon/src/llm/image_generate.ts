@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import OpenAI from "openai";
 import type { ChatCompletionCreateParams } from "openai/resources/chat/completions";
 import type { ImageGenerateParams } from "openai/resources/images";
@@ -177,7 +179,7 @@ export function resolveImageGenConfig(
   } else {
     const keys = Object.keys(opts.imageGen).sort(compareRustStrings);
     if (keys.length === 1) {
-      target = keys[0]!;
+      target = required(keys[0]);
     } else if (keys.length > 1) {
       return {
         err:

@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -371,8 +373,8 @@ describe("what a client gets", () => {
 
       const store = daemon.runtime.callStore;
       expect(store).toBeDefined();
-      expect(store!.callCount()).toBe(1);
-      expect(store!.queryCalls({ limit: 1 })[0]!.character).toBe("ada");
+      expect(required(store).callCount()).toBe(1);
+      expect(required(required(store).queryCalls({ limit: 1 })[0]).character).toBe("ada");
     } finally {
       client.close();
     }

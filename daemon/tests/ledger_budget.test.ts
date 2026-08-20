@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { Database } from "bun:sqlite";
 import { copyFileSync } from "node:fs";
 import { afterAll, expect, test } from "bun:test";
@@ -185,7 +187,7 @@ function caseLedger(index: number): Database {
   const path = `${template}.case${index}`;
   copyFileSync(template, path);
   const db = openLedger(path);
-  const columns = Object.keys(doc.seed[0]!);
+  const columns = Object.keys(required(doc.seed[0]));
   const sql = `INSERT INTO calls (${columns.join(", ")}) VALUES (${columns
     .map((c) => `$${c}`)
     .join(", ")})`;
@@ -230,12 +232,12 @@ test("the recorded budget cases still hold outside the changed pace policy", () 
     const at = (what: string) => `${c.config}/${c.now_name}: ${what}`;
 
     expect(
-      budgetStatuses(db, config!, now, opts).map(withoutChangedPolicy),
+      budgetStatuses(db, required(config), now, opts).map(withoutChangedPolicy),
       at("statuses"),
     ).toEqual(c.statuses.map(fixtureWithoutPace) as never);
     for (const [name, call] of Object.entries(CALLS)) {
-      const block = enforceBudgetForCall(db, config!, call, now, opts);
-      const expected = c.enforce[name]!;
+      const block = enforceBudgetForCall(db, required(config), call, now, opts);
+      const expected = required(c.enforce[name]);
       if (expected.scope === "pace" || block?.scope === "pace") continue;
       if (expected.allowed) {
         expect(block, at(`enforce ${name} (expected allow)`)).toBeUndefined();
@@ -248,11 +250,11 @@ test("the recorded budget cases still hold outside the changed pace policy", () 
     }
 
     expect(
-      nonPaceWarnings(newlyCrossedBudgetWarnings(db, config!, now, opts)),
+      nonPaceWarnings(newlyCrossedBudgetWarnings(db, required(config), now, opts)),
       at("warnings_first"),
     ).toEqual(nonPaceWarnings(c.warnings_first) as never);
     expect(
-      nonPaceWarnings(newlyCrossedBudgetWarnings(db, config!, now, opts)),
+      nonPaceWarnings(newlyCrossedBudgetWarnings(db, required(config), now, opts)),
       at("warnings_second"),
     ).toEqual(nonPaceWarnings(c.warnings_second) as never);
 

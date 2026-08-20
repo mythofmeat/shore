@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, expect, test } from "bun:test";
 
 import { closeLedgers } from "../src/ledger/record.ts";
@@ -233,9 +235,9 @@ test("model history is scoped to one character", () => {
   };
 
   expect(result.models.map((m) => m.model)).toEqual(["claude-opus-4-6", "glm-5.2"]);
-  expect(result.models[0]!.call_count).toBe(2);
-  expect(result.models[0]!.first_ts).toBe("2026-04-05T10:00:00+00:00");
-  expect(result.models[0]!.last_ts).toBe("2026-05-01T10:00:00+00:00");
+  expect(required(result.models[0]).call_count).toBe(2);
+  expect(required(result.models[0]).first_ts).toBe("2026-04-05T10:00:00+00:00");
+  expect(required(result.models[0]).last_ts).toBe("2026-05-01T10:00:00+00:00");
 });
 
 test("model history honours the time bounds", () => {
@@ -252,7 +254,7 @@ test("model history honours the time bounds", () => {
   }) as { models: Array<{ call_count: number }> };
 
   expect(result.models.length).toBe(1);
-  expect(result.models[0]!.call_count).toBe(1);
+  expect(required(result.models[0]).call_count).toBe(1);
 });
 
 test("a ledger that will not open is an error, not an empty report", () => {

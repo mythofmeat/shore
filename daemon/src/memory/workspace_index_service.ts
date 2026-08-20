@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { shoreLog } from "../log.ts";
 
 import type { Embedder } from "../llm/embed.ts";
@@ -149,8 +151,8 @@ export class WorkspaceIndexService {
     const characters = [...this.#entries.keys()];
     const after = this.#lastPicked === undefined ? -1 : characters.indexOf(this.#lastPicked);
     for (let step = 1; step <= characters.length; step += 1) {
-      const name = characters[(after + step) % characters.length]!;
-      const entry = this.#entries.get(name)!;
+      const name = required(characters[(after + step) % characters.length]);
+      const entry = required(this.#entries.get(name));
       if (entry.embedder === undefined || now < entry.retryAt || now < entry.nextBatchAt) continue;
       this.#lastPicked = name;
       try {

@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import {
@@ -149,7 +151,7 @@ describe("firing", () => {
     h.clock.advance(minutes(2));
     await h.service.tick();
     expect(h.sent).toHaveLength(1);
-    expect(h.sent[0]!.max_tokens).toBe(1);
+    expect(required(h.sent[0]).max_tokens).toBe(1);
   });
 
   test("a warm ping reschedules one interval out", async () => {
@@ -182,8 +184,8 @@ describe("firing", () => {
     expect(h.sent).toHaveLength(1);
 
     expect(h.events).toHaveLength(1);
-    expect(h.events[0]!.outcome).toBe("cold");
-    expect(h.events[0]!.detail).toContain("COLD");
+    expect(required(h.events[0]).outcome).toBe("cold");
+    expect(required(h.events[0]).detail).toContain("COLD");
   });
 
   test("read 0 with no write is not cold", () => {
@@ -208,8 +210,8 @@ describe("firing", () => {
     await h.service.tick();
     expect(h.sent).toHaveLength(2);
 
-    expect(h.events[0]!.outcome).toBe("failed");
-    expect(h.events[0]!.detail).toContain("connection reset");
+    expect(required(h.events[0]).outcome).toBe("failed");
+    expect(required(h.events[0]).detail).toContain("connection reset");
   });
 
   test("no pushed prefix means no ping", async () => {
@@ -241,7 +243,7 @@ describe("firing", () => {
     await service.tick();
     expect(sent).toHaveLength(1);
 
-    release!();
+    required(release)();
     await first;
   });
 });
@@ -284,12 +286,12 @@ describe("what counts as a warm", () => {
   test("a keepalive ping does not count as activity", async () => {
     const h = harness();
     armWarm(h);
-    const before = h.service.scheduleFor(CHARACTER)!.last_active_at;
+    const before = required(h.service.scheduleFor(CHARACTER)).last_active_at;
 
     h.clock.advance(minutes(56));
     h.service.observe(CHARACTER, MODEL, "keepalive");
 
-    expect(h.service.scheduleFor(CHARACTER)!.last_active_at).toBe(before);
+    expect(required(h.service.scheduleFor(CHARACTER)).last_active_at).toBe(before);
   });
 
   test("pinging stops after the idle ceiling", async () => {
@@ -343,7 +345,7 @@ describe("arming and disarming", () => {
     h.clock.advance(minutes(56));
     await h.service.tick();
     expect(h.sent).toHaveLength(1);
-    expect(h.sent[0]!.model).toBe(OTHER_MODEL);
+    expect(required(h.sent[0]).model).toBe(OTHER_MODEL);
   });
 
   test("disarm drops the prefix and the schedule", async () => {
@@ -363,7 +365,7 @@ describe("arming and disarming", () => {
     const before = h.service.scheduleFor(CHARACTER);
 
     h.service.arm(
-      prefix({ context: { ...prefix().context!, keepalive_max_secs: 6 * 3600 } }),
+      prefix({ context: { ...required(prefix().context), keepalive_max_secs: 6 * 3600 } }),
     );
     expect(h.service.scheduleFor(CHARACTER)).toEqual(before);
 
@@ -416,7 +418,7 @@ describe("what reaches the heartbeat log and the state file", () => {
 
     expect(h.events).toHaveLength(1);
     expect(h.events[0]).toMatchObject({ character: CHARACTER, outcome: "sent" });
-    expect(h.events[0]!.at).toBe(h.clock.now());
+    expect(required(h.events[0]).at).toBe(h.clock.now());
   });
 
   test("no sink means events are dropped, not buffered", async () => {
@@ -464,7 +466,7 @@ describe("what reaches the heartbeat log and the state file", () => {
   test("schedules survive a restart through restore", () => {
     const h = harness();
     armWarm(h);
-    const persisted = h.service.scheduleFor(CHARACTER)!;
+    const persisted = required(h.service.scheduleFor(CHARACTER));
 
     const fresh = harness();
     fresh.clock.advance(minutes(10));

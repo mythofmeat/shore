@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import {
@@ -560,7 +562,7 @@ async function enumerateSearchCandidates(
   let skippedBinaryOrLarge = 0;
 
   while (pending.length > 0) {
-    const path = pending.pop()!;
+    const path = required(pending.pop());
 
     let meta;
     try {
@@ -641,7 +643,7 @@ async function scanLexicalMatches(
 
     const lines = rustLines(content);
     for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i]!;
+      const line = required(lines[i]);
       const match = findCaseInsensitiveMatch(line, queryLower);
       if (match === undefined) continue;
       results.push({
@@ -728,8 +730,8 @@ export function bestLineExcerpt(content: string, qLower: string): [number, strin
   const lines = rustLines(content);
 
   for (let i = 0; i < lines.length; i += 1) {
-    const match = findCaseInsensitiveMatch(lines[i]!, qLower);
-    if (match !== undefined) return [i + 1, excerptLine(lines[i]!, match[0], match[1])];
+    const match = findCaseInsensitiveMatch(required(lines[i]), qLower);
+    if (match !== undefined) return [i + 1, excerptLine(required(lines[i]), match[0], match[1])];
   }
 
   const terms = searchExcerptTerms(qLower);
@@ -747,11 +749,11 @@ export function bestLineExcerpt(content: string, qLower: string): [number, strin
   }
 
   for (let i = 0; i < lines.length; i += 1) {
-    const trimmed = rustTrim(lines[i]!);
+    const trimmed = rustTrim(required(lines[i]));
     if (trimmed !== "" && !trimmed.startsWith("#")) return [i + 1, truncateExcerptLine(trimmed)];
   }
   for (let i = 0; i < lines.length; i += 1) {
-    const trimmed = rustTrim(lines[i]!);
+    const trimmed = rustTrim(required(lines[i]));
     if (trimmed !== "") return [i + 1, truncateExcerptLine(trimmed)];
   }
   return [1, ""];
@@ -791,7 +793,7 @@ function bestTermMatchedLine(
   let best: { lineNo: number; line: string; term: string; score: number } | undefined;
 
   for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i]!;
+    const line = required(lines[i]);
     const trimmed = rustTrim(line);
     if (trimmed === "") continue;
     if (!allowHeading && trimmed.startsWith("#")) continue;
@@ -801,7 +803,7 @@ function bestTermMatchedLine(
     let lineScore = 0;
 
     for (let t = 0; t < terms.length; t += 1) {
-      const term = terms[t]!;
+      const term = required(terms[t]);
       if (!lower.includes(term)) continue;
       const denom = Math.max(frequencies[t] ?? 1, 1);
       const termScore = Math.floor(100 / denom) + Buffer.byteLength(term, "utf8");

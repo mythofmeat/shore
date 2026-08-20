@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -227,7 +229,7 @@ describe("renderToolOutcome", () => {
 
   for (const c of fixture.dispatch_result_to_output) {
     test(c.name, async () => {
-      const answer = answers[c.name]!;
+      const answer = required(answers[c.name]);
       const out = await renderToolOutcome(async () => answer());
       expect(out.output).toBe(c.output);
       expect(out.isError).toBe(c.is_error);

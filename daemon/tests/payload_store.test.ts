@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { CallStore, ZERO_USAGE } from "../src/call_store.ts";
@@ -45,10 +47,10 @@ describe("payload splitting", () => {
   }
 
   test("a growing conversation shares every earlier chunk", () => {
-    const first = splitJsonPayload(body([turn("user", "one"), turn("assistant", "two")]))!;
-    const second = splitJsonPayload(
+    const first = required(splitJsonPayload(body([turn("user", "one"), turn("assistant", "two")])));
+    const second = required(splitJsonPayload(
       body([turn("user", "one"), turn("assistant", "two"), turn("user", "three")]),
-    )!;
+    ));
     const shared = first.filter((part) => second.includes(part));
     expect(shared.length).toBeGreaterThanOrEqual(first.length - 2);
   });
@@ -87,7 +89,7 @@ describe("payload store", () => {
     const store = CallStore.openInMemory();
     const raw = new Uint8Array([0x00, 0xff, 0xfe, 0x80, 0x41]);
     const id = store.storePayload(raw);
-    expect([...store.loadPayload(id)!]).toEqual([...raw]);
+    expect([...required(store.loadPayload(id))]).toEqual([...raw]);
     store.close();
   });
 
@@ -119,7 +121,7 @@ describe("payload store", () => {
       texts.push(text);
       ids.push(store.storePayload(text));
     }
-    ids.forEach((id, i) => expect(dec.decode(store.loadPayload(id)!)).toBe(texts[i]!));
+    ids.forEach((id, i) => expect(dec.decode(required(store.loadPayload(id)))).toBe(required(texts[i])));
     store.close();
   });
 });
@@ -131,7 +133,7 @@ describe("payload diffing", () => {
     const from = store.storePayload(body(base));
     const to = store.storePayload(body([...base, turn("user", "three")]));
 
-    const diff = store.diffPayloads(from, to)!;
+    const diff = required(store.diffPayloads(from, to));
     expect(diff.chunks.removed).toBe(0);
     expect(diff.chunks.added).toBeGreaterThan(0);
     expect(diff.chunks.equal).toBeGreaterThan(0);
@@ -154,7 +156,7 @@ describe("payload diffing", () => {
       }),
     );
 
-    const diff = store.diffPayloads(from, to)!;
+    const diff = required(store.diffPayloads(from, to));
     expect(diff.chunks.equal).toBeGreaterThan(0);
     expect(diff.entries.some((e) => e.op === "removed" && e.text?.includes("a test"))).toBe(true);
     expect(diff.entries.some((e) => e.op === "added" && e.text?.includes("something else"))).toBe(
@@ -169,7 +171,7 @@ describe("payload diffing", () => {
     const from = store.storePayload(body(base));
     const to = store.storePayload(body([...base, turn("user", "new")]));
 
-    const diff = store.diffPayloads(from, to)!;
+    const diff = required(store.diffPayloads(from, to));
     const equal = diff.entries.filter((e) => e.op === "equal");
     expect(equal.length).toBeGreaterThan(0);
     expect(equal.every((e) => e.text === null)).toBe(true);
@@ -195,7 +197,7 @@ describe("payload diffing", () => {
     const third = record("a2", "poppy", at(2), [turn("user", "one"), turn("user", "two")]);
 
     expect(store.previousCallId(third)).toBe(first);
-    const diff = store.diffCalls(first, third)!;
+    const diff = required(store.diffCalls(first, third));
     expect(diff.source).toBe("internal");
     expect(diff.chunks.removed).toBe(0);
     store.close();
@@ -235,7 +237,7 @@ describe("payload diffing", () => {
     });
     wire("w2", 0, body([turn("user", "wire one"), turn("user", "wire two")]));
 
-    const diff = store.diffCalls(one, two)!;
+    const diff = required(store.diffCalls(one, two));
     expect(diff.source).toBe("wire");
     expect(diff.entries.filter((e) => e.op === "added").map((e) => e.text).join("")).toContain(
       "wire two",
@@ -266,7 +268,7 @@ describe("payload garbage collection", () => {
     store.rotate(new Date("2026-03-01T00:00:00Z"), 1_000_000_000);
 
     expect(store.callCount()).toBe(1);
-    const survivor = store.queryCalls({ limit: 1 })[0]!;
+    const survivor = required(store.queryCalls({ limit: 1 })[0]);
     expect(store.getCall(survivor.id)?.request).toContain("shared");
     store.close();
   });

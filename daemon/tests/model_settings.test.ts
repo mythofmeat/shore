@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { CommandError } from "../src/commands/errors.ts";
@@ -75,7 +77,7 @@ describe("applySamplerValue", () => {
     test(`${c.key} accepts its type`, () => {
       const sampler: SamplerSettings = {};
       applySamplerValue(sampler, c.key, c.accepts);
-      const field = SAMPLER_FIELD_BY_KEY.get(c.key)!;
+      const field = required(SAMPLER_FIELD_BY_KEY.get(c.key));
       expect((sampler as Record<string, unknown>)[field]).toBeDefined();
     });
 
@@ -97,7 +99,7 @@ describe("applySamplerValue", () => {
       const sampler: SamplerSettings = {};
       applySamplerValue(sampler, c.key, c.accepts);
       applySamplerValue(sampler, c.key, null);
-      const field = SAMPLER_FIELD_BY_KEY.get(c.key)!;
+      const field = required(SAMPLER_FIELD_BY_KEY.get(c.key));
       expect((sampler as Record<string, unknown>)[field], `${c.key} not cleared`).toBeUndefined();
     }
   });
@@ -123,7 +125,7 @@ describe("capabilityCheck follows applicability, for every sdk and key", () => {
           for (const probe of PROBES) {
             const failure = capabilityCheck(sdk, key, probe);
             expect(failure, `${sdk}/${model} ${key}=${String(probe)}`).toBeInstanceOf(CommandError);
-            expect(failure!.message).toBe(
+            expect(required(failure).message).toBe(
               `\`${field}\` is not applicable to the \`${sdk}\` sdk for this model`,
             );
           }

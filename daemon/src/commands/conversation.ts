@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { mergeToolLoopMessages, turnMsgIds } from "../engine/merge.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { ImageRef, Message, Role } from "../engine/types.ts";
@@ -47,7 +49,7 @@ export function resolveRef(messages: readonly Message[], reference: string): str
 
     const signed = parsed < 0n ? BigInt(messages.length) + parsed : parsed - 1n;
     if (signed < 0n || signed >= BigInt(messages.length)) throw outOfRange();
-    return messages[Number(signed)]!.msg_id;
+    return required(messages[Number(signed)]).msg_id;
   }
 
   return reference;
@@ -56,7 +58,7 @@ export function resolveRef(messages: readonly Message[], reference: string): str
 function resolveAssistantRef(messages: readonly Message[], reference: string | undefined): string {
   if (reference === undefined || reference === "last" || reference === "latest") {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const msg = messages[i]!;
+      const msg = required(messages[i]);
       if (msg.role === "assistant") return msg.msg_id;
     }
     throw notFound("No assistant messages in conversation");
@@ -77,7 +79,7 @@ function pageStartByTurns(messages: readonly Message[], endBound: number, turns:
 
   let seen = 0;
   for (let idx = end - 1; idx >= 0; idx -= 1) {
-    if (messages[idx]!.role === "user") {
+    if (required(messages[idx]).role === "user") {
       seen += 1;
       if (seen >= turns) return idx;
     }

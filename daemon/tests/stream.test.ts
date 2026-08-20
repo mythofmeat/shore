@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./handler_fixtures/stream.json" with { type: "json" };
@@ -587,7 +589,7 @@ describe("emit_stream_end", () => {
 
   test("an absent revision is an absent key, not zero", () => {
     const frames: ServerMessage[] = [];
-    emitStreamEnd((m) => frames.push(m), fixtureResult((f["stream_end"] as Row[])[0]!["result"] as Row), {
+    emitStreamEnd((m) => frames.push(m), fixtureResult(required((f["stream_end"] as Row[])[0])["result"] as Row), {
       isFinal: true,
     });
     expect(Object.hasOwn(frames[0] as object, "revision")).toBe(false);

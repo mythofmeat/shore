@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { OpenAIProvider } from "../src/llm/providers/openai.ts";
@@ -122,8 +124,8 @@ describe("streaming", () => {
     const toolUses = events.filter((e) => e.type === "tool_use");
 
     expect(toolUses.map((e) => e.name)).toEqual(["read", "search"]);
-    expect(toolUses[0]!.input).toEqual({ path: "a" });
-    expect(toolUses[1]!.input).toEqual({ query: "b" });
+    expect(required(toolUses[0]).input).toEqual({ path: "a" });
+    expect(required(toolUses[1]).input).toEqual({ query: "b" });
     expect(new Set(toolUses.map((e) => e.id)).size).toBe(2);
   });
 });
@@ -136,7 +138,7 @@ describe("non-streaming", () => {
     expect(result.content).toBe("a plain answer");
     expect(result.content_blocks).toEqual([{ type: "text", text: "a plain answer" }]);
     expect(result.finish_reason).toBe("end_turn");
-    expect(m.requests[0]!.streaming).toBe(false);
+    expect(required(m.requests[0]).streaming).toBe(false);
   });
 
   test("generate surfaces a tool call", async () => {
@@ -172,11 +174,11 @@ describe("the harness itself", () => {
     );
 
     expect(m.requests).toHaveLength(1);
-    const body = m.requests[0]!.body;
+    const body = required(m.requests[0]).body;
     expect(body.model).toBe("mock-model");
     expect(body.messages[0]).toEqual({ role: "system", content: "You are a test." });
     expect(body.messages.at(-1)).toMatchObject({ role: "user" });
-    expect(m.requests[0]!.headers["authorization"]).toBe("Bearer test-key");
+    expect(required(m.requests[0]).headers["authorization"]).toBe("Bearer test-key");
   });
 
   test("the script is consumed in order, then the fallback answers", async () => {

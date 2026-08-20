@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 
@@ -93,7 +95,7 @@ function seededLedger(): Database {
   const f = freshLedger();
   cleanups.push(f.cleanup);
   const db = openLedger(f.path);
-  const columns = Object.keys(doc.seed[0]!);
+  const columns = Object.keys(required(doc.seed[0]));
   const sql = `INSERT INTO calls (${columns.join(", ")}) VALUES (${columns
     .map((c) => `$${c}`)
     .join(", ")})`;
@@ -116,34 +118,34 @@ test("every recorded filter answers the same ten queries", () => {
     expect(filter, `fixture filter "${c.filter}" has no local definition`).toBeDefined();
     const at = (what: string) => `${c.filter}: ${what}`;
 
-    expect(usageTotals(db, filter!), at("usage_totals")).toEqual(
+    expect(usageTotals(db, required(filter)), at("usage_totals")).toEqual(
       c.usage_totals as never,
     );
-    expect(usageSummary(db, filter!), at("usage_summary")).toEqual(
+    expect(usageSummary(db, required(filter)), at("usage_summary")).toEqual(
       c.usage_summary as never,
     );
-    expect(usageSummaryBy(db, filter!, "call_type"), at("by_call_type")).toEqual(
+    expect(usageSummaryBy(db, required(filter), "call_type"), at("by_call_type")).toEqual(
       c.by_call_type as never,
     );
-    expect(usageSummaryBy(db, filter!, "kind"), at("by_usage_kind")).toEqual(
+    expect(usageSummaryBy(db, required(filter), "kind"), at("by_usage_kind")).toEqual(
       c.by_usage_kind as never,
     );
-    expect(usageSummaryBy(db, filter!, "api_key"), at("by_api_key")).toEqual(
+    expect(usageSummaryBy(db, required(filter), "api_key"), at("by_api_key")).toEqual(
       c.by_api_key as never,
     );
-    expect(modelUsageSummary(db, filter!), at("model_usage")).toEqual(
+    expect(modelUsageSummary(db, required(filter)), at("model_usage")).toEqual(
       c.model_usage as never,
     );
-    expect(withoutToolSurface(queryAnomalies(db, filter!)), at("anomalies")).toEqual(
+    expect(withoutToolSurface(queryAnomalies(db, required(filter))), at("anomalies")).toEqual(
       c.anomalies as never,
     );
     expect(
-      activeAnthropicCharacters(db, filter!).map(
+      activeAnthropicCharacters(db, required(filter)).map(
         ([character, row]) => [character, withoutToolSurface([row])[0]] as const,
       ),
       at("active_anthropic"),
     ).toEqual(c.active_anthropic as never);
-    expect(withoutToolSurfaceColumn(exportTsv(db, filter!)), at("export_tsv")).toBe(
+    expect(withoutToolSurfaceColumn(exportTsv(db, required(filter))), at("export_tsv")).toBe(
       c.export_tsv,
     );
   }
@@ -154,7 +156,7 @@ test("every recorded filter answers the same ten queries", () => {
   expect(nullCostRows(db), "null_cost_rows").toEqual(doc.null_cost_rows as never);
   expect(allCostRows(db), "all_cost_rows").toEqual(doc.all_cost_rows as never);
 
-  const callRows = queryAnomalies(db, FILTERS["none"]!);
+  const callRows = queryAnomalies(db, required(FILTERS["none"]));
   expect(callRows.length, "anomalies: seeded").toBeGreaterThan(0);
   for (const row of callRows) {
     expect(row).toHaveProperty("tool_surface");

@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +21,7 @@ function tempDir(): string {
 
 afterEach(() => {
   while (roots.length > 0) {
-    const root = roots.pop()!;
+    const root = required(roots.pop());
     try {
       chmodSync(root, 0o700);
     } catch {

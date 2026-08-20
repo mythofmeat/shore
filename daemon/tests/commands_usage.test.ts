@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, expect, test } from "bun:test";
 
 import { usage, type UsageContext } from "../src/commands/usage.ts";
@@ -79,14 +81,14 @@ test("a price older than the ttl is not served, so the next call refetches it", 
   priceInStore(ledger, 0.00001);
   refuseCatalog();
 
-  const fresh = ledgerFor(ledger)!.pricing;
+  const fresh = required(ledgerFor(ledger)).pricing;
   expect(
     fresh.cached("anthropic", "claude-opus-4-6")?.input_per_token,
     "a price written just now is served from cache",
   ).toBe(0.00001);
 
   stalePricing(ledger, PRICING_TTL_MS + 60_000);
-  const stale = ledgerFor(ledger)!.pricing;
+  const stale = required(ledgerFor(ledger)).pricing;
   expect(
     stale.cached("anthropic", "claude-opus-4-6"),
     "a price past the ttl is a miss, not a stale hit",

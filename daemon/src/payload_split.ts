@@ -1,3 +1,5 @@
+import { required } from "./util/required.ts";
+
 const SPLIT_KEYS = new Set(["messages", "tools", "contents", "system", "input", "turns"]);
 
 const WHITESPACE = new Set([" ", "\t", "\n", "\r"]);
@@ -100,7 +102,7 @@ function scanValue(text: string, start: number): number {
   if (c === "[") return scanNested(text, start, "[", "]");
 
   let i = start;
-  while (i < text.length && !LITERAL_END.has(text[i]!)) i++;
+  while (i < text.length && !LITERAL_END.has(required(text[i]))) i++;
   if (i === start) throw new ScanError("empty value");
   return i;
 }
@@ -109,7 +111,7 @@ function scanNested(text: string, start: number, open: string, close: string): n
   let depth = 0;
   let i = start;
   while (i < text.length) {
-    const c = text[i]!;
+    const c = required(text[i]);
     if (c === '"') {
       i = scanString(text, i);
       continue;
@@ -127,7 +129,7 @@ function scanNested(text: string, start: number, open: string, close: string): n
 function scanString(text: string, start: number): number {
   let i = start + 1;
   while (i < text.length) {
-    const c = text[i]!;
+    const c = required(text[i]);
     if (c === "\\") {
       i += 2;
       continue;
@@ -140,6 +142,6 @@ function scanString(text: string, start: number): number {
 
 function skipWhitespace(text: string, start: number): number {
   let i = start;
-  while (i < text.length && WHITESPACE.has(text[i]!)) i++;
+  while (i < text.length && WHITESPACE.has(required(text[i]))) i++;
   return i;
 }

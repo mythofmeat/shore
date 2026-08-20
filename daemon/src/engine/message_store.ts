@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { shoreLog } from "../log.ts";
 
 import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -139,7 +141,7 @@ function serializeForStorage(msg: Message): string {
   if (msg.origin !== undefined) ordered.push(["origin", msg.origin]);
 
   const contentAt = 2;
-  const last = ordered.pop()!;
+  const last = required(ordered.pop());
   if (ordered.length > contentAt) ordered[contentAt] = last;
 
   const obj: Record<string, unknown> = {};
@@ -347,7 +349,7 @@ export class MessageStore {
     } else {
       pos = 0;
       for (let i = this.#messages.length - 1; i >= 0; i--) {
-        const existing = Date.parse(this.#messages[i]!.timestamp);
+        const existing = Date.parse(required(this.#messages[i]).timestamp);
         if (Number.isNaN(existing) || existing <= at) {
           pos = i + 1;
           break;
@@ -504,7 +506,7 @@ export class MessageStore {
 
   #keepIndex(): number {
     for (let i = this.#messages.length - 1; i >= 0; i--) {
-      if (isRealUserTurn(this.#messages[i]!)) return i + 1;
+      if (isRealUserTurn(required(this.#messages[i]))) return i + 1;
     }
     return 0;
   }

@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { readCandidateEnv, resolveKeyCandidates, type ProviderEntry } from "../llm/credentials";
 import { cacheOrBuild, OpenAIEmbedder, type Embedder } from "../llm/embed";
 import { hardcodedProviderBaseUrl } from "../llm/request";
@@ -24,7 +26,7 @@ function resolveTarget(
 ): string {
   if (defaultRef !== undefined) return defaultRef;
   const keys = Object.keys(embedding);
-  if (keys.length === 1) return keys[0]!;
+  if (keys.length === 1) return required(keys[0]);
   if (keys.length > 1) {
     throw new Error(
       'multiple [embedding."provider:model_id"] entries are configured but ' +

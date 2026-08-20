@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./memory_fixtures/compaction_llm.json";
@@ -97,10 +99,10 @@ describe("resolveImageGenConfig", () => {
       expect("ok" in result).toBe(true);
       const ok = (result as unknown as { ok: Record<string, unknown> }).ok;
       const filled: Record<string, unknown> = {};
-      for (const key of Object.keys(expected.ok!)) filled[key] = ok[key] ?? null;
-      expect(filled).toEqual(expected.ok!);
+      for (const key of Object.keys(required(expected.ok))) filled[key] = ok[key] ?? null;
+      expect(filled).toEqual(required(expected.ok));
       expect(Object.keys(ok).sort()).toEqual(
-        Object.keys(expected.ok!)
+        Object.keys(required(expected.ok))
           .filter((k) => (expected.ok as Json)[k] !== null)
           .sort(),
       );
@@ -168,20 +170,20 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
         return;
       }
       expect(error).toBeUndefined();
-      expect(JSON.parse(JSON.stringify(built))).toEqual(expected.ok!);
+      expect(JSON.parse(JSON.stringify(built))).toEqual(required(expected.ok));
     });
   }
 
   test("the tail is two entries and the instruction sits at a fixed index", () => {
-    const rec = section("build_initial_request").find(
+    const rec = required(section("build_initial_request").find(
       (r) => r.name === "chat prefix carried, model rebuilt",
-    )!;
+    ));
     const chatPrefix = (rec.chat_request as Json).messages as unknown[];
     const built = (rec.result as { ok: Json }).ok.messages as Array<{ role: string }>;
 
     expect(built.length).toBe(chatPrefix.length + COMPACTION_TAIL_ENTRY_COUNT);
-    expect(built.at(-2)!.role).toBe("user");
-    expect(built.at(-1)!.role).toBe("system");
+    expect(required(built.at(-2)).role).toBe("user");
+    expect(required(built.at(-1)).role).toBe("system");
 
     const before = JSON.stringify(built);
     const request = { messages: [...built] } as unknown as SidecarRequest;

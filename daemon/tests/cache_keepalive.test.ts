@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { CacheKeepalive } from "../src/cache/schedule.ts";
@@ -247,11 +249,11 @@ describe("snapshot and restore", () => {
     const ka = armed(now);
     const snapshot = ka.snapshot();
     expect(snapshot).toBeDefined();
-    expect(snapshot!.model).toBe(MODEL);
-    expect(snapshot!.interval).toBe(minutes(55));
+    expect(required(snapshot).model).toBe(MODEL);
+    expect(required(snapshot).interval).toBe(minutes(55));
 
     const restored = new CacheKeepalive(hours(12));
-    expect(restored.restore(snapshot!, now + minutes(20))).toBe(true);
+    expect(restored.restore(required(snapshot), now + minutes(20))).toBe(true);
     expect(restored.tick(now + minutes(54))).toBe("none");
     expect(restored.tick(now + minutes(55))).toBe("ping");
   });
@@ -262,7 +264,7 @@ describe("snapshot and restore", () => {
     expect(snapshot).toBeDefined();
 
     const restored = new CacheKeepalive(hours(12));
-    expect(restored.restore(snapshot!, now + minutes(56))).toBe(false);
+    expect(restored.restore(required(snapshot), now + minutes(56))).toBe(false);
     expect(restored.tick(now + hours(2))).toBe("none");
   });
 

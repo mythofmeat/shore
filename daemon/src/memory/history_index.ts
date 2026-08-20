@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, statSync, unlinkSync } from "node:fs";
@@ -400,7 +402,7 @@ export class HistorySearchIndex {
     );
     this.#db.transaction(() => {
       vectors.forEach((vector, i) => {
-        put.run(chosen[i]!.content_hash, identity, vector.length, vectorToBytes(vector));
+        put.run(required(chosen[i]).content_hash, identity, vector.length, vectorToBytes(vector));
       });
       this.#setMetadata(EMBED_CURSOR, String(lastAttempted));
     })();
@@ -578,9 +580,9 @@ function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let aa = 0;
   let bb = 0;
   for (let i = 0; i < a.length; i += 1) {
-    dot += a[i]! * b[i]!;
-    aa += a[i]! * a[i]!;
-    bb += b[i]! * b[i]!;
+    dot += required(a[i]) * required(b[i]);
+    aa += required(a[i]) * required(a[i]);
+    bb += required(b[i]) * required(b[i]);
   }
   return aa === 0 || bb === 0 ? Number.NEGATIVE_INFINITY : dot / Math.sqrt(aa * bb);
 }

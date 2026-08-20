@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -293,10 +295,10 @@ describe("what reaches the model", () => {
     await h.say("hello");
     await h.say("again");
 
-    const replayed = thinkingIn(assistantTurns(h.fake.seen[1]!)[0]!);
+    const replayed = thinkingIn(required(assistantTurns(required(h.fake.seen[1]))[0]));
     expect(replayed).toHaveLength(1);
-    expect(replayed[0]!["thinking"]).toBe("she asked twice");
-    expect(replayed[0]!["signature"]).toBe("sig-AAA");
+    expect(required(replayed[0])["thinking"]).toBe("she asked twice");
+    expect(required(replayed[0])["signature"]).toBe("sig-AAA");
   });
 
   test("thinking survives a regenerate and a swipe back to the first response", async () => {
@@ -308,23 +310,23 @@ describe("what reaches the model", () => {
 
     await h.say("hello");
 
-    const target = h.store.messages().at(-1)!.msg_id;
-    const prior = h.store.pendingRegenAlt()!.alternatives;
+    const target = required(h.store.messages().at(-1)).msg_id;
+    const prior = required(h.store.pendingRegenAlt()).alternatives;
     const regenReq = await h.request(true);
     const regenerated = [assistantFrom(await runToDone(new AnthropicProvider().stream(regenReq)))];
-    regenerated[0]!.msg_id = target;
+    required(regenerated[0]).msg_id = target;
     MessageStore.attachGeneratedAlt(regenerated, prior);
     await h.store.replaceAfterLastUserTurn(regenerated);
 
     await h.store.selectAlt(target, 0);
     await h.say("and now");
 
-    const turns = assistantTurns(h.fake.seen.at(-1)!);
+    const turns = assistantTurns(required(h.fake.seen.at(-1)));
     expect(turns).toHaveLength(1);
-    const replayed = thinkingIn(turns[0]!);
+    const replayed = thinkingIn(required(turns[0]));
     expect(replayed).toHaveLength(1);
-    expect(replayed[0]!["signature"]).toBe("sig-FIRST");
-    expect(replayed[0]!["thinking"]).toBe("first pass");
+    expect(required(replayed[0])["signature"]).toBe("sig-FIRST");
+    expect(required(replayed[0])["thinking"]).toBe("first pass");
   });
 
   test("every assistant turn that thought still carries thinking many turns later", async () => {
@@ -340,11 +342,11 @@ describe("what reaches the model", () => {
     await h.say("three");
     await h.say("four");
 
-    const last = h.fake.seen.at(-1)!;
+    const last = required(h.fake.seen.at(-1));
     const turns = assistantTurns(last);
     expect(turns).toHaveLength(3);
     expect(turns.map((m) => thinkingIn(m).length)).toEqual([1, 1, 1]);
-    expect(turns.map((m) => thinkingIn(m)[0]!["signature"])).toEqual(["sig-1", "sig-2", "sig-3"]);
+    expect(turns.map((m) => required(thinkingIn(m)[0])["signature"])).toEqual(["sig-1", "sig-2", "sig-3"]);
   });
 
   test("no request ever carries an unsendable turn", async () => {
@@ -391,7 +393,7 @@ describe("what reaches the model", () => {
 
     for (const req of h.fake.seen) {
       expect(breakpointCount(req)).toBeLessThanOrEqual(4);
-      const last = req.messages.at(-1)!;
+      const last = required(req.messages.at(-1));
       expect(last.content.some((b) => b["cache_control"] !== undefined)).toBe(true);
     }
   });
@@ -432,12 +434,12 @@ describe("what gets recorded", () => {
 
     const calls = store.queryCalls({ character: "poppy", limit: 10 });
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.call_type).toBe("message");
+    expect(required(calls[0]).call_type).toBe("message");
 
-    const wire = store.httpCallsFor(store.getCall(calls[0]!.id)!.call_id);
+    const wire = store.httpCallsFor(required(store.getCall(required(calls[0]).id)).call_id);
     expect(wire.length).toBe(2);
     expect(wire.every((w) => w.status === 200)).toBe(true);
-    expect(wire[0]!.request_body).toContain("claude-fixture");
+    expect(required(wire[0]).request_body).toContain("claude-fixture");
     expect(wire.map((w) => w.seq)).toEqual([0, 1]);
   });
 
@@ -463,10 +465,10 @@ describe("what gets recorded", () => {
 
     await runToDone(anthropicToolLoopEvents(req, phase));
 
-    const continuation = fake.seen[1]!;
-    const assistant = assistantTurns(continuation)[0]!;
+    const continuation = required(fake.seen[1]);
+    const assistant = required(assistantTurns(continuation)[0]);
     expect(assistant.content.map((b) => b["type"])).toEqual(["thinking", "tool_use"]);
-    expect(thinkingIn(assistant)[0]!["signature"]).toBe("sig-T");
+    expect(required(thinkingIn(assistant)[0])["signature"]).toBe("sig-T");
   });
 });
 

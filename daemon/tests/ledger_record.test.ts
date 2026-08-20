@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
@@ -95,10 +97,10 @@ describe("what a stream records", () => {
       expect(seen.map((e) => e.type)).toEqual(["start", "text", "done"]);
       const rows = rowsIn(path);
       expect(rows).toHaveLength(1);
-      expect(rows[0]!["call_type"]).toBe("message");
-      expect(rows[0]!["character"]).toBe("probe");
-      expect(rows[0]!["cache_write_tokens"]).toBe(2_000);
-      expect(rows[0]!["finish_reason"]).toBe("end_turn");
+      expect(required(rows[0])["call_type"]).toBe("message");
+      expect(required(rows[0])["character"]).toBe("probe");
+      expect(required(rows[0])["cache_write_tokens"]).toBe(2_000);
+      expect(required(rows[0])["finish_reason"]).toBe("end_turn");
     });
   });
 
@@ -140,7 +142,7 @@ describe("what a stream records", () => {
       const rows = rowsIn(path);
       expect(rows.map((r) => r["cache_read_tokens"])).toEqual([2_000, 2_200, 0]);
       expect(rows.map((r) => r["finish_reason"])).toEqual(["tool_use", "tool_use", "error"]);
-      expect(rows[2]!["cache_state"]).toBeNull();
+      expect(required(rows[2])["cache_state"]).toBeNull();
       expect(rows.every((r) => r["cache_anomaly"] === null)).toBe(true);
     });
   });
@@ -192,8 +194,8 @@ describe("what a stream records", () => {
 
       const rows = rowsIn(path);
       expect(rows).toHaveLength(1);
-      expect(rows[0]!["finish_reason"]).toBe("error");
-      expect(rows[0]!["cache_write_tokens"]).toBe(19_188);
+      expect(required(rows[0])["finish_reason"]).toBe("error");
+      expect(required(rows[0])["cache_write_tokens"]).toBe(19_188);
     });
   });
 
@@ -208,9 +210,9 @@ describe("what a stream records", () => {
 
       const rows = rowsIn(path);
       expect(rows).toHaveLength(1);
-      expect(rows[0]!["finish_reason"]).toBe("cancelled");
-      expect(rows[0]!["input_tokens"]).toBe(0);
-      expect(rows[0]!["cache_state"]).toBeNull();
+      expect(required(rows[0])["finish_reason"]).toBe("cancelled");
+      expect(required(rows[0])["input_tokens"]).toBe(0);
+      expect(required(rows[0])["cache_state"]).toBeNull();
     });
   });
 
@@ -287,7 +289,7 @@ describe("what a stream records", () => {
           timing: TIMING,
         })),
       );
-      const row = rowsIn(path)[0]!;
+      const row = required(rowsIn(path)[0]);
       expect(row["provider"]).toBe("opencode-go");
       expect(row["cost_source"]).toBe("subscription");
     });
@@ -320,8 +322,8 @@ describe("what a non-streaming call records", () => {
       });
       const rows = rowsIn(path);
       expect(rows).toHaveLength(1);
-      expect(rows[0]!["call_type"]).toBe("compaction");
-      expect(rows[0]!["cache_write_tokens"]).toBe(3_000);
+      expect(required(rows[0])["call_type"]).toBe("compaction");
+      expect(required(rows[0])["cache_write_tokens"]).toBe(3_000);
     });
   });
 
@@ -356,9 +358,9 @@ describe("what a non-streaming call records", () => {
       recordGenerateError(ctx(path), REQ, Date.now() - 250);
       const rows = rowsIn(path);
       expect(rows).toHaveLength(1);
-      expect(rows[0]!["finish_reason"]).toBe("error");
-      expect(rows[0]!["input_tokens"]).toBe(0);
-      expect(rows[0]!["total_ms"]).toBeGreaterThanOrEqual(250);
+      expect(required(rows[0])["finish_reason"]).toBe("error");
+      expect(required(rows[0])["input_tokens"]).toBe(0);
+      expect(required(rows[0])["total_ms"]).toBeGreaterThanOrEqual(250);
     });
   });
 });

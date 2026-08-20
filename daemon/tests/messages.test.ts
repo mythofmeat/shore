@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,7 +47,7 @@ describe("loading", () => {
         }
         const store = await MessageStore.load(path);
         expect(wire(store.messages())).toEqual(wire(c.expect.messages));
-        expect(store.turnCount()).toBe(c.expect.turn_count!);
+        expect(store.turnCount()).toBe(required(c.expect.turn_count));
       });
     });
   }

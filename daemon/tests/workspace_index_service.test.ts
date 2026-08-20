@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -211,7 +213,7 @@ describe("WorkspaceIndexService", () => {
       await service.runOnce();
     }
 
-    expect(service.progress("qifei")!.sweptAt).toBeDefined();
+    expect(required(service.progress("qifei")).sweptAt).toBeDefined();
     expect(second.documents).toBeGreaterThan(0);
   });
 
@@ -228,17 +230,17 @@ describe("WorkspaceIndexService", () => {
 
     clock += 2000;
     await service.runOnce();
-    const swept = service.progress("Yuna")!;
+    const swept = required(service.progress("Yuna"));
     expect(swept.sweptAt).toBe(clock);
     expect(swept.pending).toBe(0);
 
     clock += 100;
     await service.runOnce();
-    expect(service.progress("Yuna")!.sweptAt).toBe(swept.sweptAt);
+    expect(required(service.progress("Yuna")).sweptAt).toBe(swept.sweptAt);
 
     clock += 1000;
     await service.runOnce();
-    expect(service.progress("Yuna")!.sweptAt).toBe(clock);
+    expect(required(service.progress("Yuna")).sweptAt).toBe(clock);
   });
 
   test("a character with no embedder reports why instead of waiting forever", async () => {
@@ -255,7 +257,7 @@ describe("WorkspaceIndexService", () => {
     clock += 60_000;
     await service.runOnce();
 
-    const progress = service.progress("ada")!;
+    const progress = required(service.progress("ada"));
     expect(progress.sweptAt).toBeUndefined();
     expect(progress.embedderError).toBe(
       "no embedding model configured; semantic search disabled",
@@ -274,12 +276,12 @@ describe("WorkspaceIndexService", () => {
     service.register({ ...registration, embedderError: "no embedding model configured" });
     clock += 60_000;
     await service.runOnce();
-    expect(service.progress("ada")!.sweptAt).toBeUndefined();
+    expect(required(service.progress("ada")).sweptAt).toBeUndefined();
 
     service.register({ ...registration, embedder: new CountingEmbedder() });
     await service.runOnce();
 
-    const progress = service.progress("ada")!;
+    const progress = required(service.progress("ada"));
     expect(progress.embedderError).toBeUndefined();
     expect(progress.sweptAt).toBe(clock);
   });
@@ -323,17 +325,17 @@ describe("WorkspaceIndexService", () => {
 
     clock += 2000;
     await service.runOnce();
-    const first = service.progress("ada")!;
+    const first = required(service.progress("ada"));
     expect(first.failures).toBe(1);
     expect(first.lastError).toContain("provider is down");
     expect(first.retryAt).toBeGreaterThan(clock);
 
     await service.runOnce();
-    expect(service.progress("ada")!.failures).toBe(1);
+    expect(required(service.progress("ada")).failures).toBe(1);
 
     clock += 70_000;
     await service.runOnce();
-    expect(service.progress("ada")!.failures).toBe(2);
+    expect(required(service.progress("ada")).failures).toBe(2);
   });
 
   test("progress reports what is left without walking again", async () => {
@@ -372,7 +374,7 @@ describe("WorkspaceIndexService", () => {
     clock += 2000;
     await service.runOnce();
     expect(service.registeredCharacters()).toEqual(["ada"]);
-    expect(service.progress("ada")!.files).toBe(0);
+    expect(required(service.progress("ada")).files).toBe(0);
   });
 
   test("re-registering with a new embedding model clears the backoff", async () => {
@@ -390,14 +392,14 @@ describe("WorkspaceIndexService", () => {
 
     clock += 2000;
     await service.runOnce();
-    expect(service.progress("ada")!.retryAt).toBeGreaterThan(clock);
+    expect(required(service.progress("ada")).retryAt).toBeGreaterThan(clock);
 
     const replacement = new CountingEmbedder();
     Object.defineProperty(replacement, "modelId", { value: "topic-v2" });
     service.register({ ...registration, embedder: replacement });
 
-    expect(service.progress("ada")!.retryAt).toBe(0);
-    expect(service.progress("ada")!.failures).toBe(0);
+    expect(required(service.progress("ada")).retryAt).toBe(0);
+    expect(required(service.progress("ada")).failures).toBe(0);
 
     await service.runOnce();
     expect(replacement.documents).toBe(2);

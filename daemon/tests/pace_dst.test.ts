@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterAll, expect, test } from "bun:test";
 
 import { budgetStatuses, type UsageConfig } from "../src/ledger/budget.ts";
@@ -36,14 +38,14 @@ test("day pace holds the local reset hour across spring forward", () => {
   const pace = budgetStatuses(db, PACED_WEEKLY, now, { localZone: ZONE })[0]?.pace;
   expect(pace, "budget configures a pace").toBeDefined();
 
-  expect(pace!.window_start, "the day-pace opens at 06:00 local, post-transition").toBe(
+  expect(required(pace).window_start, "the day-pace opens at 06:00 local, post-transition").toBe(
     "2026-03-09T10:00:00+00:00",
   );
-  expect(pace!.window_end, "and closes at 06:00 local the next day").toBe(
+  expect(required(pace).window_end, "and closes at 06:00 local the next day").toBe(
     "2026-03-10T10:00:00+00:00",
   );
 
-  expect(pace!.periods_remaining, "2 whole days left in the week").toBeCloseTo(2, 9);
+  expect(required(pace).periods_remaining, "2 whole days left in the week").toBeCloseTo(2, 9);
 
   db.close();
 });

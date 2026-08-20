@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { commentRanges, lineNumberAt, lineStartsOf } from "../scripts/comment_ranges.ts";
@@ -83,6 +85,6 @@ describe("lineNumberAt", () => {
     const starts = lineStartsOf(source);
     const found = commentRanges(source);
     expect(found).toHaveLength(1);
-    expect(lineNumberAt(starts, found[0]!.pos)).toBe(3);
+    expect(lineNumberAt(starts, required(found[0]).pos)).toBe(3);
   });
 });

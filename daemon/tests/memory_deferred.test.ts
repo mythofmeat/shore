@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
@@ -101,7 +103,7 @@ describe("deferred edits parity", () => {
         let returned: unknown = null;
         switch (c.op.fn) {
           case "queue_deferred_edit":
-            await queueDeferredEdit(dataDir, c.op.path!);
+            await queueDeferredEdit(dataDir, required(c.op.path));
             break;
           case "note_memory_index_deferred":
             await noteMemoryIndexDeferred(dataDir);
@@ -128,7 +130,7 @@ describe("deferred edits parity", () => {
             returned = (await loadMemoryIndex(dataDir, configDir, CHAR)) ?? null;
             break;
           case "load_active_prompt_file":
-            returned = (await loadActivePromptFile(dataDir, c.op.name!)) ?? null;
+            returned = (await loadActivePromptFile(dataDir, required(c.op.name))) ?? null;
             break;
           case "load_canonical_memory_index":
             returned = (await loadCanonicalMemoryIndex(configDir, CHAR)) ?? null;
@@ -144,7 +146,7 @@ describe("deferred edits parity", () => {
           const queued = (await snapshot(root))["data/deferred_edits.jsonl"];
           if (queued !== undefined) {
             const lines = queued.split("\n").filter((l) => l.trim() !== "");
-            const last = JSON.parse(lines[lines.length - 1]!) as {
+            const last = JSON.parse(required(lines[lines.length - 1])) as {
               timestamp?: unknown;
             };
             expect(typeof last.timestamp).toBe("string");
@@ -160,7 +162,7 @@ describe("deferred edits parity", () => {
         expect(Object.keys(actual).sort()).toEqual(Object.keys(expected).sort());
 
         for (const [rel, want] of Object.entries(expected)) {
-          const got = actual[rel]!;
+          const got = required(actual[rel]);
           if (rel.endsWith("deferred_edits.jsonl")) {
             expect(normalizeQueue(got)).toBe(normalizeQueue(want));
           } else {

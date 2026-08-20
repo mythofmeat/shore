@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { realpath } from "node:fs/promises";
@@ -143,12 +145,12 @@ describe("the single-flight guard", () => {
       return g !== undefined;
     };
 
-    expect(acquire("/guard-data-a", "Aria")).toBe(steps[0]!.acquired as boolean);
-    expect(acquire("/guard-data-a", "Aria")).toBe(steps[1]!.acquired as boolean);
-    expect(acquire("/guard-data-a", "Other")).toBe(steps[2]!.acquired as boolean);
-    expect(acquire("/guard-data-b", "Aria")).toBe(steps[3]!.acquired as boolean);
+    expect(acquire("/guard-data-a", "Aria")).toBe(required(steps[0]).acquired as boolean);
+    expect(acquire("/guard-data-a", "Aria")).toBe(required(steps[1]).acquired as boolean);
+    expect(acquire("/guard-data-a", "Other")).toBe(required(steps[2]).acquired as boolean);
+    expect(acquire("/guard-data-b", "Aria")).toBe(required(steps[3]).acquired as boolean);
     held[0]?.release();
-    expect(acquire("/guard-data-a", "Aria")).toBe(steps[4]!.acquired as boolean);
+    expect(acquire("/guard-data-a", "Aria")).toBe(required(steps[4]).acquired as boolean);
 
     for (const g of held) g?.release();
   });
@@ -595,7 +597,7 @@ async function runPass(pass: Json): Promise<void> {
       const expectedLength = ((built?.built_message_count as number | undefined) ?? 0) + 1;
       expect(llm.request?.messages.length ?? expectedLength).toBe(expectedLength);
     } else {
-      expect(normalizeMessages(llm.request!.messages)).toEqual(
+      expect(normalizeMessages(required(llm.request).messages)).toEqual(
         normalizeMessages(finalMessages),
       );
     }

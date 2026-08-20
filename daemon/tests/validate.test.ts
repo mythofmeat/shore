@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./config_fixtures/validate.json" with { type: "json" };
@@ -145,7 +147,7 @@ describe("the deleted [daemon] keys", () => {
     for (const name of USES_DELETED_DAEMON_KEYS) {
       const c = cases.find((x) => x.name === name);
       expect(c, name).toBeDefined();
-      const { error } = run(c!.toml);
+      const { error } = run(required(c).toml);
       expect(error?.kind, name).toBe("parse_app");
       expect(error?.message, name).toContain("allowed_hosts");
     }
@@ -157,7 +159,7 @@ describe("the deleted [usage.spike_warnings] field", () => {
     for (const name of USES_DELETED_SPIKE_WARNINGS) {
       const c = cases.find((x) => x.name === name);
       expect(c, name).toBeDefined();
-      const { error } = run(c!.toml);
+      const { error } = run(required(c).toml);
       expect(error?.kind, name).toBe("parse_app");
       expect(error?.message, name).toContain("spike_warnings");
     }

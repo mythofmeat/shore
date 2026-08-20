@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
@@ -107,7 +109,7 @@ describe("call capture", () => {
     expect(seen.map((e) => e.type)).toEqual(["start", "done"]);
 
     expect(store.rows).toHaveLength(1);
-    const row = store.rows[0]!;
+    const row = required(store.rows[0]);
     expect(row.character).toBe("poppy");
     expect(row.call_type).toBe("message");
     expect(row.model).toBe("claude-opus-4-6");
@@ -129,7 +131,7 @@ describe("call capture", () => {
 
     await drain(p.stream(req()));
 
-    const lines = (store.rows[0]!.response_body ?? "").split("\n");
+    const lines = (required(store.rows[0]).response_body ?? "").split("\n");
     expect(lines).toHaveLength(3);
     expect(lines.map((l) => (JSON.parse(l) as { type: string }).type)).toEqual([
       "start",
@@ -144,9 +146,9 @@ describe("call capture", () => {
 
     await drain(p.stream(req()));
 
-    const body = JSON.parse(store.rows[0]!.request_body) as Record<string, unknown>;
+    const body = JSON.parse(required(store.rows[0]).request_body) as Record<string, unknown>;
     expect(body["api_key"]).toBe(REDACTED);
-    expect(store.rows[0]!.request_body).not.toContain("sk-ant-super-secret");
+    expect(required(store.rows[0]).request_body).not.toContain("sk-ant-super-secret");
     expect(body["context"]).toBeUndefined();
     expect(body["model"]).toBe("claude-opus-4-6");
   });
@@ -167,7 +169,7 @@ describe("call capture", () => {
     expect(drain(p.stream(req()))).rejects.toThrow("upstream exploded");
 
     expect(store.rows).toHaveLength(1);
-    const row = store.rows[0]!;
+    const row = required(store.rows[0]);
     expect(row.error).toBe("upstream exploded");
     expect((row.response_body ?? "").split("\n")).toHaveLength(2);
     expect(row.usage.cache_read_tokens).toBe(33);
@@ -183,15 +185,15 @@ describe("call capture", () => {
 
     await drain(p.stream(req()));
 
-    expect(store.rows[0]!.error).toBe("overloaded");
+    expect(required(store.rows[0]).error).toBe("overloaded");
   });
 
   test("a non-streaming call is recorded, and a failing one too", async () => {
     const store = recorder();
     const ok = withCallCapture(fake([]), store);
     await ok.generate(req());
-    expect(store.rows[0]!.finish_reason).toBe("end_turn");
-    expect(store.rows[0]!.error).toBeNull();
+    expect(required(store.rows[0]).finish_reason).toBe("end_turn");
+    expect(required(store.rows[0]).error).toBeNull();
 
     const boom: SidecarProvider = {
       async *stream() {},
@@ -199,8 +201,8 @@ describe("call capture", () => {
     };
     const bad = withCallCapture(boom, store);
     expect(bad.generate(req())).rejects.toThrow("no key");
-    expect(store.rows[1]!.error).toBe("no key");
-    expect(store.rows[1]!.usage.input_tokens).toBe(0);
+    expect(required(store.rows[1]).error).toBe("no key");
+    expect(required(store.rows[1]).usage.input_tokens).toBe(0);
   });
 
   test("a store that throws never breaks the call", async () => {
@@ -238,11 +240,11 @@ describe("call capture", () => {
 
       const index = store.queryCalls({ character: "poppy", limit: 10 });
       expect(index).toHaveLength(1);
-      expect(index[0]!.call_type).toBe("message");
-      expect(index[0]!.usage.cache_read_tokens).toBe(33);
-      expect(index[0]!.request_bytes).toBeGreaterThan(0);
+      expect(required(index[0]).call_type).toBe("message");
+      expect(required(index[0]).usage.cache_read_tokens).toBe(33);
+      expect(required(index[0]).request_bytes).toBeGreaterThan(0);
 
-      const payload = store.getCall(index[0]!.id);
+      const payload = store.getCall(required(index[0]).id);
       expect(payload?.request).not.toContain("sk-ant-super-secret");
       expect(payload?.request).toContain(REDACTED);
       expect(
@@ -267,8 +269,8 @@ describe("call capture", () => {
 
     expect(seen.map((e) => e.type)).toEqual(["start", "done"]);
     expect(store.rows).toHaveLength(1);
-    expect(store.rows[0]!.call_type).toBe("message");
-    expect(store.rows[0]!.finish_reason).toBe("end_turn");
+    expect(required(store.rows[0]).call_type).toBe("message");
+    expect(required(store.rows[0]).finish_reason).toBe("end_turn");
   });
 
   test("a tool loop's own HTTP calls land under the loop's call id", async () => {
@@ -293,11 +295,11 @@ describe("call capture", () => {
     expect(store.rows).toHaveLength(1);
     expect(exchanges).toHaveLength(2);
     expect(exchanges.map((e) => e.call_id)).toEqual([
-      store.rows[0]!.call_id,
-      store.rows[0]!.call_id,
+      required(store.rows[0]).call_id,
+      required(store.rows[0]).call_id,
     ]);
     expect(exchanges.map((e) => e.seq)).toEqual([0, 1]);
-    expect(exchanges[0]!.character).toBe("poppy");
+    expect(required(exchanges[0]).character).toBe("poppy");
   });
 
   test("no store means the loop's events pass through untouched", async () => {

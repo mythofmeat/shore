@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import {
   EffectiveCatalogError,
   findEffectiveModel,
@@ -139,7 +141,7 @@ function backgroundSettingTarget(ctx: ModelsContext, selector: string): Resolved
   const resolved = BACKGROUND_TASKS.map(
     (task) => [task, backgroundTargetModel(ctx, task)] as const,
   );
-  const first = resolved[0]![1];
+  const first = required(resolved[0])[1];
   const same = resolved.every(
     ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,
   );
@@ -199,7 +201,7 @@ function sharedSubagentModel(ctx: ModelsContext): ResolvedModel {
   if (names.length === 0) throw notFound("no sub-agents are configured");
 
   const resolved = names.map((name) => [name, subagentTargetModel(ctx, name)] as const);
-  const first = resolved[0]![1];
+  const first = required(resolved[0])[1];
   const same = resolved.every(
     ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,
   );

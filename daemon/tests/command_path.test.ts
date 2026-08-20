@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -150,7 +152,7 @@ function resolveCharacter(
   }
   if (available.length === 0) throw CharacterError.noneAvailable(configDir);
   if (available.length > 1) throw CharacterError.ambiguous(available);
-  return available[0]!;
+  return required(available[0]);
 }
 
 const RUST_NONE_AVAILABLE =

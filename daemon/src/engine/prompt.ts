@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
@@ -256,7 +258,7 @@ export function formatWallClock(instantMs: number, timeZone: string): string {
   const naive = naiveInZone(instantMs, timeZone);
   const { year, month, day, hour } = partsOf(naive);
   const d = new Date(naive);
-  const weekday = WEEKDAYS[d.getUTCDay()]!;
+  const weekday = required(WEEKDAYS[d.getUTCDay()]);
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
   const meridiem = hour < 12 ? "AM" : "PM";
   return `${weekday} ${String(year).padStart(4, "0")}-${pad2(month)}-${pad2(day)} · ${hour12}:${pad2(d.getUTCMinutes())} ${meridiem}`;
@@ -296,7 +298,7 @@ function trimMessages(
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i]!;
+    const msg = required(messages[i]);
     const msgTokens = estimateMessageTokens(msg);
     if (usedTokens + msgTokens > tokenBudget && selected.length > 0) break;
     usedTokens += msgTokens;
@@ -314,7 +316,7 @@ function trimMessages(
   }
   selected.reverse();
 
-  while (selected.length > 0 && isToolLoopMessage(selected[0]!.pm.role, selected[0]!.pm.content_blocks)) {
+  while (selected.length > 0 && isToolLoopMessage(required(selected[0]).pm.role, required(selected[0]).pm.content_blocks)) {
     selected.shift();
   }
 

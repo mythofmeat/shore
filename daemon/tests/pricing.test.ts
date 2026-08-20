@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -134,7 +136,7 @@ describe("the engine", () => {
       cache_read_tokens: 0,
       cache_write_tokens: 0,
     });
-    close(cost!.input, 0.0015);
+    close(required(cost).input, 0.0015);
   });
 
   test("a catalog fetch caches every model, not just the one asked for", async () => {
@@ -159,7 +161,7 @@ describe("the engine", () => {
     });
 
     const found = await engine.getOrFetch("anthropic", "claude-opus-4-6");
-    close(found!.cache_write_per_token, 0.000_018_75);
+    close(required(found).cache_write_per_token, 0.000_018_75);
     expect(engine.cached("openai", "gpt-4o")).toBeDefined();
     expect(store.get("openai/gpt-4o")).toBeDefined();
     await engine.getOrFetch("openai", "gpt-4o");

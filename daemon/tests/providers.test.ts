@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -326,7 +328,7 @@ function cacheJson(provider: string, models: [string, string][]): unknown {
 }
 
 const row = (section: keyof typeof fixture, name: string): Row =>
-  (fixture[section] as unknown as Row[]).find((r) => r.name === name)!;
+  required((fixture[section] as unknown as Row[]).find((r) => r.name === name));
 
 describe("listProviders", () => {
   test("no providers configured", async () => {

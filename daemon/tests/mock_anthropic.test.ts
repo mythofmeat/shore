@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
@@ -179,7 +181,7 @@ describe("the adapter's schedule, against the modelled cache", () => {
 
     const systemAnchor = m.lastBreakpoints.find((b) => b.where === "system");
     expect(systemAnchor).toBeDefined();
-    expect(afterChurn).toBe(systemAnchor!.prefixTokens);
+    expect(afterChurn).toBe(required(systemAnchor).prefixTokens);
     expect(afterChurn).toBeGreaterThan(0);
     expect(afterChurn).toBeLessThan(steady);
   });

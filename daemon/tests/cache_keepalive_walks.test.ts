@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { expect, test } from "bun:test";
 
 import fixture from "./keepalive_fixtures/cache_keepalive_walks.json";
@@ -60,16 +62,16 @@ test("every recorded walk decides the same at each step", () => {
       const where = `${c.name} step ${i} (${step.op})`;
       switch (step.op) {
         case "set_interval":
-          ka.setInterval(step.interval_ms ?? undefined, step.model!, step.at_ms);
+          ka.setInterval(step.interval_ms ?? undefined, required(step.model), step.at_ms);
           break;
         case "warm":
-          ka.onCacheWarmed(step.model!, step.at_ms!);
+          ka.onCacheWarmed(required(step.model), required(step.at_ms));
           break;
         case "ping_succeeded":
-          ka.onPingSucceeded(step.at_ms!);
+          ka.onPingSucceeded(required(step.at_ms));
           break;
         case "ping_failed":
-          ka.onPingFailed(step.at_ms!);
+          ka.onPingFailed(required(step.at_ms));
           break;
         case "invalidate":
           ka.onCacheInvalidated();
@@ -77,10 +79,10 @@ test("every recorded walk decides the same at each step", () => {
         case "tick": {
           if (PINGS_EARLIER.has(`${c.name}:${i}`)) {
             expect(step.expect, where).toBe("none");
-            expect(ka.tick(step.at_ms!), where).toBe("ping");
+            expect(ka.tick(required(step.at_ms)), where).toBe("ping");
             break;
           }
-          expect(ka.tick(step.at_ms!), where).toBe(
+          expect(ka.tick(required(step.at_ms)), where).toBe(
             step.expect as CacheKeepaliveAction,
           );
           break;
@@ -98,14 +100,14 @@ test("every recorded walk decides the same at each step", () => {
         case "restore": {
           restored = new CacheKeepalive(c.max_idle_ms);
           const armed = restored.restore(
-            toSnapshot(step.snapshot!),
-            step.at_ms!,
+            toSnapshot(required(step.snapshot)),
+            required(step.at_ms),
           );
           expect(armed, where).toBe(step.expect as boolean);
           break;
         }
         case "restored_tick":
-          expect(restored!.tick(step.at_ms!), where).toBe(
+          expect(required(restored).tick(required(step.at_ms)), where).toBe(
             step.expect as CacheKeepaliveAction,
           );
           break;

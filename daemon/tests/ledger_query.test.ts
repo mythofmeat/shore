@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 
@@ -105,20 +107,20 @@ describe("grouping", () => {
     const rows = modelUsageSummary(db, NONE);
     expect(rows).toHaveLength(3);
     const [opusMessage, opusToolLoop, gpt] = rows;
-    expect(opusMessage!.model).toBe("claude-opus-4-6");
-    expect(opusMessage!.call_type).toBe("message");
-    expect(opusMessage!.call_count).toBe(1);
-    expect(opusMessage!.first_ts).toBe("2026-04-05T10:00:00Z");
-    expect(opusToolLoop!.call_type).toBe("tool_loop");
-    expect(gpt!.model).toBe("gpt-4o");
-    expect(gpt!.provider).toBe("openai");
+    expect(required(opusMessage).model).toBe("claude-opus-4-6");
+    expect(required(opusMessage).call_type).toBe("message");
+    expect(required(opusMessage).call_count).toBe(1);
+    expect(required(opusMessage).first_ts).toBe("2026-04-05T10:00:00Z");
+    expect(required(opusToolLoop).call_type).toBe("tool_loop");
+    expect(required(gpt).model).toBe("gpt-4o");
+    expect(required(gpt).provider).toBe("openai");
 
     const filtered = modelUsageSummary(db, {
       character: "aria",
       since: "2026-04-05T10:02:00Z",
     });
     expect(filtered).toHaveLength(1);
-    expect(filtered[0]!.model).toBe("gpt-4o");
+    expect(required(filtered[0]).model).toBe("gpt-4o");
 
     expect(modelUsageSummary(db, { character: "nobody" })).toHaveLength(0);
   });
@@ -156,7 +158,7 @@ describe("grouping", () => {
   test("summary groups by provider and model", () => {
     const summary = usageSummary(populated(), NONE);
     expect(summary).toHaveLength(2);
-    expect(summary.find((s) => s.provider === "anthropic")!.call_count).toBe(2);
+    expect(required(summary.find((s) => s.provider === "anthropic")).call_count).toBe(2);
   });
 });
 
@@ -164,14 +166,14 @@ describe("filtering", () => {
   test("filter by provider", () => {
     const summary = usageSummary(populated(), { provider: "anthropic" });
     expect(summary).toHaveLength(1);
-    expect(summary[0]!.call_count).toBe(2);
+    expect(required(summary[0]).call_count).toBe(2);
   });
 
   test("filter by api key", () => {
     const summary = usageSummary(populated(), { api_key_name: "overflow" });
     expect(summary).toHaveLength(1);
-    expect(summary[0]!.call_count).toBe(1);
-    expect(summary[0]!.total_input).toBe(200);
+    expect(required(summary[0]).call_count).toBe(1);
+    expect(required(summary[0]).total_input).toBe(200);
   });
 
   test("totals sum without grouping", () => {
@@ -221,7 +223,7 @@ describe("anomalies and export", () => {
     expect(lines[0]).toContain("ts\t");
     expect(lines[0]).toContain("\tcost_source\t");
     expect(lines).toHaveLength(4);
-    expect(lines[1]!.split("\t")).toHaveLength(lines[0]!.split("\t").length);
+    expect(required(lines[1]).split("\t")).toHaveLength(required(lines[0]).split("\t").length);
   });
 });
 
@@ -264,7 +266,7 @@ describe("recalculation candidates", () => {
     const id = insert(db, { ...BASE, ts: "2026-04-05T10:05:00Z", total_cost: null });
     const rows = nullCostRows(db);
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.id).toBe(id);
+    expect(required(rows[0]).id).toBe(id);
   });
 
   test("update costs rewrites the breakdown and the source", () => {

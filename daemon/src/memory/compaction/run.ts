@@ -1,3 +1,5 @@
+import { required } from "../../util/required.ts";
+
 import { shoreLog } from "../../log.ts";
 
 import { join } from "node:path";
@@ -268,8 +270,8 @@ export function compactionRunner(
       ? {}
       : {
           repoint: async (character: string, config: LoadedConfig) => {
-            deps.cache!.invalidate(character, "compaction");
-            await deps.cache!.reprimeFromDisk(
+            required(deps.cache).invalidate(character, "compaction");
+            await required(deps.cache).reprimeFromDisk(
               character,
               config.dirs.data,
               config,

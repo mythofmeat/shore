@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,7 +17,7 @@ function tempDir(): string {
 }
 
 afterEach(() => {
-  while (roots.length > 0) rmSync(roots.pop()!, { recursive: true, force: true });
+  while (roots.length > 0) rmSync(required(roots.pop()), { recursive: true, force: true });
 });
 
 const parse = (text: string, env: Record<string, string> = {}) =>

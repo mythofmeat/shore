@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 
@@ -41,7 +43,7 @@ function ledger(spend: Array<[string, number]>): Database {
 }
 
 function pace(db: Database, now: string) {
-  return budgetStatuses(db, config, Date.parse(now), { localZone: "UTC" })[0]!.pace!;
+  return required(required(budgetStatuses(db, config, Date.parse(now), { localZone: "UTC" })[0]).pace);
 }
 
 const BASE = 15 / 7;

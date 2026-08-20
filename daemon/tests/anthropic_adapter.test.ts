@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import type { RawMessageStreamEvent } from "@anthropic-ai/sdk/resources/messages";
 
@@ -274,7 +276,7 @@ describe("frozen-region anchor survives a last_turn thinking strip", () => {
   function frozenAnchor(msgs: SidecarRequest["messages"]): number {
     const a = anchoredMsgIndices(msgs);
     expect(a.length).toBeGreaterThanOrEqual(2);
-    return a[a.length - 2]!;
+    return required(a[a.length - 2]);
   }
 
   function prefix(msgs: SidecarRequest["messages"], idx: number): string {

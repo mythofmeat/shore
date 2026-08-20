@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { enforceBudgetForCall, type BudgetBlock } from "./budget.ts";
 import { recentCallCost } from "./query.ts";
 import { ledgerFor } from "./record.ts";
@@ -25,7 +27,7 @@ export function budgetBlockFor(
 
   return enforceBudgetForCall(
     ledger.database,
-    context.usage!,
+    required(context.usage),
     {
       provider,
       api_key_name: context.api_key_name,

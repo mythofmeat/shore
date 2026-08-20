@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { shoreLog } from "../log.ts";
 
 export interface MockUsage {
@@ -119,7 +121,7 @@ export async function startMockProvider(
         );
       }
 
-      const model = typeof body.model === "string" ? body.model : models[0]!;
+      const model = typeof body.model === "string" ? body.model : required(models[0]);
       return recorded.streaming
         ? streamResponse(reply, model, chunkChars)
         : Response.json(completionResponse(reply, model));

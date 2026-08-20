@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -176,7 +178,7 @@ describe("parseCacheKeepalive", () => {
         expect(setting.kind).toBe("off");
       } else {
         expect(setting.kind).toBe("every");
-        expect(setting.interval!.asMillisExact().toString()).toBe(c.intervalMillis);
+        expect(required(setting.interval).asMillisExact().toString()).toBe(c.intervalMillis);
       }
     });
   }

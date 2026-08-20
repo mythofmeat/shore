@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterAll, expect, test } from "bun:test";
 
 import fixture from "./ledger_fixtures/ledger_usage_cases.json";
@@ -80,7 +82,7 @@ function splitCsvLine(line: string): string[] {
   let field = "";
   let quoted = false;
   for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i]!;
+    const ch = required(line[i]);
     if (quoted) {
       if (ch === '"') {
         if (line[i + 1] === '"') {
@@ -132,7 +134,7 @@ function seededLedgerPath(): string {
   const f = freshLedger();
   cleanups.push(f.cleanup);
   const db = openLedger(f.path);
-  const columns = Object.keys(doc.seed[0]!);
+  const columns = Object.keys(required(doc.seed[0]));
   const sql = `INSERT INTO calls (${columns.join(", ")}) VALUES (${columns
     .map((c) => `$${c}`)
     .join(", ")})`;

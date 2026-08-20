@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { CallStore } from "../src/call_store.ts";
@@ -168,7 +170,7 @@ describe("record once, replay with nothing listening", () => {
       return (await provider.generate(req)).usage;
     });
     const secondUsage = await withWireScope(newWireScope("call-2", {}), async () => {
-      return (await provider.generate(request(mock!.url))).usage;
+      return (await provider.generate(request(required(mock).url))).usage;
     });
 
     expect(firstUsage.cache_creation_tokens).toBeGreaterThan(0);

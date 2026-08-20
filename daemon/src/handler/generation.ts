@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -430,7 +432,7 @@ async function streamTurn(
       (nextRequest, callType) => {
         const continued = {
           ...nextRequest,
-          context: { ...nextRequest.context!, call_type: callType },
+          context: { ...required(nextRequest.context), call_type: callType },
         };
         const nextBlock = budgetBlockFor(continued);
         if (nextBlock) {

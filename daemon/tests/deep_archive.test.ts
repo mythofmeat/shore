@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -205,7 +207,7 @@ function deps(config: LoadedConfig, over: Partial<DeepArchiveDeps> = {}): DeepAr
 describe("runDeepIdleArchive", () => {
   test("nothing to archive quiesces, and says the idle period is finished", async () => {
     const { config, characterDir } = await world([
-      fromShape(fixture.plan[1]!.input[0] as Shape),
+      fromShape(required(fixture.plan[1]).input[0] as Shape),
     ]);
     const before = await readFile(join(characterDir, "active.jsonl"), "utf8");
 
@@ -252,7 +254,7 @@ describe("runDeepIdleArchive", () => {
   }
 
   test("the pure arm invalidates the cached body and re-points the keepalive", async () => {
-    const kase = fixture.pure_archive[0]!;
+    const kase = required(fixture.pure_archive[0]);
     const { config } = await world(kase.active_before);
 
     const disarmed: string[] = [];
@@ -271,7 +273,7 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("an engine reload that throws is a warning, not a failed archive", async () => {
-    const kase = fixture.pure_archive[0]!;
+    const kase = required(fixture.pure_archive[0]);
     const { config, characterDir } = await world(kase.active_before);
 
     const result = await runDeepIdleArchive(
@@ -289,7 +291,7 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("a failed archive reports failure and does not finish the idle period", async () => {
-    const kase = fixture.pure_archive[0]!;
+    const kase = required(fixture.pure_archive[0]);
     const { config, characterDir } = await world(kase.active_before);
     await mkdir(join(config.dirs.data, "history.db"));
 
@@ -303,7 +305,7 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("a conversation that will not load is a failure, not nothing to do", async () => {
-    const kase = fixture.pure_archive[0]!;
+    const kase = required(fixture.pure_archive[0]);
     const { config, characterDir } = await world(kase.active_before);
     await rm(join(characterDir, "active.jsonl"));
     await mkdir(join(characterDir, "active.jsonl"));
@@ -315,7 +317,7 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("the LLM arm archives a keep-0 pass that wrote nothing, and does not finish the idle period", async () => {
-    const kase = fixture.plan.find((c) => c.plan.arm === "compaction")!;
+    const kase = required(fixture.plan.find((c) => c.plan.arm === "compaction"));
     const { config, characterDir } = await world((kase.input as Shape[]).map(fromShape), false, {
       backgroundModel: true,
     });
@@ -351,9 +353,9 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("the keep-0 pass retains the unanswered autonomous run", async () => {
-    const kase = fixture.plan.find(
+    const kase = required(fixture.plan.find(
       (c) => c.plan.arm === "compaction" && c.note.startsWith("uncovered"),
-    )!;
+    ));
     const messages = (kase.input as Shape[]).map(fromShape);
     messages.push({
       msg_id: "m_9",
@@ -415,7 +417,7 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("a keep-0 pass that cannot run reports failure and finishes nothing", async () => {
-    const kase = fixture.plan.find((c) => c.plan.arm === "compaction")!;
+    const kase = required(fixture.plan.find((c) => c.plan.arm === "compaction"));
     const { config } = await world((kase.input as Shape[]).map(fromShape));
 
     const result = await runDeepIdleArchive(
@@ -435,7 +437,7 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("no compaction dependencies is a failure, not a silent archive", async () => {
-    const kase = fixture.plan.find((c) => c.plan.arm === "compaction")!;
+    const kase = required(fixture.plan.find((c) => c.plan.arm === "compaction"));
     const { config, characterDir } = await world((kase.input as Shape[]).map(fromShape));
     const before = await readFile(join(characterDir, "active.jsonl"), "utf8");
 
@@ -447,11 +449,11 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("a compaction already in flight refuses rather than archiving underneath it", async () => {
-    const kase = fixture.pure_archive[0]!;
+    const kase = required(fixture.pure_archive[0]);
     const { config, dataDir, characterDir } = await world(kase.active_before);
     const before = await readFile(join(characterDir, "active.jsonl"), "utf8");
 
-    const held = tryBeginCompaction(dataDir, "ada")!;
+    const held = required(tryBeginCompaction(dataDir, "ada"));
     const refused = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
 
     expect(refused.failed).toBeDefined();
@@ -469,7 +471,7 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("a broken legacy segments path cannot block a database archive", async () => {
-    const kase = fixture.pure_archive[0]!;
+    const kase = required(fixture.pure_archive[0]);
     const { config, characterDir } = await world(kase.active_before);
     await writeFile(join(characterDir, "segments"), "not a directory");
 

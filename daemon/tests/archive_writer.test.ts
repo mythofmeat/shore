@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
@@ -118,7 +120,7 @@ describe("compaction writer parity", () => {
         expect(Object.keys(actual).sort()).toEqual(Object.keys(expected).sort());
 
         for (const [rel, want] of Object.entries(expected)) {
-          const got = actual[rel]!;
+          const got = required(actual[rel]);
           if (rel === "compaction.json") {
             expect(normalizeManifest(got, seeded)).toBe(
               normalizeManifest(want, seeded),

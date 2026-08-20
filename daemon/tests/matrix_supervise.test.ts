@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { defaultAppConfig, defaultMatrixConfig, type MatrixConfig } from "../src/config/app.ts";
@@ -108,7 +110,7 @@ function supervisor(
     login: ((): Promise<never> => {
       const next = logins[Math.min(attempts, logins.length - 1)];
       attempts += 1;
-      return next!();
+      return required(next)();
     }),
     retry: { baseMs: 1, capMs: 2, stableMs: 1_000, now: () => 0 },
   };
@@ -171,7 +173,7 @@ describe("supervising the bridge", () => {
     await Bun.sleep(20);
     expect(bots.length).toBe(1);
 
-    bots[0]!.fault(new Error("the Matrix sync entered STOPPED"));
+    required(bots[0]).fault(new Error("the Matrix sync entered STOPPED"));
     await Bun.sleep(30);
     expect(bots.length).toBe(2);
 
@@ -195,7 +197,7 @@ describe("supervising the bridge", () => {
     });
 
     await Bun.sleep(20);
-    bots[0]!.fault(unknownToken());
+    required(bots[0]).fault(unknownToken());
     await bridge.done;
     expect(bots.length).toBe(1);
     expect(warnings.join("\n")).toContain("until the daemon restarts");

@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -160,7 +162,7 @@ describe("rotating through a provider's keys", () => {
     const keys: string[] = [];
     const out = await generateWithCredentialFallback(
       request(),
-      resolveModelForRequest(config(), request())!,
+      required(resolveModelForRequest(config(), request())),
       deps(recordingProvider(keys)),
     );
 
@@ -175,7 +177,7 @@ describe("rotating through a provider's keys", () => {
 
     const out = await generateWithCredentialFallback(
       request(),
-      resolveModelForRequest(config(), request())!,
+      required(resolveModelForRequest(config(), request())),
       deps(provider),
     );
 
@@ -191,7 +193,7 @@ describe("rotating through a provider's keys", () => {
     const req = request();
     const provider = recordingProvider(keys, (n) => (n === 0 ? unauthorized() : ok()));
 
-    await generateWithCredentialFallback(req, resolveModelForRequest(config(), req)!, deps(provider));
+    await generateWithCredentialFallback(req, required(resolveModelForRequest(config(), req)), deps(provider));
 
     expect(req.api_key).toBe("spare-secret");
   });
@@ -211,7 +213,7 @@ describe("rotating through a provider's keys", () => {
       },
     } as SidecarProvider;
 
-    await generateWithCredentialFallback(req, resolveModelForRequest(config(), req)!, deps(provider));
+    await generateWithCredentialFallback(req, required(resolveModelForRequest(config(), req)), deps(provider));
 
     expect(seen).toEqual(["primary"]);
   });
@@ -223,7 +225,7 @@ describe("rotating through a provider's keys", () => {
     expect(
       generateWithCredentialFallback(
         request(),
-        resolveModelForRequest(config(), request())!,
+        required(resolveModelForRequest(config(), request())),
         deps(provider),
       ),
     ).rejects.toThrow();
@@ -241,7 +243,7 @@ describe("rotating through a provider's keys", () => {
     expect(
       generateWithCredentialFallback(
         request(),
-        resolveModelForRequest(disabled, request())!,
+        required(resolveModelForRequest(disabled, request())),
         deps(recordingProvider(keys), { config: disabled }),
       ),
     ).rejects.toBeDefined();
@@ -255,7 +257,7 @@ describe("rotating through a provider's keys", () => {
     expect(
       generateWithCredentialFallback(
         request(),
-        resolveModelForRequest(config(), request())!,
+        required(resolveModelForRequest(config(), request())),
         deps(recordingProvider(keys), { env: {} }),
       ),
     ).rejects.toThrow();
@@ -353,7 +355,7 @@ describe("the ledger row", () => {
     const ledger = Ledger.open(path);
     expect(ledger.database.query(
       "SELECT status, call_id FROM call_attempts",
-    ).get()).toMatchObject({ status: "completed", call_id: rows[0]!.id });
+    ).get()).toMatchObject({ status: "completed", call_id: required(rows[0]).id });
     ledger.close();
   });
 

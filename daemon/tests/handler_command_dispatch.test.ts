@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { defaultAppConfig, defaultMatrixConfig } from "../src/config/app.ts";
@@ -372,7 +374,7 @@ describe("a switch_character", () => {
     const f = fakes();
     await afterCommand("switch_character", {}, { character: "bob" }, f.ctx);
 
-    expect(Object.hasOwn(f.log.sent[0]!, "rid")).toBe(false);
+    expect(Object.hasOwn(required(f.log.sent[0]), "rid")).toBe(false);
   });
 
   test("active_model is null when the snapshot names none", async () => {

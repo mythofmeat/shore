@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -146,7 +148,7 @@ describe("providerOptionsFor", () => {
   }
 
   test("the off sentinel never reaches the wire as an effort", () => {
-    const m = model(fixture.provider_options_for[0]!.model);
+    const m = model(required(fixture.provider_options_for[0]).model);
     const got = derive({ ...m, reasoning_effort: "off" }) as ProviderOptions;
     expect(got.reasoning_effort).toBeUndefined();
     expect(got.thinking_enabled).toBe(false);
@@ -177,7 +179,7 @@ describe("buildRequestWithResolvedKey", () => {
 
   test("caller-supplied provider options replace the derived ones", () => {
     const withEffort = model({
-      ...fixture.provider_options_for[0]!.model,
+      ...required(fixture.provider_options_for[0]).model,
       reasoning_effort: "high",
     });
     const built = buildRequestWithResolvedKey(withEffort, "k", {
@@ -204,14 +206,14 @@ describe("buildRequest", () => {
   }
 
   test("an empty environment value is not a credential", () => {
-    const m = model(fixture.build_request[0]!.model);
+    const m = model(required(fixture.build_request[0]).model);
     expect(() => buildRequest({ ...m, api_key_env: "E" }, { messages: [], replay: "all" }, { E: "" })).toThrow(
       MissingApiKey,
     );
   });
 
   test("the error names the variable and never the value", () => {
-    const m = model(fixture.build_request[0]!.model);
+    const m = model(required(fixture.build_request[0]).model);
     try {
       buildRequest({ ...m, api_key_env: "ABSENT_VAR" }, { messages: [], replay: "all" }, {});
       throw new Error("should have thrown");

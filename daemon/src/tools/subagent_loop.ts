@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { shoreLog } from "../log.ts";
 
 import { findEffectiveModel } from "../config/effective_catalog.ts";
@@ -226,7 +228,7 @@ export async function runSubagent(
       events,
       initialAttempt,
       (continued, callType) => {
-        const next = { ...continued, context: { ...continued.context!, call_type: callType } };
+        const next = { ...continued, context: { ...required(continued.context), call_type: callType } };
         const nextBlock = budgetBlockFor(next);
         if (nextBlock) {
           throw new BudgetBlocked(nextBlock.message, nextBlock.scope, nextBlock.reset_at);

@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import { CallStore } from "../src/call_store.ts";
@@ -134,7 +136,7 @@ describe("what lands on disk", () => {
       const calls = store.queryCalls({ limit: 10 });
       expect(calls).toHaveLength(1);
 
-      const payload = store.getCall(calls[0]!.id);
+      const payload = store.getCall(required(calls[0]).id);
       expect(payload?.request).not.toContain(SECRET);
       expect(payload?.response ?? "").not.toContain(SECRET);
       expect(JSON.stringify(calls[0])).not.toContain(SECRET);

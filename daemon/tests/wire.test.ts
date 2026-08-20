@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import type { ContentBlock } from "../src/engine/types.ts";
@@ -107,11 +109,11 @@ describe("scalar mirrors carry exactly the declared fields", () => {
     );
     const budget = wire.call_context.full.usage?.budgets?.[0];
     expect(budget, "the census carries a budget").toBeDefined();
-    expect(budget!.period).toBe("week");
-    expect(budget!.limit).toBe("block");
-    expect(budget!.reset_day_of_week).toBe("wednesday");
-    expect(budget!.pace_action).toBe("pause_background");
-    expect(budget!.usage_kind).toEqual(["message_with_tools"]);
+    expect(required(budget).period).toBe("week");
+    expect(required(budget).limit).toBe("block");
+    expect(required(budget).reset_day_of_week).toBe("wednesday");
+    expect(required(budget).pace_action).toBe("pause_background");
+    expect(required(budget).usage_kind).toEqual(["message_with_tools"]);
   });
 
   test("call_complete", () => {

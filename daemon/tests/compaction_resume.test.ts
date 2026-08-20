@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -341,7 +343,7 @@ test("a checkpoint whose source was edited out from under it is discarded instea
   expect(paused.kind).toBe("paused");
 
   const edited = [
-    { ...messages[0]!, content: "old question, reworded after sending" },
+    { ...required(messages[0]), content: "old question, reworded after sending" },
     ...messages.slice(1),
   ];
   const editedLines = edited.map(activeLine).join("\n") + "\n";

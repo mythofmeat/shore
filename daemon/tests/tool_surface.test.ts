@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 
@@ -79,7 +81,7 @@ describe("the ledger column", () => {
 
   test("round-trips through a recorded row", () => {
     const { ledger: l, db } = ledger();
-    const fingerprint = toolSurfaceFingerprint([READ_TOOL])!;
+    const fingerprint = required(toolSurfaceFingerprint([READ_TOOL]));
     l.record(call(fingerprint));
 
     const row = db.query("SELECT tool_surface FROM calls ORDER BY id DESC LIMIT 1").get() as {
@@ -113,20 +115,20 @@ describe("the ledger column", () => {
       .query("SELECT cache_state, cache_anomaly FROM calls ORDER BY id")
       .all() as { cache_state: string | null; cache_anomaly: string | null }[];
     expect(rows).toHaveLength(2);
-    expect(rows[1]!.cache_anomaly).toBeNull();
+    expect(required(rows[1]).cache_anomaly).toBeNull();
   });
 
   test("the TSV export carries the tool surface", () => {
     const { ledger: l, db } = ledger();
-    const fingerprint = toolSurfaceFingerprint([READ_TOOL])!;
+    const fingerprint = required(toolSurfaceFingerprint([READ_TOOL]));
     l.record(call(fingerprint));
 
     const tsv = exportTsv(db, {});
     const [header, row] = tsv.split("\n");
-    const index = header!.split("\t").indexOf("tool_surface");
+    const index = required(header).split("\t").indexOf("tool_surface");
     expect(index).toBe(12);
-    expect(header!.split("\t")[index - 1]).toBe("reasoning_effort");
-    expect(row!.split("\t")[index]).toBe(fingerprint);
+    expect(required(header).split("\t")[index - 1]).toBe("reasoning_effort");
+    expect(required(row).split("\t")[index]).toBe(fingerprint);
   });
 
   test("an unknown surface exports as an empty field, not the word null", () => {
@@ -135,8 +137,8 @@ describe("the ledger column", () => {
 
     const tsv = exportTsv(db, {});
     const [header, row] = tsv.split("\n");
-    const index = header!.split("\t").indexOf("tool_surface");
-    expect(row!.split("\t")[index]).toBe("");
+    const index = required(header).split("\t").indexOf("tool_surface");
+    expect(required(row).split("\t")[index]).toBe("");
   });
 
   test("without the fingerprint, that same pair is an anomaly", () => {
@@ -153,6 +155,6 @@ describe("the ledger column", () => {
     const rows = db
       .query("SELECT cache_anomaly FROM calls ORDER BY id")
       .all() as { cache_anomaly: string | null }[];
-    expect(rows[1]!.cache_anomaly).toBe("unexpected_write");
+    expect(required(rows[1]).cache_anomaly).toBe("unexpected_write");
   });
 });

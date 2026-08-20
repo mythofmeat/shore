@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -438,7 +440,7 @@ describe("the tool backends a character's turn gets", () => {
     try {
       const ada = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
       expect(ada.mcpRegistry).toBeDefined();
-      expect(await routesToCurrentRegistry(runtime, ada.mcpRegistry!)).toBe(true);
+      expect(await routesToCurrentRegistry(runtime, required(ada.mcpRegistry))).toBe(true);
       expect(ada.imageGenerator).toBeDefined();
       expect(ada.modelHistoryQuery).toBeDefined();
       expect(ada.runSubagent).toBeDefined();
@@ -1194,7 +1196,7 @@ describe("reloading [mcp]", () => {
         fresh,
       );
 
-      expect(inFlight.mcpRegistry!.call("mcp__hue__set_light", {})).resolves.toBe(
+      expect(required(inFlight.mcpRegistry).call("mcp__hue__set_light", {})).resolves.toBe(
         "set_light ran",
       );
     } finally {

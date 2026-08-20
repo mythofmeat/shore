@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -735,7 +737,7 @@ describe("the layer order exists once", () => {
         continue;
       }
 
-      const winner = [...LAYERS].reverse().find((l) => set.has(l))!;
+      const winner = required([...LAYERS].reverse().find((l) => set.has(l)));
       expect(scopes.temperature, `mask ${mask} attributed the wrong layer`).toBe(winner);
       expect(settings.temperature, `mask ${mask} resolved the wrong value`).toBe(
         VALUE_OF[winner],

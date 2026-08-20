@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -190,7 +192,7 @@ describe("resolveRef", () => {
         expect((thrown as CommandError).code).toBe(c.err.code as never);
         expect((thrown as CommandError).message).toBe(c.err.message);
       } else {
-        expect(resolveRef(c.messages, c.ref)).toBe(c.ok!);
+        expect(resolveRef(c.messages, c.ref)).toBe(required(c.ok));
       }
     });
   }
@@ -262,10 +264,10 @@ describe("conversation commands", () => {
 describe("injectSystem generates a uuid and a local timestamp", () => {
   test("the defaults produce the shapes the fixture masked", async () => {
     const { engine } = await buildScenario(
-      scenarios.find((s) => s.name === "inject_system")!,
+      required(scenarios.find((s) => s.name === "inject_system")),
     );
     await injectSystem(engine, { text: "hello" });
-    const appended = engine.messages()[engine.messages().length - 1]!;
+    const appended = required(engine.messages()[engine.messages().length - 1]);
     expect(appended.msg_id).toMatch(UUID_RE);
     expect(appended.timestamp).toMatch(LOCAL_RFC3339_RE);
     expect(Number.isNaN(Date.parse(appended.timestamp))).toBe(false);

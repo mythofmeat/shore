@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
@@ -270,8 +272,8 @@ describe("driving a tool loop", () => {
     await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
     expect(tools.messages.map((m) => m.role)).toEqual(["assistant", "user"]);
-    expect(tools.messages[0]!.content_blocks.map((b) => b.type)).toEqual(["tool_use"]);
-    expect(tools.messages[1]!.content_blocks.map((b) => b.type)).toEqual(["tool_result"]);
+    expect(required(tools.messages[0]).content_blocks.map((b) => b.type)).toEqual(["tool_use"]);
+    expect(required(tools.messages[1]).content_blocks.map((b) => b.type)).toEqual(["tool_result"]);
   });
 
   test("breakpoints never reach the turns handed to persistence", async () => {
@@ -353,7 +355,7 @@ describe("driving a tool loop", () => {
 
     const events = await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
-    expect(tools.messages[1]!.content_blocks[0]).toMatchObject({
+    expect(required(tools.messages[1]).content_blocks[0]).toMatchObject({
       type: "tool_result",
       content: "no such file",
       is_error: true,

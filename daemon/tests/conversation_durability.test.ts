@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -59,7 +61,7 @@ describe("one malformed line no longer costs the whole conversation", () => {
     const kept = await readdir(backupDirFor(path));
     const quarantine = kept.find((name) => name.includes("quarantine"));
     expect(quarantine).toBeDefined();
-    expect(await readFile(join(backupDirFor(path), quarantine!), "utf8")).toBe("{ truncated\n");
+    expect(await readFile(join(backupDirFor(path), required(quarantine)), "utf8")).toBe("{ truncated\n");
   });
 
   test("a clean conversation quarantines nothing and writes no quarantine file", async () => {
@@ -81,7 +83,7 @@ describe("backupBeforeWrite", () => {
 
     const made = await backupBeforeWrite(path, () => 1_000_000);
     expect(made).toBeDefined();
-    expect(await readFile(made!, "utf8")).toBe("original\n");
+    expect(await readFile(required(made), "utf8")).toBe("original\n");
   });
 
   test("throttles, so a busy conversation does not thrash the disk", async () => {
@@ -131,7 +133,7 @@ describe("the store takes a copy before it rewrites the file", () => {
 
     const backups = await readdir(backupDirFor(path));
     expect(backups).toHaveLength(1);
-    expect(await readFile(join(backupDirFor(path), backups[0]!), "utf8")).toContain("before");
+    expect(await readFile(join(backupDirFor(path), required(backups[0])), "utf8")).toContain("before");
     expect(await readFile(path, "utf8")).toContain("after");
   });
 });

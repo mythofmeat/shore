@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -79,7 +81,7 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): unk
   }));
 
   const subagentRows = [...subagents.keys()].sort().map((name) => {
-    const sa = subagents.get(name)!;
+    const sa = required(subagents.get(name));
     return {
       name,
       enabled: cfg.enabled_subagents.includes(name),
@@ -98,7 +100,7 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): unk
     }
   }
   for (const name of [...subagents.keys()].sort()) {
-    for (const t of subagents.get(name)!.tools) {
+    for (const t of required(subagents.get(name)).tools) {
       if (!known.has(t)) warnings.push(`subagent '${name}' references unknown tool '${t}'`);
     }
   }

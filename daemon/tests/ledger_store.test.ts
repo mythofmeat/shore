@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -45,7 +47,7 @@ describe("writing rows the daemon's schema accepts", () => {
 
       const rows = rowsIn(path);
       expect(rows).toHaveLength(1);
-      const row = rows[0]!;
+      const row = required(rows[0]);
       expect(row["character"]).toBe("probe");
       expect(row["provider"]).toBe("anthropic");
       expect(row["call_type"]).toBe("message");
@@ -91,9 +93,9 @@ describe("writing rows the daemon's schema accepts", () => {
       ledger.close();
 
       expect(row.cost_source).toBe("pricing_catalog");
-      expect(Math.abs(row.input_cost! - 0.0015) < 1e-10).toBe(true);
-      expect(Math.abs(row.cache_write_cost! - 0.0375) < 1e-10).toBe(true);
-      expect(rowsIn(path)[0]!["cost_source"]).toBe("pricing_catalog");
+      expect(Math.abs(required(row.input_cost) - 0.0015) < 1e-10).toBe(true);
+      expect(Math.abs(required(row.cache_write_cost) - 0.0375) < 1e-10).toBe(true);
+      expect(required(rowsIn(path)[0])["cost_source"]).toBe("pricing_catalog");
     } finally {
       cleanup();
     }

@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import type { LlmError } from "./errors";
 import { parseRetryAfterMs } from "./retry_after";
 
@@ -19,7 +21,7 @@ export function bodyPreview(body: string, max: number): string {
   const bytes = Buffer.from(body, "utf8");
   if (bytes.length <= max) return body;
   let end = max;
-  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end -= 1;
+  while (end > 0 && (required(bytes[end]) & 0xc0) === 0x80) end -= 1;
   return bytes.subarray(0, end).toString("utf8");
 }
 

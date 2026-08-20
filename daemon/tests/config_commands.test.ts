@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -476,7 +478,7 @@ describe("config read walks dots", () => {
       if (redirect === undefined) continue;
       const named = /read it as (\S+)$/.exec(redirect)?.[1];
       expect(named, `${key} missed without naming a readable path`).toBeDefined();
-      expect(() => config(w.ctx, { key: named! })).not.toThrow();
+      expect(() => config(w.ctx, { key: required(named) })).not.toThrow();
     }
   });
 

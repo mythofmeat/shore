@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
@@ -147,7 +149,7 @@ describe("markdown store parity", () => {
           expect(formatModifiedAt(new Date(stamp.unix_secs * 1000 + ms))).toBe(truncated);
         }
 
-        expect(group.stamps[0]!.formatted).not.toContain(".");
+        expect(required(group.stamps[0]).formatted).not.toContain(".");
       }
     } finally {
       process.env.TZ = originalTz ?? "UTC";
@@ -170,13 +172,13 @@ describe("markdown store parity", () => {
               returned = entriesJson(await store.listAll());
               break;
             case "read":
-              returned = entryJson(await store.read(c.op.path!));
+              returned = entryJson(await store.read(required(c.op.path)));
               break;
             case "write":
-              await store.write(c.op.path!, b64(c.op.content!));
+              await store.write(required(c.op.path), b64(required(c.op.content)));
               break;
             case "delete":
-              await store.delete(c.op.path!);
+              await store.delete(required(c.op.path));
               break;
             default:
               throw new Error(`unhandled op ${c.op.fn}`);
@@ -206,7 +208,7 @@ describe("markdown query parity", () => {
     test(c.name, () => {
       switch (c.op.fn) {
         case "truncate_chars":
-          expect(truncateChars(b64(c.op.text!), c.op.limit!)).toBe(c.returns);
+          expect(truncateChars(b64(required(c.op.text)), required(c.op.limit))).toBe(c.returns);
           break;
         default:
           throw new Error(`unhandled pure op ${c.op.fn}`);
@@ -241,7 +243,7 @@ function expectReturnsMatch(returned: unknown, c: StoreCase) {
   const actual = returned as ReturnedEntry[];
   expect(actual.map((e) => e.path)).toEqual(c.returns.map((e: ReturnedEntry) => e.path));
   for (let i = 0; i < c.returns.length; i += 1) {
-    expectEntryMatch(actual[i]!, c.returns[i] as ReturnedEntry, c);
+    expectEntryMatch(required(actual[i]), c.returns[i] as ReturnedEntry, c);
   }
 }
 

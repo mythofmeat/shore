@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -340,7 +342,7 @@ test("a role nobody configured reports nothing rather than guessing", async () =
 
 test("background tasks name the chat model they inherit", async () => {
   const roles = await rolesFor("");
-  const chat = roles.get("chat")!;
+  const chat = required(roles.get("chat"));
   expect(chat.model).toBe("chat.anthropic.alpha");
   for (const task of ["heartbeat", "compaction"]) {
     expect(roles.get(task), task).toEqual({

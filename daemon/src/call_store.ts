@@ -1,3 +1,5 @@
+import { required } from "./util/required.ts";
+
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { chmodSync } from "node:fs";
@@ -313,7 +315,7 @@ export class CallStore {
       stored += packed.data.byteLength;
     });
 
-    const manifestBlob = zstdCompressBytes(manifest)!;
+    const manifestBlob = required(zstdCompressBytes(manifest));
     this.#db
       .query(
         "INSERT INTO payloads (sha256, size, stored, chunks, manifest) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -836,10 +838,10 @@ function diffChunks(before: PayloadChunk[], after: PayloadChunk[]): PayloadDiffE
   const lengths: number[][] = Array.from({ length: rows + 1 }, () => Array.from({ length: cols + 1 }, () => 0));
   for (let i = rows - 1; i >= 0; i--) {
     for (let j = cols - 1; j >= 0; j--) {
-      lengths[i]![j] =
-        before[i]!.hash === after[j]!.hash
-          ? lengths[i + 1]![j + 1]! + 1
-          : Math.max(lengths[i + 1]![j]!, lengths[i]![j + 1]!);
+      required(lengths[i])[j] =
+        required(before[i]).hash === required(after[j]).hash
+          ? required(required(lengths[i + 1])[j + 1]) + 1
+          : Math.max(required(required(lengths[i + 1])[j]), required(required(lengths[i])[j + 1]));
     }
   }
 
@@ -847,20 +849,20 @@ function diffChunks(before: PayloadChunk[], after: PayloadChunk[]): PayloadDiffE
   let i = 0;
   let j = 0;
   while (i < rows && j < cols) {
-    if (before[i]!.hash === after[j]!.hash) {
-      entries.push(entryOf("equal", after[j]!));
+    if (required(before[i]).hash === required(after[j]).hash) {
+      entries.push(entryOf("equal", required(after[j])));
       i++;
       j++;
-    } else if (lengths[i + 1]![j]! >= lengths[i]![j + 1]!) {
-      entries.push(entryOf("removed", before[i]!));
+    } else if (required(required(lengths[i + 1])[j]) >= required(required(lengths[i])[j + 1])) {
+      entries.push(entryOf("removed", required(before[i])));
       i++;
     } else {
-      entries.push(entryOf("added", after[j]!));
+      entries.push(entryOf("added", required(after[j])));
       j++;
     }
   }
-  while (i < rows) entries.push(entryOf("removed", before[i++]!));
-  while (j < cols) entries.push(entryOf("added", after[j++]!));
+  while (i < rows) entries.push(entryOf("removed", required(before[i++])));
+  while (j < cols) entries.push(entryOf("added", required(after[j++])));
   return entries;
 }
 
@@ -902,7 +904,7 @@ function hexOf(hash: Uint8Array): string {
 
 function packBlob(chunk: Uint8Array): { data: Uint8Array; compressed: boolean } {
   if (chunk.byteLength < BLOB_RAW_UNDER) return { data: chunk, compressed: false };
-  const packed = zstdCompressBytes(chunk)!;
+  const packed = required(zstdCompressBytes(chunk));
   return packed.byteLength < chunk.byteLength
     ? { data: packed, compressed: true }
     : { data: chunk, compressed: false };

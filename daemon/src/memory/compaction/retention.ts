@@ -1,3 +1,5 @@
+import { required } from "../../util/required.ts";
+
 import { estimateTokens } from "../../engine/tokens.ts";
 import type { ConversationMessage } from "./types.ts";
 
@@ -25,7 +27,7 @@ export function turnsWithinReserve(
   let used = 0;
   let turns = 0;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const msg = messages[i]!;
+    const msg = required(messages[i]);
     used += estimateTokens(msg.content);
     if (used > reserveTokens) break;
     if (isRealUserTurn(msg)) turns += 1;

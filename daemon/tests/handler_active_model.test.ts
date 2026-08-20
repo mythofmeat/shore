@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -184,7 +186,7 @@ describe("the overlay", () => {
     const w = world({ defaultModel: "opus" });
 
     const { model, overlay } = resolve(w);
-    expect(resolveGenerationModel(model, w.config, overlay)).toBe(model!);
+    expect(resolveGenerationModel(model, w.config, overlay)).toBe(required(model));
   });
 });
 
@@ -222,7 +224,7 @@ describe("the split does not change the answer", () => {
         findEffectiveModel,
       );
 
-      expect(resolveGenerationModel(model, w.config, overlay)).toEqual(merged!);
+      expect(resolveGenerationModel(model, w.config, overlay)).toEqual(required(merged));
     });
   }
 });

@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { CallStore } from "../src/call_store.ts";
@@ -61,7 +63,7 @@ describe("wire capture", () => {
     await server.stop(true);
 
     expect(seen).toHaveLength(1);
-    const exchange = seen[0]!;
+    const exchange = required(seen[0]);
     expect(textOf(exchange.request_body)).toBe(body);
     expect(exchange.method).toBe("POST");
     expect(exchange.status).toBe(200);
@@ -114,7 +116,7 @@ describe("wire capture", () => {
 
     expect(seen.map((e) => e.seq)).toEqual([0, 1, 2]);
     expect(seen.map((e) => e.status)).toEqual([529, 529, 200]);
-    expect(textOf(seen[0]!.response_body)).toBe("overloaded");
+    expect(textOf(required(seen[0]).response_body)).toBe("overloaded");
   });
 
   test("captures a streamed body without withholding it from the caller", async () => {
@@ -143,7 +145,7 @@ describe("wire capture", () => {
     await server.stop(true);
 
     expect(received).toBe(chunks.join(""));
-    expect(textOf(seen[0]!.response_body)).toBe(chunks.join(""));
+    expect(textOf(required(seen[0]).response_body)).toBe(chunks.join(""));
   });
 
   test("passes through untouched when no call scope is active", async () => {
@@ -169,8 +171,8 @@ describe("wire capture", () => {
     await settle();
 
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.status).toBeNull();
-    expect(seen[0]!.error).not.toBeNull();
+    expect(required(seen[0]).status).toBeNull();
+    expect(required(seen[0]).error).not.toBeNull();
   });
 
   test("scopes an async generator across its whole iteration", async () => {
@@ -260,7 +262,7 @@ describe("wire capture", () => {
     };
 
     const text: string[] = [];
-    for await (const event of providers.anthropic!.stream(request)) {
+    for await (const event of required(providers.anthropic).stream(request)) {
       if (event.type === "text") text.push(event.text);
     }
     await settle();
@@ -271,22 +273,22 @@ describe("wire capture", () => {
     const calls = store.queryCalls({ limit: 10 });
     expect(calls).toHaveLength(1);
 
-    const wire = store.httpCallsFor(calls[0]!.call_id);
+    const wire = store.httpCallsFor(required(calls[0]).call_id);
     expect(wire).toHaveLength(1);
-    expect(wire[0]!.request_body).toBe(servedBody);
-    expect(wire[0]!.response_body).toBe(sse);
-    expect(wire[0]!.url).toBe(`http://localhost:${port}/v1/messages`);
-    expect(wire[0]!.character).toBe("poppy");
-    expect(wire[0]!.call_type).toBe("message");
+    expect(required(wire[0]).request_body).toBe(servedBody);
+    expect(required(wire[0]).response_body).toBe(sse);
+    expect(required(wire[0]).url).toBe(`http://localhost:${port}/v1/messages`);
+    expect(required(wire[0]).character).toBe("poppy");
+    expect(required(wire[0]).call_type).toBe("message");
 
-    const headers = new Map(wire[0]!.request_headers);
+    const headers = new Map(required(wire[0]).request_headers);
     expect(headers.get("x-api-key")).toBe(REDACTED);
 
-    const internal = store.getCall(calls[0]!.id);
+    const internal = store.getCall(required(calls[0]).id);
     expect(internal?.request).not.toContain("sk-ant-super-secret");
-    expect(wire[0]!.request_body).not.toContain("sk-ant-super-secret");
+    expect(required(wire[0]).request_body).not.toContain("sk-ant-super-secret");
 
-    const sent = JSON.parse(wire[0]!.request_body ?? "{}") as Record<string, unknown>;
+    const sent = JSON.parse(required(wire[0]).request_body ?? "{}") as Record<string, unknown>;
     expect(sent["model"]).toBe("claude-opus-4-6");
     expect(sent["stream"]).toBe(true);
 
@@ -318,10 +320,10 @@ describe("wire capture", () => {
 
     const rows = store.httpCallsFor("call-7");
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.request_body).toBe(body);
-    expect(rows[0]!.response_body).toBe(`{"id":"msg_1"}`);
-    expect(rows[0]!.request_headers).toEqual([["x-api-key", "sk-ant-secret"]]);
-    expect(rows[0]!.status).toBe(200);
+    expect(required(rows[0]).request_body).toBe(body);
+    expect(required(rows[0]).response_body).toBe(`{"id":"msg_1"}`);
+    expect(required(rows[0]).request_headers).toEqual([["x-api-key", "sk-ant-secret"]]);
+    expect(required(rows[0]).status).toBe(200);
     store.close();
   });
 });

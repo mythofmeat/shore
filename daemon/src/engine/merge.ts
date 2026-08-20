@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import type { ContentBlock, Message } from "./types";
 
 function isToolLoopAssistant(msg: Message): boolean {
@@ -46,7 +48,7 @@ export function toolLoopGroups(messages: readonly Message[]): Message[][] {
   let i = 0;
 
   while (i < messages.length) {
-    const msg = messages[i]!;
+    const msg = required(messages[i]);
 
     if (msg.role !== "assistant") {
       if (!isToolResultOnly(msg)) groups.push([msg]);
@@ -63,7 +65,7 @@ export function toolLoopGroups(messages: readonly Message[]): Message[][] {
     const group: Message[] = [];
 
     while (i < messages.length) {
-      const current = messages[i]!;
+      const current = required(messages[i]);
       const next = messages[i + 1];
       const results = next !== undefined && isToolResultOnly(next) ? next : undefined;
 
@@ -73,7 +75,7 @@ export function toolLoopGroups(messages: readonly Message[]): Message[][] {
 
       if (i >= messages.length) break;
 
-      const following = messages[i]!;
+      const following = required(messages[i]);
       if (following.role === "assistant" && isToolLoopAssistant(following)) {
         continue;
       }
@@ -99,14 +101,14 @@ export function turnMsgIds(messages: readonly Message[], msgId: string): string[
 }
 
 function mergeGroup(group: Message[]): Message {
-  const first = group[0]!;
+  const first = required(group[0]);
   if (!isToolLoopAssistant(first)) return first;
 
   const mergedBlocks: ContentBlock[] = [];
   let lastAssistant = first;
 
   for (let i = 0; i < group.length; i += 1) {
-    const current = group[i]!;
+    const current = required(group[i]);
     if (current.role !== "assistant") continue;
 
     if (!isToolLoopAssistant(current)) {

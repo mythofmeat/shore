@@ -1,3 +1,5 @@
+import { required } from "../util/required.ts";
+
 import { shoreLog } from "../log.ts";
 
 import { readFile, readdir, lstat, stat } from "node:fs/promises";
@@ -134,7 +136,7 @@ export async function hybridSearch(options: HybridSearchOptions): Promise<Hybrid
         const vectors = await embedDocuments(embedder, refreshed.staleDocs);
         store.putEmbeddings(
           embedder.modelId,
-          refreshed.stale.map((entry, i) => ({ hash: entry.hash, vector: vectors[i]! })),
+          refreshed.stale.map((entry, i) => ({ hash: entry.hash, vector: required(vectors[i]) })),
         );
         store.putFiles(refreshed.stale.map((entry) => ({ ...entry.row, embedded: true })));
         store.setMetadata("last_indexed_at", new Date().toISOString());
@@ -206,7 +208,7 @@ export async function indexPendingBatch(
       const vectors = await embedDocuments(embedder, refreshed.staleDocs.slice(0, batch.length));
       store.putEmbeddings(
         embedder.modelId,
-        batch.map((entry, i) => ({ hash: entry.hash, vector: vectors[i]! })),
+        batch.map((entry, i) => ({ hash: entry.hash, vector: required(vectors[i]) })),
       );
       store.putFiles(batch.map((entry) => ({ ...entry.row, embedded: true })));
       store.setMetadata("last_indexed_at", new Date().toISOString());
@@ -514,7 +516,7 @@ export async function enumerateFiles(
     if (out.length >= retrievalConfig.maxIndexedFiles) break;
     if (totalBytes >= retrievalConfig.maxTotalIndexedBytes) break;
 
-    const path = pending.pop()!;
+    const path = required(pending.pop());
     let meta;
     try {
       meta = await lstat(path);
@@ -534,7 +536,7 @@ export async function enumerateFiles(
         continue;
       }
       children.sort(compareRustStrings);
-      for (let i = children.length - 1; i >= 0; i -= 1) pending.push(join(path, children[i]!));
+      for (let i = children.length - 1; i >= 0; i -= 1) pending.push(join(path, required(children[i])));
       continue;
     }
 
@@ -634,7 +636,7 @@ export async function embedDocuments(embedder: Embedder, docs: string[]): Promis
     let batchChars = 0;
 
     while (end < docs.length && end - start < EMBED_BATCH_MAX_ITEMS) {
-      const docChars = charCount(docs[end]!);
+      const docChars = charCount(required(docs[end]));
       if (end > start && batchChars + docChars > EMBED_BATCH_MAX_CHARS) break;
       batchChars += docChars;
       end += 1;
@@ -667,8 +669,8 @@ export function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): nu
   let na = 0;
   let nb = 0;
   for (let i = 0; i < a.length; i += 1) {
-    const x = a[i]!;
-    const y = b[i]!;
+    const x = required(a[i]);
+    const y = required(b[i]);
     dot = toF32(dot + toF32(x * y));
     na = toF32(na + toF32(x * x));
     nb = toF32(nb + toF32(y * y));
