@@ -8,6 +8,7 @@ import {
   estimateTokens,
   withSafetyMargin,
 } from "../src/engine/tokens.ts";
+import { estimateHistoryTokens } from "../src/engine/prompt.ts";
 
 interface Corpus {
   host: string;
@@ -66,4 +67,28 @@ describe("withSafetyMargin", () => {
     expect(worstOvershoot).toBeGreaterThanOrEqual(0);
     expect(CONTEXT_SAFETY_FRACTION).toBeGreaterThan(0);
   });
+});
+
+test("history tokens count the active messages once", () => {
+  const messages = [
+    {
+      msg_id: "u1",
+      role: "user" as const,
+      content: "hello",
+      images: [],
+      content_blocks: [{ type: "text" as const, text: "hello" }],
+      timestamp: "2026-01-01T00:00:00Z",
+    },
+    {
+      msg_id: "a1",
+      role: "assistant" as const,
+      content: "",
+      images: [],
+      content_blocks: [{ type: "tool_use" as const, id: "t1", name: "read", input: { path: "a" } }],
+      timestamp: "2026-01-01T00:00:01Z",
+    },
+  ];
+  expect(estimateHistoryTokens(messages)).toBe(
+    estimateTokens("hello") + estimateTokens("read") + estimateTokens(JSON.stringify({ path: "a" })),
+  );
 });
