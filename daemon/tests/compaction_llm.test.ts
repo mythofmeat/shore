@@ -216,7 +216,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
       max_tokens: 4096,
       replay_prior_thinking: "all",
     };
-    const before = JSON.parse(JSON.stringify(chat));
+    const before = structuredClone(chat);
     const llm = new RealCompactionLlm({
       model: {
         provider_key: "anthropic",

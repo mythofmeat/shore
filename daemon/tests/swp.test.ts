@@ -211,9 +211,11 @@ describe("write_message", () => {
       const chunks: Uint8Array[] = [];
       await writeMessage({ write: (b) => void chunks.push(b) }, c.message);
       const line = Buffer.concat(chunks).toString("utf8");
+      const actual = JSON.parse(line) as Record<string, unknown>;
+      const expected = JSON.parse(c.line) as Record<string, unknown>;
 
-      expect(JSON.parse(line)).toEqual(JSON.parse(c.line));
-      expect(Object.keys(JSON.parse(line))).toEqual(Object.keys(JSON.parse(c.line)));
+      expect(actual).toEqual(expected);
+      expect(Object.keys(actual)).toEqual(Object.keys(expected));
 
       if (FLOAT_NOTATION_DIVERGES.has(c.name)) {
         expect(line).not.toBe(c.line);
