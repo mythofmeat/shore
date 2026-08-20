@@ -189,7 +189,7 @@ describe("delivering what a tick asked to say", () => {
     );
 
     expect(appended[0]?.images[0]).toEqual({ path: "images/x.png" });
-    expect("caption" in (appended[0]?.images[0] as object)).toBe(false);
+    expect(Object.keys(appended[0]?.images[0] ?? {})).toEqual(["path"]);
   });
 
   test("a tick with nothing to say records a skip and delivers nothing", async () => {

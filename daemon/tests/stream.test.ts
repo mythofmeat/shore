@@ -270,9 +270,10 @@ const DOCUMENT_PATH_ONLY = new Set([
 ]);
 
 describe("[notifications] parsing", () => {
-  const recordedEventDefaults = ((f["config_parse"] as Row[]).find((c) => c["name"] === "empty")?.[
-    "ok"
-  ] as Row)["events"];
+  const emptyCase = (f["config_parse"] as Row[]).find((c) => c["name"] === "empty")?.["ok"] as
+    | Row
+    | undefined;
+  const recordedEventDefaults = emptyCase?.["events"];
 
   for (const c of f["config_parse"] as Row[]) {
     if (DOCUMENT_PATH_ONLY.has(c["name"] as string)) continue;

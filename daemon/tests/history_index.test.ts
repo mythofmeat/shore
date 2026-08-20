@@ -231,8 +231,11 @@ describe("history search index", () => {
     archive(dir, 1, [message("u2", "user", "next segment after", "2026-08-13T00:03:00Z")]);
 
     const result = await handleSearchHistory({ query: "needle" }, dir);
-    expect((result.results[0]?.before as Array<Record<string, unknown>>)[0]?.msg_id).toBe("u1");
-    expect((result.results[0]?.after as Array<Record<string, unknown>>)[0]?.msg_id).toBe("u2");
+    const found = result.results[0];
+    const before = found?.before as Record<string, unknown>[] | undefined;
+    const after = found?.after as Record<string, unknown>[] | undefined;
+    expect(before?.[0]?.["msg_id"]).toBe("u1");
+    expect(after?.[0]?.["msg_id"]).toBe("u2");
   });
 
   test("regenerated alternatives are never indexed or returned", async () => {

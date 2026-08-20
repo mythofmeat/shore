@@ -18,7 +18,8 @@ describe("turnToOpenRouter", () => {
     });
     expect(m?.role).toBe("assistant");
     expect(m?.content).toBe("let me check");
-    expect((m?.toolCalls as Rec[])[0]).toMatchObject({
+    const calls = m?.toolCalls as Rec[] | undefined;
+    expect(calls?.[0]).toMatchObject({
       id: "tu_1",
       type: "function",
       function: { name: "search", arguments: '{"q":"x"}' },

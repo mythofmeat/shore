@@ -195,7 +195,8 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     );
     const m = p.messages as Array<{ content: unknown }>;
     expect(blockCC(m[2]?.content)).toEqual([true]);
-    expect((m[2]?.content as Rec[])[0]?.["cache_control"]).toEqual({
+    const blocks = m[2]?.content as Rec[] | undefined;
+    expect(blocks?.[0]?.["cache_control"]).toEqual({
       type: "ephemeral",
       ttl: "1h",
     });
@@ -217,7 +218,8 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     expect(sys.some((b) => b["cache_control"] !== undefined)).toBe(true);
 
     const m = p.messages as Array<{ content: unknown }>;
-    expect((m[0]?.content as Rec[])[0]?.["cache_control"]).toEqual({
+    const blocks = m[0]?.content as Rec[] | undefined;
+    expect(blocks?.[0]?.["cache_control"]).toEqual({
       type: "ephemeral",
       ttl: "1h",
     });

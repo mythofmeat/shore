@@ -86,6 +86,14 @@ function minimalRequest(modelId: string): SidecarRequest {
   } as never;
 }
 
+function blockText(block: unknown): string {
+  const text = (block as { text?: unknown } | undefined)?.text;
+  if (typeof text !== "string") {
+    throw new TypeError(`expected a text block, got ${JSON.stringify(block)}`);
+  }
+  return text;
+}
+
 const ENV = { [CHAT_ENV]: "chat-secret", [OVERRIDE_ENV]: "slowthink-secret" };
 
 setTestEnv(CHAT_ENV, "chat-secret");
@@ -252,7 +260,7 @@ describe("preparing a heartbeat body", () => {
 
     const last = prepared?.request.messages.at(-1);
     expect(last?.role).toBe("system");
-    const text = (last?.content[0] as { text: string }).text;
+    const text = blockText(last?.content[0]);
     expect(text).toStartWith("[Current time: Thursday 2026-07-30 · 1:00 PM]");
     expect(text).toContain("This is a private heartbeat turn");
     expect(text).not.toContain("{{");
@@ -273,7 +281,7 @@ describe("preparing a heartbeat body", () => {
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
-    const text = (prepared?.request.messages.at(-1)?.content[0] as { text: string }).text;
+    const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
     expect(text).toContain("next wake in 3 hours");
   });
 
@@ -290,7 +298,7 @@ describe("preparing a heartbeat body", () => {
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
-    const text = (prepared?.request.messages.at(-1)?.content[0] as { text: string }).text;
+    const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
     expect(text).toStartWith("[Thursday 2026-07-30 · 1:00 PM]");
     expect(text).toContain("custom body");
     expect(text).toContain("every 1 hour");
@@ -312,7 +320,7 @@ describe("preparing a heartbeat body", () => {
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
-    const text = (prepared?.request.messages.at(-1)?.content[0] as { text: string }).text;
+    const text = blockText(prepared?.request.messages.at(-1)?.content[0]);
     expect(text).toContain("char-level");
     expect(text).toContain("wakes in 1 hour");
     expect(text).not.toContain("{{");

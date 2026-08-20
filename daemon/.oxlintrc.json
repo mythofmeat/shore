@@ -49,7 +49,7 @@
     "typescript/no-unsafe-call": "warn",
     "typescript/no-unsafe-member-access": "warn",
     "typescript/no-unsafe-return": "warn",
-    "eslint/no-unsafe-optional-chaining": "warn",
+    "eslint/no-unsafe-optional-chaining": "error",
     "eslint/no-shadow": "warn",
     "eslint/eqeqeq": "error",
     "eslint/no-throw-literal": "warn",
