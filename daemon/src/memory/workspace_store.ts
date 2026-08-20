@@ -154,10 +154,9 @@ export class WorkspaceIndexStore {
     let db: Database | undefined;
     try {
       db = new Database(path, { create: true, readwrite: true });
-      const version = Number(
+      const version =
         (db.query("PRAGMA user_version").get() as { user_version?: number } | null)?.user_version ??
-          0,
-      );
+        0;
       if (version !== WORKSPACE_INDEX_SCHEMA_VERSION) {
         db.close();
         db = undefined;
@@ -329,7 +328,7 @@ export class WorkspaceIndexStore {
          WHERE document_hash NOT IN (SELECT document_hash FROM files WHERE embedded = 1)`,
       )
       .run();
-    return Number(result.changes ?? 0);
+    return result.changes ?? 0;
   }
 
   metadata(key: string): string | undefined {

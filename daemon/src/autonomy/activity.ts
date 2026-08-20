@@ -234,7 +234,7 @@ function tempoGaps(sessions: readonly Recorded[][]): number[] {
 }
 
 function hourHistogramOf(source: readonly Recorded[]): number[] {
-  const histogram = new Array<number>(24).fill(0);
+  const histogram = Array.from({ length: 24 }, () => 0);
   for (const ts of source) {
     histogram[ts.hour] = (histogram[ts.hour] ?? 0) + 1;
   }
@@ -280,7 +280,7 @@ export function classifyHours(histogram: readonly number[]): HourClassification[
   const avg =
     nonZero.length === 0 ? 0 : nonZero.reduce((a, b) => a + b, 0) / nonZero.length;
 
-  if (avg < Number.EPSILON) return new Array<HourClassification>(24).fill("normal");
+  if (avg < Number.EPSILON) return Array.from({ length: 24 }, (): HourClassification => "normal");
 
   return Array.from({ length: 24 }, (_unused, hour): HourClassification => {
     const density = histogram[hour] ?? 0;

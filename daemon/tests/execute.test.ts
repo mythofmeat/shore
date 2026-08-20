@@ -87,8 +87,12 @@ function limitsFrom(raw: FixtureLimits): ToolLimitsView {
   const overrides: Record<string, { max_result_chars?: number; timeout_ms?: number }> = {};
   for (const [name, o] of Object.entries(raw.config ?? {})) {
     overrides[name] = {
-      ...(o.max_result_chars != null ? { max_result_chars: o.max_result_chars } : {}),
-      ...(o.timeout != null ? { timeout_ms: durationMs(o.timeout) } : {}),
+      ...(o.max_result_chars === null || o.max_result_chars === undefined
+        ? {}
+        : { max_result_chars: o.max_result_chars }),
+      ...(o.timeout === null || o.timeout === undefined
+        ? {}
+        : { timeout_ms: durationMs(o.timeout) }),
     };
   }
   return {

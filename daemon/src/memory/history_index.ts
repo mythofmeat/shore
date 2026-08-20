@@ -130,10 +130,9 @@ export class HistorySearchIndex {
     let db: Database | undefined;
     try {
       db = new Database(path, { create: true, readwrite: true });
-      const version = Number(
-        (db.query("PRAGMA user_version").get() as { user_version?: number } | null)
-          ?.user_version ?? 0,
-      );
+      const version =
+        (db.query("PRAGMA user_version").get() as { user_version?: number } | null)?.user_version ??
+        0;
       if (version !== HISTORY_SEARCH_SCHEMA_VERSION) {
         db.close();
         db = undefined;
@@ -222,14 +221,14 @@ export class HistorySearchIndex {
           hash,
           chunks.length,
         );
-        const messageId = Number(
-          (this.#db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
-        );
+        const messageId = (
+          this.#db.query("SELECT last_insert_rowid() AS id").get() as { id: number }
+        ).id;
         chunks.forEach((text, ordinal) => {
           putChunk.run(messageId, ordinal, contentHash(text));
-          const chunkId = Number(
-            (this.#db.query("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
-          );
+          const chunkId = (
+            this.#db.query("SELECT last_insert_rowid() AS id").get() as { id: number }
+          ).id;
           putFts.run(chunkId, text);
         });
       }
@@ -294,16 +293,20 @@ export class HistorySearchIndex {
   }
 
   diagnostics(embedder: Embedder | undefined): HistoryIndexDiagnostics {
-    const total = Number((this.#db.query("SELECT COUNT(*) AS n FROM chunks").get() as { n: number }).n);
+    const total = (this.#db.query("SELECT COUNT(*) AS n FROM chunks").get() as { n: number }).n;
     if (embedder === undefined) return { indexed_chunks: 0, total_chunks: total, pending_chunks: total };
     const identity = embeddingIdentity(embedder);
-    const indexed = Number((this.#db.query(
-      `SELECT COUNT(*) AS n FROM chunks c WHERE EXISTS (
+    const indexed = (
+      this.#db
+        .query(
+          `SELECT COUNT(*) AS n FROM chunks c WHERE EXISTS (
          SELECT 1 FROM embeddings e
          WHERE e.content_hash = c.content_hash AND e.model = ?1
            AND (?2 IS NULL OR e.dimensions = ?2)
        )`,
-    ).get(identity, embedder.dimensions ?? null) as { n: number }).n);
+        )
+        .get(identity, embedder.dimensions ?? null) as { n: number }
+    ).n;
     return { indexed_chunks: indexed, total_chunks: total, pending_chunks: total - indexed };
   }
 

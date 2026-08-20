@@ -314,7 +314,7 @@ function anchorsFrom(budget: UsageBudgetConfig): BudgetAnchors {
   return {
     hour: budget.reset_hour ?? 0,
     day_of_week:
-      budget.reset_day_of_week == null
+      budget.reset_day_of_week === null || budget.reset_day_of_week === undefined
         ? 0
         : WEEKDAY_FROM_MONDAY[budget.reset_day_of_week],
     day_of_month: budget.reset_day_of_month ?? 1,
@@ -667,7 +667,7 @@ function pendingAttemptCost(
   const clauses = ["status IN ('pending', 'unresolved')", "started_at >= $since"];
   const bindings: Record<string, string> = { $since: toRfc3339(since) };
   const add = (column: string, key: string, value: string | null | undefined) => {
-    if (value == null) return;
+    if (value === null || value === undefined) return;
     clauses.push(`${column} = $${key}`);
     bindings[`$${key}`] = value;
   };
@@ -718,7 +718,7 @@ function paceStatus(
   const totalPeriods = slices[0]?.periods_remaining ?? pace.periods_remaining;
   const nominal = budget.cost_usd / Math.max(totalPeriods, 1);
   const entries = usageCostEntries(db, filterForBudget(budget, window.start));
-  const completedSpend = new Array<number>(currentIndex).fill(0);
+  const completedSpend = Array.from({ length: currentIndex }, () => 0);
   let sliceIndex = 0;
   for (const entry of entries) {
     const ts = Date.parse(entry.ts);
@@ -1013,7 +1013,7 @@ function budgetMatchesCall(
   const mismatched = (
     configured: string | null | undefined,
     actual: string,
-  ): boolean => configured != null && configured !== actual;
+  ): boolean => configured !== null && configured !== undefined && configured !== actual;
 
   if (mismatched(budget.character, call.character)) {
     return false;
@@ -1027,7 +1027,7 @@ function budgetMatchesCall(
   if (mismatched(budget.call_type, call.call_type)) {
     return false;
   }
-  if (budget.api_key != null) {
+  if (budget.api_key !== null && budget.api_key !== undefined) {
     if (budget.api_key !== (call.api_key_name ?? "unknown")) {
       return false;
     }

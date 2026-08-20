@@ -441,7 +441,7 @@ describe("history search index", () => {
 
     const db = new Database(path, { readonly: true });
     const embedded = db.query("SELECT COUNT(*) AS n FROM embeddings").get() as { n: number };
-    expect(Number(embedded.n)).toBe(32);
+    expect(embedded.n).toBe(32);
     db.close();
   });
 

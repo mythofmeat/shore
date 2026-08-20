@@ -98,6 +98,10 @@ interface Knobs {
   with_model?: boolean;
 }
 
+function present<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
 async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
   const dirs = {
     config: join(root, "config"),
@@ -108,8 +112,8 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
 
   const app: AppConfig = defaultAppConfig();
-  if (knobs.tools_enabled != null) app.tools.enabled_tools = [...knobs.tools_enabled];
-  if (knobs.subagent != null) {
+  if (present(knobs.tools_enabled)) app.tools.enabled_tools = [...knobs.tools_enabled];
+  if (present(knobs.subagent)) {
     app.subagents.set(knobs.subagent, {
       description: `the ${knobs.subagent} sub-agent`,
       prompt: "you are a sub-agent",
@@ -119,9 +123,9 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
       timeout: undefined,
     });
   }
-  if (knobs.image_generation != null) app.defaults.image_generation = knobs.image_generation;
-  if (knobs.embedding != null) app.defaults.embedding = knobs.embedding;
-  if (knobs.search_depth != null) app.tools.web_search.search_depth = knobs.search_depth;
+  if (present(knobs.image_generation)) app.defaults.image_generation = knobs.image_generation;
+  if (present(knobs.embedding)) app.defaults.embedding = knobs.embedding;
+  if (present(knobs.search_depth)) app.tools.web_search.search_depth = knobs.search_depth;
   if (knobs.max_retries !== undefined) app.advanced.max_retries = knobs.max_retries;
 
   const models = emptyCatalog();
@@ -129,13 +133,13 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
     models.chat.set("chat.fixture", model());
     app.defaults.model = "fixture";
   }
-  if (knobs.image_generation != null) {
+  if (present(knobs.image_generation)) {
     models.imageGeneration.set(knobs.image_generation, { size: "512x512" });
   }
 
   let providers = ProviderRegistry.empty();
-  if (knobs.image_generation != null || knobs.embedding_key_set === true) {
-    const env = knobs.image_generation != null ? IMAGE_KEY_ENV : EMBED_KEY_ENV;
+  if (present(knobs.image_generation) || knobs.embedding_key_set === true) {
+    const env = present(knobs.image_generation) ? IMAGE_KEY_ENV : EMBED_KEY_ENV;
     setTestEnv(env, "fixture-key");
     providers = ProviderRegistry.fromSection({
       openai: { keys: [{ name: "default", env }] },

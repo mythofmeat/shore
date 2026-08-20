@@ -6,7 +6,7 @@ function hangingFetch(): typeof fetch {
   return ((_url: string, init?: RequestInit) =>
     new Promise<Response>((_resolve, reject) => {
       const signal = init?.signal;
-      if (signal == null) return;
+      if (signal === null || signal === undefined) return;
       signal.addEventListener("abort", () => {
         const reason: unknown = signal.reason;
         reject(reason instanceof Error ? reason : new Error("aborted"));

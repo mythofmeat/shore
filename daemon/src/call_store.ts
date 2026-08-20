@@ -833,7 +833,7 @@ function zstdCompress(data: string): Uint8Array {
 function diffChunks(before: PayloadChunk[], after: PayloadChunk[]): PayloadDiffEntry[] {
   const rows = before.length;
   const cols = after.length;
-  const lengths: number[][] = Array.from({ length: rows + 1 }, () => new Array<number>(cols + 1).fill(0));
+  const lengths: number[][] = Array.from({ length: rows + 1 }, () => Array.from({ length: cols + 1 }, () => 0));
   for (let i = rows - 1; i >= 0; i--) {
     for (let j = cols - 1; j >= 0; j--) {
       lengths[i]![j] =

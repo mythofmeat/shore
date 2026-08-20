@@ -1041,9 +1041,6 @@ export function validateGitSubcommand(sub: string[]): void {
       ) {
         throw new InvalidArgs("modifying git remotes is not allowed");
       }
-      return;
-    default:
-      return;
   }
 }
 
@@ -1216,15 +1213,15 @@ function runProcess(
   args: string[],
   options: { cwd?: string | undefined; env?: NodeJS.ProcessEnv | undefined },
 ): Promise<ProcessOutput> {
-  return new Promise((resolvePromise, rejectPromise) => {
+  return new Promise((resolve, reject) => {
     const child = spawn(program, args, { cwd: options.cwd, env: options.env });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("error", rejectPromise);
+    child.on("error", reject);
     child.on("close", (code) => {
-      resolvePromise({
+      resolve({
         code,
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8"),

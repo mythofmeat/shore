@@ -148,7 +148,6 @@ export class MessageHandler {
           await this.cancelGeneration(sessionId, null, "all clients disconnected");
         }
         this.#deps.leases.clear();
-        return;
       }
     }
   }

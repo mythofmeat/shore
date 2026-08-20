@@ -396,7 +396,9 @@ describe("loadPreferences", () => {
       expect([...prefs.models.keys()]).toEqual(row.model_keys as string[]);
       expect(preferencesAreEmpty(prefs)).toBe(row.is_empty as boolean);
       expect(selectionKey(prefs.selected) ?? null).toBe(row.selected_key ?? null);
-      expect(selectionIsSet(prefs.selected)).toBe(row.selected_key != null);
+      expect(selectionIsSet(prefs.selected)).toBe(
+      row.selected_key !== null && row.selected_key !== undefined,
+    );
 
       const hasNestedValue =
         prefs.defaults.sampler.openrouterProvider !== undefined ||

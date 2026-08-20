@@ -44,8 +44,8 @@ class EventChannel {
 
   send(event: StreamEvent): Promise<void> {
     if (this.closed) return Promise.resolve();
-    return new Promise<void>((taken) => {
-      this.pending = { event, taken };
+    return new Promise<void>((resolve) => {
+      this.pending = { event, taken: resolve };
       this.wake();
     });
   }
@@ -73,8 +73,8 @@ class EventChannel {
         continue;
       }
       if (this.closed) return;
-      await new Promise<void>((resume) => {
-        this.waiting = resume;
+      await new Promise<void>((resolve) => {
+        this.waiting = resolve;
       });
     }
   }

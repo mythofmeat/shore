@@ -66,7 +66,7 @@ describe("median", () => {
 
 describe("hour classification", () => {
   test("one heavy hour is a peak and the faint ones are troughs", () => {
-    const histogram = new Array<number>(24).fill(0);
+    const histogram = Array.from({ length: 24 }, () => 0);
     histogram[10] = 0.5;
     histogram[14] = 0.3;
     histogram[3] = 0.01;
@@ -79,7 +79,7 @@ describe("hour classification", () => {
   });
 
   test("an hour with no events at all is a trough", () => {
-    const histogram = new Array<number>(24).fill(0);
+    const histogram = Array.from({ length: 24 }, () => 0);
     histogram[10] = 0.5;
     histogram[11] = 0.5;
 
@@ -89,11 +89,11 @@ describe("hour classification", () => {
   });
 
   test("nothing recorded is normal everywhere, not trough everywhere", () => {
-    expect(classifyHours(new Array<number>(24).fill(0)).every((c) => c === "normal")).toBe(true);
+    expect(classifyHours(Array.from({ length: 24 }, () => 0)).every((c) => c === "normal")).toBe(true);
   });
 
   test("an hour exactly on either line is normal", () => {
-    const histogram = new Array<number>(24).fill(0);
+    const histogram = Array.from({ length: 24 }, () => 0);
     histogram[9] = 0.75;
     histogram[21] = 0.25;
 

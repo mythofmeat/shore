@@ -142,7 +142,7 @@ export class HistoryStore {
       const row = this.#db
         .query("SELECT COALESCE(MAX(idx), -1) + 1 AS idx FROM history_segments WHERE character = ?1")
         .get(character) as { idx: number };
-      const idx = Number(row.idx);
+      const idx = row.idx;
       this.#replaceSegment(character, idx, entry, messages, false);
       this.#db
         .query(
@@ -221,7 +221,7 @@ export class HistoryStore {
         "SELECT COUNT(*) AS n FROM history_segments WHERE character = ?1 AND committed = 1",
       )
       .get(character) as { n: number };
-    return Number(row.n);
+    return row.n;
   }
 
   totalMessageCount(character: string): number {
@@ -231,7 +231,7 @@ export class HistoryStore {
          WHERE character = ?1 AND committed = 1`,
       )
       .get(character) as { n: number };
-    return Number(row.n);
+    return row.n;
   }
 
   archiveDigest(character: string): string {

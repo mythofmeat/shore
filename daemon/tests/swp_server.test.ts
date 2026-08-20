@@ -168,10 +168,10 @@ describe("stopping", () => {
           capabilities: [],
         })}\n`,
       );
-      while (frames.length < 2) await new Promise((r) => setTimeout(r, 5));
+      while (frames.length < 2) await new Promise((resolve) => setTimeout(resolve, 5));
 
       await stop();
-      while (frames.length < 3) await new Promise((r) => setTimeout(r, 5));
+      while (frames.length < 3) await new Promise((resolve) => setTimeout(resolve, 5));
 
       expect(frames.map((f) => f["type"])).toEqual(["hello", "history", "shutdown"]);
     } finally {

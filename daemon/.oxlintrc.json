@@ -30,7 +30,7 @@
     "typescript/no-duplicate-type-constituents": "error",
     "typescript/no-redundant-type-constituents": "warn",
     "typescript/no-unnecessary-type-assertion": "error",
-    "typescript/no-unnecessary-type-conversion": "warn",
+    "typescript/no-unnecessary-type-conversion": "error",
     "typescript/no-unnecessary-boolean-literal-compare": "error",
     "typescript/no-unnecessary-template-expression": "error",
     "typescript/require-array-sort-compare": "error",
@@ -51,19 +51,19 @@
     "typescript/no-unsafe-return": "warn",
     "eslint/no-unsafe-optional-chaining": "warn",
     "eslint/no-shadow": "warn",
-    "eslint/eqeqeq": "warn",
+    "eslint/eqeqeq": "error",
     "eslint/no-throw-literal": "warn",
     "eslint/no-promise-executor-return": "warn",
     "eslint/no-loop-func": "warn",
     "eslint/no-sequences": "error",
-    "eslint/no-eq-null": "warn",
+    "eslint/no-eq-null": "error",
     "eslint/no-empty": [
       "error",
       {
         "allowEmptyCatch": true
       }
     ],
-    "eslint/no-useless-return": "warn",
+    "eslint/no-useless-return": "error",
     "eslint/no-unused-vars": [
       "error",
       {
@@ -74,7 +74,7 @@
     ],
     "eslint/no-console": "warn",
     "unicorn/no-process-exit": "error",
-    "unicorn/no-new-array": "warn",
+    "unicorn/no-new-array": "error",
     "unicorn/no-useless-spread": "error",
     "unicorn/no-useless-length-check": "error",
     "unicorn/no-array-fill-with-reference-type": "error",
@@ -85,7 +85,7 @@
     "unicorn/prefer-number-properties": "error",
     "unicorn/escape-case": "error",
     "promise/no-return-wrap": "error",
-    "promise/param-names": "warn",
+    "promise/param-names": "error",
     "import/no-self-import": "error",
     "import/no-cycle": "error",
     "typescript/unbound-method": "warn",

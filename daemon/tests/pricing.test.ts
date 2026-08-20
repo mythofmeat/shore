@@ -170,7 +170,7 @@ describe("the engine", () => {
     let calls = 0;
     const engine = new PricingEngine(memoryStore(), async () => {
       calls++;
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
       return Response.json({ data: [{ id: "openai/gpt-4o", pricing: { prompt: "0.000005" } }] });
     });
     await Promise.all([

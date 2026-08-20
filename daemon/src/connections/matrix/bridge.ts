@@ -161,7 +161,6 @@ export class Bridge {
           images: [],
           image_data: [],
         });
-        return;
       }
     }
   }
@@ -245,7 +244,6 @@ export class Bridge {
           roomId,
           false,
         );
-        return;
     }
   }
 
@@ -403,7 +401,6 @@ export class Bridge {
       case "notice":
         return void (await this.#options.bot.sendNotice(roomId, route.action.text));
       case "none":
-        return;
     }
   }
 

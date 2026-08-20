@@ -54,7 +54,7 @@ export function startConfigWatcher(
     try {
       w = watch(dir, { recursive: true }, (_event, name) => {
         if (name === null || name === undefined) return;
-        const path = resolve(dir, name.toString());
+        const path = resolve(dir, name);
         if (triggers(path)) note(path);
       });
     } catch (e) {
