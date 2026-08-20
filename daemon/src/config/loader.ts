@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import { compareByCodePoint } from "../util/sort.ts";
@@ -114,7 +116,7 @@ function loadDotenv(
   try {
     const applied = applyDotenv(path, target);
     if (applied.length > 0) {
-      console.info(`shore: loaded ${applied.length} variables from ${path}`);
+      shoreLog.info(`shore: loaded ${applied.length} variables from ${path}`);
     }
   } catch (e) {
     onWarn("Failed to load .env file", [
@@ -261,7 +263,7 @@ export type ConfigWarn = (
 
 export const consoleConfigWarn: ConfigWarn = (message, fields) => {
   const suffix = fields.map(([key, value]) => ` ${key}=${value}`).join("");
-  console.warn(`shore: ${message}${suffix}`);
+  shoreLog.warn(`shore: ${message}${suffix}`);
 };
 
 export interface LoadedConfig {

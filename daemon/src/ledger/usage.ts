@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { Database } from "bun:sqlite";
 
 import {
@@ -393,7 +395,7 @@ export async function backfillMissingCosts(
     const found = await pricing.getOrFetch(row.provider, row.model);
     if (found === undefined) {
       const modelId = toOpenRouterId(row.provider, row.model);
-      console.warn(`shore: pricing fetch returned no data for ${modelId}`);
+      shoreLog.warn(`shore: pricing fetch returned no data for ${modelId}`);
       fetched.set(key, `no pricing data for ${modelId}`);
     } else {
       fetched.set(key, undefined);
@@ -407,7 +409,7 @@ export async function backfillMissingCosts(
         updateCosts(db, row.id, FLAT_PLAN_COST);
         updated += 1;
       } catch (e) {
-        console.warn(`shore: could not zero costs for row ${row.id}: ${String(e)}`);
+        shoreLog.warn(`shore: could not zero costs for row ${row.id}: ${String(e)}`);
       }
       continue;
     }
@@ -427,7 +429,7 @@ export async function backfillMissingCosts(
       updateCosts(db, row.id, cost);
       updated += 1;
     } catch (e) {
-      console.warn(`shore: could not update costs for row ${row.id}: ${String(e)}`);
+      shoreLog.warn(`shore: could not update costs for row ${row.id}: ${String(e)}`);
     }
   }
 

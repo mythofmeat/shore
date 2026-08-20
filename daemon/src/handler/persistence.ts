@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { ContentBlock, Message, MessageOrigin, Role } from "../engine/types.ts";
 import { deriveContentFromBlocks, MessageStore } from "../engine/message_store.ts";
@@ -159,7 +161,7 @@ async function emitUsageBudgetWarnings(
   try {
     warnings = await ctx.newlyCrossedUsageBudgetWarnings(charName);
   } catch (e) {
-    console.warn(`shore: usage budget warning check failed: ${String(e)}`);
+    shoreLog.warn(`shore: usage budget warning check failed: ${String(e)}`);
     return;
   }
 

@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import {
   applicability,
   defaultValue,
@@ -277,7 +279,7 @@ function stripRejectedSampler(
   if (fields[key] === undefined) return;
   if (applicability(sdk, field, capabilities) !== "rejected") return;
   if (fields[key] !== silentDefault) {
-    console.warn(
+    shoreLog.warn(
       `shore: dropping \`${field}\` for model ${modelId} (sdk ${sdk}): the ` +
         `provider reports that this model does not accept it`,
     );
@@ -300,7 +302,7 @@ function warnIgnoredFields(
   ];
   for (const [field, present] of checks) {
     if (present && applicability(sdk, field, capabilities) === "ignored") {
-      console.warn(
+      shoreLog.warn(
         `shore: ignoring \`${field}\` for model ${modelId}: the \`${sdk}\` sdk does not honor it`,
       );
     }
@@ -483,7 +485,7 @@ function parseCategory(
 
     const providerValue = section[providerKey];
     if (!isTable(providerValue)) {
-      console.warn(`shore: skipping non-table key "${providerKey}" in [${category}]`);
+      shoreLog.warn(`shore: skipping non-table key "${providerKey}" in [${category}]`);
       continue;
     }
 
@@ -538,7 +540,7 @@ function parseCategory(
   }
 
   if (models.length > 0) {
-    console.warn(
+    shoreLog.warn(
       `shore: \`[${category}.*]\` is deprecated and will be removed: define models via ` +
         `\`[providers.<provider>]\` and select them as \`provider:model_id\`; set ` +
         `per-provider overrides under \`[providers.<provider>.defaults]\` and per-model ` +

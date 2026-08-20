@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 export const STATE_VERSION = 4;
 
 export const STATE_FILENAME = "autonomy_state.json";
@@ -102,7 +104,7 @@ export async function saveState(path: string, state: AutonomyStateFile): Promise
     await Bun.write(path, encodeState(state));
     return true;
   } catch (err) {
-    console.error(`shore: failed to save autonomy state at ${path}: ${String(err)}`);
+    shoreLog.error(`shore: failed to save autonomy state at ${path}: ${String(err)}`);
     return false;
   }
 }

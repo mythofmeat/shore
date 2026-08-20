@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { chmodSync, closeSync, mkdirSync, openSync, readSync, statSync, unlinkSync } from "node:fs";
@@ -196,7 +198,7 @@ export class WorkspaceIndexStore {
   }
 
   static #inMemory(path: string, reason: string): WorkspaceIndexStore {
-    console.warn(
+    shoreLog.warn(
       `shore: the workspace index at ${path} is unusable, so search is running on a ` +
         `throwaway in-memory index that is discarded when the daemon stops: ${reason}`,
     );

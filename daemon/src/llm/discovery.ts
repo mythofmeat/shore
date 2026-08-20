@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { toRfc3339 } from "../ledger/zoned.ts";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
@@ -71,17 +73,17 @@ function decodeCache(bytes: string, path: string): ProviderModelsCache | undefin
   try {
     parsed = JSON.parse(bytes);
   } catch {
-    console.warn(`Provider cache failed to parse — treating as missing: ${path}`);
+    shoreLog.warn(`Provider cache failed to parse — treating as missing: ${path}`);
     return undefined;
   }
 
   const cache = asCache(parsed);
   if (cache === undefined) {
-    console.warn(`Provider cache failed to parse — treating as missing: ${path}`);
+    shoreLog.warn(`Provider cache failed to parse — treating as missing: ${path}`);
     return undefined;
   }
   if (cache.version > CACHE_VERSION) {
-    console.warn(
+    shoreLog.warn(
       `Provider cache version ${cache.version} newer than this build (${CACHE_VERSION}) — treating as missing: ${path}`,
     );
     return undefined;

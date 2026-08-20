@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { classifyCredentialFailure, shouldRotate } from "./credentials";
 import { describeLlmError, type LlmError } from "./errors";
 
@@ -19,7 +21,7 @@ export function shouldRetryError(
 
   const credKind = classifyCredentialFailure("", error);
   if (shouldRotate(credKind)) {
-    console.warn(
+    shoreLog.warn(
       `shore: credential-shaped failure (${credKind}) on attempt ${attempt}, ` +
         `failing fast so multi-key fallback can rotate: ${describeLlmError(error)}`,
     );

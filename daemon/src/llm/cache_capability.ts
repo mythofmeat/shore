@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { Sdk } from "./types.ts";
 
 const RESPECTS_INLINE_HINTS: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic"]);
@@ -43,14 +45,14 @@ export function effectiveCacheTtl(
 ): string {
   if (requested === "") return "";
   if (!respectsInlineCacheHints(sdk)) {
-    console.warn(
+    shoreLog.warn(
       `shore: cache_ttl=${requested} was requested for sdk ${sdk}, which does not read inline ` +
         `cache_control markers; no marker is being sent`,
     );
     return "";
   }
   if (requested === "1h" && !supportsExtendedCacheTtl(baseUrl)) {
-    console.warn(
+    shoreLog.warn(
       `shore: cache_ttl=1h is only honoured by api.anthropic.com and the Vertex endpoints; ` +
         `${hostOfBaseUrl(baseUrl)} gets the default 5-minute marker instead`,
     );

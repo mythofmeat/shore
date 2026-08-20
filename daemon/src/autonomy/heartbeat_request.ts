@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -62,7 +64,7 @@ export function applyHeartbeatModelOverride(
   try {
     findEffectiveModel(view, config.dirs.cache, configuredName, true);
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: heartbeat model "${configuredName}" not found in catalog for ${character}; ` +
         `keeping chat model: ${String(e)}`,
     );
@@ -90,12 +92,12 @@ export function applyHeartbeatModelOverride(
       },
       deps.env,
     );
-    console.info(
+    shoreLog.info(
       `shore: heartbeat for ${character} using configured model ${resolved.name} (${built.request.model})`,
     );
     return { request: built.request, override: resolved };
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: heartbeat could not build a request on ${resolved.name} for ${character}, ` +
         `falling back to the chat model: ${String(e)}`,
     );
@@ -131,7 +133,7 @@ export async function prepareHeartbeatRequest(
       deps.rebuild ?? {},
     );
     if (rebuilt === undefined) {
-      console.info(
+      shoreLog.info(
         `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,
       );
       return undefined;
@@ -162,7 +164,7 @@ export async function prepareHeartbeatRequest(
       config.dirs.workspace,
     );
   } catch (e) {
-    console.warn(`shore: heartbeat could not prepare the prompt snapshot for ${character}: ${String(e)}`);
+    shoreLog.warn(`shore: heartbeat could not prepare the prompt snapshot for ${character}: ${String(e)}`);
   }
 
   const nowMs = deps.now?.() ?? Date.now();

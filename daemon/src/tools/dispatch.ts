@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { handleActivityHeatmap, type ActivityStatsLookup } from "./activity.ts";
 import { handleRollDice } from "./basic.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
@@ -120,7 +122,7 @@ export function deferEditTo(
     try {
       await queue(characterDataDir, path);
     } catch (e) {
-      console.warn(`Failed to queue deferred edit: ${path}: ${String(e)}`);
+      shoreLog.warn(`Failed to queue deferred edit: ${path}: ${String(e)}`);
     }
   };
 }
@@ -334,7 +336,7 @@ export async function dispatchWithinDeadline(
       dispatchTool(name, input, { ...ctx, signal }),
       new Promise<never>((_resolve, reject) => {
         controller.signal.addEventListener("abort", () => {
-          console.warn(`Tool exceeded its deadline and was cancelled: ${name}`);
+          shoreLog.warn(`Tool exceeded its deadline and was cancelled: ${name}`);
           reject(new ToolTimedOut(Math.floor(deadlineMs / 1000)));
         });
       }),

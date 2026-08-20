@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE } from "./history_store.ts";
@@ -118,7 +120,7 @@ export class ConversationEngine {
       try {
         archivedRaw.push(...(await this.#segments.readSegment(index)));
       } catch (e) {
-        console.warn(
+        shoreLog.warn(
           `shore: failed to load archived conversation segment ${index} for ` +
             `${this.#characterName} for display: ${String(e)}`,
         );

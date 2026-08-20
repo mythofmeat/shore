@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
@@ -15,7 +17,7 @@ export async function runIdleCompaction(
     return { events: [], failed: "idle compaction has no compaction dependencies" };
   }
 
-  console.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);
+  shoreLog.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);
 
   let retained: number;
   try {
@@ -24,7 +26,7 @@ export async function runIdleCompaction(
       config: deps.config,
     });
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: idle compaction for ${character} failed, will retry on the next idle tick: ` +
         String(e),
     );
@@ -38,7 +40,7 @@ export async function runIdleCompaction(
   }
 
   await reloadAndApplyDeferred(character, deps, "Idle compaction");
-  console.info(`shore: idle compaction complete for ${character}, state reset (retained=${retained})`);
+  shoreLog.info(`shore: idle compaction complete for ${character}, state reset (retained=${retained})`);
   await repoint(character, deps, "idle_compaction");
 
   return { turnCount: retained, events: [] };

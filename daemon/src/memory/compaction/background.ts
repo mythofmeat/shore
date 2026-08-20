@@ -1,3 +1,5 @@
+import { shoreLog } from "../../log.ts";
+
 import { join } from "node:path";
 
 import { MessageStore, isToolResultOnly } from "../../engine/message_store";
@@ -45,7 +47,7 @@ export function handleCompactionOutcome(
   outcome: CompactionOutcome,
 ): number {
   if (outcome.kind === "compacted") {
-    console.info(
+    shoreLog.info(
       `shore: background compaction completed for ${character} ` +
         `(entries=${outcome.memoryFilesWritten.length}, compacted_turns=${outcome.compactedTurns}, ` +
         `retained_turns=${outcome.retainedTurns}, tool_rounds=${outcome.toolRounds})`,
@@ -59,7 +61,7 @@ export function handleCompactionOutcome(
   }
 
   if (outcome.kind === "truncated") {
-    console.warn(
+    shoreLog.warn(
       `shore: background compaction for ${character} was cut off at the token ceiling ` +
         `(truncated_turns=${outcome.truncatedTurns}, tool_rounds=${outcome.toolRounds}, ` +
         `partial_writes=${JSON.stringify(outcome.partialWrites)}) — conversation NOT archived`,
@@ -73,7 +75,7 @@ export function handleCompactionOutcome(
   }
 
   if (outcome.kind === "paused") {
-    console.warn(
+    shoreLog.warn(
       `shore: background compaction paused for ${character} ` +
         `(checkpoint=${outcome.checkpointId}, rounds=${outcome.toolRounds}, ` +
         `reason=${outcome.reason}, detail=${outcome.detail ?? "none"})`,

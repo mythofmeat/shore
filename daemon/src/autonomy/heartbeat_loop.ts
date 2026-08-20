@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import {
   captureToolSendMessage,
   extractSendMessage,
@@ -118,7 +120,7 @@ export async function runHeartbeatToolLoop(
   const maxNormalIterations = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
   const totalIterations = maxNormalIterations + deps.wrapUpGrace;
 
-  console.info(
+  shoreLog.info(
     `shore: heartbeat tool loop for ${deps.character} ` +
       `(max_iterations=${maxNormalIterations}, wrap_up_grace=${deps.wrapUpGrace})`,
   );

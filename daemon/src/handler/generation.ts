@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { LoadedConfig } from "../config/loader.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView, resolveActiveModelAndOverlay } from "../config/preferences.ts";
@@ -163,7 +165,7 @@ function droppedHistoryImages(
 
   const reason = textOnlyReason(resolved.providerKey, resolved.modelId);
   const { messages: stripped, stripped: count } = stripImageBlocks(messages, reason);
-  console.warn(
+  shoreLog.warn(
     `shore: dropped ${String(count)} image(s) from history because ${reason}; ` +
       `the turn goes over the wire without them`,
   );

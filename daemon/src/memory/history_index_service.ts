@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { Embedder } from "../llm/embed.ts";
 import { HistorySearchIndex, withHistoryIndexLock } from "./history_index.ts";
 
@@ -172,7 +174,7 @@ export class HistoryIndexService {
         entry.failures += 1;
         entry.lastError = error instanceof Error ? error.message : String(error);
         entry.retryAt = now + Math.min(1_000 * 2 ** (entry.failures - 1), 60_000);
-        console.warn(
+        shoreLog.warn(
           `shore: history embedding backfill failed for ${entry.character}; retrying later: ${entry.lastError}`,
         );
       }
@@ -195,7 +197,7 @@ export class HistoryIndexService {
       });
       entry.dirty = false;
     } catch (error) {
-      console.warn(`shore: history search index reconciliation failed for ${entry.character}: ${String(error)}`);
+      shoreLog.warn(`shore: history search index reconciliation failed for ${entry.character}: ${String(error)}`);
     }
   }
 }

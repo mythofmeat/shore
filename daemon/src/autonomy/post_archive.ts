@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -28,7 +30,7 @@ export async function reloadAndApplyDeferred(
       try {
         await deps.engine.reload(character);
       } catch (e) {
-        console.warn(`shore: ${context}: engine reload failed for ${character}: ${String(e)}`);
+        shoreLog.warn(`shore: ${context}: engine reload failed for ${character}: ${String(e)}`);
       }
     }
 
@@ -40,7 +42,7 @@ export async function reloadAndApplyDeferred(
         deps.config.dirs.workspace,
       );
     } catch (e) {
-      console.warn(
+      shoreLog.warn(
         `shore: ${context}: failed to apply deferred edits for ${character}: ${String(e)}`,
       );
     }

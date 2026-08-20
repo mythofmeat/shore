@@ -1,3 +1,5 @@
+import { shoreLog } from "./log.ts";
+
 import { mkdirSync } from "node:fs";
 
 import { InProcessAutonomyExecutor } from "./autonomy/in_process.ts";
@@ -286,10 +288,10 @@ function openCallStore(config: LoadedConfig): CallStore | undefined {
   const path = rustJoin(config.dirs.cache, "calls.db");
   try {
     const store = CallStore.open(path);
-    console.info(`shore: call payload store enabled at ${path}`);
+    shoreLog.info(`shore: call payload store enabled at ${path}`);
     return store;
   } catch (e) {
-    console.warn(`shore: cannot open the call store at ${path}; capture disabled: ${String(e)}`);
+    shoreLog.warn(`shore: cannot open the call store at ${path}; capture disabled: ${String(e)}`);
     return undefined;
   }
 }
@@ -419,15 +421,15 @@ function startCostBackfill(ledgerPath: string): { stop: () => void } {
     try {
       const result = await backfillLedgerCosts(ledgerPath);
       if (result.updated > 0) {
-        console.info(
+        shoreLog.info(
           `shore: priced ${result.updated} of ${result.total} ledger rows that had no cost`,
         );
       }
       for (const failure of result.failures) {
-        console.warn(`shore: still no pricing for ${failure.model}: ${failure.reason}`);
+        shoreLog.warn(`shore: still no pricing for ${failure.model}: ${failure.reason}`);
       }
     } catch (e) {
-      console.warn(`shore: ledger cost backfill failed: ${String(e)}`);
+      shoreLog.warn(`shore: ledger cost backfill failed: ${String(e)}`);
     } finally {
       running = false;
     }
@@ -449,13 +451,13 @@ function startCallStoreRotation(store: CallStore | undefined): { stop: () => voi
         CALL_STORE_MAX_BYTES,
       );
       if (stats.deleted_by_age > 0 || stats.deleted_by_size > 0) {
-        console.info(
+        shoreLog.info(
           `shore: call store rotation pruned ${stats.deleted_by_age} rows by age and ` +
             `${stats.deleted_by_size} by size`,
         );
       }
     } catch (e) {
-      console.warn(`shore: call store rotation failed: ${String(e)}`);
+      shoreLog.warn(`shore: call store rotation failed: ${String(e)}`);
     }
   };
 

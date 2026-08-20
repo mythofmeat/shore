@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -93,7 +95,7 @@ export async function buildCompactionResponse(
   outcome: CompactionOutcome,
 ): Promise<unknown> {
   if (outcome.kind === "compacted") {
-    console.info(
+    shoreLog.info(
       `shore: compaction completed for ${character} ` +
         `(entries=${outcome.memoryFilesWritten.length}, message_count=${outcome.messageCount}, ` +
         `retained_count=${outcome.retainedCount})`,
@@ -115,7 +117,7 @@ export async function buildCompactionResponse(
   }
 
   if (outcome.kind === "truncated") {
-    console.warn(
+    shoreLog.warn(
       `shore: compaction for ${character} hit the token ceiling ` +
         `(${String(outcome.truncatedTurns)} truncated turn(s)) — conversation NOT archived`,
     );
@@ -133,7 +135,7 @@ export async function buildCompactionResponse(
   }
 
   if (outcome.kind === "paused") {
-    console.warn(
+    shoreLog.warn(
       `shore: compaction paused for ${character} — conversation NOT archived ` +
         `(checkpoint=${outcome.checkpointId}, reason=${outcome.reason}, ` +
         `detail=${outcome.detail ?? "none"}, tool_rounds=${outcome.toolRounds})`,
@@ -194,7 +196,7 @@ async function completeCompaction(
       ctx.config.dirs.workspace,
     );
   } catch (e) {
-    console.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
+    shoreLog.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
   }
 
   try {

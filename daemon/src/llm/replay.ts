@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { ContentBlock } from "../engine/types.ts";
 import type { SidecarRequest, WireMessage } from "./types.ts";
 
@@ -115,7 +117,7 @@ export function replayableMessages(req: SidecarRequest): WireMessage[] {
   if (req.context !== undefined) req.context.thinking_dropped = totalThinkingDrops(drops);
 
   if (drops.unportable > 0) {
-    console.warn(
+    shoreLog.warn(
       `shore: ${String(drops.unportable)} thinking block(s) were minted by another ` +
         `provider or model and could not travel to ${req.provider_key ?? req.sdk}/${req.model}; ` +
         `the turn goes over the wire stripped`,

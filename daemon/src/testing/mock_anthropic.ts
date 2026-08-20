@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { createHash } from "node:crypto";
 
 export interface AnthropicUsage {
@@ -437,15 +439,15 @@ if (import.meta.main) {
     onRequest: (req) => {
       const u = req.usage;
       const marks = req.breakpoints.map((b) => `${b.where}[${b.index}]${b.hit ? "✓" : "✗"}`);
-      console.error(
+      shoreLog.error(
         `messages · in:${u.input_tokens} read:${u.cache_read_input_tokens} ` +
           `write:${u.cache_creation_input_tokens} · breakpoints: ${marks.join(" ") || "none"}`,
       );
     },
   });
 
-  console.error(`mock anthropic listening on ${mock.url}`);
-  console.error(`  [providers.mock]\n  sdk = "anthropic"\n  base_url = "${mock.url}"\n`);
+  shoreLog.error(`mock anthropic listening on ${mock.url}`);
+  shoreLog.error(`  [providers.mock]\n  sdk = "anthropic"\n  base_url = "${mock.url}"\n`);
 
   const stop = () => void mock.stop().then(() => process.exit(0));
   process.on("SIGINT", stop);

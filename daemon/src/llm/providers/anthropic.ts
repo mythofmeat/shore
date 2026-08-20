@@ -1,3 +1,5 @@
+import { shoreLog } from "../../log.ts";
+
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   ContentBlockParam,
@@ -452,7 +454,7 @@ export function placeBreakpoints(
 function warnIfDropped(tally: BreakpointTally): BreakpointTally {
   const dropped = tally.droppedNoAnchor + tally.droppedOverLimit;
   if (dropped === 0) return tally;
-  console.warn(
+  shoreLog.warn(
     `shore: dropped ${String(dropped)} cache breakpoint(s) of ` +
       `${String(tally.requested)} requested — ${String(tally.droppedNoAnchor)} had no block ` +
       `that would take a marker, ${String(tally.droppedOverLimit)} exceeded the ` +
@@ -576,7 +578,7 @@ function replayableForAnthropic(req: SidecarRequest): WireMessage[] {
   recordExtraThinkingDrops(req, dropped);
 
   if (dropped > 0) {
-    console.warn(
+    shoreLog.warn(
       `shore: ${String(dropped)} thinking block(s) carried no signature this account can ` +
         `verify and could not travel to ${req.provider_key ?? req.sdk}/${req.model}; ` +
         `the turn goes over the wire stripped`,

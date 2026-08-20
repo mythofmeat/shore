@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { mkdir, open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -92,7 +94,7 @@ export function attachmentFileName(
     (declaredMime === undefined ? undefined : extensionForMediaType(declaredMime));
 
   if (extension !== undefined) return `${safe}.${extension}`;
-  console.warn(
+  shoreLog.warn(
     `shore: could not determine image type from bytes, declared mime, or extension for ` +
       `${safe}; the LLM pipeline will skip this attachment`,
   );
@@ -139,7 +141,7 @@ async function saveAttachment(
   try {
     await mkdir(attachmentsDir, { recursive: true });
   } catch (e) {
-    console.warn(`shore: failed to create attachments directory: ${String(e)}`);
+    shoreLog.warn(`shore: failed to create attachments directory: ${String(e)}`);
     return undefined;
   }
 
@@ -148,14 +150,14 @@ async function saveAttachment(
   try {
     claimed = await createAttachmentFile(attachmentsDir, destName);
   } catch (e) {
-    console.warn(`shore: failed to create attachment file for ${sourceName}: ${String(e)}`);
+    shoreLog.warn(`shore: failed to create attachment file for ${sourceName}: ${String(e)}`);
     return undefined;
   }
 
   try {
     await claimed.handle.write(bytes);
   } catch (e) {
-    console.warn(`shore: failed to write image to attachments for ${sourceName}: ${String(e)}`);
+    shoreLog.warn(`shore: failed to write image to attachments for ${sourceName}: ${String(e)}`);
     await claimed.handle.close().catch(() => {});
     await Bun.file(claimed.path)
       .unlink()
@@ -165,7 +167,7 @@ async function saveAttachment(
     await claimed.handle.close().catch(() => {});
   }
 
-  console.info(`shore: saved incoming image to attachments: ${sourceName} -> ${claimed.path}`);
+  shoreLog.info(`shore: saved incoming image to attachments: ${sourceName} -> ${claimed.path}`);
   return { path: claimed.path };
 }
 
@@ -213,7 +215,7 @@ async function ingestUpload(
 ): Promise<ImageRef | undefined> {
   const rejection = base64Rejection(upload.data);
   if (rejection !== undefined) {
-    console.warn(
+    shoreLog.warn(
       `shore: failed to decode base64 image data for ${upload.filename}: ${rejection}`,
     );
     return undefined;
@@ -232,10 +234,10 @@ async function ingestLegacyPath(
     bytes = await readFile(srcPath);
   } catch {
     if (!(await Bun.file(srcPath).exists())) {
-      console.warn(`shore: skipping non-existent image: ${srcPath}`);
+      shoreLog.warn(`shore: skipping non-existent image: ${srcPath}`);
       return undefined;
     }
-    console.warn(`shore: failed to read image for attachments copy: ${srcPath}`);
+    shoreLog.warn(`shore: failed to read image for attachments copy: ${srcPath}`);
     return { path: srcPath };
   }
 
@@ -275,7 +277,7 @@ export async function encodeImageBlock(
 ): Promise<{ type: "base64"; media_type: string; data: string } | undefined> {
   const mediaType = mediaTypeForPath(img.path);
   if (mediaType === undefined) {
-    console.warn(`shore: skipping image with unsupported extension: ${img.path}`);
+    shoreLog.warn(`shore: skipping image with unsupported extension: ${img.path}`);
     return undefined;
   }
 
@@ -283,7 +285,7 @@ export async function encodeImageBlock(
   try {
     bytes = await readFile(img.path);
   } catch (e) {
-    console.warn(`shore: failed to read image file for LLM: ${img.path}: ${String(e)}`);
+    shoreLog.warn(`shore: failed to read image file for LLM: ${img.path}: ${String(e)}`);
     return undefined;
   }
 

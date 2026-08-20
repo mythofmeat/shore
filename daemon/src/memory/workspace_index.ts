@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { readFile, readdir, lstat, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
@@ -240,7 +242,7 @@ async function migrateIfLegacy(
   const legacy = legacyPathFor(dbPath);
   const outcome = await migrateLegacyIndex(store, legacy, workspaceDir, documentForEmbedding);
   if (outcome === undefined) return;
-  console.warn(
+  shoreLog.warn(
     `shore: migrated workspace index from JSON: ${outcome.files} files, ` +
       `${outcome.vectors} vectors carried over, ${outcome.stale} stale`,
   );

@@ -1,3 +1,5 @@
+import { shoreLog } from "./log.ts";
+
 import type { NotificationsConfig, NtfyConfig } from "./config/app.ts";
 
 export type NotificationEvent =
@@ -96,7 +98,7 @@ export class NotificationService {
     if (!this.shouldNotify(event)) return;
     const summary = truncateSummary(body, SUMMARY_MAX_BYTES);
     void this.#dispatch(title, summary).catch((e: unknown) => {
-      console.warn(`shore: notification dispatch failed: ${String(e)}`);
+      shoreLog.warn(`shore: notification dispatch failed: ${String(e)}`);
     });
   }
 

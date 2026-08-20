@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { defaultApiKeyEnv, readCandidateEnv, resolveKeyCandidates } from "./credentials";
 import type { ProviderEntry } from "./credentials";
 import { sanitizeToolPairs } from "./sanitize";
@@ -238,7 +240,7 @@ export function preprocessRequest(request: SidecarRequest): SidecarRequest {
   const cleaned = sanitizeToolPairs(request.messages);
   if (cleaned === undefined) return request;
 
-  console.warn(
+  shoreLog.warn(
     `stripped orphan tool_use/tool_result blocks from outbound LLM request ` +
       `(${request.messages.length} messages -> ${cleaned.length})`,
   );

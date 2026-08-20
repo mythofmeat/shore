@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -275,7 +277,7 @@ export class MessageStore {
 
     if (unreadable.length > 0) {
       const quarantined = await quarantineLines(path, unreadable);
-      console.error(
+      shoreLog.error(
         `shore: ${String(unreadable.length)} unreadable line(s) in ${path} were quarantined` +
           `${quarantined === undefined ? "" : ` to ${quarantined}`}; ` +
           `${String(messages.length)} message(s) loaded`,
@@ -284,7 +286,7 @@ export class MessageStore {
 
     const defects = auditAlternatives(messages);
     const report = describeAlternativeDefects(path, defects);
-    if (report !== undefined) console.warn(report);
+    if (report !== undefined) shoreLog.warn(report);
 
     const store = new MessageStore(path, messages);
     store.#quarantined = unreadable.length;

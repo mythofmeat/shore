@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 
@@ -69,7 +71,7 @@ function seedActivityInBackground(
           took_ms: Math.round(performance.now() - started),
         });
       } catch (e) {
-        console.warn(`shore: could not seed ${character}'s activity from history: ${String(e)}`);
+        shoreLog.warn(`shore: could not seed ${character}'s activity from history: ${String(e)}`);
       }
     }
   })();
@@ -325,12 +327,12 @@ if (import.meta.main) {
       argv: process.argv.slice(2),
       providers: DEFAULT_PROVIDERS,
       log: {
-        info: (msg, fields) => console.error(format("INFO", msg, fields)),
-        warn: (msg, fields) => console.error(format("WARN", msg, fields)),
+        info: (msg, fields) => shoreLog.error(format("INFO", msg, fields)),
+        warn: (msg, fields) => shoreLog.error(format("WARN", msg, fields)),
       },
     });
   } catch (e) {
-    console.error(e instanceof StartupError ? e.message : String(e));
+    shoreLog.error(e instanceof StartupError ? e.message : String(e));
     // eslint-disable-next-line unicorn/no-process-exit
     process.exit(1);
   }

@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { buildAutonomousMessage } from "./heartbeat_shape.ts";
 import {
   runHeartbeatToolLoop,
@@ -57,7 +59,7 @@ export async function persistHeartbeatMessage(
   }
 
   const text = loop.sendMessageText ?? "";
-  console.info(
+  shoreLog.info(
     `shore: heartbeat for ${character} sending a message (images=${loop.images.length})`,
   );
 
@@ -85,14 +87,14 @@ export async function persistHeartbeatMessage(
   };
 
   if (deps.engine === undefined) {
-    console.error(`shore: heartbeat for ${character} has no engine, message not persisted`);
+    shoreLog.error(`shore: heartbeat for ${character} has no engine, message not persisted`);
   } else {
     try {
       const engine = await deps.engine(character);
       await engine.appendMessage(msg);
       deps.emit?.(character, engine.currentRevision(), msg);
     } catch (e) {
-      console.error(
+      shoreLog.error(
         `shore: heartbeat could not persist the autonomous message for ${character}: ${String(e)}`,
       );
     }

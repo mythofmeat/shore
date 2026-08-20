@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { LoadedConfig } from "../config/loader.ts";
 import type { BuiltRequest } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
@@ -48,7 +50,7 @@ export class LastRequestCache {
 
   invalidate(character: string, reason: InvalidationReason): void {
     const had = this.#bodies.delete(character);
-    console.debug(
+    shoreLog.debug(
       `shore: invalidated the cached request for ${character} (reason=${reason}, had=${had})`,
     );
   }

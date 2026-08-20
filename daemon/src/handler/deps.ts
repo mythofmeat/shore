@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { localWallClock } from "../autonomy/activity.ts";
 import { compactionGenerate } from "../autonomy/in_process.ts";
 import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
@@ -313,7 +315,7 @@ function configRuntime(a: CommandAssembly): ConfigRuntime {
           mcpRegistry: runtime.mcp.current,
         })
         .catch((e: unknown) => {
-          console.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
+          shoreLog.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
         });
     },
   };
@@ -328,7 +330,7 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
       try {
         return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });
       } catch (e) {
-        console.warn(`shore: could not re-read ${runtime.configPath}: ${String(e)}`);
+        shoreLog.warn(`shore: could not re-read ${runtime.configPath}: ${String(e)}`);
         return undefined;
       }
     },
@@ -374,12 +376,12 @@ async function reconnectMcpIfChanged(a: CommandAssembly, config: LoadedConfig): 
       a.runtime.connectMcp,
     );
   } catch (e) {
-    console.error(`shore: [mcp] reload failed, keeping the running servers: ${String(e)}`);
+    shoreLog.error(`shore: [mcp] reload failed, keeping the running servers: ${String(e)}`);
     return;
   }
 
   if (Object.keys(servers).length > 0 && next.connectedServers() === 0) {
-    console.error(
+    shoreLog.error(
       "shore: [mcp] reload connected none of the configured servers; " +
         "keeping the running ones",
     );
@@ -391,10 +393,10 @@ async function reconnectMcpIfChanged(a: CommandAssembly, config: LoadedConfig): 
   try {
     await previous.shutdown();
   } catch (e) {
-    console.warn(`shore: shutting down the previous MCP registry failed: ${String(e)}`);
+    shoreLog.warn(`shore: shutting down the previous MCP registry failed: ${String(e)}`);
   }
   await repointCachedRequests(a, config, "mcp_reload");
-  console.info("shore: [mcp] changed; reconnected servers and swapped the tool surface");
+  shoreLog.info("shore: [mcp] changed; reconnected servers and swapped the tool surface");
 }
 
 async function repointCachedRequests(
@@ -413,7 +415,7 @@ async function repointCachedRequests(
         { mcpRegistry: runtime.mcp.current },
       );
     } catch (e) {
-      console.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
+      shoreLog.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
     }
   }
 }
@@ -445,7 +447,7 @@ export function configReloader(
     try {
       config = loadConfig(a.runtime.configPath, a.env === undefined ? {} : { env: a.env });
     } catch (e) {
-      console.warn(
+      shoreLog.warn(
         `shore: config hot reload failed, keeping the running config — ${where}: ${String(e)}`,
       );
       a.emitEvent(configWarning(a.runtime.configPath, undefined, e));
@@ -456,7 +458,7 @@ export function configReloader(
       try {
         loadCharacterConfig(config, name);
       } catch (e) {
-        console.warn(
+        shoreLog.warn(
           `shore: config hot reload failed on ${name}'s overlay, keeping the running config — ` +
             `${where}: ${String(e)}`,
         );
@@ -469,14 +471,14 @@ export function configReloader(
 
     const restart = restartRequiredChanges(a.runtime.registry.globalConfig(), config);
     if (restart.length > 0) {
-      console.warn(
+      shoreLog.warn(
         `shore: config hot reload saw startup-owned changes (${restart.join(", ")}); ` +
           `restart the daemon to apply them`,
       );
     }
 
     await applyReloadedConfig(a, config);
-    console.info(`shore: config hot reload applied — ${where}`);
+    shoreLog.info(`shore: config hot reload applied — ${where}`);
   };
 }
 
@@ -487,7 +489,7 @@ async function pushHistorySnapshots(a: CommandAssembly): Promise<void> {
       const snapshot = await a.handshake.history(character);
       await a.router.sendToSession(sessionId, historyMessage(snapshot, undefined));
     } catch (e) {
-      console.warn(`shore: could not push history to session ${sessionId}: ${String(e)}`);
+      shoreLog.warn(`shore: could not push history to session ${sessionId}: ${String(e)}`);
     }
   }
 }

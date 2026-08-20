@@ -1,3 +1,5 @@
+import { shoreLog } from "./log.ts";
+
 import {
   characterDataDir,
   characterWorkspaceFile,
@@ -123,7 +125,7 @@ export class CharacterRegistry {
           this.#workspaceRoot(),
         );
       } catch (e) {
-        console.warn(
+        shoreLog.warn(
           `shore: failed to prepare workspace for character ${name}: ${String(e)}`,
         );
       }

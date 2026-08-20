@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { Embedder } from "../llm/embed.ts";
 import { indexPendingBatch, type RetrievalConfig } from "./workspace_index.ts";
 
@@ -170,7 +172,7 @@ export class WorkspaceIndexService {
         entry.failures += 1;
         entry.lastError = error instanceof Error ? error.message : String(error);
         entry.retryAt = this.#now() + Math.min(1_000 * 2 ** (entry.failures - 1), 60_000);
-        console.warn(
+        shoreLog.warn(
           `shore: workspace embedding backfill failed for ${entry.character}; retrying later: ${entry.lastError}`,
         );
       }

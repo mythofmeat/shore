@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import fs from "node:fs";
 import path from "node:path";
 
@@ -63,12 +65,12 @@ export function recordImageRejection(
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, `${JSON.stringify(next, null, 2)}\n`);
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: could not record that ${providerKey}/${modelId} refuses images: ${String(e)}`,
     );
     return;
   }
-  console.warn(
+  shoreLog.warn(
     `shore: ${providerKey}/${modelId} refused an image payload; ` +
       `recording it as text-only so later turns drop images instead of failing`,
   );

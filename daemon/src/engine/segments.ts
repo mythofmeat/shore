@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { access, readFile, rmdir, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
@@ -151,7 +153,7 @@ export class SegmentReader {
     }
     if (unreadable.length > 0) {
       const quarantined = await quarantineLines(path, unreadable);
-      console.error(
+      shoreLog.error(
         `shore: ${String(unreadable.length)} unreadable line(s) in segment ${path} were ` +
           `quarantined${quarantined === undefined ? "" : ` to ${quarantined}`}; ` +
           `${String(messages.length)} message(s) recovered`,
@@ -230,7 +232,7 @@ async function importLegacySegments(
       if (code !== "ENOENT" && code !== "ENOTEMPTY") throw e;
     }
   } catch (e) {
-    console.warn(`shore: legacy history import kept its JSONL source: ${String(e)}`);
+    shoreLog.warn(`shore: legacy history import kept its JSONL source: ${String(e)}`);
   }
 }
 

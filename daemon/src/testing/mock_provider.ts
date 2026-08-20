@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 export interface MockUsage {
   prompt_tokens: number;
   completion_tokens: number;
@@ -272,7 +274,7 @@ if (import.meta.main) {
   const scriptPath = flag("--script");
   const script: MockReply[] = scriptPath === undefined ? [] : await Bun.file(scriptPath).json();
   if (!Array.isArray(script)) {
-    console.error(`--script ${scriptPath}: expected a JSON array of replies`);
+    shoreLog.error(`--script ${scriptPath}: expected a JSON array of replies`);
     process.exit(1);
   }
 
@@ -282,7 +284,7 @@ if (import.meta.main) {
       : `${req.streaming ? "stream" : "generate"} · ${
           Array.isArray(req.body?.messages) ? req.body.messages.length : 0
         } messages · ${Array.isArray(req.body?.tools) ? req.body.tools.length : 0} tools`;
-    console.error(`${req.method} ${req.path} — ${what}`);
+    shoreLog.error(`${req.method} ${req.path} — ${what}`);
   };
 
   const mock = await startMockProvider({
@@ -292,13 +294,13 @@ if (import.meta.main) {
     ...(quiet ? {} : { onRequest: trace }),
   });
 
-  console.error(`mock provider listening on ${mock.url} (model: ${models.join(", ")})`);
-  if (script.length > 0) console.error(`${script.length} scripted replies, then echo`);
-  console.error("point a provider at it:\n");
-  console.error(`  [providers.mock]`);
-  console.error(`  sdk = "openai"`);
-  console.error(`  base_url = "${mock.url}"`);
-  console.error(`  api_key_env = "MOCK_API_KEY"\n`);
+  shoreLog.error(`mock provider listening on ${mock.url} (model: ${models.join(", ")})`);
+  if (script.length > 0) shoreLog.error(`${script.length} scripted replies, then echo`);
+  shoreLog.error("point a provider at it:\n");
+  shoreLog.error(`  [providers.mock]`);
+  shoreLog.error(`  sdk = "openai"`);
+  shoreLog.error(`  base_url = "${mock.url}"`);
+  shoreLog.error(`  api_key_env = "MOCK_API_KEY"\n`);
 
   const stop = () => {
     void mock.stop().then(() => process.exit(0));

@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { Database } from "bun:sqlite";
 
 import type { UsageConfig as AppUsageConfig } from "../config/app.ts";
@@ -898,7 +900,7 @@ export function enforceBudgetForCall(
     try {
       status = budgetStatus(db, config, budget, idx, now, opts);
     } catch (e) {
-      console.error(
+      shoreLog.error(
         `shore: usage budget "${budgetName(budget, idx)}" query failed; allowing call: ${String(e)}`,
       );
       continue;

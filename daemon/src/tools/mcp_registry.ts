@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { toolPatternMatches } from "./registry.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { compareByCodePoint } from "../util/sort.ts";
@@ -207,10 +209,10 @@ export class McpRegistry {
     for (const outcome of outcomes) {
       switch (outcome.kind) {
         case "no-transport":
-          console.warn(`mcp server has no valid transport; skipping: ${outcome.name}`);
+          shoreLog.warn(`mcp server has no valid transport; skipping: ${outcome.name}`);
           break;
         case "connect-failed":
-          console.error(
+          shoreLog.error(
             `shore: mcp server '${outcome.name}' ` +
               (outcome.transport === "http"
                 ? `unreachable after ${outcome.attempts} attempts`
@@ -223,11 +225,11 @@ export class McpRegistry {
           );
           break;
         case "list-failed":
-          console.warn(`mcp tools/list failed; skipping: ${outcome.name}: ${outcome.error}`);
+          shoreLog.warn(`mcp tools/list failed; skipping: ${outcome.name}: ${outcome.error}`);
           break;
         case "connected":
           if (outcome.attempts > 1) {
-            console.info(
+            shoreLog.info(
               `shore: mcp server '${outcome.name}' connected on attempt ${outcome.attempts}`,
             );
           }
@@ -238,7 +240,7 @@ export class McpRegistry {
     }
 
     if (tools.length > 0) {
-      console.info(`connected MCP tools: ${tools.length}`);
+      shoreLog.info(`connected MCP tools: ${tools.length}`);
     }
     const specs = new Map<string, McpServerSpec>();
     for (const name of names) {
@@ -293,7 +295,7 @@ export class McpRegistry {
       try {
         next = await connect(spec);
       } catch (e) {
-        console.warn(`shore: mcp server '${server}' is still unreachable: ${String(e)}`);
+        shoreLog.warn(`shore: mcp server '${server}' is still unreachable: ${String(e)}`);
         return undefined;
       }
       if (this.closed) {
@@ -308,7 +310,7 @@ export class McpRegistry {
         } catch {
         }
       }
-      console.info(
+      shoreLog.info(
         `shore: mcp server '${server}' reconnected; its tools work again, ` +
           `and the tool surface did not change so cached prefixes still match`,
       );

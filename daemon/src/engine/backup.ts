@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { copyFile, mkdir, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
@@ -49,7 +51,7 @@ export async function backupBeforeWrite(
     await pruneBackups(dir, basename(path));
     return target;
   } catch (e) {
-    console.warn(`shore: could not back up ${path} before writing: ${String(e)}`);
+    shoreLog.warn(`shore: could not back up ${path} before writing: ${String(e)}`);
     lastBackupAt.set(path, at);
     return undefined;
   }
@@ -83,7 +85,7 @@ export async function quarantineLines(
     await rename(tmp, target);
     return target;
   } catch (e) {
-    console.error(`shore: could not quarantine unreadable lines from ${path}: ${String(e)}`);
+    shoreLog.error(`shore: could not quarantine unreadable lines from ${path}: ${String(e)}`);
     return undefined;
   }
 }

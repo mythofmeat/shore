@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
 import { KEEPALIVE_REWRITE_TOKENS } from "./tracker.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
@@ -192,7 +194,7 @@ export class KeepaliveService {
       `would pay full price for nothing. All keepalives are stopped for the life of this ` +
       `daemon; nothing resumes them, because nothing that causes this is fixable at runtime`;
     this.#halt = { character, reason, at: this.#now() };
-    console.error(`shore: KEEPALIVE HALTED (${character}) — ${reason}`);
+    shoreLog.error(`shore: KEEPALIVE HALTED (${character}) — ${reason}`);
     this.#push({
       character,
       outcome: "halted",
@@ -304,7 +306,7 @@ export class KeepaliveService {
         try {
           await this.#ping(character);
         } catch (e) {
-          console.error(`shore: keepalive ping failed for ${character}: ${String(e)}`);
+          shoreLog.error(`shore: keepalive ping failed for ${character}: ${String(e)}`);
         }
       }),
     );

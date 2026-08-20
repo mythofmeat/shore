@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { rename } from "node:fs/promises";
 
 export const HEARTBEAT_LOG_CAPACITY = 100;
@@ -124,7 +126,7 @@ export class HeartbeatLog {
       await Bun.write(tmp, this.encode());
       await rename(tmp, path);
     } catch (err) {
-      console.error(`shore: failed to flush heartbeat log at ${path}: ${String(err)}`);
+      shoreLog.error(`shore: failed to flush heartbeat log at ${path}: ${String(err)}`);
       return;
     }
     this.#dirty = false;

@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { ContentBlock, ImageRef, Message, Role } from "../engine/types.ts";
 import { imageDataForPath } from "../engine/wire_images.ts";
@@ -61,7 +63,7 @@ export async function runToolUse(
 
   const rejection = argumentRejection(toolUse, exec.schemas);
   if (rejection !== undefined) {
-    console.warn(`shore: rejected a ${toolUse.name} call — ${rejection}`);
+    shoreLog.warn(`shore: rejected a ${toolUse.name} call — ${rejection}`);
     const rejectedMs = clock() - startedAt;
     emitToolResult(exec, toolUse, rejection, true);
     return {

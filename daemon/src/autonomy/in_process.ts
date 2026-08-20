@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { runHeartbeatTick } from "./heartbeat_tick.ts";
 import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
@@ -58,14 +60,14 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         try {
           const { response, fallbacks } = await generate(request, this.#generateDeps(config));
           for (const event of fallbacks) {
-            console.warn(
+            shoreLog.warn(
               `shore: heartbeat for ${character} rotated ${event.from.name} → ` +
                 `${event.to?.name ?? "(none)"}: ${event.reason}`,
             );
           }
           return response;
         } catch (e) {
-          console.error(
+          shoreLog.error(
             `shore: heartbeat call for ${character} failed on round ${iteration}: ${String(e)}`,
           );
           return undefined;
@@ -207,7 +209,7 @@ export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
       deps,
     );
     for (const event of fallbacks) {
-      console.warn(
+      shoreLog.warn(
         `shore: compaction for ${character} rotated ${event.from.name} → ` +
           `${event.to?.name ?? "(none)"}: ${event.reason}`,
       );

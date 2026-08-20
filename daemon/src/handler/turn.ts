@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { LoadedConfig } from "../config/loader.ts";
 import { characterDataDir } from "../config/dirs.ts";
 import type { Message } from "../engine/types.ts";
@@ -228,7 +230,7 @@ async function runInlineCompaction(
   try {
     retained = await runner.run(charName, config);
   } catch (e) {
-    console.warn(`shore: inline compaction failed for ${charName}: ${String(e)}`);
+    shoreLog.warn(`shore: inline compaction failed for ${charName}: ${String(e)}`);
     ctx.autonomy.onCompactionFailed(
       charName,
       e instanceof CompactionPaused && e.resumeAt !== undefined
@@ -243,7 +245,7 @@ async function runInlineCompaction(
     try {
       await engine.reload();
     } catch (e) {
-      console.warn(`shore: inline compaction engine reload failed for ${charName}: ${String(e)}`);
+      shoreLog.warn(`shore: inline compaction engine reload failed for ${charName}: ${String(e)}`);
       ctx.autonomy.onCompactionFailed(charName);
       return;
     }
@@ -256,12 +258,12 @@ async function runInlineCompaction(
         config.dirs.workspace,
       );
     } catch (e) {
-      console.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
+      shoreLog.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
     }
     try {
       await runner.repoint?.(charName, config);
     } catch (e) {
-      console.warn(`shore: failed to repoint cached request after compaction: ${String(e)}`);
+      shoreLog.warn(`shore: failed to repoint cached request after compaction: ${String(e)}`);
     }
   } finally {
     guard.release();

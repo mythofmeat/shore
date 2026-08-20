@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { LoadedConfig } from "../config/loader.ts";
 import { resolveDisplayName } from "../config/app.ts";
 import { anyToolEnabled } from "../config/app.ts";
@@ -52,7 +54,7 @@ export async function prepareChatContext(
       config.dirs.workspace,
     );
   } catch (e) {
-    console.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);
+    shoreLog.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);
   }
 
   const characterDefinition = await loadActivePromptFile(characterDataDir, SOUL_FILE);

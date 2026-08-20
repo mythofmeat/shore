@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
@@ -66,7 +68,7 @@ export async function runDeepIdleArchive(
   try {
     loaded = await MessageStore.loadWithRaw(join(characterDir, ACTIVE_JSONL_FILE));
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: deep-idle archive for ${character} failed to read the active conversation: ${String(e)}`,
     );
     return {
@@ -79,7 +81,7 @@ export async function runDeepIdleArchive(
   const plan = deepArchivePlan(loaded.store.messages(), coveredTurnCount);
 
   if (plan.arm === "quiesce") {
-    console.debug(
+    shoreLog.debug(
       `shore: deep-idle archive for ${character} has nothing to archive (tail=${plan.tail})`,
     );
     return { events: [], deepArchiveDone: true };
@@ -102,7 +104,7 @@ async function pureArchive(
 
   const guard = tryBeginCompaction(dataDir, character);
   if (guard === undefined) {
-    console.debug(`shore: deep-idle archive for ${character} — a compaction is already in flight`);
+    shoreLog.debug(`shore: deep-idle archive for ${character} — a compaction is already in flight`);
     return {
       events: [],
       failed: `Compaction already running for ${character}`,
@@ -119,7 +121,7 @@ async function pureArchive(
       { dbPath: join(dataDir, HISTORY_DB_FILE), character },
     ).archiveAndRetain("deep-idle", { keepLastN: tail, activeContent });
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: deep-idle archive for ${character} failed, will retry after the next ` +
         `archive_after window: ${String(e)}`,
     );
@@ -140,7 +142,7 @@ async function pureArchive(
   const { title, body } = deepArchiveNotification(character, archivable);
   deps.notify?.(title, body);
 
-  console.info(
+  shoreLog.info(
     `shore: deep-idle archive complete for ${character} (pure archive, ` +
       `archivable=${archivable}, tail=${tail})`,
   );
@@ -161,7 +163,7 @@ async function compactionArchive(
     };
   }
 
-  console.info(
+  shoreLog.info(
     `shore: deep-idle archive for ${character} — running a keep-0 compaction over uncovered turns`,
   );
 
@@ -176,7 +178,7 @@ async function compactionArchive(
       { keepTurnsOverride: 0, retainTrailingAutonomous: true },
     );
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: deep-idle archive compaction for ${character} failed, will retry after the next ` +
         `archive_after window: ${String(e)}`,
     );
@@ -191,7 +193,7 @@ async function compactionArchive(
   }
 
   await reloadAndApplyDeferred(character, deps, "Deep-idle archive");
-  console.info(
+  shoreLog.info(
     `shore: deep-idle archive complete for ${character} (compaction pass, retained=${retained})`,
   );
   await repoint(character, deps, "deep_idle_archive");

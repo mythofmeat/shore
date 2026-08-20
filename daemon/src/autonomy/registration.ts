@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { localWallClock } from "./activity.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -78,7 +80,7 @@ export class TurnAutonomyBridge {
     if (this.#registered.has(character)) return false;
 
     const pending = this.#service.register(registrationFor(character, config)).catch((e: unknown) => {
-      console.warn(`shore: autonomy registration failed for ${character}: ${String(e)}`);
+      shoreLog.warn(`shore: autonomy registration failed for ${character}: ${String(e)}`);
     });
     this.#registered.set(character, pending);
     return true;
@@ -146,7 +148,7 @@ export class TurnAutonomyBridge {
     this.#registered.set(
       character,
       pending.then(fn).catch((e: unknown) => {
-        console.warn(`shore: autonomy update failed for ${character}: ${String(e)}`);
+        shoreLog.warn(`shore: autonomy update failed for ${character}: ${String(e)}`);
       }),
     );
   }

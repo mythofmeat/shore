@@ -1,3 +1,5 @@
+import { shoreLog } from "../../log.ts";
+
 import { dirname, join } from "node:path";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 
@@ -250,7 +252,7 @@ async function dispatchCompactionTool(
     }
     const displayPath = intent.path;
     if (!writeAllowedPath(displayPath)) {
-      console.warn(
+      shoreLog.warn(
         `shore: compaction refusing to write disallowed path ${displayPath} (tool ${name})`,
       );
       return {
@@ -428,7 +430,7 @@ async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<voi
       try {
         await writeWorkspaceFile(write.resolvedPath, write.previousContent);
       } catch (e) {
-        console.warn(
+        shoreLog.warn(
           `shore: rollback failed to restore compaction write at ${write.resolvedPath} ` +
             `(${write.displayPath}): ${(e as Error).message}`,
         );
@@ -439,7 +441,7 @@ async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<voi
       await rm(write.resolvedPath);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
-      console.warn(
+      shoreLog.warn(
         `shore: rollback failed to delete compaction write at ${write.resolvedPath} ` +
           `(${write.displayPath}): ${(e as Error).message}`,
       );
@@ -585,7 +587,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
       await persistCheckpoint(opts, checkpoint);
       return pausedOutcome(opts, checkpoint);
     }
-    console.warn(
+    shoreLog.warn(
       `shore: discarding compaction checkpoint ${checkpoint.id} for ${opts.charName}: the active ` +
         `conversation was rewritten under it, so the pass can never resume; summarizing from the ` +
         `current conversation instead. The memory it already wrote stays on disk`,
@@ -662,7 +664,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const truncatedTurns = state.truncatedTurns ?? 0;
   if (truncatedTurns > 0) {
     await clearCheckpoint(opts);
-    console.warn(
+    shoreLog.warn(
       `shore: compaction for ${opts.conversationId} was cut off at the token ceiling ` +
         `(${String(truncatedTurns)} truncated turn${truncatedTurns === 1 ? "" : "s"}); active ` +
         `conversation NOT archived — a partial summary is not a completed pass`,
@@ -763,10 +765,10 @@ async function archiveCompactPrefix(
           "revert: compaction rolled back after archive failure",
         )
       ) {
-        console.info("shore: compaction recorded rollback commit");
+        shoreLog.info("shore: compaction recorded rollback commit");
       }
     } catch (gitErr) {
-      console.warn(
+      shoreLog.warn(
         `shore: compaction failed to record rollback commit: ${(gitErr as Error).message}`,
       );
     }
@@ -815,7 +817,7 @@ async function discardCheckpoint(opts: CompactOptions): Promise<void> {
     () => undefined,
   );
   if (abandoned !== undefined) {
-    console.warn(
+    shoreLog.warn(
       `shore: discarding compaction checkpoint ${abandoned.id} for ${opts.charName} at the ` +
         `caller's request (state=${abandoned.state}, reason=${abandoned.pauseReason ?? "none"}, ` +
         `rounds=${abandoned.loop.toolRounds}, ` +
@@ -929,7 +931,7 @@ async function queueMemoryIndexRefresh(
 ): Promise<void> {
   if (!memoryIndexUpdated || tools.configDir !== "") return;
   if (dataDir === undefined) {
-    console.warn(
+    shoreLog.warn(
       "shore: compaction updated MEMORY.md but no data dir was available for the prompt refresh queue",
     );
     return;
@@ -937,7 +939,7 @@ async function queueMemoryIndexRefresh(
   try {
     await noteMemoryIndexDeferred(characterDataDir(dataDir, charName));
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: compaction failed to queue MEMORY.md prompt refresh: ${(e as Error).message}`,
     );
   }

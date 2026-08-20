@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { resolveDisplayName } from "../config/app.ts";
@@ -138,7 +140,7 @@ export async function runSubagent(
             })),
         },
     (unknown) =>
-      console.warn(`shore: subagent '${name}' references unknown tool ${unknown}; skipping`),
+      shoreLog.warn(`shore: subagent '${name}' references unknown tool ${unknown}; skipping`),
   );
   const tools: ToolDefinition[] = subset.map((t) => ({
     name: t.name,
@@ -199,7 +201,7 @@ export async function runSubagent(
         ...outcome,
       });
     } catch (e) {
-      console.warn(`shore: failed to record subagent '${name}' trace: ${String(e)}`);
+      shoreLog.warn(`shore: failed to record subagent '${name}' trace: ${String(e)}`);
     }
   };
 

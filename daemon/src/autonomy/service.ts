@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import type { ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
@@ -143,7 +145,7 @@ export class AutonomyService {
         try {
           await entry.runner.tick();
         } catch (err) {
-          console.error(`shore: autonomy tick failed for ${character}: ${String(err)}`);
+          shoreLog.error(`shore: autonomy tick failed for ${character}: ${String(err)}`);
         } finally {
           entry.inFlight = false;
         }

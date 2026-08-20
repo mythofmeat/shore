@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { beginCallAttempt, recordGenerate, recordGenerateError } from "../ledger/record.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -167,7 +169,7 @@ export async function generate(
       signal,
     );
   }
-  console.debug(
+  shoreLog.debug(
     `shore: ${request.provider_key ?? request.sdk}/${request.model} is not in the static catalog; ` +
       `calling with the request's own key`,
   );

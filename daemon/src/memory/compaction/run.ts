@@ -1,3 +1,5 @@
+import { shoreLog } from "../../log.ts";
+
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
@@ -149,7 +151,7 @@ async function resolveDeps(character: string, deps: CompactionRunDeps): Promise<
   try {
     effective = loadCharacterConfig(deps.config, character) ?? deps.config;
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: character config failed to load for ${character}; ` +
         `compacting under the global config: ${String(e)}`,
     );
@@ -174,7 +176,7 @@ async function resolveDeps(character: string, deps: CompactionRunDeps): Promise<
       characterMemoryDir(configDir, character, effective.dirs.workspace),
     );
   } catch (e) {
-    console.warn(`shore: markdown memory store unavailable for ${character}: ${String(e)}`);
+    shoreLog.warn(`shore: markdown memory store unavailable for ${character}: ${String(e)}`);
   }
 
   const toolCtx = await buildToolContext(effective, effective.dirs.data, character, deps.tools ?? {});

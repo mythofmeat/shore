@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { Ledger, type RecordCall, type Timing, type Usage } from "./store.ts";
 import { toolSurfaceFingerprint } from "./tool_surface.ts";
 import { estimateTokens } from "../engine/tokens.ts";
@@ -15,7 +17,7 @@ export function ledgerFor(path: string): Ledger | null {
     try {
       opened = Ledger.create(path);
     } catch (createError) {
-      console.error(
+      shoreLog.error(
         `shore: cannot open or create ledger at ${path}: ${String(e)}; ${String(createError)}`,
       );
     }
@@ -135,14 +137,14 @@ function tryRecord(
   try {
     record(ctx, req, call, attempt);
   } catch (e) {
-    console.error(`shore: failed to record ledger row: ${String(e)}`);
+    shoreLog.error(`shore: failed to record ledger row: ${String(e)}`);
   }
   const finishReason = call.finish_reason;
   if (observer === undefined || !callLanded(finishReason)) return;
   try {
     observer(ctx, req.model, call.call_type ?? ctx.call_type, req);
   } catch (e) {
-    console.error(`shore: call observer failed: ${String(e)}`);
+    shoreLog.error(`shore: call observer failed: ${String(e)}`);
   }
 }
 

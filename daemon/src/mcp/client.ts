@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -135,7 +137,7 @@ export class McpClient {
     try {
       await this.client.close();
     } catch (e) {
-      console.warn(`MCP shutdown error for '${this.serverName}': ${String(e)}`);
+      shoreLog.warn(`MCP shutdown error for '${this.serverName}': ${String(e)}`);
     }
   }
 }

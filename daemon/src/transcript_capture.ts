@@ -1,3 +1,5 @@
+import { shoreLog } from "./log.ts";
+
 import type { CallStore, TranscriptRecord } from "./call_store.ts";
 import type { GenerateResponse } from "./llm/types.ts";
 
@@ -79,6 +81,6 @@ export function recordTranscript(
   try {
     store.recordTranscript(record);
   } catch (e) {
-    console.warn(`shore: failed to record a ${params.source} transcript entry: ${String(e)}`);
+    shoreLog.warn(`shore: failed to record a ${params.source} transcript entry: ${String(e)}`);
   }
 }

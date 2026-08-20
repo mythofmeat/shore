@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { readFileSync } from "node:fs";
 
 import type { ImageRef, Message } from "./types";
@@ -6,7 +8,7 @@ export function imageDataForPath(path: string): string | undefined {
   try {
     return readFileSync(path).toString("base64");
   } catch (e) {
-    console.warn(`shore: failed to read image for wire embedding at ${path}: ${String(e)}`);
+    shoreLog.warn(`shore: failed to read image for wire embedding at ${path}: ${String(e)}`);
     return undefined;
   }
 }

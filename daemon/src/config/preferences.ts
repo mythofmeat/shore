@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -430,7 +432,7 @@ function sanitizePersistedOverlay(layer: SamplerSettings): SamplerSettings {
   const cleaned: SamplerSettings = { ...layer };
   if (badSdk) delete cleaned.sdk;
   if (zeroCap) {
-    console.warn(
+    shoreLog.warn(
       "shore: preferences carry max_tool_iterations = 0; treating as unset (unlimited)",
     );
     delete cleaned.maxToolIterations;
@@ -634,7 +636,7 @@ export function resolveActiveForCharacter(
     try {
       return findEffective(config, config.dirs.cache, appDefaultModel, true);
     } catch (e) {
-      console.warn(
+      shoreLog.warn(
         `shore: [defaults].model "${appDefaultModel}" could not be resolved, ` +
           `falling back to the first configured chat model: ${String(e)}`,
       );
@@ -675,7 +677,7 @@ export function applySamplerOverlay(
   if (overlay.sdk !== undefined) {
     const sdk = sdkFromWire(overlay.sdk);
     if (sdk === undefined) {
-      console.warn(
+      shoreLog.warn(
         `shore: preferences overlay for ${patched.qualifiedName} carries unknown sdk ` +
           `"${overlay.sdk}"; keeping catalog value`,
       );
@@ -698,7 +700,7 @@ function overlayForCharacter(
   try {
     [global, charPrefs] = loadForCharacter(dataDir, character);
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: preferences load failed for ${character} (${op}); using raw model settings: ` +
         (e as Error).message,
     );
@@ -739,7 +741,7 @@ export function resolveSubagentModelSettings(
   try {
     [global, charPrefs] = loadForCharacter(dataDir, character);
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: preferences load failed for ${character} (subagent ${subagent}); ` +
         `using raw model settings: ${(e as Error).message}`,
     );
@@ -773,7 +775,7 @@ export function resolveBackgroundModel(
   try {
     base = findEffective(config, config.dirs.cache, name, true);
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: configured ${task} model "${name}" not found in catalog for ${character}; ` +
         `falling back to active chat model: ${(e as Error).message}`,
     );
@@ -841,7 +843,7 @@ function activeSelection(
   try {
     [global, charPrefs] = loadForCharacter(config.dirs.data, character);
   } catch (e) {
-    console.warn(
+    shoreLog.warn(
       `shore: preferences load failed for ${character} (${op}); ` +
         `using empty defaults: ${(e as Error).message}`,
     );

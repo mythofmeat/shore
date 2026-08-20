@@ -72,7 +72,7 @@
         "caughtErrorsIgnorePattern": "^_"
       }
     ],
-    "eslint/no-console": "warn",
+    "eslint/no-console": "error",
     "unicorn/no-process-exit": "error",
     "unicorn/no-new-array": "error",
     "unicorn/no-useless-spread": "error",

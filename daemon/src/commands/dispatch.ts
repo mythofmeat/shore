@@ -1,3 +1,5 @@
+import { shoreLog } from "../log.ts";
+
 import { describeError } from "../llm/errors.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
@@ -286,7 +288,7 @@ export function commandFrame(name: string, outcome: { ok: unknown } | { err: unk
   }
   const e = outcome.err;
   const error = e instanceof CommandError ? e : internalError(describeError(e));
-  console.warn(`shore: command ${name} failed: ${error.message}`);
+  shoreLog.warn(`shore: command ${name} failed: ${error.message}`);
   return { type: "error", rid: null, code: error.code, message: error.message };
 }
 
