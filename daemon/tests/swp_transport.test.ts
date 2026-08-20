@@ -28,6 +28,16 @@ function chunk(n: number): ServerMessage {
   return { type: "stream_chunk", text: String(n), content_type: "text" };
 }
 
+function messageType(line: string): string {
+  const parsed: unknown = JSON.parse(line);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("expected a server message object");
+  }
+  const type = (parsed as Record<string, unknown>)["type"];
+  if (typeof type !== "string") throw new Error("expected a server message type");
+  return type;
+}
+
 function controlledSource(): {
   source: AsyncIterable<Uint8Array>;
   send: (line: string) => void;
@@ -337,8 +347,12 @@ describe("handleConnection", () => {
     c.close();
     await c.done;
 
-    for (const line of c.lines()) expect(() => JSON.parse(line)).not.toThrow();
-    const types = c.lines().map((l) => (JSON.parse(l) as ServerMessage).type);
+    for (const line of c.lines()) {
+      expect(() => {
+        JSON.parse(line);
+      }).not.toThrow();
+    }
+    const types = c.lines().map(messageType);
     expect(types).toContain("command_output");
     expect(types).toContain("ping");
   });

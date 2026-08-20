@@ -356,17 +356,18 @@ const emptyUsage = () => ({
 
 const READ_FAILED = /^(\w+) failed to read existing file: .*$/;
 
+function normalizeMessageValue(key: string, value: unknown): unknown {
+  if (key === "is_error" && value === false) return undefined;
+  if (typeof value === "string") {
+    const match = READ_FAILED.exec(value);
+    if (match !== null) return `${match[1]} failed to read existing file: <io error>`;
+  }
+  return value;
+}
+
 function normalizeMessages(messages: readonly WireMessage[]): unknown {
-  return JSON.parse(
-    JSON.stringify(messages, (key, value) => {
-      if (key === "is_error" && value === false) return undefined;
-      if (typeof value === "string") {
-        const m = READ_FAILED.exec(value);
-        if (m !== null) return `${m[1]} failed to read existing file: <io error>`;
-      }
-      return value;
-    }),
-  );
+  const normalized: unknown = JSON.parse(JSON.stringify(messages, normalizeMessageValue));
+  return normalized;
 }
 
 async function snapshotTree(root: string): Promise<Record<string, string>> {

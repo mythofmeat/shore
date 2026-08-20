@@ -48,7 +48,7 @@
     "typescript/no-unsafe-argument": "error",
     "typescript/no-unsafe-call": "error",
     "typescript/no-unsafe-member-access": "error",
-    "typescript/no-unsafe-return": "warn",
+    "typescript/no-unsafe-return": "error",
     "eslint/no-unsafe-optional-chaining": "error",
     "eslint/no-shadow": "error",
     "eslint/eqeqeq": "error",
