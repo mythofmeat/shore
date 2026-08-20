@@ -1056,12 +1056,12 @@ fn print_alt_list(data: &serde_json::Value) {
     _ = writeln!(out);
 }
 
-fn role_label(role: &str) -> &str {
+fn role_label(role: &str) -> String {
     if role == "background" {
-        "background tasks"
-    } else {
-        role
+        return "background tasks".to_owned();
     }
+    role.strip_prefix("sub-agent: ")
+        .map_or_else(|| role.to_owned(), |name| format!("sub-agent {name}"))
 }
 
 fn join_names(names: &[String]) -> String {
@@ -2087,8 +2087,8 @@ mod tests {
     #[test]
     #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh roles"]
     fn render_preview_model_roles() {
-        let cases: [(&str, fn()); 5] = [
-            ("shore model use --background heartbeat kimi-k3", || {
+        let cases: [(&str, fn()); 7] = [
+            ("shore model use --background=heartbeat kimi-k3", || {
                 print_model_switched(&serde_json::json!({
                     "active": "openrouter:moonshotai/kimi-k3",
                     "role": "heartbeat",
@@ -2096,7 +2096,7 @@ mod tests {
                     "cleared": [],
                 }));
             }),
-            ("shore model use --background all claude-opus-5", || {
+            ("shore model use --background claude-opus-5", || {
                 print_model_switched(&serde_json::json!({
                     "active": "anthropic:claude-opus-5",
                     "role": "background",
@@ -2104,7 +2104,7 @@ mod tests {
                     "cleared": ["defaults.background.heartbeat"],
                 }));
             }),
-            ("shore model reset --background heartbeat", || {
+            ("shore model reset --background=heartbeat", || {
                 print_model_reset(&serde_json::json!({
                     "active": "anthropic:claude-opus-4-6",
                     "role": "heartbeat",
@@ -2113,7 +2113,7 @@ mod tests {
                 }));
             }),
             (
-                "shore model setting --background heartbeat temperature 0",
+                "shore model setting --background=heartbeat temperature 0",
                 || {
                     print_set_model_setting(&serde_json::json!({
                         "key": "temperature",
@@ -2125,6 +2125,22 @@ mod tests {
                     }));
                 },
             ),
+            ("shore model use --subagent=music kimi-k3", || {
+                print_model_switched(&serde_json::json!({
+                    "active": "openrouter:moonshotai/kimi-k3",
+                    "role": "sub-agent: music",
+                    "config_key": "subagents.music.model",
+                    "cleared": [],
+                }));
+            }),
+            ("shore model use --subagent claude-haiku-4-5", || {
+                print_model_switched(&serde_json::json!({
+                    "active": "anthropic:claude-haiku-4-5",
+                    "role": "sub-agents",
+                    "config_key": "defaults.subagent_model",
+                    "cleared": ["subagents.music.model"],
+                }));
+            }),
             ("shore model use claude-opus-5", || {
                 print_model_switched(&serde_json::json!({"active": "anthropic:claude-opus-5"}));
             }),

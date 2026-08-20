@@ -32,6 +32,7 @@ import {
   type SamplerScopes,
   type SamplerSettings,
 } from "../config/preferences.ts";
+import type { SubagentConfig } from "../config/app.ts";
 import { reasoningDomain } from "../llm/capabilities.ts";
 import { missingModelMessage } from "../tools/subagent.ts";
 import type { Env } from "../config/dirs.ts";
@@ -157,13 +158,16 @@ export type SettingTarget =
 
 const ALL_SUBAGENTS = "all";
 
-function subagentTargetModel(ctx: ModelsContext, subagent: string): ResolvedModel {
+function requireSubagent(ctx: ModelsContext, subagent: string): SubagentConfig {
   const spec = ctx.config.app.subagents.get(subagent);
-  if (spec === undefined) {
-    const known = [...ctx.config.app.subagents.keys()].sort();
-    const suffix = known.length === 0 ? "none are configured" : `known: ${known.join(", ")}`;
-    throw notFound(`unknown sub-agent: ${subagent}; ${suffix}`);
-  }
+  if (spec !== undefined) return spec;
+  const known = [...ctx.config.app.subagents.keys()].sort();
+  const suffix = known.length === 0 ? "none are configured" : `known: ${known.join(", ")}`;
+  throw notFound(`unknown sub-agent: ${subagent}; ${suffix}`);
+}
+
+function subagentTargetModel(ctx: ModelsContext, subagent: string): ResolvedModel {
+  const spec = requireSubagent(ctx, subagent);
 
   let model: ResolvedModel | undefined;
   try {
@@ -416,9 +420,22 @@ function samplerToWire(s: SamplerSettings): Record<string, unknown> {
   };
 }
 
+function targetedRole(args: Args): boolean {
+  return asName(args["subagent"]) !== undefined || asStr(args["background_task"]) !== undefined;
+}
+
 export function modelInfo(ctx: ModelsContext, args: Args): unknown {
   const name = asName(args["name"]);
-  const resolved = name === undefined ? resolveActiveModel(ctx) : resolve(ctx, name, true);
+  const byRole = targetedRole(args);
+  if (name !== undefined && byRole) {
+    throw invalidRequest("name a model or name a role, not both");
+  }
+
+  const resolved = byRole
+    ? settingTarget(ctx, args).model
+    : name === undefined
+      ? resolveActiveModel(ctx)
+      : resolve(ctx, name, true);
   const data = resolvedModelToWire(resolved);
 
   const character = ctx.characterName;
@@ -524,7 +541,81 @@ function unpinBackgroundModel(ctx: ModelsContext, selector: string): unknown {
   };
 }
 
+const SUBAGENT_MODEL_KEY = "defaults.subagent_model";
+
+const subagentModelKey = (name: string): string => `subagents.${name}.model`;
+
+function subagentsWithOwnModel(ctx: ModelsContext): string[] {
+  return [...ctx.config.app.subagents.entries()]
+    .filter(([, spec]) => spec.model !== undefined)
+    .map(([name]) => name)
+    .sort();
+}
+
+function subagentRoleName(selector: string): string {
+  return selector === ALL_SUBAGENTS ? "sub-agents" : `sub-agent: ${selector}`;
+}
+
+function pinSubagentModel(ctx: ModelsContext, selector: string, args: Args): unknown {
+  const name = asName(args["name"]);
+  if (name === undefined) throw invalidRequest("missing model name");
+
+  if (selector !== ALL_SUBAGENTS) requireSubagent(ctx, selector);
+  const includeHidden = asBool(args["include_hidden"]) ?? false;
+  const resolved = resolve(ctx, name, includeHidden);
+  const config = configContext(ctx);
+
+  const overridden = selector === ALL_SUBAGENTS ? subagentsWithOwnModel(ctx) : [];
+  const key = selector === ALL_SUBAGENTS ? SUBAGENT_MODEL_KEY : subagentModelKey(selector);
+  const written = setConfigKey(config, key, resolved.qualifiedName);
+  const cleared = overridden.map((each) => clearConfigKey(config, subagentModelKey(each)).set);
+
+  return {
+    active: resolved.qualifiedName,
+    qualified_name: resolved.qualifiedName,
+    provider: resolved.providerKey,
+    model_id: resolved.modelId,
+    changed: true,
+    role: subagentRoleName(selector),
+    config_key: key,
+    cleared,
+    file: written.file,
+    restart_required: written.restart_required,
+  };
+}
+
+function unpinSubagentModel(ctx: ModelsContext, selector: string): unknown {
+  if (selector !== ALL_SUBAGENTS) requireSubagent(ctx, selector);
+  const config = configContext(ctx);
+
+  const keys =
+    selector === ALL_SUBAGENTS
+      ? [SUBAGENT_MODEL_KEY, ...subagentsWithOwnModel(ctx).map(subagentModelKey)]
+      : [subagentModelKey(selector)];
+
+  const cleared: string[] = [];
+  let file: string | undefined;
+  for (const key of keys) {
+    const removed = clearConfigKey(config, key);
+    file = removed.file;
+    if (removed.action === "removed") cleared.push(key);
+  }
+
+  const role = subagentRole(ctx, chatRole(ctx));
+  return {
+    active: role.model,
+    role: subagentRoleName(selector),
+    cleared,
+    source: role.source,
+    file: file ?? null,
+    reset_to: role.source ?? "config default",
+  };
+}
+
 export function switchModel(ctx: ModelsContext, args: Args): unknown {
+  const subagent = asName(args["subagent"]);
+  if (subagent !== undefined) return pinSubagentModel(ctx, subagent, args);
+
   const selector = asStr(args["background_task"]);
   if (selector !== undefined) return pinBackgroundModel(ctx, selector, args);
 
@@ -552,6 +643,9 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
 }
 
 export function resetModel(ctx: ModelsContext, args: Args = {}): unknown {
+  const subagent = asName(args["subagent"]);
+  if (subagent !== undefined) return unpinSubagentModel(ctx, subagent);
+
   const selector = asStr(args["background_task"]);
   if (selector !== undefined) return unpinBackgroundModel(ctx, selector);
 
@@ -708,7 +802,181 @@ const SETTINGS_SCOPE_FIELDS = [
   ["zai_subscription", "zaiSubscription"],
 ] as const satisfies readonly (readonly [string, keyof SamplerSettings])[];
 
+interface OverviewSetting {
+  key: string;
+  value: unknown;
+  scope: "character" | "global";
+}
+
+interface OverviewRole {
+  role: string;
+  flag: string;
+  model: string | null;
+  source: string | null;
+  inherited: boolean;
+  settings: OverviewSetting[];
+  same_settings_as: string | null;
+  error: string | null;
+}
+
+interface OverviewSlot {
+  role: string;
+  flag: string;
+  source: string | null;
+  resolve: () => SettingTarget;
+}
+
+function preferenceEntryFor(
+  target: SettingTarget,
+  prefs: ModelPreferences,
+): { sampler: SamplerSettings } | undefined {
+  switch (target.kind) {
+    case "subagent":
+      return subagentPreference(prefs, target.subagent);
+    case "subagent_model":
+      return subagentModelPreference(prefs, target.model.providerKey, target.model.modelId);
+    case "model":
+      return modelPreference(prefs, target.model.providerKey, target.model.modelId);
+  }
+}
+
+function preferenceIdentity(target: SettingTarget): string {
+  const key = preferenceKey(target.model.providerKey, target.model.modelId);
+  switch (target.kind) {
+    case "subagent":
+      return `subagent:${target.subagent}`;
+    case "subagent_model":
+      return `subagent-model:${key}`;
+    case "model":
+      return `model:${key}`;
+  }
+}
+
+function savedSettingsFor(
+  target: SettingTarget,
+  global: ModelPreferences,
+  charPrefs: ModelPreferences | undefined,
+): OverviewSetting[] {
+  const found = new Map<string, OverviewSetting>();
+  const collect = (prefs: ModelPreferences | undefined, scope: "character" | "global"): void => {
+    if (prefs === undefined) return;
+    const entry = preferenceEntryFor(target, prefs);
+    if (entry === undefined) return;
+    const wire = samplerToWire(entry.sampler);
+    for (const key of SAMPLER_KEYS) {
+      const value = wire[key];
+      if (value !== undefined) found.set(key, { key, value, scope });
+    }
+  };
+  collect(global, "global");
+  collect(charPrefs, "character");
+  return [...found.values()].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
+  const chat = chatRole(ctx);
+  const slots: OverviewSlot[] = [
+    {
+      role: "chat",
+      flag: "--chat",
+      source: chat.source,
+      resolve: () => ({ kind: "model", model: resolveActiveModel(ctx) }),
+    },
+  ];
+
+  for (const task of BACKGROUND_TASKS) {
+    slots.push({
+      role: task,
+      flag: `--background=${task}`,
+      source: backgroundRole(ctx, task, chat).source,
+      resolve: () => ({ kind: "model", model: backgroundTargetModel(ctx, task) }),
+    });
+  }
+
+  slots.push({
+    role: "sub-agents",
+    flag: "--subagent",
+    source: subagentRole(ctx, chat).source,
+    resolve: () => ({ kind: "subagent_model", model: sharedSubagentModel(ctx) }),
+  });
+
+  for (const name of [...ctx.config.app.subagents.keys()].sort()) {
+    const own = ctx.config.app.subagents.get(name)?.model;
+    slots.push({
+      role: `sub-agent: ${name}`,
+      flag: `--subagent=${name}`,
+      source: own === undefined ? "inherits sub-agents" : subagentModelKey(name),
+      resolve: () => subagentSettingTarget(ctx, name),
+    });
+  }
+
+  return slots;
+}
+
+export function modelSettingsOverview(ctx: ModelsContext): unknown {
+  const character = ctx.characterName;
+  const [global, charPrefs] =
+    character === undefined
+      ? [emptyPreferences(), undefined]
+      : loadPreferencesFor(ctx.dataDir, character);
+
+  const claimed = new Map<string, string>();
+  const roles: OverviewRole[] = [];
+
+  for (const slot of overviewSlots(ctx)) {
+    let target: SettingTarget | undefined;
+    let error: string | null = null;
+    try {
+      target = slot.resolve();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+
+    const identity = target === undefined ? undefined : preferenceIdentity(target);
+    const sharesWith = identity === undefined ? null : (claimed.get(identity) ?? null);
+    if (identity !== undefined && sharesWith === null) claimed.set(identity, slot.role);
+
+    roles.push({
+      role: slot.role,
+      flag: slot.flag,
+      model: target?.model.qualifiedName ?? null,
+      source: slot.source,
+      inherited: slot.source === null || slot.source.startsWith("inherits"),
+      settings: target === undefined ? [] : savedSettingsFor(target, global, charPrefs),
+      same_settings_as: sharesWith,
+      error,
+    });
+  }
+
+  const worthShowing = (row: OverviewRole): boolean =>
+    row.role === "chat" || row.error !== null || !row.inherited || row.settings.length > 0;
+
+  const shown = roles.filter(worthShowing);
+  return {
+    overview: true,
+    character: character ?? null,
+    roles: shown,
+    inherited_count: roles.length - shown.length,
+  };
+}
+
+function requestedKey(ctx: ModelsContext, args: Args): string | undefined {
+  const raw = asName(args["key"]);
+  if (raw === undefined) return undefined;
+  const key = raw.trim();
+  if (SAMPLER_KEYS.includes(key)) return key;
+  if (ctx.config.app.subagents.has(key)) {
+    throw invalidRequest(
+      `${key} is a sub-agent, not a setting; write --subagent=${key} to target it`,
+    );
+  }
+  throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(", ")}`);
+}
+
 export function modelSettings(ctx: ModelsContext, args: Args): unknown {
+  if (asBool(args["overview"]) === true) return modelSettingsOverview(ctx);
+
+  const only = requestedKey(ctx, args);
   const target = settingTarget(ctx, args);
   const model = target.model;
   const character = ctx.characterName;
@@ -756,6 +1024,7 @@ export function modelSettings(ctx: ModelsContext, args: Args): unknown {
     provider: model.providerKey,
     model_id: model.modelId,
     ...targetJson(target),
+    ...(only === undefined ? {} : { key: only }),
     effective_sampler: samplerJson(sampler),
     saved_global: saved(global),
     saved_character: saved(charPrefs),

@@ -78,6 +78,15 @@ the plain catalog after `find_effective_model` failed, and that retry cannot
 succeed — `find_effective_model` *begins* with the same lookup and only reaches
 its own paths once it has failed. Dropped rather than ported.
 
+#117 unified the target flags, so `switch_model` and `reset_model` now write
+sub-agent keys the way they already wrote background ones, `model_info` follows
+a role instead of a name, and a bare `model_settings` answers with the overview
+of every role. Twenty-five mutants cover that. Four were real gaps on the first
+run: pinning one sub-agent by name never proved it left another's pin alone; the
+one erroring role in the overview was also non-inherited, so the error branch of
+the filter was dead; and no sub-agent shared a model with chat, so keying its
+settings by name and keying them by model agreed.
+
 Run from the repository root:
     python3 daemon/scripts/mutate_commands_models.py
 """
@@ -346,12 +355,21 @@ MUTANTS = [
 
     # --- model_settings -----------------------------------------------------
     ("settings: a characterless session still reads the global file",
-     "    character === undefined\n"
-     "      ? [emptyPreferences(), undefined]\n"
-     "      : loadPreferencesFor(ctx.dataDir, character);",
-     "    character === undefined\n"
-     "      ? [loadGlobalPreferences(ctx), undefined]\n"
-     "      : loadPreferencesFor(ctx.dataDir, character);"),
+     "      : loadPreferencesFor(ctx.dataDir, character);\n"
+     "\n"
+     "  const subagentName =",
+     "      : loadPreferencesFor(ctx.dataDir, character);\n"
+     "\n"
+     "  if (character === undefined) global = loadGlobalPreferences(ctx);\n"
+     "  const subagentName ="),
+    ("overview: a characterless session still reads the global file",
+     "      : loadPreferencesFor(ctx.dataDir, character);\n"
+     "\n"
+     "  const claimed =",
+     "      : loadPreferencesFor(ctx.dataDir, character);\n"
+     "\n"
+     "  if (character === undefined) global = loadGlobalPreferences(ctx);\n"
+     "  const claimed ="),
     ("settings: saved_global and saved_character are swapped",
      "    saved_global: saved(global),\n    saved_character: saved(charPrefs),",
      "    saved_global: saved(charPrefs),\n    saved_character: saved(global),"),
@@ -367,6 +385,98 @@ MUTANTS = [
     ("settings: the effort domain ignores the model's capabilities",
      "    reasoning_effort_domain: reasoningDomain(model.sdk, model.capabilities),",
      "    reasoning_effort_domain: reasoningDomain(model.sdk, undefined),"),
+
+    # --- sub-agent pins (#117) ----------------------------------------------
+    ("sub-agent pin: a named sub-agent writes the shared default",
+     '  const key = selector === ALL_SUBAGENTS ? SUBAGENT_MODEL_KEY : subagentModelKey(selector);',
+     "  const key = SUBAGENT_MODEL_KEY;"),
+    ("sub-agent pin: `all` writes one sub-agent's own key",
+     '  const key = selector === ALL_SUBAGENTS ? SUBAGENT_MODEL_KEY : subagentModelKey(selector);',
+     "  const key = subagentModelKey(selector);"),
+    ("sub-agent pin: an unknown name is accepted",
+     "  if (selector !== ALL_SUBAGENTS) requireSubagent(ctx, selector);\n"
+     '  const includeHidden = asBool(args["include_hidden"]) ?? false;',
+     '  const includeHidden = asBool(args["include_hidden"]) ?? false;'),
+    ("sub-agent pin: `all` leaves the per-sub-agent overrides in place",
+     "  const overridden = selector === ALL_SUBAGENTS ? subagentsWithOwnModel(ctx) : [];",
+     "  const overridden: string[] = [];"),
+    ("sub-agent pin: a named target also clears the overrides",
+     "  const overridden = selector === ALL_SUBAGENTS ? subagentsWithOwnModel(ctx) : [];",
+     "  const overridden = subagentsWithOwnModel(ctx);"),
+    ("sub-agent pin: sub-agents without their own model are cleared too",
+     "  return [...ctx.config.app.subagents.entries()]\n"
+     "    .filter(([, spec]) => spec.model !== undefined)\n"
+     "    .map(([name]) => name)",
+     "  return [...ctx.config.app.subagents.entries()]\n"
+     "    .map(([name]) => name)"),
+    ("sub-agent unpin: `all` clears only the shared default",
+     "      ? [SUBAGENT_MODEL_KEY, ...subagentsWithOwnModel(ctx).map(subagentModelKey)]",
+     "      ? [SUBAGENT_MODEL_KEY]"),
+    ("sub-agent unpin: `all` misses the shared default",
+     "      ? [SUBAGENT_MODEL_KEY, ...subagentsWithOwnModel(ctx).map(subagentModelKey)]",
+     "      ? subagentsWithOwnModel(ctx).map(subagentModelKey)"),
+    ("sub-agent unpin: an unknown name is accepted",
+     "  if (selector !== ALL_SUBAGENTS) requireSubagent(ctx, selector);\n"
+     "  const config = configContext(ctx);",
+     "  const config = configContext(ctx);"),
+    ("sub-agent role: every selector reads as the shared one",
+     "  return selector === ALL_SUBAGENTS ? \"sub-agents\" : `sub-agent: ${selector}`;",
+     '  return "sub-agents";'),
+
+    # --- info by role (#117) -------------------------------------------------
+    ("info: a role flag is ignored in favour of the active model",
+     "  return asName(args[\"subagent\"]) !== undefined || asStr(args[\"background_task\"]) !== undefined;",
+     "  return false;"),
+    ("info: naming both a model and a role is allowed",
+     "  if (name !== undefined && byRole) {\n"
+     '    throw invalidRequest("name a model or name a role, not both");\n'
+     "  }",
+     "  void byRole;"),
+
+    # --- the settings overview (#117) ---------------------------------------
+    ("overview: a role that only inherits is listed anyway",
+     '    row.role === "chat" || row.error !== null || !row.inherited || row.settings.length > 0;',
+     "    true;"),
+    ("overview: a tuned role is hidden because it inherits its model",
+     '    row.role === "chat" || row.error !== null || !row.inherited || row.settings.length > 0;',
+     '    row.role === "chat" || row.error !== null || !row.inherited;'),
+    ("overview: a role that cannot resolve is dropped silently",
+     '    row.role === "chat" || row.error !== null || !row.inherited || row.settings.length > 0;',
+     '    row.role === "chat" || !row.inherited || row.settings.length > 0;'),
+    ("overview: an inherited model reads as its own",
+     '      inherited: slot.source === null || slot.source.startsWith("inherits"),',
+     "      inherited: slot.source === null,"),
+    ("overview: the global file wins over the character's",
+     '  collect(global, "global");\n  collect(charPrefs, "character");',
+     '  collect(charPrefs, "character");\n  collect(global, "global");'),
+    ("overview: only the character's own settings are reported",
+     '  collect(global, "global");\n  collect(charPrefs, "character");',
+     '  collect(charPrefs, "character");'),
+    ("overview: a sub-agent reads the settings of the model it runs on",
+     "    case \"subagent\":\n      return subagentPreference(prefs, target.subagent);",
+     "    case \"subagent\":\n"
+     "      return modelPreference(prefs, target.model.providerKey, target.model.modelId);"),
+    ("overview: two roles on one model are never told they share it",
+     "    const sharesWith = identity === undefined ? null : (claimed.get(identity) ?? null);",
+     "    const sharesWith = null;\n    void identity;"),
+    ("overview: a sub-agent shares its identity with its model",
+     "    case \"subagent\":\n      return `subagent:${target.subagent}`;",
+     "    case \"subagent\":\n      return `model:${key}`;"),
+
+    # --- naming one setting (#117) ------------------------------------------
+    ("show: an unknown key is accepted",
+     "  if (SAMPLER_KEYS.includes(key)) return key;",
+     "  return key;"),
+    ("show: a sub-agent's name in the key slot gets the generic error",
+     "  if (ctx.config.app.subagents.has(key)) {\n"
+     "    throw invalidRequest(\n"
+     "      `${key} is a sub-agent, not a setting; write --subagent=${key} to target it`,\n"
+     "    );\n"
+     "  }\n",
+     ""),
+    ("show: the requested key never reaches the response",
+     "    ...(only === undefined ? {} : { key: only }),",
+     "    ...{},"),
 ]
 
 
@@ -374,7 +484,11 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/model_commands.test.ts"], src=SRC)
+    return _run_mutants(
+        MUTANTS,
+        ["tests/model_commands.test.ts", "tests/subagent_model_pin.test.ts"],
+        src=SRC,
+    )
 
 
 if __name__ == "__main__":

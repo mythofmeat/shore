@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 
 const LEADING_HEADING: &str = "Options — must come before the command";
@@ -67,7 +67,8 @@ const PROMOTED: [(&str, &str); 1] = [("memory compact", "compact")];
 const FOLDED_IN: [(&str, &str); 1] = [(
     "model background",
     "every model role is listed by `shore model`; pin one with \
-     `shore model use --background <heartbeat|compaction|all> <name>`",
+     `shore model use --background=<heartbeat|compaction> <name>`, or \
+     bare `--background` for all of them",
 )];
 
 const RETIRED_UNDER: [(&str, &str, &str); 1] = [(
@@ -82,6 +83,23 @@ pub(crate) enum FlagProblem {
     Retired(&'static str, &'static str),
     BareName(&'static str, String),
     Promoted(&'static str, &'static str),
+    NeedsEquals(&'static str, String),
+}
+
+const TARGET_TAKES_EQUALS: [(&str, &[&str]); 1] =
+    [("--background", &["all", "heartbeat", "compaction"])];
+
+fn target_taking_equals(spelled: &str) -> Option<&'static str> {
+    TARGET_TAKES_EQUALS
+        .iter()
+        .find(|&&(flag, _)| flag == spelled)
+        .map(|&(flag, _)| flag)
+}
+
+fn separated_target_value(flag: &str, token: &str) -> bool {
+    TARGET_TAKES_EQUALS
+        .iter()
+        .any(|&(named, values)| named == flag && values.contains(&token))
 }
 
 fn leading_flag_named(spelled: &str) -> Option<&'static str> {
@@ -107,17 +125,26 @@ where
     let mut flags: Vec<String> = Vec::new();
     let mut flagged = false;
     let mut expecting_value = false;
+    let mut bare_target: Option<&'static str> = None;
 
     for raw in argv.into_iter().skip(1) {
         let token = raw.as_ref();
         if token == "--" {
             break;
         }
+        if let Some(flag) = bare_target.take()
+            && separated_target_value(flag, token)
+        {
+            return Some(FlagProblem::NeedsEquals(flag, token.to_owned()));
+        }
         if expecting_value {
             expecting_value = false;
             continue;
         }
         let spelled = token.split('=').next().unwrap_or(token);
+        if spelled == token {
+            bare_target = target_taking_equals(spelled);
+        }
         if let Some(problem) = retired_flag_named(spelled) {
             return Some(problem);
         }
@@ -216,6 +243,13 @@ pub(crate) fn report_flag_problem(problem: &FlagProblem) -> std::process::ExitCo
             crate::output::print_error(&format!("`shore {old}` is now a command of its own"));
             cli_err!();
             cli_err!("  shore {now}");
+        }
+        FlagProblem::NeedsEquals(flag, ref value) => {
+            crate::output::print_error(&format!("{flag} takes its value with an ="));
+            cli_err!();
+            cli_err!("  {flag}={value}");
+            cli_err!();
+            cli_err!("  bare {flag} means all of them");
         }
     }
     std::process::ExitCode::FAILURE
@@ -716,46 +750,98 @@ pub(crate) enum TraceCommand {
     },
 }
 
+#[derive(Args, Debug, Clone, Default)]
+pub(crate) struct ModelTarget {
+    /// The chat model. This is the default, so the flag is only ever needed to
+    /// say "chat and nothing else"
+    #[arg(long)]
+    pub(crate) chat: bool,
+
+    /// Background tasks: bare for every one of them, or =compaction / =heartbeat
+    #[arg(
+        long,
+        value_enum,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "all",
+        conflicts_with = "chat"
+    )]
+    pub(crate) background: Option<BackgroundTarget>,
+
+    /// Sub-agents: bare for every one of them, or =<name> for one
+    #[arg(
+        long,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "all",
+        conflicts_with_all = ["chat", "background"]
+    )]
+    pub(crate) subagent: Option<String>,
+}
+
+impl ModelTarget {
+    pub(crate) fn is_bare(&self) -> bool {
+        !self.chat && self.background.is_none() && self.subagent.is_none()
+    }
+
+    pub(crate) fn write_into(&self, obj: &mut serde_json::Map<String, serde_json::Value>) {
+        use serde_json::json;
+        if let Some(task) = self.background {
+            let _ignored = obj.insert("background_task".into(), json!(task.as_str()));
+        }
+        if let Some(name) = &self.subagent {
+            let _ignored = obj.insert("subagent".into(), json!(name));
+        }
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub(crate) enum ModelCommand {
-    /// Switch the active model
+    /// Switch the model something runs on
     ///
-    /// The same thing as `shore model <name>`, spelled out. Use it when a
-    /// model's name would otherwise read as one of these subcommands. An
-    /// unknown name is an error, never a fallback.
+    /// Spell out `use` when a model's name would otherwise read as one of
+    /// these subcommands. An unknown name is an error, never a fallback.
     ///
-    /// Without --background this picks the chat model, saved against the
-    /// attached character, so characters can differ. With --background it
-    /// pins a background task instead, by writing defaults.background in the
-    /// config file, which is global. `--background all` writes
-    /// defaults.background.model, the value both tasks fall back to.
+    /// Bare, this picks the chat model, saved against the attached character,
+    /// so characters can differ. Every other target writes the config file,
+    /// which is global: --background=<task> writes defaults.background.<task>,
+    /// bare --background writes defaults.background.model (the value both
+    /// tasks fall back to), --subagent=<name> writes subagents.<name>.model,
+    /// and bare --subagent writes defaults.subagent_model.
     Use {
         /// Model name or provider:model_id
         name: String,
 
-        /// Pin a background task's model instead of the chat model
-        #[arg(long, value_enum)]
-        background: Option<BackgroundTarget>,
+        #[command(flatten)]
+        target: ModelTarget,
     },
 
     /// Describe a model: provider, sdk, limits, and where it resolves from
+    ///
+    /// Bare, describes the active chat model. A target flag describes whatever
+    /// that role currently resolves to, which is the quick way to answer "what
+    /// is compaction actually running on".
     Info {
-        /// Model to describe. Omit for the active one
+        /// Model to describe. Omit for the active one, or for the targeted role
         name: Option<String>,
+
+        #[command(flatten)]
+        target: ModelTarget,
     },
 
-    /// Show, set, or clear this model's saved sampler settings
+    /// Show, set, or clear saved sampler settings
     ///
-    /// With no key, shows every setting in effect. With a key, shows that one;
-    /// with a key and a value, saves it; with --reset and a key, clears it.
-    /// Clearing everything at once is not supported — name the key.
+    /// Bare and with no key, this is the overview: every role whose model or
+    /// settings are its own rather than inherited, in one place. Add a target
+    /// flag to see just that one. With a key and a value it saves; with
+    /// --reset and a key it clears. Clearing everything at once is not
+    /// supported — name the key.
     ///
-    /// Targets the active chat model unless you pass --background, --subagent
-    /// or --model. A sub-agent's settings are its own: they start from its
-    /// model's catalog entry and take nothing from the chat model's settings,
-    /// so tuning chat never moves a sub-agent.
+    /// A sub-agent's settings are its own: they start from its model's catalog
+    /// entry and take nothing from the chat model's settings, so tuning chat
+    /// never moves a sub-agent.
     ///
-    /// `--subagent all` writes once against the model your sub-agents share,
+    /// Bare --subagent writes once against the model your sub-agents share,
     /// covering all of them; it errors if they are not all on one model. A
     /// named sub-agent overrides that shared value. Because the shared value
     /// belongs to the model, changing subagent_model picks up that model's
@@ -787,16 +873,11 @@ pub(crate) enum ModelCommand {
         #[arg(long)]
         reset: bool,
 
-        /// Tune a background task's model instead of the chat model
-        #[arg(long, value_enum, conflicts_with_all = ["subagent", "model"])]
-        background: Option<BackgroundTarget>,
-
-        /// Tune one sub-agent by name, or `all` for the model they share
-        #[arg(long, conflicts_with = "model")]
-        subagent: Option<String>,
+        #[command(flatten)]
+        target: ModelTarget,
 
         /// Tune a named model without switching to it
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["chat", "background", "subagent"])]
         model: Option<String>,
 
         /// Output raw JSON
@@ -804,16 +885,16 @@ pub(crate) enum ModelCommand {
         json: bool,
     },
 
-    /// Drop the saved selection and fall back to the configured default
+    /// Drop a saved selection and fall back to what it would inherit
     ///
-    /// Bare, this clears the character's chat model. With --background it
-    /// clears that task's pin from the config file, so the task goes back to
-    /// defaults.background.model, or to the chat model if that is unset too.
-    /// `--background all` clears all three keys.
+    /// Bare, this clears the character's chat model. Every other target clears
+    /// the config keys `use` would have written, so the role falls back the
+    /// way it did before anything was pinned. Bare --background clears all
+    /// three background keys; bare --subagent clears defaults.subagent_model
+    /// and every per-sub-agent override.
     Reset {
-        /// Unpin a background task instead of the chat model
-        #[arg(long, value_enum)]
-        background: Option<BackgroundTarget>,
+        #[command(flatten)]
+        target: ModelTarget,
     },
 }
 
@@ -1185,7 +1266,7 @@ function __shore_setting_key\n\
             set skip 0\n\
             continue\n\
         end\n\
-        if contains -- $token --subagent --model --background\n\
+        if contains -- $token --model\n\
             set skip 1\n\
             continue\n\
         end\n\
@@ -1200,7 +1281,7 @@ function __shore_setting_key\n\
     return 1\n\
 end\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting; and not __shore_setting_key\" -f -a \"(shore complete setting-keys 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting\" -l subagent -r -f -a \"all (shore complete subagents 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info\" -l subagent -r -f -a \"(shore complete subagents 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
 \n\
 function __shore_config_key\n\
@@ -1494,30 +1575,25 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     else {
         return None;
     };
-    if let Some(ModelCommand::Info { name: info_name }) = subcommand {
-        let target = info_name.clone().unwrap_or_default();
-        return Some(("model_info", json!({ "name": target })));
-    }
-    if let Some(ModelCommand::Use {
-        name: target,
-        background: use_background,
+    if let Some(ModelCommand::Info {
+        name: info_name,
+        target,
     }) = subcommand
     {
         let mut obj = Map::new();
-        let _ignored = obj.insert("name".into(), json!(target));
-        if let Some(task) = use_background {
-            _ = obj.insert("background_task".into(), json!(task.as_str()));
-        }
+        let _ignored = obj.insert("name".into(), json!(info_name.clone().unwrap_or_default()));
+        target.write_into(&mut obj);
+        return Some(("model_info", Value::Object(obj)));
+    }
+    if let Some(ModelCommand::Use { name, target }) = subcommand {
+        let mut obj = Map::new();
+        let _ignored = obj.insert("name".into(), json!(name));
+        target.write_into(&mut obj);
         return Some(("switch_model", Value::Object(obj)));
     }
-    if let Some(ModelCommand::Reset {
-        background: reset_background,
-    }) = subcommand
-    {
+    if let Some(ModelCommand::Reset { target }) = subcommand {
         let mut obj = Map::new();
-        if let Some(task) = reset_background {
-            _ = obj.insert("background_task".into(), json!(task.as_str()));
-        }
+        target.write_into(&mut obj);
         return Some(("reset_model", Value::Object(obj)));
     }
     if let Some(ModelCommand::Setting {
@@ -1525,26 +1601,20 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         value,
         global,
         reset: setting_reset,
-        background: setting_background,
-        subagent: setting_subagent,
+        target,
         model: setting_model,
         ..
     }) = subcommand
     {
         let scope = if *global { "global" } else { "character" };
-        let bg = setting_background.map(BackgroundTarget::as_str);
         let with_target = |mut obj: Map<String, Value>| -> Value {
-            if let Some(task) = bg {
-                let _ignored = obj.insert("background_task".into(), json!(task));
-            }
-            if let Some(name) = setting_subagent {
-                let _ignored = obj.insert("subagent".into(), json!(name));
-            }
+            target.write_into(&mut obj);
             if let Some(name) = setting_model {
                 let _ignored = obj.insert("name".into(), json!(name));
             }
             Value::Object(obj)
         };
+        let untargeted = target.is_bare() && setting_model.is_none();
         return match (key.as_deref(), value.as_deref(), *setting_reset) {
             (Some(k), _, true) => {
                 let mut obj = Map::new();
@@ -1553,8 +1623,12 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
                 _ = obj.insert("scope".into(), json!(scope));
                 Some(("set_model_setting", with_target(obj)))
             }
-            (None, _, _) | (Some(_), None, false) => {
-                Some(("model_settings", with_target(Map::new())))
+            (None, _, _) if untargeted => Some(("model_settings", json!({ "overview": true }))),
+            (None, _, _) => Some(("model_settings", with_target(Map::new()))),
+            (Some(k), None, false) => {
+                let mut obj = Map::new();
+                let _ignored = obj.insert("key".into(), json!(k));
+                Some(("model_settings", with_target(obj)))
             }
             (Some(k), Some(v), false) => {
                 let mut obj = Map::new();
@@ -2227,8 +2301,8 @@ mod tests {
             CliCommand::Model { subcommand, .. } => {
                 assert!(matches!(
                     subcommand,
-                    Some(ModelCommand::Use { name, background: None })
-                        if name == "claude-haiku-4-5-20251001"
+                    Some(ModelCommand::Use { name, target })
+                        if target.is_bare() && name == "claude-haiku-4-5-20251001"
                 ));
             }
         );
@@ -2242,7 +2316,7 @@ mod tests {
             CliCommand::Model { subcommand, .. } => {
                 assert!(matches!(
                     subcommand,
-                    Some(ModelCommand::Info { name: Some(n) }) if n == "opus"
+                    Some(ModelCommand::Info { name: Some(n), .. }) if n == "opus"
                 ));
             }
         );
@@ -3036,6 +3110,7 @@ mod tests {
         let cmd = CliCommand::Model {
             subcommand: Some(ModelCommand::Info {
                 name: Some("opus".into()),
+                target: ModelTarget::default(),
             }),
             info: false,
             reset: false,
@@ -3069,8 +3144,7 @@ mod tests {
                 value: None,
                 global: false,
                 reset: false,
-                background: None,
-                subagent: None,
+                target: ModelTarget::default(),
                 model: None,
                 json: false,
             }),
@@ -3091,8 +3165,7 @@ mod tests {
                 value: Some("0.8".into()),
                 global: false,
                 reset: false,
-                background: None,
-                subagent: None,
+                target: ModelTarget::default(),
                 model: None,
                 json: false,
             }),
@@ -3116,8 +3189,7 @@ mod tests {
                 value: None,
                 global: false,
                 reset: true,
-                background: None,
-                subagent: None,
+                target: ModelTarget::default(),
                 model: None,
                 json: false,
             }),
@@ -3139,8 +3211,7 @@ mod tests {
                 value: Some("0.95".into()),
                 global: true,
                 reset: false,
-                background: None,
-                subagent: None,
+                target: ModelTarget::default(),
                 model: None,
                 json: false,
             }),
@@ -3167,14 +3238,15 @@ mod tests {
             Some(FlagProblem::Retired(
                 "model background",
                 "every model role is listed by `shore model`; pin one with \
-                 `shore model use --background <heartbeat|compaction|all> <name>`",
+                 `shore model use --background=<heartbeat|compaction> <name>`, or \
+                 bare `--background` for all of them",
             )),
         );
     }
 
     #[test]
     fn model_use_background_threads_the_task() {
-        let cli = parse(&["model", "use", "--background", "heartbeat", "kimi-k3"]);
+        let cli = parse(&["model", "use", "--background=heartbeat", "kimi-k3"]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "switch_model");
         assert_eq!(arg(&args, "name"), "kimi-k3");
@@ -3190,7 +3262,7 @@ mod tests {
 
     #[test]
     fn model_reset_background_threads_the_task() {
-        let cli = parse(&["model", "reset", "--background", "all"]);
+        let cli = parse(&["model", "reset", "--background=all"]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "reset_model");
         assert_eq!(arg(&args, "background_task"), "all");
@@ -3198,14 +3270,12 @@ mod tests {
 
     #[test]
     fn a_background_pin_needs_a_model_name() {
-        assert!(
-            Cli::try_parse_from(["shore", "model", "use", "--background", "heartbeat"]).is_err()
-        );
+        assert!(Cli::try_parse_from(["shore", "model", "use", "--background=heartbeat"]).is_err());
     }
 
     #[test]
     fn model_setting_background_show_threads_task() {
-        let cli = parse(&["model", "setting", "--background", "compaction"]);
+        let cli = parse(&["model", "setting", "--background=compaction"]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "model_settings");
         assert_eq!(arg(&args, "background_task"), "compaction");
@@ -3213,14 +3283,7 @@ mod tests {
 
     #[test]
     fn model_setting_background_set_threads_task() {
-        let cli = parse(&[
-            "model",
-            "setting",
-            "--background",
-            "all",
-            "temperature",
-            "0.5",
-        ]);
+        let cli = parse(&["model", "setting", "--background=all", "temperature", "0.5"]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "key"), "temperature");
@@ -3234,8 +3297,7 @@ mod tests {
         let cli = parse(&[
             "model",
             "setting",
-            "--background",
-            "heartbeat",
+            "--background=heartbeat",
             "--reset",
             "reasoning_effort",
         ]);
@@ -3247,7 +3309,7 @@ mod tests {
 
     #[test]
     fn model_setting_subagent_show_threads_the_name() {
-        let cli = parse(&["model", "setting", "--subagent", "librarian"]);
+        let cli = parse(&["model", "setting", "--subagent=librarian"]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "model_settings");
         assert_eq!(arg(&args, "subagent"), "librarian");
@@ -3260,8 +3322,7 @@ mod tests {
         let cli = parse(&[
             "model",
             "setting",
-            "--subagent",
-            "librarian",
+            "--subagent=librarian",
             "temperature",
             "0.25",
         ]);
@@ -3277,8 +3338,7 @@ mod tests {
         let cli = parse(&[
             "model",
             "setting",
-            "--subagent",
-            "librarian",
+            "--subagent=librarian",
             "--reset",
             "temperature",
         ]);
@@ -3299,13 +3359,17 @@ mod tests {
 
     #[test]
     fn model_setting_targets_are_mutually_exclusive() {
-        for pair in [
-            ["--subagent", "librarian", "--background", "compaction"],
-            ["--model", "opus", "--background", "compaction"],
-            ["--subagent", "librarian", "--model", "opus"],
-        ] {
+        let combinations: [&[&str]; 6] = [
+            &["--subagent=librarian", "--background=compaction"],
+            &["--model", "opus", "--background=compaction"],
+            &["--subagent=librarian", "--model", "opus"],
+            &["--chat", "--background=compaction"],
+            &["--chat", "--subagent=librarian"],
+            &["--chat", "--model", "opus"],
+        ];
+        for pair in combinations {
             let mut argv = vec!["shore", "model", "setting"];
-            argv.extend_from_slice(&pair);
+            argv.extend_from_slice(pair);
             assert!(
                 Cli::try_parse_from(&argv).is_err(),
                 "{pair:?} must not combine"
@@ -3329,8 +3393,7 @@ mod tests {
                 value: Some("off".into()),
                 global: false,
                 reset: false,
-                background: None,
-                subagent: None,
+                target: ModelTarget::default(),
                 model: None,
                 json: false,
             }),
@@ -3352,8 +3415,7 @@ mod tests {
                     value: Some(synonym.into()),
                     global: false,
                     reset: false,
-                    background: None,
-                    subagent: None,
+                    target: ModelTarget::default(),
                     model: None,
                     json: false,
                 }),
@@ -3513,10 +3575,10 @@ mod tests {
             let line = footer
                 .lines()
                 .find(|l| {
-                    l.contains("__fish_seen_subcommand_from setting")
+                    l.contains("__fish_shore_using_subcommand model")
                         && l.contains(&format!(" -l {flag} "))
                 })
-                .unwrap_or_else(|| panic!("footer must complete `--{flag}` under `model setting`"));
+                .unwrap_or_else(|| panic!("footer must complete `--{flag}` under `model`"));
             assert!(
                 line.contains(&format!("shore complete {kind}")),
                 "`--{flag}` must complete from `{kind}`: {line}"
@@ -3525,29 +3587,28 @@ mod tests {
     }
 
     #[test]
-    fn the_subagent_flag_offers_all_alongside_the_names() {
+    fn the_subagent_flag_completes_under_every_verb_that_takes_a_target() {
         let line = fish_dynamic_completions_footer()
             .lines()
             .find(|l| {
-                l.contains("__fish_seen_subcommand_from setting") && l.contains(" -l subagent ")
+                l.contains("__fish_shore_using_subcommand model") && l.contains(" -l subagent ")
             })
-            .expect("footer must complete `--subagent` under `model setting`");
+            .expect("footer must complete `--subagent` under `model`");
+        for verb in ["use", "setting", "reset", "info"] {
+            assert!(
+                line.contains(&format!(" {verb}")),
+                "`--subagent` must complete under `{verb}`: {line}"
+            );
+        }
         assert!(
-            line.contains("-a \"all ("),
-            "`all` must be offered before the configured names: {line}"
+            !line.contains("-a \"all ("),
+            "bare `--subagent` already means all, so `all` is not a name to offer: {line}"
         );
     }
 
     #[test]
-    fn model_setting_subagent_all_threads_through_like_any_name() {
-        let cli = parse(&[
-            "model",
-            "setting",
-            "--subagent",
-            "all",
-            "temperature",
-            "0.3",
-        ]);
+    fn a_bare_subagent_flag_means_every_sub_agent() {
+        let cli = parse(&["model", "setting", "--subagent", "temperature", "0.3"]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "subagent"), "all");
@@ -3562,8 +3623,8 @@ mod tests {
             .nth(1)
             .expect("footer must define __shore_setting_key");
         assert!(
-            body.contains("contains -- $token --subagent --model --background"),
-            "the guard must not mistake a target flag's value for the key: {body}"
+            body.contains("contains -- $token --model"),
+            "the guard must not mistake --model's value for the key: {body}"
         );
     }
 
@@ -3990,7 +4051,7 @@ mod tests {
             CliCommand::Model {
                 subcommand: Some(ModelCommand::Use {
                     name: "m".into(),
-                    background: None,
+                    target: ModelTarget::default(),
                 }),
                 info: false,
                 reset: false,
@@ -4000,6 +4061,7 @@ mod tests {
             CliCommand::Model {
                 subcommand: Some(ModelCommand::Info {
                     name: Some("m".into()),
+                    target: ModelTarget::default(),
                 }),
                 info: false,
                 reset: false,
@@ -4019,8 +4081,7 @@ mod tests {
                     value: None,
                     global: false,
                     reset: false,
-                    background: None,
-                    subagent: None,
+                    target: ModelTarget::default(),
                     model: None,
                     json: false,
                 }),

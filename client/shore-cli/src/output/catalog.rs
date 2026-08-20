@@ -117,7 +117,92 @@ fn source_of(key: &str, data: &Value) -> (&'static str, Tone) {
     ("default", Tone::Muted)
 }
 
+fn write_saved_settings<W: Write>(out: &mut W, settings: &[Value]) {
+    let mut rows = Rows::at_depth(2);
+    for saved in settings {
+        rows.add_noted(
+            text(saved, "key"),
+            &scalar(saved.get("value").unwrap_or(&Value::Null)),
+            text(saved, "scope"),
+            Tone::Plain,
+        );
+    }
+    rows.write(out);
+}
+
+fn write_overview_role<W: Write>(out: &mut W, role: &Value) {
+    let settings = rows_of(role, "settings");
+    let tuned = !settings.is_empty();
+
+    let mut head = Rows::new();
+    head.add_marked(
+        if tuned { Mark::Active } else { Mark::Off },
+        text(role, "role"),
+        super::abbreviate_model(text(role, "model")),
+        if tuned { Tone::Plain } else { Tone::Muted },
+    );
+    head.write(out);
+
+    let mut rows = Rows::at_depth(1);
+    let source = text(role, "source");
+    if !source.is_empty() {
+        rows.add("from", source);
+    }
+    rows.add_toned(
+        "target",
+        &format!("shore model setting {}", text(role, "flag")),
+        Tone::Muted,
+    );
+    let shared = role.get("same_settings_as").and_then(Value::as_str);
+    if let Some(other) = shared {
+        rows.add_toned(
+            "shares settings with",
+            &format!("{other} — the same model, so tuning either moves both"),
+            Tone::Warn,
+        );
+    }
+    if let Some(problem) = role.get("error").and_then(Value::as_str) {
+        rows.add_toned("unresolved", problem, Tone::Bad);
+    }
+    rows.write(out);
+
+    if tuned {
+        write_saved_settings(out, settings);
+    }
+}
+
+fn write_settings_overview<W: Write>(out: &mut W, data: &Value) {
+    let character = data.get("character").and_then(Value::as_str);
+    section(out, "model settings", character);
+
+    let roles = rows_of(data, "roles");
+    if roles.is_empty() {
+        empty(out, "nothing resolves to a model yet");
+        return;
+    }
+    for (index, role) in roles.iter().enumerate() {
+        if index > 0 {
+            blank(out);
+        }
+        write_overview_role(out, role);
+    }
+
+    let inherited = number(data, "inherited_count");
+    blank(out);
+    if inherited > 0 {
+        note(
+            out,
+            &format!("{inherited} more role(s) inherit and are tuned by nothing, not shown"),
+        );
+    }
+    note(out, "add a target flag to see or set just one of these");
+}
+
 pub(crate) fn write_model_settings<W: Write>(out: &mut W, data: &Value) {
+    if flag(data, "overview") {
+        write_settings_overview(out, data);
+        return;
+    }
     section(out, "model settings", Some(text(data, "model")));
     let Some(effective) = data.get("effective_sampler").and_then(Value::as_object) else {
         empty(out, "no settings available");
@@ -134,8 +219,12 @@ pub(crate) fn write_model_settings<W: Write>(out: &mut W, data: &Value) {
         &["setting", "value", "from"],
         &[Align::Left, Align::Left, Align::Left],
     );
+    let only = data.get("key").and_then(Value::as_str);
     let mut ignored = 0_usize;
     for (key, value) in effective {
+        if only.is_some_and(|wanted| wanted != key) {
+            continue;
+        }
         let (source, _tone) = source_of(key, data);
         let is_set = !value.is_null() || source != "default";
         if !honored(key) {
@@ -150,7 +239,19 @@ pub(crate) fn write_model_settings<W: Write>(out: &mut W, data: &Value) {
         table.row(&[key.clone(), scalar(value), source.to_owned()]);
     }
     if table.is_empty() {
-        empty(out, "nothing set; every value is the built-in default");
+        empty(
+            out,
+            only.map_or(
+                "nothing set; every value is the built-in default",
+                |wanted| {
+                    if honored(wanted) {
+                        "not set; this one is the built-in default"
+                    } else {
+                        "set, but this model's sdk ignores it"
+                    }
+                },
+            ),
+        );
     } else {
         table.write(out);
         blank(out);
@@ -494,6 +595,129 @@ mod tests {
         }
         let out = render(|b| write_model_list(b, &data));
         assert!(!out.contains("hidden"), "{out}");
+    }
+
+    fn an_overview() -> Value {
+        json!({
+            "overview": true,
+            "character": "qifei",
+            "inherited_count": 2,
+            "roles": [
+                {
+                    "role": "chat",
+                    "flag": "--chat",
+                    "model": "anthropic:claude-opus-5",
+                    "source": "character",
+                    "inherited": false,
+                    "settings": [
+                        {"key": "reasoning_effort", "value": "high", "scope": "character"},
+                        {"key": "temperature", "value": 0.7, "scope": "global"}
+                    ],
+                    "same_settings_as": null,
+                    "error": null
+                },
+                {
+                    "role": "compaction",
+                    "flag": "--background=compaction",
+                    "model": "anthropic:claude-opus-5",
+                    "source": "defaults.background.compaction",
+                    "inherited": false,
+                    "settings": [],
+                    "same_settings_as": "chat",
+                    "error": null
+                },
+                {
+                    "role": "sub-agent: music",
+                    "flag": "--subagent=music",
+                    "model": "openrouter:moonshot/kimi-k3",
+                    "source": "subagents.music.model",
+                    "inherited": false,
+                    "settings": [{"key": "max_output_tokens", "value": 4096, "scope": "character"}],
+                    "same_settings_as": null,
+                    "error": null
+                },
+                {
+                    "role": "sub-agents",
+                    "flag": "--subagent",
+                    "model": null,
+                    "source": "inherits chat",
+                    "inherited": true,
+                    "settings": [],
+                    "same_settings_as": null,
+                    "error": "sub-agents use different models (music \u{2192} kimi-k3, librarian \u{2192} opus); target one by name instead of `all`"
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn the_overview_names_every_role_and_how_to_reach_it() {
+        set_color_enabled(false);
+        let out = render(|b| write_model_settings(b, &an_overview()));
+
+        for role in ["chat", "compaction", "sub-agent: music", "sub-agents"] {
+            assert!(out.contains(role), "{role} must appear: {out}");
+        }
+        for flag in ["--chat", "--background=compaction", "--subagent=music"] {
+            assert!(
+                out.contains(&format!("shore model setting {flag}")),
+                "{flag} must be spelled out as a command to type: {out}"
+            );
+        }
+        assert!(out.contains("reasoning_effort"), "{out}");
+        assert!(out.contains("2 more role(s) inherit"), "{out}");
+    }
+
+    #[test]
+    fn the_overview_warns_when_two_roles_share_one_model() {
+        set_color_enabled(false);
+        let out = render(|b| write_model_settings(b, &an_overview()));
+        assert!(
+            out.contains("shares settings with") && out.contains("tuning either moves both"),
+            "a shared model must be called out, not left to be discovered: {out}"
+        );
+    }
+
+    #[test]
+    fn a_role_that_cannot_resolve_says_so_rather_than_vanishing() {
+        set_color_enabled(false);
+        let out = render(|b| write_model_settings(b, &an_overview()));
+        assert!(
+            out.contains("unresolved") && out.contains("use different models"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn naming_one_setting_shows_only_that_one() {
+        set_color_enabled(false);
+        let data = json!({
+            "model": "deepseek:deepseek-v4-pro",
+            "key": "temperature",
+            "effective_sampler": {"temperature": 1, "reasoning_effort": "max"},
+            "saved_character": {"reasoning_effort": "max", "temperature": 1},
+            "saved_global": null
+        });
+        let out = render(|b| write_model_settings(b, &data));
+        assert!(out.contains("temperature"), "{out}");
+        assert!(
+            !out.contains("reasoning_effort"),
+            "naming a key must narrow the view to it: {out}"
+        );
+    }
+
+    #[test]
+    fn a_named_setting_that_is_unset_says_so_instead_of_showing_nothing() {
+        set_color_enabled(false);
+        let data = json!({
+            "model": "deepseek:deepseek-v4-pro",
+            "key": "top_p",
+            "effective_sampler": {"temperature": 1, "top_p": null},
+            "saved_character": null,
+            "saved_global": null
+        });
+        let out = render(|b| write_model_settings(b, &data));
+        assert!(out.contains("built-in default"), "{out}");
     }
 
     #[test]

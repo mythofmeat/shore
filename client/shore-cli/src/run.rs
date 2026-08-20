@@ -7,7 +7,7 @@ use shore_common::protocol::types::Role;
 use shore_common::swp_client::{SWPConnection, ServerAddr};
 use tracing::{debug, info, instrument};
 
-use crate::cli::{BackgroundTarget, Cli, CliCommand, LogRole, ModelCommand};
+use crate::cli::{Cli, CliCommand, LogRole, ModelCommand, ModelTarget};
 use crate::output;
 use crate::state;
 
@@ -734,8 +734,8 @@ async fn handle_status_command(
 }
 
 enum ModelChange<'target> {
-    SwitchTo(&'target str, Option<BackgroundTarget>),
-    Reset(Option<BackgroundTarget>),
+    SwitchTo(&'target str, &'target ModelTarget),
+    Reset(Option<&'target ModelTarget>),
 }
 
 fn model_change(cmd: &CliCommand) -> Option<ModelChange<'_>> {
@@ -746,11 +746,8 @@ fn model_change(cmd: &CliCommand) -> Option<ModelChange<'_>> {
         return None;
     };
     match subcommand {
-        Some(ModelCommand::Use {
-            name: target,
-            background,
-        }) => Some(ModelChange::SwitchTo(target, *background)),
-        Some(ModelCommand::Reset { background }) => Some(ModelChange::Reset(*background)),
+        Some(ModelCommand::Use { name, target }) => Some(ModelChange::SwitchTo(name, target)),
+        Some(ModelCommand::Reset { target }) => Some(ModelChange::Reset(Some(target))),
         Some(_) => None,
         None if *reset => Some(ModelChange::Reset(None)),
         None => None,
@@ -765,24 +762,25 @@ async fn apply_model_change(
     let CliCommand::Model { all, json, .. } = cmd else {
         return Ok(());
     };
-    let background = match change {
-        ModelChange::Reset(task) | ModelChange::SwitchTo(_, task) => task,
+    let target = match change {
+        ModelChange::Reset(target) => target,
+        ModelChange::SwitchTo(_, target) => Some(target),
     };
-    let with_task = |mut args: serde_json::Map<String, serde_json::Value>| {
-        if let Some(task) = background {
-            _ = args.insert("background_task".into(), serde_json::json!(task.as_str()));
+    let with_target = |mut args: serde_json::Map<String, serde_json::Value>| {
+        if let Some(selected) = target {
+            selected.write_into(&mut args);
         }
         args
     };
     let (command, args) = match change {
-        ModelChange::Reset(_) => ("reset_model", with_task(serde_json::Map::new())),
-        ModelChange::SwitchTo(target, _) => {
+        ModelChange::Reset(_) => ("reset_model", with_target(serde_json::Map::new())),
+        ModelChange::SwitchTo(name, _) => {
             let mut args = serde_json::Map::new();
-            _ = args.insert("name".into(), serde_json::json!(target));
+            _ = args.insert("name".into(), serde_json::json!(name));
             if *all {
                 _ = args.insert("include_hidden".into(), serde_json::json!(true));
             }
-            ("switch_model", with_task(args))
+            ("switch_model", with_target(args))
         }
     };
     _ = conn
@@ -1418,7 +1416,7 @@ async fn recv_command_data(
 #[cfg(test)]
 mod tests {
     use super::{ModelChange, model_change};
-    use crate::cli::ModelCommand;
+    use crate::cli::{ModelCommand, ModelTarget};
     use crate::test_env::set_env;
     use tokio::io::AsyncWriteExt;
     use tokio::io::duplex;
@@ -1515,12 +1513,12 @@ mod tests {
     fn switching_models_clears_the_local_pin() {
         let cmd = model_command(Some(ModelCommand::Use {
             name: "opus".to_owned(),
-            background: None,
+            target: ModelTarget::default(),
         }));
         assert!(
             matches!(
                 model_change(&cmd),
-                Some(ModelChange::SwitchTo("opus", None))
+                Some(ModelChange::SwitchTo("opus", target)) if target.is_bare()
             ),
             "{cmd:?}"
         );
@@ -1535,16 +1533,19 @@ mod tests {
         ));
         assert!(matches!(
             model_change(&model_command(Some(ModelCommand::Reset {
-                background: None
+                target: ModelTarget::default()
             }))),
-            Some(ModelChange::Reset(None))
+            Some(ModelChange::Reset(Some(target))) if target.is_bare()
         ));
     }
 
     #[test]
     fn reading_about_models_changes_nothing() {
         let listing = model_command(None);
-        let describing = model_command(Some(ModelCommand::Info { name: None }));
+        let describing = model_command(Some(ModelCommand::Info {
+            name: None,
+            target: ModelTarget::default(),
+        }));
         let info_flag = model_flags(None, true, false);
         for cmd in [listing, describing, info_flag] {
             assert!(model_change(&cmd).is_none(), "{cmd:?}");
