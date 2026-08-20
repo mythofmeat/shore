@@ -89,7 +89,7 @@ MUTANTS = [
      "  try {\n"
      "    [global, charPrefs] = loadForCharacter(config.dirs.data, character);\n"
      "  } catch (e) {\n"
-     "    console.warn(\n"
+     "    shoreLog.warn(\n"
      "      `shore: preferences load failed for ${character} (${op}); ` +\n"
      "        `using empty defaults: ${(e as Error).message}`,\n"
      "    );\n"

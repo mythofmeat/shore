@@ -34,7 +34,7 @@ PRECHECK = (
     "  try {\n"
     "    findEffectiveModel(view, config.dirs.cache, configuredName, true);\n"
     "  } catch (e) {\n"
-    "    console.warn(\n"
+    "    shoreLog.warn(\n"
     '      `shore: heartbeat model "${configuredName}" not found in catalog for ${character}; ` +\n'
     "        `keeping chat model: ${String(e)}`,\n"
     "    );\n"
@@ -67,7 +67,7 @@ MUTANTS = [
      "  try {\n"
      "    findModel(config.models, configuredName);\n"
      "  } catch (e) {\n"
-     "    console.warn(`shore: heartbeat model not found: ${String(e)}`);\n"
+     "    shoreLog.warn(`shore: heartbeat model not found: ${String(e)}`);\n"
      "    return { request, override: undefined };\n"
      "  }"),
     ("override: swaps even when the body already runs on that model",
@@ -77,7 +77,7 @@ MUTANTS = [
     ("override: a missing key ends the tick instead of falling back to chat",
      H,
      "  } catch (e) {\n"
-     "    console.warn(\n"
+     "    shoreLog.warn(\n"
      "      `shore: heartbeat could not build a request on ${resolved.name} for ${character}, ` +\n"
      "        `falling back to the chat model: ${String(e)}`,\n"
      "    );\n"
@@ -137,7 +137,7 @@ MUTANTS = [
     ("prepare: a mid-turn conversation ticks anyway on an empty body",
      H,
      "    if (rebuilt === undefined) {\n"
-     "      console.info(\n"
+     "      shoreLog.info(\n"
      "        `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,\n"
      "      );\n"
      "      return undefined;\n"
@@ -159,7 +159,7 @@ MUTANTS = [
     ("prepare: a failed prompt snapshot aborts the tick",
      H,
      "  } catch (e) {\n"
-     "    console.warn(`shore: heartbeat could not prepare the prompt snapshot for ${character}: ${String(e)}`);\n"
+     "    shoreLog.warn(`shore: heartbeat could not prepare the prompt snapshot for ${character}: ${String(e)}`);\n"
      "  }",
      "  } catch (e) {\n"
      "    throw e;\n"

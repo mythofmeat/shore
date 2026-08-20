@@ -84,8 +84,8 @@ MUTANTS = [
      "return `toolu_gen_${index}_${safe}`;",
      "return `toolu_gen_${safe}`;"),
     ("id: the stem is not sanitized", WIRE,
-     '    .map((c) => (/[0-9A-Za-z]/.test(c) ? c : "_"))',
-     "    .map((c) => c)"),
+     '  const safe = Array.from(stem, (c) => (/[0-9A-Za-z]/.test(c) ? c : "_"))',
+     "  const safe = Array.from(stem)"),
     ("id: the stem is not truncated", WIRE,
      "    .slice(0, 48)",
      "    .slice(0, 64)"),
@@ -262,7 +262,7 @@ MUTANTS = [
      "    void ensureActivePromptSnapshot;"),
     ("context: a failed snapshot is fatal", CONTEXT,
      "  } catch (e) {\n"
-     "    console.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);\n"
+     "    shoreLog.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);\n"
      "  }",
      "  } catch (e) {\n    throw e;\n  }"),
 

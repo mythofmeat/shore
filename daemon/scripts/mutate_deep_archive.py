@@ -183,7 +183,7 @@ MUTANTS = [
      "  void 0;\n\n  const { title"),
     ("bookkeeping: a failed reload aborts the archive it already did",
      P,
-     "      console.warn(`shore: ${context}: engine reload failed for ${character}: ${String(e)}`);",
+     "      shoreLog.warn(`shore: ${context}: engine reload failed for ${character}: ${String(e)}`);",
      "      throw e;"),
     ("notification: the count is dropped from the body",
      D,

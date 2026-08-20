@@ -165,8 +165,10 @@ MUTANTS = [
      "  const definition = hasDefinition ? readOrUndefined(definitionPath) : undefined;",
      '  const definition = hasDefinition ? (readOrUndefined(definitionPath) ?? "") : undefined;'),
     ("info: the preview counts UTF-16 units rather than scalar values",
-     "    definition_preview: definition === undefined ? null : [...definition].slice(0, PREVIEW_CHARS).join(\"\"),",
-     "    definition_preview: definition === undefined ? null : definition.slice(0, PREVIEW_CHARS),"),
+     "    definition_preview:\n"
+     '      definition === undefined ? null : Array.from(definition).slice(0, PREVIEW_CHARS).join(""),',
+     "    definition_preview:\n"
+     "      definition === undefined ? null : definition.slice(0, PREVIEW_CHARS),"),
     ("info: the preview cap is off by one",
      "const PREVIEW_CHARS = 500;",
      "const PREVIEW_CHARS = 501;"),

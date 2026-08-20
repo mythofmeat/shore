@@ -20,6 +20,7 @@ run comments bun run lint:comments
 run citations bun run lint:citations
 run typecheck bun run typecheck
 run lint bun run lint
+run mutate-stale bun run mutate --stale
 
 cd "$root/client" || exit 1
 run cargo-upgrade cargo upgrade --incompatible

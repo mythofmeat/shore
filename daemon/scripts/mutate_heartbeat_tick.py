@@ -38,7 +38,7 @@ ENGINE_BLOCK = (
     "      await engine.appendMessage(msg);\n"
     "      deps.emit?.(character, engine.currentRevision(), msg);\n"
     "    } catch (e) {\n"
-    "      console.error(\n"
+    "      shoreLog.error(\n"
     "        `shore: heartbeat could not persist the autonomous message for ${character}: ${String(e)}`,\n"
     "      );\n"
     "    }"
@@ -90,7 +90,7 @@ MUTANTS = [
      "      caption: img.caption,"),
     ("message: the ring-buffer preview is unbounded",
      T,
-     "  return [...text].slice(0, 80).join(\"\");",
+     "  return Array.from(text).slice(0, 80).join(\"\");",
      "  return text;"),
 
     # --- delivery -------------------------------------------------------------
@@ -101,7 +101,7 @@ MUTANTS = [
      "      deps.emit?.(character, engine.currentRevision(), msg);\n"
      "      await engine.appendMessage(msg);\n"
      "    } catch (e) {\n"
-     "      console.error(`shore: heartbeat could not persist for ${character}: ${String(e)}`);\n"
+     "      shoreLog.error(`shore: heartbeat could not persist for ${character}: ${String(e)}`);\n"
      "    }"),
     ("deliver: a failed append takes the whole tick down with it",
      T, ENGINE_BLOCK,

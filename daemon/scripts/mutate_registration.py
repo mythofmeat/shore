@@ -105,7 +105,7 @@ MUTANTS = [
      "    })().catch((e: unknown) => {"),
     ("ensure: a failed registration throws, taking the turn with it",
      R,
-     "      console.warn(`shore: autonomy registration failed for ${character}: ${String(e)}`);\n    });",
+     "      shoreLog.warn(`shore: autonomy registration failed for ${character}: ${String(e)}`);\n    });",
      "      throw e;\n    });"),
 
     # --- the deferred updates -------------------------------------------------

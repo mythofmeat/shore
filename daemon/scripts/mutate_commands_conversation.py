@@ -139,7 +139,7 @@ MUTANTS = [
     ("assistant ref: an absent ref means the last message, not the last assistant",
      '  if (reference === undefined || reference === "last" || reference === "latest") {\n'
      "    for (let i = messages.length - 1; i >= 0; i -= 1) {\n"
-     "      const msg = messages[i]!;\n"
+     "      const msg = required(messages[i]);\n"
      '      if (msg.role === "assistant") return msg.msg_id;\n'
      "    }\n"
      '    throw notFound("No assistant messages in conversation");\n'
@@ -177,7 +177,7 @@ MUTANTS = [
      "  for (let idx = end - 1; idx >= 0; idx -= 1) {",
      "  for (let idx = end; idx >= 0; idx -= 1) {"),
     ("pageStartByTurns: assistant turns are counted too",
-     '    if (messages[idx]!.role === "user") {',
+     '    if (required(messages[idx]).role === "user") {',
      "    if (true as boolean) {"),
     ("pageStartByTurns: the end bound is not clamped to the list (EQUIVALENT — resolveHistoryBefore already clamped it)",
      "  const end = Math.min(endBound, messages.length);",
@@ -380,9 +380,9 @@ MUTANTS = [
      "    position: msg.alt_index === undefined ? null : msg.alt_index + 1,",
      "    position: current + 1,"),
     ("alternatives: image bytes are not embedded",
-     "    const images: ImageRef[] = structuredClone(alt.images);\n"
+     "    const images: ImageRef[] = structuredClone(alternative.images);\n"
      "    embedImageData(images);",
-     "    const images: ImageRef[] = structuredClone(alt.images);"),
+     "    const images: ImageRef[] = structuredClone(alternative.images);"),
     ("alt: an empty alternative list is not rejected",
      "  if (altCount === 0) throw invalidRequest(`message ${msgId} has no alternate responses`);",
      "  if (false as boolean) throw invalidRequest(`message ${msgId} has no alternate responses`);"),

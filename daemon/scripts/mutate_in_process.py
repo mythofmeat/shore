@@ -147,7 +147,7 @@ MUTANTS = [
     ("transcript: a failed write takes the tick down with it",
      T,
      "  } catch (e) {\n"
-     "    console.warn(`shore: failed to record a ${params.source} transcript entry: ${String(e)}`);\n"
+     "    shoreLog.warn(`shore: failed to record a ${params.source} transcript entry: ${String(e)}`);\n"
      "  }",
      "  } catch (e) {\n"
      "    throw e;\n"

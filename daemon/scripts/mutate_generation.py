@@ -171,7 +171,7 @@ MUTANTS = [
      "    void ensureActivePromptSnapshot;"),
     ("context: an embedder failure fails the turn instead of degrading",
      CTX,
-     "  } catch (e) {\n    console.warn(\n      `shore: embedder unavailable for ${charName}; semantic memory retrieval disabled: ${String(e)}`,\n    );\n  }",
+     "  } catch (e) {\n    shoreLog.warn(\n      `shore: embedder unavailable for ${charName}; semantic memory retrieval disabled: ${String(e)}`,\n    );\n  }",
      "  } catch (e) {\n    throw e;\n  }"),
     ("context: sub-agents are offered even when none are configured",
      CTX,

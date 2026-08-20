@@ -66,7 +66,7 @@ MUTANTS = [
      "    if (request.provider_key !== model.providerKey) continue;"),
     ("placement: a model the catalog cannot place is refused instead of run",
      G,
-     "  console.debug(\n"
+     "  shoreLog.debug(\n"
      "    `shore: ${request.provider_key ?? request.sdk}/${request.model} is not in the static catalog; ` +\n"
      "      `calling with the request's own key`,\n"
      "  );\n"

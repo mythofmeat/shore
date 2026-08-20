@@ -53,7 +53,7 @@ MUTANTS = [
      "        await ensureActivePromptSnapshot(",
      "        if (false as boolean) await ensureActivePromptSnapshot("),
     ("scan: a failed workspace preparation is fatal",
-     "      } catch (e) {\n        console.warn(\n          `shore: failed to prepare workspace for character ${name}: ${String(e)}`,\n        );\n      }",
+     "      } catch (e) {\n        shoreLog.warn(\n          `shore: failed to prepare workspace for character ${name}: ${String(e)}`,\n        );\n      }",
      "      } catch (e) {\n        throw e;\n      }"),
     ("scan: the snapshot is prepared under the config dir, not the data dir",
      "          characterDataDir(this.#dataDir, name),",

@@ -164,12 +164,12 @@ MUTANTS = [
      "        configDir: loaded.dirs.data,"),
     ("reload: a config that will not parse is adopted, flapping through every keystroke",
      D,
-     "      console.warn(\n"
+     "      shoreLog.warn(\n"
      "        `shore: config hot reload failed, keeping the running config — ${where}: ${String(e)}`,\n"
      "      );\n"
      "      a.emitEvent(configWarning(a.runtime.configPath, undefined, e));\n"
      "      return;",
-     "      console.warn(String(e));\n"
+     "      shoreLog.warn(String(e));\n"
      "      config = a.runtime.config;"),
     ("reload: per-character overlays are not validated before the global is committed",
      D,

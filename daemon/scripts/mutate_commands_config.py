@@ -101,7 +101,7 @@ MUTANTS = [
      "      if (false) warnings.push(`subagent '${name}' references unknown tool '${t}'`);"),
     ("tools: only enabled subagents are checked for dangling tools",
      "  for (const name of [...subagents.keys()].sort()) {\n"
-     "    for (const t of subagents.get(name)!.tools) {",
+     "    for (const t of required(subagents.get(name)).tools) {",
      "  for (const name of cfg.enabled_subagents) {\n"
      "    for (const t of subagents.get(name)?.tools ?? []) {"),
 

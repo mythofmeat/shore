@@ -86,8 +86,8 @@ MUTANTS = [
      "  void 0;"),
     ("bookkeeping: the engine is reloaded before the pass rewrites the conversation",
      I,
-     '  console.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);',
-     '  console.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);\n'
+     '  shoreLog.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);',
+     '  shoreLog.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);\n'
      '  await reloadAndApplyDeferred(character, deps, "Idle compaction");'),
     ("pass: the compaction runs without the character's effective config", I,
      "    retained = await runCompaction(character, {\n      ...deps.run,\n      config: deps.config,\n    });",

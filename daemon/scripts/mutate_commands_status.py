@@ -91,22 +91,22 @@ MUTANTS = [
 
     # --- effective_interval_secs / the bounds ---------------------------------
     ("bounds: the effective interval reads the silence limit",
-     "    effective_interval_secs: asSecs(status.default_interval_ms),",
-     "    effective_interval_secs: asSecs(status.max_silent_ms),"),
+     "    effective_interval_secs: asSecs(autonomy.default_interval_ms),",
+     "    effective_interval_secs: asSecs(autonomy.max_silent_ms),"),
     ("bounds: the effective interval reads the wake floor",
-     "    effective_interval_secs: asSecs(status.default_interval_ms),",
-     "    effective_interval_secs: asSecs(status.min_wake_interval_ms),"),
+     "    effective_interval_secs: asSecs(autonomy.default_interval_ms),",
+     "    effective_interval_secs: asSecs(autonomy.min_wake_interval_ms),"),
     ("bounds: the latency floor and the idle limit are swapped",
-     "    minimum_heartbeat_latency_secs: asSecs(status.min_wake_interval_ms),\n"
-     "    dormant_after_idle_time_secs: asSecs(status.max_silent_ms),",
-     "    minimum_heartbeat_latency_secs: asSecs(status.max_silent_ms),\n"
-     "    dormant_after_idle_time_secs: asSecs(status.min_wake_interval_ms),"),
+     "    minimum_heartbeat_latency_secs: asSecs(autonomy.min_wake_interval_ms),\n"
+     "    dormant_after_idle_time_secs: asSecs(autonomy.max_silent_ms),",
+     "    minimum_heartbeat_latency_secs: asSecs(autonomy.max_silent_ms),\n"
+     "    dormant_after_idle_time_secs: asSecs(autonomy.min_wake_interval_ms),"),
     ("bounds: the idle-tick cap reads the tick count",
-     "    dormant_after_heartbeat_turns: status.max_idle_ticks,",
-     "    dormant_after_heartbeat_turns: status.ticks_without_user,"),
+     "    dormant_after_heartbeat_turns: autonomy.max_idle_ticks,",
+     "    dormant_after_heartbeat_turns: autonomy.ticks_without_user,"),
     ("bounds: the tick count reads the cap",
-     "    ticks_without_user: status.ticks_without_user,",
-     "    ticks_without_user: status.max_idle_ticks,"),
+     "    ticks_without_user: autonomy.ticks_without_user,",
+     "    ticks_without_user: autonomy.max_idle_ticks,"),
 
     # --- seconds_until_wake ---------------------------------------------------
     ("until: an overdue wake floors rather than truncating",
@@ -177,10 +177,10 @@ MUTANTS = [
 
     # --- the projection's shape -----------------------------------------------
     ("shape: the recent events are dropped",
-     "    recent_events: status.recent_events,",
+     "    recent_events: autonomy.recent_events,",
      "    recent_events: [],"),
     ("shape: the heartbeat state is hardcoded active",
-     "    heartbeat_state: status.heartbeat_state,",
+     "    heartbeat_state: autonomy.heartbeat_state,",
      "    heartbeat_state: \"Active\","),
 
     # --- autonomy / activity presence -----------------------------------------

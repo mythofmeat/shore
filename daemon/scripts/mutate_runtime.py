@@ -57,7 +57,7 @@ MUTANTS = [
     ("call store: a failed open becomes fatal, trading the daemon for its telemetry",
      R,
      "  } catch (e) {\n"
-     "    console.warn(`shore: cannot open the call store at ${path}; capture disabled: ${String(e)}`);\n"
+     "    shoreLog.warn(`shore: cannot open the call store at ${path}; capture disabled: ${String(e)}`);\n"
      "    return undefined;\n"
      "  }",
      "  } catch (e) {\n"
@@ -144,7 +144,7 @@ MUTANTS = [
     ("rotation: a failure takes the daemon's startup down with it",
      R,
      "    } catch (e) {\n"
-     "      console.warn(`shore: call store rotation failed: ${String(e)}`);\n"
+     "      shoreLog.warn(`shore: call store rotation failed: ${String(e)}`);\n"
      "    }",
      "    } catch (e) {\n"
      "      throw e;\n"
