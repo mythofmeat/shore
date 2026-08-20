@@ -258,10 +258,13 @@ fn parse_fixture_role(value: &str) -> io::Result<FixtureRole> {
 
 fn parse_usize_env(value: Option<&str>, name: &str, default: usize) -> io::Result<usize> {
     match value {
-        Some(value) => value
+        Some(raw_value) => raw_value
             .parse::<usize>()
             .map_err(|_| {
-                invalid_env_value(name, format!("expected positive integer; got {value:?}"))
+                invalid_env_value(
+                    name,
+                    format!("expected positive integer; got {raw_value:?}"),
+                )
             })
             .and_then(|parsed| {
                 if parsed == 0 {
@@ -276,22 +279,22 @@ fn parse_usize_env(value: Option<&str>, name: &str, default: usize) -> io::Resul
 
 fn parse_u16_env(value: Option<&str>, name: &str, default: u16) -> io::Result<u16> {
     match value {
-        Some(value) => value
+        Some(raw_value) => raw_value
             .parse::<u16>()
-            .map_err(|_| invalid_env_value(name, format!("expected integer; got {value:?}"))),
+            .map_err(|_| invalid_env_value(name, format!("expected integer; got {raw_value:?}"))),
         None => Ok(default),
     }
 }
 
 fn parse_render_size(name: &str, value: &str) -> io::Result<(u16, u16)> {
     let normalized = value.trim().replace('X', "x");
-    let (width, height) = normalized
+    let (width_text, height_text) = normalized
         .split_once('x')
         .ok_or_else(|| invalid_env_value(name, format!("expected WIDTHxHEIGHT; got {value:?}")))?;
-    let width = width
+    let width = width_text
         .parse::<u16>()
         .map_err(|_| invalid_env_value(name, "width must be an integer"))?;
-    let height = height
+    let height = height_text
         .parse::<u16>()
         .map_err(|_| invalid_env_value(name, "height must be an integer"))?;
     if width == 0 || height == 0 {
@@ -345,7 +348,7 @@ impl FrameDump {
         if !frame.ends_with('\n') {
             writeln!(file)?;
         }
-        self.next_frame += 1;
+        self.next_frame = self.next_frame.saturating_add(1);
         Ok(())
     }
 }
@@ -401,48 +404,61 @@ fn legacy_prefs_path() -> PathBuf {
 }
 
 fn load_prefs(app: &mut App) {
-    let data = std::fs::read_to_string(prefs_path())
+    let prefs_data = std::fs::read_to_string(prefs_path())
         .or_else(|_| std::fs::read_to_string(legacy_prefs_path()));
-    if let Ok(data) = data
-        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&data)
+    if let Ok(data) = prefs_data
+        && let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&data)
     {
-        if let Some(b) = v.get("show_thinking").and_then(serde_json::Value::as_bool) {
+        if let Some(b) = prefs
+            .get("show_thinking")
+            .and_then(serde_json::Value::as_bool)
+        {
             app.show_thinking = b;
         }
-        if let Some(b) = v.get("show_tools").and_then(serde_json::Value::as_bool) {
+        if let Some(b) = prefs.get("show_tools").and_then(serde_json::Value::as_bool) {
             app.show_tools = b;
         }
-        if let Some(b) = v.get("show_subagent").and_then(serde_json::Value::as_bool) {
+        if let Some(b) = prefs
+            .get("show_subagent")
+            .and_then(serde_json::Value::as_bool)
+        {
             app.show_subagent = b;
         }
-        if let Some(b) = v.get("show_images").and_then(serde_json::Value::as_bool) {
+        if let Some(b) = prefs
+            .get("show_images")
+            .and_then(serde_json::Value::as_bool)
+        {
             app.show_images = b;
         }
-        if let Some(b) = v
+        if let Some(b) = prefs
             .get("show_timestamps")
             .and_then(serde_json::Value::as_bool)
         {
             app.show_timestamps = b;
         }
-        if let Some(b) = v.get("show_metadata").and_then(serde_json::Value::as_bool) {
+        if let Some(b) = prefs
+            .get("show_metadata")
+            .and_then(serde_json::Value::as_bool)
+        {
             app.show_metadata = b;
         }
-        if let Some(mode) = v
+        if let Some(mode) = prefs
             .get("usage_display")
-            .and_then(|v| v.as_str())
+            .and_then(serde_json::Value::as_str)
             .and_then(UsageDisplay::from_token)
         {
             app.usage_display = mode;
-        } else if let Some(b) = v.get("show_usage").and_then(serde_json::Value::as_bool) {
+        } else if let Some(b) = prefs.get("show_usage").and_then(serde_json::Value::as_bool) {
             app.usage_display = if b {
                 UsageDisplay::Always
             } else {
                 UsageDisplay::Off
             };
+        } else {
         }
-        if let Some(focus) = v
+        if let Some(focus) = prefs
             .get("budget_focus")
-            .and_then(|v| v.as_str())
+            .and_then(serde_json::Value::as_str)
             .and_then(app::BudgetFocus::from_token)
         {
             app.budget_focus = focus;
@@ -475,7 +491,7 @@ fn save_prefs(app: &App) {
     }
     if let Err(e) = std::fs::rename(&tmp, &path) {
         warn!("failed to persist prefs: {e}");
-        let _ = std::fs::remove_file(&tmp);
+        drop(std::fs::remove_file(&tmp));
     }
 }
 
@@ -496,7 +512,7 @@ fn open_in_editor(
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
-    let _ = std::process::Command::new(&editor).arg(&tmp).status();
+    drop(std::process::Command::new(&editor).arg(&tmp).status());
 
     enable_raw_mode()?;
     execute!(
@@ -518,7 +534,7 @@ fn pick_image(
     start_dir: Option<&str>,
 ) -> io::Result<Vec<String>> {
     let chooser_file = std::env::temp_dir().join("shore_image_pick");
-    let _ = std::fs::remove_file(&chooser_file);
+    drop(std::fs::remove_file(&chooser_file));
 
     let start = start_dir.unwrap_or(".");
 
@@ -619,7 +635,7 @@ async fn send_conn_commands(
     cmds: Vec<ConnCommand>,
 ) {
     for cmd in cmds {
-        let _ = cmd_tx.send(cmd).await;
+        drop(cmd_tx.send(cmd).await);
     }
 }
 
@@ -819,7 +835,7 @@ async fn handle_action(
         }
         Action::Send(cmd) => {
             if send_enabled {
-                let _ = cmd_tx.send(cmd).await;
+                drop(cmd_tx.send(cmd).await);
             } else {
                 app.set_status("fixture mode: command ignored");
             }
@@ -834,7 +850,7 @@ async fn handle_action(
             Ok(true)
         }
         Action::OpenInEditor => {
-            let _ = open_in_editor(terminal, &mut app.input);
+            drop(open_in_editor(terminal, &mut app.input));
             Ok(true)
         }
         Action::PickImage(start_dir) => {
@@ -908,9 +924,9 @@ async fn run_tui(
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    let character = resolve_character(character);
+    let resolved_character = resolve_character(character);
     let fixture_mode = debug.fixture_enabled();
-    info!(character = ?character, fixture_mode, "TUI starting");
+    info!(character = ?resolved_character, fixture_mode, "TUI starting");
 
     let mut app = if fixture_mode {
         debug.build_app()?
@@ -932,7 +948,7 @@ async fn run_tui(
         let (_event_tx, event_rx) = tokio::sync::mpsc::channel::<ConnEvent>(1);
         (cmd_tx, event_rx)
     } else {
-        connection::spawn_connection(addr, character)
+        connection::spawn_connection(addr, resolved_character)
     };
 
     let mut input_poll = tokio::time::interval(INPUT_POLL_INTERVAL);
@@ -981,11 +997,11 @@ async fn run_tui(
 
                     loop {
                         match event_rx.try_recv() {
-                            Ok(event) => {
+                            Ok(buffered_event) => {
                                 process_conn_event(
                                     &mut app,
                                     &cmd_tx,
-                                    event,
+                                    buffered_event,
                                     &mut needs_redraw,
                                     &mut deferred_stream_dirty,
                                     &mut needs_full_redraw,
@@ -1051,11 +1067,11 @@ async fn run_tui(
     info!("TUI exiting");
     if !fixture_mode {
         save_prefs(&app);
-        let _ = cmd_tx.send(ConnCommand::Shutdown).await;
+        drop(cmd_tx.send(ConnCommand::Shutdown).await);
     }
 
     for path in &app.paste_temp_paths {
-        let _ = std::fs::remove_file(path);
+        drop(std::fs::remove_file(path));
     }
 
     execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
@@ -1148,7 +1164,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 fn build_history_entries(messages: Vec<Message>, active_start: usize) -> Vec<ConversationEntry> {
     let mut entries = Vec::new();
     let boundary_at = active_start.min(messages.len());
-    let archived_turns = count_user_turns(&messages[..boundary_at]);
+    let archived_turns = count_user_turns(messages.get(..boundary_at).unwrap_or(&messages));
     let mut inserted_boundary = false;
     for (index, msg) in messages.into_iter().enumerate() {
         if boundary_at > 0 && index == boundary_at {
@@ -1203,12 +1219,12 @@ fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start:
         })
         .or_else(|| match app.entries.last() {
             Some(entry) if matches!(entry.as_turn(), Some(t) if matches!(t.role, Role::Assistant)) => {
-                Some(app.entries.len() - 1)
+                Some(app.entries.len().saturating_sub(1))
             }
-            _ => None,
+            Some(_) | None => None,
         });
 
-    if let Some(turn) = target_pos.and_then(|pos| app.entries[pos].as_turn_mut()) {
+    if let Some(turn) = target_pos.and_then(|pos| app.entries.get_mut(pos)?.as_turn_mut()) {
         turn.state = TurnState::Streaming;
         if turn.metadata.is_none() {
             turn.metadata = prev_metadata;
@@ -1222,11 +1238,17 @@ fn accumulate_metadata(slot: &mut Option<StreamMetadata>, incoming: &StreamMetad
     match slot {
         Some(acc) => {
             acc.model.clone_from(&incoming.model);
-            acc.tokens.input += incoming.tokens.input;
-            acc.tokens.output += incoming.tokens.output;
-            acc.tokens.cache_read += incoming.tokens.cache_read;
-            acc.tokens.cache_write += incoming.tokens.cache_write;
-            acc.timing.total_ms += incoming.timing.total_ms;
+            acc.tokens.input = acc.tokens.input.saturating_add(incoming.tokens.input);
+            acc.tokens.output = acc.tokens.output.saturating_add(incoming.tokens.output);
+            acc.tokens.cache_read = acc
+                .tokens
+                .cache_read
+                .saturating_add(incoming.tokens.cache_read);
+            acc.tokens.cache_write = acc
+                .tokens
+                .cache_write
+                .saturating_add(incoming.tokens.cache_write);
+            acc.timing.total_ms = acc.timing.total_ms.saturating_add(incoming.timing.total_ms);
         }
         None => *slot = Some(incoming.clone()),
     }
@@ -1250,7 +1272,7 @@ fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
     app.history_next_before = data
         .get("next_before")
         .and_then(serde_json::Value::as_u64)
-        .map(|v| v as usize);
+        .and_then(|value| usize::try_from(value).ok());
     app.history_has_more_before = data
         .get("has_more_before")
         .and_then(serde_json::Value::as_bool)
@@ -1282,8 +1304,8 @@ fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
         .iter()
         .position(|entry| matches!(entry, ConversationEntry::ArchiveBoundary { .. }))
     {
-        if let ConversationEntry::ArchiveBoundary { archived_count } =
-            &mut app.entries[boundary_idx]
+        if let Some(ConversationEntry::ArchiveBoundary { archived_count }) =
+            app.entries.get_mut(boundary_idx)
         {
             *archived_count = archived_count.saturating_add(loaded_turns);
         }
@@ -1316,33 +1338,37 @@ fn splice_subagent_sections(
         }
         let mut i = 0;
         while i < turn.blocks.len() {
-            let Block::ToolUse {
+            let Some(Block::ToolUse {
                 tool_id, tool_name, ..
-            } = &turn.blocks[i]
+            }) = turn.blocks.get(i)
             else {
-                i += 1;
+                i = i.saturating_add(1);
                 continue;
             };
             if !tool_name.starts_with("ask_") {
-                i += 1;
+                i = i.saturating_add(1);
                 continue;
             }
-            if matches!(turn.blocks.get(i + 1), Some(Block::SubagentBegin(_))) {
-                i += 1;
+            if matches!(
+                turn.blocks.get(i.saturating_add(1)),
+                Some(Block::SubagentBegin(_))
+            ) {
+                i = i.saturating_add(1);
                 continue;
             }
             let Some(Some(section)) = traces.get(tool_id.as_str()) else {
-                i += 1;
+                i = i.saturating_add(1);
                 continue;
             };
 
-            let mut nested = Vec::with_capacity(section.blocks.len() + 2);
+            let mut nested = Vec::with_capacity(section.blocks.len().saturating_add(2));
             nested.push(Block::SubagentBegin(section.name.clone()));
             nested.extend(section.blocks.iter().cloned());
             nested.push(Block::SubagentEnd(section.name.clone()));
             let inserted = nested.len();
-            drop(turn.blocks.splice((i + 1)..=i, nested));
-            i += inserted + 1;
+            let insert_at = i.saturating_add(1);
+            drop(turn.blocks.splice(insert_at..insert_at, nested));
+            i = i.saturating_add(inserted).saturating_add(1);
         }
     }
 }
@@ -1352,7 +1378,10 @@ fn tool_name_map(blocks: &[ContentBlock]) -> std::collections::HashMap<&str, &st
         .iter()
         .filter_map(|b| match b {
             ContentBlock::ToolUse { id, name, .. } => Some((id.as_str(), name.as_str())),
-            _ => None,
+            ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::RedactedThinking { .. }
+            | ContentBlock::ToolResult { .. } => None,
         })
         .collect()
 }
@@ -1408,7 +1437,10 @@ fn editable_text(msg: &Message) -> String {
         .iter()
         .filter_map(|block| match block {
             ContentBlock::Text { text } => Some(text.as_str()),
-            _ => None,
+            ContentBlock::Thinking { .. }
+            | ContentBlock::ToolUse { .. }
+            | ContentBlock::RedactedThinking { .. }
+            | ContentBlock::ToolResult { .. } => None,
         })
         .collect::<Vec<&str>>()
         .join("\n")
@@ -1453,8 +1485,13 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
 
 fn image_max_cells() -> (u16, u16) {
     let (w, h) = crossterm::terminal::size().unwrap_or((80, 24));
-    let max_cols = (w * 80 / 100).saturating_sub(4).max(1);
-    let max_rows = (h * 50 / 100).max(1);
+    let max_cols = w
+        .saturating_mul(80)
+        .checked_div(100)
+        .unwrap_or(1)
+        .saturating_sub(4)
+        .max(1);
+    let max_rows = h.saturating_mul(50).checked_div(100).unwrap_or(1).max(1);
     (max_cols, max_rows)
 }
 
@@ -1487,9 +1524,9 @@ fn model_switch_name(model: &serde_json::Value) -> Option<String> {
     if let Some(qualified) = model.get("qualified_name").and_then(|v| v.as_str()) {
         return Some(qualified.to_owned());
     }
-    let provider = model.get("provider").and_then(|v| v.as_str());
-    let model_id = model.get("model_id").and_then(|v| v.as_str());
-    if let (Some(provider), Some(model_id)) = (provider, model_id) {
+    let provider_name = model.get("provider").and_then(|value| value.as_str());
+    let model_identifier = model.get("model_id").and_then(|value| value.as_str());
+    if let (Some(provider), Some(model_id)) = (provider_name, model_identifier) {
         return Some(format!("{provider}:{model_id}"));
     }
     model
@@ -1573,7 +1610,22 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
                 },
             );
         }
-        _ => {}
+        ServerMessage::Hello(_)
+        | ServerMessage::History(_)
+        | ServerMessage::Shutdown(_)
+        | ServerMessage::Ping(_)
+        | ServerMessage::CommandOutput(_)
+        | ServerMessage::Error(_)
+        | ServerMessage::StreamStart(_)
+        | ServerMessage::StreamEnd(_)
+        | ServerMessage::Phase(_)
+        | ServerMessage::NewMessage(_)
+        | ServerMessage::SendImage(_)
+        | ServerMessage::CacheWarning(_)
+        | ServerMessage::ProviderFallbackWarning(_)
+        | ServerMessage::UsageWarning(_)
+        | ServerMessage::ConfigWarning(_)
+        | ServerMessage::Unknown => {}
     }
 
     UiEffect::redraw(if app.subagent_panel == Some(idx) {
@@ -1647,7 +1699,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         .rposition(|e| matches!(e.as_turn(), Some(t) if t.is_streaming()))
                 });
 
-            match target_pos.and_then(|pos| app.entries[pos].as_turn_mut()) {
+            match target_pos.and_then(|pos| app.entries.get_mut(pos)?.as_turn_mut()) {
                 Some(turn) => {
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
@@ -1764,13 +1816,14 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             .data
                             .get("active_start")
                             .and_then(serde_json::Value::as_u64)
-                            .unwrap_or(0) as usize;
+                            .and_then(|value| usize::try_from(value).ok())
+                            .unwrap_or_default();
                         rebuild_entries_from_history(app, history, active_start);
                         app.history_next_before = co
                             .data
                             .get("next_before")
                             .and_then(serde_json::Value::as_u64)
-                            .map(|v| v as usize);
+                            .and_then(|value| usize::try_from(value).ok());
                         app.history_has_more_before = co
                             .data
                             .get("has_more_before")
@@ -1871,16 +1924,16 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             .get("active")
                             .and_then(|v| v.as_str())
                             .filter(|s| !s.is_empty());
-                        if let Some(active) = active {
-                            app.set_active_model(Some(active));
+                        if let Some(active_name) = active {
+                            app.set_active_model(Some(active_name));
                         }
 
                         let active_for_matching = active
                             .or_else(|| (!app.model.is_empty()).then_some(app.model.as_str()));
-                        if let Some(active) = active_for_matching {
+                        if let Some(active_name) = active_for_matching {
                             let active_names: Vec<String> = models
                                 .iter()
-                                .filter_map(|m| active_model_candidate_name(active, m))
+                                .filter_map(|model| active_model_candidate_name(active_name, model))
                                 .collect();
                             if !active_names.is_empty() {
                                 app.active_model_names = active_names;
@@ -1959,32 +2012,35 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 "model_settings" => {
                     let pending_response = app.sampler_settings_rid_matches(co.rid.as_deref());
-                    let snapshot = EffectiveSamplerSnapshot::from_model_settings(&co.data);
+                    let sampler_snapshot = EffectiveSamplerSnapshot::from_model_settings(&co.data);
                     if pending_response {
                         app.finish_sampler_settings_refresh();
-                        if let Some(snapshot) = snapshot {
+                        if let Some(snapshot) = sampler_snapshot {
                             app.note_active_model_from_snapshot(&snapshot);
                             app.effective_sampler = Some(snapshot);
                         }
-                    } else if co.rid.is_none()
-                        && let Some(snapshot) = snapshot
-                            .filter(|snapshot| app.sampler_snapshot_matches_active_model(snapshot))
-                    {
-                        app.finish_sampler_settings_refresh();
-                        app.note_active_model_from_snapshot(&snapshot);
-                        app.effective_sampler = Some(snapshot);
+                    } else {
+                        if co.rid.is_none()
+                            && let Some(snapshot) = sampler_snapshot.filter(|candidate_snapshot| {
+                                app.sampler_snapshot_matches_active_model(candidate_snapshot)
+                            })
+                        {
+                            app.finish_sampler_settings_refresh();
+                            app.note_active_model_from_snapshot(&snapshot);
+                            app.effective_sampler = Some(snapshot);
+                        }
                     }
                     if app.is_setting_palette_open() {
                         app.update_completions();
                     }
                 }
                 "switch_model" => {
-                    let name = co
+                    let active_name = co
                         .data
                         .get("active")
                         .and_then(|v| v.as_str())
                         .or_else(|| co.data.get("qualified_name").and_then(|v| v.as_str()));
-                    if let Some(name) = name {
+                    if let Some(name) = active_name {
                         app.set_active_model(Some(name));
                         app.set_status(format!("model: {name}"));
                     }
@@ -2037,13 +2093,13 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                     index: item
                                         .get("index")
                                         .and_then(serde_json::Value::as_u64)
-                                        .unwrap_or(0)
-                                        as u32,
+                                        .and_then(|value| u32::try_from(value).ok())
+                                        .unwrap_or_default(),
                                     position: item
                                         .get("position")
                                         .and_then(serde_json::Value::as_u64)
-                                        .unwrap_or(0)
-                                        as u32,
+                                        .and_then(|value| u32::try_from(value).ok())
+                                        .unwrap_or_default(),
                                     active: item
                                         .get("active")
                                         .and_then(serde_json::Value::as_bool)
@@ -2095,7 +2151,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 "get" => {
                     if let Some(msg_ref) = app.take_edit_prefill(co.rid.as_deref()) {
                         match serde_json::from_value::<Message>(co.data.clone()) {
-                            Ok(msg) => app.start_editing(msg_ref, editable_text(&msg)),
+                            Ok(message) => app.start_editing(msg_ref, editable_text(&message)),
                             Err(e) => {
                                 app.set_error(format!("could not read message {msg_ref}: {e}"));
                             }
@@ -2189,7 +2245,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             };
         }
 
-        _ => RedrawEffect::Immediate,
+        ServerMessage::Hello(_)
+        | ServerMessage::Shutdown(_)
+        | ServerMessage::Ping(_)
+        | ServerMessage::Unknown => RedrawEffect::Immediate,
     };
     UiEffect::redraw(redraw)
 }
@@ -2322,12 +2381,12 @@ mod redraw_tests {
             ));
         }
         rebuild_entries_from_history(&mut app, messages.clone(), 0);
-        let _ = render_app_to_string(&mut app, 80, 30);
+        drop(render_app_to_string(&mut app, 80, 30));
 
         app.scroll_up(20);
         let before = render_app_to_string(&mut app, 80, 30).unwrap();
 
-        messages[3].content =
+        messages.get_mut(3).expect("fourth message").content =
             "A much longer reply that wraps over several lines\n\nsecond paragraph\n\nthird paragraph"
                 .into();
         let _ = handle_server_message(
@@ -2416,7 +2475,7 @@ mod redraw_tests {
 
         stream_start(&mut app);
         stream_chunk(&mut app, "First chunk of the answer.");
-        let _ = render_app_to_string(&mut app, 80, 30);
+        drop(render_app_to_string(&mut app, 80, 30));
 
         app.scroll_up(500);
         let before = render_app_to_string(&mut app, 80, 30).unwrap();
@@ -2426,7 +2485,7 @@ mod redraw_tests {
                 &mut app,
                 &format!("\nchunk {tick} with some reasonably long text to wrap around"),
             );
-            let _ = render_app_to_string(&mut app, 80, 30);
+            drop(render_app_to_string(&mut app, 80, 30));
         }
 
         stream_end(&mut app);
@@ -2505,11 +2564,11 @@ mod redraw_tests {
         assert_eq!(app.scroll_offset, 4);
         assert!(!app.auto_scroll);
         assert!(matches!(
-            app.entries[0].as_turn(),
+            app.entries.first().and_then(ConversationEntry::as_turn),
             Some(t) if t.role == Role::Assistant && t.joined_text().contains("# Fixture")
         ));
 
-        let _ = std::fs::remove_file(path);
+        drop(std::fs::remove_file(path));
     }
 
     #[test]
@@ -2532,7 +2591,7 @@ mod redraw_tests {
         assert!(frame.contains("- bullet"));
         assert!(!frame.contains("```"));
 
-        let _ = std::fs::remove_file(path);
+        drop(std::fs::remove_file(path));
     }
 
     #[test]
@@ -2557,7 +2616,7 @@ mod redraw_tests {
         assert!(contents.contains("shore frame 1 (32x12)"));
         assert!(contents.contains("hello from dump"));
 
-        let _ = std::fs::remove_file(path);
+        drop(std::fs::remove_file(path));
     }
 
     fn usage_warning(percent: f64) -> ServerMessage {
@@ -3078,7 +3137,9 @@ mod redraw_tests {
                 ConversationEntry::System { content, .. } if content.contains("Models:") => {
                     Some(content.clone())
                 }
-                _ => None,
+                ConversationEntry::Turn(_)
+                | ConversationEntry::System { .. }
+                | ConversationEntry::ArchiveBoundary { .. } => None,
             })
             .expect("`:model` prints the model list");
         assert!(listing.contains("deepseek:deepseek-v4-pro"), "{listing}");
@@ -3243,7 +3304,7 @@ mod redraw_tests {
             vec!["loading sampler settings..."]
         );
 
-        let effect = handle_server_message(
+        let unrelated_error_effect = handle_server_message(
             &mut app,
             ServerMessage::Error(CommandError {
                 rid: Some(rid),
@@ -3252,7 +3313,7 @@ mod redraw_tests {
             }),
         );
 
-        assert_eq!(effect.redraw, RedrawEffect::Immediate);
+        assert_eq!(unrelated_error_effect.redraw, RedrawEffect::Immediate);
         assert!(!app.sampler_settings_loading);
         assert_eq!(
             app.completion.candidates,
@@ -3292,7 +3353,7 @@ mod redraw_tests {
             vec!["loading sampler settings..."]
         );
 
-        let effect = handle_server_message(
+        let sampler_settings_effect = handle_server_message(
             &mut app,
             ServerMessage::CommandOutput(CommandOutput {
                 rid: Some(rid),
@@ -3308,7 +3369,7 @@ mod redraw_tests {
             }),
         );
 
-        assert_eq!(effect.redraw, RedrawEffect::Immediate);
+        assert_eq!(sampler_settings_effect.redraw, RedrawEffect::Immediate);
         assert!(!app.sampler_settings_loading);
         assert!(app.pending_sampler_settings_rid.is_none());
         assert!(
@@ -3504,17 +3565,15 @@ mod redraw_tests {
 
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
         assert_eq!(effect.cmds.len(), 1);
-        match &effect.cmds[0] {
-            ConnCommand::Send(ClientMessage::Command(cmd)) => {
-                assert_eq!(cmd.name, "model_settings");
-                assert!(cmd.rid.is_some());
-                assert_eq!(
-                    cmd.rid.as_deref(),
-                    app.pending_sampler_settings_rid.as_deref()
-                );
-            }
-            _ => panic!("expected model_settings command"),
-        }
+        let Some(ConnCommand::Send(ClientMessage::Command(cmd))) = effect.cmds.first() else {
+            panic!("expected model_settings command");
+        };
+        assert_eq!(cmd.name, "model_settings");
+        assert!(cmd.rid.is_some());
+        assert_eq!(
+            cmd.rid.as_deref(),
+            app.pending_sampler_settings_rid.as_deref()
+        );
         assert!(app.sampler_settings_loading);
         assert!(
             app.notifications

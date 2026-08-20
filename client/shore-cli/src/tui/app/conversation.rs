@@ -78,7 +78,11 @@ impl Turn {
             .iter()
             .filter_map(|b| match b {
                 Block::Text(t) => Some(t.as_str()),
-                _ => None,
+                Block::Thinking(_)
+                | Block::ToolUse { .. }
+                | Block::ToolResult { .. }
+                | Block::SubagentBegin(_)
+                | Block::SubagentEnd(_) => None,
             })
             .collect();
         parts.join("\n")
@@ -134,14 +138,14 @@ impl ConversationEntry {
     pub(crate) fn as_turn(&self) -> Option<&Turn> {
         match self {
             ConversationEntry::Turn(turn) => Some(turn),
-            _ => None,
+            ConversationEntry::System { .. } | ConversationEntry::ArchiveBoundary { .. } => None,
         }
     }
 
     pub(crate) fn as_turn_mut(&mut self) -> Option<&mut Turn> {
         match self {
             ConversationEntry::Turn(turn) => Some(turn),
-            _ => None,
+            ConversationEntry::System { .. } | ConversationEntry::ArchiveBoundary { .. } => None,
         }
     }
 }

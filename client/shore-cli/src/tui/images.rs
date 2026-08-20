@@ -50,8 +50,8 @@ fn query_cell_size() -> Option<(u16, u16)> {
     if ret != 0 || ws.ws_xpixel == 0 || ws.ws_ypixel == 0 || ws.ws_col == 0 || ws.ws_row == 0 {
         return None;
     }
-    let cw = ws.ws_xpixel / ws.ws_col;
-    let ch = ws.ws_ypixel / ws.ws_row;
+    let cw = ws.ws_xpixel.checked_div(ws.ws_col)?;
+    let ch = ws.ws_ypixel.checked_div(ws.ws_row)?;
     if cw == 0 || ch == 0 {
         return None;
     }
@@ -154,16 +154,16 @@ impl ImageCache {
         let (cols, rows) = self.calculate_cells(pw, ph, max_cols, max_rows);
 
         let id = self.next_id;
-        self.next_id += 1;
+        self.next_id = self.next_id.saturating_add(1);
 
         let png_data = ensure_png(&data)?;
         let encoded = base64_encode(&png_data);
         let mut tty = open_tty_write()?;
         transmit_kitty_data(&mut tty, id, &encoded);
         place_kitty(&mut tty, id, cols, rows);
-        let _ = tty.flush();
+        drop(tty.flush());
 
-        let _ = self.cache.insert(
+        let _previous = self.cache.insert(
             path.to_owned(),
             TransmittedImage {
                 id,
@@ -199,16 +199,16 @@ impl ImageCache {
         let (cols, rows) = self.calculate_cells(pw, ph, max_cols, max_rows);
 
         let id = self.next_id;
-        self.next_id += 1;
+        self.next_id = self.next_id.saturating_add(1);
 
         let png_data = ensure_png(&bytes)?;
         let encoded = base64_encode(&png_data);
         let mut tty = open_tty_write()?;
         transmit_kitty_data(&mut tty, id, &encoded);
         place_kitty(&mut tty, id, cols, rows);
-        let _ = tty.flush();
+        drop(tty.flush());
 
-        let _ = self.cache.insert(
+        let _previous = self.cache.insert(
             key.to_owned(),
             TransmittedImage {
                 id,
@@ -226,7 +226,7 @@ impl ImageCache {
     }
 
     pub(crate) fn version(&self) -> u64 {
-        (u64::from(self.next_id) << 32) | (self.cache.len() as u64)
+        (u64::from(self.next_id) << 32) | u64::try_from(self.cache.len()).unwrap_or(u64::MAX)
     }
 
     pub(crate) fn clear(&mut self) {
@@ -234,12 +234,19 @@ impl ImageCache {
             && !self.cache.is_empty()
             && let Some(mut tty) = open_tty_write()
         {
-            let _ = write!(tty, "\x1b_Ga=d,q=2\x1b\\");
-            let _ = tty.flush();
+            drop(write!(tty, "\x1b_Ga=d,q=2\x1b\\"));
+            drop(tty.flush());
         }
         self.cache.clear();
     }
 
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::float_arithmetic,
+        reason = "terminal pixel-to-cell scaling is bounded to positive u16 dimensions immediately after calculation"
+    )]
     pub(crate) fn calculate_cells(
         &self,
         pw: u32,
@@ -269,13 +276,13 @@ impl ImageCache {
 
 pub(crate) fn placeholder_lines(img: &TransmittedImage) -> Vec<Line<'static>> {
     let style = id_to_style(img.id);
-    let mut lines = Vec::with_capacity(img.rows as usize);
+    let mut lines = Vec::with_capacity(usize::from(img.rows));
     for row in 0..img.rows {
-        let mut text = String::with_capacity(img.cols as usize * 12);
+        let mut text = String::with_capacity(usize::from(img.cols).saturating_mul(12));
         for col in 0..img.cols {
             text.push('\u{2800}');
-            text.push(diacritic(row as u8));
-            text.push(diacritic(col as u8));
+            text.push(diacritic(u8::try_from(row).unwrap_or(u8::MAX)));
+            text.push(diacritic(u8::try_from(col).unwrap_or(u8::MAX)));
         }
         lines.push(Line::from(Span::styled(text, style)));
     }
@@ -284,13 +291,13 @@ pub(crate) fn placeholder_lines(img: &TransmittedImage) -> Vec<Line<'static>> {
 
 pub(crate) fn placeholder_lines_at(id: KittyImageId, cols: u16, rows: u16) -> Vec<Line<'static>> {
     let style = id_to_style(id);
-    let mut lines = Vec::with_capacity(rows as usize);
+    let mut lines = Vec::with_capacity(usize::from(rows));
     for row in 0..rows {
-        let mut text = String::with_capacity(cols as usize * 12);
+        let mut text = String::with_capacity(usize::from(cols).saturating_mul(12));
         for col in 0..cols {
             text.push('\u{2800}');
-            text.push(diacritic(row as u8));
-            text.push(diacritic(col as u8));
+            text.push(diacritic(u8::try_from(row).unwrap_or(u8::MAX)));
+            text.push(diacritic(u8::try_from(col).unwrap_or(u8::MAX)));
         }
         lines.push(Line::from(Span::styled(text, style)));
     }
@@ -301,17 +308,21 @@ pub(crate) fn fixup_placeholder_cells(
     buf: &mut ratatui::buffer::Buffer,
     area: ratatui::layout::Rect,
 ) {
-    for y in area.y..(area.y + area.height) {
-        for x in area.x..(area.x + area.width) {
-            let cell = &buf[(x, y)];
+    for y in area.y..area.y.saturating_add(area.height) {
+        for x in area.x..area.x.saturating_add(area.width) {
+            let Some(cell) = buf.cell((x, y)) else {
+                continue;
+            };
             let sym = cell.symbol();
             if let Some(rest) = sym.strip_prefix('\u{2800}')
                 && !rest.is_empty()
             {
-                let mut new_sym = String::with_capacity(4 + rest.len());
+                let mut new_sym = String::with_capacity(4_usize.saturating_add(rest.len()));
                 new_sym.push('\u{10EEEE}');
                 new_sym.push_str(rest);
-                let _ = buf[(x, y)].set_symbol(&new_sym);
+                if let Some(target_cell) = buf.cell_mut((x, y)) {
+                    let _cell = target_cell.set_symbol(&new_sym);
+                }
             }
         }
     }
@@ -319,16 +330,20 @@ pub(crate) fn fixup_placeholder_cells(
 
 fn diacritic(value: u8) -> char {
     // Safety: all DIACRITICS entries are valid Unicode code points
-    char::from_u32(DIACRITICS[value as usize]).unwrap_or('\u{FFFD}')
+    DIACRITICS
+        .get(usize::from(value))
+        .copied()
+        .and_then(char::from_u32)
+        .unwrap_or('\u{FFFD}')
 }
 
 fn id_to_style(id: u32) -> Style {
     if id < 256 {
-        Style::default().fg(Color::Indexed(id as u8))
+        Style::default().fg(Color::Indexed(u8::try_from(id).unwrap_or(u8::MAX)))
     } else {
-        let r = (id & 0xFF) as u8;
-        let g = ((id >> 8) & 0xFF) as u8;
-        let b = ((id >> 16) & 0xFF) as u8;
+        let r = u8::try_from(id & 0xFF).unwrap_or_default();
+        let g = u8::try_from((id >> 8) & 0xFF).unwrap_or_default();
+        let b = u8::try_from((id >> 16) & 0xFF).unwrap_or_default();
         Style::default().fg(Color::Rgb(r, g, b))
     }
 }
@@ -342,56 +357,93 @@ fn transmit_kitty_data<W: Write>(w: &mut W, id: u32, encoded: &str) {
         .collect();
 
     for (i, chunk) in chunks.iter().enumerate() {
-        let more = i32::from(i + 1 < chunks.len());
+        let more = i32::from(i.saturating_add(1) < chunks.len());
         if i == 0 {
-            let _ = write!(w, "\x1b_Ga=t,f=100,q=2,i={id},m={more};{chunk}\x1b\\");
+            drop(write!(
+                w,
+                "\x1b_Ga=t,f=100,q=2,i={id},m={more};{chunk}\x1b\\"
+            ));
         } else {
-            let _ = write!(w, "\x1b_Gq=2,m={more};{chunk}\x1b\\");
+            drop(write!(w, "\x1b_Gq=2,m={more};{chunk}\x1b\\"));
         }
     }
 }
 
 fn place_kitty<W: Write>(w: &mut W, id: u32, cols: u16, rows: u16) {
-    let _ = write!(w, "\x1b_Ga=p,U=1,q=2,i={id},c={cols},r={rows}\x1b\\");
+    drop(write!(
+        w,
+        "\x1b_Ga=p,U=1,q=2,i={id},c={cols},r={rows}\x1b\\"
+    ));
+}
+
+fn read_u16_be(data: &[u8], offset: usize) -> Option<u16> {
+    let bytes: [u8; 2] = data
+        .get(offset..offset.saturating_add(2))?
+        .try_into()
+        .ok()?;
+    Some(u16::from_be_bytes(bytes))
+}
+
+fn read_u16_le(data: &[u8], offset: usize) -> Option<u16> {
+    let bytes: [u8; 2] = data
+        .get(offset..offset.saturating_add(2))?
+        .try_into()
+        .ok()?;
+    Some(u16::from_le_bytes(bytes))
+}
+
+fn read_u32_be(data: &[u8], offset: usize) -> Option<u32> {
+    let bytes: [u8; 4] = data
+        .get(offset..offset.saturating_add(4))?
+        .try_into()
+        .ok()?;
+    Some(u32::from_be_bytes(bytes))
+}
+
+fn read_u32_le(data: &[u8], offset: usize) -> Option<u32> {
+    let bytes: [u8; 4] = data
+        .get(offset..offset.saturating_add(4))?
+        .try_into()
+        .ok()?;
+    Some(u32::from_le_bytes(bytes))
 }
 
 fn image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
     if data.len() >= 24 && data.starts_with(b"\x89PNG\r\n\x1a\n") {
-        let w = u32::from_be_bytes([data[16], data[17], data[18], data[19]]);
-        let h = u32::from_be_bytes([data[20], data[21], data[22], data[23]]);
-        return Some((w, h));
+        return Some((read_u32_be(data, 16)?, read_u32_be(data, 20)?));
     }
-    if data.len() >= 4 && data[0] == 0xFF && data[1] == 0xD8 {
-        let mut i = 2;
-        while i + 9 < data.len() {
-            if data[i] != 0xFF {
-                i += 1;
+    if data.starts_with(&[0xFF, 0xD8]) {
+        let mut i: usize = 2;
+        while i.saturating_add(9) < data.len() {
+            if data.get(i).copied()? != 0xFF {
+                i = i.saturating_add(1);
                 continue;
             }
-            let marker = data[i + 1];
+            let marker = data.get(i.saturating_add(1)).copied()?;
             if marker == 0xC0 || marker == 0xC2 {
-                let h = u32::from(u16::from_be_bytes([data[i + 5], data[i + 6]]));
-                let w = u32::from(u16::from_be_bytes([data[i + 7], data[i + 8]]));
+                let h = u32::from(read_u16_be(data, i.saturating_add(5))?);
+                let w = u32::from(read_u16_be(data, i.saturating_add(7))?);
                 return Some((w, h));
             }
-            if i + 3 < data.len() {
-                let len = u16::from_be_bytes([data[i + 2], data[i + 3]]) as usize;
-                i += 2 + len;
+            if i.saturating_add(3) < data.len() {
+                let len = usize::from(read_u16_be(data, i.saturating_add(2))?);
+                i = i.saturating_add(2).saturating_add(len);
             } else {
                 break;
             }
         }
     }
-    if data.len() >= 30 && data.starts_with(b"RIFF") && &data[8..12] == b"WEBP" {
-        if &data[12..16] == b"VP8 " {
-            let w = u32::from(u16::from_le_bytes([data[26], data[27]]) & 0x3FFF);
-            let h = u32::from(u16::from_le_bytes([data[28], data[29]]) & 0x3FFF);
+    if data.len() >= 30 && data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP".as_slice())
+    {
+        if data.get(12..16) == Some(b"VP8 ".as_slice()) {
+            let w = u32::from(read_u16_le(data, 26)? & 0x3FFF);
+            let h = u32::from(read_u16_le(data, 28)? & 0x3FFF);
             return Some((w, h));
         }
-        if &data[12..16] == b"VP8L" && data.len() >= 25 {
-            let b = u32::from_le_bytes([data[21], data[22], data[23], data[24]]);
-            let w = (b & 0x3FFF) + 1;
-            let h = ((b >> 14) & 0x3FFF) + 1;
+        if data.get(12..16) == Some(b"VP8L".as_slice()) && data.len() >= 25 {
+            let b = read_u32_le(data, 21)?;
+            let w = (b & 0x3FFF).saturating_add(1);
+            let h = ((b >> 14) & 0x3FFF).saturating_add(1);
             return Some((w, h));
         }
     }
@@ -506,14 +558,20 @@ mod tests {
             ph: 80,
         };
         let lines = placeholder_lines(&img);
-        let text = &lines[0].spans[0].content;
+        let text = &lines
+            .first()
+            .expect("placeholder line")
+            .spans
+            .first()
+            .expect("placeholder span")
+            .content;
         let chars: Vec<char> = text.chars().collect();
-        assert_eq!(chars[0], '\u{2800}');
-        assert_eq!(chars[1], diacritic(0));
-        assert_eq!(chars[2], diacritic(0));
-        assert_eq!(chars[3], '\u{2800}');
-        assert_eq!(chars[4], diacritic(0));
-        assert_eq!(chars[5], diacritic(1));
+        assert_eq!(chars.first().copied(), Some('\u{2800}'));
+        assert_eq!(chars.get(1).copied(), Some(diacritic(0)));
+        assert_eq!(chars.get(2).copied(), Some(diacritic(0)));
+        assert_eq!(chars.get(3).copied(), Some('\u{2800}'));
+        assert_eq!(chars.get(4).copied(), Some(diacritic(0)));
+        assert_eq!(chars.get(5).copied(), Some(diacritic(1)));
     }
 
     #[test]

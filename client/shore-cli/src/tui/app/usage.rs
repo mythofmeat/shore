@@ -74,18 +74,18 @@ impl BudgetFocus {
     }
 
     pub(crate) fn from_token(token: &str) -> Option<Self> {
-        let token = token.trim();
-        if let Some((name, scope)) = token.split_once(':') {
-            let name = name.trim();
-            if name.is_empty() {
+        let trimmed_token = token.trim();
+        if let Some((name, scope)) = trimmed_token.split_once(':') {
+            let trimmed_name = name.trim();
+            if trimmed_name.is_empty() {
                 return None;
             }
             return Some(Self {
-                name: Some(name.to_owned()),
+                name: Some(trimmed_name.to_owned()),
                 scope: Some(UsageScope::from_token(scope.trim())?),
             });
         }
-        match token.to_ascii_lowercase().as_str() {
+        match trimmed_token.to_ascii_lowercase().as_str() {
             "" => None,
             "auto" => Some(Self::default()),
             "cap" | "budget" => Some(Self::scoped(UsageScope::Cap)),

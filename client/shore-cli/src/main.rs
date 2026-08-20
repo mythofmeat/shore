@@ -29,24 +29,6 @@ mod state;
 mod terminal_images;
 #[cfg(test)]
 mod test_env;
-#[expect(
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::else_if_without_else,
-    clippy::float_arithmetic,
-    clippy::indexing_slicing,
-    clippy::integer_division,
-    clippy::let_underscore_must_use,
-    clippy::shadow_reuse,
-    clippy::shadow_unrelated,
-    clippy::string_slice,
-    clippy::wildcard_enum_match_arm,
-    reason = "the imported TUI renderer remains isolated while its unchecked layout operations are converted"
-)]
 mod tui;
 
 use std::process::ExitCode;

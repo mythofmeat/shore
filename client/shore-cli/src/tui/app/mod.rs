@@ -178,7 +178,9 @@ impl EffectiveSamplerSnapshot {
             serde_json::Value::Bool(v) => v.to_string(),
             serde_json::Value::Number(v) => v.to_string(),
             serde_json::Value::String(v) => v.clone(),
-            other => other.to_string(),
+            other @ (serde_json::Value::Array(_) | serde_json::Value::Object(_)) => {
+                other.to_string()
+            }
         }
     }
 
@@ -369,13 +371,18 @@ impl App {
                 ConversationEntry::Turn(turn) => {
                     let block_len = |b: &Block| -> u64 {
                         match b {
-                            Block::Text(s) | Block::Thinking(s) => s.len() as u64,
-                            Block::ToolUse { tool_name, .. } => tool_name.len() as u64,
+                            Block::Text(s) | Block::Thinking(s) => {
+                                u64::try_from(s.len()).unwrap_or(u64::MAX)
+                            }
+                            Block::ToolUse { tool_name, .. } => {
+                                u64::try_from(tool_name.len()).unwrap_or(u64::MAX)
+                            }
                             Block::ToolResult {
                                 tool_name, output, ..
-                            } => (tool_name.len() + output.len()) as u64,
+                            } => u64::try_from(tool_name.len().saturating_add(output.len()))
+                                .unwrap_or(u64::MAX),
                             Block::SubagentBegin(name) | Block::SubagentEnd(name) => {
-                                name.len() as u64
+                                u64::try_from(name.len()).unwrap_or(u64::MAX)
                             }
                         }
                     };
@@ -385,48 +392,46 @@ impl App {
                         | (role_bit << 55)
                         | (u64::from(turn.is_streaming()) << 54)
                         | (u64::from(turn.metadata.is_some()) << 53)
-                        | (((turn.images.len() as u64) & 0x1FF) << 44)
-                        | (((turn.blocks.len() as u64) & 0xFFF) << 32)
+                        | ((u64::try_from(turn.images.len()).unwrap_or(u64::MAX) & 0x1FF) << 44)
+                        | ((u64::try_from(turn.blocks.len()).unwrap_or(u64::MAX) & 0xFFF) << 32)
                         | (last_len & 0xFFFF_FFFF)
                 }
                 ConversationEntry::System { content, count, .. } => {
-                    (3_u64 << 56) | ((content.len() as u64) << 24) | u64::from(*count)
+                    (3_u64 << 56)
+                        | (u64::try_from(content.len()).unwrap_or(u64::MAX) << 24)
+                        | u64::from(*count)
                 }
                 ConversationEntry::ArchiveBoundary { archived_count } => {
-                    (7_u64 << 56) | (*archived_count as u64)
+                    (7_u64 << 56) | u64::try_from(*archived_count).unwrap_or(u64::MAX)
                 }
             }
         };
 
         let last_entry = self.entries.last().map_or(0, entry_summary);
-        let second_last_entry = if self.entries.len() >= 2 {
-            entry_summary(&self.entries[self.entries.len() - 2])
-        } else {
-            0
-        };
+        let second_last_entry = self.entries.iter().rev().nth(1).map_or(0, entry_summary);
 
         ConvFingerprint {
             width,
-            entries_len: self.entries.len() as u32,
+            entries_len: u32::try_from(self.entries.len()).unwrap_or(u32::MAX),
             last_entry,
             second_last_entry,
             history_version: self.history_version,
             stream_active: self.stream.active,
             stream_regen: self.stream.regen,
-            stream_phase_len: self.stream.phase.len() as u32,
+            stream_phase_len: u32::try_from(self.stream.phase.len()).unwrap_or(u32::MAX),
             stream_tool_name_len: self
                 .stream
                 .tool_name
                 .as_ref()
-                .map_or(-1, |s| s.len() as i32),
+                .map_or(-1, |s| i32::try_from(s.len()).unwrap_or(i32::MAX)),
             show_thinking: self.show_thinking,
             show_tools: self.show_tools,
             show_subagent: self.show_subagent,
             show_images: self.show_images,
             show_timestamps: self.show_timestamps,
             show_metadata: self.show_metadata,
-            spinner_frame: self.spinner_frame as u32,
-            character_name_len: self.character_name.len() as u32,
+            spinner_frame: u32::try_from(self.spinner_frame).unwrap_or(u32::MAX),
+            character_name_len: u32::try_from(self.character_name.len()).unwrap_or(u32::MAX),
             image_cache_version: self.image_cache.version(),
         }
     }
@@ -480,10 +485,11 @@ impl App {
             .iter()
             .position(|task| task.task_id == task_id)
         {
-            if let Some(name) = name
-                && self.subagent_tasks[idx].name.is_empty()
+            if let Some(task_name) = name
+                && let Some(task) = self.subagent_tasks.get_mut(idx)
+                && task.name.is_empty()
             {
-                self.subagent_tasks[idx].name = name.to_owned();
+                task.name = task_name.to_owned();
             }
             return idx;
         }
@@ -491,12 +497,14 @@ impl App {
             task_id.to_owned(),
             name.unwrap_or_default().to_owned(),
         ));
-        self.subagent_tasks.len() - 1
+        self.subagent_tasks.len().saturating_sub(1)
     }
 
     pub(crate) fn begin_subagent_task(&mut self, tool_id: &str, name: &str, query: String) {
         let idx = self.subagent_task_index(tool_id, Some(name));
-        let task = &mut self.subagent_tasks[idx];
+        let Some(task) = self.subagent_tasks.get_mut(idx) else {
+            return;
+        };
         task.query = query;
         task.status = "running".to_owned();
         task.detail = None;
@@ -555,7 +563,7 @@ impl App {
             .subagent_tasks
             .iter()
             .position(SubagentTaskView::is_running);
-        self.subagent_panel = Some(running.unwrap_or(self.subagent_tasks.len() - 1));
+        self.subagent_panel = Some(running.unwrap_or(self.subagent_tasks.len().saturating_sub(1)));
     }
 
     pub(crate) fn select_subagent_task(&mut self, delta: isize) {
@@ -566,9 +574,14 @@ impl App {
         if total == 0 {
             return;
         }
-        let total_i = total as isize;
-        let next = (selected as isize + delta).rem_euclid(total_i);
-        self.subagent_panel = Some(next as usize);
+        let Ok(total_i) = isize::try_from(total) else {
+            return;
+        };
+        let Ok(selected_i) = isize::try_from(selected) else {
+            return;
+        };
+        let next = selected_i.saturating_add(delta).rem_euclid(total_i);
+        self.subagent_panel = usize::try_from(next).ok();
     }
 
     pub(crate) fn selected_subagent_task_mut(&mut self) -> Option<&mut SubagentTaskView> {
@@ -581,10 +594,14 @@ impl App {
             return;
         };
         if delta < 0 {
-            task.scroll = task.scroll.saturating_sub(delta.unsigned_abs() as u16);
+            task.scroll = task
+                .scroll
+                .saturating_sub(u16::try_from(delta.unsigned_abs()).unwrap_or(u16::MAX));
             task.follow = false;
         } else {
-            task.scroll = task.scroll.saturating_add(delta as u16);
+            task.scroll = task
+                .scroll
+                .saturating_add(u16::try_from(delta).unwrap_or(u16::MAX));
         }
     }
 
@@ -687,19 +704,19 @@ impl App {
     }
 
     pub(crate) fn set_error(&mut self, msg: impl Into<String>) {
-        let msg = msg.into();
-        tracing::error!("{msg}");
+        let message = msg.into();
+        tracing::error!("{message}");
         if self.error_log.len() >= MAX_ERROR_LOG {
             let _ = self.error_log.remove(0);
         }
-        self.error_log.push(msg.clone());
-        self.notify(NotificationLevel::Error, msg);
+        self.error_log.push(message.clone());
+        self.notify(NotificationLevel::Error, message);
     }
 
     pub(crate) fn notify(&mut self, level: NotificationLevel, msg: impl Into<String>) {
-        let msg = msg.into();
+        let message = msg.into();
         if let Some(last) = self.notifications.last_mut()
-            && last.content == msg
+            && last.content == message
             && last.level == level
         {
             last.count = last.count.saturating_add(1);
@@ -707,13 +724,13 @@ impl App {
             return;
         }
         self.notifications.push(Notification {
-            content: msg,
+            content: message,
             level,
             count: 1,
             created: std::time::Instant::now(),
         });
         if self.notifications.len() > MAX_NOTIFICATIONS {
-            let overflow = self.notifications.len() - MAX_NOTIFICATIONS;
+            let overflow = self.notifications.len().saturating_sub(MAX_NOTIFICATIONS);
             drop(self.notifications.drain(0..overflow));
         }
     }
@@ -784,7 +801,11 @@ impl App {
         if picker.loading || picker.choices.is_empty() {
             return;
         }
-        picker.selected = (picker.selected + 1) % picker.choices.len();
+        picker.selected = picker
+            .selected
+            .saturating_add(1)
+            .checked_rem(picker.choices.len())
+            .unwrap_or_default();
         self.preview_alt_selection();
     }
 
@@ -796,8 +817,8 @@ impl App {
             return;
         }
         picker.selected = match picker.selected {
-            0 => picker.choices.len() - 1,
-            n => n - 1,
+            0 => picker.choices.len().saturating_sub(1),
+            n => n.saturating_sub(1),
         };
         self.preview_alt_selection();
     }
@@ -854,7 +875,7 @@ impl App {
             })
             .or_else(|| self.entries.iter().rposition(is_assistant));
 
-        if let Some(turn) = target_idx.and_then(|idx| self.entries[idx].as_turn_mut()) {
+        if let Some(turn) = target_idx.and_then(|idx| self.entries.get_mut(idx)?.as_turn_mut()) {
             turn.blocks = if choice.content.is_empty() {
                 Vec::new()
             } else {
@@ -894,19 +915,24 @@ impl App {
     }
 
     pub(crate) fn set_active_model(&mut self, model: Option<&str>) {
-        let next = model.filter(|m| !m.is_empty());
-        let current = (!self.model.is_empty()).then_some(self.model.as_str());
-        let equivalent = match (current, next) {
-            (Some(current), Some(next)) => Self::model_identifier_matches(current, next),
+        let next_model = model.filter(|candidate| !candidate.is_empty());
+        let current_model = (!self.model.is_empty()).then_some(self.model.as_str());
+        let equivalent = match (current_model, next_model) {
+            (Some(active_model), Some(candidate_model)) => {
+                Self::model_identifier_matches(active_model, candidate_model)
+            }
             (None, None) => true,
             _ => false,
         };
 
         if equivalent {
-            if let Some(next) = next
-                && !self.active_model_names.iter().any(|n| n == next)
+            if let Some(candidate_model) = next_model
+                && !self
+                    .active_model_names
+                    .iter()
+                    .any(|name| name == candidate_model)
             {
-                self.active_model_names.push(next.to_owned());
+                self.active_model_names.push(candidate_model.to_owned());
             }
             return;
         }
@@ -915,9 +941,9 @@ impl App {
         self.sampler_settings_loading = false;
         self.pending_sampler_settings_rid = None;
 
-        if let Some(model) = next {
-            self.model = model.to_owned();
-            self.active_model_names = vec![model.to_owned()];
+        if let Some(selected_model) = next_model {
+            self.model = selected_model.to_owned();
+            self.active_model_names = vec![selected_model.to_owned()];
         } else {
             self.model.clear();
             self.active_model_names.clear();
@@ -980,7 +1006,7 @@ impl App {
 
     pub(crate) fn sampler_settings_rid_matches(&self, rid: Option<&str>) -> bool {
         match (self.pending_sampler_settings_rid.as_deref(), rid) {
-            (Some(pending), Some(rid)) => pending == rid,
+            (Some(pending), Some(response_rid)) => pending == response_rid,
             _ => false,
         }
     }
@@ -1151,8 +1177,12 @@ impl App {
         let next = cycle
             .iter()
             .position(|focus| *focus == self.budget_focus)
-            .map_or(0, |i| (i + 1) % cycle.len());
-        self.budget_focus = cycle[next].clone();
+            .map_or(0, |i| {
+                i.saturating_add(1)
+                    .checked_rem(cycle.len())
+                    .unwrap_or_default()
+            });
+        self.budget_focus = cycle.get(next).cloned().unwrap_or_default();
         self.budget_focus.clone()
     }
 
@@ -1360,7 +1390,7 @@ impl App {
             PaletteMode::ValueEditor(state) => match &state.kind {
                 ValueEditorKind::Slider { dirty, .. } => (state.key.clone(), !*dirty),
             },
-            _ => return,
+            PaletteMode::Top | PaletteMode::Submenu(_) => return,
         };
 
         if !should_refresh {
@@ -1385,6 +1415,10 @@ impl App {
         text
     }
 
+    #[expect(
+        clippy::float_arithmetic,
+        reason = "quantizing a floating-point sampler slider necessarily uses floating-point steps"
+    )]
     fn quantize_slider_value(min: f64, max: f64, step: f64, value: f64) -> f64 {
         let clamped = value.clamp(min, max);
         if step <= 0.0 {
@@ -1543,7 +1577,7 @@ impl App {
             self.input.cmd_cursor = text.len();
             if !text.contains(' ') {
                 self.input.cmd_text.push(' ');
-                self.input.cmd_cursor += 1;
+                self.input.cmd_cursor = self.input.cmd_cursor.saturating_add(1);
             }
         }
     }
@@ -1551,13 +1585,15 @@ impl App {
     fn update_submenu_candidates(&mut self) {
         let parent = match &self.completion.mode {
             PaletteMode::Submenu(s) => s.parent.clone(),
-            _ => return,
+            PaletteMode::Top | PaletteMode::ValueEditor(_) => return,
         };
         let raw_filter = self.input.cmd_text.trim();
         let filter = raw_filter.to_lowercase();
         self.completion.header = match parent.as_str() {
             "setting" | "setting:reset" => Some("setting key".into()),
-            parent if parent.starts_with("setting:") => Some("setting value".into()),
+            setting_parent if setting_parent.starts_with("setting:") => {
+                Some("setting value".into())
+            }
             "view" => Some("view option".into()),
             _ => None,
         };
@@ -1734,23 +1770,23 @@ impl App {
     }
 
     fn view_value_presets(&self, key: &str, filter: &str) -> Vec<String> {
-        let filter = filter.to_lowercase();
+        let normalized_filter = filter.to_lowercase();
         match key {
-            "usage" => Self::filtered_presets(&["off", "always", "warn", "toggle"], &filter),
+            "usage" => {
+                Self::filtered_presets(&["off", "always", "warn", "toggle"], &normalized_filter)
+            }
             "budget" => {
                 let mut candidates =
-                    Self::filtered_presets(&["auto", "cap", "pace", "toggle"], &filter);
-                candidates.extend(
-                    self.usage_budgets
-                        .iter()
-                        .map(|b| b.name.clone())
-                        .filter(|name| {
-                            filter.is_empty() || name.to_lowercase().starts_with(&filter)
-                        }),
-                );
+                    Self::filtered_presets(&["auto", "cap", "pace", "toggle"], &normalized_filter);
+                candidates.extend(self.usage_budgets.iter().map(|b| b.name.clone()).filter(
+                    |name| {
+                        normalized_filter.is_empty()
+                            || name.to_lowercase().starts_with(&normalized_filter)
+                    },
+                ));
                 candidates
             }
-            _ => Self::filtered_presets(&["on", "off", "toggle"], &filter),
+            _ => Self::filtered_presets(&["on", "off", "toggle"], &normalized_filter),
         }
     }
 
@@ -1827,6 +1863,10 @@ impl App {
         self.update_completions();
     }
 
+    #[expect(
+        clippy::float_arithmetic,
+        reason = "moving a floating-point sampler slider necessarily applies a signed float step"
+    )]
     pub(crate) fn adjust_value_editor(&mut self, direction: f64) {
         let PaletteMode::ValueEditor(state) = &mut self.completion.mode else {
             return;
@@ -1880,7 +1920,7 @@ impl App {
     pub(crate) fn apply_value_editor(&mut self) -> Option<String> {
         let state = match &self.completion.mode {
             PaletteMode::ValueEditor(state) => state.clone(),
-            _ => return None,
+            PaletteMode::Top | PaletteMode::Submenu(_) => return None,
         };
         if Self::is_setting_key(&state.key) && !self.setting_editors_ready() {
             return None;
@@ -1893,12 +1933,12 @@ impl App {
                 typed,
                 ..
             } => {
-                if let Some(typed) = typed {
-                    let parsed = typed.parse::<f64>().ok()?;
+                if let Some(typed_value) = typed {
+                    let parsed = typed_value.parse::<f64>().ok()?;
                     if !(min..=max).contains(&parsed) {
                         return None;
                     }
-                    typed
+                    typed_value
                 } else {
                     Self::format_slider_number(current)
                 }
@@ -1916,7 +1956,7 @@ impl App {
     pub(crate) fn apply_submenu(&mut self) -> Option<String> {
         let parent = match &self.completion.mode {
             PaletteMode::Submenu(s) => s.parent.clone(),
-            _ => return None,
+            PaletteMode::Top | PaletteMode::ValueEditor(_) => return None,
         };
         let idx = self.completion.selected?;
         let chosen = self.completion.candidates.get(idx)?.clone();
@@ -1997,7 +2037,10 @@ impl App {
             return;
         }
         self.completion.selected = Some(match self.completion.selected {
-            Some(i) => (i + 1) % self.completion.candidates.len(),
+            Some(i) => i
+                .saturating_add(1)
+                .checked_rem(self.completion.candidates.len())
+                .unwrap_or_default(),
             None => 0,
         });
         self.apply_completion();
@@ -2009,8 +2052,8 @@ impl App {
             return;
         }
         self.completion.selected = Some(match self.completion.selected {
-            Some(0) | None => len - 1,
-            Some(i) => i - 1,
+            Some(0) | None => len.saturating_sub(1),
+            Some(i) => i.saturating_sub(1),
         });
         self.apply_completion();
     }
@@ -2181,11 +2224,9 @@ mod tests {
         app.set_status("reconnecting: connection lost");
         app.set_status("reconnecting: connection lost");
         assert_eq!(app.notifications.len(), 1);
-        assert_eq!(
-            app.notifications[0].content,
-            "reconnecting: connection lost"
-        );
-        assert_eq!(app.notifications[0].count, 3);
+        let notification = app.notifications.first().expect("notification");
+        assert_eq!(notification.content, "reconnecting: connection lost");
+        assert_eq!(notification.count, 3);
     }
 
     #[test]
@@ -2220,7 +2261,7 @@ mod tests {
     fn expired_notifications_are_pruned() {
         let mut app = App::default();
         app.set_status("hi");
-        let now = app.notifications[0].created;
+        let now = app.notifications.first().expect("notification").created;
         assert!(
             !app.expire_notifications(
                 (now + NOTIFICATION_TTL)
@@ -2238,9 +2279,16 @@ mod tests {
         let mut app = App::default();
         app.set_error("error: rate_limit - too many requests");
         assert_eq!(app.notifications.len(), 1);
-        assert_eq!(app.notifications[0].level, NotificationLevel::Error);
+        assert_eq!(
+            app.notifications.first().expect("notification").level,
+            NotificationLevel::Error
+        );
         assert_eq!(app.error_log.len(), 1);
-        assert!(app.error_log[0].contains("rate_limit"));
+        assert!(
+            app.error_log
+                .first()
+                .is_some_and(|entry| entry.contains("rate_limit"))
+        );
     }
 
     #[test]
@@ -2278,13 +2326,13 @@ mod tests {
         );
         app.next_alt();
         assert!(matches!(
-            app.entries[0].as_turn(),
+            app.entries.first().and_then(ConversationEntry::as_turn),
             Some(t) if t.joined_text() == "second"
         ));
 
         app.cancel_alt_picker();
         assert!(matches!(
-            app.entries[0].as_turn(),
+            app.entries.first().and_then(ConversationEntry::as_turn),
             Some(t) if t.joined_text() == "first"
         ));
     }
@@ -2306,8 +2354,8 @@ mod tests {
         );
 
         let args = app.selected_alt_command_args().unwrap();
-        assert_eq!(args["index"], 3);
-        assert_eq!(args["ref"], "a1");
+        assert_eq!(args.get("index"), Some(&serde_json::json!(3)));
+        assert_eq!(args.get("ref"), Some(&serde_json::json!("a1")));
     }
 
     fn budget(name: &str, cap: f64, pace: Option<f64>) -> UsageBudget {
@@ -2368,14 +2416,17 @@ mod tests {
         );
 
         app.budget_focus = BudgetFocus::named("weekly");
-        let focused = app.focused_budget().unwrap();
-        assert_eq!(focused.name, "weekly");
-        assert_eq!(focused.level(app.budget_focus.scope).percent_used, 0.7);
+        let weekly_budget = app.focused_budget().unwrap();
+        assert_eq!(weekly_budget.name, "weekly");
+        assert_eq!(
+            weekly_budget.level(app.budget_focus.scope).percent_used,
+            0.7
+        );
 
         app.budget_focus = BudgetFocus::from_token("weekly:pace").unwrap();
-        let focused = app.focused_budget().unwrap();
-        assert_eq!(focused.level(app.budget_focus.scope).percent_used, 0.2);
-        assert!(focused.level_is_pace(app.budget_focus.scope));
+        let weekly_pace = app.focused_budget().unwrap();
+        assert_eq!(weekly_pace.level(app.budget_focus.scope).percent_used, 0.2);
+        assert!(weekly_pace.level_is_pace(app.budget_focus.scope));
 
         app.budget_focus = BudgetFocus::named("retired");
         assert!(app.focused_budget().is_none());

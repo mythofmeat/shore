@@ -9,8 +9,8 @@ fn render_markdown(text: &str) -> Vec<Line<'static>> {
 }
 
 pub(crate) fn render_markdown_wrapped(text: &str, max_width: usize) -> Vec<Line<'static>> {
-    let max_width = (max_width > 0).then_some(max_width);
-    render_markdown_inner(text, max_width)
+    let width_limit = (max_width > 0).then_some(max_width);
+    render_markdown_inner(text, width_limit)
 }
 
 fn render_markdown_inner(text: &str, max_width: Option<usize>) -> Vec<Line<'static>> {
@@ -24,7 +24,7 @@ fn render_markdown_inner(text: &str, max_width: Option<usize>) -> Vec<Line<'stat
         if starts_visual_block(&event)
             && let Some(end) = previous_block_end.take()
             && range.start > end
-            && source_gap_has_blank_line(&text[end..range.start])
+            && source_gap_has_blank_line(text.get(end..range.start).unwrap_or_default())
         {
             renderer.push_blank_line_if_needed();
         }
@@ -102,8 +102,12 @@ fn source_gap_has_blank_line(gap: &str) -> bool {
 fn block_gap_start(text: &str, end: usize) -> usize {
     let bytes = text.as_bytes();
     let mut idx = end;
-    while idx > 0 && matches!(bytes[idx - 1], b'\n' | b'\r' | b' ' | b'\t') {
-        idx -= 1;
+    while idx > 0
+        && bytes
+            .get(idx.saturating_sub(1))
+            .is_some_and(|byte| matches!(byte, b'\n' | b'\r' | b' ' | b'\t'))
+    {
+        idx = idx.saturating_sub(1);
     }
     idx
 }
@@ -237,10 +241,10 @@ impl MarkdownRenderer {
             }
             Tag::BlockQuote(kind) => {
                 self.flush_current();
-                self.quote_depth += 1;
-                if let Some(kind) = kind {
+                self.quote_depth = self.quote_depth.saturating_add(1);
+                if let Some(quote_kind) = kind {
                     self.push_text(
-                        &format!("[{kind:?}] "),
+                        &format!("[{quote_kind:?}] "),
                         self.current_style()
                             .fg(Color::DarkGray)
                             .add_modifier(Modifier::BOLD),
@@ -251,10 +255,10 @@ impl MarkdownRenderer {
                 self.flush_current();
                 self.in_code_block = true;
                 if let CodeBlockKind::Fenced(lang) = kind {
-                    let lang = lang.trim();
-                    if !lang.is_empty() {
+                    let language = lang.trim();
+                    if !language.is_empty() {
                         self.lines.push(Line::from(Span::styled(
-                            format!("-- {lang} --"),
+                            format!("-- {language} --"),
                             Style::default().fg(Color::DarkGray),
                         )));
                     }
@@ -318,7 +322,7 @@ impl MarkdownRenderer {
                     self.push_text(" | ", Style::default().fg(Color::DarkGray));
                 }
                 if let Some(table) = &mut self.table {
-                    table.cell_index += 1;
+                    table.cell_index = table.cell_index.saturating_add(1);
                 }
             }
             Tag::Emphasis => self.push_style(self.current_style().add_modifier(Modifier::ITALIC)),
@@ -472,7 +476,7 @@ impl MarkdownRenderer {
             && list.next > 0
         {
             let n = list.next;
-            list.next += 1;
+            list.next = list.next.saturating_add(1);
             return format!("{indent}{n}. ");
         }
 
@@ -524,7 +528,7 @@ impl MarkdownRenderer {
             };
 
             let line_width = self.current_width();
-            if line_width + UnicodeWidthStr::width(text) <= max_width {
+            if line_width.saturating_add(UnicodeWidthStr::width(text)) <= max_width {
                 self.current.push(Span::styled(text.to_owned(), style));
                 return;
             }
@@ -532,9 +536,10 @@ impl MarkdownRenderer {
             let available = max_width.saturating_sub(line_width).max(1);
             let split = split_at_width(text, available);
             let (head, tail) = text.split_at(split);
-            let head = head.trim_end_matches(char::is_whitespace);
-            if !head.is_empty() {
-                self.current.push(Span::styled(head.to_owned(), style));
+            let trimmed_head = head.trim_end_matches(char::is_whitespace);
+            if !trimmed_head.is_empty() {
+                self.current
+                    .push(Span::styled(trimmed_head.to_owned(), style));
             }
             self.flush_current();
             self.ensure_continuation_prefix();
@@ -552,7 +557,7 @@ impl MarkdownRenderer {
             };
 
             let line_width = self.current_width();
-            if line_width + UnicodeWidthStr::width(text) <= max_width {
+            if line_width.saturating_add(UnicodeWidthStr::width(text)) <= max_width {
                 self.current.push(Span::styled(text.to_owned(), style));
                 return;
             }
@@ -644,23 +649,23 @@ impl MarkdownRenderer {
 }
 
 fn split_at_width(text: &str, max_width: usize) -> usize {
-    let mut width = 0;
+    let mut width: usize = 0;
     let mut last_whitespace = None;
     let mut last_fit = 0;
 
     for (idx, ch) in text.char_indices() {
         let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
-        if width + ch_width > max_width {
+        if width.saturating_add(ch_width) > max_width {
             return last_whitespace.filter(|&i| i > 0).unwrap_or_else(|| {
                 if last_fit > 0 {
                     last_fit
                 } else {
-                    idx + ch.len_utf8()
+                    idx.saturating_add(ch.len_utf8())
                 }
             });
         }
-        width += ch_width;
-        let next = idx + ch.len_utf8();
+        width = width.saturating_add(ch_width);
+        let next = idx.saturating_add(ch.len_utf8());
         last_fit = next;
         if ch.is_whitespace() {
             last_whitespace = Some(next);
@@ -671,20 +676,20 @@ fn split_at_width(text: &str, max_width: usize) -> usize {
 }
 
 fn split_at_width_hard(text: &str, max_width: usize) -> usize {
-    let mut width = 0;
+    let mut width: usize = 0;
     let mut last_fit = 0;
 
     for (idx, ch) in text.char_indices() {
         let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
-        if width + ch_width > max_width {
+        if width.saturating_add(ch_width) > max_width {
             return if last_fit > 0 {
                 last_fit
             } else {
-                idx + ch.len_utf8()
+                idx.saturating_add(ch.len_utf8())
             };
         }
-        width += ch_width;
-        last_fit = idx + ch.len_utf8();
+        width = width.saturating_add(ch_width);
+        last_fit = idx.saturating_add(ch.len_utf8());
     }
 
     text.len()
@@ -705,28 +710,36 @@ mod tests {
         lines.iter().map(line_text).collect::<Vec<_>>().join("\n")
     }
 
+    fn line_at<'lines>(lines: &'lines [Line<'static>], index: usize) -> &'lines Line<'static> {
+        lines.get(index).expect("rendered line should exist")
+    }
+
+    fn first_span<'line>(line: &'line Line<'static>) -> &'line Span<'static> {
+        line.spans.first().expect("rendered span should exist")
+    }
+
     #[test]
     fn plain_text() {
         let lines = render_markdown("hello world");
         assert_eq!(lines.len(), 1);
-        assert_eq!(line_text(&lines[0]), "hello world");
+        assert_eq!(line_text(line_at(&lines, 0)), "hello world");
     }
 
     #[test]
     fn blank_line_between_paragraphs() {
         let lines = render_markdown("hello\n\nworld");
         assert_eq!(lines.len(), 3);
-        assert_eq!(line_text(&lines[0]), "hello");
-        assert_eq!(line_text(&lines[1]), "");
-        assert_eq!(line_text(&lines[2]), "world");
+        assert_eq!(line_text(line_at(&lines, 0)), "hello");
+        assert_eq!(line_text(line_at(&lines, 1)), "");
+        assert_eq!(line_text(line_at(&lines, 2)), "world");
     }
 
     #[test]
     fn single_newline_stays_compact() {
         let lines = render_markdown("hello\nworld");
         assert_eq!(lines.len(), 2);
-        assert_eq!(line_text(&lines[0]), "hello");
-        assert_eq!(line_text(&lines[1]), "world");
+        assert_eq!(line_text(line_at(&lines, 0)), "hello");
+        assert_eq!(line_text(line_at(&lines, 1)), "world");
     }
 
     #[test]
@@ -757,8 +770,8 @@ mod tests {
         let text = "```rust\nfn main() {}\n```";
         let lines = render_markdown(text);
         assert_eq!(lines.len(), 2);
-        assert!(line_text(&lines[0]).contains("rust"));
-        assert!(line_text(&lines[1]).contains("fn main"));
+        assert!(line_text(line_at(&lines, 0)).contains("rust"));
+        assert!(line_text(line_at(&lines, 1)).contains("fn main"));
     }
 
     #[test]
@@ -766,13 +779,13 @@ mod tests {
         let lines = render_markdown("# Title\n## Subtitle\nBody");
         assert_eq!(lines.len(), 3);
         assert!(
-            lines[0].spans[0]
+            first_span(line_at(&lines, 0))
                 .style
                 .add_modifier
                 .contains(Modifier::BOLD)
         );
         assert!(
-            lines[0].spans[0]
+            first_span(line_at(&lines, 0))
                 .style
                 .add_modifier
                 .contains(Modifier::UNDERLINED)
@@ -783,14 +796,14 @@ mod tests {
     fn blockquote() {
         let lines = render_markdown("> quoted text");
         assert_eq!(lines.len(), 1);
-        assert!(line_text(&lines[0]).starts_with("> "));
+        assert!(line_text(line_at(&lines, 0)).starts_with("> "));
     }
 
     #[test]
     fn inline_code() {
         let lines = render_markdown("use `foo` here");
         assert!(
-            lines[0]
+            line_at(&lines, 0)
                 .spans
                 .iter()
                 .any(|span| span.content == "foo" && span.style.fg == Some(Color::Yellow))
@@ -801,14 +814,19 @@ mod tests {
     fn inline_bold_and_strikethrough() {
         let lines = render_markdown("this is **bold** and ~~gone~~");
         assert!(
-            lines[0]
+            line_at(&lines, 0)
                 .spans
                 .iter()
                 .any(|span| span.content == "bold"
                     && span.style.add_modifier.contains(Modifier::BOLD))
         );
-        assert!(lines[0].spans.iter().any(|span| span.content == "gone"
-            && span.style.add_modifier.contains(Modifier::CROSSED_OUT)));
+        assert!(
+            line_at(&lines, 0)
+                .spans
+                .iter()
+                .any(|span| span.content == "gone"
+                    && span.style.add_modifier.contains(Modifier::CROSSED_OUT))
+        );
     }
 
     #[test]
@@ -829,8 +847,8 @@ mod tests {
     fn wrapped_list_continuation_keeps_indent() {
         let lines = render_markdown_wrapped("- alpha beta gamma delta", 12);
         assert!(lines.len() > 1);
-        assert!(line_text(&lines[0]).starts_with("- "));
-        assert!(line_text(&lines[1]).starts_with("  "));
+        assert!(line_text(line_at(&lines, 0)).starts_with("- "));
+        assert!(line_text(line_at(&lines, 1)).starts_with("  "));
     }
 
     #[test]
@@ -855,7 +873,7 @@ mod tests {
         let lines = render_markdown_wrapped(text, 14);
 
         assert!(lines.iter().all(|line| line.width() <= 14));
-        assert!(line_text(&lines[0]).contains("rust"));
+        assert!(line_text(line_at(&lines, 0)).contains("rust"));
         assert!(all_text(&lines).contains("let message"));
         assert!(all_text(&lines).contains("println!"));
         assert!(
@@ -890,8 +908,8 @@ mod tests {
             "wrapped ordered item should not repeat its marker"
         );
         assert!(lines.iter().any(|line| {
-            let text = line_text(line);
-            text.starts_with("   ") && text.contains("inline")
+            let rendered_line = line_text(line);
+            rendered_line.starts_with("   ") && rendered_line.contains("inline")
         }));
     }
 
@@ -902,7 +920,7 @@ mod tests {
         let rendered = all_text(&lines);
 
         assert!(lines.iter().all(|line| line.width() <= 12));
-        assert!(line_text(&lines[0]).starts_with("- before"));
+        assert!(line_text(line_at(&lines, 0)).starts_with("- before"));
         assert!(rendered.contains("abcdefghij"));
         assert!(rendered.contains("klmnop"));
         assert!(

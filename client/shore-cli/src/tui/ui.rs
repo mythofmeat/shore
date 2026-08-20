@@ -15,11 +15,17 @@ use crate::tui::app::{
 use crate::tui::images;
 use crate::tui::markdown;
 
+fn usize_to_u16(value: usize) -> u16 {
+    u16::try_from(value).unwrap_or(u16::MAX)
+}
+
 pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
     let size = frame.area();
 
-    let input_content_width = size.width as usize;
-    let input_height = (app.input.visual_line_count(input_content_width) as u16 + 1).min(8);
+    let input_content_width = usize::from(size.width);
+    let input_height = usize_to_u16(app.input.visual_line_count(input_content_width))
+        .saturating_add(1)
+        .min(8);
 
     let show_value_editor = app.input.mode == InputMode::Command && app.is_value_editor_open();
     let show_completions =
@@ -29,8 +35,8 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
         4
     } else if show_completions {
         let header_lines = u16::from(app.completion.header.is_some());
-        let n = app.completion.candidates.len() as u16;
-        (header_lines + n).min(15)
+        let n = usize_to_u16(app.completion.candidates.len());
+        header_lines.saturating_add(n).min(15)
     } else {
         0
     };
@@ -38,7 +44,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
         if picker.loading {
             2
         } else {
-            (picker.choices.len() as u16 + 1).min(12)
+            usize_to_u16(picker.choices.len()).saturating_add(1).min(12)
         }
     } else {
         0
@@ -49,6 +55,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
         constraints.push(Constraint::Length(completion_height));
     } else if show_alt_picker {
         constraints.push(Constraint::Length(alt_picker_height));
+    } else {
     }
 
     let chunks = Layout::default()
@@ -56,18 +63,32 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
         .constraints(constraints)
         .split(size);
 
-    draw_conversation(frame, &mut *app, chunks[0]);
+    let Some(conversation_area) = chunks.first().copied() else {
+        return;
+    };
+    let Some(input_area) = chunks.get(1).copied() else {
+        return;
+    };
 
-    draw_notifications(frame, app, chunks[0]);
+    draw_conversation(frame, &mut *app, conversation_area);
 
-    draw_input(frame, app, chunks[1]);
+    draw_notifications(frame, app, conversation_area);
+
+    draw_input(frame, app, input_area);
 
     if show_value_editor {
-        draw_value_editor(frame, app, chunks[2]);
+        if let Some(completion_area) = chunks.get(2).copied() {
+            draw_value_editor(frame, app, completion_area);
+        }
     } else if show_completions {
-        draw_completions_inline(frame, app, chunks[2]);
+        if let Some(completion_area) = chunks.get(2).copied() {
+            draw_completions_inline(frame, app, completion_area);
+        }
     } else if show_alt_picker {
-        draw_alt_picker_inline(frame, app, chunks[2]);
+        if let Some(picker_area) = chunks.get(2).copied() {
+            draw_alt_picker_inline(frame, app, picker_area);
+        }
+    } else {
     }
 
     if app.subagent_panel.is_some() {
@@ -91,11 +112,18 @@ fn draw_notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {
     }
 
     let margin = 1_u16;
-    let box_w = (area.width / 2)
+    let box_w = area
+        .width
+        .checked_div(2)
+        .unwrap_or(area.width)
         .clamp(24, 56)
         .min(area.width.saturating_sub(margin));
-    let inner_w = box_w.saturating_sub(3) as usize;
-    let box_x = area.x + area.width - box_w - margin;
+    let inner_w = usize::from(box_w.saturating_sub(3));
+    let box_x = area
+        .x
+        .saturating_add(area.width)
+        .saturating_sub(box_w)
+        .saturating_sub(margin);
 
     let mut next_top = area.y;
     for notif in app.notifications.iter().rev() {
@@ -143,8 +171,8 @@ fn draw_notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {
             })
             .collect();
 
-        let box_h = lines.len() as u16 + 2;
-        if next_top + box_h > area.y + area.height {
+        let box_h = usize_to_u16(lines.len()).saturating_add(2);
+        if next_top.saturating_add(box_h) > area.y.saturating_add(area.height) {
             break;
         }
         let box_y = next_top;
@@ -157,7 +185,7 @@ fn draw_notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {
         frame.render_widget(Clear, rect);
         frame.render_widget(Paragraph::new(lines).block(block), rect);
 
-        next_top = box_y + box_h;
+        next_top = box_y.saturating_add(box_h);
     }
 }
 
@@ -185,12 +213,12 @@ fn looks_like_token_stream(text: &str) -> bool {
         if line.is_empty() {
             continue;
         }
-        non_empty += 1;
+        non_empty = non_empty.saturating_add(1);
         if line.chars().next().is_some_and(char::is_whitespace) {
-            leading_ws += 1;
+            leading_ws = leading_ws.saturating_add(1);
         }
     }
-    non_empty > 0 && leading_ws * 2 >= non_empty
+    non_empty > 0 && leading_ws.saturating_mul(2) >= non_empty
 }
 
 fn push_thinking_reflowed(
@@ -240,7 +268,7 @@ fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wr
         .add_modifier(Modifier::ITALIC);
     let bar_style = Style::default().fg(Color::DarkGray);
     lines.push(Line::from(Span::styled("  ◆ thinking", header_style)));
-    let text_width = wrap_width.saturating_sub(4) as usize;
+    let text_width = usize::from(wrap_width.saturating_sub(4));
     for thought in thoughts {
         if looks_like_token_stream(thought) {
             push_thinking_reflowed(lines, thought, bar_style, content_style, text_width);
@@ -260,7 +288,7 @@ fn render_tool_block(
     wrap_width: u16,
 ) {
     let bar_style = Style::default().fg(Color::DarkGray);
-    let text_width = wrap_width.saturating_sub(4) as usize;
+    let text_width = usize::from(wrap_width.saturating_sub(4));
     match block {
         TurnBlock::ToolUse {
             tool_name, input, ..
@@ -277,10 +305,10 @@ fn render_tool_block(
                     Style::default().fg(call_color).add_modifier(Modifier::BOLD),
                 ),
             ]));
-            if let Some(input) = format_tool_input(input) {
+            if let Some(formatted_input) = format_tool_input(input) {
                 push_bar_wrapped(
                     lines,
-                    &input,
+                    &formatted_input,
                     bar_style,
                     Style::default().fg(Color::DarkGray),
                     text_width,
@@ -310,17 +338,20 @@ fn render_tool_block(
                         .add_modifier(Modifier::BOLD),
                 ),
             ]));
-            let output = format_tool_output(output);
+            let formatted_output = format_tool_output(output);
             push_bar_wrapped(
                 lines,
-                &output,
+                &formatted_output,
                 bar_style,
                 Style::default().fg(Color::DarkGray),
                 text_width,
             );
             lines.push(Line::from(""));
         }
-        _ => {}
+        TurnBlock::Text(_)
+        | TurnBlock::Thinking(_)
+        | TurnBlock::SubagentBegin(_)
+        | TurnBlock::SubagentEnd(_) => {}
     }
 }
 
@@ -335,7 +366,10 @@ fn render_blocks(
     let mut in_subagent = false;
     let mut i = 0;
     while i < blocks.len() {
-        match &blocks[i] {
+        let Some(block) = blocks.get(i) else {
+            break;
+        };
+        match block {
             TurnBlock::SubagentBegin(name) => {
                 in_subagent = true;
                 if show_subagent {
@@ -346,13 +380,14 @@ fn render_blocks(
                             .add_modifier(Modifier::BOLD),
                     )));
                 } else {
-                    let tools = section_tool_count(&blocks[i + 1..]);
+                    let tools =
+                        section_tool_count(blocks.get(i.saturating_add(1)..).unwrap_or_default());
                     lines.push(Line::from(Span::styled(
                         format!("  » {name} · {tools} tool{} (press s)", plural(tools)),
                         Style::default().fg(Color::DarkGray),
                     )));
                 }
-                i += 1;
+                i = i.saturating_add(1);
             }
             TurnBlock::SubagentEnd(name) => {
                 if show_subagent && in_subagent {
@@ -365,12 +400,15 @@ fn render_blocks(
                     lines.push(Line::from(""));
                 }
                 in_subagent = false;
-                i += 1;
+                i = i.saturating_add(1);
             }
             TurnBlock::Thinking(_) => {
                 let start = i;
-                while i < blocks.len() && matches!(blocks[i], TurnBlock::Thinking(_)) {
-                    i += 1;
+                while blocks
+                    .get(i)
+                    .is_some_and(|candidate| matches!(candidate, TurnBlock::Thinking(_)))
+                {
+                    i = i.saturating_add(1);
                 }
                 let visible = if in_subagent {
                     show_subagent
@@ -378,11 +416,17 @@ fn render_blocks(
                     show_thinking
                 };
                 if visible {
-                    let thoughts: Vec<String> = blocks[start..i]
+                    let thoughts: Vec<String> = blocks
+                        .get(start..i)
+                        .unwrap_or_default()
                         .iter()
                         .filter_map(|b| match b {
                             TurnBlock::Thinking(content) => Some(content.clone()),
-                            _ => None,
+                            TurnBlock::Text(_)
+                            | TurnBlock::ToolUse { .. }
+                            | TurnBlock::ToolResult { .. }
+                            | TurnBlock::SubagentBegin(_)
+                            | TurnBlock::SubagentEnd(_) => None,
                         })
                         .collect();
                     render_thinking_group(lines, &thoughts, wrap_width);
@@ -391,13 +435,13 @@ fn render_blocks(
             TurnBlock::Text(content) => {
                 let visible = if in_subagent { show_subagent } else { true };
                 if visible && !content.is_empty() {
-                    let wrap_w = wrap_width.saturating_sub(2) as usize;
+                    let wrap_w = usize::from(wrap_width.saturating_sub(2));
                     lines.extend(indent_lines(markdown::render_markdown_wrapped(
                         content, wrap_w,
                     )));
                     lines.push(Line::from(""));
                 }
-                i += 1;
+                i = i.saturating_add(1);
             }
             TurnBlock::ToolUse { .. } | TurnBlock::ToolResult { .. } => {
                 let visible = if in_subagent {
@@ -405,10 +449,10 @@ fn render_blocks(
                 } else {
                     show_tools
                 };
-                if visible {
-                    render_tool_block(lines, &blocks[i], in_subagent, wrap_width);
+                if visible && let Some(tool_block) = blocks.get(i) {
+                    render_tool_block(lines, tool_block, in_subagent, wrap_width);
                 }
-                i += 1;
+                i = i.saturating_add(1);
             }
         }
     }
@@ -431,7 +475,7 @@ fn squeeze_blank_lines(lines: &mut Vec<Line<'static>>) {
 
     for line in lines.drain(..) {
         if line.width() == 0 {
-            consecutive_blanks += 1;
+            consecutive_blanks = consecutive_blanks.saturating_add(1);
             if consecutive_blanks > 1 {
                 continue;
             }
@@ -445,7 +489,7 @@ fn squeeze_blank_lines(lines: &mut Vec<Line<'static>>) {
 }
 
 fn visual_line_count(lines: &[Line<'static>], _width: u16) -> u16 {
-    lines.len().min(u16::MAX as usize) as u16
+    usize_to_u16(lines.len())
 }
 
 fn truncate_to_width(s: &mut String, max_width: usize) {
@@ -458,11 +502,11 @@ fn truncate_to_width(s: &mut String, max_width: usize) {
     let mut end = 0_usize;
     for (idx, ch) in s.char_indices() {
         let w = UnicodeWidthChar::width(ch).unwrap_or(0);
-        if width + w > max_width {
+        if width.saturating_add(w) > max_width {
             break;
         }
-        width += w;
-        end = idx + ch.len_utf8();
+        width = width.saturating_add(w);
+        end = idx.saturating_add(ch.len_utf8());
     }
     s.truncate(end);
 }
@@ -483,10 +527,10 @@ fn word_wrap(text: &str, max_width: usize) -> Vec<String> {
         if current.is_empty() {
             current = word.to_owned();
             current_width = w;
-        } else if current_width + 1 + w <= max_width {
+        } else if current_width.saturating_add(1).saturating_add(w) <= max_width {
             current.push(' ');
             current.push_str(word);
-            current_width += 1 + w;
+            current_width = current_width.saturating_add(1).saturating_add(w);
         } else {
             result.push(std::mem::take(&mut current));
             current = word.to_owned();
@@ -576,16 +620,19 @@ fn render_streaming_content(lines: &mut Vec<Line<'static>>, app: &App, _content_
 
 fn spinner_glyphs(frame: usize) -> &'static str {
     const FRAMES: [&str; 4] = ["···", "•··", "·•·", "··•"];
-    FRAMES[frame % FRAMES.len()]
+    FRAMES
+        .get(frame.checked_rem(FRAMES.len()).unwrap_or_default())
+        .copied()
+        .unwrap_or_default()
 }
 
 fn format_timestamp(timestamp: &str) -> Option<String> {
-    let timestamp = timestamp.trim();
-    if timestamp.is_empty() {
+    let trimmed_timestamp = timestamp.trim();
+    if trimmed_timestamp.is_empty() {
         return None;
     }
 
-    match DateTime::parse_from_rfc3339(timestamp) {
+    match DateTime::parse_from_rfc3339(trimmed_timestamp) {
         Ok(dt) => {
             let local = dt.with_timezone(&Local);
             if local.date_naive() == Local::now().date_naive() {
@@ -594,7 +641,7 @@ fn format_timestamp(timestamp: &str) -> Option<String> {
                 Some(local.format("%Y-%m-%d %H:%M").to_string())
             }
         }
-        Err(_) => Some(timestamp.to_owned()),
+        Err(_) => Some(trimmed_timestamp.to_owned()),
     }
 }
 
@@ -634,9 +681,13 @@ fn draw_conversation(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         let grew_above = std::mem::take(&mut app.grew_above_viewport);
         if !app.auto_scroll && same_width && !grew_above {
             let added_below_viewport =
-                i32::from(content_visual) - i32::from(previous_content_visual);
-            app.scroll_offset = (i32::from(app.scroll_offset) + added_below_viewport)
-                .clamp(0, i32::from(u16::MAX)) as u16;
+                i32::from(content_visual).saturating_sub(i32::from(previous_content_visual));
+            app.scroll_offset = u16::try_from(
+                i32::from(app.scroll_offset)
+                    .saturating_add(added_below_viewport)
+                    .clamp(0, i32::from(u16::MAX)),
+            )
+            .unwrap_or_default();
         }
     }
 
@@ -658,10 +709,10 @@ fn draw_conversation(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     };
 
     let render_area = if content_visual < visible_height {
-        let top_pad = visible_height - content_visual;
+        let top_pad = visible_height.saturating_sub(content_visual);
         Rect {
             x: area.x,
-            y: area.y + top_pad,
+            y: area.y.saturating_add(top_pad),
             width: area.width,
             height: content_visual,
         }
@@ -812,7 +863,7 @@ fn build_conversation_lines(
                 );
                 lines.push(Line::from(""));
                 let sys_style = Style::default().fg(Color::Yellow);
-                let sys_wrap_w = content_width.saturating_sub(2) as usize;
+                let sys_wrap_w = usize::from(content_width.saturating_sub(2));
                 for sline in content.lines() {
                     for wline in word_wrap(sline, sys_wrap_w) {
                         lines.push(Line::from(vec![
@@ -873,12 +924,15 @@ fn push_archive_boundary(
     } else {
         format!(" {archived_turns} archived turns above · outside current context ")
     };
-    let width = content_width as usize;
+    let width = usize::from(content_width);
     let label_width = unicode_width::UnicodeWidthStr::width(label.as_str());
 
     let text = if width > label_width {
-        let left = (width - label_width) / 2;
-        let right = width.saturating_sub(label_width + left);
+        let left = width
+            .saturating_sub(label_width)
+            .checked_div(2)
+            .unwrap_or_default();
+        let right = width.saturating_sub(label_width.saturating_add(left));
         format!("{}{}{}", "─".repeat(left), label, "─".repeat(right))
     } else {
         label.trim().to_owned()
@@ -896,7 +950,9 @@ fn draw_fullscreen_image(frame: &mut Frame<'_>, app: &App, area: Rect) {
         Some(i) if i < app.image_index.len() => i,
         _ => return,
     };
-    let entry = &app.image_index[idx];
+    let Some(entry) = app.image_index.get(idx) else {
+        return;
+    };
     let Some(transmitted) = app.image_cache.get(&entry.path) else {
         return;
     };
@@ -906,8 +962,12 @@ fn draw_fullscreen_image(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(area);
 
-    let img_area = chunks[0];
-    let status_area = chunks[1];
+    let Some(img_area) = chunks.first().copied() else {
+        return;
+    };
+    let Some(status_area) = chunks.get(1).copied() else {
+        return;
+    };
 
     let (fs_cols, fs_rows) = app.image_cache.calculate_cells(
         transmitted.pw,
@@ -916,7 +976,11 @@ fn draw_fullscreen_image(frame: &mut Frame<'_>, app: &App, area: Rect) {
         img_area.height,
     );
 
-    let v_pad = img_area.height.saturating_sub(fs_rows) / 2;
+    let v_pad = img_area
+        .height
+        .saturating_sub(fs_rows)
+        .checked_div(2)
+        .unwrap_or_default();
     let mut img_lines: Vec<Line<'static>> = Vec::new();
     for _ in 0..v_pad {
         img_lines.push(Line::from(""));
@@ -931,7 +995,12 @@ fn draw_fullscreen_image(frame: &mut Frame<'_>, app: &App, area: Rect) {
     frame.render_widget(paragraph, img_area);
 
     let total = app.image_index.len();
-    let status_text = format!("  {}/{} \u{2014} {}", idx + 1, total, entry.display_name);
+    let status_text = format!(
+        "  {}/{} \u{2014} {}",
+        idx.saturating_add(1),
+        total,
+        entry.display_name
+    );
     let status = Paragraph::new(Line::from(Span::styled(
         status_text,
         Style::default().fg(Color::DarkGray),
@@ -984,6 +1053,14 @@ fn render_images(
     }
 }
 
+#[expect(
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::float_arithmetic,
+    reason = "the bounded ten-cell usage gauge converts a clamped percentage to discrete cells"
+)]
 fn usage_chip(
     budget: &crate::tui::app::UsageBudget,
     focus: &crate::tui::app::BudgetFocus,
@@ -1026,37 +1103,45 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
 
         frame.render_widget(paragraph, area);
 
-        let prefix_w = unicode_width::UnicodeWidthStr::width(prefix) as u16;
-        let cursor_x = prefix_w
-            + unicode_width::UnicodeWidthStr::width(&app.input.cmd_text[..app.input.cmd_cursor])
-                as u16;
-        frame.set_cursor_position((area.x + cursor_x, area.y + 1));
+        let prefix_w = usize_to_u16(unicode_width::UnicodeWidthStr::width(prefix));
+        let cursor_x =
+            prefix_w.saturating_add(usize_to_u16(unicode_width::UnicodeWidthStr::width(
+                app.input
+                    .cmd_text
+                    .get(..app.input.cmd_cursor)
+                    .unwrap_or_default(),
+            )));
+        frame.set_cursor_position((area.x.saturating_add(cursor_x), area.y.saturating_add(1)));
         return;
     }
 
-    let content_width = area.width as usize;
+    let content_width = usize::from(area.width);
     let line_starts = crate::tui::app::word_wrap_offsets(&app.input.text, content_width);
 
     let cy_idx = line_starts
         .partition_point(|&s| s <= app.input.cursor)
         .saturating_sub(1);
-    let cy: u16 = cy_idx as u16;
-    let line_start = line_starts[cy_idx];
-    let mut cx: usize = app.input.text[line_start..app.input.cursor]
+    let cy = usize_to_u16(cy_idx);
+    let line_start = line_starts.get(cy_idx).copied().unwrap_or_default();
+    let mut cx: usize = app
+        .input
+        .text
+        .get(line_start..app.input.cursor)
+        .unwrap_or_default()
         .chars()
         .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
         .sum();
 
-    let cy = if content_width > 0 && cx >= content_width {
+    let cursor_row = if content_width > 0 && cx >= content_width {
         cx = 0;
-        cy + 1
+        cy.saturating_add(1)
     } else {
         cy
     };
 
     let content_height = area.height.saturating_sub(1);
-    let input_scroll = if cy >= content_height {
-        cy - content_height + 1
+    let input_scroll = if cursor_row >= content_height {
+        cursor_row.saturating_sub(content_height).saturating_add(1)
     } else {
         0
     };
@@ -1073,8 +1158,11 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
             .iter()
             .enumerate()
             .map(|(idx, &start)| {
-                let end = line_starts.get(idx + 1).copied().unwrap_or(text.len());
-                let slice = &text[start..end];
+                let end = line_starts
+                    .get(idx.saturating_add(1))
+                    .copied()
+                    .unwrap_or(text.len());
+                let slice = text.get(start..end).unwrap_or_default();
                 slice.strip_suffix('\n').unwrap_or(slice).to_owned()
             })
             .collect();
@@ -1144,7 +1232,13 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
     frame.render_widget(paragraph, area);
 
     if app.input.mode == InputMode::Insert {
-        frame.set_cursor_position((area.x + cx as u16, area.y + 1 + cy - input_scroll));
+        frame.set_cursor_position((
+            area.x.saturating_add(usize_to_u16(cx)),
+            area.y
+                .saturating_add(1)
+                .saturating_add(cy)
+                .saturating_sub(input_scroll),
+        ));
     }
 }
 
@@ -1187,13 +1281,15 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         return;
     }
 
-    let visible_rows = (inner.height as usize / 3)
+    let visible_rows = usize::from(inner.height)
+        .checked_div(3)
+        .unwrap_or_default()
         .clamp(1, 8)
         .min(app.subagent_tasks.len());
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(visible_rows as u16),
+            Constraint::Length(usize_to_u16(visible_rows)),
             Constraint::Length(1),
             Constraint::Min(1),
             Constraint::Length(1),
@@ -1220,7 +1316,7 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         } else {
             Style::default().fg(Color::Gray)
         };
-        let budget = inner.width.saturating_sub(7) as usize;
+        let budget = usize::from(inner.width.saturating_sub(7));
         selector_lines.push(Line::from(vec![
             Span::styled(marker.to_owned(), Style::default().fg(SUBAGENT_COLOR)),
             Span::styled(format!("{glyph} "), Style::default().fg(color)),
@@ -1230,23 +1326,28 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             ),
         ]));
     }
-    frame.render_widget(Paragraph::new(Text::from(selector_lines)), chunks[0]);
+    let Some(selector_area) = chunks.first().copied() else {
+        return;
+    };
+    frame.render_widget(Paragraph::new(Text::from(selector_lines)), selector_area);
 
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
-            "\u{2500}".repeat(inner.width as usize),
+            "\u{2500}".repeat(usize::from(inner.width)),
             Style::default().fg(Color::DarkGray),
         ))),
-        chunks[1],
+        chunks.get(1).copied().unwrap_or(inner),
     );
 
-    let body_area = chunks[2];
+    let Some(body_area) = chunks.get(2).copied() else {
+        return;
+    };
     let mut lines: Vec<Line<'static>> = Vec::new();
     let Some(task) = app.subagent_tasks.get(selected) else {
         return;
     };
     if !task.query.is_empty() {
-        let wrap_w = body_area.width.saturating_sub(2) as usize;
+        let wrap_w = usize::from(body_area.width.saturating_sub(2));
         for chunk in wrap_plain(&task.query, wrap_w) {
             lines.push(Line::from(Span::styled(
                 format!("  {chunk}"),
@@ -1267,7 +1368,7 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         )));
-        let wrap_w = body_area.width.saturating_sub(2) as usize;
+        let wrap_w = usize::from(body_area.width.saturating_sub(2));
         for chunk in wrap_plain(detail, wrap_w) {
             lines.push(Line::from(Span::styled(
                 format!("  {chunk}"),
@@ -1282,20 +1383,20 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         )));
     }
 
-    let total = lines.len() as u16;
+    let total = usize_to_u16(lines.len());
     let max_scroll = total.saturating_sub(body_area.height);
-    let Some(task) = app.subagent_tasks.get_mut(selected) else {
+    let Some(selected_task) = app.subagent_tasks.get_mut(selected) else {
         return;
     };
-    if task.follow {
-        task.scroll = max_scroll;
+    if selected_task.follow {
+        selected_task.scroll = max_scroll;
     } else {
-        task.scroll = task.scroll.min(max_scroll);
-        if task.scroll == max_scroll {
-            task.follow = true;
+        selected_task.scroll = selected_task.scroll.min(max_scroll);
+        if selected_task.scroll == max_scroll {
+            selected_task.follow = true;
         }
     }
-    let scroll = task.scroll;
+    let scroll = selected_task.scroll;
 
     frame.render_widget(
         Paragraph::new(Text::from(lines)).scroll((scroll, 0)),
@@ -1307,7 +1408,7 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             "  Tab/h/l switch  j/k scroll  G bottom  Esc close",
             Style::default().fg(Color::DarkGray),
         ))),
-        chunks[3],
+        chunks.get(3).copied().unwrap_or(inner),
     );
 }
 
@@ -1322,10 +1423,10 @@ fn truncate_display(text: &str, budget: usize) -> String {
     let mut used = 0_usize;
     for ch in text.chars() {
         let w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
-        if used + w + 1 > budget {
+        if used.saturating_add(w).saturating_add(1) > budget {
             break;
         }
-        used += w;
+        used = used.saturating_add(w);
         out.push(ch);
     }
     out.push('\u{2026}');
@@ -1341,8 +1442,8 @@ fn wrap_plain(text: &str, width: usize) -> Vec<String> {
         let mut current = String::new();
         for word in raw.split_whitespace() {
             let candidate_len = unicode_width::UnicodeWidthStr::width(current.as_str())
-                + usize::from(!current.is_empty())
-                + unicode_width::UnicodeWidthStr::width(word);
+                .saturating_add(usize::from(!current.is_empty()))
+                .saturating_add(unicode_width::UnicodeWidthStr::width(word));
             if !current.is_empty() && candidate_len > width {
                 out.push(std::mem::take(&mut current));
             }
@@ -1458,7 +1559,15 @@ mod subagent_panel_tests {
         tool(&mut h, "tu_1", "research", "web_search");
 
         assert_eq!(h.app.subagent_tasks.len(), 1);
-        assert_eq!(h.app.subagent_tasks[0].blocks.len(), 3);
+        assert_eq!(
+            h.app
+                .subagent_tasks
+                .first()
+                .expect("subagent task")
+                .blocks
+                .len(),
+            3
+        );
         let blocks = &h
             .app
             .entries
@@ -1477,17 +1586,26 @@ mod subagent_panel_tests {
     fn the_input_border_says_how_many_are_running() {
         let mut h = Harness::new();
         asking(&mut h, "tu_1", "research", "find the tide tables");
-        let frame = h.render("one running");
-        assert!(frame.contains("1 sub-agent running"), "frame: {frame}");
-        assert!(frame.contains("press S"), "frame: {frame}");
+        let one_running = h.render("one running");
+        assert!(
+            one_running.contains("1 sub-agent running"),
+            "frame: {one_running}"
+        );
+        assert!(one_running.contains("press S"), "frame: {one_running}");
 
         asking(&mut h, "tu_2", "cook", "plan dinner");
-        let frame = h.render("two running");
-        assert!(frame.contains("2 sub-agents running"), "frame: {frame}");
+        let two_running = h.render("two running");
+        assert!(
+            two_running.contains("2 sub-agents running"),
+            "frame: {two_running}"
+        );
 
         answered(&mut h, "tu_1", "research");
-        let frame = h.render("one settled");
-        assert!(frame.contains("1 sub-agent running"), "frame: {frame}");
+        let one_settled = h.render("one settled");
+        assert!(
+            one_settled.contains("1 sub-agent running"),
+            "frame: {one_settled}"
+        );
     }
 
     #[test]
@@ -1527,15 +1645,27 @@ mod subagent_panel_tests {
         chunk(&mut h, "tu_2", "cook", "counting the plates");
 
         open_panel(&mut h);
-        let frame = h.render("first task selected");
-        assert!(frame.contains("checking the almanac"), "frame: {frame}");
-        assert!(!frame.contains("counting the plates"), "frame: {frame}");
+        let first_task = h.render("first task selected");
+        assert!(
+            first_task.contains("checking the almanac"),
+            "frame: {first_task}"
+        );
+        assert!(
+            !first_task.contains("counting the plates"),
+            "frame: {first_task}"
+        );
 
         h.press(KeyCode::Tab);
         assert_eq!(h.app.subagent_panel, Some(1));
-        let frame = h.render("second task selected");
-        assert!(frame.contains("counting the plates"), "frame: {frame}");
-        assert!(frame.contains("plan dinner for six"), "frame: {frame}");
+        let second_task = h.render("second task selected");
+        assert!(
+            second_task.contains("counting the plates"),
+            "frame: {second_task}"
+        );
+        assert!(
+            second_task.contains("plan dinner for six"),
+            "frame: {second_task}"
+        );
 
         h.press(KeyCode::Tab);
         assert_eq!(h.app.subagent_panel, Some(0), "selection wraps around");
@@ -1560,7 +1690,10 @@ mod subagent_panel_tests {
         chunk(&mut h, "tu_9", "research", "arriving before the call did");
 
         assert_eq!(h.app.subagent_tasks.len(), 1);
-        assert_eq!(h.app.subagent_tasks[0].name, "research");
+        assert_eq!(
+            h.app.subagent_tasks.first().expect("subagent task").name,
+            "research"
+        );
         assert!(h.app.entries.is_empty());
 
         asking(&mut h, "tu_9", "research", "the late query");
@@ -1569,7 +1702,10 @@ mod subagent_panel_tests {
             1,
             "the ask_ call upserts, it does not append"
         );
-        assert_eq!(h.app.subagent_tasks[0].query, "the late query");
+        assert_eq!(
+            h.app.subagent_tasks.first().expect("subagent task").query,
+            "the late query"
+        );
     }
 
     fn untagged_chunk(h: &mut Harness, name: &str, text: &str) {
@@ -1595,8 +1731,9 @@ mod subagent_panel_tests {
             "no sub-agent output belongs in the conversation"
         );
         assert_eq!(h.app.subagent_tasks.len(), 1);
-        assert_eq!(h.app.subagent_tasks[0].name, "research");
-        assert_eq!(h.app.subagent_tasks[0].blocks.len(), 1);
+        let task = h.app.subagent_tasks.first().expect("subagent task");
+        assert_eq!(task.name, "research");
+        assert_eq!(task.blocks.len(), 1);
     }
 
     fn ask_call(h: &mut Harness, tool_id: &str, name: &str, output: &str, is_error: bool) {
@@ -1716,19 +1853,19 @@ mod subagent_panel_tests {
 
         open_panel(&mut h);
         let _ = h.render("following the tail");
-        assert!(h.app.subagent_tasks[0].follow);
+        assert!(h.app.subagent_tasks.first().expect("subagent task").follow);
         assert!(
-            h.app.subagent_tasks[0].scroll > 0,
+            h.app.subagent_tasks.first().expect("subagent task").scroll > 0,
             "the tail is scrolled to"
         );
 
         h.press(KeyCode::Char('k'));
         let _ = h.render("scrolled up");
-        assert!(!h.app.subagent_tasks[0].follow);
+        assert!(!h.app.subagent_tasks.first().expect("subagent task").follow);
 
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char('G'));
         let _ = h.render("back to the tail");
-        assert!(h.app.subagent_tasks[0].follow);
+        assert!(h.app.subagent_tasks.first().expect("subagent task").follow);
     }
 }
 
@@ -1867,10 +2004,20 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect) {
         Line::from(""),
     ];
 
-    let height = lines.len() as u16 + 2;
+    let height = usize_to_u16(lines.len()).saturating_add(2);
     let width = 56_u16.min(area.width);
-    let x = area.x + area.width.saturating_sub(width) / 2;
-    let y = area.y + area.height.saturating_sub(height) / 2;
+    let x = area.x.saturating_add(
+        area.width
+            .saturating_sub(width)
+            .checked_div(2)
+            .unwrap_or_default(),
+    );
+    let y = area.y.saturating_add(
+        area.height
+            .saturating_sub(height)
+            .checked_div(2)
+            .unwrap_or_default(),
+    );
     let popup_area = Rect::new(x, y, width, height);
 
     let popup = Paragraph::new(Text::from(lines))
@@ -1896,7 +2043,7 @@ fn completion_window_start(
     }
     selected
         .map_or(0, |idx| idx.saturating_add(1).saturating_sub(visible_rows))
-        .min(total_rows - visible_rows)
+        .min(total_rows.saturating_sub(visible_rows))
 }
 
 fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
@@ -1917,8 +2064,8 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
         )));
     }
 
-    let candidate_rows = (area.height as usize).saturating_sub(lines.len());
-    let row_width = area.width as usize;
+    let candidate_rows = usize::from(area.height).saturating_sub(lines.len());
+    let row_width = usize::from(area.width);
     let name_col: usize = 18;
 
     let window_start = completion_window_start(
@@ -1935,7 +2082,7 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .take(candidate_rows)
         .enumerate()
     {
-        let i = window_start + offset;
+        let i = window_start.saturating_add(offset);
         let selected = app.completion.selected == Some(i);
         let desc = App::command_description(c);
         let is_active = match &app.completion.mode {
@@ -1950,7 +2097,7 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
             PaletteMode::Submenu(s) if s.parent == "view" => {
                 app.view_enabled(App::view_key_from_row(c)).unwrap_or(false)
             }
-            _ => false,
+            PaletteMode::Top | PaletteMode::Submenu(_) | PaletteMode::ValueEditor(_) => false,
         };
 
         let name_text = format!("   {c}");
@@ -1966,10 +2113,10 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
         };
 
         let used = name_w
-            + unicode_width::UnicodeWidthStr::width(gap.as_str())
-            + unicode_width::UnicodeWidthStr::width(desc_text.as_str());
+            .saturating_add(unicode_width::UnicodeWidthStr::width(gap.as_str()))
+            .saturating_add(unicode_width::UnicodeWidthStr::width(desc_text.as_str()));
         let trailing = if used < row_width {
-            " ".repeat(row_width - used)
+            " ".repeat(row_width.saturating_sub(used))
         } else {
             String::new()
         };
@@ -2005,6 +2152,14 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
     frame.render_widget(paragraph, area);
 }
 
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::float_arithmetic,
+    reason = "the slider maps a clamped floating-point sampler range onto a bounded terminal rail"
+)]
 fn draw_value_editor(frame: &mut Frame<'_>, app: &App, area: Rect) {
     if area.height == 0 {
         return;
@@ -2033,15 +2188,17 @@ fn draw_value_editor(frame: &mut Frame<'_>, app: &App, area: Rect) {
                 .clone()
                 .unwrap_or_else(|| App::format_slider_number(*current));
             let value_width = unicode_width::UnicodeWidthStr::width(value_text.as_str());
-            let row_width = area.width as usize;
-            let rail_width = row_width.saturating_sub(value_width + 8).clamp(8, 48);
+            let row_width = usize::from(area.width);
+            let rail_width = row_width
+                .saturating_sub(value_width.saturating_add(8))
+                .clamp(8, 48);
             let ratio = if max > min {
                 ((*current - *min) / (*max - *min)).clamp(0.0, 1.0)
             } else {
                 0.0
             };
             let thumb = ((rail_width.saturating_sub(1)) as f64 * ratio).round() as usize;
-            let mut rail = String::with_capacity(rail_width + 2);
+            let mut rail = String::with_capacity(rail_width.saturating_add(2));
             rail.push('[');
             for idx in 0..rail_width {
                 rail.push(if idx == thumb { '●' } else { '─' });
@@ -2050,7 +2207,11 @@ fn draw_value_editor(frame: &mut Frame<'_>, app: &App, area: Rect) {
 
             let rail_width_with_brackets = unicode_width::UnicodeWidthStr::width(rail.as_str());
             let gap = row_width
-                .saturating_sub(2 + rail_width_with_brackets + value_width)
+                .saturating_sub(
+                    2_usize
+                        .saturating_add(rail_width_with_brackets)
+                        .saturating_add(value_width),
+                )
                 .max(1);
             let value_style = if typed.is_some() {
                 Style::default()
@@ -2069,7 +2230,7 @@ fn draw_value_editor(frame: &mut Frame<'_>, app: &App, area: Rect) {
             let max_label = App::format_slider_number(*max);
             let label_gap = rail_width.saturating_sub(
                 unicode_width::UnicodeWidthStr::width(min_label.as_str())
-                    + unicode_width::UnicodeWidthStr::width(max_label.as_str()),
+                    .saturating_add(unicode_width::UnicodeWidthStr::width(max_label.as_str())),
             );
             lines.push(Line::from(Span::styled(
                 format!("  {min_label}{}{}", "─".repeat(label_gap.max(1)), max_label),
@@ -2085,7 +2246,7 @@ fn draw_value_editor(frame: &mut Frame<'_>, app: &App, area: Rect) {
 
     let visible = lines
         .into_iter()
-        .take(area.height as usize)
+        .take(usize::from(area.height))
         .collect::<Vec<_>>();
     frame.render_widget(Paragraph::new(Text::from(visible)), area);
 }
@@ -2103,12 +2264,12 @@ fn alt_preview_text(choice: &AltChoice, max_width: usize) -> String {
     let mut width = 0_usize;
     for ch in compact.chars() {
         let w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
-        if width + w > max_width.saturating_sub(3) {
+        if width.saturating_add(w) > max_width.saturating_sub(3) {
             out.push_str("...");
             return out;
         }
         out.push(ch);
-        width += w;
+        width = width.saturating_add(w);
     }
     out
 }
@@ -2121,7 +2282,7 @@ fn draw_alt_picker_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
         return;
     }
 
-    let row_width = area.width as usize;
+    let row_width = usize::from(area.width);
     let mut lines: Vec<Line<'static>> = Vec::new();
     let title = picker
         .msg_id
@@ -2147,7 +2308,7 @@ fn draw_alt_picker_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
         return;
     }
 
-    let visible_rows = (area.height as usize).saturating_sub(1);
+    let visible_rows = usize::from(area.height).saturating_sub(1);
     let window_start =
         completion_window_start(Some(picker.selected), visible_rows, picker.choices.len());
 
@@ -2158,16 +2319,17 @@ fn draw_alt_picker_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .take(visible_rows)
         .enumerate()
     {
-        let i = window_start + offset;
+        let i = window_start.saturating_add(offset);
         let selected = i == picker.selected;
         let active = if choice.active { "*" } else { " " };
         let prefix = format!("  {active} {:>2}  ", choice.position);
         let prefix_width = unicode_width::UnicodeWidthStr::width(prefix.as_str());
         let preview_width = row_width.saturating_sub(prefix_width).max(8);
         let preview = alt_preview_text(choice, preview_width);
-        let used = prefix_width + unicode_width::UnicodeWidthStr::width(preview.as_str());
+        let used =
+            prefix_width.saturating_add(unicode_width::UnicodeWidthStr::width(preview.as_str()));
         let trailing = if used < row_width {
-            " ".repeat(row_width - used)
+            " ".repeat(row_width.saturating_sub(used))
         } else {
             String::new()
         };
@@ -2403,8 +2565,13 @@ pub(crate) mod scenario_tests {
             if self.frames.len() < 2 {
                 return vec![];
             }
-            let prev: Vec<&str> = self.frames[self.frames.len() - 2].lines().collect();
-            let curr: Vec<&str> = self.frames[self.frames.len() - 1].lines().collect();
+            let prev: Vec<&str> = self
+                .frames
+                .get(self.frames.len().saturating_sub(2))
+                .expect("previous frame")
+                .lines()
+                .collect();
+            let curr: Vec<&str> = self.frames.last().expect("current frame").lines().collect();
             prev.iter()
                 .zip(curr.iter())
                 .enumerate()
@@ -2419,7 +2586,7 @@ pub(crate) mod scenario_tests {
                 .unwrap()
                 .lines()
                 .skip(from)
-                .take(to - from)
+                .take(to.saturating_sub(from))
                 .collect::<Vec<_>>()
                 .join("\n")
         }
@@ -2454,10 +2621,10 @@ pub(crate) mod scenario_tests {
     }
 
     fn sent_command(action: input::Action) -> shore_common::protocol::client_msg::Command {
-        match action {
-            input::Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => cmd,
-            _ => panic!("expected command send"),
-        }
+        let input::Action::Send(ConnCommand::Send(ClientMessage::Command(command))) = action else {
+            panic!("expected command send");
+        };
+        command
     }
 
     fn open_setting_menu_with_snapshot(h: &mut Harness) {
@@ -2471,9 +2638,9 @@ pub(crate) mod scenario_tests {
     fn assert_set_model_setting(action: input::Action, key: &str, value: &serde_json::Value) {
         let cmd = sent_command(action);
         assert_eq!(cmd.name, "set_model_setting");
-        assert_eq!(cmd.args["key"], key);
-        assert_eq!(cmd.args["value"], *value);
-        assert_eq!(cmd.args["scope"], "character");
+        assert_eq!(cmd.args.get("key"), Some(&serde_json::json!(key)));
+        assert_eq!(cmd.args.get("value"), Some(value));
+        assert_eq!(cmd.args.get("scope"), Some(&serde_json::json!("character")));
     }
 
     fn metadata(model: &str) -> StreamMetadata {
@@ -2518,8 +2685,11 @@ pub(crate) mod scenario_tests {
         let _ = h.render("initial");
 
         h.type_str("Hello, world!");
-        let f = h.render("after typing");
-        assert!(f.contains("Hello, world!"), "typed text visible in input");
+        let after_typing = h.render("after typing");
+        assert!(
+            after_typing.contains("Hello, world!"),
+            "typed text visible in input"
+        );
 
         h.press(KeyCode::Enter);
         h.app.entries.push(ConversationEntry::user(
@@ -2527,27 +2697,33 @@ pub(crate) mod scenario_tests {
             vec![],
             "t1".into(),
         ));
-        let f = h.render("after send");
+        let after_send = h.render("after send");
         assert!(
-            !h.rows(H as usize - 4, H as usize - 1)
-                .contains("Hello, world!"),
+            !h.rows(
+                usize::from(H).saturating_sub(4),
+                usize::from(H).saturating_sub(1)
+            )
+            .contains("Hello, world!"),
             "input area should be cleared after send"
         );
-        assert!(f.contains("You"), "user label visible");
-        assert!(f.contains("Hello, world!"), "user message in conversation");
+        assert!(after_send.contains("You"), "user label visible");
+        assert!(
+            after_send.contains("Hello, world!"),
+            "user message in conversation"
+        );
 
         h.stream_start();
         let _ = h.render("stream started");
 
         h.stream_chunk("Hi there");
-        let f = h.render("first chunk");
-        assert!(f.contains("Hi there"), "streamed text visible");
-        assert!(f.contains("Narrator"), "assistant name visible");
+        let first_chunk = h.render("first chunk");
+        assert!(first_chunk.contains("Hi there"), "streamed text visible");
+        assert!(first_chunk.contains("Narrator"), "assistant name visible");
 
         h.stream_chunk(", how are you today?");
-        let f = h.render("more chunks");
+        let more_chunks = h.render("more chunks");
         assert!(
-            f.contains("Hi there, how are you today?"),
+            more_chunks.contains("Hi there, how are you today?"),
             "accumulated text visible"
         );
 
@@ -2558,13 +2734,13 @@ pub(crate) mod scenario_tests {
         }
 
         h.stream_end("Hi there, how are you today?");
-        let f = h.render("stream ended");
+        let stream_ended = h.render("stream ended");
         assert!(
-            !f.contains("[streaming...]"),
+            !stream_ended.contains("[streaming...]"),
             "streaming indicator gone after end"
         );
         assert!(
-            f.contains("Hi there, how are you today?"),
+            stream_ended.contains("Hi there, how are you today?"),
             "final response visible"
         );
     }
@@ -2827,19 +3003,22 @@ pub(crate) mod scenario_tests {
         let _ = h.render("normal mode");
 
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        let f = h.render("command palette open");
-        assert!(f.contains("COMMAND"), "command mode title visible");
+        let palette_open = h.render("command palette open");
+        assert!(
+            palette_open.contains("COMMAND"),
+            "command mode title visible"
+        );
 
         h.type_str("mod");
-        let f = h.render("typing 'mod'");
-        assert!(f.contains(":mod"), "command text visible");
-        assert!(f.contains("model"), "model completion visible");
+        let typing_model = h.render("typing 'mod'");
+        assert!(typing_model.contains(":mod"), "command text visible");
+        assert!(typing_model.contains("model"), "model completion visible");
 
-        let cmd_line = f
+        let cmd_line = typing_model
             .lines()
             .position(|l| l.contains("[COMMAND]"))
             .expect("command line present");
-        let cand_line = f
+        let cand_line = typing_model
             .lines()
             .enumerate()
             .skip(cmd_line + 1)
@@ -2852,21 +3031,21 @@ pub(crate) mod scenario_tests {
         );
 
         h.press(KeyCode::Tab);
-        let f = h.render("after tab completion");
-        assert!(f.contains("[model]"), "model submenu opened");
+        let after_completion = h.render("after tab completion");
+        assert!(after_completion.contains("[model]"), "model submenu opened");
 
         h.press(KeyCode::Esc);
-        let f = h.render("after escape");
+        let after_escape = h.render("after escape");
         assert!(
-            f.contains("[COMMAND]"),
+            after_escape.contains("[COMMAND]"),
             "top-level command palette restored"
         );
-        assert!(f.contains(":model"), "parent command restored");
+        assert!(after_escape.contains(":model"), "parent command restored");
 
         h.press(KeyCode::Esc);
-        let f = h.render("after second escape");
+        let after_second_escape = h.render("after second escape");
         assert!(
-            !f.contains("COMMAND"),
+            !after_second_escape.contains("COMMAND"),
             "command palette hidden after escape"
         );
     }
@@ -2959,7 +3138,7 @@ pub(crate) mod scenario_tests {
         h.app.input.mode = InputMode::Normal;
 
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        let f = h.render("palette open");
+        let palette_frame = h.render("palette open");
 
         for (cmd, desc) in [
             ("compact", "Summarize and shrink the conversation"),
@@ -2967,11 +3146,11 @@ pub(crate) mod scenario_tests {
             ("setting", "View or change sampler settings"),
             ("help", "Show keyboard shortcuts"),
         ] {
-            let row = f
+            let row = palette_frame
                 .lines()
                 .find(|l| l.contains(cmd) && l.contains(desc))
                 .unwrap_or_else(|| {
-                    panic!("expected row with `{cmd}` + `{desc}`; full frame:\n{f}")
+                    panic!("expected row with `{cmd}` + `{desc}`; full frame:\n{palette_frame}")
                 });
             let cmd_pos = row.find(cmd).unwrap();
             let desc_pos = row.find(desc).unwrap();
@@ -2985,13 +3164,13 @@ pub(crate) mod scenario_tests {
         h.press_mod(KeyModifiers::NONE, KeyCode::Backspace);
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
         h.type_str("model ");
-        let f = h.render("model submenu");
+        let model_submenu = h.render("model submenu");
         assert!(
-            f.contains("alpha-1") || f.contains("model alpha-1"),
+            model_submenu.contains("alpha-1") || model_submenu.contains("model alpha-1"),
             "model candidate visible"
         );
         assert!(
-            !f.contains("Switch the active model"),
+            !model_submenu.contains("Switch the active model"),
             "argument candidates should not carry parent-command desc"
         );
     }
@@ -3046,10 +3225,10 @@ pub(crate) mod scenario_tests {
         h.press(KeyCode::Enter);
         let f = h.render("view submenu open");
 
-        match &h.app.completion.mode {
-            PaletteMode::Submenu(s) => assert_eq!(s.parent, "view"),
-            _ => panic!("expected view submenu"),
-        }
+        let PaletteMode::Submenu(submenu) = &h.app.completion.mode else {
+            panic!("expected view submenu");
+        };
+        assert_eq!(submenu.parent, "view");
         assert!(f.contains("[view]"), "view submenu title visible");
         assert!(
             f.contains("timestamps = off"),
@@ -3205,21 +3384,23 @@ pub(crate) mod scenario_tests {
         h.app.set_active_model(Some("chat.anthropic.beta"));
 
         h.app.enter_submenu("model");
-        let f = h.render("active model marker");
+        let active_model_frame = h.render("active model marker");
         assert!(
-            f.lines()
+            active_model_frame
+                .lines()
                 .any(|l| l.contains("beta") && l.contains("active")),
-            "active model row should be marked like the active character; frame:\n{f}"
+            "active model row should be marked like the active character; frame:\n{active_model_frame}"
         );
 
         h.app.characters = vec![CharacterInfo::new("Alice"), CharacterInfo::new("Bob")];
         h.app.character_name = "Alice".into();
         h.app.enter_submenu("character");
-        let f = h.render("active character marker");
+        let active_character_frame = h.render("active character marker");
         assert!(
-            f.lines()
+            active_character_frame
+                .lines()
                 .any(|l| l.contains("Alice") && l.contains("active")),
-            "active character row should still be marked; frame:\n{f}"
+            "active character row should still be marked; frame:\n{active_character_frame}"
         );
     }
 
@@ -3356,7 +3537,12 @@ pub(crate) mod scenario_tests {
         app.enter_submenu("model");
         assert!(app.completion.candidates.contains(&"gpt-4o".to_owned()));
         app.next_completion();
-        let chosen = app.completion.candidates[app.completion.selected.unwrap()].clone();
+        let chosen = app
+            .completion
+            .selected
+            .and_then(|selected| app.completion.candidates.get(selected))
+            .expect("selected completion")
+            .clone();
 
         let cmd = app.apply_submenu().expect("apply_submenu yields a command");
         assert_eq!(cmd, format!("model {chosen}"));
@@ -3428,14 +3614,19 @@ pub(crate) mod scenario_tests {
         h.type_str("reasoning");
         h.press(KeyCode::Enter);
 
-        match &h.app.completion.mode {
-            PaletteMode::Submenu(s) => {
-                assert_eq!(s.parent, "setting:reasoning_effort");
-            }
-            _ => panic!("expected reasoning_effort submenu"),
-        }
+        let PaletteMode::Submenu(reasoning_submenu) = &h.app.completion.mode else {
+            panic!("expected reasoning_effort submenu");
+        };
+        assert_eq!(reasoning_submenu.parent, "setting:reasoning_effort");
         let selected = h.app.completion.selected.expect("current value selected");
-        assert_eq!(h.app.completion.candidates[selected], "medium");
+        assert_eq!(
+            h.app
+                .completion
+                .candidates
+                .get(selected)
+                .map(String::as_str),
+            Some("medium")
+        );
     }
 
     #[test]
@@ -3508,10 +3699,10 @@ pub(crate) mod scenario_tests {
             matches!(blocked, input::Action::Redraw),
             "Enter should not dispatch before sampler settings load"
         );
-        match &h.app.completion.mode {
-            PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting"),
-            _ => panic!("expected to stay in setting submenu while loading"),
-        }
+        let PaletteMode::Submenu(loading_submenu) = &h.app.completion.mode else {
+            panic!("expected to stay in setting submenu while loading");
+        };
+        assert_eq!(loading_submenu.parent, "setting");
 
         let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
         h.press(KeyCode::Enter);
@@ -3535,21 +3726,26 @@ pub(crate) mod scenario_tests {
         h.type_str("reasoning");
         let blocked = h.press_action(KeyCode::Enter);
         assert!(matches!(blocked, input::Action::Redraw));
-        match &h.app.completion.mode {
-            PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting"),
-            _ => panic!("expected to stay in setting submenu while loading"),
-        }
+        let PaletteMode::Submenu(loading_submenu) = &h.app.completion.mode else {
+            panic!("expected to stay in setting submenu while loading");
+        };
+        assert_eq!(loading_submenu.parent, "setting");
 
         let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
         h.press(KeyCode::Enter);
-        match &h.app.completion.mode {
-            PaletteMode::Submenu(s) => {
-                assert_eq!(s.parent, "setting:reasoning_effort");
-            }
-            _ => panic!("expected reasoning_effort submenu after settings load"),
-        }
+        let PaletteMode::Submenu(reasoning_submenu) = &h.app.completion.mode else {
+            panic!("expected reasoning_effort submenu after settings load");
+        };
+        assert_eq!(reasoning_submenu.parent, "setting:reasoning_effort");
         let selected = h.app.completion.selected.expect("current value selected");
-        assert_eq!(h.app.completion.candidates[selected], "medium");
+        assert_eq!(
+            h.app
+                .completion
+                .candidates
+                .get(selected)
+                .map(String::as_str),
+            Some("medium")
+        );
     }
 
     #[test]
@@ -3614,10 +3810,10 @@ pub(crate) mod scenario_tests {
         open_setting_menu_with_snapshot(&mut h);
         h.type_str("sdk");
         h.press(KeyCode::Enter);
-        match &h.app.completion.mode {
-            PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting:sdk"),
-            _ => panic!("expected setting sdk submenu"),
-        }
+        let PaletteMode::Submenu(submenu) = &h.app.completion.mode else {
+            panic!("expected setting sdk submenu");
+        };
+        assert_eq!(submenu.parent, "setting:sdk");
         h.type_str("anthropic");
         let action = h.press_action(KeyCode::Enter);
 
@@ -3679,10 +3875,10 @@ pub(crate) mod scenario_tests {
         open_setting_menu_with_snapshot(&mut h);
         h.type_str("reset");
         h.press(KeyCode::Enter);
-        match &h.app.completion.mode {
-            PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting:reset"),
-            _ => panic!("expected setting reset submenu"),
-        }
+        let PaletteMode::Submenu(submenu) = &h.app.completion.mode else {
+            panic!("expected setting reset submenu");
+        };
+        assert_eq!(submenu.parent, "setting:reset");
         h.type_str("temperature");
         let action = h.press_action(KeyCode::Enter);
 
@@ -3713,9 +3909,9 @@ pub(crate) mod scenario_tests {
 
         h.stream_start();
         h.stream_chunk("New streaming response...");
-        let f = h.render("streaming with auto_scroll");
+        let streaming_frame = h.render("streaming with auto_scroll");
         assert!(
-            f.contains("New streaming response"),
+            streaming_frame.contains("New streaming response"),
             "latest content visible with auto_scroll"
         );
 
@@ -3728,10 +3924,10 @@ pub(crate) mod scenario_tests {
 
         h.app.input.mode = InputMode::Normal;
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char('G'));
-        let f = h.render("back to bottom");
+        let bottom_frame = h.render("back to bottom");
         assert!(h.app.auto_scroll, "auto_scroll re-enabled");
         assert!(
-            f.contains("More text arrives"),
+            bottom_frame.contains("More text arrives"),
             "latest content visible after re-scroll"
         );
     }
@@ -3906,17 +4102,20 @@ pub(crate) mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        let f = h.render("insert mode");
-        assert!(f.contains("[INSERT]"), "starts in INSERT mode");
+        let insert_frame = h.render("insert mode");
+        assert!(insert_frame.contains("[INSERT]"), "starts in INSERT mode");
 
         h.press(KeyCode::Esc);
-        let f = h.render("normal mode");
-        assert!(f.contains("[NORMAL]"), "shows NORMAL after Esc");
-        assert!(!f.contains("[INSERT]"), "INSERT label gone");
+        let normal_frame = h.render("normal mode");
+        assert!(normal_frame.contains("[NORMAL]"), "shows NORMAL after Esc");
+        assert!(!normal_frame.contains("[INSERT]"), "INSERT label gone");
 
         h.press(KeyCode::Char('i'));
-        let f = h.render("back to insert");
-        assert!(f.contains("[INSERT]"), "shows INSERT after 'i'");
+        let restored_insert_frame = h.render("back to insert");
+        assert!(
+            restored_insert_frame.contains("[INSERT]"),
+            "shows INSERT after 'i'"
+        );
 
         let diffs = h.changed_lines();
         assert!(
@@ -3953,16 +4152,16 @@ pub(crate) mod scenario_tests {
             "t1".into(),
         ));
 
-        let f = h.render("long message");
+        let long_message_frame = h.render("long message");
         assert!(
-            f.contains("This is a very long message"),
+            long_message_frame.contains("This is a very long message"),
             "start of message visible"
         );
 
         h.type_str("Another really long input message that should cause the input area to grow taller as the text wraps to accommodate");
-        let f = h.render("long input");
+        let long_input_frame = h.render("long input");
         assert!(
-            f.lines().any(|l| l.contains("taller")),
+            long_input_frame.lines().any(|l| l.contains("taller")),
             "word 'taller' should stay intact on one visual line"
         );
     }
@@ -4196,7 +4395,9 @@ pub(crate) mod scenario_tests {
             pos("FINAL_ANSWER"),
         ];
         assert!(
-            order.windows(2).all(|w| w[0] < w[1]),
+            order
+                .windows(2)
+                .all(|window| matches!(window, [first, second] if first < second)),
             "thinking/tool/text must render in interleaved source order, got positions {order:?}\n{f}"
         );
     }
@@ -4537,7 +4738,9 @@ pub(crate) mod scenario_tests {
             pos("POSTTOOL_TEXT"),
         ];
         assert!(
-            order.windows(2).all(|w| w[0] < w[1]),
+            order
+                .windows(2)
+                .all(|window| matches!(window, [first, second] if first < second)),
             "text→tool→text must render in source order under one header, got {order:?}\n{f}"
         );
     }
@@ -4656,6 +4859,16 @@ pub(crate) mod scenario_tests {
     }
 
     #[test]
+    fn scenario_zero_sized_terminal() {
+        for (width, height) in [(0, 0), (0, 1), (1, 0)] {
+            let mut harness = Harness::with_size(width, height);
+            let frame = harness.render("zero-sized terminal axis");
+
+            assert_eq!(frame.lines().count(), usize::from(height));
+        }
+    }
+
+    #[test]
     fn scenario_stream_to_final_transition() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
@@ -4683,7 +4896,7 @@ pub(crate) mod scenario_tests {
             .find(|(_, l)| l.contains("Once upon a time"));
 
         if let (Some((ls, _)), Some((lf, _))) = (story_line_streaming, story_line_final) {
-            let jump = (ls as i32 - lf as i32).unsigned_abs();
+            let jump = ls.abs_diff(lf);
             eprintln!("Story line position: streaming=L{ls}, final=L{lf}, jump={jump}");
             assert!(
                 jump <= 1,
@@ -5166,11 +5379,11 @@ pub(crate) mod scenario_tests {
             h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
             h.type_str(&format!("line {i}"));
         }
-        let _f = h.render("7 line input (near max)");
+        let _near_max_frame = h.render("7 line input (near max)");
 
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
         h.type_str("line 8");
-        let _f = h.render("8 line input (at max)");
+        let _max_frame = h.render("8 line input (at max)");
 
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
         h.type_str("line 9");
@@ -5187,19 +5400,22 @@ pub(crate) mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        let f = h.render("empty with welcome");
+        let welcome_frame = h.render("empty with welcome");
         assert!(
-            f.contains("Press i to start typing"),
+            welcome_frame.contains("Press i to start typing"),
             "welcome hint should appear when no messages"
         );
-        assert!(f.contains("for commands"), "command hint should appear");
+        assert!(
+            welcome_frame.contains("for commands"),
+            "command hint should appear"
+        );
 
         h.app
             .entries
             .push(ConversationEntry::user("Hello".into(), vec![], "t1".into()));
-        let f = h.render("with message");
+        let message_frame = h.render("with message");
         assert!(
-            !f.contains("Press i to start typing"),
+            !message_frame.contains("Press i to start typing"),
             "welcome hint should disappear once there are messages"
         );
     }
@@ -5218,20 +5434,23 @@ pub(crate) mod scenario_tests {
             ));
         }
 
-        let f = h.render("at bottom");
-        assert!(f.contains("Msg 19"), "latest message visible at bottom");
+        let bottom_frame = h.render("at bottom");
+        assert!(
+            bottom_frame.contains("Msg 19"),
+            "latest message visible at bottom"
+        );
 
         h.app.scroll_up(5);
-        let f = h.render("scrolled up");
+        let scrolled_frame = h.render("scrolled up");
         assert!(
-            !f.contains("Msg 19"),
+            !scrolled_frame.contains("Msg 19"),
             "latest message not visible when scrolled up"
         );
 
         h.app.scroll_to_bottom();
-        let f = h.render("back at bottom");
+        let restored_bottom_frame = h.render("back at bottom");
         assert!(
-            f.contains("Msg 19"),
+            restored_bottom_frame.contains("Msg 19"),
             "latest message visible after scrolling back"
         );
     }
@@ -5291,24 +5510,24 @@ pub(crate) mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        let f = h.render("empty insert mode");
+        let empty_insert_frame = h.render("empty insert mode");
         assert!(
-            f.contains("Type a message"),
+            empty_insert_frame.contains("Type a message"),
             "placeholder should show when input is empty"
         );
 
         h.type_str("h");
-        let f = h.render("after typing one char");
+        let typed_frame = h.render("after typing one char");
         assert!(
-            !f.contains("Type a message"),
+            !typed_frame.contains("Type a message"),
             "placeholder should disappear when typing"
         );
 
         h.press(KeyCode::Backspace);
         h.press(KeyCode::Esc);
-        let f = h.render("normal mode empty");
+        let empty_normal_frame = h.render("normal mode empty");
         assert!(
-            !f.contains("Type a message"),
+            !empty_normal_frame.contains("Type a message"),
             "placeholder should not show in normal mode"
         );
     }
@@ -5319,12 +5538,18 @@ pub(crate) mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
 
         h.stream_start();
-        let f = h.render("streaming, no phase");
-        assert!(f.contains("···"), "typing indicator visible during stream");
+        let empty_stream_frame = h.render("streaming, no phase");
+        assert!(
+            empty_stream_frame.contains("···"),
+            "typing indicator visible during stream"
+        );
 
         h.stream_chunk("Hello!");
-        let f = h.render("streaming with text");
-        assert!(f.contains("Hello!"), "streamed text visible");
+        let text_stream_frame = h.render("streaming with text");
+        assert!(
+            text_stream_frame.contains("Hello!"),
+            "streamed text visible"
+        );
     }
 
     #[test]
@@ -5344,15 +5569,21 @@ pub(crate) mod scenario_tests {
             None,
         ));
 
-        let f = h.render("short terminal with messages");
-        assert!(f.contains("Bob"), "character name in assistant entry");
-        assert!(f.contains("[INSERT]"), "input mode indicator visible");
+        let short_message_frame = h.render("short terminal with messages");
+        assert!(
+            short_message_frame.contains("Bob"),
+            "character name in assistant entry"
+        );
+        assert!(
+            short_message_frame.contains("[INSERT]"),
+            "input mode indicator visible"
+        );
 
         h.stream_start();
         h.stream_chunk("Response text");
-        let f = h.render("streaming in short terminal");
+        let short_stream_frame = h.render("streaming in short terminal");
         assert!(
-            f.contains("Response"),
+            short_stream_frame.contains("Response"),
             "streamed content visible in short terminal"
         );
     }
@@ -5521,8 +5752,11 @@ pub(crate) mod scenario_tests {
             None,
         ));
 
-        let f = h.render("before regen");
-        assert!(f.contains("chicken"), "original response visible");
+        let before_regen = h.render("before regen");
+        assert!(
+            before_regen.contains("chicken"),
+            "original response visible"
+        );
 
         h.app.stream.reset();
         h.app.stream.active = true;
@@ -5536,22 +5770,31 @@ pub(crate) mod scenario_tests {
             h.app.entries.truncate(pos);
         }
 
-        let f = h.render("regen started");
+        let regen_started = h.render("regen started");
         assert!(
-            !f.contains("chicken"),
+            !regen_started.contains("chicken"),
             "original response should be removed during regen"
         );
 
         h.stream_chunk("A better joke: ");
-        let f = h.render("regen streaming");
-        assert!(f.contains("(regenerating)"), "should show regen indicator");
-        assert!(f.contains("A better joke"), "new response streaming");
+        let regen_streaming = h.render("regen streaming");
+        assert!(
+            regen_streaming.contains("(regenerating)"),
+            "should show regen indicator"
+        );
+        assert!(
+            regen_streaming.contains("A better joke"),
+            "new response streaming"
+        );
 
         h.stream_end("A better joke: Why do programmers prefer dark mode?");
-        let f = h.render("regen complete");
-        assert!(f.contains("dark mode"), "regenerated response visible");
+        let regen_complete = h.render("regen complete");
         assert!(
-            !f.contains("regenerating"),
+            regen_complete.contains("dark mode"),
+            "regenerated response visible"
+        );
+        assert!(
+            !regen_complete.contains("regenerating"),
             "regen indicator gone after completion"
         );
     }
@@ -5598,11 +5841,12 @@ pub(crate) mod scenario_tests {
 
         assert_eq!(
             second,
-            first + 2,
+            first.saturating_add(2),
             "paragraphs should have one visible blank row between them\n{f}"
         );
         assert!(
-            rows[first + 1].trim().is_empty(),
+            rows.get(first.saturating_add(1))
+                .is_some_and(|row| row.trim().is_empty()),
             "row between paragraphs should be visually blank\n{f}"
         );
     }
@@ -5780,8 +6024,8 @@ pub(crate) mod scenario_tests {
         h.app.set_error("error: second notice");
         assert_eq!(h.app.notifications.len(), 2);
 
-        let action = h.press_action(KeyCode::Esc);
-        assert!(matches!(action, input::Action::Redraw));
+        let first_escape = h.press_action(KeyCode::Esc);
+        assert!(matches!(first_escape, input::Action::Redraw));
         assert_eq!(h.app.notifications.len(), 1);
         let f = h.render("after first esc");
         assert!(f.contains("first notice"), "older toast still visible");
@@ -5790,8 +6034,8 @@ pub(crate) mod scenario_tests {
         h.press(KeyCode::Esc);
         assert!(h.app.notifications.is_empty(), "all toasts dismissed");
 
-        let action = h.press_action(KeyCode::Esc);
-        assert!(matches!(action, input::Action::None));
+        let final_escape = h.press_action(KeyCode::Esc);
+        assert!(matches!(final_escape, input::Action::None));
     }
 
     #[test]
