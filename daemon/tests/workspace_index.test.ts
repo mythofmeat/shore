@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -44,9 +44,178 @@ import {
 } from "../src/memory/retrieval";
 import { defaultBaseUrl, hardcodedProviderBaseUrl } from "../src/llm/request";
 
+interface RawConfig {
+  binary: string;
+  max_file_bytes: number;
+  max_indexed_files: number;
+  max_total_indexed_bytes: number;
+  max_embed_chars_per_file: number;
+}
+
+interface RawEntry {
+  size: number;
+  modified_at_secs: number;
+  embedded: boolean;
+  reason?: string | null;
+  embedding?: number[];
+  hash?: string;
+  model_id?: string;
+  max_embed_chars_per_file?: number;
+}
+
+interface RawIndex {
+  entries: Record<string, RawEntry>;
+}
+
+interface OutcomeFile {
+  display_path: string;
+  fs_path: string;
+  content: string | null;
+  lexical_score: number;
+  semantic_score: number;
+  combined_score: number;
+  embedded: boolean;
+  skip_reason: string | null;
+}
+
+interface RunOutcome {
+  error?: string;
+  searched_files: number;
+  embedded_files: number;
+  skipped_binary_or_large: number;
+  files: OutcomeFile[];
+}
+
+interface Run {
+  config: RawConfig;
+  query: string;
+  mode: string;
+  path_filter: string | null;
+  counts_only: boolean;
+  embed_calls: string[][];
+  embed_input_count: number;
+  index_after: RawIndex | null;
+  outcome: RunOutcome;
+}
+
+type ScriptStep =
+  | { op: "write" | "write_outside"; path: string; text: string; mtime: number }
+  | { op: "write_bytes"; path: string; bytes: number[]; mtime: number }
+  | { op: "write_millis"; path: string; text: string; mtime_ms: number }
+  | { op: "symlink"; path: string; target: string }
+  | { op: "mkdir" | "delete" | "socket"; path: string }
+  | { op: "seed_index"; raw: string }
+  | { op: "config"; config: RawConfig }
+  | { op: "search"; run: number }
+  | { op: "block_index_parent" };
+
+interface SearchCase {
+  name: string;
+  model: string;
+  topics: string[];
+  fail_embed: string | null;
+  miscount_embed: boolean;
+  missing_root: boolean;
+  unconfigured: boolean;
+  script: ScriptStep[];
+  runs: Run[];
+}
+
+interface Candidate {
+  display_path: string;
+  size: number;
+  modified_at_secs: number;
+  content: string | null;
+  skip_reason: string | null;
+}
+
+interface RefreshCase {
+  name: string;
+  config: RawConfig;
+  files: { path: string; bytes: number[]; mtime: number }[];
+  delete_after_walk: string[];
+  pre_index: RawIndex;
+  out: {
+    candidates: Candidate[];
+    stale: [string, number, number][];
+    stale_docs: string[];
+    index: RawIndex;
+    dirty: boolean;
+    skipped_binary_or_large: number;
+  };
+}
+
+interface EmbedBatch {
+  items: number;
+  chars: number;
+}
+
+interface ResolveEmbedderCase {
+  name: string;
+  registry: {
+    provider_key: string;
+    base_url: string | null;
+    entry: NonNullable<EmbeddingProvider["entry"]>;
+  }[];
+  default_ref: string | null;
+  embedding: { key: string; dimensions: number | null }[];
+  providers_toml: string;
+  env: { var: string; value: string }[];
+  outcome: {
+    error?: string;
+    model_id: string;
+    dimensions: number | null;
+    cache_key: string;
+  };
+}
+
+interface Fixture {
+  cases: SearchCase[];
+  refresh_index_entries: RefreshCase[];
+  display_path_for: { name: string; workspace_dir: string; path: string; out: string }[];
+  tokenize_query: { query: string; out: string[] }[];
+  lexical_score: {
+    name: string;
+    path: string;
+    content: string;
+    query: string;
+    q_lower: string;
+    terms: string[];
+    out: number;
+  }[];
+  cosine_similarity: { name: string; a: number[]; b: number[]; out: number }[];
+  document_for_embedding: {
+    name: string;
+    path: string;
+    content: string;
+    max_embed_chars_per_file: number;
+    out: string;
+  }[];
+  skip_tag: { size: number; mtime: number; out: string }[];
+  index_path: { cache_dir: string; character: string; out: string }[];
+  embed_batching: { name: string; doc_char_counts: number[]; batches: EmbedBatch[] }[];
+  build_embed_body: {
+    name: string;
+    model: string;
+    inputs: string[];
+    dimensions: number | null;
+    out: Record<string, unknown>;
+  }[];
+  parse_embedding_response: {
+    name: string;
+    response: unknown;
+    expected_count: number;
+    out: { error?: string; ok: number[][] };
+  }[];
+  retrieval: {
+    hardcoded_base_url: { provider_key: string; base_url: string | null }[];
+    resolve_embedder: ResolveEmbedderCase[];
+  };
+}
+
 const fixture = JSON.parse(
   readFileSync(new URL("./memory_fixtures/workspace_index.json", import.meta.url), "utf8"),
-);
+) as Fixture;
 
 function f32(value: number | null): number | undefined {
   return value === null ? undefined : toF32(value);
@@ -113,14 +282,23 @@ async function writeAt(
   await utimes(path, mtime, mtime);
 }
 
-function configOf(raw: Record<string, unknown>): RetrievalConfig {
+function configOf(raw: RawConfig): RetrievalConfig {
   return {
-    maxFileBytes: raw.max_file_bytes as number,
-    maxIndexedFiles: raw.max_indexed_files as number,
-    maxTotalIndexedBytes: raw.max_total_indexed_bytes as number,
-    maxEmbedCharsPerFile: raw.max_embed_chars_per_file as number,
+    maxFileBytes: raw.max_file_bytes,
+    maxIndexedFiles: raw.max_indexed_files,
+    maxTotalIndexedBytes: raw.max_total_indexed_bytes,
+    maxEmbedCharsPerFile: raw.max_embed_chars_per_file,
     binary: raw.binary as RetrievalConfig["binary"],
   };
+}
+
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function must<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new Error(`the fixture has no ${what}`);
+  return value;
 }
 
 const CORRECTED = new Set([
@@ -129,7 +307,7 @@ const CORRECTED = new Set([
 ]);
 
 describe("hybridSearch", () => {
-  for (const c of fixture.cases.filter((c: any) => !CORRECTED.has(c.name))) {
+  for (const c of fixture.cases.filter((c) => !CORRECTED.has(c.name))) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       const idx = join(root, "cache/workspace_index.db");
@@ -180,9 +358,6 @@ describe("hybridSearch", () => {
           case "delete":
             await rm(join(ws, step.path), { recursive: true, force: true });
             break;
-          case "chmod":
-            await chmod(join(ws, step.path), step.mode);
-            break;
           case "seed_index":
             await mkdir(dirname(idx), { recursive: true });
             await writeFile(join(dirname(idx), "workspace_index.json"), step.raw);
@@ -191,7 +366,7 @@ describe("hybridSearch", () => {
             config = configOf(step.config);
             break;
           case "search": {
-            const run = c.runs[runIdx];
+            const run = must(c.runs[runIdx], `run ${runIdx} of ${c.name}`);
             runIdx += 1;
             await replayRun(run, {
               workspaceDir: c.unconfigured ? "" : ws,
@@ -202,7 +377,7 @@ describe("hybridSearch", () => {
             break;
           }
           default:
-            throw new Error(`unknown script op ${String(step.op)}`);
+            throw new Error(`unknown script op ${JSON.stringify(step)}`);
         }
       }
       for (const server of sockets) server.close();
@@ -218,7 +393,7 @@ interface RunContext {
   config: RetrievalConfig;
 }
 
-async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<void> {
+async function replayRun(run: Run, ctx: RunContext): Promise<void> {
   ctx.embedder.takeCalls();
 
   let result: Awaited<ReturnType<typeof hybridSearch>> | undefined;
@@ -231,7 +406,7 @@ async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<voi
       mode: run.mode as HybridMode,
       embedder: ctx.embedder,
       indexPath: ctx.indexFile,
-      pathFilter: run.path_filter ?? undefined,
+      ...(run.path_filter === null ? {} : { pathFilter: run.path_filter }),
     });
   } catch (e) {
     error = e;
@@ -259,7 +434,7 @@ async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<voi
   }
 
   expect(got.files.map((f) => f.displayPath)).toEqual(
-    run.outcome.files.map((f: any) => f.display_path),
+    run.outcome.files.map((f) => f.display_path),
   );
   for (const [i, expected] of run.outcome.files.entries()) {
     const actual = got.files[i]!;
@@ -273,7 +448,7 @@ async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<voi
   }
 
   expect(calls.map((b) => [...b].sort())).toEqual(
-    (run.embed_calls as string[][]).map((b) => [...b].sort()),
+    run.embed_calls.map((b) => [...b].sort()),
   );
   if (calls.length > 0) expect(calls.at(-1)).toEqual([run.query]);
 
@@ -378,7 +553,7 @@ function expectedIndexShape(index: any): Record<string, unknown> {
 }
 
 describe("refreshIndexEntries", () => {
-  for (const c of fixture.refresh_index_entries.filter((c: any) => !CORRECTED.has(c.name))) {
+  for (const c of fixture.refresh_index_entries.filter((c) => !CORRECTED.has(c.name))) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       await mkdir(ws, { recursive: true });
@@ -475,8 +650,14 @@ describe("lexicalScore", () => {
   }
 
   test("a BOM before a heading costs it the heading weight", () => {
-    const withBom = fixture.lexical_score.find((c: any) => c.content.startsWith("﻿# tea"));
-    const withNel = fixture.lexical_score.find((c: any) => c.content.startsWith("# tea"));
+    const withBom = must(
+      fixture.lexical_score.find((c) => c.content.startsWith("\uFEFF# tea")),
+      "a lexical_score case whose content starts with a BOM",
+    );
+    const withNel = must(
+      fixture.lexical_score.find((c) => c.content.startsWith("\u0085# tea")),
+      "a lexical_score case whose content starts with a NEL",
+    );
     expect(withBom.out).toBe(34);
     expect(withNel.out).toBe(84);
   });
@@ -490,7 +671,10 @@ describe("cosineSimilarity", () => {
   }
 
   test("the f32 accumulation is load-bearing", () => {
-    const c = fixture.cosine_similarity.find((x: any) => x.name === "long accumulation order matters");
+    const c = must(
+      fixture.cosine_similarity.find((x) => x.name === "long accumulation order matters"),
+      "the long-accumulation cosine case",
+    );
     const a = f32s(c.a);
     const b = f32s(c.b);
     let dot = 0;
@@ -535,7 +719,7 @@ describe("indexPath", () => {
 describe("embedDocuments batching", () => {
   for (const c of fixture.embed_batching) {
     test(c.name, async () => {
-      const docs = c.doc_char_counts.map((n: number, i: number) =>
+      const docs = c.doc_char_counts.map((n, i) =>
         (i === 0 && c.name.includes("counts chars") ? "🌊" : "x").repeat(n),
       );
       const recorder = new TopicEmbedder(["never-matches"], "batch-probe", undefined, false);
@@ -550,12 +734,15 @@ describe("embedDocuments batching", () => {
   }
 
   test("the character cap counts code points, not UTF-16 units", async () => {
-    const c = fixture.embed_batching.find((x: any) => x.name.includes("counts chars"));
-    const docs = c.doc_char_counts.map((n: number) => "🌊".repeat(n));
+    const c = must(
+      fixture.embed_batching.find((x) => x.name.includes("counts chars")),
+      "the character-counting embed_batching case",
+    );
+    const docs = c.doc_char_counts.map((n) => "🌊".repeat(n));
     const recorder = new TopicEmbedder(["never-matches"], "batch-probe", undefined, false);
     await embedDocuments(recorder, docs);
-    expect(recorder.calls.map((b) => b.length)).toEqual(c.batches.map((b: any) => b.items));
-    expect(docs[0]!.length).toBe(c.doc_char_counts[0] * 2);
+    expect(recorder.calls.map((b) => b.length)).toEqual(c.batches.map((b) => b.items));
+    expect(docs[0]?.length).toBe(must(c.doc_char_counts[0], "a first document") * 2);
   });
 });
 
@@ -610,9 +797,9 @@ describe("hardcodedProviderBaseUrl", () => {
 
   test("it is not the same table chat uses", () => {
     const disagreements = fixture.retrieval.hardcoded_base_url.filter(
-      (c: any) => (c.base_url ?? undefined) !== defaultBaseUrl(c.provider_key),
+      (c) => (c.base_url ?? undefined) !== defaultBaseUrl(c.provider_key),
     );
-    expect(disagreements.map((c: any) => c.provider_key).sort()).toEqual([
+    expect(disagreements.map((c) => c.provider_key).sort(compareStrings)).toEqual([
       "anthropic",
       "deepseek",
       "nanogpt",
@@ -661,14 +848,14 @@ describe("resolveEmbedder", () => {
 
       const call = () =>
         resolveEmbedder({
-          defaultRef: c.default_ref ?? undefined,
+          ...(c.default_ref === null ? {} : { defaultRef: c.default_ref }),
           embedding,
           providers,
           fetchImpl: stubFetch,
         });
 
       if (c.outcome.error !== undefined) {
-        expect(call).toThrow(String(c.outcome.error).replace(" (see CONFIGURATION.md).", "."));
+        expect(call).toThrow(c.outcome.error.replace(" (see CONFIGURATION.md).", "."));
         return;
       }
       const embedder = call();
