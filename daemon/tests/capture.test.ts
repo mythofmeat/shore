@@ -281,7 +281,7 @@ describe("call capture", () => {
       }),
     );
     await new Promise((resolve) => setTimeout(resolve, 25));
-    server.stop(true);
+    await server.stop(true);
 
     expect(store.rows).toHaveLength(1);
     expect(exchanges).toHaveLength(2);

@@ -118,10 +118,10 @@ describe("what shore remembers after a refusal", () => {
     expect(readLearnedImageSupport(cache, "opencode-go")).toEqual({ "glm-5.3": false });
   });
 
-  test("a corrupt file reads as no knowledge rather than throwing", () => {
+  test("a corrupt file reads as no knowledge rather than throwing", async () => {
     const cache = scratch();
     recordImageRejection(cache, "opencode-go", "glm-5.3");
-    Bun.write(learnedImageSupportPath(cache, "opencode-go"), "{not json");
+    await Bun.write(learnedImageSupportPath(cache, "opencode-go"), "{not json");
     expect(readLearnedImageSupport(cache, "opencode-go")).toEqual({});
   });
 });

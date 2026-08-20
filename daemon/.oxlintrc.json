@@ -21,7 +21,7 @@
   },
   "rules": {
     "typescript/await-thenable": "warn",
-    "typescript/no-floating-promises": "warn",
+    "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
     "typescript/no-misused-spread": "warn",
     "typescript/no-base-to-string": "warn",

@@ -56,7 +56,7 @@ describe("wire capture", () => {
       });
     });
     await settle();
-    server.stop(true);
+    await server.stop(true);
 
     expect(seen).toHaveLength(1);
     const exchange = seen[0]!;
@@ -79,7 +79,7 @@ describe("wire capture", () => {
       await fetch(`http://localhost:${server.port}/`);
     });
     await settle();
-    server.stop(true);
+    await server.stop(true);
 
     expect(seen[0]).toMatchObject({
       call_id: "call-42",
@@ -108,7 +108,7 @@ describe("wire capture", () => {
       }
     });
     await settle();
-    server.stop(true);
+    await server.stop(true);
 
     expect(seen.map((e) => e.seq)).toEqual([0, 1, 2]);
     expect(seen.map((e) => e.status)).toEqual([529, 529, 200]);
@@ -138,7 +138,7 @@ describe("wire capture", () => {
       return await response.text();
     });
     await settle();
-    server.stop(true);
+    await server.stop(true);
 
     expect(received).toBe(chunks.join(""));
     expect(textOf(seen[0]!.response_body)).toBe(chunks.join(""));
@@ -152,7 +152,7 @@ describe("wire capture", () => {
     const response = await fetch(`http://localhost:${server.port}/`);
     expect(await response.text()).toBe("mcp traffic");
     await settle();
-    server.stop(true);
+    await server.stop(true);
 
     expect(seen).toHaveLength(0);
   });
@@ -186,7 +186,7 @@ describe("wire capture", () => {
     const out: number[] = [];
     for await (const value of wireScopedIteration(scope(), stream)) out.push(value);
     await settle();
-    server.stop(true);
+    await server.stop(true);
 
     expect(out).toEqual([1, 2]);
     expect(seen.map((e) => e.url.endsWith("/first") || e.url.endsWith("/second"))).toEqual([
@@ -262,7 +262,7 @@ describe("wire capture", () => {
       if (event.type === "text") text.push(event.text);
     }
     await settle();
-    server.stop(true);
+    await server.stop(true);
 
     expect(text.join("")).toBe("hello");
 

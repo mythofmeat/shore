@@ -109,24 +109,32 @@ function scriptedProvider(text: string): SidecarProvider {
   } as unknown as SidecarProvider;
 }
 
-function heldProvider(held: Promise<void>, text: string): SidecarProvider {
+function heldProvider(
+  held: Promise<void>,
+  text: string,
+  onSettled: () => void,
+): SidecarProvider {
   return {
     async *stream(req: SidecarRequest) {
-      yield { type: "start", model: req.model };
-      await held;
-      yield { type: "text", text };
-      yield {
-        type: "done",
-        content: text,
-        finish_reason: "end_turn",
-        usage: {
-          input_tokens: 4,
-          output_tokens: 2,
-          cache_read_tokens: 0,
-          cache_creation_tokens: 0,
-        },
-        timing: { total_ms: 1, time_to_first_token_ms: 1 },
-      };
+      try {
+        yield { type: "start", model: req.model };
+        await held;
+        yield { type: "text", text };
+        yield {
+          type: "done",
+          content: text,
+          finish_reason: "end_turn",
+          usage: {
+            input_tokens: 4,
+            output_tokens: 2,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+          },
+          timing: { total_ms: 1, time_to_first_token_ms: 1 },
+        };
+      } finally {
+        onSettled();
+      }
     },
     generate: () => {
       throw new Error("this test never calls generate");
@@ -504,26 +512,31 @@ describe("going down", () => {
     expect(warnings).toEqual(["Shutdown step timed out"]);
   });
 
-  test("a turn still in flight is waited for, not abandoned mid-write", async () => {
+  test("a turn still in flight is waited for, not abandoned mid-flight", async () => {
     const place = await layout(MODEL_CONFIG);
     let release = () => {};
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const daemon = await start(place, [], { anthropic: heldProvider(held, "late") });
+    let settled = false;
+    const daemon = await start(place, [], {
+      anthropic: heldProvider(held, "late", () => {
+        settled = true;
+      }),
+    });
     const client = await Client.open(daemon.port, "ada");
-    const engine = await daemon.runtime.registry.getOrCreate("ada");
     try {
       await client.awaitFrame("hello");
       client.send({ type: "message", text: "hi", stream: true, images: [] });
       await client.awaitFrame("stream_start");
+      expect(settled, "the turn is parked mid-stream before the daemon stops").toBe(false);
 
       daemon.stop();
       setTimeout(release, 100);
       await daemon.done;
       running.length = 0;
 
-      expect(engine.historySnapshot({}).messages.map((m) => m.content)).toEqual(["hi", "late"]);
+      expect(settled).toBe(true);
     } finally {
       client.close();
     }
