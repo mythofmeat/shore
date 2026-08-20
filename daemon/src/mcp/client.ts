@@ -57,7 +57,7 @@ export class McpClient {
     return this.serverName;
   }
 
-  static async connect(spec: McpServerSpec): Promise<McpClient> {
+  static async connect(this: void, spec: McpServerSpec): Promise<McpClient> {
     const client = new Client({ name: "shore", version: "1.0.0" });
     try {
       if (spec.transport.kind === "stdio") {

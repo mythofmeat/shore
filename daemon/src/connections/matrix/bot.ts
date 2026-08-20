@@ -66,7 +66,7 @@ export class MatrixBot {
     });
   }
 
-  static async login(config: BotConfig): Promise<MatrixBot> {
+  static async login(this: void, config: BotConfig): Promise<MatrixBot> {
     const client = createClient({
       baseUrl: config.homeserver,
       store: new MemoryStore(),

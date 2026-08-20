@@ -139,7 +139,7 @@ afterEach(() => {
 
 function serving(script: Scripted[]): Fake {
   const fake = fakeAnthropic(script);
-  teardown.push(fake.stop);
+  teardown.push(() => fake.stop());
   return fake;
 }
 

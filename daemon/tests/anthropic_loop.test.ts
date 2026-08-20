@@ -228,7 +228,7 @@ describe("driving a tool loop", () => {
       { kind: "text", text: "the file says hello" },
     ]);
     const tools = fakePhase("hello");
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     const events = await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
     const types = events.map((e) => e.type);
@@ -265,7 +265,7 @@ describe("driving a tool loop", () => {
       { kind: "text", text: "done" },
     ]);
     const tools = fakePhase("ok");
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
@@ -280,7 +280,7 @@ describe("driving a tool loop", () => {
       { kind: "text", text: "done" },
     ]);
     const tools = fakePhase("ok");
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
@@ -302,7 +302,7 @@ describe("driving a tool loop", () => {
       { kind: "text", text: "done" },
     ]);
     const tools = fakePhase("ok");
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
@@ -317,7 +317,7 @@ describe("driving a tool loop", () => {
       { kind: "text", text: "done" },
     ]);
     const tools = fakePhase("ok");
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
     expect(anthropic.requests).toHaveLength(2);
@@ -329,7 +329,7 @@ describe("driving a tool loop", () => {
       { kind: "text", text: "done" },
     ]);
     const tools = fakePhase("ok");
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
@@ -349,7 +349,7 @@ describe("driving a tool loop", () => {
       { kind: "text", text: "that file is missing, then" },
     ]);
     const tools = fakePhase("no such file", ["read"]);
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     const events = await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
@@ -368,7 +368,7 @@ describe("driving a tool loop", () => {
       { kind: "text", text: "done" },
     ]);
     const tools = fakePhase("ok");
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     const events = await collect(
       anthropicToolLoopEvents(request(anthropic), tools.phase, AbortSignal.abort()),
@@ -380,7 +380,7 @@ describe("driving a tool loop", () => {
   test("the initial request is the same one the non-loop path would send", async () => {
     const anthropic = fakeAnthropic([{ kind: "text", text: "hi" }]);
     const tools = fakePhase("ok");
-    stops.push(anthropic.stop);
+    stops.push(() => anthropic.stop());
 
     const req = request(anthropic);
     await collect(anthropicToolLoopEvents(req, tools.phase));

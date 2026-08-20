@@ -88,7 +88,7 @@
     "promise/param-names": "error",
     "import/no-self-import": "error",
     "import/no-cycle": "error",
-    "typescript/unbound-method": "warn",
+    "typescript/unbound-method": "error",
     "eslint/require-yield": "error"
   },
   "overrides": [
