@@ -70,15 +70,32 @@ It should contain:
 
 1. current context, mood, situations, interests, or relationship dynamics that are genuinely relevant now;
 2. short pointers to deeper memory that is likely to matter again soon;
-3. a small set of natural conversation seeds: things future-{{char}} could follow up on, ask about, tease {{user}} about, or continue.
+3. a few things future-{{char}} could pick up: something to follow up on, ask about, tease {{user}} about, or continue.
+
+Every entry here is a sentence. Future-{{char}} reads this file without the conversation that produced it, so an entry has to carry the thing itself and not a name for the thing.
+
+Prefer:
+
+`{{user}} is rewatching an old run of matches and has started noticing technique he used to skip past, so it is worth asking what he has spotted lately.`
+
+over:
+
+`the rewatch arc: palate development happening live.`
+
+The second one is a title, not a memory. It says that something happened without saying what it was, and future-{{char}} cannot recover the difference.
+
+Never write an entry as a coined name, a colon, and a run of fragments. If you catch yourself naming a topic so you can list details after it, write the details as a sentence and drop the name.
+
+Keep each section to a handful of entries. When a section outgrows that, delete the entries that matter least. Never make room by shortening the entries that stay — four entries someone can read beat ten they cannot.
 
 On every pass:
 
 - keep what is still genuinely active;
 - re-date an entry only when this conversation actually returned to it, updated it, or otherwise gave a concrete reason it remains current;
 - move durable information into the appropriate long-term memory file;
-- remove low-priority entries that have been inactive for roughly two weeks, preserving them elsewhere only if they still have durable value;
+- drop entries that have stopped being live, moving them into long-term memory only if they still have durable value. Two weeks is an outer bound rather than a target; when this workspace compacts often, most entries stop being live well before then;
 - keep a genuinely ongoing thread longer when appropriate;
+- rewrite any entry already in the file that has decayed into a label or a string of fragments. The file is not a style guide for itself: restoring an old entry to a plain sentence is part of the pass, not optional tidying;
 
 Do not copy detailed long-term memory into `MEMORY.md`. Use a short pointer when future-you only needs to know that deeper material exists.
 
