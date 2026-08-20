@@ -3,7 +3,12 @@ import { shoreLog } from "../log.ts";
 import { access, readFile, rmdir, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-import { HISTORY_DB_FILE, HistoryStore } from "./history_store.ts";
+import {
+  HISTORY_DB_FILE,
+  HistoryStore,
+  type SegmentEntry,
+  type SegmentRecord,
+} from "./history_store.ts";
 import { MessageNotFound, JsonParseError, normalizeMessage } from "./message_store";
 import { quarantineLines } from "./backup.ts";
 import type { Message } from "./types";
@@ -12,12 +17,7 @@ const SEGMENTS_DIR = "segments";
 const COMPACTION_MANIFEST_FILE = "compaction.json";
 const ACTIVE_JSONL_FILE = "active.jsonl";
 
-export interface SegmentEntry {
-  file: string;
-  message_count: number;
-  compacted_at: string;
-  compaction_id?: string;
-}
+export type { SegmentEntry, SegmentRecord } from "./history_store.ts";
 
 export interface CompactionManifest {
   segments: SegmentEntry[];
@@ -117,11 +117,20 @@ export class SegmentReader {
     return `${durable}|${manifest}`;
   }
 
-  entries(): readonly SegmentEntry[] {
+  entries(): readonly SegmentRecord[] {
     const historyEntries = this.#history?.entries(this.#character) ?? [];
     return historyEntries.length >= this.#manifest.segments.length
       ? historyEntries
-      : this.#manifest.segments;
+      : this.#manifest.segments.map((entry, idx) => ({
+          ...entry,
+          idx,
+          first_message_at: null,
+          last_message_at: null,
+        }));
+  }
+
+  entry(index: number): SegmentRecord | undefined {
+    return this.entries().find((entry) => entry.idx === index);
   }
 
   async readSegment(index: number): Promise<Message[]> {

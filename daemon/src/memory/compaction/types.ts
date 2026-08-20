@@ -130,7 +130,15 @@ export interface CompactionLlm {
 export interface ConversationManager {
   archiveAndRetain(
     conversationId: string,
-    params: { keepLastN: number; activeContent: string; operationId?: string },
+    params: {
+      keepLastN: number;
+      activeContent: string;
+      operationId?: string;
+      memoryBefore?: string;
+      memoryAfter?: string;
+      excluded?: boolean;
+      note?: string;
+    },
   ): Promise<string>;
 }
 
@@ -146,6 +154,8 @@ export interface CompactionTools {
   dispatch(name: string, input: unknown): Promise<ToolOutput>;
 
   ensureWorkspaceGitRepo(workspaceDir: string, charName: string, reason: string): Promise<void>;
+
+  gitHead?(workspaceDir: string): Promise<string | undefined>;
 
   gitCommitAll(workspaceDir: string, charName: string, message: string): Promise<boolean>;
 }

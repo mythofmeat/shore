@@ -23,6 +23,7 @@ import { dispatchTool } from "../../tools/dispatch.ts";
 import {
   ensureWorkspaceGitRepoBestEffort,
   gitCommitAll,
+  gitHead,
   gitPushWorkspaceBestEffort,
 } from "../../tools/workspace.ts";
 import { MarkdownMemoryStore } from "../markdown_store.ts";
@@ -210,6 +211,7 @@ function compactionTools(ctx: Parameters<typeof dispatchTool>[2]): CompactionToo
     ensureWorkspaceGitRepo: async (workspaceDir) => {
       await ensureWorkspaceGitRepoBestEffort(workspaceDir);
     },
+    gitHead: async (workspaceDir) => await gitHead(workspaceDir),
     gitCommitAll: async (workspaceDir, charName, message) =>
       await gitCommitAll(workspaceDir, charName, message),
   };

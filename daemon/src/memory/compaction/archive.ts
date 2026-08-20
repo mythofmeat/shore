@@ -36,6 +36,12 @@ export function conversationManager(
         newId,
         params.operationId,
         history,
+        {
+          ...(params.memoryBefore === undefined ? {} : { memory_before: params.memoryBefore }),
+          ...(params.memoryAfter === undefined ? {} : { memory_after: params.memoryAfter }),
+          ...(params.excluded === true ? { excluded: true } : {}),
+          ...(params.note === undefined ? {} : { note: params.note }),
+        },
       ),
   };
 }
@@ -48,6 +54,10 @@ export async function archiveAndRetain(
   newId: () => string = () => crypto.randomUUID(),
   operationId?: string,
   history?: DurableHistoryLocation,
+  segmentMetadata: Pick<
+    import("../../engine/history_store.ts").SegmentEntry,
+    "memory_before" | "memory_after" | "excluded" | "note"
+  > = {},
 ): Promise<string> {
   const lines = rustLines(activeContent).filter((l) => rustTrim(l) !== "");
   const keep = Math.min(keepLastN, lines.length);
@@ -65,6 +75,7 @@ export async function archiveAndRetain(
       now,
       operationId,
       characterDir,
+      segmentMetadata,
     );
     return newId();
   }
@@ -90,6 +101,10 @@ async function archiveToDatabase(
   now: () => string,
   operationId: string | undefined,
   characterDir: string,
+  segmentMetadata: Pick<
+    import("../../engine/history_store.ts").SegmentEntry,
+    "memory_before" | "memory_after" | "excluded" | "note"
+  >,
 ): Promise<void> {
   const messages = archived.map((line) => normalizeMessage(JSON.parse(line) as Message));
   const reader = await SegmentReader.load(characterDir, {
@@ -109,6 +124,7 @@ async function archiveToDatabase(
           message_count: messages.length,
           compacted_at: now(),
           ...(operationId === undefined ? {} : { compaction_id: operationId }),
+          ...segmentMetadata,
         },
         messages,
         activeContent,

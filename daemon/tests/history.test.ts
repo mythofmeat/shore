@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 
 import {
   excerptFor,
   filtersFrom,
-  handleLegacySearchHistory,
   matchesTimeRange,
   excerptCharsFrom,
   maxResultsFrom,
@@ -14,7 +11,6 @@ import {
   QueryMatcher,
   rangeIsEmpty,
 } from "../src/tools/history";
-import { testTmp } from "./support/tmp.ts";
 
 type Json = Record<string, unknown>;
 
@@ -73,75 +69,7 @@ const fixture = (await Bun.file(
   new URL("./engine_fixtures/history.json", import.meta.url),
 ).json()) as Fixture;
 
-async function corpusDir(): Promise<string> {
-  const dir = await mkdtemp(testTmp("history-parity-"));
-  await mkdir(join(dir, "segments"), { recursive: true });
-  for (const seg of fixture.corpus.segments) {
-    await writeFile(join(dir, "segments", seg.file), seg.body);
-  }
-  await writeFile(join(dir, "compaction.json"), fixture.corpus["compaction.json"]);
-  await writeFile(join(dir, "active.jsonl"), fixture.corpus["active.jsonl"]);
-  return dir;
-}
-
-async function run(input: Json, dir: string): Promise<{ ok: Json } | { error: string }> {
-  try {
-    return { ok: (await handleLegacySearchHistory(input, dir)) as unknown as Json };
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-}
-
 describe("the fixture is real", () => {
-  test("the corpus spans segments and the active window", () => {
-    expect(fixture.corpus.segments.length).toBeGreaterThan(1);
-    expect(fixture.corpus["active.jsonl"].length).toBeGreaterThan(0);
-  });
-
-  test("the corpus contains content no search may reach", () => {
-    const all = fixture.corpus.segments.map((s) => s.body).join("");
-    expect(all).toContain('"type":"thinking"');
-    expect(all).toContain('"type":"tool_result"');
-  });
-
-  test("the corpus contains non-ASCII content", () => {
-    const all = fixture.corpus.segments.map((s) => s.body).join("");
-    expect(/[\u{1F300}-\u{1FAFF}]/u.test(all)).toBe(true);
-    expect(/[一-鿿]/u.test(all)).toBe(true);
-  });
-
-  test("the corpus contains an unparseable timestamp", () => {
-    expect(fixture.corpus["active.jsonl"]).toContain("not-a-timestamp");
-  });
-
-  test("both end-to-end outcomes are represented", () => {
-    const ok = fixture.end_to_end.filter((c) => "ok" in c.expect);
-    const err = fixture.end_to_end.filter((c) => "error" in c.expect);
-    expect(ok.length).toBeGreaterThan(0);
-    expect(err.length).toBeGreaterThan(0);
-  });
-
-  test("some end-to-end cases return results and some return none", () => {
-    const withHits = fixture.end_to_end.filter(
-      (c) => "ok" in c.expect && (c.expect.ok.count as number) > 0,
-    );
-    const without = fixture.end_to_end.filter(
-      (c) => "ok" in c.expect && (c.expect.ok.count as number) === 0,
-    );
-    expect(withHits.length).toBeGreaterThan(0);
-    expect(without.length).toBeGreaterThan(0);
-  });
-
-  test("at least one case has more candidates than it returns", () => {
-    const truncated = fixture.end_to_end.filter(
-      (c) =>
-        "ok" in c.expect &&
-        typeof c.input.max_results === "number" &&
-        (c.expect.ok.count as number) === Math.max(1, c.input.max_results),
-    );
-    expect(truncated.length).toBeGreaterThan(0);
-  });
-
   test("the scoring table records both matches and non-matches", () => {
     expect(fixture.scoring.some((c) => c.score !== null)).toBe(true);
     expect(fixture.scoring.some((c) => c.score === null)).toBe(true);
@@ -306,87 +234,5 @@ describe("time range membership", () => {
     );
     expect(boundary.length).toBeGreaterThan(0);
     expect(boundary.every((c) => c.expect)).toBe(true);
-  });
-});
-
-describe("end to end", () => {
-  function successful(result: { ok: Json } | { error: string }): Json {
-    if ("error" in result) throw new Error(result.error);
-    return result.ok;
-  }
-
-  test("returns a small, clean, deduplicated result set", async () => {
-    const result = successful(await run({ query: "tea" }, await corpusDir()));
-    const results = result.results as Json[];
-    expect(results.length).toBeLessThanOrEqual(8);
-    expect(results.every((entry) => typeof entry.text === "string")).toBe(true);
-    expect(results.every((entry) => !("excerpt" in entry) && !("source" in entry))).toBe(true);
-    expect(results.every((entry) => !(entry.text as string).includes("\n"))).toBe(true);
-    expect(new Set(results.map((entry) => entry.text)).size).toBe(results.length);
-  });
-
-  test("a multi-term query keeps only the best available term coverage", async () => {
-    const result = successful(await run({ query: "tea kettle" }, await corpusDir()));
-    const results = result.results as Json[];
-    expect(results.length).toBeGreaterThan(0);
-    expect(
-      results.every((entry) => {
-        const text = String(entry.text).toLowerCase();
-        return text.includes("tea") && text.includes("kettle");
-      }),
-    ).toBe(true);
-  });
-
-  test("unselected alternatives are unreachable, with or without the retired flag", async () => {
-    const dir = await corpusDir();
-    expect(successful(await run({ query: "third take" }, dir)).count).toBe(0);
-    expect(
-      successful(await run({ query: "third take", include_alternatives: true }, dir)).count,
-    ).toBe(0);
-  });
-
-  test("the active window is unreachable", async () => {
-    const dir = await corpusDir();
-    const result = successful(await run({ query: "tea" }, dir));
-    const ids = (result.results as Json[]).map((entry) => entry.msg_id);
-    expect(ids.length).toBeGreaterThan(0);
-    expect(ids).not.toContain("a-recent");
-    expect(result.searched_messages).toBe(6);
-  });
-
-  test("time-only results remain chronological", async () => {
-    const result = successful(
-      await run(
-        { start_time: "2026-01-01T00:00:00Z", end_time: "2026-01-04T23:59:59Z" },
-        await corpusDir(),
-      ),
-    );
-    const timestamps = (result.results as Json[]).map((entry) => Date.parse(String(entry.timestamp)));
-    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
-  });
-
-  for (const c of fixture.end_to_end.filter((entry) => "error" in entry.expect)) {
-    test(c.name, async () => {
-      expect(await run(c.input, await corpusDir())).toEqual(c.expect as never);
-    });
-  }
-
-  test("an empty character directory searches nothing and does not fail", async () => {
-    const dir = await mkdtemp(testTmp("history-parity-empty-"));
-    expect(await run({ query: "tea" }, dir)).toEqual(fixture.empty_character_dir as never);
-  });
-
-  test("an unconfigured character directory is rejected", async () => {
-    expect(await run({ query: "tea" }, "")).toEqual(
-      fixture.unconfigured_character_dir as never,
-    );
-  });
-
-  test("result order is deterministic across runs", async () => {
-    const dir = await corpusDir();
-    const first = await run({ query: "tea" }, dir);
-    for (let i = 0; i < 5; i += 1) {
-      expect(await run({ query: "tea" }, dir)).toEqual(first as never);
-    }
   });
 });

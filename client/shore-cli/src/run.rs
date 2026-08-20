@@ -187,6 +187,8 @@ pub(crate) async fn execute(
         | CliCommand::Model { .. }
         | CliCommand::Provider { .. }
         | CliCommand::Compact { .. }
+        | CliCommand::Segments { .. }
+        | CliCommand::Clear { .. }
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Completions { .. }
@@ -241,6 +243,8 @@ fn wants_json(other: &CliCommand) -> bool {
         }
         CliCommand::Character { json, .. }
         | CliCommand::Compact { json, .. }
+        | CliCommand::Segments { json, .. }
+        | CliCommand::Clear { json, .. }
         | CliCommand::Usage { json, .. } => *json,
         CliCommand::Debug { subcommand } => matches!(
             subcommand,
@@ -1631,6 +1635,8 @@ mod tests {
             | CliCommand::Model { .. }
             | CliCommand::Provider { .. }
             | CliCommand::Compact { .. }
+            | CliCommand::Segments { .. }
+            | CliCommand::Clear { .. }
             | CliCommand::Config { .. }
             | CliCommand::Usage { .. }
             | CliCommand::Completions { .. }

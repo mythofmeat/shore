@@ -1,8 +1,5 @@
 import { join } from "node:path";
 
-import { deriveContentFromBlocks } from "../engine/message_store";
-import { SegmentReader } from "../engine/segments";
-import type { ContentBlock, Message } from "../engine/types";
 import type { Embedder } from "../llm/embed.ts";
 import {
   HistorySearchIndex,
@@ -21,7 +18,6 @@ const MAX_EXCERPT_CHARS = 2000;
 const TERM_HIT = 10;
 const FULL_COVERAGE_BONUS = 15;
 const PHRASE_BONUS = 25;
-const RECENCY_WEIGHT = 15.0;
 
 export { InvalidArgs, ToolIoError };
 
@@ -256,54 +252,6 @@ export function excerptFor(
   return excerpt;
 }
 
-function cleanExcerptFor(
-  content: string,
-  matcher: QueryMatcher | undefined,
-  excerptChars: number,
-): string {
-  const normalized = content.replace(/\s+/gu, " ").trim();
-  let excerpt = excerptFor(normalized, matcher, excerptChars);
-  const leading = excerpt.startsWith("...");
-  const trailing = excerpt.endsWith("...");
-  if (leading) excerpt = excerpt.slice(3);
-  if (trailing) excerpt = excerpt.slice(0, -3);
-  if (leading) {
-    const boundary = excerpt.indexOf(" ");
-    if (boundary >= 0) excerpt = excerpt.slice(boundary + 1);
-  }
-  if (trailing) {
-    const boundary = excerpt.lastIndexOf(" ");
-    if (boundary >= 0) excerpt = excerpt.slice(0, boundary);
-  }
-  return `${leading ? "… " : ""}${excerpt.trim()}${trailing ? " …" : ""}`;
-}
-
-function chatText(blocks: ContentBlock[]): string {
-  return deriveContentFromBlocks(blocks, false);
-}
-
-interface SearchFilters {
-  matcher: QueryMatcher | undefined;
-  range: TimeRange;
-  modelFilter: string | undefined;
-  excerptChars: number;
-}
-
-interface ScoredCandidate {
-  value: Record<string, unknown>;
-  relevance: number;
-  coverage: number;
-  normalizedText: string;
-  parsedTs: number | undefined;
-}
-
-function relevanceFor(
-  matcher: QueryMatcher | undefined,
-  content: string,
-): number | undefined {
-  return matcher === undefined ? 0 : matcher.score(content);
-}
-
 export function matchesTimeRange(
   timestamp: string,
   range: TimeRange,
@@ -318,181 +266,11 @@ export function matchesTimeRange(
   return rangeContains(range, parsed);
 }
 
-function scoredCandidate(
-  relevance: number,
-  coverage: number,
-  text: string,
-  timestamp: string,
-  value: Record<string, unknown>,
-): ScoredCandidate {
-  return {
-    relevance,
-    coverage,
-    normalizedText: text.toLowerCase().replace(/\s+/gu, " ").trim(),
-    parsedTs: parseRfc3339(timestamp),
-    value,
-  };
-}
-
-function roleLabel(role: Message["role"]): string {
-  return role;
-}
-
-function collectMatches(
-  candidates: ScoredCandidate[],
-  messages: readonly Message[],
-  filters: SearchFilters,
-  stats: { skipped: number },
-): void {
-  const { matcher, range, modelFilter, excerptChars } = filters;
-
-  for (const message of messages) {
-    const text = chatText(message.content_blocks);
-    if (text === "" || !modelMatches(message.model, modelFilter)) continue;
-    const relevance = relevanceFor(matcher, text);
-    if (relevance === undefined || !matchesTimeRange(message.timestamp, range, stats)) continue;
-    candidates.push(
-      scoredCandidate(relevance, matcher?.coverage(text) ?? 0, text, message.timestamp, {
-        msg_id: message.msg_id,
-        role: roleLabel(message.role),
-        timestamp: message.timestamp,
-        model: message.model ?? null,
-        text: cleanExcerptFor(text, matcher, excerptChars),
-      }),
-    );
-  }
-}
-
-function combinedScore(
-  c: ScoredCandidate,
-  minTs: number | undefined,
-  spanSecs: number,
-): number {
-  let recency = 0;
-  if (c.parsedTs !== undefined && minTs !== undefined && spanSecs > 0) {
-    const elapsed = Math.trunc((c.parsedTs - minTs) / 1000);
-    recency = (elapsed / spanSecs) * RECENCY_WEIGHT;
-  }
-  return c.relevance + recency;
-}
-
-function rankCandidates(candidates: ScoredCandidate[]): void {
-  let minTs: number | undefined;
-  let maxTs: number | undefined;
-  for (const c of candidates) {
-    if (c.parsedTs === undefined) continue;
-    minTs = minTs === undefined ? c.parsedTs : Math.min(minTs, c.parsedTs);
-    maxTs = maxTs === undefined ? c.parsedTs : Math.max(maxTs, c.parsedTs);
-  }
-  const spanSecs =
-    minTs !== undefined && maxTs !== undefined
-      ? Math.max(Math.trunc((maxTs - minTs) / 1000), 0)
-      : 0;
-
-  candidates.sort((a, b) => {
-    const diff = combinedScore(b, minTs, spanSecs) - combinedScore(a, minTs, spanSecs);
-    if (diff !== 0) return diff < 0 ? -1 : 1;
-    return compareOptionalTs(b.parsedTs, a.parsedTs);
-  });
-}
-
-function bestResults(
-  candidates: ScoredCandidate[],
-  matcher: QueryMatcher | undefined,
-  maxResults: number,
-): Record<string, unknown>[] {
-  let eligible = candidates;
-  if (matcher !== undefined && matcher.terms.length > 1 && candidates.length > 0) {
-    const bestCoverage = Math.max(...candidates.map((candidate) => candidate.coverage));
-    eligible = candidates.filter((candidate) => candidate.coverage === bestCoverage);
-  }
-  const seen = new Set<string>();
-  const results: Record<string, unknown>[] = [];
-  for (const candidate of eligible) {
-    if (seen.has(candidate.normalizedText)) continue;
-    seen.add(candidate.normalizedText);
-    results.push(candidate.value);
-    if (results.length === maxResults) break;
-  }
-  return results;
-}
-
 function compareOptionalTs(a: number | undefined, b: number | undefined): number {
   if (a === undefined && b === undefined) return 0;
   if (a === undefined) return -1;
   if (b === undefined) return 1;
   return a === b ? 0 : a < b ? -1 : 1;
-}
-
-export interface LegacySearchHistoryResult {
-  query: string | null;
-  time_range: { start_time: string | null; end_time: string | null; inclusive: true };
-  model_filter: string | null;
-  results: Record<string, unknown>[];
-  count: number;
-  searched_messages: number;
-  skipped_invalid_timestamps: number;
-}
-
-export async function handleLegacySearchHistory(
-  input: Record<string, unknown>,
-  characterDataDir: string,
-): Promise<LegacySearchHistoryResult> {
-  if (characterDataDir === "") {
-    throw new InvalidArgs("conversation history is not configured");
-  }
-
-  const { query, range } = filtersFrom(input);
-  const modelFilter = modelFilterFrom(input);
-  if (query === undefined && rangeIsEmpty(range) && modelFilter === undefined) {
-    throw new InvalidArgs("provide query, start_time, end_time, model, or a combination");
-  }
-
-  const matcher = query === undefined ? undefined : new QueryMatcher(query);
-  const maxResults = maxResultsFrom(input);
-  const filters: SearchFilters = {
-    matcher,
-    range,
-    modelFilter,
-    excerptChars: excerptCharsFrom(input),
-  };
-
-  const candidates: ScoredCandidate[] = [];
-  const stats = { skipped: 0 };
-  let searchedMessages = 0;
-
-  const segments = await ioGuard(() => SegmentReader.load(characterDataDir));
-  try {
-    for (let index = 0; index < segments.segmentCount(); index += 1) {
-      const messages = await ioGuard(() => segments.readSegment(index));
-      searchedMessages += messages.length;
-      collectMatches(candidates, messages, filters, stats);
-    }
-  } finally {
-    segments.close();
-  }
-
-  if (matcher !== undefined) {
-    rankCandidates(candidates);
-  } else {
-    candidates.sort((a, b) => compareOptionalTs(a.parsedTs, b.parsedTs));
-  }
-
-  const results = bestResults(candidates, matcher, maxResults);
-
-  return {
-    query: query ?? null,
-    time_range: {
-      start_time: range.start?.rfc3339 ?? null,
-      end_time: range.end?.rfc3339 ?? null,
-      inclusive: true,
-    },
-    model_filter: modelFilter ?? null,
-    results,
-    count: results.length,
-    searched_messages: searchedMessages,
-    skipped_invalid_timestamps: stats.skipped,
-  };
 }
 
 export type HistorySearchMode = "auto" | "lexical" | "hybrid" | "vector";
@@ -802,13 +580,4 @@ function compareIndexed(a: IndexedMessage, b: IndexedMessage): number {
 
 function describeFailure(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-async function ioGuard<T>(f: () => Promise<T>): Promise<T> {
-  try {
-    return await f();
-  } catch (e) {
-    if (e instanceof InvalidArgs) throw e;
-    throw new ToolIoError(e instanceof Error ? e.message : String(e));
-  }
 }

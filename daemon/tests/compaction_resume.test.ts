@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { HISTORY_DB_FILE } from "../src/engine/history_store.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { MarkdownMemoryStore } from "../src/memory/markdown_store.ts";
 import { conversationManager } from "../src/memory/compaction/archive.ts";
 import { compact } from "../src/memory/compaction/manager.ts";
@@ -36,6 +36,7 @@ test("a failed compaction resumes after its completed tool round without replayi
   await writeFile(join(characterDir, "active.jsonl"), activeContent, "utf8");
 
   let edits = 0;
+  const heads = ["before-sha", "during-sha", "after-sha"];
   const tools: CompactionTools = {
     workspaceDir: workspace,
     configDir: "",
@@ -49,6 +50,7 @@ test("a failed compaction resumes after its completed tool round without replayi
       return { output: "written", isError: false };
     },
     ensureWorkspaceGitRepo: async () => {},
+    gitHead: async () => heads.shift(),
     gitCommitAll: async () => false,
   };
 
@@ -71,6 +73,7 @@ test("a failed compaction resumes after its completed tool round without replayi
         ]),
         new Error("provider unavailable"),
       ]),
+      true,
     ),
     { keepRecentTurns: 1 },
   );
@@ -80,13 +83,14 @@ test("a failed compaction resumes after its completed tool round without replayi
   expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(activeContent);
   const checkpoint = JSON.parse(
     await readFile(join(characterDir, "compaction-checkpoint.json"), "utf8"),
-  ) as { request: { api_key: string }; loop: { toolRounds: number } };
+  ) as { request: { api_key: string }; loop: { toolRounds: number }; memoryBefore?: string };
   expect(checkpoint.request.api_key).toBe("");
   expect(checkpoint.loop.toolRounds).toBe(1);
+  expect(checkpoint.memoryBefore).toBe("before-sha");
 
   const secondLlm = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
   const second = await compact(
-    options(dataDir, workspace, memoryStore, messages, activeContent, tools, secondLlm),
+    options(dataDir, workspace, memoryStore, messages, activeContent, tools, secondLlm, true),
     { keepRecentTurns: 1 },
   );
 
@@ -96,6 +100,12 @@ test("a failed compaction resumes after its completed tool round without replayi
   expect(secondLlm.apiKeys).toEqual(["secret-that-must-not-land-on-disk"]);
   expect(await readFile(join(workspace, "memory/fact.md"), "utf8")).toBe("remembered\n");
   expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  const history = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+  expect(history.entries("ada")[0]).toMatchObject({
+    memory_before: "before-sha",
+    memory_after: "after-sha",
+  });
+  history.close();
 });
 
 test("the tool-round ceiling pauses work in resumable slices instead of making the job incomplete", async () => {

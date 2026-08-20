@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS history_segments (
     compacted_at  TEXT    NOT NULL,
     compaction_id TEXT,
     committed     INTEGER NOT NULL DEFAULT 1,
+    memory_before TEXT,
+    memory_after  TEXT,
+    excluded      INTEGER NOT NULL DEFAULT 0,
+    label         TEXT,
+    note          TEXT,
     PRIMARY KEY (character, idx)
 );
 
@@ -77,6 +82,17 @@ export interface SegmentEntry {
   message_count: number;
   compacted_at: string;
   compaction_id?: string;
+  memory_before?: string;
+  memory_after?: string;
+  excluded?: boolean;
+  label?: string;
+  note?: string;
+}
+
+export interface SegmentRecord extends SegmentEntry {
+  idx: number;
+  first_message_at: string | null;
+  last_message_at: string | null;
 }
 
 const ZSTD_LEVEL = 3;
@@ -235,6 +251,12 @@ export class HistoryStore {
   }
 
   archiveDigest(character: string): string {
+    const segments = this.#db
+      .query(
+        `SELECT idx, excluded FROM history_segments
+         WHERE character = ?1 AND committed = 1 ORDER BY idx`,
+      )
+      .all(character) as { idx: number; excluded: number }[];
     const rows = this.#db
       .query(
         `SELECT m.segment, m.ordinal, m.msg_id, m.blocks_hash FROM history_messages m
@@ -249,27 +271,80 @@ export class HistoryStore {
       blocks_hash: string;
     }[];
     const digest = createHash("sha256");
+    for (const segment of segments) {
+      digest.update(`segment:${segment.idx}:excluded=${segment.excluded}\n`);
+    }
     for (const row of rows) {
       digest.update(`${row.segment}:${row.ordinal}:${row.msg_id}:${row.blocks_hash}\n`);
     }
-    return `${rows.length}:${digest.digest("hex")}`;
+    return `${segments.length}:${rows.length}:${digest.digest("hex")}`;
   }
 
-  entries(character: string): SegmentEntry[] {
+  entries(character: string): SegmentRecord[] {
     const rows = this.#db
       .query(
-        `SELECT file, message_count, compacted_at, compaction_id FROM history_segments
-         WHERE character = ?1 AND committed = 1 ORDER BY idx`,
+        `SELECT s.idx, s.file, s.message_count, s.compacted_at, s.compaction_id,
+                s.memory_before, s.memory_after, s.excluded, s.label, s.note,
+                (SELECT m.timestamp FROM history_messages m
+                 WHERE m.character = s.character AND m.segment = s.idx
+                 ORDER BY m.ordinal ASC LIMIT 1) AS first_message_at,
+                (SELECT m.timestamp FROM history_messages m
+                 WHERE m.character = s.character AND m.segment = s.idx
+                 ORDER BY m.ordinal DESC LIMIT 1) AS last_message_at
+         FROM history_segments s
+         WHERE s.character = ?1 AND s.committed = 1 ORDER BY s.idx`,
       )
-      .all(character) as (Omit<SegmentEntry, "compaction_id"> & {
+      .all(character) as (Omit<SegmentRecord,
+        "compaction_id" | "memory_before" | "memory_after" | "excluded" | "label" | "note"
+      > & {
       compaction_id: string | null;
+      memory_before: string | null;
+      memory_after: string | null;
+      excluded: number;
+      label: string | null;
+      note: string | null;
     })[];
     return rows.map((row) => ({
+      idx: row.idx,
       file: row.file,
       message_count: row.message_count,
       compacted_at: row.compacted_at,
+      first_message_at: row.first_message_at,
+      last_message_at: row.last_message_at,
       ...(row.compaction_id === null ? {} : { compaction_id: row.compaction_id }),
+      ...(row.memory_before === null ? {} : { memory_before: row.memory_before }),
+      ...(row.memory_after === null ? {} : { memory_after: row.memory_after }),
+      ...(row.excluded === 0 ? {} : { excluded: true }),
+      ...(row.label === null ? {} : { label: row.label }),
+      ...(row.note === null ? {} : { note: row.note }),
     }));
+  }
+
+  setExcluded(character: string, idx: number, excluded: boolean): boolean {
+    return this.#db
+      .query(
+        `UPDATE history_segments SET excluded = ?3
+         WHERE character = ?1 AND idx = ?2 AND committed = 1`,
+      )
+      .run(character, idx, excluded ? 1 : 0).changes > 0;
+  }
+
+  setLabel(character: string, idx: number, label: string | null): boolean {
+    return this.#db
+      .query(
+        `UPDATE history_segments SET label = ?3
+         WHERE character = ?1 AND idx = ?2 AND committed = 1`,
+      )
+      .run(character, idx, label).changes > 0;
+  }
+
+  setNote(character: string, idx: number, note: string | null): boolean {
+    return this.#db
+      .query(
+        `UPDATE history_segments SET note = ?3
+         WHERE character = ?1 AND idx = ?2 AND committed = 1`,
+      )
+      .run(character, idx, note).changes > 0;
   }
 
   readSegment(character: string, idx: number): Message[] {
@@ -380,14 +455,20 @@ export class HistoryStore {
     this.#db
       .query(
         `INSERT INTO history_segments
-             (character, idx, file, message_count, compacted_at, compaction_id, committed)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             (character, idx, file, message_count, compacted_at, compaction_id, committed,
+              memory_before, memory_after, excluded, label, note)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
          ON CONFLICT (character, idx) DO UPDATE SET
            file = excluded.file,
            message_count = excluded.message_count,
            compacted_at = excluded.compacted_at,
            compaction_id = excluded.compaction_id,
-           committed = excluded.committed`,
+           committed = excluded.committed,
+           memory_before = excluded.memory_before,
+           memory_after = excluded.memory_after,
+           excluded = excluded.excluded,
+           label = excluded.label,
+           note = excluded.note`,
       )
       .run(
         character,
@@ -397,6 +478,11 @@ export class HistoryStore {
         entry.compacted_at,
         entry.compaction_id ?? null,
         committed ? 1 : 0,
+        entry.memory_before ?? null,
+        entry.memory_after ?? null,
+        entry.excluded === true ? 1 : 0,
+        entry.label ?? null,
+        entry.note ?? null,
       );
     messages.forEach((message, ordinal) => {
       this.#insertMessage(character, idx, ordinal, normalizeMessage(message));
@@ -485,6 +571,21 @@ function migrate(db: Database): void {
   }
   if (!columns.some((column) => column.name === "committed")) {
     db.run("ALTER TABLE history_segments ADD COLUMN committed INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!columns.some((column) => column.name === "memory_before")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN memory_before TEXT");
+  }
+  if (!columns.some((column) => column.name === "memory_after")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN memory_after TEXT");
+  }
+  if (!columns.some((column) => column.name === "excluded")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.some((column) => column.name === "label")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN label TEXT");
+  }
+  if (!columns.some((column) => column.name === "note")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN note TEXT");
   }
   db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_history_segments_operation
            ON history_segments (character, compaction_id)

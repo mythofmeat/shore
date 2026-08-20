@@ -70,6 +70,7 @@ import { estimateHistoryTokens } from "../engine/prompt.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import { usageConfigView } from "../ledger/budget.ts";
+import { clear, segments } from "./segments.ts";
 
 export interface CommandSession {
   config: LoadedConfig;
@@ -167,6 +168,16 @@ export async function runCommand(
         { ...deps.compaction, config: session.config, autonomy: deps.autonomy },
         args,
       );
+    case "segments":
+      return await segments(session.dataDir, character, args, deps.historyIndex);
+    case "clear":
+      return await clear(engine, {
+        dataDir: session.dataDir,
+        ...(deps.compaction?.repoint === undefined
+          ? {}
+          : { repoint: async (name) => await deps.compaction?.repoint?.(name, session.config) }),
+        onComplete: (name) => deps.autonomy.onCompactionComplete(name, 0),
+      }, args);
     case "config":
       return config(session, args);
     case "tools":

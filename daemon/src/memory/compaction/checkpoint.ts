@@ -41,6 +41,7 @@ export interface CompactionCheckpoint {
   sourceHash: string;
   splitAt: number;
   compactedTurns: number;
+  memoryBefore?: string;
   request: SidecarRequest;
   loop: CheckpointLoopState;
 }
@@ -60,6 +61,7 @@ export function newCompactionCheckpoint(
   compactedTurns: number,
   request: SidecarRequest,
   dryRun: boolean,
+  memoryBefore?: string,
   now: () => Date = () => new Date(),
 ): CompactionCheckpoint {
   const at = now().toISOString();
@@ -74,6 +76,7 @@ export function newCompactionCheckpoint(
     sourceHash: hashCompactionSource(sourceContent),
     splitAt,
     compactedTurns,
+    ...(memoryBefore === undefined ? {} : { memoryBefore }),
     request,
     loop: {
       writesApplied: [],

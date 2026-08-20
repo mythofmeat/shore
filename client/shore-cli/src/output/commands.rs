@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use crossterm::style::{Attribute, SetAttribute};
 use shore_common::duration::format_duration_ms;
 
-use super::transcript::{character_color, format_time};
+use super::transcript::{LogFilter, character_color, format_time, print_log};
 use super::vocab::{COLOR_ERROR, Tone, indent_to, paint, wrap_line};
 use super::{
     COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK,
@@ -34,6 +34,8 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "refresh_provider_models" => print_provider_refresh(data),
         "refresh_all_provider_models" => print_provider_refresh_all(data),
         "compact" => print_compact_result(data),
+        "segments" => print_segments(data),
+        "clear" => print_clear_result(data),
         "config_reload" => print_config_reload(data),
         "edit" => print_edit_confirmation(data),
         "delete" => print_delete_confirmation(data),
@@ -53,6 +55,80 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "run_tool" => print_run_tool(data),
         _ => print_command_output_fallback(name, data),
     }
+}
+
+fn print_segments(data: &serde_json::Value) {
+    if let Some(segment) = data.get("segment") {
+        print_segment_row(segment);
+        if let Some(messages) = data.get("messages").and_then(serde_json::Value::as_array) {
+            if messages.is_empty() {
+                print_dim_line(&mut io::stdout().lock(), "(no messages recorded)");
+            } else {
+                cli_out!();
+                print_log(
+                    messages,
+                    data["character"].as_str().unwrap_or("?"),
+                    LogFilter::default(),
+                );
+            }
+        }
+        return;
+    }
+    let Some(segments) = data.get("segments").and_then(serde_json::Value::as_array) else {
+        print_dim_line(&mut io::stdout().lock(), "(no segments recorded)");
+        return;
+    };
+    if segments.is_empty() {
+        print_dim_line(&mut io::stdout().lock(), "(no segments recorded)");
+        return;
+    }
+    for segment in segments {
+        print_segment_row(segment);
+    }
+}
+
+fn print_segment_row(segment: &serde_json::Value) {
+    let excluded = if segment["excluded"].as_bool().unwrap_or(false) {
+        "  excluded"
+    } else {
+        ""
+    };
+    let label = segment["label"]
+        .as_str()
+        .map_or_else(String::new, |value| format!("  {value}"));
+    cli_out!(
+        "#{:<4} {} → {}  {} messages{}{}",
+        segment["index"].as_u64().unwrap_or(0),
+        segment["first_message_at"].as_str().unwrap_or("?"),
+        segment["last_message_at"].as_str().unwrap_or("?"),
+        segment["message_count"].as_u64().unwrap_or(0),
+        excluded,
+        label,
+    );
+    if let Some(note) = segment["note"].as_str() {
+        cli_out!("      {note}");
+    }
+    match (
+        segment["memory_before"].as_str(),
+        segment["memory_after"].as_str(),
+    ) {
+        (Some(before), Some(after)) if before == after => {
+            cli_out!("      memory: unchanged {after}")
+        }
+        (Some(before), Some(after)) => cli_out!("      memory: {before}..{after}"),
+        (None, Some(after)) => cli_out!("      memory: root..{after}"),
+        _ => {}
+    }
+}
+
+fn print_clear_result(data: &serde_json::Value) {
+    cli_out!(
+        "Cleared {} messages into segment #{}.",
+        data["message_count"].as_u64().unwrap_or(0),
+        data.pointer("/segment/index")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0),
+    );
 }
 
 const CALL_BODY_PREVIEW: usize = 4000;

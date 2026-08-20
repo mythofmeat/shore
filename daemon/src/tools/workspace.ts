@@ -1173,6 +1173,14 @@ export async function gitCommitAll(
   return true;
 }
 
+export async function gitHead(workspaceDir: string): Promise<string | undefined> {
+  if (!(await exists(join(workspaceDir, ".git")))) return undefined;
+  const head = await runGit(workspaceDir, ["rev-parse", "--verify", "HEAD"]);
+  if (head.code !== 0) return undefined;
+  const sha = rustTrim(head.stdout);
+  return sha === "" ? undefined : sha;
+}
+
 export async function gitPushWorkspace(workspaceDir: string): Promise<boolean> {
   if (!(await exists(join(workspaceDir, ".git")))) return false;
 

@@ -332,6 +332,33 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
+    /// Inspect or change archived conversation segments
+    #[command(display_order = 3)]
+    Segments {
+        #[command(subcommand)]
+        subcommand: Option<SegmentsCommand>,
+
+        /// Output raw JSON
+        #[arg(long, global = true)]
+        json: bool,
+    },
+
+    /// Archive the active conversation without summarizing it into memory
+    #[command(display_order = 3)]
+    Clear {
+        /// Exclude the new segment from history search immediately
+        #[arg(long)]
+        exclude: bool,
+
+        /// Attach a note to the new segment
+        #[arg(long)]
+        note: Option<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Inspect what the daemon did behind the conversation: raw model calls,
     /// heartbeat activity, stored sub-agent runs, and errors it hit.
     #[command(display_order = 10)]
@@ -551,6 +578,24 @@ pub(crate) enum MsgCommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum SegmentsCommand {
+    /// Show the messages stored in a segment
+    Show { index: u32 },
+
+    /// Exclude a segment from history search
+    Exclude { index: u32 },
+
+    /// Include a previously excluded segment in history search
+    Include { index: u32 },
+
+    /// Set a segment label, or omit LABEL to clear it
+    Label { index: u32, label: Option<String> },
+
+    /// Set a segment note, or omit NOTE to clear it
+    Note { index: u32, note: Option<String> },
 }
 
 /// Targets for the hidden `__complete` helper.
@@ -1145,7 +1190,7 @@ fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
 
 const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
     ("Conversation", &["msg", "log"]),
-    ("Maintenance", &["compact"]),
+    ("Maintenance", &["compact", "clear", "segments"]),
     (
         "Configuration",
         &["character", "model", "provider", "config"],
@@ -1443,6 +1488,32 @@ pub(crate) fn to_swp_command(
         CliCommand::Provider { .. } => provider_to_swp(cmd),
 
         CliCommand::Compact { .. } => compact_to_swp(cmd),
+
+        CliCommand::Segments { subcommand, .. } => {
+            let (action, segment_index, field_value) = match subcommand {
+                None => ("list", None, None),
+                Some(SegmentsCommand::Show { index }) => ("show", Some(index), None),
+                Some(SegmentsCommand::Exclude { index }) => ("exclude", Some(index), None),
+                Some(SegmentsCommand::Include { index }) => ("include", Some(index), None),
+                Some(SegmentsCommand::Label { index, label }) => {
+                    ("label", Some(index), Some(label))
+                }
+                Some(SegmentsCommand::Note { index, note }) => ("note", Some(index), Some(note)),
+            };
+            let mut args = serde_json::Map::new();
+            _ = args.insert("action".into(), json!(action));
+            if let Some(selected_index) = segment_index {
+                _ = args.insert("index".into(), json!(selected_index));
+            }
+            if let Some(selected_value) = field_value {
+                _ = args.insert("value".into(), json!(selected_value));
+            }
+            Some(("segments", serde_json::Value::Object(args)))
+        }
+
+        CliCommand::Clear { exclude, note, .. } => {
+            Some(("clear", json!({ "exclude": exclude, "note": note })))
+        }
 
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Tools { .. }),
@@ -2527,6 +2598,26 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn parse_segments_and_clear() {
+        let segments = parse(&["segments", "show", "4"]);
+        assert_variant!(
+            parsed_command(&segments),
+            CliCommand::Segments {
+                subcommand: Some(SegmentsCommand::Show { index }),
+                ..
+            } => assert_eq!(*index, 4),
+        );
+        let clear = parse(&["clear", "--exclude", "--note", "bad branch"]);
+        assert_variant!(
+            parsed_command(&clear),
+            CliCommand::Clear { exclude, note, .. } => {
+                assert!(*exclude);
+                assert_eq!(note.as_deref(), Some("bad branch"));
+            }
+        );
     }
 
     #[test]
@@ -4020,6 +4111,30 @@ mod tests {
         assert_eq!(name, "compact");
         assert_eq!(arg(&args, "keep_turns"), 0);
         assert_eq!(arg(&args, "restart"), true);
+    }
+
+    #[test]
+    fn segment_changes_and_clear_map_to_daemon_commands() {
+        let (show_name, show_args) =
+            to_swp_command(parsed_command(&parse(&["segments", "show", "3"])), None).unwrap();
+        assert_eq!(show_name, "segments");
+        assert_eq!(arg(&show_args, "action"), "show");
+        assert_eq!(arg(&show_args, "index"), 3);
+
+        let (note_name, note_args) = to_swp_command(
+            parsed_command(&parse(&["segments", "note", "2", "review later"])),
+            None,
+        )
+        .unwrap();
+        assert_eq!(note_name, "segments");
+        assert_eq!(arg(&note_args, "action"), "note");
+        assert_eq!(arg(&note_args, "index"), 2);
+        assert_eq!(arg(&note_args, "value"), "review later");
+
+        let (clear_name, clear_args) =
+            to_swp_command(parsed_command(&parse(&["clear", "--exclude"])), None).unwrap();
+        assert_eq!(clear_name, "clear");
+        assert_eq!(arg(&clear_args, "exclude"), true);
     }
 
     #[test]

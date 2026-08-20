@@ -166,8 +166,10 @@ export class HistorySearchIndex {
     const before = await sourceFingerprint(this.characterDataDir);
     if (!force && this.#metadata("source_fingerprint") === before) return;
 
-    const corpus = await readCanonicalCorpus(this.characterDataDir);
-    const after = await sourceFingerprint(this.characterDataDir);
+    const { corpus, fingerprint: after } = await readStableCanonicalCorpus(
+      this.characterDataDir,
+      before,
+    );
     this.#db.transaction(() => {
       const existing = this.#db.query(
         "SELECT id, locator, content_hash FROM messages",
@@ -286,12 +288,14 @@ export class HistorySearchIndex {
   neighbor(row: IndexedMessage, direction: -1 | 1): IndexedMessage | undefined {
     const op = direction < 0 ? "<" : ">";
     const order = direction < 0 ? "DESC" : "ASC";
-    return this.#db.query(
+    const neighbor = this.#db.query(
       `SELECT id, segment, ordinal, msg_id, role, timestamp, model, content_hash
        FROM messages
        WHERE segment ${op} ?1 OR (segment = ?1 AND ordinal ${op} ?2)
        ORDER BY segment ${order}, ordinal ${order} LIMIT 1`,
-    ).get(row.segment, row.ordinal) as IndexedMessage | null ?? undefined;
+    ).get(row.segment, row.ordinal) as IndexedMessage | null;
+    if (neighbor === null || Math.abs(neighbor.segment - row.segment) > 1) return undefined;
+    return neighbor;
   }
 
   diagnostics(embedder: Embedder | undefined): HistoryIndexDiagnostics {
@@ -497,7 +501,11 @@ async function readCanonicalCorpus(characterDataDir: string): Promise<CanonicalC
   let selectedCount = 0;
   const reader = await SegmentReader.load(characterDataDir);
   try {
+    const excluded = new Set(
+      reader.entries().filter((entry) => entry.excluded === true).map((entry) => entry.idx),
+    );
     for (let segment = 0; segment < reader.segmentCount(); segment += 1) {
+      if (excluded.has(segment)) continue;
       const archived = await reader.readSegment(segment);
       appendCanonical(messages, archived, segment);
       selectedCount += archived.length;
@@ -506,6 +514,20 @@ async function readCanonicalCorpus(characterDataDir: string): Promise<CanonicalC
     reader.close();
   }
   return { messages, selectedCount };
+}
+
+async function readStableCanonicalCorpus(
+  characterDataDir: string,
+  initialFingerprint: string,
+): Promise<{ corpus: CanonicalCorpus; fingerprint: string }> {
+  let before = initialFingerprint;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const corpus = await readCanonicalCorpus(characterDataDir);
+    const after = await sourceFingerprint(characterDataDir);
+    if (before === after) return { corpus, fingerprint: after };
+    before = after;
+  }
+  throw new Error("history archive changed repeatedly while the search index was reconciling");
 }
 
 function appendCanonical(out: CanonicalMessage[], messages: readonly Message[], segment: number): void {

@@ -542,11 +542,18 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     opts.charName,
     opts.dryRun,
   );
+  const workspaceHead = opts.dryRun ? undefined : await tools.gitHead?.(workspaceDir);
 
   const compactedTurns = countTurns(messages.slice(0, splitAt));
   const originalRetained = messages.length - splitAt;
   const originalRetainedTurns = countTurns(messages.slice(splitAt));
-  let checkpoint = await resolveCheckpoint(opts, splitAt, compactedTurns, initialRequest);
+  let checkpoint = await resolveCheckpoint(
+    opts,
+    splitAt,
+    compactedTurns,
+    initialRequest,
+    workspaceHead,
+  );
   checkpoint.request.api_key = initialRequest.api_key;
   const alreadyArchived = opts.resumable === true && opts.dataDir !== undefined
     ? await hasCompactionOperation(join(opts.dataDir, opts.charName), checkpoint.id)
@@ -602,6 +609,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
       compactedTurns,
       initialRequest,
       opts.dryRun,
+      workspaceHead,
     );
     checkpoint.request.api_key = initialRequest.api_key;
   }
@@ -697,6 +705,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const retainedTurns = opts.resumable === true
     ? countRetainedTurns(liveLines.slice(checkpoint.splitAt))
     : originalRetainedTurns;
+  const memoryAfter = await tools.gitHead?.(workspaceDir);
 
   const newConversationId = await archiveCompactPrefix(
     opts.conversationMgr,
@@ -708,6 +717,8 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     opts.charName,
     tools,
     checkpoint.id,
+    checkpoint.memoryBefore,
+    memoryAfter,
   );
   await clearCheckpoint(opts);
 
@@ -750,12 +761,16 @@ async function archiveCompactPrefix(
   charName: string,
   tools: CompactionTools,
   operationId?: string,
+  memoryBefore?: string,
+  memoryAfter?: string,
 ): Promise<string> {
   try {
     return await conversationMgr.archiveAndRetain(conversationId, {
       keepLastN: retained,
       activeContent,
       ...(operationId === undefined ? {} : { operationId }),
+      ...(memoryBefore === undefined ? {} : { memoryBefore }),
+      ...(memoryAfter === undefined ? {} : { memoryAfter }),
     });
   } catch (e) {
     await rollbackCompaction(writesApplied);
@@ -783,10 +798,21 @@ async function resolveCheckpoint(
   splitAt: number,
   compactedTurns: number,
   request: SidecarRequest,
+  workspaceHead: string | undefined,
 ): Promise<CompactionCheckpoint> {
   if (opts.resumable === true && opts.dataDir !== undefined) {
-    if (opts.restart === true) await discardCheckpoint(opts);
-    else {
+    if (opts.restart === true) {
+      const abandonedBefore = await discardCheckpoint(opts);
+      return newCompactionCheckpoint(
+        opts.charName,
+        opts.activeContent,
+        splitAt,
+        compactedTurns,
+        request,
+        opts.dryRun,
+        abandonedBefore ?? workspaceHead,
+      );
+    } else {
       const existing = await loadCompactionCheckpoint(opts.dataDir, opts.charName);
       if (existing !== undefined) return existing;
     }
@@ -798,6 +824,7 @@ async function resolveCheckpoint(
     compactedTurns,
     request,
     opts.dryRun,
+    workspaceHead,
   );
 }
 
@@ -813,8 +840,8 @@ async function clearCheckpoint(opts: CompactOptions): Promise<void> {
   }
 }
 
-async function discardCheckpoint(opts: CompactOptions): Promise<void> {
-  if (opts.dataDir === undefined) return;
+async function discardCheckpoint(opts: CompactOptions): Promise<string | undefined> {
+  if (opts.dataDir === undefined) return undefined;
   const abandoned = await loadCompactionCheckpoint(opts.dataDir, opts.charName).catch(
     () => undefined,
   );
@@ -828,6 +855,7 @@ async function discardCheckpoint(opts: CompactOptions): Promise<void> {
     );
   }
   await removeCompactionCheckpoint(opts.dataDir, opts.charName);
+  return abandoned?.memoryBefore;
 }
 
 interface CheckpointConflict {
