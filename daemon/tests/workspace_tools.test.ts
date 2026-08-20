@@ -9,6 +9,7 @@ import {
   bestLineExcerpt,
   characterGitIdentity,
   checkoutTargetsAPathspec,
+  DEFAULT_MEMORY_FILE_LIMITS,
   excerptLine,
   findCaseInsensitiveMatch,
   GIT_SAFETY_FLAGS,
@@ -17,6 +18,7 @@ import {
   handleRead,
   handleSearch,
   isPathLikeArg,
+  memoryFileLimitFor,
   trashStamp,
   validateGitArgs,
   validateGitSubcommand,
@@ -230,6 +232,115 @@ describe("edit", () => {
       expect(await snapshot(workspace)).toEqual(c.after);
     });
   }
+
+  test("memory file limits use the three configured tiers", () => {
+    expect(memoryFileLimitFor("memory/wrestling.md")?.bytes).toBe(8 * 1024);
+    expect(memoryFileLimitFor("workspace/MEMORY.md")?.bytes).toBe(16 * 1024);
+    expect(memoryFileLimitFor("SOUL.md")?.bytes).toBe(64 * 1024);
+    expect(memoryFileLimitFor("notes.md")).toBeUndefined();
+    expect(DEFAULT_MEMORY_FILE_LIMITS).toEqual({
+      maxNoteBytes: 8 * 1024,
+      maxIndexBytes: 16 * 1024,
+      maxPromptBytes: 64 * 1024,
+    });
+  });
+
+  test("an oversized memory note is rejected before it is written", async () => {
+    const { workspace } = await makeCase([]);
+    const limits = { maxNoteBytes: 8, maxIndexBytes: 16, maxPromptBytes: 64 };
+
+    expect(handleEdit({ path: "memory/wrestling.md", content: "123456789" }, workspace, limits))
+      .rejects.toThrow(
+        "memory/wrestling.md would be 9 bytes, exceeding the 8 bytes limit for an individual memory note",
+      );
+    expect(await snapshot(workspace)).toEqual([]);
+  });
+
+  test("the larger prompt-file tier does not constrain unrelated workspace files", async () => {
+    const { workspace } = await makeCase([]);
+    const limits = { maxNoteBytes: 4, maxIndexBytes: 8, maxPromptBytes: 12 };
+
+    expect(handleEdit({ path: "SOUL.md", content: "123456789012" }, workspace, limits))
+      .resolves.toEqual({ path: "SOUL.md", bytes_written: 12 });
+    expect(handleEdit({ path: "notes.md", content: "x".repeat(100) }, workspace, limits))
+      .resolves.toEqual({ path: "notes.md", bytes_written: 100 });
+  });
+
+  test("targeted edits cannot push a memory note over its limit", async () => {
+    const { workspace } = await makeCase([
+      { path: "memory/topic.md", kind: "file", content: "1234567" },
+    ]);
+    const limits = { maxNoteBytes: 8, maxIndexBytes: 16, maxPromptBytes: 64 };
+
+    expect(
+      handleEdit(
+        {
+          path: "memory/topic.md",
+          edits: [{ old_string: "7", new_string: "789" }],
+        },
+        workspace,
+        limits,
+      ),
+    ).rejects.toThrow("would be 9 bytes");
+    expect(await readFile(join(workspace, "memory/topic.md"), "utf8")).toBe("1234567");
+  });
+
+  test("an existing oversized note can be repaired in steps", async () => {
+    const { workspace } = await makeCase([
+      { path: "memory/topic.md", kind: "file", content: "123456789012" },
+    ]);
+    const limits = { maxNoteBytes: 8, maxIndexBytes: 16, maxPromptBytes: 64 };
+
+    expect(
+      handleEdit(
+        {
+          path: "memory/topic.md",
+          edits: [{ old_string: "9012", new_string: "90" }],
+        },
+        workspace,
+        limits,
+      ),
+    ).resolves.toEqual({ path: "memory/topic.md", replacements_made: 1 });
+    expect(await readFile(join(workspace, "memory/topic.md"), "utf8")).toBe("1234567890");
+
+    expect(
+      handleEdit(
+        {
+          path: "memory/topic.md",
+          edits: [{ old_string: "90", new_string: "ab" }],
+        },
+        workspace,
+        limits,
+      ),
+    ).rejects.toThrow("Existing over-limit files may still be edited when the result is strictly smaller");
+  });
+
+  test("targeted edits to binary memory files are exempt", async () => {
+    const { workspace } = await makeCase([
+      { path: "memory/image.bin", kind: "file", bytes: [255, 97] },
+    ]);
+    const limits = { maxNoteBytes: 1, maxIndexBytes: 1, maxPromptBytes: 1 };
+
+    expect(
+      handleEdit(
+        {
+          path: "memory/image.bin",
+          edits: [{ old_string: "a", new_string: "binary payload" }],
+        },
+        workspace,
+        limits,
+      ),
+    ).resolves.toEqual({ path: "memory/image.bin", replacements_made: 1 });
+  });
+
+  test("whole-file writes containing binary data are exempt", async () => {
+    const { workspace } = await makeCase([]);
+    const limits = { maxNoteBytes: 1, maxIndexBytes: 1, maxPromptBytes: 1 };
+
+    expect(
+      handleEdit({ path: "memory/image.bin", content: "\0binary payload" }, workspace, limits),
+    ).resolves.toEqual({ path: "memory/image.bin", bytes_written: 15 });
+  });
 });
 
 describe("delete", () => {

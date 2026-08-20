@@ -13,6 +13,7 @@ import {
   handleGit,
   handleRead,
   handleSearch,
+  type MemoryFileLimits,
   type ToolInput,
 } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
@@ -31,6 +32,7 @@ export interface ToolContext {
   searchConfig: SearchConfigView;
   retrievalConfig: RetrievalConfig;
   retrievalMode: RetrievalMode;
+  memoryFileLimits?: MemoryFileLimits;
 
   imageGenConfig?: ImageGenConfigView;
   imageGenerator?: ImageGenerator;
@@ -172,7 +174,7 @@ export async function dispatchTool(
 
     case "edit": {
       const path = typeof args["path"] === "string" ? args["path"] : "";
-      const result = await handleEdit(args, ctx.workspaceDir);
+      const result = await handleEdit(args, ctx.workspaceDir, ctx.memoryFileLimits);
       await annotateDeferredEdit(path, result, ctx);
       return result;
     }

@@ -704,13 +704,37 @@ const RETRIEVAL: StructSpec<RetrievalConfig> = {
 
 export interface MemoryConfig {
   compaction: CompactionConfig;
+  file_limits: MemoryFileLimitsConfig;
   thinking: ThinkingConfig;
   retrieval: RetrievalConfig;
   git_push: boolean;
 }
 
+export interface MemoryFileLimitsConfig {
+  max_note_bytes: number;
+  max_index_bytes: number;
+  max_prompt_bytes: number;
+}
+
+const defaultMemoryFileLimitsConfig = (): MemoryFileLimitsConfig => ({
+  max_note_bytes: 8 * 1024,
+  max_index_bytes: 16 * 1024,
+  max_prompt_bytes: 64 * 1024,
+});
+
+const MEMORY_FILE_LIMITS: StructSpec<MemoryFileLimitsConfig> = {
+  name: "MemoryFileLimitsConfig",
+  make: defaultMemoryFileLimitsConfig,
+  fields: {
+    max_note_bytes: readU64,
+    max_index_bytes: readU64,
+    max_prompt_bytes: readU64,
+  },
+};
+
 const defaultMemoryConfig = (): MemoryConfig => ({
   compaction: defaultCompactionConfig(),
+  file_limits: defaultMemoryFileLimitsConfig(),
   thinking: defaultThinkingConfig(),
   retrieval: defaultRetrievalConfig(),
   git_push: false,
@@ -721,6 +745,7 @@ const MEMORY: StructSpec<MemoryConfig> = {
   make: defaultMemoryConfig,
   fields: {
     compaction: struct(COMPACTION),
+    file_limits: struct(MEMORY_FILE_LIMITS),
     thinking: struct(THINKING),
     retrieval: struct(RETRIEVAL),
     git_push: readBool,
