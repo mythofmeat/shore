@@ -439,7 +439,7 @@ describe("config read walks dots", () => {
   }
 
   test("`advanced.editor` is gone; the CLI reads $VISUAL and $EDITOR itself", async () => {
-    await expect(build("mid", `${FURNISHED}\n[advanced]\neditor = "hx"\n`)).rejects.toThrow(
+    expect(build("mid", `${FURNISHED}\n[advanced]\neditor = "hx"\n`)).rejects.toThrow(
       "`editor` was removed",
     );
   });

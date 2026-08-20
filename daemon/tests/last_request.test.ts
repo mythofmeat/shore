@@ -545,7 +545,7 @@ describe("keepalivePingNowCommand", () => {
       );
 
       if (c.output.kind === "err") {
-        await expect(keepalivePingNowCommand("ada", world_.ctx)).rejects.toThrow(
+        expect(keepalivePingNowCommand("ada", world_.ctx)).rejects.toThrow(
           c.output.message,
         );
         return;

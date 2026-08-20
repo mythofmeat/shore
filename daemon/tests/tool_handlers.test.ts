@@ -318,19 +318,19 @@ describe("handleModelHistory", () => {
   ];
 
   test("no ledger reports io, not not-implemented", async () => {
-    await expect(handleModelHistory({}, "poppy", undefined)).rejects.toThrow(
+    expect(handleModelHistory({}, "poppy", undefined)).rejects.toThrow(
       "io: the usage ledger is not available in this context",
     );
   });
 
   test("an empty character is an argument error", async () => {
-    await expect(handleModelHistory({}, "", async () => [])).rejects.toThrow(
+    expect(handleModelHistory({}, "", async () => [])).rejects.toThrow(
       "invalid args: model history is not configured",
     );
   });
 
   test("a reversed range is rejected", async () => {
-    await expect(
+    expect(
       handleModelHistory(
         { start_time: "2026-06-01T00:00:00Z", end_time: "2026-05-01T00:00:00Z" },
         "poppy",

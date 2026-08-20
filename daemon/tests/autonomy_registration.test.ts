@@ -149,7 +149,7 @@ describe("taking up a character", () => {
     });
 
     expect(bridge.ensureState("ada", configWith())).toBe(true);
-    await expect(bridge.settled("ada")).resolves.toBeUndefined();
+    expect(bridge.settled("ada")).resolves.toBeUndefined();
   });
 });
 

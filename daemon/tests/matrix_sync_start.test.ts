@@ -49,7 +49,7 @@ describe("waiting for the first sync", () => {
     const client = new FakeClient();
     const waiting = awaitInitialSync(client.asClient(), 10_000);
     client.emit(SyncState.Error, unknownToken());
-    await expect(waiting).rejects.toThrow("M_UNKNOWN_TOKEN");
+    expect(waiting).rejects.toThrow("M_UNKNOWN_TOKEN");
     expect(client.listenerCount).toBe(0);
   });
 
@@ -57,14 +57,14 @@ describe("waiting for the first sync", () => {
     const client = new FakeClient();
     const waiting = awaitInitialSync(client.asClient(), 10_000);
     client.emit(SyncState.Stopped);
-    await expect(waiting).rejects.toThrow("STOPPED");
+    expect(waiting).rejects.toThrow("STOPPED");
   });
 
   test("a sync that never settles gives up rather than blocking startup", async () => {
     const client = new FakeClient();
     const waiting = awaitInitialSync(client.asClient(), 10);
     client.emit(SyncState.Reconnecting);
-    await expect(waiting).rejects.toThrow("did not start within 10ms");
+    expect(waiting).rejects.toThrow("did not start within 10ms");
     expect(client.listenerCount).toBe(0);
   });
 

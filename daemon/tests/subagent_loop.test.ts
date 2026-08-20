@@ -217,7 +217,7 @@ function failingProvider(message: string): SidecarProvider {
 describe("resolution", () => {
   test("a name with no config is NotImplemented, like any unregistered tool", async () => {
     const { config, root } = await configWith({});
-    await expect(run(config, root, "ghost", scriptedProvider("x"))).rejects.toBeInstanceOf(
+    expect(run(config, root, "ghost", scriptedProvider("x"))).rejects.toBeInstanceOf(
       NotImplemented,
     );
   });
@@ -397,7 +397,7 @@ describe("the trace", () => {
   test("a failed run is recorded with the error, which is the case worth reading", async () => {
     const { config, root } = await configWith({ researcher: spec() });
 
-    await expect(
+    expect(
       run(config, root, "researcher", failingProvider("upstream exploded"), [], "toolu_parent"),
     ).rejects.toBeInstanceOf(InvalidArgs);
 
@@ -414,7 +414,7 @@ describe("the trace", () => {
       ] as typeof app.usage.budgets;
     });
 
-    await expect(
+    expect(
       run(config, root, "researcher", scriptedProvider("never reached"), [], "toolu_parent"),
     ).rejects.toBeInstanceOf(BudgetBlocked);
 

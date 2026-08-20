@@ -60,12 +60,12 @@ describe("read lists a bare prefix", () => {
     "a blank path (%p) is still refused",
     async (path, message) => {
       const workspace = await makeWorkspace();
-      await expect(handleRead({ path }, workspace)).rejects.toThrow(message);
+      expect(handleRead({ path }, workspace)).rejects.toThrow(message);
     },
   );
 
   test("an unconfigured workspace is still refused", async () => {
-    await expect(handleRead({ path: "memory" }, "")).rejects.toThrow("workspace not configured");
+    expect(handleRead({ path: "memory" }, "")).rejects.toThrow("workspace not configured");
   });
 });
 
@@ -73,7 +73,7 @@ describe("the strict resolver stays strict", () => {
   for (const path of ["workspace", "memory", "memory/"]) {
     test(`edit refuses \`${path}\``, async () => {
       const workspace = await makeWorkspace();
-      await expect(handleEdit({ path, content: "x" }, workspace)).rejects.toThrow(
+      expect(handleEdit({ path, content: "x" }, workspace)).rejects.toThrow(
         "invalid args: path is empty",
       );
     });
@@ -82,7 +82,7 @@ describe("the strict resolver stays strict", () => {
       const workspace = await makeWorkspace();
       const data = join(workspace, "..", "data");
       await mkdir(data, { recursive: true });
-      await expect(handleDelete({ path }, workspace, data)).rejects.toThrow(
+      expect(handleDelete({ path }, workspace, data)).rejects.toThrow(
         "invalid args: path is empty",
       );
     });

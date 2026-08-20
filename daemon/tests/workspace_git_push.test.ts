@@ -143,7 +143,7 @@ describe.if(await gitAvailable())("gitPushWorkspace", () => {
     writeFileSync(join(workspace, "MEMORY.md"), "# memory\n\n- new\n");
     await gitCommitAll(workspace, "Ada", "memory: compaction");
 
-    await expect(gitPushWorkspace(workspace)).rejects.toThrow();
+    expect(gitPushWorkspace(workspace)).rejects.toThrow();
     expect(await gitPushWorkspaceBestEffort(workspace)).toBeUndefined();
   });
 });

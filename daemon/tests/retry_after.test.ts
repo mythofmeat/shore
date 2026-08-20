@@ -67,7 +67,7 @@ describe("the hint reaches the backoff", () => {
   test("streamWithRetry waits the server's window, not its own 500ms", async () => {
     const delays: number[] = [];
     let calls = 0;
-    await expect(
+    expect(
       streamWithRetry(
         async () => {
           calls += 1;

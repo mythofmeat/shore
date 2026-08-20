@@ -164,7 +164,7 @@ describe("wire capture", () => {
     uninstall = installWireCapture(sink);
 
     await withWireScope(scope(), async () => {
-      await expect(fetch("http://127.0.0.1:1/unreachable")).rejects.toThrow();
+      expect(fetch("http://127.0.0.1:1/unreachable")).rejects.toThrow();
     });
     await settle();
 

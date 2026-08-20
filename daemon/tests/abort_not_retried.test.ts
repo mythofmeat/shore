@@ -75,7 +75,7 @@ describe("the abort survives the flattening chain", () => {
 describe("streamWithRetry", () => {
   test("an aborted error is not reissued at full price", async () => {
     let calls = 0;
-    await expect(
+    expect(
       streamWithRetry(
         async () => {
           calls += 1;
@@ -92,7 +92,7 @@ describe("streamWithRetry", () => {
   test("an already-aborted signal stops the loop even if classification missed it", async () => {
     const controller = new AbortController();
     let calls = 0;
-    await expect(
+    expect(
       streamWithRetry(
         async () => {
           calls += 1;

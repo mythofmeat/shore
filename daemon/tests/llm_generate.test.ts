@@ -220,7 +220,7 @@ describe("rotating through a provider's keys", () => {
     const keys: string[] = [];
     const provider = recordingProvider(keys, () => badRequest());
 
-    await expect(
+    expect(
       generateWithCredentialFallback(
         request(),
         resolveModelForRequest(config(), request())!,
@@ -238,7 +238,7 @@ describe("rotating through a provider's keys", () => {
       anthropic: { enabled: false, api_key_env: PRIMARY },
     });
 
-    await expect(
+    expect(
       generateWithCredentialFallback(
         request(),
         resolveModelForRequest(disabled, request())!,
@@ -252,7 +252,7 @@ describe("rotating through a provider's keys", () => {
   test("a provider with no key at all is refused before any call", async () => {
     const keys: string[] = [];
 
-    await expect(
+    expect(
       generateWithCredentialFallback(
         request(),
         resolveModelForRequest(config(), request())!,
@@ -286,7 +286,7 @@ describe("calling the model", () => {
     const keys: string[] = [];
     const provider = recordingProvider(keys, () => unauthorized());
 
-    await expect(generate(request({ model: "dyn-model" }), deps(provider))).rejects.toThrow();
+    expect(generate(request({ model: "dyn-model" }), deps(provider))).rejects.toThrow();
 
     expect(keys).toEqual(["seed"]);
   });
@@ -313,7 +313,7 @@ describe("calling the model", () => {
   });
 
   test("an sdk with no adapter is a plain failure", async () => {
-    await expect(
+    expect(
       generate(request({ sdk: "gemini", model: "dyn-model" }), deps(recordingProvider([]))),
     ).rejects.toThrow("unsupported sdk: gemini");
   });
@@ -361,7 +361,7 @@ describe("the ledger row", () => {
     const path = freshLedger();
     const provider = recordingProvider([], () => badRequest());
 
-    await expect(generate(withLedger(path), deps(provider))).rejects.toBeDefined();
+    expect(generate(withLedger(path), deps(provider))).rejects.toBeDefined();
 
     const rows = rowsIn(path);
     expect(rows.length).toBe(1);
@@ -418,7 +418,7 @@ describe("the budget gate", () => {
       },
     } as never);
 
-    await expect(generate(req, deps(recordingProvider(keys)))).rejects.toBeInstanceOf(BudgetBlocked);
+    expect(generate(req, deps(recordingProvider(keys)))).rejects.toBeInstanceOf(BudgetBlocked);
 
     expect(keys).toEqual([]);
     expect(rowsIn(path).length).toBe(1);

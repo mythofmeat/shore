@@ -143,8 +143,8 @@ describe("the history snapshot", () => {
       "yuna",
     );
 
-    await expect(attempt).rejects.toThrow(HistorySnapshotError);
-    await expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
+    expect(attempt).rejects.toThrow(HistorySnapshotError);
+    expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
   });
 
   test("a live character carries its conversation, revision and resolved name", async () => {

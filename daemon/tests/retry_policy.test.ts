@@ -62,7 +62,7 @@ describe("sleepUnlessAborted", () => {
     const started = Date.now();
     const pending = sleepUnlessAborted((ms) => Bun.sleep(ms), 30_000, controller.signal);
     controller.abort();
-    await expect(pending).rejects.toBeInstanceOf(AbortError);
+    expect(pending).rejects.toBeInstanceOf(AbortError);
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
@@ -70,7 +70,7 @@ describe("sleepUnlessAborted", () => {
     const controller = new AbortController();
     controller.abort();
     let slept = false;
-    await expect(
+    expect(
       sleepUnlessAborted(async () => {
         slept = true;
       }, 5, controller.signal),
@@ -103,7 +103,7 @@ describe("streamWithRetry backoff cancellation", () => {
     );
     await Bun.sleep(5);
     controller.abort();
-    await expect(pending).rejects.toBeInstanceOf(AbortError);
+    expect(pending).rejects.toBeInstanceOf(AbortError);
     expect(calls).toBe(1);
   });
 });

@@ -160,7 +160,7 @@ describe("call capture", () => {
       store,
     );
 
-    await expect(drain(p.stream(req()))).rejects.toThrow("upstream exploded");
+    expect(drain(p.stream(req()))).rejects.toThrow("upstream exploded");
 
     expect(store.rows).toHaveLength(1);
     const row = store.rows[0]!;
@@ -194,7 +194,7 @@ describe("call capture", () => {
       generate: () => Promise.reject(new Error("no key")),
     };
     const bad = withCallCapture(boom, store);
-    await expect(bad.generate(req())).rejects.toThrow("no key");
+    expect(bad.generate(req())).rejects.toThrow("no key");
     expect(store.rows[1]!.error).toBe("no key");
     expect(store.rows[1]!.usage.input_tokens).toBe(0);
   });
@@ -207,7 +207,7 @@ describe("call capture", () => {
     };
     const p = withCallCapture(fake([DONE]), angry);
     expect((await drain(p.stream(req()))).map((e) => e.type)).toEqual(["done"]);
-    await expect(p.generate(req())).resolves.toMatchObject({ finish_reason: "end_turn" });
+    expect(p.generate(req())).resolves.toMatchObject({ finish_reason: "end_turn" });
   });
 
   test("call ids are unique within a millisecond", async () => {

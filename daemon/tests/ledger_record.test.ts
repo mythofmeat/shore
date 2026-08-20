@@ -220,7 +220,7 @@ describe("what a stream records", () => {
         yield { type: "start", model: "claude-opus-4-6" };
         throw new Error("provider exploded");
       }
-      await expect(drain(recordingStream(ctx(path), REQ, boom()))).rejects.toThrow(
+      expect(drain(recordingStream(ctx(path), REQ, boom()))).rejects.toThrow(
         "provider exploded",
       );
       expect(rowsIn(path).map((r) => r["finish_reason"])).toEqual(["cancelled"]);

@@ -436,7 +436,7 @@ describe("deferred edit annotation", () => {
     const defer = deferEditTo("/data/juniper", async () => {
       throw new Error("disk full");
     });
-    await expect(defer("SOUL.md")).resolves.toBeUndefined();
+    expect(defer("SOUL.md")).resolves.toBeUndefined();
   });
 
   test("a path that is not prompt-visible never reaches deferEdit", async () => {
@@ -659,13 +659,13 @@ describe("dispatch deadline", () => {
   }
 
   test("a tool that outruns its deadline fails as a tool, not a transport error", async () => {
-    await expect(
+    expect(
       dispatchWithinDeadline("mcp__slow__thing", {}, hangingContext(), 50),
     ).rejects.toThrow("timed out after 0s and was cancelled");
   });
 
   test("the reported seconds floor the millisecond deadline", async () => {
-    await expect(
+    expect(
       dispatchWithinDeadline("mcp__slow__thing", {}, hangingContext(), 1_500),
     ).rejects.toThrow("timed out after 1s and was cancelled");
   });
@@ -691,7 +691,7 @@ describe("dispatch deadline", () => {
           });
         }),
     });
-    await expect(dispatchWithinDeadline("mcp__slow__thing", {}, ctx, 50)).rejects.toThrow();
+    expect(dispatchWithinDeadline("mcp__slow__thing", {}, ctx, 50)).rejects.toThrow();
     expect(aborted).toBe(true);
   });
 
@@ -733,7 +733,7 @@ describe("dispatch deadline", () => {
           signal?.addEventListener("abort", () => reject(new Error("aborted late")));
         }),
     });
-    await expect(dispatchWithinDeadline("mcp__x__y", {}, ctx, 5_000)).rejects.toThrow(
+    expect(dispatchWithinDeadline("mcp__x__y", {}, ctx, 5_000)).rejects.toThrow(
       "aborted by caller",
     );
     expect(aborted).toBe(true);

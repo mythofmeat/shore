@@ -730,7 +730,7 @@ describe("when the daemon cannot be reached", () => {
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
 
-      await expect(runner.tick()).rejects.toThrow("compaction:idle unreachable");
+      expect(runner.tick()).rejects.toThrow("compaction:idle unreachable");
       expect(executor.calls, "dreaming never ran").not.toContain("dream");
     });
   });
@@ -744,7 +744,7 @@ describe("when the daemon cannot be reached", () => {
       executor.unreachable.add("compaction:idle");
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
-      await expect(runner.tick()).rejects.toThrow();
+      expect(runner.tick()).rejects.toThrow();
 
       executor.unreachable.clear();
       time.now += 2 * HOUR;
@@ -762,7 +762,7 @@ describe("when the daemon cannot be reached", () => {
       runner.onUserMessage(1, time.now);
       time.now += 4 * HOUR;
 
-      await expect(runner.tick()).rejects.toThrow("heartbeat unreachable");
+      expect(runner.tick()).rejects.toThrow("heartbeat unreachable");
 
       const saved = await loadState(join(dir, STATE_FILENAME));
       expect(saved, "the state was written despite the throw").toBeDefined();

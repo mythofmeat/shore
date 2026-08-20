@@ -97,8 +97,8 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
     { dbPath, character: "ada" },
   );
 
-  await expect(access(join(characterDir, "segments"))).rejects.toThrow();
-  await expect(access(join(characterDir, "compaction.json"))).rejects.toThrow();
+  expect(access(join(characterDir, "segments"))).rejects.toThrow();
+  expect(access(join(characterDir, "compaction.json"))).rejects.toThrow();
   const reader = await SegmentReader.load(characterDir, { dbPath, character: "ada" });
   expect(reader.segmentCount()).toBe(1);
   expect(await reader.readSegment(0)).toEqual(messages);
@@ -152,8 +152,8 @@ test("legacy segments import lazily and survive removal of the source files", as
   expect(await importing.readSegment(0)).toEqual(messages);
   importing.close();
 
-  await expect(access(segmentsDir)).rejects.toThrow();
-  await expect(access(join(characterDir, "compaction.json"))).rejects.toThrow();
+  expect(access(segmentsDir)).rejects.toThrow();
+  expect(access(join(characterDir, "compaction.json"))).rejects.toThrow();
   const durable = await SegmentReader.load(characterDir, { dbPath, character: "ada" });
   expect(await durable.readSegment(0)).toEqual(messages);
   durable.close();

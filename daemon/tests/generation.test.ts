@@ -665,7 +665,7 @@ test("a turn with no model configured leaves the conversation untouched", async 
     },
   );
 
-  await expect(run).rejects.toThrow(NO_CHAT_MODELS_MESSAGE);
+  expect(run).rejects.toThrow(NO_CHAT_MODELS_MESSAGE);
 
   expect(existsSync(characterActiveJsonl(config.dirs.data, "ada"))).toBe(false);
   expect(engine.messages()).toEqual([]);

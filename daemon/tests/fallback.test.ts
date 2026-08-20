@@ -228,7 +228,7 @@ describe("credential rotation", () => {
 
   test("a non-credential failure does not rotate", async () => {
     const h = harness({ A: "sk-a", B: "sk-b" });
-    await expect(
+    expect(
       streamWithCredentialFallback(
         "openrouter",
         [cand("first", "A"), cand("second", "B")],
@@ -242,7 +242,7 @@ describe("credential rotation", () => {
 
   test("an interrupted stream does not rotate", async () => {
     const h = harness({ A: "sk-a", B: "sk-b" });
-    await expect(
+    expect(
       streamWithCredentialFallback(
         "openrouter",
         [cand("first", "A"), cand("second", "B")],
@@ -271,7 +271,7 @@ describe("credential rotation", () => {
 
   test("exhausting every key surfaces the last classified failure", async () => {
     const h = harness({ A: "sk-a", B: "sk-b" });
-    await expect(
+    expect(
       streamWithCredentialFallback(
         "openrouter",
         [cand("first", "A"), cand("second", "B")],
@@ -288,7 +288,7 @@ describe("credential rotation", () => {
 
   test("no candidates at all names the provider", async () => {
     const h = harness({});
-    await expect(
+    expect(
       streamWithCredentialFallback("openrouter", [], h.readEnv, h.attempt({}), h.hooks),
     ).rejects.toMatchObject({
       kind: "missing_api_key",
@@ -321,7 +321,7 @@ describe("credential rotation", () => {
 
   test("the last key's failure carries no warning, only the error", async () => {
     const h = harness({ A: "sk-a" });
-    await expect(
+    expect(
       streamWithCredentialFallback(
         "openrouter",
         [cand("only", "A", true)],
@@ -376,7 +376,7 @@ describe("transient retry", () => {
 
   test("retries are bounded and the last error escapes", async () => {
     let calls = 0;
-    await expect(
+    expect(
       streamWithRetry(
         async () => {
           calls += 1;
@@ -392,7 +392,7 @@ describe("transient retry", () => {
 
   test("a credential failure fails fast so rotation can happen", async () => {
     let calls = 0;
-    await expect(
+    expect(
       streamWithRetry(
         async () => {
           calls += 1;

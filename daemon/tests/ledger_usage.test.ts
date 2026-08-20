@@ -298,7 +298,7 @@ test("a period nobody recognises is refused instead of quietly meaning all time"
   const ledger = ledgerWith([{ ts: "2024-01-01T10:00:00+00:00", total_cost: 500 }]);
 
   for (const last of ["1m", "1mo", "banana", "", "M"]) {
-    await expect(summaryFor(ledger, last), `'${last}' must be refused`).rejects.toThrow(
+    expect(summaryFor(ledger, last), `'${last}' must be refused`).rejects.toThrow(
       `unknown usage period '${last}' (expected today, week, month, all, or a count like 4h, 7d, 2w, 1M)`,
     );
   }

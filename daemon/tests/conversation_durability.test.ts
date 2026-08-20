@@ -69,7 +69,7 @@ describe("one malformed line no longer costs the whole conversation", () => {
 
     const store = await MessageStore.load(path);
     expect(store.quarantinedLines).toBe(0);
-    await expect(readdir(backupDirFor(path))).rejects.toThrow();
+    expect(readdir(backupDirFor(path))).rejects.toThrow();
   });
 });
 

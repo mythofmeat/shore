@@ -332,7 +332,7 @@ describe("ntfy url", () => {
       }),
     );
     const { realSink } = await import("../src/notifications.ts");
-    await expect(
+    expect(
       realSink.ntfy({ url: "https://ntfy.sh", topic: "", token: "" }, "t", "b"),
     ).rejects.toThrow("ntfy topic is not configured");
     expect(svc.shouldNotify("error")).toBe(true);

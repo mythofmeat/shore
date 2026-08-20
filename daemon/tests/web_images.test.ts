@@ -193,13 +193,13 @@ describe("handleWebSearch", () => {
     });
 
   test("a missing query is an argument error", async () => {
-    await expect(
+    expect(
       handleWebSearch({}, searchConfig, { TAVILY_KEY: "k" }, ok),
     ).rejects.toThrow("invalid args: missing 'query' field");
   });
 
   test("an unset API key names the variable it wanted", async () => {
-    await expect(handleWebSearch({ query: "q" }, searchConfig, {}, ok)).rejects.toThrow(
+    expect(handleWebSearch({ query: "q" }, searchConfig, {}, ok)).rejects.toThrow(
       "invalid args: web_search requires the TAVILY_KEY environment variable to be set",
     );
   });
@@ -245,7 +245,7 @@ describe("handleWebSearch", () => {
   });
 
   test("a non-2xx response reports the status and the body", async () => {
-    await expect(
+    expect(
       handleWebSearch({ query: "q" }, searchConfig, { TAVILY_KEY: "k" }, async () =>
         new Response("nope", { status: 429 }),
       ),
@@ -258,7 +258,7 @@ describe("handleFetchUrl", () => {
     async () => new Response(body, { status: 200, headers: { "content-type": contentType } });
 
   test("a missing url is an argument error", async () => {
-    await expect(handleFetchUrl({}, html(""))).rejects.toThrow(
+    expect(handleFetchUrl({}, html(""))).rejects.toThrow(
       "invalid args: missing 'url' field",
     );
   });
@@ -292,7 +292,7 @@ describe("handleFetchUrl", () => {
   });
 
   test("a non-2xx response names the status and the url", async () => {
-    await expect(
+    expect(
       handleFetchUrl({ url: "https://x/y" }, async () => new Response("", { status: 404 })),
     ).rejects.toThrow("http: HTTP 404 for https://x/y");
   });
@@ -323,16 +323,16 @@ describe("handleGenerateImage", () => {
   };
 
   test("a missing prompt is an argument error", async () => {
-    await expect(handleGenerateImage({}, "/tmp/x", config, gen)).rejects.toThrow(
+    expect(handleGenerateImage({}, "/tmp/x", config, gen)).rejects.toThrow(
       "invalid args: missing 'prompt' field",
     );
   });
 
   test("no generator and no profile both report io, not not-implemented", async () => {
-    await expect(
+    expect(
       handleGenerateImage({ prompt: "p" }, "/tmp/x", config, undefined),
     ).rejects.toThrow("io: image generation not available: no LLM client");
-    await expect(
+    expect(
       handleGenerateImage({ prompt: "p" }, "/tmp/x", undefined, gen),
     ).rejects.toThrow("io: no [image_generation] profile configured");
   });
@@ -370,7 +370,7 @@ describe("handleGenerateImage", () => {
   });
 
   test("a generation failure is reported as http", async () => {
-    await expect(
+    expect(
       handleGenerateImage({ prompt: "p" }, "/tmp/x", config, async () => {
         throw new Error("boom");
       }),

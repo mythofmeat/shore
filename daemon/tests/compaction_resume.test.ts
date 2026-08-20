@@ -93,7 +93,7 @@ test("a failed compaction resumes after its completed tool round without replayi
   expect(secondLlm.calls).toBe(1);
   expect(secondLlm.apiKeys).toEqual(["secret-that-must-not-land-on-disk"]);
   expect(await readFile(join(workspace, "memory/fact.md"), "utf8")).toBe("remembered\n");
-  await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
 test("the tool-round ceiling pauses work in resumable slices instead of making the job incomplete", async () => {
@@ -143,7 +143,7 @@ test("the tool-round ceiling pauses work in resumable slices instead of making t
   expect(edits).toBe(2);
   expect(await readFile(join(workspace, "memory/one.md"), "utf8")).toBe("one\n");
   expect(await readFile(join(workspace, "memory/two.md"), "utf8")).toBe("two\n");
-  await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
 test("a durable archive that lost its checkpoint to a crash is recognised instead of re-run", async () => {
@@ -217,7 +217,7 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
 
   expect(resumed.kind).toBe("compacted");
   expect(afterCrash.calls).toBe(0);
-  await expect(readFile(checkpointFile, "utf8")).rejects.toThrow();
+  expect(readFile(checkpointFile, "utf8")).rejects.toThrow();
 });
 
 test("a checkpoint the workspace has moved past stays wedged until a restart throws it away", async () => {
@@ -287,7 +287,7 @@ test("a checkpoint the workspace has moved past stays wedged until a restart thr
   expect(restarted.kind).toBe("compacted");
   expect(restartedLlm.calls).toBe(2);
   expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).not.toBe(activeContent);
-  await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
 test("a checkpoint whose source was edited out from under it is discarded instead of wedging", async () => {
@@ -354,7 +354,7 @@ test("a checkpoint whose source was edited out from under it is discarded instea
   expect(freshLlm.calls).toBe(2);
   expect(edits).toBe(2);
   expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).not.toBe(editedLines);
-  await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
 function options(

@@ -131,7 +131,7 @@ describe("session router", () => {
 
   test("sending to a session that has already gone is a no-op", async () => {
     const router = new SessionRouter();
-    await expect(router.sendToSession(99, PING)).resolves.toBeUndefined();
+    expect(router.sendToSession(99, PING)).resolves.toBeUndefined();
   });
 
   test("the live character survives a mid-session move", () => {
@@ -175,8 +175,8 @@ describe("serialSink", () => {
       },
     };
     const sink = serialSink(flaky);
-    await expect(sink.write(new Uint8Array([1]))).rejects.toThrow("boom");
-    await expect(sink.write(new Uint8Array([2]))).resolves.toBeUndefined();
+    expect(sink.write(new Uint8Array([1]))).rejects.toThrow("boom");
+    expect(sink.write(new Uint8Array([2]))).resolves.toBeUndefined();
   });
 });
 

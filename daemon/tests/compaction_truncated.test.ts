@@ -52,7 +52,7 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
   expect((outcome as { partialWrites: string[] }).partialWrites.length).toBeGreaterThan(0);
 
   expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(activeContent);
-  await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
 test("a pass that ends cleanly still archives", async () => {

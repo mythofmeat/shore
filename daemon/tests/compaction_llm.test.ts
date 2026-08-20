@@ -251,7 +251,7 @@ describe("RealCompactionLlm.generate", () => {
         throw new Error("upstream is down");
       },
     });
-    await expect(
+    expect(
       llm.generate({ messages: [] } as unknown as SidecarRequest),
     ).rejects.toThrow("llm: upstream is down");
   });

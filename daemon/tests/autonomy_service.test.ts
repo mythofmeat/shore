@@ -539,7 +539,7 @@ describe("the keepalive's two halves", () => {
     await inTempDir(async (root) => {
       const { service } = build();
       await service.register(registration("nova", characterDir(root, "nova"), COMPACTION_ONLY));
-      await expect(service.tick()).resolves.toBeUndefined();
+      expect(service.tick()).resolves.toBeUndefined();
     });
   });
 });

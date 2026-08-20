@@ -168,7 +168,7 @@ test("every recorded usage payload comes back the same", async () => {
     expect(filter, `fixture filter "${c.filter}" has no local definition`).toBeDefined();
 
     if (REFUSED_SINCE_127.has(c.last)) {
-      await expect(
+      expect(
         usageReport(
           { ledger, args: { last: c.last, ...mode, ...filter }, usage: config(c.timezone) },
           opts,

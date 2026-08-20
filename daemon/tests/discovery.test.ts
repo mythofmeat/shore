@@ -360,7 +360,7 @@ describe("the cache file is byte-identical to the Rust's", () => {
         },
       ],
     } as unknown as ProviderModelsCache;
-    await expect(writeCache(path, poisoned)).rejects.toThrow();
+    expect(writeCache(path, poisoned)).rejects.toThrow();
 
     expect(await readFile(path, "utf8")).toBe(fixture.write_cache.full.bytes);
     const entries = await readdir(join(dir, "providers", "openrouter"));
@@ -373,7 +373,7 @@ describe("the cache file is byte-identical to the Rust's", () => {
     await writeCache(path, fixture.write_cache.full.cache);
 
     await mkdir(`${path}.tmp`, { recursive: true });
-    await expect(writeCache(path, fixture.write_cache.empty.cache)).rejects.toThrow();
+    expect(writeCache(path, fixture.write_cache.empty.cache)).rejects.toThrow();
 
     expect(await readFile(path, "utf8")).toBe(fixture.write_cache.full.bytes);
   });
@@ -471,6 +471,6 @@ describe("readCache", () => {
   test("a genuine I/O failure is not swallowed", async () => {
     const dir = await scratch();
     await mkdir(join(dir, "providers", "openrouter", "models.json"), { recursive: true });
-    await expect(readCache(cachePath(dir, "openrouter"))).rejects.toThrow();
+    expect(readCache(cachePath(dir, "openrouter"))).rejects.toThrow();
   });
 });

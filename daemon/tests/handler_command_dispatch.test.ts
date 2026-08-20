@@ -363,7 +363,7 @@ describe("a switch_character", () => {
       f.ctx,
     );
 
-    await expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
+    expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
     expect(f.ctx.router.characterFor(SESSION)).toBe(CHARACTER);
     expect(f.log.sent).toEqual([]);
   });

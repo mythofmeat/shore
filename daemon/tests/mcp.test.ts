@@ -229,11 +229,11 @@ describe("toToolDef", () => {
 
 describe("call routing", () => {
   test("an unknown name is reported, not dispatched", async () => {
-    await expect(registry.call("mcp__nope__x", {})).rejects.toThrow("not yet implemented");
+    expect(registry.call("mcp__nope__x", {})).rejects.toThrow("not yet implemented");
   });
 
   test("a known name with no live client is reported the same way", async () => {
-    await expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(
+    expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(
       "not yet implemented",
     );
   });
@@ -263,10 +263,10 @@ describe("call routing", () => {
       ]),
     );
 
-    await expect(wired.call("mcp__multi__part__tool__name", { a: 1 })).resolves.toBe("ok");
+    expect(wired.call("mcp__multi__part__tool__name", { a: 1 })).resolves.toBe("ok");
     expect(calls).toEqual([["tool__name", { a: 1 }]]);
 
-    await expect(wired.call("mcp__hue__set_light", {})).resolves.toBe("ok");
+    expect(wired.call("mcp__hue__set_light", {})).resolves.toBe("ok");
     expect(calls[1]).toEqual(["set_light", {}]);
   });
 });
