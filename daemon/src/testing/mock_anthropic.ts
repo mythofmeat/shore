@@ -451,7 +451,13 @@ if (import.meta.main) {
 
   const port = Number(flag("--port") ?? 0);
   const scriptPath = flag("--script");
-  const script: AnthropicReply[] = scriptPath === undefined ? [] : await Bun.file(scriptPath).json();
+  const loadedScript: unknown =
+    scriptPath === undefined ? [] : await Bun.file(scriptPath).json();
+  if (!Array.isArray(loadedScript)) {
+    shoreLog.error(`--script ${scriptPath}: expected a JSON array of replies`);
+    process.exit(1);
+  }
+  const script = loadedScript as AnthropicReply[];
 
   const mock = await startMockAnthropic({
     port,

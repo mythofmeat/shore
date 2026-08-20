@@ -25,11 +25,12 @@ function request(over: Partial<SidecarRequest> = {}): SidecarRequest {
 }
 
 function markersIn(params: { messages: unknown[]; system?: unknown }): unknown[] {
+  const system: unknown[] = Array.isArray(params.system) ? params.system : [];
   const blocks = [
-    ...(Array.isArray(params.system) ? params.system : []),
-    ...params.messages.flatMap((m) => {
+    ...system,
+    ...params.messages.flatMap((m): unknown[] => {
       const content = (m as { content?: unknown }).content;
-      return Array.isArray(content) ? content : [];
+      return Array.isArray(content) ? (content as unknown[]) : [];
     }),
   ];
   return blocks

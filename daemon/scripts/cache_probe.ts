@@ -78,7 +78,7 @@ function mostRecentTurnStart(msgs: WireMessage[], len: number): number {
 }
 
 function applyStrip(history: WireMessage[], mode: Mode, completedLen: number): WireMessage[] {
-  const out: WireMessage[] = JSON.parse(JSON.stringify(history));
+  const out = structuredClone(history);
   if (mode === "all") return out;
   const keepFrom = mode === "last_turn" ? mostRecentTurnStart(out, completedLen) : completedLen;
   for (let i = 0; i < completedLen; i++) {

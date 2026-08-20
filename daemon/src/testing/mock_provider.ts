@@ -292,11 +292,13 @@ if (import.meta.main) {
   const quiet = argv.includes("--quiet");
 
   const scriptPath = flag("--script");
-  const script: MockReply[] = scriptPath === undefined ? [] : await Bun.file(scriptPath).json();
-  if (!Array.isArray(script)) {
+  const loadedScript: unknown =
+    scriptPath === undefined ? [] : await Bun.file(scriptPath).json();
+  if (!Array.isArray(loadedScript)) {
     shoreLog.error(`--script ${scriptPath}: expected a JSON array of replies`);
     process.exit(1);
   }
+  const script = loadedScript as MockReply[];
 
   const trace = (req: RecordedRequest) => {
     const what = req.path.endsWith("/models")

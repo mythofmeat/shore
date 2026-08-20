@@ -113,7 +113,9 @@ describe("writing a row", () => {
       finish_reason: "end_turn",
       usage: { input_tokens: 11, output_tokens: 22, cache_read_tokens: 33 },
     });
-    const entry = JSON.parse((rows[0] as { entry_json: string }).entry_json);
+    const entry = JSON.parse((rows[0] as { entry_json: string }).entry_json) as {
+      text: string;
+    };
     expect(entry.text).toBe("hello");
   });
 

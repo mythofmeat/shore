@@ -435,7 +435,10 @@ export function catalogFromSections(
   imageGeneration: Record<string, unknown> | undefined,
   providers?: ProviderRegistryView,
 ): ModelCatalog {
-  const chatModels = chat === undefined ? new Map() : parseCategory("chat", chat, providers);
+  const chatModels =
+    chat === undefined
+      ? new Map<string, ResolvedModel>()
+      : parseCategory("chat", chat, providers);
 
   const embeddingProfiles =
     embedding === undefined

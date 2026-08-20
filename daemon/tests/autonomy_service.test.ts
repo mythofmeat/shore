@@ -95,6 +95,14 @@ function characterDir(root: string, character: string): string {
   return dir;
 }
 
+function parseObject(raw: string): Record<string, unknown> {
+  const value: unknown = JSON.parse(raw);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("expected a JSON object");
+  }
+  return value as Record<string, unknown>;
+}
+
 function build(clock?: { value: number }) {
   const now = clock ?? { value: START };
   const executor = new SpyExecutor();
@@ -178,8 +186,8 @@ describe("registering", () => {
       now.value += HOUR;
       await service.register(registration("nova", dir));
       expect(service.status("nova")?.covered_turn_count).toBe(0);
-      const saved = JSON.parse(await Bun.file(join(dir, STATE_FILENAME)).text());
-      expect(saved.last_user_at).not.toBeNull();
+      const saved = parseObject(await Bun.file(join(dir, STATE_FILENAME)).text());
+      expect(saved["last_user_at"]).not.toBeNull();
     });
   });
 
@@ -448,11 +456,13 @@ describe("the keepalive's two halves", () => {
       const lines = (await Bun.file(join(dir, HEARTBEAT_LOG_FILENAME)).text())
         .trim()
         .split("\n")
-        .map((l) => JSON.parse(l));
-      const ping = lines.find((l) => l.kind === "dormant_ping");
+        .map(parseObject);
+      const ping = lines.find((l) => l["kind"] === "dormant_ping");
       expect(ping, "the ping is in the log").toBeDefined();
-      expect(ping.detail).toContain("COLD");
-      expect(ping.timestamp).toBe(new Date(START + 5_000).toISOString().replace(/\.\d{3}Z$/, "+00:00"));
+      expect(ping?.["detail"]).toContain("COLD");
+      expect(ping?.["timestamp"]).toBe(
+        new Date(START + 5_000).toISOString().replace(/\.\d{3}Z$/, "+00:00"),
+      );
     });
   });
 
@@ -481,9 +491,9 @@ describe("the keepalive's two halves", () => {
       await service.tick();
       await service.unregister("nova");
 
-      const saved = JSON.parse(await Bun.file(join(dir, STATE_FILENAME)).text());
-      expect(saved.keepalive_model).toBe("claude-opus-4-6");
-      expect(saved.keepalive_interval_ms).toBe(3_300_000);
+      const saved = parseObject(await Bun.file(join(dir, STATE_FILENAME)).text());
+      expect(saved["keepalive_model"]).toBe("claude-opus-4-6");
+      expect(saved["keepalive_interval_ms"]).toBe(3_300_000);
     });
   });
 
@@ -501,9 +511,9 @@ describe("the keepalive's two halves", () => {
       await service.tick();
       await service.unregister("nova");
 
-      const saved = JSON.parse(await Bun.file(join(dir, STATE_FILENAME)).text());
-      expect(saved.keepalive_model ?? null).toBeNull();
-      expect(saved.keepalive_interval_ms ?? null).toBeNull();
+      const saved = parseObject(await Bun.file(join(dir, STATE_FILENAME)).text());
+      expect(saved["keepalive_model"] ?? null).toBeNull();
+      expect(saved["keepalive_interval_ms"] ?? null).toBeNull();
     });
   });
 
