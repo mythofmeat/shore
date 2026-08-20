@@ -33,7 +33,7 @@ export class OpenRouterProvider implements SidecarProvider {
     const { client, chatRequest } = buildCall(req, true);
     const stream = (await client.chat.send(
       { chatRequest: { ...chatRequest, stream: true } },
-      signal ? { fetchOptions: { signal } } : undefined,
+      signal ? { signal } : undefined,
     )) as AsyncIterable<ChatStreamChunk>;
     yield* openRouterStreamEvents(req.model, stream);
   }
@@ -43,7 +43,7 @@ export class OpenRouterProvider implements SidecarProvider {
     const { client, chatRequest } = buildCall(req, false);
     const result = (await client.chat.send(
       { chatRequest: { ...chatRequest, stream: false } },
-      signal ? { fetchOptions: { signal } } : undefined,
+      signal ? { signal } : undefined,
     )) as ChatResult;
     const choice = result.choices?.[0];
     const message = choice?.message;

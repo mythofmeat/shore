@@ -162,10 +162,10 @@ export class WorkspaceIndexStore {
         db = undefined;
         removeCacheFiles(path);
         db = new Database(path, { create: true, readwrite: true });
-        db.exec(SCHEMA);
-        db.exec(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
+        db.run(SCHEMA);
+        db.run(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
       }
-      db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+      db.run("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
       try {
         chmodSync(path, 0o600);
       } catch {}
@@ -182,9 +182,9 @@ export class WorkspaceIndexStore {
   static #rebuild(path: string): WorkspaceIndexStore {
     try {
       const db = new Database(path, { create: true, readwrite: true });
-      db.exec(SCHEMA);
-      db.exec(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
-      db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+      db.run(SCHEMA);
+      db.run(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
+      db.run("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
       try {
         chmodSync(path, 0o600);
       } catch {}
@@ -201,8 +201,8 @@ export class WorkspaceIndexStore {
         `throwaway in-memory index that is discarded when the daemon stops: ${reason}`,
     );
     const db = new Database(":memory:", { create: true, readwrite: true });
-    db.exec(SCHEMA);
-    db.exec(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
+    db.run(SCHEMA);
+    db.run(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
     return new WorkspaceIndexStore(path, db, reason);
   }
 

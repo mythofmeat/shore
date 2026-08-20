@@ -90,8 +90,9 @@ export class VercelProvider implements SidecarProvider {
     const result = await generateText(buildCall(req, signal) as Parameters<typeof generateText>[0]);
 
     const content_blocks: ContentBlock[] = [];
-    if (typeof result.reasoningText === "string" && result.reasoningText.length > 0) {
-      content_blocks.push({ type: "thinking", thinking: result.reasoningText });
+    const reasoningText = result.finalStep.reasoningText;
+    if (typeof reasoningText === "string" && reasoningText.length > 0) {
+      content_blocks.push({ type: "thinking", thinking: reasoningText });
     }
     if (result.text) content_blocks.push({ type: "text", text: result.text });
     for (const tc of result.toolCalls) {

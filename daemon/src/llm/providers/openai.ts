@@ -190,7 +190,7 @@ function buildOpenAICall(
   const params: ChatCompletionCreateParams = {
     model: req.model,
     messages,
-    max_tokens: req.max_tokens,
+    max_completion_tokens: req.max_tokens,
     ...(streaming ? { stream: true, stream_options: { include_usage: true } } : {}),
   };
   if (tools.length > 0) params.tools = tools;

@@ -266,10 +266,10 @@ export class CallStore {
 
   private constructor(db: Database) {
     this.#db = db;
-    db.exec(`PRAGMA auto_vacuum = INCREMENTAL;
+    db.run(`PRAGMA auto_vacuum = INCREMENTAL;
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
-    db.exec(SCHEMA);
+    db.run(SCHEMA);
     migrate(db);
   }
 
@@ -755,8 +755,8 @@ export class CallStore {
        )`,
     );
 
-    this.#db.exec("CREATE TEMP TABLE IF NOT EXISTS live_hashes (hash TEXT PRIMARY KEY)");
-    this.#db.exec("DELETE FROM live_hashes");
+    this.#db.run("CREATE TEMP TABLE IF NOT EXISTS live_hashes (hash TEXT PRIMARY KEY)");
+    this.#db.run("DELETE FROM live_hashes");
     const remember = this.#db.query("INSERT OR IGNORE INTO live_hashes (hash) VALUES (?1)");
     for (const row of this.#db.query("SELECT manifest FROM payloads").iterate() as Iterable<Row>) {
       const manifest = row["manifest"];
@@ -764,8 +764,8 @@ export class CallStore {
       for (const hash of unpackManifest(zstdDecompressSync(manifest))) remember.run(hash);
     }
     this.#changes("DELETE FROM blobs WHERE hash NOT IN (SELECT hash FROM live_hashes)");
-    this.#db.exec("DELETE FROM live_hashes");
-    this.#db.exec("PRAGMA incremental_vacuum;");
+    this.#db.run("DELETE FROM live_hashes");
+    this.#db.run("PRAGMA incremental_vacuum;");
   }
 
   #changes(sql: string, ...values: (string | number | null)[]): number {
@@ -1011,7 +1011,7 @@ function migrate(db: Database): void {
   ]);
 
   if (!columnExists(db, "transcripts", "character")) {
-    db.exec(
+    db.run(
       `ALTER TABLE transcripts ADD COLUMN character TEXT;
        DROP INDEX IF EXISTS idx_transcripts_source;
        CREATE INDEX idx_transcripts_source
@@ -1028,7 +1028,7 @@ function migrate(db: Database): void {
 function addIntegerColumns(db: Database, columns: readonly (readonly [string, string])[]): void {
   for (const [table, column] of columns) {
     if (!columnExists(db, table, column)) {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`);
+      db.run(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`);
     }
   }
 }

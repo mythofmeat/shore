@@ -97,10 +97,10 @@ export class HistoryStore {
 
   constructor(db: Database) {
     this.#db = db;
-    db.exec(`PRAGMA auto_vacuum = INCREMENTAL;
+    db.run(`PRAGMA auto_vacuum = INCREMENTAL;
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
-    db.exec(HISTORY_SCHEMA);
+    db.run(HISTORY_SCHEMA);
     migrate(db);
   }
 
@@ -462,7 +462,7 @@ export class HistoryStore {
   }
 
   #collectGarbage(): void {
-    this.#db.exec(`DELETE FROM history_blobs
+    this.#db.run(`DELETE FROM history_blobs
                    WHERE hash NOT IN (
                      SELECT blocks_hash FROM history_messages
                      UNION SELECT blocks_hash FROM history_alternatives
@@ -481,19 +481,19 @@ function textHash(text: string): string {
 function migrate(db: Database): void {
   const columns = db.query("PRAGMA table_info(history_segments)").all() as { name: string }[];
   if (!columns.some((column) => column.name === "compaction_id")) {
-    db.exec("ALTER TABLE history_segments ADD COLUMN compaction_id TEXT");
+    db.run("ALTER TABLE history_segments ADD COLUMN compaction_id TEXT");
   }
   if (!columns.some((column) => column.name === "committed")) {
-    db.exec("ALTER TABLE history_segments ADD COLUMN committed INTEGER NOT NULL DEFAULT 1");
+    db.run("ALTER TABLE history_segments ADD COLUMN committed INTEGER NOT NULL DEFAULT 1");
   }
-  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_history_segments_operation
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_history_segments_operation
            ON history_segments (character, compaction_id)
            WHERE compaction_id IS NOT NULL`);
   const oldBlobs = db
     .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'blobs'")
     .get();
   if (oldBlobs !== null) {
-    db.exec(`INSERT OR IGNORE INTO history_blobs (hash, size, compressed, data)
+    db.run(`INSERT OR IGNORE INTO history_blobs (hash, size, compressed, data)
              SELECT hash, size, compressed, data FROM blobs`);
   }
 }

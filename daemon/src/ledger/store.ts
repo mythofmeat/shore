@@ -136,7 +136,7 @@ const MIGRATIONS: readonly string[] = [
 function migrate(db: Database): void {
   for (const statement of MIGRATIONS) {
     try {
-      db.exec(statement);
+      db.run(statement);
     } catch (e) {
       if (!String(e).includes("duplicate column")) throw e;
     }
@@ -144,7 +144,7 @@ function migrate(db: Database): void {
 }
 
 function migrateCallAttempts(db: Database): void {
-  db.exec(`CREATE TABLE IF NOT EXISTS call_attempts (
+  db.run(`CREATE TABLE IF NOT EXISTS call_attempts (
     id TEXT PRIMARY KEY,
     started_at TEXT NOT NULL,
     finished_at TEXT,
@@ -159,7 +159,7 @@ function migrateCallAttempts(db: Database): void {
     error TEXT,
     FOREIGN KEY (call_id) REFERENCES calls(id)
   )`);
-  db.exec("CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)");
 }
 
 let subscriptionProviders = new Set(["opencode-go", "opencode"]);
@@ -289,9 +289,9 @@ export class Ledger {
 
   static create(path: string, pricing?: PricingEngine): Ledger {
     const db = new Database(path, { create: true, readwrite: true });
-    db.exec("PRAGMA busy_timeout = 5000;");
-    db.exec("PRAGMA journal_mode = WAL;");
-    db.exec(SCHEMA);
+    db.run("PRAGMA busy_timeout = 5000;");
+    db.run("PRAGMA journal_mode = WAL;");
+    db.run(SCHEMA);
     migrate(db);
     db.query("UPDATE call_attempts SET status = 'unresolved' WHERE status = 'pending'").run();
     return new Ledger(db, pricing);
@@ -299,7 +299,7 @@ export class Ledger {
 
   static open(path: string, pricing?: PricingEngine): Ledger {
     const db = new Database(path, { create: false, readwrite: true });
-    db.exec("PRAGMA busy_timeout = 5000;");
+    db.run("PRAGMA busy_timeout = 5000;");
     const table = db
       .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'calls'")
       .get();

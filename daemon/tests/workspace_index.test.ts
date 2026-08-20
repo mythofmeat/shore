@@ -996,7 +996,7 @@ describe("index persistence", () => {
     store.close();
 
     const raw = new Database(path, { readwrite: true });
-    raw.exec("PRAGMA user_version = 9999");
+    raw.run("PRAGMA user_version = 9999");
     raw.close();
 
     const reopened = WorkspaceIndexStore.open(path);

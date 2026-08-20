@@ -67,7 +67,7 @@ export class MatrixBot {
   }
 
   static async login(this: void, config: BotConfig): Promise<MatrixBot> {
-    const client = createClient({
+    let client = createClient({
       baseUrl: config.homeserver,
       store: new MemoryStore(),
       ...(config.accessToken === undefined ? {} : { accessToken: config.accessToken }),
@@ -79,13 +79,22 @@ export class MatrixBot {
       if (config.password === undefined) {
         throw new Error("the Matrix bridge needs either an access token or a password");
       }
-      const session = await client.login("m.login.password", {
-        user: config.userId,
+      const session = await client.loginRequest({
+        type: "m.login.password",
+        identifier: { type: "m.id.user", user: config.userId },
         password: config.password,
         initial_device_display_name: "Shore Matrix Bridge",
         ...(config.deviceId === undefined ? {} : { device_id: config.deviceId }),
       });
       config.log?.info?.("logged in with a password", { device_id: session.device_id });
+      client = createClient({
+        baseUrl: config.homeserver,
+        store: new MemoryStore(),
+        accessToken: session.access_token,
+        userId: session.user_id,
+        deviceId: session.device_id,
+        ...(session.refresh_token === undefined ? {} : { refreshToken: session.refresh_token }),
+      });
     }
 
     const bot = new MatrixBot(client, config.userId, config.log);

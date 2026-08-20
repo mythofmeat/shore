@@ -138,19 +138,19 @@ export class HistorySearchIndex {
         db = undefined;
         removeCacheFiles(path);
         db = new Database(path, { create: true, readwrite: true });
-        db.exec(SCHEMA);
-        db.exec(`PRAGMA user_version = ${HISTORY_SEARCH_SCHEMA_VERSION}`);
+        db.run(SCHEMA);
+        db.run(`PRAGMA user_version = ${HISTORY_SEARCH_SCHEMA_VERSION}`);
       }
-      db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
+      db.run("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
       chmodSync(path, 0o600);
       return new HistorySearchIndex({ ...options, path }, db);
     } catch {
       try { db?.close(); } catch {}
       removeCacheFiles(path);
       const rebuilt = new Database(path, { create: true, readwrite: true });
-      rebuilt.exec(SCHEMA);
-      rebuilt.exec(`PRAGMA user_version = ${HISTORY_SEARCH_SCHEMA_VERSION}`);
-      rebuilt.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
+      rebuilt.run(SCHEMA);
+      rebuilt.run(`PRAGMA user_version = ${HISTORY_SEARCH_SCHEMA_VERSION}`);
+      rebuilt.run("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
       try { chmodSync(path, 0o600); } catch {}
       return new HistorySearchIndex({ ...options, path }, rebuilt);
     }

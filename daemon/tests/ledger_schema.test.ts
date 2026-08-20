@@ -108,7 +108,7 @@ describe("migrating a ledger an older daemon made", () => {
   function v1Ledger(): string {
     const path = tempPath();
     const db = new Database(path, { create: true });
-    db.exec(V1);
+    db.run(V1);
     db.close();
     return path;
   }

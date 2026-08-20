@@ -279,8 +279,8 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     ...(system.length > 0 ? { system } : {}),
     ...(tools.length > 0 ? { tools } : {}),
   };
-  if (req.temperature !== undefined) params.temperature = req.temperature;
-  if (req.top_p !== undefined) params.top_p = req.top_p;
+  if (req.temperature !== undefined) Object.assign(params, { temperature: req.temperature });
+  if (req.top_p !== undefined) Object.assign(params, { top_p: req.top_p });
   if (thinking) params.thinking = thinking;
   if (outputConfig) params.output_config = outputConfig;
 

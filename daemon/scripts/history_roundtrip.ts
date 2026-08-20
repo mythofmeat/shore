@@ -53,7 +53,7 @@ function jsonlFiles(dir: string): string[] {
 
 for (const suffix of ["", "-wal", "-shm"]) rmSync(`${dbPath}${suffix}`, { force: true });
 const db = new Database(dbPath, { create: true, readwrite: true });
-db.exec("PRAGMA auto_vacuum = INCREMENTAL; PRAGMA journal_mode = WAL;");
+db.run("PRAGMA auto_vacuum = INCREMENTAL; PRAGMA journal_mode = WAL;");
 const store = new HistoryStore(db);
 
 const files = jsonlFiles(segmentsDir);
@@ -109,7 +109,7 @@ files.forEach((file, idx) => {
   }
 });
 
-db.exec("PRAGMA incremental_vacuum;");
+db.run("PRAGMA incremental_vacuum;");
 db.close();
 
 const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;

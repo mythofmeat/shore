@@ -25,8 +25,12 @@ import { parseToolArgs } from "../tool_args.ts";
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
 export const ZAI_CODING_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
 
-export type ZaiChatCompletionCreateParams = Omit<ChatCompletionCreateParams, "stream"> & {
+export type ZaiChatCompletionCreateParams = Omit<
+  ChatCompletionCreateParams,
+  "stream" | "max_tokens"
+> & {
   stream: boolean;
+  max_tokens: number;
   thinking: { type: "enabled" | "disabled"; clear_thinking?: boolean };
 };
 

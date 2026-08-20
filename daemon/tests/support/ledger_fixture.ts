@@ -19,7 +19,7 @@ export function freshLedger(): LedgerFixture {
 
 export function openLedger(path: string, opts: { readonly?: boolean } = {}): Database {
   const db = opts.readonly ? new Database(path, { readonly: true }) : new Database(path);
-  db.exec("PRAGMA busy_timeout = 5000;");
+  db.run("PRAGMA busy_timeout = 5000;");
   return db;
 }
 

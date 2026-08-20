@@ -42,7 +42,7 @@
     "typescript/no-explicit-any": "warn",
     "typescript/no-var-requires": "error",
     "typescript/no-require-imports": "error",
-    "typescript/no-deprecated": "warn",
+    "typescript/no-deprecated": "error",
     "typescript/no-non-null-assertion": "warn",
     "typescript/no-unsafe-assignment": "warn",
     "typescript/no-unsafe-argument": "warn",
