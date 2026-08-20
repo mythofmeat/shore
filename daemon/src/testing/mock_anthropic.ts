@@ -65,6 +65,12 @@ export interface MockAnthropic {
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
 const HOUR_TTL_MS = 60 * 60 * 1000;
 
+function isTextBlock(block: unknown): block is { type: "text"; text: string } {
+  if (typeof block !== "object" || block === null) return false;
+  const maybe = block as { type?: unknown; text?: unknown };
+  return maybe.type === "text" && typeof maybe.text === "string";
+}
+
 function estimateTokens(value: unknown): number {
   const text = typeof value === "string" ? value : JSON.stringify(value) ?? "";
   return Math.max(1, Math.ceil(text.length / 4));
@@ -283,10 +289,7 @@ function echoLastUserMessage(record: AnthropicRequestRecord): AnthropicReply {
     typeof content === "string"
       ? content
       : Array.isArray(content)
-        ? content
-            .filter((b: any) => b?.type === "text" && typeof b.text === "string")
-            .map((b: any) => b.text)
-            .join("")
+        ? content.filter(isTextBlock).map((b) => b.text).join("")
         : "";
   return { text: `mock reply to: ${text || "(nothing)"}` };
 }

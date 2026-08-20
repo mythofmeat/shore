@@ -146,12 +146,15 @@ function echoLastUserMessage(request: RecordedRequest): MockReply {
   return { text: `mock reply to: ${text || "(nothing)"}` };
 }
 
+function isTextBlock(block: unknown): block is { type: "text"; text: string } {
+  if (typeof block !== "object" || block === null) return false;
+  const maybe = block as { type?: unknown; text?: unknown };
+  return maybe.type === "text" && typeof maybe.text === "string";
+}
+
 function contentText(content: unknown): string {
   if (!Array.isArray(content)) return "";
-  return content
-    .filter((p: any) => p?.type === "text" && typeof p.text === "string")
-    .map((p: any) => p.text)
-    .join("");
+  return content.filter(isTextBlock).map((b) => b.text).join("");
 }
 
 function usageOf(reply: MockReply): MockUsage {
