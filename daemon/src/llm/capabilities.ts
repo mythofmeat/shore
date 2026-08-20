@@ -6,7 +6,7 @@ import { ChatRequestEffort } from "@openrouter/sdk/models";
 import type { ReasoningEffort as OpenAiReasoningEffort } from "openai/resources/shared";
 import type { ZhipuReasoningEffort } from "zhipu-ai-provider";
 
-import { parseCacheKeepalive } from "../config/models.ts";
+import { parseCacheKeepalive } from "../config/keepalive.ts";
 
 export type Sdk =
   | "anthropic"
