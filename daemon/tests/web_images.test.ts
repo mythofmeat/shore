@@ -107,7 +107,7 @@ describe("truncateToBytes", () => {
   test("the cut never splits a character", () => {
     for (let max = 0; max <= 8; max += 1) {
       const { content } = truncateToBytes("a🎵b", max);
-      expect([...content].every((ch) => ch.codePointAt(0) !== 0xfffd)).toBe(true);
+      expect(Array.from(content).every((ch) => ch.codePointAt(0) !== 0xfffd)).toBe(true);
       expect(utf8(content)).toBeLessThanOrEqual(max);
     }
   });
@@ -117,7 +117,7 @@ describe("truncateToBytes", () => {
     const out = truncateToBytes(straddle, MAX_CONTENT_BYTES);
     expect(utf8(straddle)).toBe(fx.truncate_at_real_limit.input_bytes);
     expect(utf8(out.content)).toBe(fx.truncate_at_real_limit.content_bytes);
-    expect([...out.content].length).toBe(fx.truncate_at_real_limit.content_chars);
+    expect(Array.from(out.content).length).toBe(fx.truncate_at_real_limit.content_chars);
     expect(out.truncated).toBe(fx.truncate_at_real_limit.truncated);
     expect(out.content.endsWith("aaa")).toBe(true);
   });

@@ -38,7 +38,7 @@ export function isAnthropicPricing(provider: string, model: string): boolean {
 }
 
 function normalizeAnthropicModel(model: string): string {
-  const chars = [...model];
+  const chars = Array.from(model);
   for (let i = chars.length - 2; i >= 1; i--) {
     const before = chars[i - 1];
     const separator = chars[i];

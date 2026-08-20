@@ -108,7 +108,8 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
     config_dir: charDir,
     workspace_dir: workspaceDir,
     has_definition: hasDefinition,
-    definition_preview: definition === undefined ? null : [...definition].slice(0, PREVIEW_CHARS).join(""),
+    definition_preview:
+      definition === undefined ? null : Array.from(definition).slice(0, PREVIEW_CHARS).join(""),
     bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE].filter((file) =>
       pathExists(characterWorkspaceFile(ctx.configDir, name, file, ctx.workspaceRoot)),
     ),

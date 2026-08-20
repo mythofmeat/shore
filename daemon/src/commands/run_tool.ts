@@ -268,7 +268,7 @@ export async function runTool(
     duration_ms: run.durationMs,
     output,
     truncated: run.window?.truncated ?? false,
-    result_chars: run.window?.originalChars ?? [...run.raw].length,
+    result_chars: run.window?.originalChars ?? Array.from(run.raw).length,
     raw: request.raw ? run.raw : null,
     calls: nestedCalls(frames, toolUseId, request.raw),
   };

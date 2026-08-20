@@ -34,7 +34,7 @@ export interface HeartbeatTickDeps
 }
 
 function shortPreview(text: string): string {
-  return [...text].slice(0, 80).join("");
+  return Array.from(text).slice(0, 80).join("");
 }
 
 export async function persistHeartbeatMessage(

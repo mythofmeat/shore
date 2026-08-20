@@ -234,7 +234,7 @@ export function excerptFor(
   matcher: QueryMatcher | undefined,
   excerptChars: number,
 ): string {
-  const chars = [...content];
+  const chars = Array.from(content);
 
   if (matcher === undefined) {
     const excerpt = chars.slice(0, excerptChars).join("");

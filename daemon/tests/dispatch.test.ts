@@ -493,10 +493,12 @@ describe("result truncation", () => {
         return;
       }
       expect(got.truncated).toBe(true);
-      expect(got.originalChars).toBe([...row.input].length);
+      expect(got.originalChars).toBe(Array.from(row.input).length);
       expect(got.headChars + got.tailChars).toBe(row.max_chars);
-      expect(got.output.startsWith([...row.input].slice(0, got.headChars).join(""))).toBe(true);
-      expect(got.output).toContain(`${String([...row.input].length)} characters`);
+      expect(got.output.startsWith(Array.from(row.input).slice(0, got.headChars).join(""))).toBe(
+        true,
+      );
+      expect(got.output).toContain(`${String(Array.from(row.input).length)} characters`);
       expect(got.output).toContain("Narrow the call");
     });
   }

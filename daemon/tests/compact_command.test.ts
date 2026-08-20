@@ -220,7 +220,7 @@ function outcomeFor(data: Record<string, unknown>): CompactionOutcome {
 }
 
 function expand(preview: string): string {
-  const chars = [...preview];
+  const chars = Array.from(preview);
   if (chars.length < 200) return preview;
   return preview + (chars.at(-1) ?? "").repeat(50);
 }

@@ -613,7 +613,7 @@ export function documentForEmbedding(
   content: string,
   maxEmbedCharsPerFile: number,
 ): string {
-  const trimmed = [...content].slice(0, maxEmbedCharsPerFile).join("");
+  const trimmed = Array.from(content).slice(0, maxEmbedCharsPerFile).join("");
   return `path: ${path}\n\n${trimmed}`;
 }
 

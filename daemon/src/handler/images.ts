@@ -43,7 +43,7 @@ export function sniffMediaType(bytes: Uint8Array): string | undefined {
 }
 
 function ascii(s: string): number[] {
-  return [...s].map((c) => c.charCodeAt(0));
+  return Array.from(s, (c) => c.charCodeAt(0));
 }
 
 function startsWith(bytes: Uint8Array, prefix: readonly number[]): boolean {

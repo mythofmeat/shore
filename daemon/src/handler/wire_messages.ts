@@ -18,8 +18,7 @@ interface AssistantImageRender {
 
 function syntheticToolUseId(path: string, index: number): string {
   const stem = fileStem(path) ?? "image";
-  const safe = [...stem]
-    .map((c) => (/[0-9A-Za-z]/.test(c) ? c : "_"))
+  const safe = Array.from(stem, (c) => (/[0-9A-Za-z]/.test(c) ? c : "_"))
     .slice(0, 48)
     .join("");
   return `toolu_gen_${index}_${safe}`;

@@ -727,7 +727,7 @@ describe("embedDocuments batching", () => {
       expect(
         recorder.calls.map((b) => ({
           items: b.length,
-          chars: b.reduce((n, d) => n + [...d].length, 0),
+          chars: b.reduce((n, d) => n + Array.from(d).length, 0),
         })),
       ).toEqual(c.batches);
     });

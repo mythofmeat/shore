@@ -179,7 +179,7 @@ function renderLog(data: Json): string | undefined {
 }
 
 export function preview(content: string, maxChars: number): string {
-  const flat = [...content.replaceAll("\n", " ")];
+  const flat = Array.from(content.replaceAll("\n", " "));
   return flat.length <= maxChars ? flat.join("") : `${flat.slice(0, maxChars).join("")}…`;
 }
 

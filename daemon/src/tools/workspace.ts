@@ -96,8 +96,8 @@ export function findCaseInsensitiveMatch(
   line: string,
   queryLower: string,
 ): [number, number] | undefined {
-  const folded = [...line.toLowerCase()];
-  const query = [...queryLower];
+  const folded = Array.from(line.toLowerCase());
+  const query = Array.from(queryLower);
   const foldedStart = indexOfCodePoints(folded, query);
   if (foldedStart === undefined) return undefined;
   const foldedEnd = foldedStart + query.length;
@@ -109,7 +109,7 @@ export function findCaseInsensitiveMatch(
   let originalIdx = 0;
   for (const ch of line) {
     const charFoldedStart = foldedPos;
-    foldedPos += [...ch.toLowerCase()].length;
+    foldedPos += Array.from(ch.toLowerCase()).length;
     const charFoldedEnd = foldedPos;
 
     if (charFoldedEnd > foldedStart && charFoldedStart < foldedEnd) {
@@ -120,7 +120,7 @@ export function findCaseInsensitiveMatch(
     originalIdx += 1;
   }
 
-  return [originalStart ?? 0, originalEnd ?? [...line].length];
+  return [originalStart ?? 0, originalEnd ?? Array.from(line).length];
 }
 
 function indexOfCodePoints(haystack: string[], needle: string[]): number | undefined {
@@ -137,8 +137,8 @@ function indexOfCodePoints(haystack: string[], needle: string[]): number | undef
 
 export function excerptLine(line: string, rawMatchStart: number, rawMatchEnd: number): string {
   const trimmedStart = rustTrimStart(line);
-  const leadingTrimmed = [...line].length - [...trimmedStart].length;
-  const trimmed = [...rustTrimEnd(trimmedStart)];
+  const leadingTrimmed = Array.from(line).length - Array.from(trimmedStart).length;
+  const trimmed = Array.from(rustTrimEnd(trimmedStart));
 
   const matchStart = Math.min(Math.max(rawMatchStart - leadingTrimmed, 0), trimmed.length);
   const matchEnd = Math.max(
@@ -176,7 +176,7 @@ export function excerptLine(line: string, rawMatchStart: number, rawMatchEnd: nu
 }
 
 function truncateExcerptLine(line: string): string {
-  const count = [...line].length;
+  const count = Array.from(line).length;
   if (count <= SEARCH_EXCERPT_CHARS) return line;
   return `${truncateChars(line, SEARCH_EXCERPT_CHARS)}...`;
 }
@@ -343,7 +343,7 @@ async function applyEdits(
 
     if (count === 0) {
       const snippet =
-        [...content].length <= EDIT_SNIPPET_CHARS
+        Array.from(content).length <= EDIT_SNIPPET_CHARS
           ? content
           : `${truncateChars(content, EDIT_SNIPPET_CHARS)}\n... (truncated)`;
       throw new InvalidArgs(
@@ -1045,9 +1045,7 @@ export function validateGitSubcommand(sub: string[]): void {
 }
 
 export function characterGitIdentity(character: string): [string, string] {
-  const local = [...character.toLowerCase()]
-    .map((c) => (/\s/u.test(c) ? "-" : c))
-    .join("");
+  const local = Array.from(character.toLowerCase(), (c) => (/\s/u.test(c) ? "-" : c)).join("");
   return [character, `${local}@shore.local`];
 }
 

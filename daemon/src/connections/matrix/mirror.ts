@@ -146,7 +146,7 @@ const REACTIONS = new Map<string, ReactionControl>([
 const VARIATION_SELECTOR_16 = "\u{FE0F}";
 
 export function parseReaction(key: string): ReactionControl | undefined {
-  return REACTIONS.get([...key].filter((c) => c !== VARIATION_SELECTOR_16).join(""));
+  return REACTIONS.get(Array.from(key).filter((c) => c !== VARIATION_SELECTOR_16).join(""));
 }
 
 export function splitLines(content: string): string[] {

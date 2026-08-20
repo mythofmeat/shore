@@ -1,6 +1,6 @@
 export function compareByCodePoint(a: string, b: string): number {
-  const ac = [...a];
-  const bc = [...b];
+  const ac = Array.from(a);
+  const bc = Array.from(b);
   const shared = Math.min(ac.length, bc.length);
   for (let i = 0; i < shared; i += 1) {
     const x = (ac[i] as string).codePointAt(0) as number;

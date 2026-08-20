@@ -278,7 +278,7 @@ export interface ToolResultWindow {
 const HEAD_SHARE = 0.6;
 
 export function windowToolResult(output: string, maxChars: number): ToolResultWindow {
-  const chars = [...output];
+  const chars = Array.from(output);
   if (maxChars === 0 || chars.length <= maxChars) {
     return {
       output,

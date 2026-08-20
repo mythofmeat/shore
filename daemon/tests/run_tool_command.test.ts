@@ -303,7 +303,7 @@ describe("runTool", () => {
     })) as Record<string, unknown>;
     expect(windowed["truncated"]).toBe(true);
     expect(String(windowed["output"])).toContain("tool_result truncated");
-    expect([...String(windowed["output"])].length).toBeLessThan(
+    expect(Array.from(String(windowed["output"])).length).toBeLessThan(
       windowed["result_chars"] as number,
     );
     expect(windowed["raw"]).toBeNull();
@@ -313,7 +313,7 @@ describe("runTool", () => {
       pairs: { path: "long.md" },
       raw: true,
     })) as Record<string, unknown>;
-    expect([...String(raw["raw"])].length).toBe(raw["result_chars"] as number);
+    expect(Array.from(String(raw["raw"])).length).toBe(raw["result_chars"] as number);
   });
 
   test("a sub-agent run reports its own nested tool calls", async () => {

@@ -170,7 +170,7 @@ export async function buildCompactionResponse(
 function previewOf(op: MemoryFileOp): { path: string; content_preview: string } {
   return {
     path: op.path,
-    content_preview: [...op.content].slice(0, PREVIEW_CHARS).join(""),
+    content_preview: Array.from(op.content).slice(0, PREVIEW_CHARS).join(""),
   };
 }
 

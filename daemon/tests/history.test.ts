@@ -206,8 +206,9 @@ describe("scoring", () => {
         expect(got, JSON.stringify([c.query, c.content])).toBeUndefined();
         continue;
       }
-      const rustChars = [...Buffer.from(lower, "utf8").subarray(0, c.earliest_index).toString("utf8")]
-        .length;
+      const rustChars = Array.from(
+        Buffer.from(lower, "utf8").subarray(0, c.earliest_index).toString("utf8"),
+      ).length;
       const tsChars = Array.from(lower.slice(0, got)).length;
       expect(tsChars, JSON.stringify([c.query, c.content])).toBe(rustChars);
     }
@@ -224,7 +225,7 @@ describe("excerptFor", () => {
 
   test("the window is measured in characters, not code units", () => {
     const content = "🙂".repeat(500);
-    expect([...excerptFor(content, undefined, 80)].length).toBe(80 + "...".length);
+    expect(Array.from(excerptFor(content, undefined, 80)).length).toBe(80 + "...".length);
   });
 
   test("no excerpt ever splits a character", () => {
