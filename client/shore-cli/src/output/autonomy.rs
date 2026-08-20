@@ -2,7 +2,7 @@ use std::io::Write;
 
 use super::parse_timestamp;
 use super::transcript::format_time;
-use super::vocab::{COLOR_ERROR, Tone, note, paint, write_row, write_section_header};
+use super::vocab::{COLOR_ERROR, Rows, Tone, note, paint, write_row, write_section_header};
 
 #[expect(
     clippy::float_arithmetic,
@@ -152,25 +152,6 @@ fn format_duration_compact(secs: i64) -> String {
     if neg { format!("-{body}") } else { body }
 }
 
-fn format_threshold(secs: u64) -> String {
-    if secs >= SECONDS_PER_HOUR && secs.is_multiple_of(SECONDS_PER_HOUR) {
-        format!("{}h", checked_div_u64(secs, SECONDS_PER_HOUR))
-    } else if secs >= SECONDS_PER_MINUTE && secs.is_multiple_of(SECONDS_PER_MINUTE) {
-        format!("{}m", checked_div_u64(secs, SECONDS_PER_MINUTE))
-    } else if secs >= SECONDS_PER_HOUR {
-        let hours = checked_div_u64(secs, SECONDS_PER_HOUR);
-        let remaining_minutes =
-            checked_div_u64(checked_rem_u64(secs, SECONDS_PER_HOUR), SECONDS_PER_MINUTE);
-        format!("{hours}h {remaining_minutes}m")
-    } else if secs >= SECONDS_PER_MINUTE {
-        let minutes = checked_div_u64(secs, SECONDS_PER_MINUTE);
-        let seconds = checked_rem_u64(secs, SECONDS_PER_MINUTE);
-        format!("{minutes}m {seconds}s")
-    } else {
-        format!("{secs}s")
-    }
-}
-
 pub(crate) fn format_local_timestamp(rfc3339: &str) -> String {
     parse_timestamp(rfc3339).map_or_else(
         || rfc3339.to_owned(),
@@ -185,52 +166,16 @@ pub(crate) fn write_autonomy_section(
 ) {
     write_section_header(out, "autonomy", "", width);
 
-    let int_state = autonomy["heartbeat_state"].as_str().unwrap_or("Active");
-    let ticks = autonomy["ticks_without_user"].as_u64().unwrap_or(0);
-    let max_ticks = autonomy["dormant_after_heartbeat_turns"]
-        .as_u64()
-        .unwrap_or(0);
-    let description = heartbeat_description(int_state, ticks, max_ticks);
-
-    paint(out, Tone::Muted, &format!("  {:<13}", "heartbeat"));
-    _ = write!(out, "{description}  ");
-    paint(out, Tone::Muted, &format!("({int_state})"));
-    _ = writeln!(out);
-
-    write_autonomy_schedule(out, autonomy, ticks, max_ticks);
-    write_autonomy_events(out, autonomy);
+    let mut rows = Rows::new();
+    add_autonomy_rows(&mut rows, autonomy);
+    rows.write(out);
+    if has_recent_events(autonomy) {
+        _ = writeln!(out);
+        write_autonomy_events(out, autonomy);
+    }
 }
 
-fn write_autonomy_schedule(
-    out: &mut impl Write,
-    autonomy: &serde_json::Value,
-    ticks: u64,
-    max_ticks: u64,
-) {
-    if let Some(eff) = autonomy["effective_interval_secs"].as_u64() {
-        write_row(out, "interval", &format_threshold(eff));
-    }
-
-    if let Some(secs) = autonomy["seconds_until_wake"].as_i64() {
-        let abs_label = autonomy["next_wake_at"]
-            .as_str()
-            .map(format_local_timestamp)
-            .unwrap_or_default();
-        let rel = if secs >= 0 {
-            format!("in {}", format_duration_compact(secs))
-        } else {
-            format!("{} overdue", format_duration_compact(secs.saturating_neg()))
-        };
-        let detail = if abs_label.is_empty() {
-            rel
-        } else {
-            format!("{rel}  ({abs_label})")
-        };
-        write_row(out, "next wake", &detail);
-    } else {
-        write_row(out, "next wake", "(none scheduled)");
-    }
-
+pub(crate) fn add_autonomy_rows(rows: &mut Rows, autonomy: &serde_json::Value) {
     if let Some(secs) = autonomy["seconds_since_user"].as_i64() {
         let abs_label = autonomy["last_user_at"]
             .as_str()
@@ -242,34 +187,64 @@ fn write_autonomy_schedule(
         } else {
             format!("{rel}  ({abs_label})")
         };
-        write_row(out, "last user", &detail);
+        rows.add("last active", &detail);
     }
 
-    write_row(out, "idle ticks", &format!("{ticks} / {max_ticks}"));
-
-    if let Some(secs) = autonomy["minimum_heartbeat_latency_secs"].as_u64() {
-        write_row(out, "min latency", &format_threshold(secs));
-    }
-    if let Some(secs) = autonomy["dormant_after_idle_time_secs"].as_u64() {
-        write_row(out, "idle limit", &format_threshold(secs));
+    let state = autonomy["heartbeat_state"].as_str().unwrap_or("Active");
+    let ticks = autonomy["ticks_without_user"].as_u64().unwrap_or(0);
+    let max_ticks = autonomy["dormant_after_heartbeat_turns"]
+        .as_u64()
+        .unwrap_or(0);
+    if let Some(secs) = autonomy["seconds_until_wake"].as_i64() {
+        let abs_label = autonomy["next_wake_at"]
+            .as_str()
+            .map(format_local_timestamp)
+            .unwrap_or_default();
+        let rel = if secs >= 0 {
+            format!("in {}", format_duration_compact(secs))
+        } else {
+            format!("{} overdue", format_duration_compact(secs.saturating_neg()))
+        };
+        let mut detail = if abs_label.is_empty() {
+            rel
+        } else {
+            format!("{rel}  ({abs_label})")
+        };
+        if max_ticks > 0 {
+            let remaining = max_ticks.saturating_sub(ticks);
+            detail.push_str(&format!(" \u{00b7} {remaining}/{max_ticks} remaining"));
+        }
+        rows.add("next heartbeat", &detail);
+    } else if state.eq_ignore_ascii_case("dormant") {
+        rows.add("next heartbeat", "dormant \u{2014} waiting for you");
+    } else {
+        rows.add("next heartbeat", "(none scheduled)");
     }
 }
 
-fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
-    let events: Vec<serde_json::Value> = autonomy
+fn recent_events(autonomy: &serde_json::Value) -> Vec<serde_json::Value> {
+    autonomy
         .get("recent_events")
         .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter(|event| event["kind"].as_str() != Some("tool_use"))
         .cloned()
-        .unwrap_or_default();
+        .collect()
+}
+
+pub(crate) fn has_recent_events(autonomy: &serde_json::Value) -> bool {
+    !recent_events(autonomy).is_empty()
+}
+
+pub(crate) fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
+    let events = recent_events(autonomy);
     if events.is_empty() {
-        _ = writeln!(out);
         return;
     }
 
-    _ = writeln!(out);
     paint(out, Tone::Muted, "  Recent events:");
-
-    let _ignored = writeln!(out);
+    _ = writeln!(out);
     let mut prev_date: Option<String> = None;
     for event in events.iter().rev() {
         let ts = event["timestamp"].as_str().unwrap_or("");
@@ -287,7 +262,6 @@ fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
             "tick_fired" => Tone::Active,
             "message_sent" | "wake" => Tone::Good,
             "message_skipped" => Tone::Muted,
-            "tool_use" => Tone::Active,
             "dormant" | "call_failed" => COLOR_ERROR,
             "dormant_ping" => Tone::Thinking,
             "timeout" => Tone::Warn,
@@ -296,16 +270,6 @@ fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
         paint(out, Tone::Muted, &format!("    {time_str:<16}"));
         paint(out, kind_color, &format!("{kind:<17}"));
         _ = writeln!(out, "{detail}");
-    }
-    _ = writeln!(out);
-}
-
-fn heartbeat_description(state: &str, ticks: u64, max_ticks: u64) -> String {
-    match state {
-        "Active" if ticks == 0 => "active \u{2014} in conversation".to_owned(),
-        "Active" => format!("active \u{2014} idle {ticks}/{max_ticks} ticks"),
-        "Dormant" => "dormant \u{2014} waiting for you".to_owned(),
-        other => other.to_owned(),
     }
 }
 
@@ -331,23 +295,18 @@ mod tests {
     }
 
     #[test]
-    fn heartbeat_description_maps_states() {
+    fn tool_calls_are_not_status_events() {
+        let value = serde_json::json!({
+            "recent_events": [
+                {"timestamp": "2026-01-01T00:00:00Z", "kind": "tool_use", "detail": "read"},
+                {"timestamp": "2026-01-01T00:01:00Z", "kind": "message_sent", "detail": "sent"}
+            ]
+        });
+        let events = recent_events(&value);
+        assert_eq!(events.len(), 1);
         assert_eq!(
-            heartbeat_description("Active", 0, 3),
-            "active \u{2014} in conversation"
+            events.first().and_then(|event| event["kind"].as_str()),
+            Some("message_sent")
         );
-        assert_eq!(
-            heartbeat_description("Active", 2, 3),
-            "active \u{2014} idle 2/3 ticks"
-        );
-        assert_eq!(
-            heartbeat_description("Dormant", 4, 3),
-            "dormant \u{2014} waiting for you"
-        );
-    }
-
-    #[test]
-    fn heartbeat_description_unknown_state() {
-        assert_eq!(heartbeat_description("CustomState", 0, 8), "CustomState");
     }
 }

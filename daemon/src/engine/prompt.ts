@@ -221,6 +221,10 @@ function estimateMessageTokens(msg: Message): number {
   return total;
 }
 
+export function estimateHistoryTokens(messages: readonly Message[]): number {
+  return messages.reduce((total, message) => total + estimateMessageTokens(message), 0);
+}
+
 const WEEKDAYS = [
   "Sunday",
   "Monday",

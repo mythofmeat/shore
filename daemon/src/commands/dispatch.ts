@@ -66,6 +66,7 @@ import {
 } from "./status.ts";
 import { usage } from "./usage.ts";
 import { conversationTokens } from "../ledger/conversation_spend.ts";
+import { estimateHistoryTokens } from "../engine/prompt.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import { usageConfigView } from "../ledger/budget.ts";
@@ -311,6 +312,7 @@ function statusContext(
       engine.characterName,
       engine.startedAt(),
     ),
+    contextTokens: estimateHistoryTokens(engine.messages()),
     autonomy: deps.autonomy,
     diagnostics: deps.diagnostics,
     now: deps.now ?? Date.now,
