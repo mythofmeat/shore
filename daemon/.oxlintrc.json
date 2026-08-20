@@ -37,7 +37,7 @@
     "typescript/only-throw-error": "warn",
     "typescript/prefer-promise-reject-errors": "error",
     "typescript/use-unknown-in-catch-callback-variable": "error",
-    "typescript/switch-exhaustiveness-check": "warn",
+    "typescript/switch-exhaustiveness-check": ["error", { "considerDefaultExhaustiveForUnions": true }],
     "typescript/no-dynamic-delete": "warn",
     "typescript/no-explicit-any": "warn",
     "typescript/no-var-requires": "error",
