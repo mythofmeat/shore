@@ -7,10 +7,10 @@ arch="x86_64"
 license="MIT OR Apache-2.0"
 depends="$pkgname-cli=$pkgver-r$pkgrel $pkgname-daemon=$pkgver-r$pkgrel"
 makedepends="cargo"
-subpackages="$pkgname-cli:_cli $pkgname-daemon:_daemon $pkgname-tui:_tui"
+subpackages="$pkgname-cli:_cli $pkgname-daemon:_daemon"
 builddir="$startdir/../.."
 
-_cargo_packages="shore-cli shore-tui"
+_cargo_packages="shore-cli"
 
 build() {
 	local package
@@ -47,7 +47,7 @@ package() {
 }
 
 _cli() {
-	pkgdesc="Persistent AI character engine — CLI client"
+	pkgdesc="Persistent AI character engine — CLI and terminal chat client"
 	depends=""
 
 	install -Dm755 "$builddir/client/target/release/shore" "$subpkgdir/usr/bin/shore"
@@ -72,16 +72,6 @@ _daemon() {
 
 	install -Dm755 "$builddir/daemon/dist/shore-daemon" \
 		"$subpkgdir/usr/bin/shore-daemon"
-
-	_install_licenses
-}
-
-_tui() {
-	pkgdesc="Persistent AI character engine — terminal client"
-	depends=""
-
-	install -Dm755 "$builddir/client/target/release/shore-tui" \
-		"$subpkgdir/usr/bin/shore-tui"
 
 	_install_licenses
 }

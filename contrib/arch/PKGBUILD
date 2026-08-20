@@ -1,5 +1,5 @@
 pkgbase=shore
-pkgname=('shore-cli' 'shore-daemon' 'shore-tui')
+pkgname=('shore-cli' 'shore-daemon')
 pkgver=0.0.0
 pkgrel=1
 pkgdesc="Persistent AI character engine"
@@ -18,7 +18,6 @@ build() {
     ( 
         cd "./client/"
         cargo build --release --bin shore
-        cargo build --release --bin shore-tui
     )
     (
         cd "./daemon"
@@ -48,10 +47,13 @@ _install_licenses() {
 }
 
 package_shore-cli() {
-    pkgdesc="Persistent AI character engine — CLI client"
+    pkgdesc="Persistent AI character engine — CLI and terminal chat client"
     depends=('gcc-libs' 'glibc')
+    replaces=('shore-tui')
+    conflicts=('shore-tui')
     optdepends=(
         'shore-daemon: the daemon this client talks to'
+        'wl-clipboard: ctrl+v image paste from clipboard (Wayland)'
     )
 
     setup
@@ -74,8 +76,7 @@ package_shore-daemon() {
     pkgdesc="Persistent AI character engine — daemon"
     depends=('gcc-libs' 'glibc' 'git')
     options=(!strip)
-    optdepends=('shore-cli: CLI client'
-                'shore-tui: terminal chat client')
+    optdepends=('shore-cli: CLI and terminal chat client')
 
     setup
     install -Dm755 "./daemon/dist/shore-daemon" \
@@ -84,18 +85,6 @@ package_shore-daemon() {
     install -Dm755 "./contrib/systemd/shore-daemon.service" \
         "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
     chmod 644 "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
-
-    _install_licenses
-}
-
-package_shore-tui() {
-    pkgdesc="Persistent AI character engine — terminal client"
-    depends=('gcc-libs' 'glibc')
-    optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)')
-
-    setup
-
-    install -Dm755 "./client/target/release/shore-tui" "$pkgdir/usr/bin/shore-tui"
 
     _install_licenses
 }

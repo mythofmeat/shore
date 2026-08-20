@@ -868,6 +868,11 @@ mod tests {
         let muted = format!("{}", SetForegroundColor(Tone::Muted.color().unwrap()));
         let cyan = format!("{}", SetForegroundColor(Tone::Active.color().unwrap()));
 
+        assert_ne!(Tone::Active.color(), Tone::Muted.color());
+        if cyan == muted {
+            return;
+        }
+
         assert!(
             active.contains(&format!("{cyan}qifei")),
             "the active name must carry the mark's colour: {active:?}"

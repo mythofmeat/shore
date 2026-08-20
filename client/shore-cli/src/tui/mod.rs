@@ -1,31 +1,3 @@
-#![expect(
-    elided_lifetimes_in_paths,
-    unused_qualifications,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::else_if_without_else,
-    clippy::exit,
-    clippy::expect_used,
-    clippy::float_arithmetic,
-    clippy::indexing_slicing,
-    clippy::integer_division,
-    clippy::let_underscore_must_use,
-    clippy::shadow_reuse,
-    clippy::shadow_unrelated,
-    clippy::str_to_string,
-    clippy::string_slice,
-    clippy::unreachable,
-    clippy::unseparated_literal_suffix,
-    clippy::unwrap_in_result,
-    clippy::unwrap_used,
-    clippy::wildcard_enum_match_arm,
-    reason = "pre-existing violations from before this crate opted into the workspace lints (#8)"
-)]
-
 mod app;
 mod clipboard;
 mod connection;
@@ -39,7 +11,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use clap::Parser;
 use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste, poll, read};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -98,29 +69,10 @@ impl UiEffect {
     }
 }
 
-#[derive(Parser)]
-#[command(name = "shore-tui", about = "Shore terminal UI")]
-struct Cli {
-    /// TCP address of the daemon (overrides discovery)
-    ///
-    /// Reads `SHORE_ADDR` when the flag is absent, matching `shore`. The two
-    /// binaries talk to the same daemon and are configured the same way, so a
-    /// variable that steers one and is ignored by the other is a trap — you set
-    /// it, `shore` obeys, and `shore-tui` silently falls back to discovery.
-    #[arg(long, env = "SHORE_ADDR")]
+pub(crate) async fn run(
     addr: Option<String>,
-
-    /// Config path to select daemon instance
-    #[arg(long)]
-    config: Option<String>,
-
-    /// Character to connect as
-    #[arg(short, long)]
     character: Option<String>,
-}
-
-fn main() -> io::Result<()> {
-    let cli = Cli::parse();
+) -> io::Result<std::process::ExitCode> {
     let debug = TuiDebugConfig::from_env()?;
 
     #[expect(
@@ -131,29 +83,23 @@ fn main() -> io::Result<()> {
         let mut app = debug.build_app()?;
         let frame = render_app_to_string(&mut app, width, height)?;
         print!("{frame}");
-        return Ok(());
+        return Ok(std::process::ExitCode::SUCCESS);
     }
 
     if !debug.fixture_enabled() {
-        init_logging();
+        init_logging()?;
     }
 
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("failed to create tokio runtime");
-
-    rt.block_on(run_tui(cli, debug))
+    run_tui(addr, character, debug).await
 }
 
-fn init_logging() {
+fn init_logging() -> io::Result<()> {
     let log_dir = shore_common::dirs::runtime_dir();
-    let _ = std::fs::create_dir_all(&log_dir);
+    std::fs::create_dir_all(&log_dir)?;
     let log_file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(log_dir.join("tui.log"))
-        .expect("failed to open tui.log");
+        .open(log_dir.join("tui.log"))?;
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
@@ -162,6 +108,7 @@ fn init_logging() {
         .with_ansi(false)
         .with_writer(std::sync::Mutex::new(log_file))
         .init();
+    Ok(())
 }
 
 #[derive(Clone, Debug, Default)]
@@ -216,7 +163,7 @@ impl TuiDebugConfig {
                     0,
                 )?,
                 character_name: lookup(ENV_TUI_FIXTURE_CHARACTER)
-                    .unwrap_or_else(|| "Fixture".to_string()),
+                    .unwrap_or_else(|| "Fixture".to_owned()),
             }),
             None => None,
         };
@@ -293,7 +240,7 @@ impl TuiFixtureConfig {
 fn env_nonempty(name: &str) -> Option<String> {
     std::env::var(name)
         .ok()
-        .map(|value| value.trim().to_string())
+        .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
 }
 
@@ -391,7 +338,7 @@ impl FrameDump {
             .open(&self.path)?;
         writeln!(
             file,
-            "=== shore-tui frame {} ({}x{}) ===",
+            "=== shore frame {} ({}x{}) ===",
             self.next_frame, width, height
         )?;
         file.write_all(frame.as_bytes())?;
@@ -445,11 +392,11 @@ fn persist_active_character(name: &str) {
     }
 }
 
-fn prefs_path() -> std::path::PathBuf {
+fn prefs_path() -> PathBuf {
     shore_common::dirs::config_dir().join("tui_prefs.json")
 }
 
-fn legacy_prefs_path() -> std::path::PathBuf {
+fn legacy_prefs_path() -> PathBuf {
     shore_common::dirs::runtime_dir().join("tui_prefs.json")
 }
 
@@ -483,14 +430,14 @@ fn load_prefs(app: &mut App) {
         if let Some(mode) = v
             .get("usage_display")
             .and_then(|v| v.as_str())
-            .and_then(app::UsageDisplay::from_token)
+            .and_then(UsageDisplay::from_token)
         {
             app.usage_display = mode;
         } else if let Some(b) = v.get("show_usage").and_then(serde_json::Value::as_bool) {
             app.usage_display = if b {
-                app::UsageDisplay::Always
+                UsageDisplay::Always
             } else {
-                app::UsageDisplay::Off
+                UsageDisplay::Off
             };
         }
         if let Some(focus) = v
@@ -541,7 +488,7 @@ fn open_in_editor(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     input: &mut InputState,
 ) -> io::Result<()> {
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_owned());
     let tmp = std::env::temp_dir().join("shore_input.md");
     std::fs::write(&tmp, input.text.as_str())?;
 
@@ -561,7 +508,7 @@ fn open_in_editor(
     force_full_redraw(terminal)?;
 
     if let Ok(contents) = std::fs::read_to_string(&tmp) {
-        input.set_text(contents.trim_end_matches('\n').to_string());
+        input.set_text(contents.trim_end_matches('\n').to_owned());
     }
     Ok(())
 }
@@ -595,7 +542,7 @@ fn pick_image(
             if let Ok(contents) = std::fs::read_to_string(&chooser_file) {
                 let paths: Vec<String> = contents
                     .lines()
-                    .map(|l| l.trim().to_string())
+                    .map(|l| l.trim().to_owned())
                     .filter(|l| !l.is_empty())
                     .collect();
                 Ok(paths)
@@ -622,7 +569,7 @@ fn try_yazi(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
 }
 
 fn try_fzf(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
-    let find = std::process::Command::new("find")
+    let mut find = std::process::Command::new("find")
         .arg(start)
         .arg("-type")
         .arg("f")
@@ -639,18 +586,18 @@ fn try_fzf(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
         .ok()?;
 
     let preview_cmd = if which_exists("chafa") {
-        "chafa -s ${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES} {}".to_string()
+        "chafa -s ${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES} {}".to_owned()
     } else if which_exists("kitty") {
-        "kitty icat --clear --transfer-mode=memory --stdin=no {}".to_string()
+        "kitty icat --clear --transfer-mode=memory --stdin=no {}".to_owned()
     } else {
-        "file {}".to_string()
+        "file {}".to_owned()
     };
 
     let status = std::process::Command::new("fzf")
         .arg("--preview")
         .arg(&preview_cmd)
         .arg("--preview-window=right:50%")
-        .stdin(find.stdout.unwrap())
+        .stdin(find.stdout.take()?)
         .stdout(std::fs::File::create(chooser_file).ok()?)
         .status()
         .ok()?;
@@ -945,8 +892,12 @@ async fn handle_action(
     }
 }
 
-#[instrument(skip(cli, debug))]
-async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
+#[instrument(skip(debug))]
+async fn run_tui(
+    addr: Option<String>,
+    character: Option<String>,
+    debug: TuiDebugConfig,
+) -> io::Result<std::process::ExitCode> {
     enable_raw_mode()?;
     execute!(
         io::stdout(),
@@ -957,7 +908,7 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    let character = resolve_character(cli.character);
+    let character = resolve_character(character);
     let fixture_mode = debug.fixture_enabled();
     info!(character = ?character, fixture_mode, "TUI starting");
 
@@ -981,7 +932,7 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
         let (_event_tx, event_rx) = tokio::sync::mpsc::channel::<ConnEvent>(1);
         (cmd_tx, event_rx)
     } else {
-        connection::spawn_connection(cli.addr, cli.config, character)
+        connection::spawn_connection(addr, character)
     };
 
     let mut input_poll = tokio::time::interval(INPUT_POLL_INTERVAL);
@@ -1124,10 +1075,10 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
 
     if app.interrupt {
         result?;
-        std::process::exit(130);
+        return Ok(std::process::ExitCode::from(130));
     }
 
-    result
+    result.map(|()| std::process::ExitCode::SUCCESS)
 }
 
 fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
@@ -1534,7 +1485,7 @@ fn transmit_image_ref(
 
 fn model_switch_name(model: &serde_json::Value) -> Option<String> {
     if let Some(qualified) = model.get("qualified_name").and_then(|v| v.as_str()) {
-        return Some(qualified.to_string());
+        return Some(qualified.to_owned());
     }
     let provider = model.get("provider").and_then(|v| v.as_str());
     let model_id = model.get("model_id").and_then(|v| v.as_str());
@@ -1579,14 +1530,14 @@ fn query_of(input: &serde_json::Value) -> String {
         .get("query")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default()
-        .to_string()
+        .to_owned()
 }
 
 fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
-    let name = msg.subagent().map(str::to_string);
+    let name = msg.subagent().map(str::to_owned);
     let Some(task_id) = msg
         .task_id()
-        .map(str::to_string)
+        .map(str::to_owned)
         .or_else(|| name.as_deref().map(untagged_task_key))
     else {
         return UiEffect::redraw(RedrawEffect::None);
@@ -1888,7 +1839,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 "switch_character" => {
                     if let Some(name) = co.data.get("character").and_then(|v| v.as_str()) {
-                        app.character_name = name.to_string();
+                        app.character_name = name.to_owned();
                         persist_active_character(name);
                     }
                     app.subagent_traces.clear();
@@ -1962,7 +1913,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                     let qualified = match m.get("model_id").and_then(|v| v.as_str())
                                     {
                                         Some(model_id) => format!("{provider}:{model_id}"),
-                                        None => provider.to_string(),
+                                        None => provider.to_owned(),
                                     };
                                     let source =
                                         m.get("source").and_then(|v| v.as_str()).unwrap_or("");
@@ -2074,7 +2025,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         .data
                         .get("ref")
                         .and_then(|v| v.as_str())
-                        .map(ToString::to_string);
+                        .map(str::to_owned);
                     let choices = co
                         .data
                         .get("alternatives")
@@ -2101,7 +2052,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                         .get("content")
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("")
-                                        .to_string(),
+                                        .to_owned(),
                                     images: item
                                         .get("images")
                                         .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -2110,7 +2061,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                         .get("timestamp")
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("")
-                                        .to_string(),
+                                        .to_owned(),
                                 })
                                 .collect::<Vec<_>>()
                         })
@@ -2492,7 +2443,7 @@ mod redraw_tests {
         TuiDebugConfig::from_lookup(|name| {
             pairs
                 .iter()
-                .find_map(|(key, value)| (*key == name).then(|| (*value).to_string()))
+                .find_map(|(key, value)| (*key == name).then(|| (*value).to_owned()))
         })
     }
 
@@ -2502,7 +2453,7 @@ mod redraw_tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "shore-tui-{label}-{}-{nanos}.{extension}",
+            "shore-{label}-{}-{nanos}.{extension}",
             std::process::id()
         ))
     }
@@ -2516,7 +2467,7 @@ mod redraw_tests {
             (ENV_TUI_FIXTURE_SCROLL, "7"),
             (ENV_TUI_FIXTURE_CHARACTER, "DebugChar"),
             (ENV_TUI_FIXTURE_RENDER, "72x18"),
-            (ENV_TUI_DEBUG_FRAMES, "/tmp/shore-tui.frames"),
+            (ENV_TUI_DEBUG_FRAMES, "/tmp/shore.frames"),
             (ENV_TUI_DEBUG_NO_IMAGE_PROBE, "true"),
         ])
         .unwrap();
@@ -2530,7 +2481,7 @@ mod redraw_tests {
         assert_eq!(cfg.render_size, Some((72, 18)));
         assert_eq!(
             cfg.frame_dump_path,
-            Some(PathBuf::from("/tmp/shore-tui.frames"))
+            Some(PathBuf::from("/tmp/shore.frames"))
         );
         assert!(cfg.no_image_probe);
     }
@@ -2603,7 +2554,7 @@ mod redraw_tests {
 
         dump.dump(&mut app, 32, 12).unwrap();
         let contents = std::fs::read_to_string(&path).unwrap();
-        assert!(contents.contains("shore-tui frame 1 (32x12)"));
+        assert!(contents.contains("shore frame 1 (32x12)"));
         assert!(contents.contains("hello from dump"));
 
         let _ = std::fs::remove_file(path);
@@ -3235,7 +3186,7 @@ mod redraw_tests {
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
         assert_eq!(app.editing_ref.as_deref(), Some("3"));
         assert_eq!(app.input.text, "the third message");
-        assert_eq!(app.input.mode, crate::app::InputMode::Insert);
+        assert_eq!(app.input.mode, app::InputMode::Insert);
         assert!(app.pending_edit_prefill.is_none());
     }
 
@@ -3432,7 +3383,7 @@ mod redraw_tests {
         app.set_active_model(Some("chat.test.current"));
         app.effective_sampler = Some(EffectiveSamplerSnapshot {
             model: Some("chat.test.current".into()),
-            temperature: crate::app::EffectiveSamplerField {
+            temperature: app::EffectiveSamplerField {
                 value: Some("0.5".into()),
                 scope: Some("character_model".into()),
             },
@@ -3470,7 +3421,7 @@ mod redraw_tests {
         app.set_active_model(Some("chat.test.current"));
         app.effective_sampler = Some(EffectiveSamplerSnapshot {
             model: Some("chat.test.current".into()),
-            temperature: crate::app::EffectiveSamplerField {
+            temperature: app::EffectiveSamplerField {
                 value: Some("0.5".into()),
                 scope: Some("character_model".into()),
             },

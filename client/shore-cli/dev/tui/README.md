@@ -1,21 +1,21 @@
 # TUI Debug Fixtures
 
-`shore-tui` has env-var-only debug hooks so renderer testing does not touch a
+`shore` has env-var-only debug hooks so renderer testing does not touch a
 real daemon, character, conversation history, preference state, or TUI log.
 Fixture mode also skips terminal image-protocol probing.
 
 Interactive fixture mode:
 
 ```sh
-SHORE_TUI_FIXTURE=dev/fixtures/markdown.md target/debug/shore-tui
+SHORE_TUI_FIXTURE=dev/tui/fixtures/markdown.md target/debug/shore
 ```
 
 One-shot render to stdout:
 
 ```sh
-SHORE_TUI_FIXTURE=dev/fixtures/markdown.md \
+SHORE_TUI_FIXTURE=dev/tui/fixtures/markdown.md \
 SHORE_TUI_FIXTURE_RENDER=80x24 \
-target/debug/shore-tui
+target/debug/shore
 ```
 
 Useful env vars:

@@ -291,7 +291,7 @@ impl MarkdownRenderer {
                 self.flush_current();
                 let prior = self.item_prefix.take();
                 self.item_prefix_stack.push(prior);
-                self.item_prefix = Some(ItemPrefixState::new(": ".to_string()));
+                self.item_prefix = Some(ItemPrefixState::new(": ".to_owned()));
             }
             Tag::Table(_) => {
                 self.flush_current();
@@ -519,13 +519,13 @@ impl MarkdownRenderer {
             self.ensure_prefix();
 
             let Some(max_width) = self.max_width else {
-                self.current.push(Span::styled(text.to_string(), style));
+                self.current.push(Span::styled(text.to_owned(), style));
                 return;
             };
 
             let line_width = self.current_width();
             if line_width + UnicodeWidthStr::width(text) <= max_width {
-                self.current.push(Span::styled(text.to_string(), style));
+                self.current.push(Span::styled(text.to_owned(), style));
                 return;
             }
 
@@ -534,7 +534,7 @@ impl MarkdownRenderer {
             let (head, tail) = text.split_at(split);
             let head = head.trim_end_matches(char::is_whitespace);
             if !head.is_empty() {
-                self.current.push(Span::styled(head.to_string(), style));
+                self.current.push(Span::styled(head.to_owned(), style));
             }
             self.flush_current();
             self.ensure_continuation_prefix();
@@ -547,20 +547,20 @@ impl MarkdownRenderer {
             self.ensure_prefix();
 
             let Some(max_width) = self.max_width else {
-                self.current.push(Span::styled(text.to_string(), style));
+                self.current.push(Span::styled(text.to_owned(), style));
                 return;
             };
 
             let line_width = self.current_width();
             if line_width + UnicodeWidthStr::width(text) <= max_width {
-                self.current.push(Span::styled(text.to_string(), style));
+                self.current.push(Span::styled(text.to_owned(), style));
                 return;
             }
 
             let available = max_width.saturating_sub(line_width).max(1);
             let split = split_at_width_hard(text, available);
             let (head, tail) = text.split_at(split);
-            self.current.push(Span::styled(head.to_string(), style));
+            self.current.push(Span::styled(head.to_owned(), style));
             self.flush_current();
             self.ensure_continuation_prefix();
             text = tail;
@@ -574,7 +574,7 @@ impl MarkdownRenderer {
 
         for _ in 0..self.quote_depth {
             self.current.push(Span::styled(
-                "> ".to_string(),
+                "> ".to_owned(),
                 Style::default().fg(Color::DarkGray),
             ));
         }
@@ -624,7 +624,7 @@ impl MarkdownRenderer {
 
         for _ in 0..self.quote_depth {
             self.current.push(Span::styled(
-                "> ".to_string(),
+                "> ".to_owned(),
                 Style::default().fg(Color::DarkGray),
             ));
         }

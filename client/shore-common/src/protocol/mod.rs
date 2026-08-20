@@ -48,7 +48,7 @@ mod tests {
     fn client_hello_round_trip() {
         let msg = ClientMessage::Hello(ClientHello {
             client_type: "tui".into(),
-            client_name: "shore-tui".into(),
+            client_name: "shore".into(),
             capabilities: vec!["streaming".into()],
             character: None,
             token: Some("s3cret".into()),

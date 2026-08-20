@@ -186,7 +186,7 @@ impl InputState {
 }
 
 pub(crate) fn word_wrap_offsets(text: &str, max_width: usize) -> Vec<usize> {
-    let mut starts = vec![0usize];
+    let mut starts = vec![0_usize];
 
     if max_width == 0 {
         for (i, ch) in text.char_indices() {

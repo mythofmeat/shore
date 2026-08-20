@@ -7,7 +7,7 @@ use shore_common::protocol::types::Role;
 use shore_common::swp_client::{SWPConnection, ServerAddr};
 use tracing::{debug, info, instrument};
 
-use crate::cli::{Cli, CliCommand, LogRole, ModelCommand, ModelTarget};
+use crate::cli::{Cli, CliCommand, LogRole, ModelCommand, ModelTarget, MsgCommand};
 use crate::output;
 use crate::state;
 
@@ -56,11 +56,24 @@ pub(crate) fn already_reported(err: &(dyn std::error::Error + 'static)) -> bool 
     err.downcast_ref::<ReportedError>().is_some()
 }
 
-#[instrument(skip(cli))]
-pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+#[instrument(skip(cli_command))]
+pub(crate) async fn execute(
+    requested_character: Option<String>,
+    requested_addr: Option<String>,
+    cli_command: CliCommand,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli {
+        character: requested_character,
+        addr: requested_addr,
+        command: Some(cli_command),
+    };
     if let Some(result) = try_handle_local_only(&cli).await {
         return result;
     }
+
+    let Some(command_ref) = cli.command.as_ref() else {
+        return Err("missing command".into());
+    };
 
     let addr = resolve_addr(&cli)?;
 
@@ -90,13 +103,22 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
                 .into());
     }
 
-    match &cli.command {
-        CliCommand::Send { .. } => handle_send_command(&mut conn, &cli.command).await?,
-        CliCommand::Regen => {
-            _ = conn.send_regen(true).await?;
-            recv_streaming_response(&mut conn).await?;
-        }
-        CliCommand::Alt { .. } => handle_alt_command(&mut conn, &cli.command).await?,
+    match command_ref {
+        CliCommand::Msg { command: message } => match message {
+            MsgCommand::Send { .. } => handle_send_command(&mut conn, message).await?,
+            MsgCommand::Regen => {
+                _ = conn.send_regen(true).await?;
+                recv_streaming_response(&mut conn).await?;
+            }
+            MsgCommand::Alt { .. } => handle_alt_command(&mut conn, message).await?,
+            MsgCommand::Edit { msg_ref, json, .. } => {
+                let one = std::slice::from_ref(msg_ref);
+                handle_message_change(&mut conn, command_ref, *json, one).await?;
+            }
+            MsgCommand::Delete { msg_refs, json } => {
+                handle_message_change(&mut conn, command_ref, *json, msg_refs).await?;
+            }
+        },
         CliCommand::Character {
             subcommand: Some(crate::cli::CharacterCommand::New { name }),
             ..
@@ -148,23 +170,16 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
             );
         }
         CliCommand::Log { .. } => {
-            handle_log_command(&mut conn, &cli.command, &display_character).await?;
-        }
-        CliCommand::Edit { msg_ref, json, .. } => {
-            let one = std::slice::from_ref(msg_ref);
-            handle_message_change(&mut conn, &cli.command, *json, one).await?;
-        }
-        CliCommand::Delete { msg_refs, json } => {
-            handle_message_change(&mut conn, &cli.command, *json, msg_refs).await?;
+            handle_log_command(&mut conn, command_ref, &display_character).await?;
         }
         CliCommand::Status { .. } => {
-            handle_status_command(&mut conn, &cli.command, &display_character).await?;
+            handle_status_command(&mut conn, command_ref, &display_character).await?;
         }
-        CliCommand::Model { .. } if model_change(&cli.command).is_some() => {
-            let Some(change) = model_change(&cli.command) else {
+        CliCommand::Model { .. } if model_change(command_ref).is_some() => {
+            let Some(change) = model_change(command_ref) else {
                 return Ok(());
             };
-            apply_model_change(&mut conn, &cli.command, change).await?;
+            apply_model_change(&mut conn, command_ref, change).await?;
         }
         other @ (CliCommand::Character { .. }
         | CliCommand::Trace { .. }
@@ -234,11 +249,11 @@ fn wants_json(other: &CliCommand) -> bool {
                     | crate::cli::DebugCommand::Subagent { json: true, .. }
             )
         ),
-        CliCommand::Edit { json, .. } | CliCommand::Delete { json, .. } => *json,
-        CliCommand::Send { .. }
-        | CliCommand::Regen
-        | CliCommand::Alt { .. }
-        | CliCommand::Log { .. }
+        CliCommand::Msg { command } => matches!(
+            command,
+            MsgCommand::Edit { json: true, .. } | MsgCommand::Delete { json: true, .. }
+        ),
+        CliCommand::Log { .. }
         | CliCommand::Status { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. } => false,
@@ -631,9 +646,9 @@ async fn follow_log_stream(
 
 async fn handle_send_command(
     conn: &mut SWPConnection,
-    cmd: &CliCommand,
+    cmd: &MsgCommand,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let CliCommand::Send {
+    let MsgCommand::Send {
         message,
         images,
         system,
@@ -668,9 +683,9 @@ async fn handle_send_command(
 
 async fn handle_alt_command(
     conn: &mut SWPConnection,
-    cmd: &CliCommand,
+    cmd: &MsgCommand,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let CliCommand::Alt {
+    let MsgCommand::Alt {
         selector,
         msg_ref,
         json,
@@ -796,10 +811,10 @@ async fn apply_model_change(
 }
 
 async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::error::Error>>> {
-    if matches!(&cli.command, CliCommand::Config { path: true, .. }) {
+    if matches!(&cli.command, Some(CliCommand::Config { path: true, .. })) {
         return Some(print_config_path(cli).await);
     }
-    if let CliCommand::Complete { kind, arg } = &cli.command {
+    if let Some(CliCommand::Complete { kind, arg }) = &cli.command {
         let _ignored = handle_complete_query(*kind, arg.as_deref(), cli).await;
         return Some(Ok(()));
     }
@@ -1427,7 +1442,7 @@ mod tests {
     use shore_common::protocol::server_msg::*;
     use shore_common::protocol::types::*;
 
-    use crate::cli::{Cli, CliCommand};
+    use crate::cli::{Cli, CliCommand, MsgCommand};
 
     macro_rules! assert_variant {
         ($value:expr, $pattern:pat => $body:expr $(,)?) => {{
@@ -1556,8 +1571,12 @@ mod tests {
         Cli {
             addr: None,
             character: None,
-            command,
+            command: Some(command),
         }
+    }
+
+    fn msg_command(command: MsgCommand) -> CliCommand {
+        CliCommand::Msg { command }
     }
 
     fn with_token() {
@@ -1580,9 +1599,15 @@ mod tests {
         .await
         .unwrap();
 
-        match &cli.command {
-            CliCommand::Send {
-                message, images, ..
+        let Some(command) = cli.command.as_ref() else {
+            panic!("expected a command");
+        };
+        match command {
+            CliCommand::Msg {
+                command:
+                    MsgCommand::Send {
+                        message, images, ..
+                    },
             } => {
                 let text = message.join(" ");
                 let _ignored = conn
@@ -1591,14 +1616,14 @@ mod tests {
                     .unwrap();
                 super::recv_streaming_response(&mut conn).await.unwrap();
             }
-            CliCommand::Regen => {
+            CliCommand::Msg {
+                command: MsgCommand::Regen,
+            } => {
                 let _ignored = conn.send_regen(true).await.unwrap();
                 super::recv_streaming_response(&mut conn).await.unwrap();
             }
-            other @ (CliCommand::Alt { .. }
+            other @ (CliCommand::Msg { .. }
             | CliCommand::Log { .. }
-            | CliCommand::Edit { .. }
-            | CliCommand::Delete { .. }
             | CliCommand::Trace { .. }
             | CliCommand::Character { .. }
             | CliCommand::Status { .. }
@@ -1671,11 +1696,11 @@ mod tests {
 
     #[tokio::test]
     async fn send_sends_swp_message() {
-        let cli = test_cli(CliCommand::Send {
+        let cli = test_cli(msg_command(MsgCommand::Send {
             message: vec!["hello".into(), "world".into()],
             images: vec![],
             system: false,
-        });
+        }));
         let received = execute_with_mock(cli, streaming_response("Hi there!")).await;
 
         assert_variant!(
@@ -1689,7 +1714,7 @@ mod tests {
 
     #[tokio::test]
     async fn regen_sends_swp_regen() {
-        let cli = test_cli(CliCommand::Regen);
+        let cli = test_cli(msg_command(MsgCommand::Regen));
         let received = execute_with_mock(cli, streaming_response("Haha!")).await;
 
         assert_variant!(
@@ -1734,11 +1759,11 @@ mod tests {
 
     #[tokio::test]
     async fn edit_sends_edit_command() {
-        let cli = test_cli(CliCommand::Edit {
+        let cli = test_cli(msg_command(MsgCommand::Edit {
             msg_ref: "m1".into(),
             content: vec!["new".into(), "text".into()],
             json: false,
-        });
+        }));
         let received = execute_with_mock(cli, command_response("edit")).await;
 
         assert_variant!(
@@ -1753,10 +1778,10 @@ mod tests {
 
     #[tokio::test]
     async fn delete_sends_delete_command() {
-        let cli = test_cli(CliCommand::Delete {
+        let cli = test_cli(msg_command(MsgCommand::Delete {
             msg_refs: vec!["m1".into()],
             json: false,
-        });
+        }));
         let received = execute_with_mock(cli, command_response("delete")).await;
 
         assert_variant!(
@@ -1770,10 +1795,10 @@ mod tests {
 
     #[tokio::test]
     async fn delete_sends_every_ref_in_one_command() {
-        let cli = test_cli(CliCommand::Delete {
+        let cli = test_cli(msg_command(MsgCommand::Delete {
             msg_refs: vec!["-1".into(), "-2".into(), "-3".into()],
             json: false,
-        });
+        }));
         let received = execute_with_mock(cli, command_response("delete")).await;
 
         assert_variant!(
@@ -1833,11 +1858,11 @@ mod tests {
             }),
         ];
 
-        let cli = test_cli(CliCommand::Send {
+        let cli = test_cli(msg_command(MsgCommand::Send {
             message: vec!["test".into()],
             images: vec![],
             system: false,
-        });
+        }));
         let received = execute_with_mock(cli, responses).await;
         assert!(matches!(received, ClientMessage::Message(_)));
     }

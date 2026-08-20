@@ -1,7 +1,7 @@
 use ratatui::text::Line;
 use shore_common::protocol::types::{CharacterInfo, ImageRef, Role, StreamMetadata, TokenCounts};
 
-use crate::images::ImageCache;
+use crate::tui::images::ImageCache;
 
 mod alt;
 mod cache;
@@ -104,15 +104,15 @@ impl EffectiveSamplerSnapshot {
             model: data
                 .get("model")
                 .and_then(|v| v.as_str())
-                .map(ToString::to_string),
+                .map(str::to_owned),
             provider: data
                 .get("provider")
                 .and_then(|v| v.as_str())
-                .map(ToString::to_string),
+                .map(str::to_owned),
             model_id: data
                 .get("model_id")
                 .and_then(|v| v.as_str())
-                .map(ToString::to_string),
+                .map(str::to_owned),
             temperature: Self::field(sampler, scopes, "temperature"),
             top_p: Self::field(sampler, scopes, "top_p"),
             reasoning_effort: Self::field(sampler, scopes, "reasoning_effort"),
@@ -132,7 +132,7 @@ impl EffectiveSamplerSnapshot {
                 .and_then(|v| v.as_object())
                 .map(|obj| {
                     obj.iter()
-                        .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                        .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_owned())))
                         .collect()
                 })
                 .unwrap_or_default(),
@@ -141,7 +141,7 @@ impl EffectiveSamplerSnapshot {
                 .and_then(|v| v.as_array())
                 .map(|arr| {
                     arr.iter()
-                        .filter_map(|v| v.as_str().map(ToString::to_string))
+                        .filter_map(|v| v.as_str().map(str::to_owned))
                         .collect()
                 })
                 .unwrap_or_default(),
@@ -168,7 +168,7 @@ impl EffectiveSamplerSnapshot {
             scope: scopes
                 .and_then(|s| s.get(key))
                 .and_then(|v| v.as_str())
-                .map(ToString::to_string),
+                .map(str::to_owned),
         }
     }
 
@@ -381,7 +381,7 @@ impl App {
                     };
                     let role_bit = u64::from(matches!(turn.role, Role::Assistant));
                     let last_len = turn.blocks.last().map_or(0, block_len);
-                    (1u64 << 56)
+                    (1_u64 << 56)
                         | (role_bit << 55)
                         | (u64::from(turn.is_streaming()) << 54)
                         | (u64::from(turn.metadata.is_some()) << 53)
@@ -390,10 +390,10 @@ impl App {
                         | (last_len & 0xFFFF_FFFF)
                 }
                 ConversationEntry::System { content, count, .. } => {
-                    (3u64 << 56) | ((content.len() as u64) << 24) | u64::from(*count)
+                    (3_u64 << 56) | ((content.len() as u64) << 24) | u64::from(*count)
                 }
                 ConversationEntry::ArchiveBoundary { archived_count } => {
-                    (7u64 << 56) | (*archived_count as u64)
+                    (7_u64 << 56) | (*archived_count as u64)
                 }
             }
         };
@@ -464,10 +464,14 @@ impl App {
                 metadata: None,
             }));
         }
-        self.entries
+        let Some(turn) = self
+            .entries
             .last_mut()
             .and_then(ConversationEntry::as_turn_mut)
-            .expect("just ensured a trailing streaming turn")
+        else {
+            std::process::abort();
+        };
+        turn
     }
 
     pub(crate) fn subagent_task_index(&mut self, task_id: &str, name: Option<&str>) -> usize {
@@ -479,13 +483,13 @@ impl App {
             if let Some(name) = name
                 && self.subagent_tasks[idx].name.is_empty()
             {
-                self.subagent_tasks[idx].name = name.to_string();
+                self.subagent_tasks[idx].name = name.to_owned();
             }
             return idx;
         }
         self.subagent_tasks.push(SubagentTaskView::new(
-            task_id.to_string(),
-            name.unwrap_or_default().to_string(),
+            task_id.to_owned(),
+            name.unwrap_or_default().to_owned(),
         ));
         self.subagent_tasks.len() - 1
     }
@@ -494,7 +498,7 @@ impl App {
         let idx = self.subagent_task_index(tool_id, Some(name));
         let task = &mut self.subagent_tasks[idx];
         task.query = query;
-        task.status = "running".to_string();
+        task.status = "running".to_owned();
         task.detail = None;
     }
 
@@ -506,8 +510,8 @@ impl App {
         else {
             return;
         };
-        task.status = if is_error { "error" } else { "done" }.to_string();
-        task.detail = Some(output.to_string());
+        task.status = if is_error { "error" } else { "done" }.to_owned();
+        task.detail = Some(output.to_owned());
     }
 
     pub(crate) fn subagent_task_append_text(&mut self, idx: usize, text: &str) {
@@ -516,7 +520,7 @@ impl App {
         };
         match task.blocks.last_mut() {
             Some(Block::Text(content)) => content.push_str(text),
-            _ => task.blocks.push(Block::Text(text.to_string())),
+            _ => task.blocks.push(Block::Text(text.to_owned())),
         }
     }
 
@@ -526,7 +530,7 @@ impl App {
         };
         match task.blocks.last_mut() {
             Some(Block::Thinking(content)) => content.push_str(text),
-            _ => task.blocks.push(Block::Thinking(text.to_string())),
+            _ => task.blocks.push(Block::Thinking(text.to_owned())),
         }
     }
 
@@ -588,7 +592,7 @@ impl App {
         let turn = self.ensure_streaming_turn();
         match turn.blocks.last_mut() {
             Some(Block::Thinking(content)) => content.push_str(text),
-            _ => turn.blocks.push(Block::Thinking(text.to_string())),
+            _ => turn.blocks.push(Block::Thinking(text.to_owned())),
         }
     }
 
@@ -596,7 +600,7 @@ impl App {
         let turn = self.ensure_streaming_turn();
         match turn.blocks.last_mut() {
             Some(Block::Text(content)) => content.push_str(text),
-            _ => turn.blocks.push(Block::Text(text.to_string())),
+            _ => turn.blocks.push(Block::Text(text.to_owned())),
         }
     }
 
@@ -651,7 +655,7 @@ impl App {
         let rid = format!("tui_edit_prefill_{}", self.edit_prefill_seq);
         self.pending_edit_prefill = Some(PendingEditPrefill {
             rid: rid.clone(),
-            msg_ref: msg_ref.to_string(),
+            msg_ref: msg_ref.to_owned(),
         });
         rid
     }
@@ -902,7 +906,7 @@ impl App {
             if let Some(next) = next
                 && !self.active_model_names.iter().any(|n| n == next)
             {
-                self.active_model_names.push(next.to_string());
+                self.active_model_names.push(next.to_owned());
             }
             return;
         }
@@ -912,8 +916,8 @@ impl App {
         self.pending_sampler_settings_rid = None;
 
         if let Some(model) = next {
-            self.model = model.to_string();
-            self.active_model_names = vec![model.to_string()];
+            self.model = model.to_owned();
+            self.active_model_names = vec![model.to_owned()];
         } else {
             self.model.clear();
             self.active_model_names.clear();
@@ -951,13 +955,13 @@ impl App {
     pub(crate) fn note_active_model_from_snapshot(&mut self, snapshot: &EffectiveSamplerSnapshot) {
         let mut keys = Vec::new();
         if let Some(model) = snapshot.model.as_deref() {
-            keys.push(model.to_string());
+            keys.push(model.to_owned());
         }
         if let Some(model_id) = snapshot.model_id.as_deref() {
             if let Some(provider) = snapshot.provider.as_deref() {
                 keys.push(format!("{provider}:{model_id}"));
             }
-            keys.push(model_id.to_string());
+            keys.push(model_id.to_owned());
         }
         for key in keys {
             if !key.is_empty() && !self.active_model_names.iter().any(|n| n == &key) {
@@ -1163,7 +1167,7 @@ impl App {
                     .get("name")
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
-                    .to_string(),
+                    .to_owned(),
                 percent_used: b
                     .get("percent_used")
                     .and_then(serde_json::Value::as_f64)
@@ -1188,7 +1192,7 @@ impl App {
                 existing
             } else {
                 self.usage_budgets.push(UsageBudget {
-                    name: name.to_string(),
+                    name: name.to_owned(),
                     ..UsageBudget::default()
                 });
                 let Some(pushed) = self.usage_budgets.last_mut() else {
@@ -1265,7 +1269,7 @@ impl App {
             .and_then(|snapshot| snapshot.display_value(key))
         {
             Some(value) => format!("{key} = {value}"),
-            None => key.to_string(),
+            None => key.to_owned(),
         }
     }
 
@@ -1561,7 +1565,7 @@ impl App {
         if (parent == "setting" || parent.starts_with("setting:"))
             && let Some(row) = self.setting_editor_blocked_row()
         {
-            self.completion.candidates = vec![row.to_string()];
+            self.completion.candidates = vec![row.to_owned()];
             self.completion.selected = None;
             return;
         }
@@ -1690,7 +1694,7 @@ impl App {
                 self.completion.candidates = Self::SETTING_KEYS
                     .iter()
                     .filter(|key| filter.is_empty() || key.starts_with(&filter))
-                    .map(|key| (*key).to_string())
+                    .map(|key| (*key).to_owned())
                     .collect();
             }
             "view" => {
@@ -1754,7 +1758,7 @@ impl App {
         presets
             .iter()
             .filter(|preset| filter.is_empty() || preset.starts_with(filter))
-            .map(|preset| (*preset).to_string())
+            .map(|preset| (*preset).to_owned())
             .collect()
     }
 
@@ -1765,7 +1769,7 @@ impl App {
         let saved_cmd_text = self.input.cmd_text.clone();
         let saved_cmd_cursor = self.input.cmd_cursor;
         self.completion.mode = PaletteMode::Submenu(SubmenuState {
-            parent: parent.to_string(),
+            parent: parent.to_owned(),
             saved_cmd_text,
             saved_cmd_cursor,
         });
@@ -1785,7 +1789,7 @@ impl App {
     pub(crate) fn switch_submenu(&mut self, parent: &str) {
         let (saved_cmd_text, saved_cmd_cursor) = self.saved_palette_input();
         self.completion.mode = PaletteMode::Submenu(SubmenuState {
-            parent: parent.to_string(),
+            parent: parent.to_owned(),
             saved_cmd_text,
             saved_cmd_cursor,
         });
@@ -1797,7 +1801,7 @@ impl App {
     pub(crate) fn enter_value_editor(&mut self, key: &str, kind: ValueEditorKind) {
         let (saved_cmd_text, saved_cmd_cursor) = self.saved_palette_input();
         self.completion.mode = PaletteMode::ValueEditor(ValueEditorState {
-            key: key.to_string(),
+            key: key.to_owned(),
             kind,
             saved_cmd_text,
             saved_cmd_cursor,
@@ -1920,7 +1924,7 @@ impl App {
             if !self.setting_editors_ready() {
                 return None;
             }
-            let key = Self::setting_key_from_row(&chosen).to_string();
+            let key = Self::setting_key_from_row(&chosen).to_owned();
             if key == "reset" {
                 self.switch_submenu("setting:reset");
                 return None;
@@ -1959,7 +1963,7 @@ impl App {
         }
 
         if parent == "view" {
-            let key = Self::view_key_from_row(&chosen).to_string();
+            let key = Self::view_key_from_row(&chosen).to_owned();
             if !Self::is_view_key(&key) {
                 return None;
             }

@@ -164,7 +164,7 @@ impl ImageCache {
         let _ = tty.flush();
 
         let _ = self.cache.insert(
-            path.to_string(),
+            path.to_owned(),
             TransmittedImage {
                 id,
                 cols,
@@ -209,7 +209,7 @@ impl ImageCache {
         let _ = tty.flush();
 
         let _ = self.cache.insert(
-            key.to_string(),
+            key.to_owned(),
             TransmittedImage {
                 id,
                 cols,
@@ -319,7 +319,7 @@ pub(crate) fn fixup_placeholder_cells(
 
 fn diacritic(value: u8) -> char {
     // Safety: all DIACRITICS entries are valid Unicode code points
-    char::from_u32(DIACRITICS[value as usize]).unwrap()
+    char::from_u32(DIACRITICS[value as usize]).unwrap_or('\u{FFFD}')
 }
 
 fn id_to_style(id: u32) -> Style {
@@ -566,8 +566,8 @@ mod tests {
         let mut data = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
         data.extend_from_slice(&[0, 0, 0, 13]);
         data.extend_from_slice(b"IHDR");
-        data.extend_from_slice(&100u32.to_be_bytes());
-        data.extend_from_slice(&50u32.to_be_bytes());
+        data.extend_from_slice(&100_u32.to_be_bytes());
+        data.extend_from_slice(&50_u32.to_be_bytes());
         assert_eq!(image_dimensions(&data), Some((100, 50)));
     }
 

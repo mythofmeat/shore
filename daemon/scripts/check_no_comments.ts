@@ -8,7 +8,7 @@ const ROOT = join(import.meta.dir, "..");
 const ROOTS = [join(ROOT, "src"), join(ROOT, "tests"), join(ROOT, "scripts")];
 const CLIENT = join(ROOT, "..", "client");
 
-const CLAP_FILES = new Set(["shore-cli/src/cli.rs", "shore-tui/src/main.rs"]);
+const CLAP_FILES = new Set(["shore-cli/src/cli.rs"]);
 const RUST_DIRECTIVE = /^\/\/\s*(SAFETY:|rustfmt|clippy|allow-)/i;
 
 const DIRECTIVE =

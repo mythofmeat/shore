@@ -576,7 +576,7 @@ fn config_warning_without_a_character_golden() {
 const CLIENT_HELLO_FIXTURE: &str = r#"{
     "type": "hello",
     "client_type": "tui",
-    "client_name": "shore-tui",
+    "client_name": "shore",
     "capabilities": ["streaming", "images"]
 }"#;
 
@@ -587,7 +587,7 @@ fn client_hello_golden() {
     msg,
     ClientMessage::Hello(h) => {
         assert_eq!(h.client_type, "tui");
-        assert_eq!(h.client_name, "shore-tui");
+        assert_eq!(h.client_name, "shore");
         assert_eq!(h.capabilities, vec!["streaming", "images"]);
     }
     );

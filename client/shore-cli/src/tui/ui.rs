@@ -8,14 +8,14 @@ use shore_common::duration::format_duration_ms;
 use shore_common::protocol::tool_display::{format_tool_input, format_tool_output};
 use shore_common::protocol::types::Role;
 
-use crate::app::{
+use crate::tui::app::{
     AltChoice, App, Block as TurnBlock, ConversationEntry, InputMode, PaletteMode, Turn,
     ValueEditorKind,
 };
-use crate::images;
-use crate::markdown;
+use crate::tui::images;
+use crate::tui::markdown;
 
-pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
+pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
     let size = frame.area();
 
     let input_content_width = size.width as usize;
@@ -83,14 +83,14 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     }
 }
 
-fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {
     const MAX_LINES: usize = 3;
 
     if app.notifications.is_empty() || area.width < 16 || area.height < 3 {
         return;
     }
 
-    let margin = 1u16;
+    let margin = 1_u16;
     let box_w = (area.width / 2)
         .clamp(24, 56)
         .min(area.width.saturating_sub(margin));
@@ -100,9 +100,9 @@ fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
     let mut next_top = area.y;
     for notif in app.notifications.iter().rev() {
         let (icon, color) = match notif.level {
-            crate::app::NotificationLevel::Info => ("•", Color::Cyan),
-            crate::app::NotificationLevel::Warning => ("⚠", Color::Yellow),
-            crate::app::NotificationLevel::Error => ("✖", Color::Red),
+            crate::tui::app::NotificationLevel::Info => ("•", Color::Cyan),
+            crate::tui::app::NotificationLevel::Warning => ("⚠", Color::Yellow),
+            crate::tui::app::NotificationLevel::Error => ("✖", Color::Red),
         };
 
         let suffix = if notif.count > 1 {
@@ -171,7 +171,7 @@ fn push_bar_wrapped(
     for tline in text.lines() {
         for wline in word_wrap(tline, text_width) {
             lines.push(Line::from(vec![
-                Span::styled("  │ ".to_string(), bar_style),
+                Span::styled("  │ ".to_owned(), bar_style),
                 Span::styled(wline, content_style),
             ]));
         }
@@ -179,8 +179,8 @@ fn push_bar_wrapped(
 }
 
 fn looks_like_token_stream(text: &str) -> bool {
-    let mut non_empty = 0usize;
-    let mut leading_ws = 0usize;
+    let mut non_empty = 0_usize;
+    let mut leading_ws = 0_usize;
     for line in text.replace("\r\n", "\n").replace('\r', "\n").split('\n') {
         if line.is_empty() {
             continue;
@@ -217,11 +217,11 @@ fn push_thinking_reflowed(
 
     for (i, paragraph) in paragraphs.iter().enumerate() {
         if i > 0 {
-            lines.push(Line::from(Span::styled("  │ ".to_string(), bar_style)));
+            lines.push(Line::from(Span::styled("  │ ".to_owned(), bar_style)));
         }
         for wline in word_wrap(paragraph, text_width) {
             lines.push(Line::from(vec![
-                Span::styled("  │ ".to_string(), bar_style),
+                Span::styled("  │ ".to_owned(), bar_style),
                 Span::styled(wline, content_style),
             ]));
         }
@@ -426,7 +426,7 @@ fn plural(n: usize) -> &'static str {
 }
 
 fn squeeze_blank_lines(lines: &mut Vec<Line<'static>>) {
-    let mut consecutive_blanks = 0u32;
+    let mut consecutive_blanks = 0_u32;
     let mut squeezed = Vec::with_capacity(lines.len());
 
     for line in lines.drain(..) {
@@ -454,8 +454,8 @@ fn truncate_to_width(s: &mut String, max_width: usize) {
     if UnicodeWidthStr::width(s.as_str()) <= max_width {
         return;
     }
-    let mut width = 0usize;
-    let mut end = 0usize;
+    let mut width = 0_usize;
+    let mut end = 0_usize;
     for (idx, ch) in s.char_indices() {
         let w = UnicodeWidthChar::width(ch).unwrap_or(0);
         if width + w > max_width {
@@ -471,7 +471,7 @@ fn word_wrap(text: &str, max_width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
 
     if max_width == 0 || UnicodeWidthStr::width(text) <= max_width {
-        return vec![text.to_string()];
+        return vec![text.to_owned()];
     }
 
     let mut result = Vec::new();
@@ -481,7 +481,7 @@ fn word_wrap(text: &str, max_width: usize) -> Vec<String> {
     for word in text.split_whitespace() {
         let w = UnicodeWidthStr::width(word);
         if current.is_empty() {
-            current = word.to_string();
+            current = word.to_owned();
             current_width = w;
         } else if current_width + 1 + w <= max_width {
             current.push(' ');
@@ -489,7 +489,7 @@ fn word_wrap(text: &str, max_width: usize) -> Vec<String> {
             current_width += 1 + w;
         } else {
             result.push(std::mem::take(&mut current));
-            current = word.to_string();
+            current = word.to_owned();
             current_width = w;
         }
     }
@@ -531,7 +531,7 @@ fn render_streaming_header(lines: &mut Vec<Line<'static>>, app: &App) {
         )));
     } else {
         lines.push(Line::from(Span::styled(
-            name.to_string(),
+            name.to_owned(),
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
@@ -563,8 +563,8 @@ fn render_streaming_content(lines: &mut Vec<Line<'static>>, app: &App, _content_
         let label = match app.stream.phase.as_str() {
             "thinking" => format!("thinking {spinner}"),
             "tool_use" => format!("waiting for tool {spinner}"),
-            "responding" => spinner.to_string(),
-            _ => spinner.to_string(),
+            "responding" => spinner.to_owned(),
+            _ => spinner.to_owned(),
         };
         lines.push(Line::from(vec![
             Span::raw("  "),
@@ -594,7 +594,7 @@ fn format_timestamp(timestamp: &str) -> Option<String> {
                 Some(local.format("%Y-%m-%d %H:%M").to_string())
             }
         }
-        Err(_) => Some(timestamp.to_string()),
+        Err(_) => Some(timestamp.to_owned()),
     }
 }
 
@@ -618,7 +618,7 @@ fn push_entry_header(
     lines.push(Line::from(spans));
 }
 
-fn draw_conversation(frame: &mut Frame, app: &mut App, area: Rect) {
+fn draw_conversation(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let content_width = area.width;
 
     let fingerprint = app.conversation_fingerprint(content_width);
@@ -685,13 +685,13 @@ fn render_turn(
     app: &App,
     turn: &Turn,
     content_width: u16,
-    image_index: &mut Vec<crate::app::ImageEntry>,
+    image_index: &mut Vec<crate::tui::app::ImageEntry>,
 ) {
     match turn.role {
         Role::User => {
             push_entry_header(
                 lines,
-                "You".to_string(),
+                "You".to_owned(),
                 Color::Blue,
                 &turn.timestamp,
                 app.show_timestamps,
@@ -719,7 +719,7 @@ fn render_turn(
                 render_streaming_header(lines, app);
             } else {
                 let name = if app.character_name.is_empty() {
-                    "Assistant".to_string()
+                    "Assistant".to_owned()
                 } else {
                     app.character_name.clone()
                 };
@@ -784,9 +784,9 @@ fn render_turn(
 fn build_conversation_lines(
     app: &App,
     content_width: u16,
-) -> (Vec<Line<'static>>, Vec<crate::app::ImageEntry>, u16) {
+) -> (Vec<Line<'static>>, Vec<crate::tui::app::ImageEntry>, u16) {
     let mut lines: Vec<Line<'static>> = Vec::new();
-    let mut image_index: Vec<crate::app::ImageEntry> = Vec::new();
+    let mut image_index: Vec<crate::tui::app::ImageEntry> = Vec::new();
 
     for entry in &app.entries {
         match entry {
@@ -801,7 +801,7 @@ fn build_conversation_lines(
                 let header = if *count > 1 {
                     format!("System (×{count})")
                 } else {
-                    "System".to_string()
+                    "System".to_owned()
                 };
                 push_entry_header(
                     &mut lines,
@@ -869,7 +869,7 @@ fn push_archive_boundary(
     lines.push(Line::from(""));
 
     let label = if archived_turns == 1 {
-        " 1 archived turn above · outside current context ".to_string()
+        " 1 archived turn above · outside current context ".to_owned()
     } else {
         format!(" {archived_turns} archived turns above · outside current context ")
     };
@@ -881,7 +881,7 @@ fn push_archive_boundary(
         let right = width.saturating_sub(label_width + left);
         format!("{}{}{}", "─".repeat(left), label, "─".repeat(right))
     } else {
-        label.trim().to_string()
+        label.trim().to_owned()
     };
 
     lines.push(Line::from(Span::styled(
@@ -891,7 +891,7 @@ fn push_archive_boundary(
     lines.push(Line::from(""));
 }
 
-fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_fullscreen_image(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let idx = match app.fullscreen {
         Some(i) if i < app.image_index.len() => i,
         _ => return,
@@ -946,7 +946,7 @@ fn render_images(
     img_refs: &[shore_common::protocol::types::ImageRef],
     cache: &images::ImageCache,
     show_inline: bool,
-    index: &mut Vec<crate::app::ImageEntry>,
+    index: &mut Vec<crate::tui::app::ImageEntry>,
 ) {
     if img_refs.is_empty() {
         return;
@@ -969,9 +969,9 @@ fn render_images(
             )));
             let img_start_line = lines.len();
             lines.extend(images::placeholder_lines(transmitted));
-            index.push(crate::app::ImageEntry {
+            index.push(crate::tui::app::ImageEntry {
                 path: img.path.clone(),
-                display_name: display.to_string(),
+                display_name: display.to_owned(),
                 line: img_start_line,
             });
             continue;
@@ -985,8 +985,8 @@ fn render_images(
 }
 
 fn usage_chip(
-    budget: &crate::app::UsageBudget,
-    focus: &crate::app::BudgetFocus,
+    budget: &crate::tui::app::UsageBudget,
+    focus: &crate::tui::app::BudgetFocus,
 ) -> (String, Color) {
     const CELLS: usize = 10;
     let level = budget.level(focus.scope);
@@ -1008,10 +1008,10 @@ fn usage_chip(
     (format!("{prefix}[{bar}] {pct}%"), color)
 }
 
-fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
     if app.input.mode == InputMode::Command {
         let (title, prefix): (String, &str) = match &app.completion.mode {
-            PaletteMode::Top => (" [COMMAND] ".to_string(), ":"),
+            PaletteMode::Top => (" [COMMAND] ".to_owned(), ":"),
             PaletteMode::Submenu(s) => (format!(" [{}] ", s.parent), ""),
             PaletteMode::ValueEditor(s) => (format!(" [{}] ", s.key), ""),
         };
@@ -1035,7 +1035,7 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     let content_width = area.width as usize;
-    let line_starts = crate::app::word_wrap_offsets(&app.input.text, content_width);
+    let line_starts = crate::tui::app::word_wrap_offsets(&app.input.text, content_width);
 
     let cy_idx = line_starts
         .partition_point(|&s| s <= app.input.cursor)
@@ -1062,7 +1062,7 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let show_placeholder = app.input.text.is_empty() && app.input.mode == InputMode::Insert;
-    let input_content: Text = if show_placeholder {
+    let input_content: Text<'_> = if show_placeholder {
         Text::from(Line::from(Span::styled(
             "Type a message...",
             Style::default().fg(Color::DarkGray),
@@ -1075,19 +1075,19 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
             .map(|(idx, &start)| {
                 let end = line_starts.get(idx + 1).copied().unwrap_or(text.len());
                 let slice = &text[start..end];
-                slice.strip_suffix('\n').unwrap_or(slice).to_string()
+                slice.strip_suffix('\n').unwrap_or(slice).to_owned()
             })
             .collect();
         Text::from(lines.into_iter().map(Line::from).collect::<Vec<_>>())
     };
 
     let (mode_label, border_color) = if app.editing_ref.is_some() {
-        (" [EDIT] ".to_string(), Color::Yellow)
+        (" [EDIT] ".to_owned(), Color::Yellow)
     } else {
         match app.input.mode {
-            InputMode::Insert => (" [INSERT] ".to_string(), Color::Cyan),
-            InputMode::Normal => (" [NORMAL] ".to_string(), Color::DarkGray),
-            InputMode::Command => unreachable!(),
+            InputMode::Insert => (" [INSERT] ".to_owned(), Color::Cyan),
+            InputMode::Normal => (" [NORMAL] ".to_owned(), Color::DarkGray),
+            InputMode::Command => (" [COMMAND] ".to_owned(), Color::Cyan),
         }
     };
     let img_count = app.pending_images.len();
@@ -1099,7 +1099,7 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
     if img_count > 0 {
         indicators.push((
             if img_count == 1 {
-                "1 image".to_string()
+                "1 image".to_owned()
             } else {
                 format!("{img_count} images")
             },
@@ -1118,9 +1118,9 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
     }
     if let Some(budget) = app.focused_budget() {
         let show = match app.usage_display {
-            crate::app::UsageDisplay::Off => false,
-            crate::app::UsageDisplay::Always => true,
-            crate::app::UsageDisplay::Warn => budget.in_warning(),
+            crate::tui::app::UsageDisplay::Off => false,
+            crate::tui::app::UsageDisplay::Always => true,
+            crate::tui::app::UsageDisplay::Warn => budget.in_warning(),
         };
         if show {
             indicators.push(usage_chip(budget, &app.budget_focus));
@@ -1148,7 +1148,7 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn subagent_status_glyph(task: &crate::app::SubagentTaskView) -> (&'static str, Color) {
+fn subagent_status_glyph(task: &crate::tui::app::SubagentTaskView) -> (&'static str, Color) {
     match task.status.as_str() {
         "done" => ("\u{2713}", Color::Green),
         "running" => ("\u{25cf}", Color::Yellow),
@@ -1156,7 +1156,7 @@ fn subagent_status_glyph(task: &crate::app::SubagentTaskView) -> (&'static str, 
     }
 }
 
-fn draw_subagent_panel(frame: &mut Frame, app: &mut App, area: Rect) {
+fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let Some(selected) = app.subagent_panel else {
         return;
     };
@@ -1222,7 +1222,7 @@ fn draw_subagent_panel(frame: &mut Frame, app: &mut App, area: Rect) {
         };
         let budget = inner.width.saturating_sub(7) as usize;
         selector_lines.push(Line::from(vec![
-            Span::styled(marker.to_string(), Style::default().fg(SUBAGENT_COLOR)),
+            Span::styled(marker.to_owned(), Style::default().fg(SUBAGENT_COLOR)),
             Span::styled(format!("{glyph} "), Style::default().fg(color)),
             Span::styled(
                 truncate_display(&task.selector_label(), budget),
@@ -1316,10 +1316,10 @@ fn truncate_display(text: &str, budget: usize) -> String {
         return String::new();
     }
     if unicode_width::UnicodeWidthStr::width(text) <= budget {
-        return text.to_string();
+        return text.to_owned();
     }
     let mut out = String::new();
-    let mut used = 0usize;
+    let mut used = 0_usize;
     for ch in text.chars() {
         let w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
         if used + w + 1 > budget {
@@ -1363,7 +1363,7 @@ mod subagent_panel_tests {
     use shore_common::protocol::server_msg::{ServerMessage, StreamChunk, ToolCall, ToolResult};
 
     fn asking(h: &mut Harness, task_id: &str, name: &str, query: &str) {
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 rid: None,
@@ -1377,7 +1377,7 @@ mod subagent_panel_tests {
     }
 
     fn failed(h: &mut Harness, task_id: &str, name: &str) {
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolResult(ToolResult {
                 rid: None,
@@ -1392,7 +1392,7 @@ mod subagent_panel_tests {
     }
 
     fn answered(h: &mut Harness, task_id: &str, name: &str) {
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolResult(ToolResult {
                 rid: None,
@@ -1412,7 +1412,7 @@ mod subagent_panel_tests {
     }
 
     fn chunk(h: &mut Harness, task_id: &str, name: &str, text: &str) {
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 rid: None,
@@ -1425,7 +1425,7 @@ mod subagent_panel_tests {
     }
 
     fn tool(h: &mut Harness, task_id: &str, name: &str, tool_name: &str) {
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 rid: None,
@@ -1436,7 +1436,7 @@ mod subagent_panel_tests {
                 task_id: Some(task_id.into()),
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolResult(ToolResult {
                 rid: None,
@@ -1573,7 +1573,7 @@ mod subagent_panel_tests {
     }
 
     fn untagged_chunk(h: &mut Harness, name: &str, text: &str) {
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 rid: None,
@@ -1600,7 +1600,7 @@ mod subagent_panel_tests {
     }
 
     fn ask_call(h: &mut Harness, tool_id: &str, name: &str, output: &str, is_error: bool) {
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 rid: None,
@@ -1611,7 +1611,7 @@ mod subagent_panel_tests {
                 task_id: None,
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolResult(ToolResult {
                 rid: None,
@@ -1628,7 +1628,7 @@ mod subagent_panel_tests {
     #[test]
     fn a_refused_ask_still_shows_why() {
         let mut h = Harness::new();
-        h.app.connection_status = crate::app::ConnectionStatus::Connected;
+        h.app.connection_status = crate::tui::app::ConnectionStatus::Connected;
         h.app.character_name = "Alice".into();
         ask_call(
             &mut h,
@@ -1732,7 +1732,7 @@ mod subagent_panel_tests {
     }
 }
 
-fn draw_help(frame: &mut Frame, area: Rect) {
+fn draw_help(frame: &mut Frame<'_>, area: Rect) {
     let lines = vec![
         Line::from(""),
         Line::from(vec![Span::styled(
@@ -1868,7 +1868,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
     ];
 
     let height = lines.len() as u16 + 2;
-    let width = 56u16.min(area.width);
+    let width = 56_u16.min(area.width);
     let x = area.x + area.width.saturating_sub(width) / 2;
     let y = area.y + area.height.saturating_sub(height) / 2;
     let popup_area = Rect::new(x, y, width, height);
@@ -1882,7 +1882,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         )
         .style(Style::default().bg(Color::Rgb(20, 20, 30)));
 
-    frame.render_widget(ratatui::widgets::Clear, popup_area);
+    frame.render_widget(Clear, popup_area);
     frame.render_widget(popup, popup_area);
 }
 
@@ -1899,7 +1899,7 @@ fn completion_window_start(
         .min(total_rows - visible_rows)
 }
 
-fn draw_completions_inline(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
     const ACTIVE_MARKER: &str = "  ● active";
 
     if area.height == 0 || app.completion.candidates.is_empty() {
@@ -1958,9 +1958,9 @@ fn draw_completions_inline(frame: &mut Frame, app: &App, area: Rect) {
 
         let (gap, desc_text) = if let Some(d) = desc {
             let gap = name_col.saturating_sub(name_w).max(2);
-            (" ".repeat(gap), d.to_string())
+            (" ".repeat(gap), d.to_owned())
         } else if is_active {
-            (String::new(), ACTIVE_MARKER.to_string())
+            (String::new(), ACTIVE_MARKER.to_owned())
         } else {
             (String::new(), String::new())
         };
@@ -2005,7 +2005,7 @@ fn draw_completions_inline(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(paragraph, area);
 }
 
-fn draw_value_editor(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_value_editor(frame: &mut Frame<'_>, app: &App, area: Rect) {
     if area.height == 0 {
         return;
     }
@@ -2100,7 +2100,7 @@ fn alt_preview_text(choice: &AltChoice, max_width: usize) -> String {
         return "(empty)".into();
     }
     let mut out = String::new();
-    let mut width = 0usize;
+    let mut width = 0_usize;
     for ch in compact.chars() {
         let w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
         if width + w > max_width.saturating_sub(3) {
@@ -2113,7 +2113,7 @@ fn alt_preview_text(choice: &AltChoice, max_width: usize) -> String {
     out
 }
 
-fn draw_alt_picker_inline(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_alt_picker_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let Some(picker) = &app.alt_picker else {
         return;
     };
@@ -2128,7 +2128,7 @@ fn draw_alt_picker_inline(frame: &mut Frame, app: &App, area: Rect) {
         .as_deref()
         .or(picker.target_ref.as_deref())
         .map_or_else(
-            || "  alternates".to_string(),
+            || "  alternates".to_owned(),
             |msg_id| format!("  alternates for {msg_id}"),
         );
     lines.push(Line::from(Span::styled(
@@ -2197,22 +2197,24 @@ pub(crate) mod scenario_tests {
     )]
 
     use super::*;
-    use crate::app::{App, Block, ConnectionStatus, ConversationEntry, InputMode, Turn, TurnState};
+    use crate::tui::app::{
+        App, Block, ConnectionStatus, ConversationEntry, InputMode, Turn, TurnState,
+    };
 
     #[test]
     fn truncate_to_width_leaves_room_and_keeps_graphemes() {
-        let mut s = "abcdef".to_string();
+        let mut s = "abcdef".to_owned();
         truncate_to_width(&mut s, 3);
         assert_eq!(s, "abc");
-        let mut w = "古池や".to_string();
+        let mut w = "古池や".to_owned();
         truncate_to_width(&mut w, 3);
         assert_eq!(w, "古");
-        let mut short = "hi".to_string();
+        let mut short = "hi".to_owned();
         truncate_to_width(&mut short, 10);
         assert_eq!(short, "hi");
     }
-    use crate::connection::ConnCommand;
-    use crate::input;
+    use crate::tui::connection::ConnCommand;
+    use crate::tui::input;
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -2380,15 +2382,15 @@ pub(crate) mod scenario_tests {
                 .map(|turn| {
                     turn.blocks.retain(|b| !matches!(b, TurnBlock::Text(_)));
                     if !content.is_empty() {
-                        turn.blocks.push(TurnBlock::Text(content.to_string()));
+                        turn.blocks.push(TurnBlock::Text(content.to_owned()));
                     }
-                    turn.state = crate::app::TurnState::Complete;
+                    turn.state = TurnState::Complete;
                 })
                 .is_some();
             if !finalized {
                 self.app.entries.push(ConversationEntry::assistant(
                     None,
-                    content.to_string(),
+                    content.to_owned(),
                     vec![],
                     String::new(),
                     None,
@@ -2463,7 +2465,7 @@ pub(crate) mod scenario_tests {
         h.type_str("setting");
         let cmd = sent_command(h.press_action(KeyCode::Enter));
         assert_eq!(cmd.name, "model_settings");
-        let _ = crate::handle_server_message(&mut h.app, sampler_settings_output());
+        let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
     }
 
     fn assert_set_model_setting(action: input::Action, key: &str, value: &serde_json::Value) {
@@ -2611,7 +2613,7 @@ pub(crate) mod scenario_tests {
             },
         ];
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
                 rid: None,
@@ -3007,7 +3009,7 @@ pub(crate) mod scenario_tests {
         let f = h.render("model submenu open");
 
         assert!(
-            matches!(h.app.completion.mode, crate::app::PaletteMode::Submenu(_)),
+            matches!(h.app.completion.mode, PaletteMode::Submenu(_)),
             "completion mode should be Submenu after Enter"
         );
         assert!(
@@ -3045,7 +3047,7 @@ pub(crate) mod scenario_tests {
         let f = h.render("view submenu open");
 
         match &h.app.completion.mode {
-            crate::app::PaletteMode::Submenu(s) => assert_eq!(s.parent, "view"),
+            PaletteMode::Submenu(s) => assert_eq!(s.parent, "view"),
             _ => panic!("expected view submenu"),
         }
         assert!(f.contains("[view]"), "view submenu title visible");
@@ -3072,7 +3074,7 @@ pub(crate) mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Insert;
-        h.app.usage_budgets = vec![crate::app::UsageBudget {
+        h.app.usage_budgets = vec![crate::tui::app::UsageBudget {
             name: "monthly".into(),
             percent_used: 0.82,
             crossed_warn_at: vec![0.8],
@@ -3086,7 +3088,7 @@ pub(crate) mod scenario_tests {
             "chip should be hidden while usage_display is Off; frame:\n{hidden}"
         );
 
-        h.app.usage_display = crate::app::UsageDisplay::Always;
+        h.app.usage_display = crate::tui::app::UsageDisplay::Always;
         let shown = h.render("usage always");
         assert!(
             shown.contains("82%"),
@@ -3103,9 +3105,9 @@ pub(crate) mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Insert;
-        h.app.usage_display = crate::app::UsageDisplay::Warn;
+        h.app.usage_display = crate::tui::app::UsageDisplay::Warn;
 
-        h.app.usage_budgets = vec![crate::app::UsageBudget {
+        h.app.usage_budgets = vec![crate::tui::app::UsageBudget {
             name: "monthly".into(),
             percent_used: 0.23,
             crossed_warn_at: vec![],
@@ -3118,7 +3120,7 @@ pub(crate) mod scenario_tests {
             "warn mode hides the chip before a threshold; frame:\n{calm}"
         );
 
-        h.app.usage_budgets = vec![crate::app::UsageBudget {
+        h.app.usage_budgets = vec![crate::tui::app::UsageBudget {
             name: "monthly".into(),
             percent_used: 0.82,
             crossed_warn_at: vec![0.8],
@@ -3131,12 +3133,12 @@ pub(crate) mod scenario_tests {
             "warn mode reveals the chip past a threshold; frame:\n{warned}"
         );
 
-        h.app.usage_budgets = vec![crate::app::UsageBudget {
+        h.app.usage_budgets = vec![crate::tui::app::UsageBudget {
             name: "weekly".into(),
             percent_used: 0.6,
             crossed_warn_at: vec![],
             over_limit: false,
-            pace: Some(crate::app::UsageLevel {
+            pace: Some(crate::tui::app::UsageLevel {
                 percent_used: 0.55,
                 crossed_warn_at: vec![0.5],
                 over_limit: false,
@@ -3154,13 +3156,13 @@ pub(crate) mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Insert;
-        h.app.usage_display = crate::app::UsageDisplay::Always;
-        h.app.usage_budgets = vec![crate::app::UsageBudget {
+        h.app.usage_display = crate::tui::app::UsageDisplay::Always;
+        h.app.usage_budgets = vec![crate::tui::app::UsageBudget {
             name: "brainwife".into(),
             percent_used: 0.71,
             crossed_warn_at: vec![],
             over_limit: false,
-            pace: Some(crate::app::UsageLevel {
+            pace: Some(crate::tui::app::UsageLevel {
                 percent_used: 0.24,
                 crossed_warn_at: vec![],
                 over_limit: false,
@@ -3173,9 +3175,9 @@ pub(crate) mod scenario_tests {
             "auto follows the leading limit; frame:\n{auto}"
         );
 
-        h.app.budget_focus = crate::app::BudgetFocus {
+        h.app.budget_focus = crate::tui::app::BudgetFocus {
             name: None,
-            scope: Some(crate::app::UsageScope::Pace),
+            scope: Some(crate::tui::app::UsageScope::Pace),
         };
         let paced = h.render("focus pace");
         assert!(
@@ -3183,7 +3185,7 @@ pub(crate) mod scenario_tests {
             "pinned pace shows the pace figure; frame:\n{paced}"
         );
 
-        h.app.budget_focus = crate::app::BudgetFocus {
+        h.app.budget_focus = crate::tui::app::BudgetFocus {
             name: Some("gone".into()),
             scope: None,
         };
@@ -3286,7 +3288,7 @@ pub(crate) mod scenario_tests {
         let _ = h.render("after space");
 
         assert!(
-            matches!(h.app.completion.mode, crate::app::PaletteMode::Submenu(_)),
+            matches!(h.app.completion.mode, PaletteMode::Submenu(_)),
             "Space on `:model` should open submenu, not insert a space"
         );
         assert!(
@@ -3315,7 +3317,7 @@ pub(crate) mod scenario_tests {
             .completion
             .candidates
             .iter()
-            .map(std::string::String::as_str)
+            .map(String::as_str)
             .collect();
         assert!(
             names
@@ -3331,7 +3333,7 @@ pub(crate) mod scenario_tests {
         h.press(KeyCode::Esc);
         let _ = h.render("after esc");
         assert!(
-            matches!(h.app.completion.mode, crate::app::PaletteMode::Top),
+            matches!(h.app.completion.mode, PaletteMode::Top),
             "Esc should pop submenu back to Top"
         );
         assert_eq!(
@@ -3352,14 +3354,14 @@ pub(crate) mod scenario_tests {
         app.input.cmd_cursor = 5;
 
         app.enter_submenu("model");
-        assert!(app.completion.candidates.contains(&"gpt-4o".to_string()));
+        assert!(app.completion.candidates.contains(&"gpt-4o".to_owned()));
         app.next_completion();
         let chosen = app.completion.candidates[app.completion.selected.unwrap()].clone();
 
         let cmd = app.apply_submenu().expect("apply_submenu yields a command");
         assert_eq!(cmd, format!("model {chosen}"));
         assert!(app.completion.candidates.is_empty());
-        assert!(matches!(app.completion.mode, crate::app::PaletteMode::Top));
+        assert!(matches!(app.completion.mode, PaletteMode::Top));
         assert_ne!(app.input.mode, InputMode::Command, "command mode exited");
     }
 
@@ -3392,10 +3394,7 @@ pub(crate) mod scenario_tests {
         open_setting_menu_with_snapshot(&mut h);
         let f = h.render("setting submenu with values");
 
-        assert!(matches!(
-            h.app.completion.mode,
-            crate::app::PaletteMode::Submenu(_)
-        ));
+        assert!(matches!(h.app.completion.mode, PaletteMode::Submenu(_)));
         assert!(f.contains("setting key"), "setting header visible");
         assert!(
             f.contains("temperature = 0.7"),
@@ -3430,7 +3429,7 @@ pub(crate) mod scenario_tests {
         h.press(KeyCode::Enter);
 
         match &h.app.completion.mode {
-            crate::app::PaletteMode::Submenu(s) => {
+            PaletteMode::Submenu(s) => {
                 assert_eq!(s.parent, "setting:reasoning_effort");
             }
             _ => panic!("expected reasoning_effort submenu"),
@@ -3450,10 +3449,7 @@ pub(crate) mod scenario_tests {
         h.press(KeyCode::Enter);
         let f = h.render("temperature slider");
 
-        assert!(matches!(
-            h.app.completion.mode,
-            crate::app::PaletteMode::ValueEditor(_)
-        ));
+        assert!(matches!(h.app.completion.mode, PaletteMode::ValueEditor(_)));
         assert!(f.contains("temperature"));
         assert!(f.contains("●"), "slider thumb should render; frame:\n{f}");
         assert!(
@@ -3513,16 +3509,13 @@ pub(crate) mod scenario_tests {
             "Enter should not dispatch before sampler settings load"
         );
         match &h.app.completion.mode {
-            crate::app::PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting"),
+            PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting"),
             _ => panic!("expected to stay in setting submenu while loading"),
         }
 
-        let _ = crate::handle_server_message(&mut h.app, sampler_settings_output());
+        let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
         h.press(KeyCode::Enter);
-        assert!(matches!(
-            h.app.completion.mode,
-            crate::app::PaletteMode::ValueEditor(_)
-        ));
+        assert!(matches!(h.app.completion.mode, PaletteMode::ValueEditor(_)));
         let action = h.press_action(KeyCode::Enter);
 
         assert_set_model_setting(action, "temperature", &serde_json::json!(0.7));
@@ -3543,14 +3536,14 @@ pub(crate) mod scenario_tests {
         let blocked = h.press_action(KeyCode::Enter);
         assert!(matches!(blocked, input::Action::Redraw));
         match &h.app.completion.mode {
-            crate::app::PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting"),
+            PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting"),
             _ => panic!("expected to stay in setting submenu while loading"),
         }
 
-        let _ = crate::handle_server_message(&mut h.app, sampler_settings_output());
+        let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
         h.press(KeyCode::Enter);
         match &h.app.completion.mode {
-            crate::app::PaletteMode::Submenu(s) => {
+            PaletteMode::Submenu(s) => {
                 assert_eq!(s.parent, "setting:reasoning_effort");
             }
             _ => panic!("expected reasoning_effort submenu after settings load"),
@@ -3622,7 +3615,7 @@ pub(crate) mod scenario_tests {
         h.type_str("sdk");
         h.press(KeyCode::Enter);
         match &h.app.completion.mode {
-            crate::app::PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting:sdk"),
+            PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting:sdk"),
             _ => panic!("expected setting sdk submenu"),
         }
         h.type_str("anthropic");
@@ -3687,7 +3680,7 @@ pub(crate) mod scenario_tests {
         h.type_str("reset");
         h.press(KeyCode::Enter);
         match &h.app.completion.mode {
-            crate::app::PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting:reset"),
+            PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting:reset"),
             _ => panic!("expected setting reset submenu"),
         }
         h.type_str("temperature");
@@ -3887,7 +3880,7 @@ pub(crate) mod scenario_tests {
                 })
             })
             .collect();
-        crate::prepend_history_page(
+        crate::tui::prepend_history_page(
             &mut h.app,
             &serde_json::json!({
                 "messages": page,
@@ -4238,7 +4231,7 @@ pub(crate) mod scenario_tests {
             .entries
             .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4247,7 +4240,7 @@ pub(crate) mod scenario_tests {
                 regen: false,
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -4257,7 +4250,7 @@ pub(crate) mod scenario_tests {
                 content_type: "thinking".into(),
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -4284,7 +4277,7 @@ pub(crate) mod scenario_tests {
             "phase-1 thinking must be committed on tool_use phase end"
         );
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
@@ -4364,7 +4357,7 @@ pub(crate) mod scenario_tests {
             "t1".into(),
         ));
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4373,7 +4366,7 @@ pub(crate) mod scenario_tests {
                 regen: false,
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -4387,7 +4380,7 @@ pub(crate) mod scenario_tests {
                 is_final: false,
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
@@ -4410,7 +4403,7 @@ pub(crate) mod scenario_tests {
             "intermediate per-call stats must not appear mid-turn\n{f_mid}"
         );
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolResult(ToolResult {
                 subagent: None,
@@ -4423,7 +4416,7 @@ pub(crate) mod scenario_tests {
             }),
         );
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4432,7 +4425,7 @@ pub(crate) mod scenario_tests {
                 regen: false,
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -4442,7 +4435,7 @@ pub(crate) mod scenario_tests {
                 content_type: "text".into(),
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -4577,7 +4570,7 @@ pub(crate) mod scenario_tests {
             .entries
             .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4586,7 +4579,7 @@ pub(crate) mod scenario_tests {
                 regen: false,
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -4602,7 +4595,7 @@ pub(crate) mod scenario_tests {
             "pre-tool text must stream live\n{f1}"
         );
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -4616,7 +4609,7 @@ pub(crate) mod scenario_tests {
                 is_final: false,
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
@@ -4719,7 +4712,7 @@ pub(crate) mod scenario_tests {
             "t1".into(),
         ));
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4728,7 +4721,7 @@ pub(crate) mod scenario_tests {
                 regen: false,
             }),
         );
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -4772,7 +4765,7 @@ pub(crate) mod scenario_tests {
             },
             persisted_assistant,
         ];
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
                 rid: None,
@@ -4797,7 +4790,7 @@ pub(crate) mod scenario_tests {
                 ttft_ms: 80,
             },
         };
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -4872,7 +4865,7 @@ pub(crate) mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "qifei".into();
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4882,7 +4875,7 @@ pub(crate) mod scenario_tests {
             }),
         );
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
                 rid: None,
@@ -4945,7 +4938,7 @@ pub(crate) mod scenario_tests {
             "t1".into(),
         ));
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4955,7 +4948,7 @@ pub(crate) mod scenario_tests {
             }),
         );
         for chunk in reply.as_bytes().chunks(96) {
-            let _ = crate::handle_server_message(
+            let _ = crate::tui::handle_server_message(
                 &mut h.app,
                 ServerMessage::StreamChunk(StreamChunk {
                     subagent: None,
@@ -5001,7 +4994,7 @@ pub(crate) mod scenario_tests {
                 origin: None,
             },
         ];
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
                 rid: None,
@@ -5013,7 +5006,7 @@ pub(crate) mod scenario_tests {
             }),
         );
 
-        let _ = crate::handle_server_message(
+        let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -5249,7 +5242,7 @@ pub(crate) mod scenario_tests {
             frame
                 .lines()
                 .filter_map(|line| line.trim().strip_prefix("unique row "))
-                .map(std::string::ToString::to_string)
+                .map(str::to_owned)
                 .collect()
         }
 
@@ -5782,7 +5775,7 @@ pub(crate) mod scenario_tests {
     fn scenario_escape_dismisses_one_toast_at_a_time_in_normal_mode() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.input.mode = crate::app::InputMode::Normal;
+        h.app.input.mode = crate::tui::app::InputMode::Normal;
         h.app.set_status("first notice");
         h.app.set_error("error: second notice");
         assert_eq!(h.app.notifications.len(), 2);
@@ -5805,12 +5798,12 @@ pub(crate) mod scenario_tests {
     fn scenario_escape_in_insert_mode_leaves_toasts_alone() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        assert_eq!(h.app.input.mode, crate::app::InputMode::Insert);
+        assert_eq!(h.app.input.mode, crate::tui::app::InputMode::Insert);
         h.app.set_error("error: second notice");
         assert_eq!(h.app.notifications.len(), 1);
 
         h.press(KeyCode::Esc);
-        assert_eq!(h.app.input.mode, crate::app::InputMode::Normal);
+        assert_eq!(h.app.input.mode, crate::tui::app::InputMode::Normal);
         assert_eq!(
             h.app.notifications.len(),
             1,

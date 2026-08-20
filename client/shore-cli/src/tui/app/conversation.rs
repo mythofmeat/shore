@@ -164,7 +164,7 @@ impl SubagentTaskView {
             task_id,
             name,
             query: String::new(),
-            status: "running".to_string(),
+            status: "running".to_owned(),
             detail: None,
             blocks: Vec::new(),
             scroll: 0,
@@ -183,7 +183,7 @@ impl SubagentTaskView {
             self.name.as_str()
         };
         if self.query.is_empty() {
-            name.to_string()
+            name.to_owned()
         } else {
             format!("{name} · {}", one_line(&self.query))
         }

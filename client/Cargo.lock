@@ -1749,7 +1749,11 @@ dependencies = [
  "clap",
  "clap_complete",
  "crossterm",
+ "image",
  "insta",
+ "libc",
+ "pulldown-cmark",
+ "ratatui",
  "serde",
  "serde_json",
  "shore-common",
@@ -1758,6 +1762,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "unicode-width",
 ]
 
 [[package]]
@@ -1776,27 +1781,6 @@ dependencies = [
  "toml",
  "tracing",
  "ts-rs",
-]
-
-[[package]]
-name = "shore-tui"
-version = "0.0.0"
-dependencies = [
- "base64 0.23.1",
- "chrono",
- "clap",
- "crossterm",
- "image",
- "libc",
- "pulldown-cmark",
- "ratatui",
- "serde_json",
- "shore-common",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "unicode-width",
 ]
 
 [[package]]

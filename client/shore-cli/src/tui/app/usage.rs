@@ -59,15 +59,15 @@ impl BudgetFocus {
 
     pub(crate) fn named(name: &str) -> Self {
         Self {
-            name: Some(name.to_string()),
+            name: Some(name.to_owned()),
             scope: None,
         }
     }
 
     pub(crate) fn as_token(&self) -> String {
         match (&self.name, self.scope) {
-            (None, None) => "auto".to_string(),
-            (None, Some(scope)) => scope.as_token().to_string(),
+            (None, None) => "auto".to_owned(),
+            (None, Some(scope)) => scope.as_token().to_owned(),
             (Some(name), None) => name.clone(),
             (Some(name), Some(scope)) => format!("{name}:{}", scope.as_token()),
         }
@@ -81,7 +81,7 @@ impl BudgetFocus {
                 return None;
             }
             return Some(Self {
-                name: Some(name.to_string()),
+                name: Some(name.to_owned()),
                 scope: Some(UsageScope::from_token(scope.trim())?),
             });
         }

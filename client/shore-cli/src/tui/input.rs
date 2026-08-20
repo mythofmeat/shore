@@ -4,8 +4,8 @@ use shore_common::protocol::client_msg::{
 };
 use tracing::debug;
 
-use crate::app::{App, InputMode, PaletteMode};
-use crate::connection::ConnCommand;
+use crate::tui::app::{App, InputMode, PaletteMode};
+use crate::tui::connection::ConnCommand;
 
 const HISTORY_PAGE_TURNS: u32 = 64;
 
@@ -186,7 +186,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
 
         (KeyModifiers::NONE, KeyCode::Char('s')) => {
             app.show_subagent = !app.show_subagent;
-            Action::SendAndSavePrefs(crate::subagent_trace_fetch(app))
+            Action::SendAndSavePrefs(crate::tui::subagent_trace_fetch(app))
         }
 
         (KeyModifiers::SHIFT, KeyCode::Char('S')) => {
@@ -375,7 +375,7 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
                         use base64::Engine;
                         let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                         let filename = std::path::Path::new(p).file_name().map_or_else(
-                            || "image".to_string(),
+                            || "image".to_owned(),
                             |f| f.to_string_lossy().to_string(),
                         );
                         image_refs.push(shore_common::protocol::types::ImageRef {
@@ -395,7 +395,7 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
                 }
             }
             app.dismiss_notifications();
-            app.entries.push(crate::app::ConversationEntry::user(
+            app.entries.push(crate::tui::app::ConversationEntry::user(
                 text.clone(),
                 image_refs,
                 String::new(),
@@ -512,7 +512,7 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
         }
 
         (KeyModifiers::NONE, KeyCode::Enter) => {
-            let trimmed = app.input.cmd_text.trim().to_string();
+            let trimmed = app.input.cmd_text.trim().to_owned();
             if let Some(parent) = App::canonical_submenu_parent(&trimmed) {
                 app.enter_submenu(parent);
                 submenu_fetch_action(app, parent)
@@ -524,7 +524,7 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
         }
 
         (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(' ')) => {
-            let trimmed = app.input.cmd_text.trim().to_string();
+            let trimmed = app.input.cmd_text.trim().to_owned();
             if let Some(parent) = App::canonical_submenu_parent(&trimmed) {
                 app.enter_submenu(parent);
                 submenu_fetch_action(app, parent)
@@ -559,7 +559,7 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
 fn enter_completed_submenu(app: &mut App) -> Option<Action> {
     let trimmed = app.input.cmd_text.trim();
     let parent = App::canonical_submenu_parent(trimmed)?;
-    app.input.cmd_text = parent.to_string();
+    app.input.cmd_text = parent.to_owned();
     app.input.cmd_cursor = parent.len();
     app.enter_submenu(parent);
     Some(submenu_fetch_action(app, parent))
@@ -761,7 +761,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 let lowered = value.to_ascii_lowercase();
                 let mode = if lowered == "toggle" {
                     app.cycle_usage_display()
-                } else if let Some(mode) = crate::app::UsageDisplay::from_token(&lowered) {
+                } else if let Some(mode) = crate::tui::app::UsageDisplay::from_token(&lowered) {
                     app.set_usage_display(mode);
                     mode
                 } else {
@@ -775,7 +775,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             if key == "budget" {
                 let focus = if value.eq_ignore_ascii_case("toggle") {
                     app.cycle_budget_focus()
-                } else if let Some(focus) = crate::app::BudgetFocus::from_token(value) {
+                } else if let Some(focus) = crate::tui::app::BudgetFocus::from_token(value) {
                     app.set_budget_focus(focus.clone());
                     focus
                 } else {
@@ -995,7 +995,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 app.set_status("usage: :alt [ref]");
                 return Action::Redraw;
             }
-            let target_ref = msg_ref.map(ToString::to_string);
+            let target_ref = msg_ref.map(str::to_owned);
             app.start_alt_picker(target_ref.clone());
             let mut args = serde_json::Map::new();
             if let Some(msg_ref) = target_ref {
@@ -1022,10 +1022,10 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                     if let Ok(home) = std::env::var("HOME") {
                         arg.replacen('~', &home, 1)
                     } else {
-                        arg.to_string()
+                        arg.to_owned()
                     }
                 } else {
-                    arg.to_string()
+                    arg.to_owned()
                 };
                 let path = if std::path::Path::new(&expanded).is_absolute() {
                     expanded
@@ -1108,27 +1108,27 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
             match trimmed.to_ascii_lowercase().as_str() {
                 "true" | "yes" | "on" => Value::Bool(true),
                 "false" | "no" | "off" => Value::Bool(false),
-                _ => Value::String(trimmed.to_string()),
+                _ => Value::String(trimmed.to_owned()),
             }
         }
         "temperature" | "top_p" => trimmed
             .parse::<f64>()
             .ok()
             .and_then(serde_json::Number::from_f64)
-            .map_or_else(|| Value::String(trimmed.to_string()), Value::Number),
+            .map_or_else(|| Value::String(trimmed.to_owned()), Value::Number),
         "budget_tokens" | "max_output_tokens" | "gemini_generation" | "max_tool_iterations" => {
             trimmed.parse::<u64>().map_or_else(
-                |_| Value::String(trimmed.to_string()),
+                |_| Value::String(trimmed.to_owned()),
                 |n| Value::Number(n.into()),
             )
         }
         "reasoning_effort" => match trimmed.to_ascii_lowercase().as_str() {
             "off" | "none" | "disable" | "disabled" | "unset" | "" => Value::String("off".into()),
-            _ => Value::String(trimmed.to_string()),
+            _ => Value::String(trimmed.to_owned()),
         },
         "openrouter_provider" => serde_json::from_str::<Value>(trimmed)
-            .unwrap_or_else(|_| Value::String(trimmed.to_string())),
-        _ => Value::String(trimmed.to_string()),
+            .unwrap_or_else(|_| Value::String(trimmed.to_owned())),
+        _ => Value::String(trimmed.to_owned()),
     }
 }
 
@@ -1203,7 +1203,7 @@ mod tests {
 
     #[test]
     fn view_usage_command_sets_and_cycles_mode() {
-        use crate::app::UsageDisplay;
+        use crate::tui::app::UsageDisplay;
         let mut app = App::default();
         assert_eq!(app.usage_display, UsageDisplay::Off);
 
@@ -1227,7 +1227,7 @@ mod tests {
 
     #[test]
     fn view_budget_command_pins_and_cycles_focus() {
-        use crate::app::{BudgetFocus, UsageBudget};
+        use crate::tui::app::{BudgetFocus, UsageBudget};
         let mut app = App {
             usage_budgets: vec![UsageBudget {
                 name: "brainwife".into(),

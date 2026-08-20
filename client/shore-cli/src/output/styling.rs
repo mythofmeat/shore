@@ -17,7 +17,7 @@ use super::{
     process_wrap_width, write_channel_rule, write_process_body, write_sigil_header,
     write_thinking_content_line,
 };
-use crate::images;
+use crate::terminal_images;
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -296,12 +296,12 @@ pub(crate) fn print_server_error(code: &str, message: &str) {
 }
 
 pub(crate) fn print_send_image(img: &SendImage) {
-    images::render_image(&img.path, img.caption.as_deref(), img.data.as_deref());
+    terminal_images::render_image(&img.path, img.caption.as_deref(), img.data.as_deref());
 }
 
 pub(crate) fn print_image_refs(refs: &[ImageRef]) {
     for img in refs {
-        images::render_image(&img.path, img.caption.as_deref(), img.data.as_deref());
+        terminal_images::render_image(&img.path, img.caption.as_deref(), img.data.as_deref());
     }
 }
 

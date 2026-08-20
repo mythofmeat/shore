@@ -25,7 +25,7 @@ pub(crate) struct Cli {
     pub addr: Option<String>,
 
     #[command(subcommand)]
-    pub command: CliCommand,
+    pub command: Option<CliCommand>,
 }
 
 const LEADING_FLAGS: [(&str, &str); 3] = [
@@ -58,7 +58,7 @@ const RETIRED_FLAGS: [(&str, &str); 8] = [
 ];
 
 const GUIDANCE_WAS_NEVER_READ: &str =
-    "it never reached the model, so `shore regen` is the same call";
+    "it never reached the model, so `shore msg regen` is the same call";
 
 const NAMED_BY_USE: [&str; 2] = ["model", "character"];
 
@@ -265,43 +265,15 @@ fn message_ref(raw: &str) -> Result<String, String> {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum CliCommand {
-    /// Send a message
+    /// Send or change messages
     #[command(display_order = 1)]
-    Send {
-        /// The message text
-        message: Vec<String>,
-
-        /// Attach image file(s) to the message
-        #[arg(short = 'i', long = "image")]
-        images: Vec<String>,
-
-        /// Inject as a system instruction instead of a user message
-        #[arg(long)]
-        system: bool,
-    },
-
-    /// Regenerate the last assistant response
-    #[command(display_order = 2)]
-    Regen,
-
-    /// List or select alternate responses for the latest assistant message
-    #[command(display_order = 3)]
-    Alt {
-        /// Selector: list, prev, next, last, first, or 1-based alternate position
-        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
-        selector: Option<String>,
-
-        /// Assistant message reference (defaults to latest assistant)
-        #[arg(long = "ref", allow_hyphen_values = true, value_parser = message_ref)]
-        msg_ref: Option<String>,
-
-        /// Output raw JSON
-        #[arg(long)]
-        json: bool,
+    Msg {
+        #[command(subcommand)]
+        command: MsgCommand,
     },
 
     /// Show the conversation
-    #[command(display_order = 4)]
+    #[command(display_order = 9)]
     Log {
         /// Message reference — show a single message (last, -1, 3, etc.)
         #[arg(allow_hyphen_values = true, value_parser = message_ref)]
@@ -340,30 +312,20 @@ pub(crate) enum CliCommand {
         subagent_tools: bool,
     },
 
-    /// Replace the content of a message (last, -1, 3, etc.)
-    #[command(display_order = 5)]
-    Edit {
-        /// Message reference (last, -1, -2, 3, etc.)
-        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
-        msg_ref: String,
+    /// Summarize the conversation into memory and shorten the active window
+    #[command(display_order = 2)]
+    Compact {
+        /// How many recent user turns to leave in the conversation. Everything
+        /// older is folded into markdown memory. 0 keeps none of it, leaving
+        /// only the prompt files and the memory index.
+        keep_turns: Option<u32>,
 
-        /// New content
-        content: Vec<String>,
-
-        /// Output raw JSON
+        /// Throw away a paused checkpoint and summarize from scratch. Use this
+        /// when a pass stopped partway — out of quota, provider down, memory
+        /// files edited since — and `shore compact` keeps reporting paused. The
+        /// memory it already wrote stays; those turns get summarized again.
         #[arg(long)]
-        json: bool,
-    },
-
-    /// Remove one or more messages from the conversation
-    #[command(display_order = 6)]
-    Delete {
-        /// Message references (last, -1, -2, 3, or a raw m_… id). Every reference
-        /// resolves against the conversation as it stands before any of them are
-        /// removed. A reference that lands inside a tool loop removes the whole
-        /// turn, since a tool result cannot outlive the call it answers
-        #[arg(required = true, allow_hyphen_values = true, value_parser = message_ref)]
-        msg_refs: Vec<String>,
+        restart: bool,
 
         /// Output raw JSON
         #[arg(long)]
@@ -372,14 +334,14 @@ pub(crate) enum CliCommand {
 
     /// Inspect what the daemon did behind the conversation: raw model calls,
     /// heartbeat activity, stored sub-agent runs, and errors it hit.
-    #[command(display_order = 14)]
+    #[command(display_order = 10)]
     Trace {
         #[command(subcommand)]
         subcommand: Option<TraceCommand>,
     },
 
     /// List characters, or switch to another one
-    #[command(display_order = 8)]
+    #[command(display_order = 3)]
     Character {
         #[command(subcommand)]
         subcommand: Option<CharacterCommand>,
@@ -394,7 +356,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Show daemon and session status
-    #[command(display_order = 12)]
+    #[command(display_order = 7)]
     Status {
         /// Show only one section; every section is shown by default.
         /// `shore complete sections` lists them
@@ -407,7 +369,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Advanced debugging utilities
-    #[command(display_order = 15)]
+    #[command(display_order = 11)]
     Debug {
         #[command(subcommand)]
         subcommand: Option<DebugCommand>,
@@ -415,7 +377,7 @@ pub(crate) enum CliCommand {
 
     /// List models, switch the active one, or tune its sampler settings
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 9)]
+    #[command(display_order = 4)]
     Model {
         #[command(subcommand)]
         subcommand: Option<ModelCommand>,
@@ -439,7 +401,7 @@ pub(crate) enum CliCommand {
 
     /// List configured providers with key and cache status, or refresh a catalog
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 10)]
+    #[command(display_order = 5)]
     Provider {
         #[command(subcommand)]
         subcommand: Option<ProviderCommand>,
@@ -449,29 +411,9 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Summarize the conversation into memory and shorten the active window
-    #[command(display_order = 7)]
-    Compact {
-        /// How many recent user turns to leave in the conversation. Everything
-        /// older is folded into markdown memory. 0 keeps none of it, leaving
-        /// only the prompt files and the memory index.
-        keep_turns: Option<u32>,
-
-        /// Throw away a paused checkpoint and summarize from scratch. Use this
-        /// when a pass stopped partway — out of quota, provider down, memory
-        /// files edited since — and `shore compact` keeps reporting paused. The
-        /// memory it already wrote stays; those turns get summarized again.
-        #[arg(long)]
-        restart: bool,
-
-        /// Output raw JSON
-        #[arg(long)]
-        json: bool,
-    },
-
     /// Show or modify configuration
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 11)]
+    #[command(display_order = 6)]
     Config {
         #[command(subcommand)]
         subcommand: Option<ConfigCommand>,
@@ -498,7 +440,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Show token usage statistics and costs
-    #[command(display_order = 13)]
+    #[command(display_order = 8)]
     Usage {
         #[command(subcommand)]
         subcommand: Option<UsageCommand>,
@@ -531,7 +473,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Generate shell completions
-    #[command(display_order = 16)]
+    #[command(display_order = 12)]
     Completions {
         /// Shell to generate completions for
         shell: Shell,
@@ -545,6 +487,69 @@ pub(crate) enum CliCommand {
 
         /// Context for kinds that need it, e.g. the key for `config-values`
         arg: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum MsgCommand {
+    /// Send a message
+    Send {
+        /// The message text
+        message: Vec<String>,
+
+        /// Attach image file(s) to the message
+        #[arg(short = 'i', long = "image")]
+        images: Vec<String>,
+
+        /// Inject as a system instruction instead of a user message
+        #[arg(long)]
+        system: bool,
+    },
+
+    /// Regenerate the last assistant response
+    Regen,
+
+    /// List or select alternate responses for the latest assistant message
+    Alt {
+        /// Selector: list, prev, next, last, first, or 1-based alternate position
+        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
+        selector: Option<String>,
+
+        /// Assistant message reference (defaults to latest assistant)
+        #[arg(long = "ref", allow_hyphen_values = true, value_parser = message_ref)]
+        msg_ref: Option<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Replace the content of a message (last, -1, 3, etc.)
+    Edit {
+        /// Message reference (last, -1, -2, 3, etc.)
+        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
+        msg_ref: String,
+
+        /// New content
+        content: Vec<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Remove one or more messages from the conversation
+    Delete {
+        /// Message references (last, -1, -2, 3, or a raw m_… id). Every reference
+        /// resolves against the conversation as it stands before any of them are
+        /// removed. A reference that lands inside a tool loop removes the whole
+        /// turn, since a tool result cannot outlive the call it answers
+        #[arg(required = true, allow_hyphen_values = true, value_parser = message_ref)]
+        msg_refs: Vec<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -1138,11 +1143,9 @@ fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
     )
 }
 
-const COMMAND_GROUPS: [(&str, &[&str]); 5] = [
-    (
-        "Conversation",
-        &["send", "log", "regen", "alt", "edit", "delete", "compact"],
-    ),
+const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
+    ("Conversation", &["msg", "log"]),
+    ("Maintenance", &["compact"]),
     (
         "Configuration",
         &["character", "model", "provider", "config"],
@@ -1211,7 +1214,7 @@ pub(crate) fn grouped_command() -> clap::Command {
     for name in &ungrouped {
         cmd = cmd.mut_subcommand(name.as_str(), |sub| sub.hide(true));
     }
-    cmd.override_usage("shore [OPTIONS] <COMMAND>")
+    cmd.override_usage("shore [OPTIONS] [COMMAND]")
         .help_template(format!(
             "{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{listing}{{all-args}}"
         ))
@@ -1364,9 +1367,7 @@ pub(crate) fn to_swp_command(
 ) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::json;
     match cmd {
-        CliCommand::Send { system: false, .. }
-        | CliCommand::Regen
-        | CliCommand::Completions { .. }
+        CliCommand::Completions { .. }
         | CliCommand::Complete { .. }
         | CliCommand::Config {
             path: true,
@@ -1378,15 +1379,7 @@ pub(crate) fn to_swp_command(
             ..
         } => None,
 
-        CliCommand::Send {
-            system: true,
-            message,
-            ..
-        } => Some(("inject_system", json!({ "text": message.join(" ") }))),
-
-        CliCommand::Alt {
-            selector, msg_ref, ..
-        } => Some(alt_command_to_swp(selector.as_deref(), msg_ref.as_deref())),
+        CliCommand::Msg { command } => msg_to_swp(command),
 
         CliCommand::Character {
             subcommand: Some(CharacterCommand::Info),
@@ -1401,13 +1394,6 @@ pub(crate) fn to_swp_command(
         }
 
         CliCommand::Log { .. } => log_to_swp(cmd),
-        CliCommand::Edit {
-            msg_ref, content, ..
-        } => Some((
-            "edit",
-            json!({ "ref": msg_ref, "content": content.join(" ") }),
-        )),
-        CliCommand::Delete { msg_refs, .. } => Some(("delete", json!({ "refs": msg_refs }))),
         CliCommand::Trace { subcommand: None } => None,
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
@@ -1478,6 +1464,28 @@ pub(crate) fn to_swp_command(
         CliCommand::Config { .. } => Some(("config", json!({ "key": null, "value": null }))),
 
         CliCommand::Usage { .. } => usage_to_swp(cmd, character),
+    }
+}
+
+fn msg_to_swp(cmd: &MsgCommand) -> Option<(&'static str, serde_json::Value)> {
+    use serde_json::json;
+    match cmd {
+        MsgCommand::Send { system: false, .. } | MsgCommand::Regen => None,
+        MsgCommand::Send {
+            system: true,
+            message,
+            ..
+        } => Some(("inject_system", json!({ "text": message.join(" ") }))),
+        MsgCommand::Alt {
+            selector, msg_ref, ..
+        } => Some(alt_command_to_swp(selector.as_deref(), msg_ref.as_deref())),
+        MsgCommand::Edit {
+            msg_ref, content, ..
+        } => Some((
+            "edit",
+            json!({ "ref": msg_ref, "content": content.join(" ") }),
+        )),
+        MsgCommand::Delete { msg_refs, .. } => Some(("delete", json!({ "refs": msg_refs }))),
     }
 }
 
@@ -1774,16 +1782,54 @@ mod tests {
         Cli::try_parse_from(full)
     }
 
+    fn parsed_command(cli: &Cli) -> &CliCommand {
+        let Some(command) = cli.command.as_ref() else {
+            panic!("expected a command");
+        };
+        command
+    }
+
+    fn parsed_msg(cli: &Cli) -> &MsgCommand {
+        let CliCommand::Msg { command } = parsed_command(cli) else {
+            panic!("expected a msg command");
+        };
+        command
+    }
+
+    fn msg(command: MsgCommand) -> CliCommand {
+        CliCommand::Msg { command }
+    }
+
     fn arg<'val>(args: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
         args.get(key).expect("expected command argument")
     }
 
     #[test]
+    fn bare_shore_selects_no_cli_command() {
+        assert!(parse(&[]).command.is_none());
+    }
+
+    #[test]
+    fn chat_commands_are_a_hard_break_at_the_top_level() {
+        for old in ["send", "regen", "alt", "edit", "delete"] {
+            assert!(
+                try_parse(&[old]).is_err(),
+                "{old} still parsed at top level"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_command_does_not_become_the_tui() {
+        assert!(try_parse(&["stauts"]).is_err());
+    }
+
+    #[test]
     fn parse_send() {
-        let cli = parse(&["send", "hello", "world"]);
+        let cli = parse(&["msg", "send", "hello", "world"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Send {
+            parsed_msg(&cli),
+            MsgCommand::Send {
                 message, images, ..
             } => {
                 assert_eq!(message, &["hello", "world"]);
@@ -1794,10 +1840,10 @@ mod tests {
 
     #[test]
     fn parse_send_with_image() {
-        let cli = parse(&["send", "-i", "photo.jpg", "describe", "this"]);
+        let cli = parse(&["msg", "send", "-i", "photo.jpg", "describe", "this"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Send {
+            parsed_msg(&cli),
+            MsgCommand::Send {
                 message, images, ..
             } => {
                 assert_eq!(message, &["describe", "this"]);
@@ -1808,10 +1854,10 @@ mod tests {
 
     #[test]
     fn parse_send_with_multiple_images() {
-        let cli = parse(&["send", "-i", "a.jpg", "-i", "b.png", "compare"]);
+        let cli = parse(&["msg", "send", "-i", "a.jpg", "-i", "b.png", "compare"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Send {
+            parsed_msg(&cli),
+            MsgCommand::Send {
                 message, images, ..
             } => {
                 assert_eq!(message, &["compare"]);
@@ -1822,30 +1868,30 @@ mod tests {
 
     #[test]
     fn parse_regen() {
-        assert_variant!(&parse(&["regen"]).command, CliCommand::Regen => {});
+        assert_variant!(parsed_msg(&parse(&["msg", "regen"])), MsgCommand::Regen => {});
     }
 
     #[test]
     fn regen_guidance_no_longer_parses() {
         for flag in ["--guidance", "-g"] {
             assert_eq!(
-                misplaced(&["regen", flag, "be more concise"]),
+                misplaced(&["msg", "regen", flag, "be more concise"]),
                 Some(FlagProblem::Retired(flag, GUIDANCE_WAS_NEVER_READ)),
                 "{flag}"
             );
         }
         assert_eq!(
-            parse_error(&["regen", "--guidance", "be more concise"]).kind(),
+            parse_error(&["msg", "regen", "--guidance", "be more concise"]).kind(),
             clap::error::ErrorKind::UnknownArgument
         );
     }
 
     #[test]
     fn parse_alt_defaults_to_list() {
-        let cli = parse(&["alt"]);
+        let cli = parse(&["msg", "alt"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Alt {
+            parsed_msg(&cli),
+            MsgCommand::Alt {
                 selector,
                 msg_ref,
                 json,
@@ -1859,10 +1905,10 @@ mod tests {
 
     #[test]
     fn parse_alt_position_with_ref_and_json() {
-        let cli = parse(&["alt", "2", "--ref", "-1", "--json"]);
+        let cli = parse(&["msg", "alt", "2", "--ref", "-1", "--json"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Alt {
+            parsed_msg(&cli),
+            MsgCommand::Alt {
                 selector,
                 msg_ref,
                 json,
@@ -1878,7 +1924,7 @@ mod tests {
     fn parse_log_default() {
         let cli = parse(&["log"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Log {
                 msg_ref,
                 count,
@@ -1907,7 +1953,7 @@ mod tests {
     fn parse_log_custom_count() {
         let cli = parse(&["log", "--count", "50"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Log { count, .. } => {
                 assert_eq!(*count, 50);
             }
@@ -1918,7 +1964,7 @@ mod tests {
     fn parse_log_get_by_ref() {
         let cli = parse(&["log", "last"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Log { msg_ref, .. } => {
                 assert_eq!(msg_ref.as_deref(), Some("last"));
             }
@@ -1929,7 +1975,7 @@ mod tests {
     fn parse_log_get_by_role() {
         let cli = parse(&["log", "last", "--role", "user"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Log { msg_ref, role, .. } => {
                 assert_eq!(msg_ref.as_deref(), Some("last"));
                 assert_eq!(*role, Some(LogRole::User));
@@ -1941,7 +1987,7 @@ mod tests {
     fn parse_log_character_role_alias() {
         let cli = parse(&["log", "--role", "character"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Log { role, .. } => {
                 assert_eq!(*role, Some(LogRole::Character));
                 assert_eq!(
@@ -2045,7 +2091,7 @@ mod tests {
     fn parse_log_get_positive_index() {
         let cli = parse(&["log", "3"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Log { msg_ref, .. } => {
                 assert_eq!(msg_ref.as_deref(), Some("3"));
             }
@@ -2054,10 +2100,10 @@ mod tests {
 
     #[test]
     fn parse_edit() {
-        let cli = parse(&["edit", "msg_123", "new", "text"]);
+        let cli = parse(&["msg", "edit", "msg_123", "new", "text"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Edit { msg_ref, content, .. } => {
+            parsed_msg(&cli),
+            MsgCommand::Edit { msg_ref, content, .. } => {
                 assert_eq!(msg_ref, "msg_123");
                 assert_eq!(content, &["new", "text"]);
             }
@@ -2066,10 +2112,10 @@ mod tests {
 
     #[test]
     fn parse_edit_last() {
-        let cli = parse(&["edit", "last", "updated"]);
+        let cli = parse(&["msg", "edit", "last", "updated"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Edit { msg_ref, content, .. } => {
+            parsed_msg(&cli),
+            MsgCommand::Edit { msg_ref, content, .. } => {
                 assert_eq!(msg_ref, "last");
                 assert_eq!(content, &["updated"]);
             }
@@ -2078,10 +2124,10 @@ mod tests {
 
     #[test]
     fn parse_edit_negative_index() {
-        let cli = parse(&["edit", "-1", "new", "text"]);
+        let cli = parse(&["msg", "edit", "-1", "new", "text"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Edit { msg_ref, content, .. } => {
+            parsed_msg(&cli),
+            MsgCommand::Edit { msg_ref, content, .. } => {
                 assert_eq!(msg_ref, "-1");
                 assert_eq!(content, &["new", "text"]);
             }
@@ -2090,10 +2136,10 @@ mod tests {
 
     #[test]
     fn parse_delete() {
-        let cli = parse(&["delete", "msg_456"]);
+        let cli = parse(&["msg", "delete", "msg_456"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Delete { msg_refs, .. } => {
+            parsed_msg(&cli),
+            MsgCommand::Delete { msg_refs, .. } => {
                 assert_eq!(msg_refs, &["msg_456"]);
             }
         );
@@ -2101,10 +2147,10 @@ mod tests {
 
     #[test]
     fn parse_delete_negative_index() {
-        let cli = parse(&["delete", "-1"]);
+        let cli = parse(&["msg", "delete", "-1"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Delete { msg_refs, .. } => {
+            parsed_msg(&cli),
+            MsgCommand::Delete { msg_refs, .. } => {
                 assert_eq!(msg_refs, &["-1"]);
             }
         );
@@ -2112,10 +2158,10 @@ mod tests {
 
     #[test]
     fn parse_delete_takes_several_refs() {
-        let cli = parse(&["delete", "-1", "-2", "msg_456"]);
+        let cli = parse(&["msg", "delete", "-1", "-2", "msg_456"]);
         assert_variant!(
-            &cli.command,
-            CliCommand::Delete { msg_refs, .. } => {
+            parsed_msg(&cli),
+            MsgCommand::Delete { msg_refs, .. } => {
                 assert_eq!(msg_refs, &["-1", "-2", "msg_456"]);
             }
         );
@@ -2123,7 +2169,7 @@ mod tests {
 
     #[test]
     fn delete_needs_at_least_one_ref() {
-        assert!(Cli::try_parse_from(["shore", "delete"]).is_err());
+        assert!(Cli::try_parse_from(["shore", "msg", "delete"]).is_err());
     }
 
     #[test]
@@ -2149,7 +2195,7 @@ mod tests {
     fn parse_character_list() {
         let cli = parse(&["character"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Character { subcommand, info, .. } => {
                 assert!(subcommand.is_none());
                 assert!(!info);
@@ -2161,7 +2207,7 @@ mod tests {
     fn parse_character_switch() {
         let cli = parse(&["character", "use", "alice"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Character { subcommand, .. } => {
                 assert!(matches!(
                     subcommand,
@@ -2175,7 +2221,7 @@ mod tests {
     fn parse_character_new() {
         let cli = parse(&["character", "new", "alice"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Character { subcommand, .. } => {
                 assert!(matches!(
                     subcommand,
@@ -2197,7 +2243,7 @@ mod tests {
     fn parse_character_info() {
         let cli = parse(&["character", "info"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Character { subcommand, .. } => {
                 assert!(matches!(subcommand, Some(CharacterCommand::Info)));
             }
@@ -2208,7 +2254,7 @@ mod tests {
     fn parse_status() {
         let cli = parse(&["status"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Status { section, .. } => {
                 assert!(section.is_none());
             }
@@ -2232,7 +2278,7 @@ mod tests {
     fn parse_trace_errors() {
         let cli = parse(&["trace", "errors", "-n", "5"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Trace {
                 subcommand: Some(TraceCommand::Errors { count, json }),
             } => {
@@ -2246,7 +2292,7 @@ mod tests {
     fn parse_debug_tick_now() {
         let cli = parse(&["debug", "heartbeat_tick_now"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Debug {
                 subcommand: Some(DebugCommand::TickNow),
             } => {}
@@ -2257,7 +2303,7 @@ mod tests {
     fn parse_debug_status_dormant() {
         let cli = parse(&["debug", "heartbeat_status_dormant"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Debug {
                 subcommand: Some(DebugCommand::StatusDormant),
             } => {}
@@ -2268,7 +2314,7 @@ mod tests {
     fn parse_debug_status_active() {
         let cli = parse(&["debug", "heartbeat_status_active"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Debug {
                 subcommand: Some(DebugCommand::StatusActive),
             } => {}
@@ -2279,7 +2325,7 @@ mod tests {
     fn parse_model_list() {
         let cli = parse(&["model"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Model {
                 info,
                 subcommand,
@@ -2297,7 +2343,7 @@ mod tests {
     fn parse_model_switch() {
         let cli = parse(&["model", "use", "claude-haiku-4-5-20251001"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Model { subcommand, .. } => {
                 assert!(matches!(
                     subcommand,
@@ -2312,7 +2358,7 @@ mod tests {
     fn parse_model_info() {
         let cli = parse(&["model", "info", "opus"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Model { subcommand, .. } => {
                 assert!(matches!(
                     subcommand,
@@ -2326,7 +2372,7 @@ mod tests {
     fn parse_model_all_flag() {
         let cli = parse(&["model", "--all"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Model { all, .. } => assert!(all),
         );
     }
@@ -2335,7 +2381,7 @@ mod tests {
     fn parse_model_setting_show() {
         let cli = parse(&["model", "setting"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Model {
                 subcommand: Some(ModelCommand::Setting { key, value, .. }),
                 ..
@@ -2350,7 +2396,7 @@ mod tests {
     fn parse_model_setting_with_value() {
         let cli = parse(&["model", "setting", "temperature", "0.8"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Model {
                 subcommand:
                     Some(ModelCommand::Setting {
@@ -2374,7 +2420,7 @@ mod tests {
     fn parse_model_setting_reset() {
         let cli = parse(&["model", "setting", "--reset", "temperature"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Model {
                 subcommand:
                     Some(ModelCommand::Setting {
@@ -2393,7 +2439,7 @@ mod tests {
     fn parse_model_setting_global_flag() {
         let cli = parse(&["model", "setting", "--global", "top_p", "0.9"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Model {
                 subcommand: Some(ModelCommand::Setting { global, .. }),
                 ..
@@ -2407,7 +2453,7 @@ mod tests {
     fn parse_provider_list() {
         let cli = parse(&["provider"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Provider { subcommand, .. } => assert!(subcommand.is_none()),
         );
     }
@@ -2416,7 +2462,7 @@ mod tests {
     fn parse_provider_models() {
         let cli = parse(&["provider", "models", "openrouter"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Provider {
                 subcommand: Some(ProviderCommand::Models { name, all, .. }),
                 ..
@@ -2431,7 +2477,7 @@ mod tests {
     fn parse_provider_models_all() {
         let cli = parse(&["provider", "models", "openrouter", "--all"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Provider {
                 subcommand: Some(ProviderCommand::Models { all, .. }),
                 ..
@@ -2443,7 +2489,7 @@ mod tests {
     fn parse_provider_refresh() {
         let cli = parse(&["provider", "refresh", "openrouter"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Provider {
                 subcommand: Some(ProviderCommand::Refresh { name, .. }),
                 ..
@@ -2455,7 +2501,7 @@ mod tests {
     fn parse_provider_refresh_no_arg() {
         let cli = parse(&["provider", "refresh"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Provider {
                 subcommand: Some(ProviderCommand::Refresh { name, .. }),
                 ..
@@ -2474,7 +2520,7 @@ mod tests {
         ] {
             let cli = parse(args);
             assert_variant!(
-                &cli.command,
+                parsed_command(&cli),
                 CliCommand::Compact { keep_turns, restart, .. } => {
                     assert_eq!(*keep_turns, expected, "{args:?}");
                     assert_eq!(*restart, expected_restart, "{args:?}");
@@ -2498,7 +2544,7 @@ mod tests {
     fn parse_config_no_args() {
         let cli = parse(&["config"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Config {
                 subcommand,
                 path,
@@ -2516,7 +2562,7 @@ mod tests {
     fn parse_config_get() {
         let cli = parse(&["config", "get", "defaults.model"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Config {
                 subcommand: Some(ConfigCommand::Get { key, toml, all, .. }),
                 ..
@@ -2537,7 +2583,7 @@ mod tests {
             "claude-haiku-4-5-20251001",
         ]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Config {
                 subcommand: Some(ConfigCommand::Set { key, value, .. }),
                 ..
@@ -2572,7 +2618,7 @@ mod tests {
     fn parse_config_reload() {
         let cli = parse(&["config", "reload"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Config {
                 subcommand: Some(ConfigCommand::Reload { yes, json }),
                 ..
@@ -2587,7 +2633,7 @@ mod tests {
     fn parse_config_reload_yes() {
         let cli = parse(&["config", "reload", "-y"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Config {
                 subcommand: Some(ConfigCommand::Reload { yes, .. }),
                 ..
@@ -2615,13 +2661,14 @@ mod tests {
     fn config_tools_asks_the_daemon_for_the_tool_surface() {
         let cli = parse(&["config", "tools"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Config {
                 subcommand: Some(ConfigCommand::Tools { json }),
                 ..
             } => assert!(!json)
         );
-        let (name, _args) = to_swp_command(&cli.command, None).expect("must map to a command");
+        let (name, _args) =
+            to_swp_command(parsed_command(&cli), None).expect("must map to a command");
         assert_eq!(name, "tools");
     }
 
@@ -2629,7 +2676,7 @@ mod tests {
     fn a_dotted_key_under_tools_is_still_a_key_read() {
         let cli = parse(&["config", "get", "tools.enabled_tools"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Config { subcommand, .. } => {
                 assert_variant!(
                     subcommand,
@@ -2639,7 +2686,8 @@ mod tests {
                 );
             }
         );
-        let (name, args) = to_swp_command(&cli.command, None).expect("must map to a command");
+        let (name, args) =
+            to_swp_command(parsed_command(&cli), None).expect("must map to a command");
         assert_eq!(name, "config");
         assert_eq!(
             args.get("key").and_then(|v| v.as_str()),
@@ -2659,7 +2707,7 @@ mod tests {
     fn parse_config_path() {
         let cli = parse(&["config", "--path"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Config { path, .. } => {
                 assert!(path);
             }
@@ -2670,7 +2718,7 @@ mod tests {
     fn parse_leading_addr_flag() {
         let cli = parse(&["--addr", "127.0.0.1:7320", "status"]);
         assert_eq!(cli.addr.as_deref(), Some("127.0.0.1:7320"));
-        assert!(matches!(cli.command, CliCommand::Status { .. }));
+        assert!(matches!(cli.command, Some(CliCommand::Status { .. })));
     }
 
     #[test]
@@ -2766,7 +2814,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                misplaced(&["send", flag, "0.8", "hello"]),
+                misplaced(&["msg", "send", flag, "0.8", "hello"]),
                 Some(FlagProblem::Retired(flag, instead)),
                 "{flag}"
             );
@@ -2781,7 +2829,7 @@ mod tests {
             &["--character=ada", "status"][..],
             &["--character", "status", "status"][..],
             &["log", "-n", "5"][..],
-            &["send", "--", "-c", "is a flag"][..],
+            &["msg", "send", "--", "-c", "is a flag"][..],
         ] {
             assert_eq!(misplaced(args), None, "{args:?}");
         }
@@ -2791,10 +2839,10 @@ mod tests {
     fn a_mistyped_flag_is_not_read_as_a_message_reference() {
         for args in [
             &["log", "--conten"][..],
-            &["edit", "--conten"][..],
-            &["delete", "--conten"][..],
-            &["delete", "-1", "--conten"][..],
-            &["alt", "--conten"][..],
+            &["msg", "edit", "--conten"][..],
+            &["msg", "delete", "--conten"][..],
+            &["msg", "delete", "-1", "--conten"][..],
+            &["msg", "alt", "--conten"][..],
         ] {
             let err = parse_error(args);
             assert!(
@@ -2802,15 +2850,17 @@ mod tests {
                 "{args:?} gave: {err}"
             );
         }
+        let log = parse(&["log", "-1"]);
         assert_variant!(
-            &parse(&["log", "-1"]).command,
+            parsed_command(&log),
             CliCommand::Log { msg_ref, .. } => {
                 assert_eq!(msg_ref.as_deref(), Some("-1"));
             }
         );
+        let delete = parse(&["msg", "delete", "-1", "-2"]);
         assert_variant!(
-            &parse(&["delete", "-1", "-2"]).command,
-            CliCommand::Delete { msg_refs, .. } => {
+            parsed_msg(&delete),
+            MsgCommand::Delete { msg_refs, .. } => {
                 assert_eq!(msg_refs, &["-1", "-2"]);
             }
         );
@@ -2874,7 +2924,7 @@ mod tests {
         }
         for flag in ["--temperature", "--top-p", "--thinking"] {
             assert_eq!(
-                parse_error(&["send", flag, "0.8", "hi"]).kind(),
+                parse_error(&["msg", "send", flag, "0.8", "hi"]).kind(),
                 clap::error::ErrorKind::UnknownArgument,
                 "{flag}"
             );
@@ -2883,17 +2933,17 @@ mod tests {
 
     #[test]
     fn send_maps_to_none() {
-        let cmd = CliCommand::Send {
+        let cmd = msg(MsgCommand::Send {
             message: vec!["hi".into()],
             images: vec![],
             system: false,
-        };
+        });
         assert!(to_swp_command(&cmd, None).is_none());
     }
 
     #[test]
     fn regen_maps_to_none() {
-        let cmd = CliCommand::Regen;
+        let cmd = msg(MsgCommand::Regen);
         assert!(to_swp_command(&cmd, None).is_none());
     }
 
@@ -2942,16 +2992,16 @@ mod tests {
         let cli = parse(&["debug", "keepalive_ping_now"]);
         assert!(matches!(
             cli.command,
-            CliCommand::Debug {
+            Some(CliCommand::Debug {
                 subcommand: Some(DebugCommand::KeepalivePingNow)
-            }
+            })
         ));
     }
 
     #[test]
     fn debug_tool_sends_pairs_as_strings_for_the_daemon_to_coerce() {
         let cli = parse(&["debug", "tool", "read", "path=notes.md", "offset=3"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "run_tool");
         assert_eq!(arg(&args, "tool"), "read");
         assert_eq!(
@@ -2965,7 +3015,7 @@ mod tests {
     #[test]
     fn debug_tool_value_may_contain_equals_signs() {
         let cli = parse(&["debug", "tool", "search", "query=a=b"]);
-        let (_name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (_name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(arg(&args, "pairs"), &serde_json::json!({ "query": "a=b" }));
     }
 
@@ -2980,7 +3030,7 @@ mod tests {
             r#"{"globs":["*.md"]}"#,
             "--raw",
         ]);
-        let (_name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (_name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(
             arg(&args, "input"),
             &serde_json::json!({ "globs": ["*.md"] })
@@ -3016,7 +3066,7 @@ mod tests {
             "we",
             "decide",
         ]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "run_tool");
         assert_eq!(arg(&args, "tool"), "ask_librarian");
         assert_eq!(
@@ -3040,9 +3090,9 @@ mod tests {
         let cli = parse(&["debug", "session_activate"]);
         assert!(matches!(
             cli.command,
-            CliCommand::Debug {
+            Some(CliCommand::Debug {
                 subcommand: Some(DebugCommand::SessionActivate)
-            }
+            })
         ));
     }
 
@@ -3227,7 +3277,7 @@ mod tests {
     #[test]
     fn the_background_model_is_reported_by_the_list_not_a_subcommand() {
         assert!(Cli::try_parse_from(["shore", "model", "--background"]).is_err());
-        let (name, _) = to_swp_command(&parse(&["model"]).command, None).unwrap();
+        let (name, _) = to_swp_command(parsed_command(&parse(&["model"])), None).unwrap();
         assert_eq!(name, "list_models");
     }
 
@@ -3247,7 +3297,7 @@ mod tests {
     #[test]
     fn model_use_background_threads_the_task() {
         let cli = parse(&["model", "use", "--background=heartbeat", "kimi-k3"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "switch_model");
         assert_eq!(arg(&args, "name"), "kimi-k3");
         assert_eq!(arg(&args, "background_task"), "heartbeat");
@@ -3256,14 +3306,14 @@ mod tests {
     #[test]
     fn model_use_without_background_omits_the_task() {
         let cli = parse(&["model", "use", "kimi-k3"]);
-        let (_, args) = to_swp_command(&cli.command, None).unwrap();
+        let (_, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert!(args.get("background_task").is_none());
     }
 
     #[test]
     fn model_reset_background_threads_the_task() {
         let cli = parse(&["model", "reset", "--background=all"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "reset_model");
         assert_eq!(arg(&args, "background_task"), "all");
     }
@@ -3276,7 +3326,7 @@ mod tests {
     #[test]
     fn model_setting_background_show_threads_task() {
         let cli = parse(&["model", "setting", "--background=compaction"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "model_settings");
         assert_eq!(arg(&args, "background_task"), "compaction");
     }
@@ -3284,7 +3334,7 @@ mod tests {
     #[test]
     fn model_setting_background_set_threads_task() {
         let cli = parse(&["model", "setting", "--background=all", "temperature", "0.5"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "key"), "temperature");
         assert_eq!(arg(&args, "value"), 0.5);
@@ -3301,7 +3351,7 @@ mod tests {
             "--reset",
             "reasoning_effort",
         ]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert!(arg(&args, "value").is_null());
         assert_eq!(arg(&args, "background_task"), "heartbeat");
@@ -3310,7 +3360,7 @@ mod tests {
     #[test]
     fn model_setting_subagent_show_threads_the_name() {
         let cli = parse(&["model", "setting", "--subagent=librarian"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "model_settings");
         assert_eq!(arg(&args, "subagent"), "librarian");
         assert!(args.get("background_task").is_none());
@@ -3326,7 +3376,7 @@ mod tests {
             "temperature",
             "0.25",
         ]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "subagent"), "librarian");
         assert_eq!(arg(&args, "key"), "temperature");
@@ -3342,7 +3392,7 @@ mod tests {
             "--reset",
             "temperature",
         ]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "subagent"), "librarian");
         assert!(arg(&args, "value").is_null());
@@ -3351,7 +3401,7 @@ mod tests {
     #[test]
     fn model_setting_model_targets_a_catalog_name_without_switching() {
         let cli = parse(&["model", "setting", "--model", "opus", "top_p", "0.9"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "name"), "opus");
         assert!(args.get("subagent").is_none());
@@ -3380,7 +3430,7 @@ mod tests {
     #[test]
     fn model_setting_without_background_omits_task() {
         let cli = parse(&["model", "setting", "temperature", "0.7"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert!(args.get("background_task").is_none());
     }
@@ -3532,7 +3582,7 @@ mod tests {
     #[test]
     fn debug_tool_describes_instead_of_running_only_when_asked() {
         let (cmd, plain) =
-            to_swp_command(&parse(&["debug", "tool", "read"]).command, None).unwrap();
+            to_swp_command(parsed_command(&parse(&["debug", "tool", "read"])), None).unwrap();
         assert_eq!(cmd, "run_tool");
         assert_eq!(
             arg(&plain, "describe"),
@@ -3541,7 +3591,7 @@ mod tests {
         );
 
         let (_, described) = to_swp_command(
-            &parse(&["debug", "tool", "read", "--describe"]).command,
+            parsed_command(&parse(&["debug", "tool", "read", "--describe"])),
             None,
         )
         .unwrap();
@@ -3609,7 +3659,7 @@ mod tests {
     #[test]
     fn a_bare_subagent_flag_means_every_sub_agent() {
         let cli = parse(&["model", "setting", "--subagent", "temperature", "0.3"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "subagent"), "all");
         assert_eq!(arg(&args, "value"), 0.3);
@@ -3714,7 +3764,7 @@ mod tests {
     fn config_value_completion_takes_the_key_as_an_argument() {
         let cli = parse(&["complete", "config-values", "defaults.stream"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Complete { kind, arg } => {
                 assert_eq!(*kind, CompleteKind::ConfigValues);
                 assert_eq!(arg.as_deref(), Some("defaults.stream"));
@@ -3750,11 +3800,11 @@ mod tests {
 
     #[test]
     fn edit_maps_to_edit_command() {
-        let cmd = CliCommand::Edit {
+        let cmd = msg(MsgCommand::Edit {
             msg_ref: "m1".into(),
             content: vec!["new".into(), "text".into()],
             json: false,
-        };
+        });
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "edit");
         assert_eq!(arg(&args, "ref"), "m1");
@@ -3763,10 +3813,10 @@ mod tests {
 
     #[test]
     fn delete_maps_to_delete_command() {
-        let cmd = CliCommand::Delete {
+        let cmd = msg(MsgCommand::Delete {
             msg_refs: vec!["m1".into()],
             json: false,
-        };
+        });
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "delete");
         assert_eq!(arg(&args, "refs"), &serde_json::json!(["m1"]));
@@ -3774,10 +3824,10 @@ mod tests {
 
     #[test]
     fn delete_sends_every_ref_as_one_list() {
-        let cmd = CliCommand::Delete {
+        let cmd = msg(MsgCommand::Delete {
             msg_refs: vec!["-1".into(), "-2".into()],
             json: false,
-        };
+        });
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "delete");
         assert_eq!(arg(&args, "refs"), &serde_json::json!(["-1", "-2"]));
@@ -3785,11 +3835,11 @@ mod tests {
 
     #[test]
     fn alt_position_maps_to_alt_command() {
-        let cmd = CliCommand::Alt {
+        let cmd = msg(MsgCommand::Alt {
             selector: Some("2".into()),
             msg_ref: Some("last".into()),
             json: false,
-        };
+        });
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "alt");
         assert_eq!(arg(&args, "position"), 2);
@@ -3798,11 +3848,11 @@ mod tests {
 
     #[test]
     fn alt_list_maps_to_list_alternatives_command() {
-        let cmd = CliCommand::Alt {
+        let cmd = msg(MsgCommand::Alt {
             selector: Some("list".into()),
             msg_ref: None,
             json: false,
-        };
+        });
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "list_alternatives");
         assert!(args.as_object().unwrap().is_empty());
@@ -3849,7 +3899,7 @@ mod tests {
     #[test]
     fn trace_subagent_bare_lists_recent_runs() {
         let cli = parse(&["trace", "subagent", "-n", "5"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "subagent_trace");
         assert_eq!(arg(&args, "count"), 5);
         assert!(args.get("ids").is_none());
@@ -3858,7 +3908,7 @@ mod tests {
     #[test]
     fn trace_subagent_with_id_asks_for_one_run() {
         let cli = parse(&["trace", "subagent", "toolu_01A"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "subagent_trace");
         assert_eq!(arg(&args, "ids"), &serde_json::json!(["toolu_01A"]));
         assert!(args.get("count").is_none());
@@ -3867,14 +3917,14 @@ mod tests {
     #[test]
     fn log_subagent_tools_stays_on_the_conversation() {
         let cli = parse(&["log", "--subagent-tools"]);
-        let (name, _) = to_swp_command(&cli.command, None).unwrap();
+        let (name, _) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "log");
     }
 
     #[test]
     fn trace_calls_diff_asks_for_a_comparison() {
         let cli = parse(&["trace", "calls", "42", "--diff"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "call_log");
         assert_eq!(arg(&args, "id"), 42);
         assert_eq!(arg(&args, "diff"), true);
@@ -3884,25 +3934,25 @@ mod tests {
     #[test]
     fn trace_calls_diff_against_pins_the_other_side() {
         let cli = parse(&["trace", "calls", "42", "--diff", "--against", "40"]);
-        let (_, args) = to_swp_command(&cli.command, None).unwrap();
+        let (_, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(arg(&args, "against"), 40);
     }
 
     #[test]
     fn trace_calls_without_diff_asks_for_no_comparison() {
         let cli = parse(&["trace", "calls", "42"]);
-        let (_, args) = to_swp_command(&cli.command, None).unwrap();
+        let (_, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert!(args.get("diff").is_none());
     }
 
     #[test]
     fn trace_calls_asks_for_the_wire_only_when_told_to() {
         let bare = parse(&["trace", "calls", "42"]);
-        let (_, bare_args) = to_swp_command(&bare.command, None).unwrap();
+        let (_, bare_args) = to_swp_command(parsed_command(&bare), None).unwrap();
         assert!(bare_args.get("wire").is_none());
 
         let asked = parse(&["trace", "calls", "42", "--wire"]);
-        let (name, args) = to_swp_command(&asked.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&asked), None).unwrap();
         assert_eq!(name, "call_log");
         assert_eq!(arg(&args, "id"), 42);
         assert_eq!(arg(&args, "wire"), true);
@@ -3916,7 +3966,7 @@ mod tests {
     #[test]
     fn trace_calls_bare_lists_and_can_filter_by_type() {
         let cli = parse(&["trace", "calls", "-n", "5", "--call-type", "heartbeat"]);
-        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "call_log");
         assert_eq!(arg(&args, "count"), 5);
         assert_eq!(arg(&args, "call_type"), "heartbeat");
@@ -3925,11 +3975,12 @@ mod tests {
     #[test]
     fn trace_heartbeat_and_events_are_separate_views() {
         let (heartbeat, hb_args) =
-            to_swp_command(&parse(&["trace", "heartbeat"]).command, None).unwrap();
+            to_swp_command(parsed_command(&parse(&["trace", "heartbeat"])), None).unwrap();
         assert_eq!(heartbeat, "transcript");
         assert_eq!(arg(&hb_args, "source"), "heartbeat");
 
-        let (events, _) = to_swp_command(&parse(&["trace", "events"]).command, None).unwrap();
+        let (events, _) =
+            to_swp_command(parsed_command(&parse(&["trace", "events"])), None).unwrap();
         assert_eq!(events, "heartbeat_log");
     }
 
@@ -3997,15 +4048,15 @@ mod tests {
                 tools: false,
                 subagent_tools: false,
             },
-            CliCommand::Edit {
+            msg(MsgCommand::Edit {
                 msg_ref: "m1".into(),
                 content: vec!["text".into()],
                 json: false,
-            },
-            CliCommand::Delete {
+            }),
+            msg(MsgCommand::Delete {
                 msg_refs: vec!["m1".into()],
                 json: false,
-            },
+            }),
             CliCommand::Log {
                 msg_ref: Some("last".into()),
                 count: 20,
@@ -4139,7 +4190,7 @@ mod tests {
     fn parse_completions_fish() {
         let cli = parse(&["completions", "fish"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Completions { shell } => {
                 assert_eq!(*shell, Shell::Fish);
             }
@@ -4150,7 +4201,7 @@ mod tests {
     fn parse_completions_bash() {
         let cli = parse(&["completions", "bash"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Completions { shell } => {
                 assert_eq!(*shell, Shell::Bash);
             }
@@ -4161,7 +4212,7 @@ mod tests {
     fn parse_completions_zsh() {
         let cli = parse(&["completions", "zsh"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Completions { shell } => {
                 assert_eq!(*shell, Shell::Zsh);
             }
@@ -4170,11 +4221,12 @@ mod tests {
 
     #[test]
     fn usage_export_defaults_to_csv_and_switches_on_tsv() {
-        let (_, csv) = to_swp_command(&parse(&["usage", "export"]).command, None).unwrap();
+        let (_, csv) = to_swp_command(parsed_command(&parse(&["usage", "export"])), None).unwrap();
         assert_eq!(arg(&csv, "export_csv"), true);
         assert_eq!(arg(&csv, "export_tsv"), false);
 
-        let (_, tsv) = to_swp_command(&parse(&["usage", "export", "--tsv"]).command, None).unwrap();
+        let (_, tsv) =
+            to_swp_command(parsed_command(&parse(&["usage", "export", "--tsv"])), None).unwrap();
         assert_eq!(arg(&tsv, "export_csv"), false);
         assert_eq!(arg(&tsv, "export_tsv"), true);
     }
@@ -4195,7 +4247,7 @@ mod tests {
 
     #[test]
     fn a_bare_usage_view_asks_for_no_action() {
-        let (_, args) = to_swp_command(&parse(&["usage"]).command, None).unwrap();
+        let (_, args) = to_swp_command(parsed_command(&parse(&["usage"])), None).unwrap();
         for action in ["export_csv", "export_tsv"] {
             assert_eq!(arg(&args, action), false, "{action} should be off");
         }
@@ -4204,13 +4256,13 @@ mod tests {
 
     #[test]
     fn the_character_filter_is_the_one_the_user_selected() {
-        let (_, none) = to_swp_command(&parse(&["usage"]).command, None).unwrap();
+        let (_, none) = to_swp_command(parsed_command(&parse(&["usage"])), None).unwrap();
         assert!(
             none.get("character")
                 .is_some_and(serde_json::Value::is_null)
         );
 
-        let (_, ada) = to_swp_command(&parse(&["usage"]).command, Some("ada")).unwrap();
+        let (_, ada) = to_swp_command(parsed_command(&parse(&["usage"])), Some("ada")).unwrap();
         assert_eq!(arg(&ada, "character"), "ada");
     }
 
@@ -4218,7 +4270,7 @@ mod tests {
     fn parse_usage_no_call_type_flag() {
         let cli = parse(&["usage"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Usage { call_type, .. } => {
                 assert!(call_type.is_none(), "flag absent → None");
             }
@@ -4234,7 +4286,7 @@ mod tests {
     fn parse_usage_call_type_with_value() {
         let cli = parse(&["usage", "--call-type", "message"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Usage { call_type, .. } => {
                 assert_eq!(*call_type, Some("message".into()));
             }
@@ -4244,7 +4296,7 @@ mod tests {
     #[test]
     fn usage_last_hours_forwarded() {
         let cli = parse(&["usage", "--last", "4h"]);
-        let (cmd, args) = to_swp_command(&cli.command, None).unwrap();
+        let (cmd, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(cmd, "usage");
         assert_eq!(arg(&args, "last"), "4h");
     }
@@ -4259,7 +4311,7 @@ mod tests {
             ("api-key", "api_key"),
         ] {
             let (cmd, args) =
-                to_swp_command(&parse(&["usage", "by", typed]).command, None).unwrap();
+                to_swp_command(parsed_command(&parse(&["usage", "by", typed])), None).unwrap();
             assert_eq!(cmd, "usage");
             assert_eq!(arg(&args, "group_by"), wire, "`usage by {typed}`");
         }
@@ -4268,14 +4320,20 @@ mod tests {
     #[test]
     fn grouping_by_a_dimension_does_not_filter_by_it() {
         let (_, args) =
-            to_swp_command(&parse(&["usage", "by", "call-type"]).command, None).unwrap();
+            to_swp_command(parsed_command(&parse(&["usage", "by", "call-type"])), None).unwrap();
         assert!(
             arg(&args, "call_type").is_null(),
             "`usage by call-type` groups, it does not filter",
         );
 
         let (_, filtered) = to_swp_command(
-            &parse(&["usage", "by", "call-type", "--call-type", "message"]).command,
+            parsed_command(&parse(&[
+                "usage",
+                "by",
+                "call-type",
+                "--call-type",
+                "message",
+            ])),
             None,
         )
         .unwrap();
@@ -4286,17 +4344,19 @@ mod tests {
     #[test]
     fn usage_call_type_value_sets_filter_not_grouping() {
         let cli = parse(&["usage", "--call-type", "message"]);
-        let (_cmd, args) = to_swp_command(&cli.command, None).unwrap();
+        let (_cmd, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(arg(&args, "call_type"), "message");
         assert!(arg(&args, "group_by").is_null());
     }
 
     #[test]
     fn usage_views_are_subcommands() {
-        let (_, budgets) = to_swp_command(&parse(&["usage", "budgets"]).command, None).unwrap();
+        let (_, budgets) =
+            to_swp_command(parsed_command(&parse(&["usage", "budgets"])), None).unwrap();
         assert_eq!(arg(&budgets, "budget").as_bool(), Some(true));
 
-        let (_, anomalies) = to_swp_command(&parse(&["usage", "anomalies"]).command, None).unwrap();
+        let (_, anomalies) =
+            to_swp_command(parsed_command(&parse(&["usage", "anomalies"])), None).unwrap();
         assert_eq!(arg(&anomalies, "anomalies").as_bool(), Some(true));
     }
 
@@ -4420,7 +4480,7 @@ mod tests {
     fn parse_complete_models() {
         let cli = parse(&["complete", "models"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Complete { kind, .. } => {
                 assert_eq!(*kind, CompleteKind::Models);
             }
@@ -4431,7 +4491,7 @@ mod tests {
     fn parse_complete_characters() {
         let cli = parse(&["complete", "characters"]);
         assert_variant!(
-            &cli.command,
+            parsed_command(&cli),
             CliCommand::Complete { kind, .. } => {
                 assert_eq!(*kind, CompleteKind::Characters);
             }

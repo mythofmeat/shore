@@ -23,12 +23,31 @@ macro_rules! cli_err {
 }
 
 mod cli;
-mod images;
 mod output;
 mod run;
 mod state;
+mod terminal_images;
 #[cfg(test)]
 mod test_env;
+#[expect(
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::else_if_without_else,
+    clippy::float_arithmetic,
+    clippy::indexing_slicing,
+    clippy::integer_division,
+    clippy::let_underscore_must_use,
+    clippy::shadow_reuse,
+    clippy::shadow_unrelated,
+    clippy::string_slice,
+    clippy::wildcard_enum_match_arm,
+    reason = "the imported TUI renderer remains isolated while its unchecked layout operations are converted"
+)]
+mod tui;
 
 use std::process::ExitCode;
 
@@ -49,23 +68,26 @@ fn main() -> ExitCode {
         Err(e) => e.exit(),
     };
 
-    let default_filter = if matches!(cli.command, CliCommand::Complete { .. }) {
+    let default_filter = if matches!(cli.command, Some(CliCommand::Complete { .. })) {
         "off"
     } else {
         "warn"
     };
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter)),
-        )
-        .with_target(true)
-        .with_writer(std::io::stderr)
-        .init();
-
-    if let CliCommand::Completions { shell } = &cli.command {
+    if let Some(CliCommand::Completions { shell }) = &cli.command {
         cli::print_completions(*shell);
         return ExitCode::SUCCESS;
+    }
+
+    if cli.command.is_some() {
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| EnvFilter::new(default_filter)),
+            )
+            .with_target(true)
+            .with_writer(std::io::stderr)
+            .init();
     }
 
     let rt = match tokio::runtime::Builder::new_multi_thread()
@@ -79,9 +101,16 @@ fn main() -> ExitCode {
         }
     };
 
-    let outcome = rt.block_on(run::execute(cli));
+    let outcome: Result<ExitCode, Box<dyn std::error::Error>> = match cli.command {
+        Some(command) => rt
+            .block_on(run::execute(cli.character, cli.addr, command))
+            .map(|()| ExitCode::SUCCESS),
+        None => rt
+            .block_on(tui::run(cli.addr, cli.character))
+            .map_err(Into::into),
+    };
     match outcome {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(e) => {
             if !run::already_reported(e.as_ref()) {
                 output::print_error(&e);

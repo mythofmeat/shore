@@ -81,7 +81,7 @@ jobs:
         run: sed -i.bak "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml
         working-directory: client
 
-      - run: cargo build --release --target ${{ matrix.rust-target }} --package shore-cli --package shore-tui
+      - run: cargo build --release --target ${{ matrix.rust-target }} --package shore-cli
         working-directory: client
 
       - run: bun install
@@ -95,7 +95,6 @@ jobs:
           name="shore-${GITHUB_REF_NAME#v}-${{ matrix.arch }}-apple-darwin"
           mkdir -p "out/$name"
           cp client/target/${{ matrix.rust-target }}/release/shore \
-             client/target/${{ matrix.rust-target }}/release/shore-tui \
              daemon/dist/shore-daemon \
              LICENSE-MIT \
              LICENSE-APACHE-2.0 \
