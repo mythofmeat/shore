@@ -11,7 +11,7 @@ export interface WorkspaceIndexSource {
 export async function workspaceIndexSection(
   source: WorkspaceIndexSource | undefined,
   character: string,
-): Promise<Json | null> {
+): Promise<Json> {
   if (source === undefined) return null;
 
   const indexPath = source.indexPathFor(character);

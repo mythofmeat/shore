@@ -899,7 +899,7 @@ export function enforceBudgetForCall(
       status = budgetStatus(db, config, budget, idx, now, opts);
     } catch (e) {
       console.error(
-        `shore: usage budget "${budgetName(budget, idx)}" query failed; allowing call: ${e}`,
+        `shore: usage budget "${budgetName(budget, idx)}" query failed; allowing call: ${String(e)}`,
       );
       continue;
     }

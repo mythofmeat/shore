@@ -22,13 +22,13 @@
   "rules": {
     "typescript/await-thenable": "warn",
     "typescript/no-floating-promises": "warn",
-    "typescript/no-misused-promises": "warn",
+    "typescript/no-misused-promises": "error",
     "typescript/no-misused-spread": "warn",
     "typescript/no-base-to-string": "warn",
-    "typescript/restrict-template-expressions": "warn",
+    "typescript/restrict-template-expressions": "error",
     "typescript/restrict-plus-operands": "error",
     "typescript/no-duplicate-type-constituents": "error",
-    "typescript/no-redundant-type-constituents": "warn",
+    "typescript/no-redundant-type-constituents": "error",
     "typescript/no-unnecessary-type-assertion": "error",
     "typescript/no-unnecessary-type-conversion": "error",
     "typescript/no-unnecessary-boolean-literal-compare": "error",
@@ -54,7 +54,7 @@
     "eslint/eqeqeq": "error",
     "eslint/no-throw-literal": "warn",
     "eslint/no-promise-executor-return": "warn",
-    "eslint/no-loop-func": "warn",
+    "eslint/no-loop-func": "error",
     "eslint/no-sequences": "error",
     "eslint/no-eq-null": "error",
     "eslint/no-empty": [
@@ -107,6 +107,7 @@
       ],
       "rules": {
         "eslint/no-console": "off",
+        "eslint/no-loop-func": "off",
         "unicorn/no-process-exit": "off",
         "typescript/no-explicit-any": "warn"
       }

@@ -573,7 +573,7 @@ function loadCharacterPreferences(ctx: ModelsContext, character: string): ModelP
   try {
     return loadPreferences(characterPreferencesPath(ctx.dataDir, character));
   } catch (e) {
-    throw internalError(`Failed to load preferences: ${e instanceof Error ? e.message : e}`);
+    throw internalError(`Failed to load preferences: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
@@ -581,7 +581,7 @@ function saveCharacter(ctx: ModelsContext, character: string, prefs: ModelPrefer
   try {
     saveCharacterPreferences(ctx.dataDir, character, prefs);
   } catch (e) {
-    throw internalError(`Failed to save preferences: ${e instanceof Error ? e.message : e}`);
+    throw internalError(`Failed to save preferences: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

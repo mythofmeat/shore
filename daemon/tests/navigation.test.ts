@@ -62,7 +62,7 @@ function scrub(value: unknown, root: string): unknown {
   return out;
 }
 
-async function check(r: Row, root: string, run: () => unknown | Promise<unknown>): Promise<void> {
+async function check(r: Row, root: string, run: () => unknown): Promise<void> {
   let result: unknown;
   let thrown: unknown;
   try {

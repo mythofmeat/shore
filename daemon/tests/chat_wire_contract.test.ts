@@ -129,7 +129,7 @@ function fakeAnthropic(script: Scripted[]): Fake {
       return new Response(sse(turn), { headers: { "content-type": "text/event-stream" } });
     },
   });
-  return { url: `http://localhost:${server.port}`, seen, stop: () => server.stop(true) };
+  return { url: `http://localhost:${server.port}`, seen, stop: () => void server.stop(true) };
 }
 
 const teardown: Array<() => void> = [];

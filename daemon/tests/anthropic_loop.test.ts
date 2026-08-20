@@ -156,7 +156,7 @@ function fakeAnthropic(turns: Turn[]): FakeAnthropic {
       });
     },
   });
-  return { url: `http://localhost:${server.port}`, requests, stop: () => server.stop(true) };
+  return { url: `http://localhost:${server.port}`, requests, stop: () => void server.stop(true) };
 }
 
 function fakePhase(output: string, failing: readonly string[] = []) {

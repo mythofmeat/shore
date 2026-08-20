@@ -126,7 +126,7 @@ export async function refreshOne(
   try {
     await writeCache(path, cache);
   } catch (e) {
-    throw internalError(`failed to write provider cache: ${e instanceof Error ? e.message : e}`);
+    throw internalError(`failed to write provider cache: ${e instanceof Error ? e.message : String(e)}`);
   }
   return { cache, cachePath: path };
 }

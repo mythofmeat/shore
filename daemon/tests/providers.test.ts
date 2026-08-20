@@ -172,7 +172,7 @@ async function readCaches(cacheDir: string, providers: string[]): Promise<Record
   return out;
 }
 
-async function check(row: Row, world: World, run: () => unknown | Promise<unknown>): Promise<void> {
+async function check(row: Row, world: World, run: () => unknown): Promise<void> {
   const stamps: string[] = [];
   let result: unknown;
   let thrown: unknown;

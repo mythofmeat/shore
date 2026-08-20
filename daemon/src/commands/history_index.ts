@@ -10,7 +10,7 @@ export interface HistoryIndexSource {
 export async function historyIndexSection(
   source: HistoryIndexSource | undefined,
   character: string,
-): Promise<Json | null> {
+): Promise<Json> {
   if (source === undefined) return null;
 
   const progress = source.progressFor(character);

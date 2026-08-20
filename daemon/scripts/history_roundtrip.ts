@@ -29,7 +29,7 @@ function deepEqual(a: unknown, b: unknown, path: string): string | null {
   if (typeof a === "object" && typeof b === "object") {
     const ka = Object.keys(a).sort();
     const kb = Object.keys(b).sort();
-    if (ka.join(",") !== kb.join(",")) return `${path}: keys [${ka}] vs [${kb}]`;
+    if (ka.join(",") !== kb.join(",")) return `${path}: keys [${ka.join(",")}] vs [${kb.join(",")}]`;
     for (const k of ka) {
       const left = (a as Record<string, unknown>)[k];
       const right = (b as Record<string, unknown>)[k];

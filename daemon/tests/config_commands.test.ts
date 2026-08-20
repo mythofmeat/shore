@@ -158,7 +158,7 @@ function upToParser(message: string): string {
 async function check(
   r: Row,
   w: World,
-  run: () => unknown | Promise<unknown>,
+  run: () => unknown,
   normalize: (ok: any) => unknown = (v) => v,
   normalizeResult: (actual: any) => unknown = normalize,
 ): Promise<void> {

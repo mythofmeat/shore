@@ -18,7 +18,7 @@ interface SegmentRead {
 
 interface SegmentCase {
   name: string;
-  manifest: unknown | null;
+  manifest: unknown;
   segment_files: Record<string, string>;
   segment_count: number;
   total_message_count: number;
@@ -41,7 +41,7 @@ interface WalkCase {
   name: string;
   character: string;
   initial_active: Message[] | null;
-  manifest: unknown | null;
+  manifest: unknown;
   segment_files: Record<string, string>;
   image_files?: Record<string, string>;
   steps: WalkStep[];
@@ -62,7 +62,7 @@ async function scratch(): Promise<string> {
 
 async function layout(
   dir: string,
-  manifest: unknown | null,
+  manifest: unknown,
   segmentFiles: Record<string, string>,
   activeJsonl?: string,
 ): Promise<void> {

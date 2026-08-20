@@ -183,7 +183,7 @@ export async function runGeneration(
 
   const turnCtx: TurnContext = {
     emitEvent: deps.emitEvent,
-    sendDirect: params.send,
+    sendDirect: (message) => void params.send(message),
     autonomy: deps.autonomy,
     now,
     newMessageId,
@@ -252,7 +252,7 @@ export async function runGeneration(
     request,
     regen,
     conversation: subagentHistory,
-    send: params.send,
+    send: (message) => void params.send(message),
     ...(params.rid === null ? {} : { rid: params.rid }),
     signal: params.signal,
     now,
@@ -269,7 +269,7 @@ export async function runGeneration(
 
   const persistCtx: PersistContext = {
     emitEvent: deps.emitEvent,
-    sendDirect: params.send,
+    sendDirect: (message) => void params.send(message),
     autonomy: deps.autonomy,
     notifier: deps.notifier,
     newlyCrossedUsageBudgetWarnings: deps.newlyCrossedUsageBudgetWarnings,
