@@ -14,22 +14,35 @@ fn number(data: &Value, key: &str) -> u64 {
 
 fn session_line(data: &Value) -> String {
     let turns = number(data, "turn_count");
-    let tokens = data.get("tokens");
-    let spent: u64 = tokens.map_or(0, |t| {
-        number(t, "input")
-            .saturating_add(number(t, "output"))
-            .saturating_add(number(t, "cache_read"))
-            .saturating_add(number(t, "cache_write"))
-    });
+    let context = data
+        .get("context_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
     let turn_word = if turns == 1 { "turn" } else { "turns" };
-    if spent == 0 {
-        format!("{turns} {turn_word} in this conversation")
+    if context == 0 {
+        format!("{turns} {turn_word} in history")
     } else {
         format!(
-            "{turns} {turn_word} \u{00b7} {} tokens in this conversation",
-            count(spent)
+            "{turns} {turn_word} \u{00b7} {} tokens in history",
+            count(context)
         )
     }
+}
+
+fn embedding_models(data: &Value) -> String {
+    let mut models: Vec<&str> = data
+        .pointer("/index/models")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    if let Some(model) = data.pointer("/history_index/model").and_then(Value::as_str)
+        && !models.contains(&model)
+    {
+        models.push(model);
+    }
+    models.join(", ")
 }
 
 pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str) {
@@ -55,11 +68,13 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
             Tone::Plain
         },
     );
+    let embeddings = embedding_models(data);
+    if !embeddings.is_empty() {
+        rows.add("embedding", &embeddings);
+    }
     rows.add("session", &session_line(data));
-
-    let config_dir = text(data, "config_dir");
-    if !config_dir.is_empty() {
-        rows.add("config", config_dir);
+    if let Some(autonomy) = data.get("autonomy").filter(|value| !value.is_null()) {
+        super::autonomy::add_autonomy_rows(&mut rows, autonomy);
     }
 
     let pending = number(data, "pending_deferred_edit_count");
@@ -85,9 +100,24 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
         );
     }
 
-    for section_name in sections_of(data) {
+    if let Some(autonomy) = data.get("autonomy").filter(|value| !value.is_null())
+        && super::autonomy::has_recent_events(autonomy)
+    {
         blank(out);
-        let _shown = write_section(out, data, &section_name);
+        super::autonomy::write_autonomy_events(out, autonomy);
+    }
+
+    if data.get("index").is_some_and(|value| !value.is_null())
+        || data
+            .get("history_index")
+            .is_some_and(|value| !value.is_null())
+    {
+        blank(out);
+        super::workspace::write_compact_index_section(
+            out,
+            data.get("index"),
+            data.get("history_index"),
+        );
     }
 }
 
@@ -140,7 +170,7 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
         return true;
     }
     if name == "index" {
-        super::workspace::write_index_section(out, value);
+        super::workspace::write_compact_index_section(out, Some(value), data.get("history_index"));
         return true;
     }
     if name == "history_index" {
@@ -266,7 +296,7 @@ mod tests {
     fn a_zero_turn_count_says_what_it_is_counting() {
         let out = render(&payload());
         assert!(
-            out.contains("0 turns in this conversation"),
+            out.contains("0 turns in history"),
             "a bare 0 reads as 'nothing ever happened'; say the window: {out}"
         );
         assert!(
@@ -283,7 +313,7 @@ mod tests {
         }
         let out = render(&data);
         assert!(
-            out.contains("11 turns in this conversation"),
+            out.contains("11 turns in history"),
             "turn_count is user turns in the stored conversation, which outlives a restart: {out}"
         );
         assert!(
@@ -304,14 +334,22 @@ mod tests {
                 "cache_read": 300_000, "cache_write": 0
             });
         }
+        let legacy_out = render(&data);
+        assert!(
+            !legacy_out.contains("1.8M"),
+            "an older daemon's cumulative counters must not masquerade as context: {legacy_out}"
+        );
+        if let Some(map) = data.as_object_mut() {
+            drop(map.insert("context_tokens".to_owned(), json!(23_400)));
+        }
         let out = render(&data);
         assert!(
-            out.contains("11 turns \u{00b7} 1.8M tokens in this conversation"),
-            "turns and tokens are both scoped to the active conversation now: {out}"
+            out.contains("11 turns \u{00b7} 23.4K tokens in history"),
+            "the session must report active history, not cumulative model traffic: {out}"
         );
         assert!(
-            !out.contains("since the daemon started"),
-            "nothing on this line is a daemon-lifetime figure any more: {out}"
+            !out.contains("1.8M"),
+            "cache reads and earlier calls must not inflate current context: {out}"
         );
     }
 
@@ -327,8 +365,8 @@ mod tests {
         if let Some(slot) = data.get_mut("turn_count") {
             *slot = json!(3);
         }
-        if let Some(slot) = data.pointer_mut("/tokens/input") {
-            *slot = json!(8_042);
+        if let Some(map) = data.as_object_mut() {
+            drop(map.insert("context_tokens".to_owned(), json!(8_042)));
         }
         let out = render(&data);
         assert!(out.contains("3 turns"), "{out}");
@@ -342,7 +380,7 @@ mod tests {
             *slot = json!(1);
         }
         assert!(
-            render(&data).contains("1 turn in this"),
+            render(&data).contains("1 turn in history"),
             "{}",
             render(&data)
         );
@@ -450,14 +488,81 @@ mod tests {
     }
 
     #[test]
-    fn the_default_view_shows_every_section_the_daemon_named() {
+    fn the_default_view_omits_analytics_sections() {
         let out = render(&payload());
         for name in ["tokens", "autonomy", "activity"] {
             assert!(
-                out.contains(name),
-                "{name} is in `sections` but missing from the default view: {out}"
+                !out.contains(&format!("\u{2500}\u{2500} {name} ")),
+                "{name} is diagnostic/analytics detail, not status dashboard content: {out}"
             );
         }
+    }
+
+    #[test]
+    fn the_dashboard_consolidates_live_status() {
+        let data = json!({
+            "character": "qifei",
+            "active_model": "zai:glm-5.3",
+            "turn_count": 5,
+            "context_tokens": 23_400,
+            "tokens": {"input": 288_106, "output": 71_483, "cache_read": 1_131_904, "cache_write": 0},
+            "config_dir": "/config",
+            "pending_deferred_edit_count": 0,
+            "keepalive_halted": null,
+            "autonomy": {
+                "heartbeat_state": "Active",
+                "ticks_without_user": 1,
+                "dormant_after_heartbeat_turns": 3,
+                "seconds_since_user": 11_400,
+                "last_user_at": "2026-08-20T04:06:00+00:00",
+                "seconds_until_wake": 17_340,
+                "next_wake_at": "2026-08-20T12:06:00+00:00",
+                "recent_events": [
+                    {"timestamp": "2026-08-20T07:10:00+00:00", "kind": "tool_use", "detail": "Tool: edit"},
+                    {"timestamp": "2026-08-20T07:11:00+00:00", "kind": "message_sent", "detail": "Autonomous message sent"}
+                ]
+            },
+            "index": {
+                "embedded": 1702,
+                "pending": 0,
+                "models": ["qwen/qwen3-embedding-8b"],
+                "bytes": 29_779_558,
+                "last_indexed_at": "2026-08-20T07:11:00+00:00"
+            },
+            "history_index": {
+                "messages": 36_684,
+                "pending": 0,
+                "model": "qwen/qwen3-embedding-8b"
+            },
+            "sections": ["tokens", "autonomy", "activity", "index", "history_index"]
+        });
+        let out = render(&data);
+        for wanted in [
+            "5 turns \u{00b7} 23.4K tokens in history",
+            "last active",
+            "next heartbeat",
+            "2/3 remaining",
+            "Autonomous message sent",
+            "1702 files \u{00b7} 36684 messages",
+            "(up to date)",
+            "qwen/qwen3-embedding-8b",
+        ] {
+            assert!(out.contains(wanted), "missing {wanted:?}: {out}");
+        }
+        for unwanted in [
+            "/config",
+            "1.5M",
+            "Tool: edit",
+            "files seen",
+            "vectors",
+            "engagement",
+        ] {
+            assert!(!out.contains(unwanted), "unexpected {unwanted:?}: {out}");
+        }
+        assert!(
+            !out.contains("\n\n\n"),
+            "dashboard has excess vertical whitespace: {out}"
+        );
     }
 
     #[test]

@@ -28,7 +28,7 @@ pub(crate) fn handle_event(app: &mut App, event: Event) -> Action {
         Event::Key(key) => handle_key(app, key),
         Event::Paste(text) => handle_paste(app, &text),
         Event::Resize(_, _) => Action::Redraw,
-        _ => Action::None,
+        Event::FocusGained | Event::FocusLost | Event::Mouse(_) => Action::None,
     }
 }
 
@@ -219,21 +219,28 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
                 return Action::None;
             }
             let term_height = crossterm::terminal::size().map_or(24, |(_, h)| h);
-            let visible_h = (term_height * 80 / 100).max(1) as usize;
+            let visible_h = usize::from(
+                term_height
+                    .saturating_mul(80)
+                    .checked_div(100)
+                    .unwrap_or(1)
+                    .max(1),
+            );
             let last_line = app.image_index.last().map_or(0, |e| e.line);
-            let total_approx = last_line + visible_h;
+            let total_approx = last_line.saturating_add(visible_h);
+            let half_visible = visible_h.checked_div(2).unwrap_or_default();
             let center = if app.auto_scroll {
-                total_approx.saturating_sub(visible_h / 2)
+                total_approx.saturating_sub(half_visible)
             } else {
                 total_approx
-                    .saturating_sub(app.scroll_offset as usize)
-                    .saturating_sub(visible_h / 2)
+                    .saturating_sub(usize::from(app.scroll_offset))
+                    .saturating_sub(half_visible)
             };
             let best = app
                 .image_index
                 .iter()
                 .enumerate()
-                .min_by_key(|(_, e)| (e.line as isize - center as isize).unsigned_abs())
+                .min_by_key(|(_, entry)| entry.line.abs_diff(center))
                 .map_or(0, |(i, _)| i);
             app.fullscreen = Some(best);
             Action::Redraw
@@ -310,7 +317,7 @@ fn handle_fullscreen(app: &mut App, key: KeyEvent) -> Action {
             if let Some(ref mut idx) = app.fullscreen {
                 let total = app.image_index.len();
                 if total > 0 {
-                    *idx = (*idx + 1) % total;
+                    *idx = idx.saturating_add(1).checked_rem(total).unwrap_or_default();
                 }
             }
             Action::Redraw
@@ -319,7 +326,9 @@ fn handle_fullscreen(app: &mut App, key: KeyEvent) -> Action {
             if let Some(ref mut idx) = app.fullscreen {
                 let total = app.image_index.len();
                 if total > 0 {
-                    *idx = (*idx + total - 1) % total;
+                    *idx = idx
+                        .checked_sub(1)
+                        .unwrap_or_else(|| total.saturating_sub(1));
                 }
             }
             Action::Redraw
@@ -714,12 +723,12 @@ fn submenu_fetch_action(app: &mut App, parent: &str) -> Action {
 }
 
 fn parse_command(app: &mut App, input: &str) -> Action {
-    let input = input.trim();
-    if input.is_empty() {
+    let trimmed_input = input.trim();
+    if trimmed_input.is_empty() {
         return Action::Redraw;
     }
 
-    let mut parts = input.splitn(2, ' ');
+    let mut parts = trimmed_input.splitn(2, ' ');
     let cmd = parts.next().unwrap_or("");
     let arg = parts.next().unwrap_or("").trim();
 
@@ -741,8 +750,8 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "view" => {
-            let mut parts = arg.split_whitespace();
-            let Some(key) = parts.next() else {
+            let mut view_parts = arg.split_whitespace();
+            let Some(key) = view_parts.next() else {
                 app.enter_submenu("view");
                 return Action::Redraw;
             };
@@ -750,8 +759,8 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 app.set_status(format!("unknown view option: {key}"));
                 return Action::Redraw;
             }
-            let value = parts.next().unwrap_or("toggle");
-            if parts.next().is_some() {
+            let value = view_parts.next().unwrap_or("toggle");
+            if view_parts.next().is_some() {
                 app.set_status(
                     "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage|budget] [on|off|toggle]",
                 );
@@ -844,8 +853,9 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             if rest.is_empty() {
                 app.show_model_list = true;
                 let mut args = serde_json::json!({});
-                if include_hidden {
-                    args["include_hidden"] = serde_json::json!(true);
+                if include_hidden && let Some(argument_map) = args.as_object_mut() {
+                    let _previous =
+                        argument_map.insert("include_hidden".into(), serde_json::json!(true));
                 }
                 Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
                     rid: None,
@@ -860,8 +870,9 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 })))
             } else {
                 let mut args = serde_json::json!({ "name": rest });
-                if include_hidden {
-                    args["include_hidden"] = serde_json::json!(true);
+                if include_hidden && let Some(argument_map) = args.as_object_mut() {
+                    let _previous =
+                        argument_map.insert("include_hidden".into(), serde_json::json!(true));
                 }
                 Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
                     rid: None,
@@ -879,9 +890,9 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                     name: "model_settings".into(),
                     args: serde_json::json!({}),
                 })))
-            } else if let Some(("reset", key)) = trimmed.split_once(' ') {
-                let key = key.trim();
-                if key.is_empty() {
+            } else if let Some(("reset", raw_key)) = trimmed.split_once(' ') {
+                let trimmed_key = raw_key.trim();
+                if trimmed_key.is_empty() {
                     app.set_status("usage: :setting reset <key>");
                     Action::Redraw
                 } else {
@@ -889,20 +900,20 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                         rid: None,
                         name: "set_model_setting".into(),
                         args: serde_json::json!({
-                            "key": key,
+                            "key": trimmed_key,
                             "value": serde_json::Value::Null,
                             "scope": "character",
                         }),
                     })))
                 }
-            } else if let Some((key, value)) = trimmed.split_once(' ') {
-                let value = value.trim();
+            } else if let Some((key, raw_value)) = trimmed.split_once(' ') {
+                let trimmed_value = raw_value.trim();
                 Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
                     rid: None,
                     name: "set_model_setting".into(),
                     args: serde_json::json!({
                         "key": key,
-                        "value": parse_setting_value_str(key, value),
+                        "value": parse_setting_value_str(key, trimmed_value),
                         "scope": "character",
                     }),
                 })))
@@ -916,9 +927,15 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             let mut args = serde_json::json!({});
             for word in arg.split_whitespace() {
                 if word == "restart" {
-                    args["restart"] = serde_json::json!(true);
+                    if let Some(argument_map) = args.as_object_mut() {
+                        let _previous =
+                            argument_map.insert("restart".into(), serde_json::json!(true));
+                    }
                 } else if let Ok(n) = word.parse::<u32>() {
-                    args["keep_turns"] = serde_json::json!(n);
+                    if let Some(argument_map) = args.as_object_mut() {
+                        let _previous =
+                            argument_map.insert("keep_turns".into(), serde_json::json!(n));
+                    }
                 } else {
                     app.set_status("usage: :compact [keep_turns] [restart]");
                     return Action::Redraw;
@@ -939,7 +956,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             } else {
                 let refs: Vec<&str> = arg.split_whitespace().collect();
                 let args = if refs.len() == 1 {
-                    serde_json::json!({ "refs": refs[0] })
+                    serde_json::json!({ "refs": refs.first().copied().unwrap_or_default() })
                 } else {
                     serde_json::json!({ "refs": refs })
                 };
@@ -985,21 +1002,21 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "alt" => {
-            let mut parts = arg.split_whitespace();
-            let first = parts.next();
+            let mut alt_parts = arg.split_whitespace();
+            let first = alt_parts.next();
             let msg_ref = match first {
-                None | Some("list") => parts.next(),
+                None | Some("list") => alt_parts.next(),
                 Some(other) => Some(other),
             };
-            if parts.next().is_some() {
+            if alt_parts.next().is_some() {
                 app.set_status("usage: :alt [ref]");
                 return Action::Redraw;
             }
             let target_ref = msg_ref.map(str::to_owned);
             app.start_alt_picker(target_ref.clone());
             let mut args = serde_json::Map::new();
-            if let Some(msg_ref) = target_ref {
-                let _ = args.insert("ref".into(), serde_json::json!(msg_ref));
+            if let Some(selected_ref) = target_ref {
+                let _previous = args.insert("ref".into(), serde_json::json!(selected_ref));
             }
             let msg = ClientMessage::Command(Command {
                 rid: None,
@@ -1063,7 +1080,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "reasoning" => {
-            let cmd = if arg.is_empty() {
+            let command = if arg.is_empty() {
                 Command {
                     rid: None,
                     name: "model_settings".into(),
@@ -1090,7 +1107,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                     }),
                 }
             };
-            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd)))
+            Action::Send(ConnCommand::Send(ClientMessage::Command(command)))
         }
 
         _ => {
@@ -1137,6 +1154,13 @@ mod tests {
     use super::*;
     use crossterm::event::{KeyEventKind, KeyEventState};
     use serde_json::json;
+
+    fn sent_command(action: Action) -> Command {
+        let Action::Send(ConnCommand::Send(ClientMessage::Command(command))) = action else {
+            panic!("expected command send");
+        };
+        command
+    }
 
     #[test]
     fn parse_setting_value_coerces_daemon_sampler_keys() {
@@ -1285,10 +1309,10 @@ mod tests {
         let mut app = App::default();
         app.stream.active = true;
         let action = handle_key(&mut app, make_key(KeyModifiers::ALT, KeyCode::Char('c')));
-        match action {
-            Action::Send(ConnCommand::Send(ClientMessage::Cancel(_))) => {}
-            _ => panic!("expected Cancel send"),
-        }
+        assert!(matches!(
+            action,
+            Action::Send(ConnCommand::Send(ClientMessage::Cancel(_)))
+        ));
         assert!(!app.stream.active, "stream state should be reset on cancel");
     }
 
@@ -1318,10 +1342,10 @@ mod tests {
     fn cancel_command_sends_cancel_when_streaming() {
         let mut app = App::default();
         app.stream.active = true;
-        match parse_command(&mut app, "cancel") {
-            Action::Send(ConnCommand::Send(ClientMessage::Cancel(_))) => {}
-            _ => panic!("expected Cancel send"),
-        }
+        assert!(matches!(
+            parse_command(&mut app, "cancel"),
+            Action::Send(ConnCommand::Send(ClientMessage::Cancel(_)))
+        ));
         assert!(!app.stream.active);
     }
 
@@ -1375,12 +1399,12 @@ mod tests {
         let mut app = App::default();
         assert!(!app.show_timestamps);
 
-        let action = parse_command(&mut app, "view timestamps on");
-        assert!(matches!(action, Action::SavePrefs));
+        let timestamps_action = parse_command(&mut app, "view timestamps on");
+        assert!(matches!(timestamps_action, Action::SavePrefs));
         assert!(app.show_timestamps);
 
-        let action = parse_command(&mut app, "view metadata off");
-        assert!(matches!(action, Action::SavePrefs));
+        let metadata_action = parse_command(&mut app, "view metadata off");
+        assert!(matches!(metadata_action, Action::SavePrefs));
         assert!(!app.show_metadata);
     }
 
@@ -1423,14 +1447,16 @@ mod tests {
         app.history_has_more_before = true;
         app.conversation_max_scroll = 1;
 
-        match handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('k'))) {
-            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => {
-                assert_eq!(cmd.name, "history_page");
-                assert_eq!(cmd.args["before"], "active");
-                assert_eq!(cmd.args["turns"], HISTORY_PAGE_TURNS);
-            }
-            _ => panic!("expected history_page command"),
-        }
+        let cmd = sent_command(handle_key(
+            &mut app,
+            make_key(KeyModifiers::NONE, KeyCode::Char('k')),
+        ));
+        assert_eq!(cmd.name, "history_page");
+        assert_eq!(cmd.args.get("before"), Some(&serde_json::json!("active")));
+        assert_eq!(
+            cmd.args.get("turns"),
+            Some(&serde_json::json!(HISTORY_PAGE_TURNS))
+        );
         assert!(app.history_page_loading);
     }
 
@@ -1448,13 +1474,9 @@ mod tests {
     #[test]
     fn character_command_sends_single_switch_request() {
         let mut app = App::default();
-        match parse_command(&mut app, "character Bob") {
-            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => {
-                assert_eq!(cmd.name, "switch_character");
-                assert_eq!(cmd.args["name"], "Bob");
-            }
-            _ => panic!("expected single switch_character send"),
-        }
+        let cmd = sent_command(parse_command(&mut app, "character Bob"));
+        assert_eq!(cmd.name, "switch_character");
+        assert_eq!(cmd.args.get("name"), Some(&serde_json::json!("Bob")));
     }
 
     #[test]
@@ -1472,12 +1494,8 @@ mod tests {
             "Tab on a submenu parent should enter the child picker"
         );
         assert_eq!(app.input.cmd_text, "");
-        match action {
-            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => {
-                assert_eq!(cmd.name, "list_characters");
-            }
-            _ => panic!("expected list_characters fetch"),
-        }
+        let cmd = sent_command(action);
+        assert_eq!(cmd.name, "list_characters");
     }
 
     #[test]
@@ -1499,28 +1517,20 @@ mod tests {
     #[test]
     fn delete_command_sends_single_delete_request() {
         let mut app = App::default();
-        match parse_command(&mut app, "delete last") {
-            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => {
-                assert_eq!(cmd.name, "delete");
-                assert_eq!(cmd.args["refs"], "last");
-            }
-            _ => panic!("expected single delete send"),
-        }
+        let cmd = sent_command(parse_command(&mut app, "delete last"));
+        assert_eq!(cmd.name, "delete");
+        assert_eq!(cmd.args.get("refs"), Some(&serde_json::json!("last")));
     }
 
     #[test]
     fn edit_command_asks_the_daemon_to_resolve_the_ref() {
         let mut app = App::default();
-        match parse_command(&mut app, "edit 3") {
-            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => {
-                assert_eq!(cmd.name, "get");
-                assert_eq!(cmd.args["ref"], "3");
-                assert!(cmd.rid.is_some());
-                assert!(app.editing_ref.is_none());
-                assert!(app.pending_edit_prefill.is_some());
-            }
-            _ => panic!("expected a get request for the message being edited"),
-        }
+        let cmd = sent_command(parse_command(&mut app, "edit 3"));
+        assert_eq!(cmd.name, "get");
+        assert_eq!(cmd.args.get("ref"), Some(&serde_json::json!("3")));
+        assert!(cmd.rid.is_some());
+        assert!(app.editing_ref.is_none());
+        assert!(app.pending_edit_prefill.is_some());
     }
 
     #[test]
@@ -1543,26 +1553,18 @@ mod tests {
     #[test]
     fn alt_command_sends_list_request_and_opens_picker() {
         let mut app = App::default();
-        match parse_command(&mut app, "alt") {
-            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => {
-                assert_eq!(cmd.name, "list_alternatives");
-                assert!(cmd.args.as_object().unwrap().is_empty());
-                assert!(app.alt_picker.is_some());
-            }
-            _ => panic!("expected alt list command send"),
-        }
+        let cmd = sent_command(parse_command(&mut app, "alt"));
+        assert_eq!(cmd.name, "list_alternatives");
+        assert!(cmd.args.as_object().unwrap().is_empty());
+        assert!(app.alt_picker.is_some());
     }
 
     #[test]
     fn alt_command_accepts_message_ref() {
         let mut app = App::default();
-        match parse_command(&mut app, "alt -2") {
-            Action::Send(ConnCommand::Send(ClientMessage::Command(cmd))) => {
-                assert_eq!(cmd.name, "list_alternatives");
-                assert_eq!(cmd.args["ref"], "-2");
-            }
-            _ => panic!("expected alt list command send"),
-        }
+        let cmd = sent_command(parse_command(&mut app, "alt -2"));
+        assert_eq!(cmd.name, "list_alternatives");
+        assert_eq!(cmd.args.get("ref"), Some(&serde_json::json!("-2")));
     }
 
     #[test]

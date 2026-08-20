@@ -22,6 +22,7 @@ export interface StatusContext {
   activeModel: string | undefined;
   config: StatusConfigView;
   conversationTokens: ConversationTokens;
+  contextTokens?: number | undefined;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
   now: () => number;
@@ -118,6 +119,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
         : { character: halt.character, reason: halt.reason, at: rfc3339(halt.at) },
     message_count: ctx.turnCount,
     turn_count: ctx.turnCount,
+    ...(ctx.contextTokens === undefined ? {} : { context_tokens: ctx.contextTokens }),
     active_model: effectiveModel,
     config_dir: ctx.config.dirs.config,
     data_dir: ctx.config.dirs.data,

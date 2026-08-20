@@ -466,6 +466,13 @@ test("the autonomy projection drops the fields the CLI does not read", async () 
   expect(keys).not.toContain("default_interval_ms");
 });
 
+test("status carries current history tokens separately from cumulative usage", async () => {
+  const ctx = await build("turns_and_tokens");
+  const result = (await status({ ...ctx, contextTokens: 4321 })) as Record<string, unknown>;
+  expect(result["context_tokens"]).toBe(4321);
+  expect(result["tokens"]).toEqual({ input: 1200, output: 340, cache_read: 9000, cache_write: 512 });
+});
+
 test("the envelope's turn count and the activity count are different numbers", async () => {
   const ctx = await build("activity_week");
   const result = (await status({ ...ctx, turnCount: 7 })) as {

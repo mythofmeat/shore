@@ -1,99 +1,114 @@
 use std::io::Write;
 
 use super::autonomy::format_local_timestamp;
-use super::vocab::{Tone, empty, note, section, warning, write_row, write_row_colored};
+use super::vocab::{Tone, empty, section, warning, write_row, write_row_colored};
 
-pub(crate) fn write_index_section(out: &mut impl Write, index: &serde_json::Value) {
+pub(crate) fn write_compact_index_section(
+    out: &mut impl Write,
+    workspace_value: Option<&serde_json::Value>,
+    history_value: Option<&serde_json::Value>,
+) {
     section(out, "index", None);
 
-    if let Some(error) = index["error"].as_str() {
+    let workspace = workspace_value.filter(|value| !value.is_null());
+    let history = history_value.filter(|value| !value.is_null());
+    if workspace.is_none() && history.is_none() {
+        empty(out, "no indexes configured for this character");
+        return;
+    }
+
+    if let Some(error) = workspace.and_then(|value| value["error"].as_str()) {
         warning(
             out,
             &format!("the workspace index could not be read: {error}"),
         );
-        return;
     }
-
-    if let Some(reason) = index["unusable"].as_str() {
-        warning(out, &format!("index unavailable — {reason}"));
-        if let Some(path) = index["path"].as_str() {
-            write_row(out, "path", path);
-        }
-        note(
+    if let Some(error) = history.and_then(|value| value["error"].as_str()) {
+        warning(
             out,
-            "search still runs, but nothing it embeds survives a daemon restart",
+            &format!("the history index could not be read: {error}"),
         );
+    }
+    if let Some(reason) = workspace.and_then(|value| value["unusable"].as_str()) {
+        warning(out, &format!("index unavailable — {reason}"));
+    }
+
+    let usable_workspace =
+        workspace.filter(|value| value["error"].is_null() && value["unusable"].is_null());
+    let usable_history = history.filter(|value| value["error"].is_null());
+    if usable_workspace.is_none() && usable_history.is_none() {
         return;
     }
 
-    let files = index["files"].as_u64().unwrap_or(0);
-    let embedded = index["embedded"].as_u64().unwrap_or(0);
-    let pending = index["pending"].as_u64().unwrap_or(0);
-    let skipped = index["skipped"].as_u64().unwrap_or(0);
-
-    if files == 0 {
+    let files = usable_workspace.map_or(0, |value| value["embedded"].as_u64().unwrap_or(0));
+    let messages = usable_history.map_or(0, |value| value["messages"].as_u64().unwrap_or(0));
+    if files == 0 && messages == 0 {
         empty(out, "nothing indexed yet");
+    } else {
+        let mut parts = Vec::new();
+        if usable_workspace.is_some() {
+            parts.push(format!("{files} files"));
+        }
+        if usable_history.is_some() {
+            parts.push(format!("{messages} messages"));
+        }
+        write_row(out, "embedded", &parts.join(" \u{00b7} "));
     }
 
-    write_row(out, "files seen", &files.to_string());
-    write_row_colored(
-        out,
-        "embedded",
-        &format!("{embedded} of {files}"),
-        if pending == 0 {
-            Tone::Good
-        } else {
-            Tone::Active
-        },
-    );
-    if pending > 0 {
-        write_row_colored(out, "pending", &pending.to_string(), Tone::Active);
-    }
-    if skipped > 0 {
+    let file_pending = usable_workspace.map_or(0, |value| value["pending"].as_u64().unwrap_or(0));
+    let history_pending = usable_history.map_or(0, |value| value["pending"].as_u64().unwrap_or(0));
+    let pending = file_pending.saturating_add(history_pending);
+    let problem = index_problem(usable_workspace, usable_history);
+
+    if let Some(index) = usable_workspace {
         write_row(
             out,
-            "skipped",
-            &format!("{skipped} ({})", skip_reasons(index)),
+            "size",
+            &human_bytes(index["bytes"].as_u64().unwrap_or(0)),
         );
-    }
-    write_row(
-        out,
-        "vectors",
-        &index["vectors"].as_u64().unwrap_or(0).to_string(),
-    );
-    if let Some(models) = index["models"].as_array().filter(|m| !m.is_empty()) {
-        let names: Vec<&str> = models
-            .iter()
-            .filter_map(serde_json::Value::as_str)
-            .collect();
-        write_row(out, "model", &names.join(", "));
-    }
-    write_row(
-        out,
-        "size",
-        &human_bytes(index["bytes"].as_u64().unwrap_or(0)),
-    );
-    write_row(
-        out,
-        "last indexed",
-        &index["last_indexed_at"]
+        let stamp = index["last_indexed_at"]
             .as_str()
-            .map_or_else(|| "never".to_owned(), format_local_timestamp),
-    );
+            .map_or_else(|| "never".to_owned(), format_local_timestamp);
+        let state = if pending == 0 && problem.is_none() {
+            "up to date"
+        } else if problem.is_some() {
+            "attention needed"
+        } else {
+            "indexing"
+        };
+        write_row(out, "last indexed", &format!("{stamp} ({state})"));
+    }
 
-    write_background_pass(out, &index["background"], pending);
+    if pending > 0 {
+        let mut parts = Vec::new();
+        if file_pending > 0 {
+            parts.push(format!("{file_pending} files"));
+        }
+        if history_pending > 0 {
+            parts.push(format!("{history_pending} history chunks"));
+        }
+        write_row_colored(out, "pending", &parts.join(" \u{00b7} "), Tone::Active);
+    }
+    if let Some((label, detail)) = problem {
+        write_row_colored(out, "background", label, Tone::Bad);
+        write_row(out, "last error", detail);
+    }
 }
 
-fn skip_reasons(data: &serde_json::Value) -> String {
-    let Some(reasons) = data["skip_reasons"].as_object() else {
-        return String::new();
-    };
-    let mut parts: Vec<String> = reasons
-        .iter()
-        .map(|(reason, n)| format!("{} {reason}", n.as_u64().unwrap_or(0)))
-        .collect();
-    parts.sort();
-    parts.join(", ")
+fn index_problem<'value>(
+    workspace: Option<&'value serde_json::Value>,
+    history: Option<&'value serde_json::Value>,
+) -> Option<(&'static str, &'value str)> {
+    for value in [workspace, history].into_iter().flatten() {
+        let background = &value["background"];
+        if let Some(reason) = background["embedder_error"].as_str() {
+            return Some(("cannot run", reason));
+        }
+        if let Some(error) = background["last_error"].as_str() {
+            return Some(("failing", error));
+        }
+    }
+    None
 }
 
 fn human_bytes(bytes: u64) -> String {
@@ -118,218 +133,82 @@ fn human_bytes(bytes: u64) -> String {
     format!("{bytes} B")
 }
 
-fn write_background_pass(out: &mut impl Write, background: &serde_json::Value, pending: u64) {
-    if background["registered"].as_bool() != Some(true) {
-        note(
-            out,
-            "no background indexer registered — nothing will be embedded until one runs",
-        );
-        return;
-    }
-
-    if let Some(reason) = background["embedder_error"].as_str() {
-        write_row_colored(out, "background", "cannot run", Tone::Bad);
-        write_row(out, "no embedder", reason);
-        return;
-    }
-
-    if let Some(error) = background["last_error"].as_str() {
-        write_row_colored(out, "background", "failing", Tone::Bad);
-        write_row(out, "last error", error);
-        write_row(
-            out,
-            "failures",
-            &background["failures"].as_u64().unwrap_or(0).to_string(),
-        );
-        if let Some(secs) = background["retry_in_secs"].as_u64() {
-            write_row(out, "retrying in", &format!("{secs}s"));
-        }
-        return;
-    }
-
-    if pending > 0 {
-        write_row_colored(out, "background", "working", Tone::Active);
-        note(
-            out,
-            "(it embeds a batch at a time once the daemon has been idle)",
-        );
-        return;
-    }
-
-    if background["swept"].as_bool() == Some(true) {
-        write_row_colored(out, "background", "up to date", Tone::Good);
-    } else {
-        write_row_colored(out, "background", "not yet run", Tone::Thinking);
-        note(out, "(it starts once the daemon has been idle for a while)");
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn render(data: &serde_json::Value) -> String {
+    fn render(workspace: &serde_json::Value, history: &serde_json::Value) -> String {
         let mut buf = Vec::new();
-        write_index_section(&mut buf, data);
+        write_compact_index_section(&mut buf, Some(workspace), Some(history));
         String::from_utf8(buf).expect("utf8")
     }
 
     #[test]
-    #[ignore = "writes rendered output to stdout for visual inspection; run with --ignored"]
-    fn render_preview_index_unusable() {
-        use std::io::Write as _;
-
-        crate::output::set_color_enabled(true);
-        let mut buf = Vec::new();
-        write_index_section(
-            &mut buf,
+    fn workspace_and_history_are_one_summary() {
+        let out = render(
             &serde_json::json!({
-                "path": "/home/eshen/.cache/shore/characters/poppy/workspace_index.db",
-                "unusable": "it already holds something that is not a SQLite database, and shore will not overwrite it",
-                "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
-                "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
-                "background": {"registered": true, "swept": true, "failures": 0},
+                "embedded": 1702, "pending": 0, "bytes": 29_779_558,
+                "last_indexed_at": "2026-08-20T07:11:00+00:00",
+                "background": {"registered": true, "failures": 0}
+            }),
+            &serde_json::json!({
+                "messages": 36_684, "pending": 0,
+                "background": {"registered": true, "failures": 0}
             }),
         );
-        write_index_section(
-            &mut buf,
+        assert!(out.contains("1702 files \u{00b7} 36684 messages"), "{out}");
+        assert!(out.contains("28.4 MB"), "{out}");
+        assert!(out.contains("up to date"), "{out}");
+        for redundant in ["files seen", "vectors", "skipped", "chunks"] {
+            assert!(!out.contains(redundant), "unexpected {redundant:?}: {out}");
+        }
+    }
+
+    #[test]
+    fn pending_work_is_visible_without_configuration_noise() {
+        let out = render(
             &serde_json::json!({
-                "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
-                "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
-                "background": {"registered": true, "swept": true, "failures": 0},
+                "embedded": 4, "pending": 6, "bytes": 1024, "last_indexed_at": null,
+                "background": {"registered": true, "failures": 0}
+            }),
+            &serde_json::json!({
+                "messages": 12, "pending": 3,
+                "background": {"registered": true, "failures": 0}
             }),
         );
-        write_index_section(
-            &mut buf,
+        assert!(out.contains("6 files \u{00b7} 3 history chunks"), "{out}");
+        assert!(out.contains("indexing"), "{out}");
+        assert!(
+            !out.contains("background"),
+            "healthy configuration is not status: {out}"
+        );
+    }
+
+    #[test]
+    fn a_stalled_backlog_keeps_the_actionable_error() {
+        let out = render(
             &serde_json::json!({
-                "path": "/home/eshen/.cache/shore/characters/poppy/workspace_index.db",
-                "files": 42, "embedded": 0, "pending": 42, "skipped": 0, "skip_reasons": {},
-                "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
-                "background": {"registered": true, "swept": false, "failures": 0,
-                               "embedder_error": "no embedding model configured; semantic search disabled. Set defaults.embedding = \"provider:model_id\" pointing at an OpenAI-compatible embeddings endpoint and configure [providers.<provider>]."},
+                "embedded": 4, "pending": 6, "bytes": 1024, "last_indexed_at": null,
+                "background": {"registered": true, "last_error": "429 rate limited"}
             }),
+            &serde_json::json!({"messages": 12, "pending": 0, "background": {}}),
         );
-        crate::output::set_color_enabled(false);
-        std::io::stdout().write_all(&buf).unwrap();
+        assert!(out.contains("attention needed"), "{out}");
+        assert!(out.contains("failing"), "{out}");
+        assert!(out.contains("429 rate limited"), "{out}");
+        assert!(!out.contains("up to date"), "{out}");
     }
 
     #[test]
-    fn an_unusable_index_says_so_instead_of_reporting_zeroes() {
-        let out = render(&serde_json::json!({
-            "path": "/cache/idx.db",
-            "unusable": "it already holds something that is not a SQLite database, and shore will not overwrite it",
-            "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
-            "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
-            "background": {"registered": true, "swept": true, "failures": 0},
-        }));
-        assert!(out.contains("index unavailable"));
-        assert!(out.contains("not a SQLite database"));
-        assert!(!out.contains("nothing indexed yet"));
-        assert!(!out.contains("files seen"));
-    }
-
-    #[test]
-    fn a_healthy_empty_index_still_says_nothing_indexed_yet() {
-        let out = render(&serde_json::json!({
-            "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
-            "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
-            "background": {"registered": true, "swept": true, "failures": 0},
-        }));
-        assert!(out.contains("nothing indexed yet"));
-        assert!(!out.contains("index unavailable"));
-    }
-
-    #[test]
-    fn an_unregistered_indexer_says_nothing_will_be_embedded() {
-        let out = render(&serde_json::json!({
-            "files": 10, "embedded": 0, "pending": 10, "skip_reasons": {},
-            "background": {"registered": false},
-        }));
-        assert!(out.contains("no background indexer registered"));
-    }
-
-    #[test]
-    fn an_indexer_with_no_embedder_says_it_cannot_run_rather_than_not_yet() {
-        let out = render(&serde_json::json!({
-            "files": 10, "embedded": 0, "pending": 10, "skip_reasons": {},
-            "background": {"registered": true, "swept": false, "failures": 0,
-                           "embedder_error": "no embedding model configured; \
-        semantic search disabled"},
-        }));
-        assert!(out.contains("cannot run"), "{out}");
-        assert!(out.contains("no embedding model configured"), "{out}");
-        assert!(
-            !out.contains("not yet run"),
-            "waiting for idle is the one thing it is not doing: {out}"
+    fn unreadable_indexes_report_the_problem_without_fake_zeroes() {
+        let out = render(
+            &serde_json::json!({"error": "database disk image is malformed"}),
+            &serde_json::json!({"error": "history lock failed"}),
         );
-        assert!(
-            !out.contains("idle"),
-            "idleness has nothing to do with it; do not send the reader looking: {out}"
-        );
-    }
-
-    #[test]
-    fn a_pending_backlog_does_not_hide_a_missing_embedder() {
-        let out = render(&serde_json::json!({
-            "files": 10, "embedded": 0, "pending": 10, "skip_reasons": {},
-            "background": {"registered": true, "swept": false, "failures": 0,
-                           "embedder_error": "embedding API key not set for provider 'openai'"},
-        }));
-        assert!(out.contains("cannot run"), "{out}");
-        assert!(
-            !out.contains("working"),
-            "a backlog with no embedder is stuck, not working: {out}"
-        );
-    }
-
-    #[test]
-    fn a_failing_indexer_shows_the_error_and_the_retry() {
-        let out = render(&serde_json::json!({
-            "files": 10, "embedded": 0, "pending": 10, "skip_reasons": {},
-            "background": {"registered": true, "swept": true, "failures": 4,
-                           "last_error": "429 rate limited", "retry_in_secs": 8},
-        }));
-        assert!(out.contains("failing"));
-        assert!(out.contains("429 rate limited"));
-        assert!(out.contains("8s"));
-        assert!(!out.contains("up to date"));
-    }
-
-    #[test]
-    fn outstanding_work_reads_as_working_not_up_to_date() {
-        let out = render(&serde_json::json!({
-            "files": 10, "embedded": 4, "pending": 6, "skip_reasons": {},
-            "background": {"registered": true, "swept": true, "failures": 0},
-        }));
-        assert!(out.contains("pending"));
-        assert!(out.contains("working"));
-        assert!(!out.contains("up to date"));
-    }
-
-    #[test]
-    fn a_drained_index_reads_as_up_to_date_with_no_pending_row() {
-        let out = render(&serde_json::json!({
-            "files": 10, "embedded": 10, "pending": 0, "skip_reasons": {},
-            "background": {"registered": true, "swept": true, "failures": 0},
-        }));
-        assert!(out.contains("up to date"));
-        assert!(!out.contains("pending"));
-    }
-
-    #[test]
-    fn an_index_that_would_not_open_says_so_instead_of_printing_zeroes() {
-        let out = render(&serde_json::json!({"error": "database disk image is malformed"}));
-        assert!(out.contains("could not be read"));
-        assert!(out.contains("database disk image is malformed"));
-        assert!(!out.contains("files seen"));
-    }
-
-    #[test]
-    fn skip_reasons_are_counted_and_ordered() {
-        let out = skip_reasons(&serde_json::json!({
-            "skip_reasons": {"oversize": 2, "non-utf8": 11},
-        }));
-        assert_eq!(out, "11 non-utf8, 2 oversize");
+        assert!(out.contains("database disk image is malformed"), "{out}");
+        assert!(out.contains("history lock failed"), "{out}");
+        assert!(!out.contains("nothing indexed yet"), "{out}");
+        assert!(!out.contains("up to date"), "{out}");
     }
 
     #[test]
