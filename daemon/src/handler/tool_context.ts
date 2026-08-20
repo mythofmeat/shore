@@ -77,6 +77,11 @@ export async function buildToolContext(
     searchConfig: config.app.tools.web_search,
     retrievalConfig: retrievalView(config.app.memory.retrieval),
     retrievalMode: config.app.memory.retrieval.mode,
+    memoryFileLimits: {
+      maxNoteBytes: config.app.memory.file_limits.max_note_bytes,
+      maxIndexBytes: config.app.memory.file_limits.max_index_bytes,
+      maxPromptBytes: config.app.memory.file_limits.max_prompt_bytes,
+    },
     memoryIndexPath: indexPath(config.dirs.cache, charName),
     historyIndexPath: historyIndexPath(config.dirs.cache, charName),
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),

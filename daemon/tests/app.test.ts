@@ -346,8 +346,30 @@ describe("AppConfig::default", () => {
 
     expect(app.defaults.stream).toBe(true);
     expect(app.memory.compaction.archive_after.asSecs()).toBe(0n);
+    expect(app.memory.file_limits).toEqual({
+      max_note_bytes: 8 * 1024,
+      max_index_bytes: 16 * 1024,
+      max_prompt_bytes: 64 * 1024,
+    });
     expect(app.notifications.events.message_complete).toBe(true);
     expect(app.usage.allow_compaction_over_budget).toBe(false);
+  });
+
+  test("memory file limits are configurable independently", () => {
+    const parsed = parseAppConfig(
+      parseToml(
+        "[memory.file_limits]\n" +
+          "max_note_bytes = 4096\n" +
+          "max_index_bytes = 12288\n" +
+          "max_prompt_bytes = 131072\n",
+      ),
+    );
+    if ("err" in parsed) throw new Error(parsed.err);
+    expect(parsed.ok.memory.file_limits).toEqual({
+      max_note_bytes: 4096,
+      max_index_bytes: 12288,
+      max_prompt_bytes: 131072,
+    });
   });
 });
 

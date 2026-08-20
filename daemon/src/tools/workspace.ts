@@ -27,6 +27,7 @@ import {
 import { InvalidArgs, ToolIoError } from "./errors";
 import {
   isInside,
+  normalizeWorkspacePath,
   normalizePromptVisiblePath,
   PathError,
   resolvePath,
@@ -38,6 +39,18 @@ const SEARCH_MAX_RESULTS = 100;
 const SEARCH_EXCERPT_CHARS = 1_200;
 
 const EDIT_SNIPPET_CHARS = 800;
+
+export interface MemoryFileLimits {
+  maxNoteBytes: number;
+  maxIndexBytes: number;
+  maxPromptBytes: number;
+}
+
+export const DEFAULT_MEMORY_FILE_LIMITS: MemoryFileLimits = {
+  maxNoteBytes: 8 * 1024,
+  maxIndexBytes: 16 * 1024,
+  maxPromptBytes: 64 * 1024,
+};
 
 export const DEFAULT_RETRIEVAL_CONFIG: RetrievalConfig = {
   maxFileBytes: 1_048_576,
@@ -271,7 +284,11 @@ async function listDirectory(
   return { entries };
 }
 
-export async function handleEdit(input: ToolInput, workspaceDir: string): Promise<unknown> {
+export async function handleEdit(
+  input: ToolInput,
+  workspaceDir: string,
+  fileLimits: MemoryFileLimits = DEFAULT_MEMORY_FILE_LIMITS,
+): Promise<unknown> {
   const pathStr = asStr(input, "path");
   if (pathStr === undefined) throw new InvalidArgs("missing required field: path");
   rejectGitInternalPath(pathStr);
@@ -284,8 +301,10 @@ export async function handleEdit(input: ToolInput, workspaceDir: string): Promis
       "pass either 'content' (whole file) or 'edits' (targeted replacements), not both",
     );
   }
-  if (content !== undefined) return await writeWholeFile(pathStr, content, workspaceDir);
-  if (edits !== undefined) return await applyEdits(pathStr, edits, workspaceDir);
+  if (content !== undefined) {
+    return await writeWholeFile(pathStr, content, workspaceDir, fileLimits);
+  }
+  if (edits !== undefined) return await applyEdits(pathStr, edits, workspaceDir, fileLimits);
   throw new InvalidArgs(
     "missing required field: pass 'content' to write a whole file, or 'edits' to replace text within one",
   );
@@ -295,8 +314,14 @@ async function writeWholeFile(
   pathStr: string,
   content: string,
   workspaceDir: string,
+  fileLimits: MemoryFileLimits,
 ): Promise<unknown> {
   const path = resolvePath(workspaceDir, pathStr);
+  const previousBytes =
+    memoryFileLimitFor(pathStr, fileLimits) === undefined
+      ? undefined
+      : await existingFileBytes(path);
+  enforceMemoryFileLimit(pathStr, content, previousBytes?.length, fileLimits);
 
   try {
     await mkdir(dirname(path), { recursive: true });
@@ -312,6 +337,7 @@ async function applyEdits(
   pathStr: string,
   edits: unknown[],
   workspaceDir: string,
+  fileLimits: MemoryFileLimits,
 ): Promise<unknown> {
   if (edits.length === 0) throw new InvalidArgs("'edits' array is empty");
 
@@ -322,12 +348,14 @@ async function applyEdits(
     );
   }
 
-  let content: string;
+  let bytes: Buffer;
   try {
-    content = await readFile(path, "utf8");
+    bytes = await readFile(path);
   } catch (e) {
     throw new ToolIoError(ioMessage(e));
   }
+  let content = bytes.toString("utf8");
+  const binary = !isUtf8(bytes);
 
   let replacementsMade = 0;
 
@@ -365,6 +393,8 @@ async function applyEdits(
     replacementsMade += count;
   }
 
+  if (!binary) enforceMemoryFileLimit(pathStr, content, bytes.length, fileLimits);
+
   try {
     await writeFile(path, content);
   } catch (e) {
@@ -372,6 +402,79 @@ async function applyEdits(
   }
 
   return { path: pathStr, replacements_made: replacementsMade };
+}
+
+async function existingFileBytes(path: string): Promise<Buffer | undefined> {
+  try {
+    return await readFile(path);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new ToolIoError(ioMessage(e));
+  }
+}
+
+function isUtf8(bytes: Buffer): boolean {
+  if (bytes.includes(0)) return false;
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+interface FileLimit {
+  bytes: number;
+  kind: string;
+}
+
+export function memoryFileLimitFor(
+  pathStr: string,
+  limits: MemoryFileLimits = DEFAULT_MEMORY_FILE_LIMITS,
+): FileLimit | undefined {
+  const normalized = normalizeWorkspacePath(pathStr);
+  const promptVisible = normalizePromptVisiblePath(normalized);
+  if (promptVisible === "MEMORY.md") {
+    return { bytes: limits.maxIndexBytes, kind: "the active memory index" };
+  }
+  if (promptVisible !== undefined) {
+    return { bytes: limits.maxPromptBytes, kind: "a prompt-visible root file" };
+  }
+  if (normalized.startsWith("memory/") && normalized.length > "memory/".length) {
+    return { bytes: limits.maxNoteBytes, kind: "an individual memory note" };
+  }
+  return undefined;
+}
+
+function enforceMemoryFileLimit(
+  pathStr: string,
+  content: string,
+  previousBytes: number | undefined,
+  limits: MemoryFileLimits,
+): void {
+  const limit = memoryFileLimitFor(pathStr, limits);
+  if (limit === undefined) return;
+  if (content.includes("\0")) return;
+
+  const resultingBytes = Buffer.byteLength(content, "utf8");
+  if (resultingBytes <= limit.bytes) return;
+  if (previousBytes !== undefined && resultingBytes < previousBytes) return;
+
+  const repair =
+    previousBytes !== undefined && previousBytes > limit.bytes
+      ? " Existing over-limit files may still be edited when the result is strictly smaller."
+      : "";
+  throw new InvalidArgs(
+    `${pathStr} would be ${formatBytes(resultingBytes)}, exceeding the ${formatBytes(limit.bytes)} ` +
+      `limit for ${limit.kind}. Split it into smaller, focused files instead of trimming useful ` +
+      `material.${repair}`,
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  const kib = bytes / 1024;
+  return `${bytes} bytes (${Number.isInteger(kib) ? kib.toFixed(0) : kib.toFixed(1)} KiB)`;
 }
 
 export async function handleDelete(
