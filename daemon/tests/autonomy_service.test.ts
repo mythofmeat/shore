@@ -95,7 +95,8 @@ function characterDir(root: string, character: string): string {
   return dir;
 }
 
-function build(now: { value: number } = { value: START }) {
+function build(clock?: { value: number }) {
+  const now = clock ?? { value: START };
   const executor = new SpyExecutor();
   return { executor, service: new AutonomyService(executor, () => now.value), now };
 }

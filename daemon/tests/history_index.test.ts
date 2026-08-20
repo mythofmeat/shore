@@ -352,7 +352,9 @@ describe("history search index", () => {
     await index.reconcile();
     const total = index.diagnostics(embedder).total_chunks;
     expect(total).toBeGreaterThan(2);
-    while ((await index.embedPending(embedder)) > 0) {}
+    for (;;) {
+      if ((await index.embedPending(embedder)) === 0) break;
+    }
     expect(index.diagnostics(embedder)).toEqual({
       indexed_chunks: total,
       total_chunks: total,
@@ -393,7 +395,9 @@ describe("history search index", () => {
     });
     await settled.reconcile();
     const warm = embedderFor("one");
-    while ((await settled.embedPending(warm)) > 0) {}
+    for (;;) {
+      if ((await settled.embedPending(warm)) === 0) break;
+    }
     settled.close();
     seen.length = 0;
 

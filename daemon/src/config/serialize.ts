@@ -1,3 +1,4 @@
+import { compareByCodePoint } from "../util/sort.ts";
 import { ConfigDuration } from "./duration.ts";
 
 export function serializeConfigValue(value: unknown): unknown {
@@ -5,7 +6,7 @@ export function serializeConfigValue(value: unknown): unknown {
   if (value instanceof ConfigDuration) return value.toString();
   if (value instanceof Map) {
     const out: Record<string, unknown> = {};
-    for (const key of [...value.keys()].sort()) {
+    for (const key of [...value.keys()].sort(compareByCodePoint)) {
       out[key] = serializeConfigValue(value.get(key));
     }
     return out;

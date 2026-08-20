@@ -264,7 +264,12 @@ describe("running a heartbeat", () => {
     const executor = new InProcessAutonomyExecutor({
       registry: registryFor(config),
       cache: new LastRequestCache(),
-      callStore: { recordTranscript: (r) => (rows.push(r), 1) },
+      callStore: {
+        recordTranscript: (r) => {
+          rows.push(r);
+          return 1;
+        },
+      },
       providers: {
         anthropic: scriptedProvider(
           [
@@ -382,7 +387,12 @@ describe("running a heartbeat", () => {
     const executor = new InProcessAutonomyExecutor({
       registry: registryFor(config),
       cache: new LastRequestCache(),
-      callStore: { recordTranscript: (r) => (rows.push(r), 1) },
+      callStore: {
+        recordTranscript: (r) => {
+          rows.push(r);
+          return 1;
+        },
+      },
       providers: {
         anthropic: scriptedProvider([
           response(

@@ -429,6 +429,7 @@ describe("the regen body", () => {
 
 describe("a generation that throws", () => {
   async function failWith(error: unknown): Promise<ServerMessage | undefined> {
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     const h = harness(["Alice"], 1, () => Promise.reject(error));
     await h.handler.handleRouted({
       kind: "engine",

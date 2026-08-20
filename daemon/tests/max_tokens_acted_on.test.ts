@@ -32,8 +32,7 @@ const REQ: SidecarRequest = {
 } as unknown as SidecarRequest;
 
 async function drain(events: AsyncIterable<StreamEvent>): Promise<void> {
-  for await (const _event of events) {
-  }
+  for await (const event of events) void event;
 }
 
 async function* died(text: string): AsyncIterable<StreamEvent> {

@@ -144,7 +144,7 @@ export function installWireCapture(sink: WireSink, now: () => number = Date.now)
     const [downstream, recorded] = response.body.tee();
     void drain(recorded).then(
       (body) => finish(body, null),
-      (e) => finish(null, e instanceof Error ? e.message : String(e)),
+      (e: unknown) => finish(null, e instanceof Error ? e.message : String(e)),
     );
 
     return new Response(downstream, {

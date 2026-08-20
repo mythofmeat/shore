@@ -270,7 +270,7 @@ async function main() {
   console.log(JSON.stringify({ model: MODEL, turns: TURNS, results }, null, 2));
 }
 
-main().catch((e) => {
-  process.stderr.write(`FATAL: ${e?.stack ?? e}\n`);
+main().catch((e: unknown) => {
+  process.stderr.write(`FATAL: ${e instanceof Error ? e.stack : String(e)}\n`);
   process.exit(1);
 });

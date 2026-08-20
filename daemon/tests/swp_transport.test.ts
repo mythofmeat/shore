@@ -364,7 +364,7 @@ describe("message loop", () => {
 
   test("exactly MAX_CONSECUTIVE_LAGS is the ceiling, not one more", async () => {
     const lag = { kind: "lagged", skipped: 1 } as const;
-    const h = harness(3_600_000, scriptedEvents(Array(MAX_CONSECUTIVE_LAGS - 1).fill(lag)));
+    const h = harness(3_600_000, scriptedEvents(Array.from({ length: MAX_CONSECUTIVE_LAGS - 1 }, () => lag)));
     const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
     let finished = false;
     void done.then(() => {
@@ -460,7 +460,8 @@ describe("message loop", () => {
     const h = harness(5);
     const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
     const until = Date.now() + 60;
-    while (Date.now() < until) {
+    for (;;) {
+      if (Date.now() >= until) break;
     }
     await new Promise((r) => setTimeout(r, 10));
     h.shutdown();

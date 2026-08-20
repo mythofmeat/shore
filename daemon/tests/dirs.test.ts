@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -233,7 +233,7 @@ describe("load_raw_config_table", () => {
     const env: Env = { SHORE_CONFIG_DIR: root };
     const got = loadRawConfigTable(undefined, { env, homeLookup: passwdHome });
     expect(got.table).toEqual({});
-    expect(() => require("node:fs").statSync(join(root, "config.toml"))).toThrow();
+    expect(() => statSync(join(root, "config.toml"))).toThrow();
   });
 });
 

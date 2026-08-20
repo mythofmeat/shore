@@ -119,10 +119,12 @@ function serializeForStorage(msg: Message): string {
     ordered.push([
       "alternatives",
       msg.alternatives.map((a) => {
-        const out: Record<string, unknown> = { content: a.content };
-        out["images"] = stripImageData(a.images) ?? [];
-        out["content_blocks"] = a.content_blocks;
-        out["timestamp"] = a.timestamp;
+        const out: Record<string, unknown> = {
+          content: a.content,
+          images: stripImageData(a.images) ?? [],
+          content_blocks: a.content_blocks,
+          timestamp: a.timestamp,
+        };
         if (a.provider_key !== undefined) out["provider_key"] = a.provider_key;
         if (a.model !== undefined) out["model"] = a.model;
         return out;

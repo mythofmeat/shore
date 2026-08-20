@@ -145,7 +145,7 @@ export class HistorySearchIndex {
       db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
       chmodSync(path, 0o600);
       return new HistorySearchIndex({ ...options, path }, db);
-    } catch (error) {
+    } catch {
       try { db?.close(); } catch {}
       removeCacheFiles(path);
       const rebuilt = new Database(path, { create: true, readwrite: true });

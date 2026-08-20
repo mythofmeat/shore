@@ -8,7 +8,8 @@ function hangingFetch(): typeof fetch {
       const signal = init?.signal;
       if (signal == null) return;
       signal.addEventListener("abort", () => {
-        reject(signal.reason ?? new Error("aborted"));
+        const reason: unknown = signal.reason;
+        reject(reason instanceof Error ? reason : new Error("aborted"));
       });
     })) as unknown as typeof fetch;
 }

@@ -60,6 +60,7 @@ class FaultingBot {
     return Promise.resolve(alias);
   }
 
+  // eslint-disable-next-line require-yield
   async *events(): AsyncGenerator<never> {
     for (;;) {
       if (this.#stopped) return;

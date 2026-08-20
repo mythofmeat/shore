@@ -552,9 +552,9 @@ export function dropUnverifiableThinking(turns: WireMessage[]): {
 
   for (const msg of turns) {
     const thinking = msg.content.filter(isThinkingBlock);
-    const verifiable =
-      thinking.length === 0 ||
-      thinking.every((block) => block.type !== "thinking" || carriesSignature(block));
+    const verifiable = thinking.every(
+      (block) => block.type !== "thinking" || carriesSignature(block),
+    );
 
     if (verifiable) {
       out.push(msg);

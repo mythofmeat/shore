@@ -371,7 +371,8 @@ describe("what reaches the model", () => {
       const results = req.messages.flatMap((m) =>
         m.content.filter((b) => b["type"] === "tool_result").map((b) => b["tool_use_id"]),
       );
-      expect(results.sort()).toEqual(uses.sort());
+      const byText = (a: unknown, b: unknown) => String(a).localeCompare(String(b));
+      expect(results.sort(byText)).toEqual(uses.sort(byText));
     }
   });
 

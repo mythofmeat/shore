@@ -84,7 +84,12 @@ describe("writing a row", () => {
     const rows: unknown[] = [];
 
     recordTranscript(
-      { recordTranscript: (r) => (rows.push(r), 1) },
+      {
+        recordTranscript: (r) => {
+          rows.push(r);
+          return 1;
+        },
+      },
       {
         source: "heartbeat",
         character: "ada",
@@ -116,7 +121,12 @@ describe("writing a row", () => {
     const rows: { model: string | null }[] = [];
 
     recordTranscript(
-      { recordTranscript: (r) => (rows.push(r as never), 1) },
+      {
+        recordTranscript: (r) => {
+          rows.push(r as never);
+          return 1;
+        },
+      },
       {
         source: "heartbeat",
         character: "ada",
