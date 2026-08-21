@@ -47,8 +47,7 @@ fn handle_paste(app: &mut App, text: &str) -> Action {
 
 fn handle_key(app: &mut App, key: KeyEvent) -> Action {
     if app.show_help {
-        app.show_help = false;
-        return Action::Redraw;
+        return handle_help_overlay(app, key);
     }
 
     if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c') {
@@ -83,6 +82,50 @@ fn handle_key(app: &mut App, key: KeyEvent) -> Action {
         InputMode::Insert => handle_insert_mode(app, key),
         InputMode::Command => handle_command_mode(app, key),
     }
+}
+
+fn handle_help_overlay(app: &mut App, key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.help_scroll = app.help_scroll.saturating_add(1);
+        }
+        KeyCode::PageDown => {
+            app.help_scroll = app.help_scroll.saturating_add(10);
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.help_scroll = app.help_scroll.saturating_sub(1);
+        }
+        KeyCode::PageUp => {
+            app.help_scroll = app.help_scroll.saturating_sub(10);
+        }
+        KeyCode::Home => app.help_scroll = 0,
+        KeyCode::Backspace
+        | KeyCode::Enter
+        | KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::End
+        | KeyCode::Tab
+        | KeyCode::BackTab
+        | KeyCode::Delete
+        | KeyCode::Insert
+        | KeyCode::F(_)
+        | KeyCode::Char(_)
+        | KeyCode::Null
+        | KeyCode::Esc
+        | KeyCode::CapsLock
+        | KeyCode::ScrollLock
+        | KeyCode::NumLock
+        | KeyCode::PrintScreen
+        | KeyCode::Pause
+        | KeyCode::Menu
+        | KeyCode::KeypadBegin
+        | KeyCode::Media(_)
+        | KeyCode::Modifier(_) => {
+            app.show_help = false;
+            app.help_scroll = 0;
+        }
+    }
+    Action::Redraw
 }
 
 fn redraw_or_load_older_history(app: &mut App) -> Action {
@@ -318,8 +361,7 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             debug!("Input: Insert → Normal");
             app.input.mode = InputMode::Normal;
             if app.editing_ref.take().is_some() {
-                app.input.text.clear();
-                app.input.cursor = 0;
+                app.input.set_text(String::new());
                 app.set_status("edit cancelled");
             }
             Action::Redraw
@@ -404,6 +446,19 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
         }
 
         (KeyModifiers::CONTROL, KeyCode::Char('g')) => Action::OpenInEditor,
+
+        (KeyModifiers::CONTROL, KeyCode::Char('z')) => {
+            if !app.input.undo() {
+                app.set_status("nothing left to undo");
+            }
+            Action::Redraw
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('y')) => {
+            if !app.input.redo() {
+                app.set_status("nothing to redo");
+            }
+            Action::Redraw
+        }
 
         (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
             app.input.insert_char(c);
@@ -910,8 +965,7 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
             if app.editing_ref.is_some() || app.pending_edit_prefill.is_some() {
                 app.editing_ref = None;
                 app.cancel_edit_prefill();
-                app.input.text.clear();
-                app.input.cursor = 0;
+                app.input.set_text(String::new());
                 app.set_status("edit cancelled");
             } else {
                 app.set_status("no edit in progress");
@@ -931,6 +985,7 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
 
         UiCommand::Help => {
             app.show_help = true;
+            app.help_scroll = 0;
             Action::Redraw
         }
 
@@ -1685,6 +1740,58 @@ mod tests {
         let metadata_action = parse_command(&mut app, "view metadata off");
         assert!(matches!(metadata_action, Action::SavePrefs));
         assert!(!app.show_metadata);
+    }
+
+    #[test]
+    fn ctrl_z_and_ctrl_y_walk_the_input_box_back_and_forward() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Insert;
+        app.input.insert_str("something worth keeping");
+        app.input.set_text(String::new());
+
+        let _undone = handle_key(
+            &mut app,
+            make_key(KeyModifiers::CONTROL, KeyCode::Char('z')),
+        );
+        assert_eq!(app.input.text, "something worth keeping");
+
+        let _redone = handle_key(
+            &mut app,
+            make_key(KeyModifiers::CONTROL, KeyCode::Char('y')),
+        );
+        assert_eq!(app.input.text, "");
+    }
+
+    #[test]
+    fn undo_with_an_empty_history_says_so_instead_of_doing_nothing() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Insert;
+
+        let _action = handle_key(
+            &mut app,
+            make_key(KeyModifiers::CONTROL, KeyCode::Char('z')),
+        );
+        assert!(
+            app.notifications
+                .iter()
+                .any(|n| n.content.contains("nothing left to undo")),
+            "{:?}",
+            app.notifications
+        );
+    }
+
+    #[test]
+    fn cancelling_an_edit_leaves_the_text_recoverable() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Insert;
+        app.editing_ref = Some("-2".to_owned());
+        app.input.insert_str("my careful rewrite");
+
+        let _cancelled = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Esc));
+        assert_eq!(app.input.text, "");
+
+        assert!(app.input.undo());
+        assert_eq!(app.input.text, "my careful rewrite");
     }
 
     #[test]

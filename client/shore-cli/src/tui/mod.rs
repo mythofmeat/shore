@@ -3,6 +3,7 @@ mod app;
 mod clipboard;
 mod command_output;
 mod connection;
+mod draft;
 mod images;
 mod input;
 mod keymap;
@@ -40,6 +41,7 @@ use input::Action;
 
 const STREAM_FRAME_INTERVAL: Duration = Duration::from_millis(200);
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const DRAFT_AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3);
 const EDITOR_FENCE: &str = "# ------------------------ >8 ------------------------";
 const EDITOR_FENCE_NOTE: &str =
     "# Last assistant reply. Everything below is removed when you close the editor.";
@@ -563,7 +565,9 @@ fn open_in_editor(
     last_reply: Option<&str>,
 ) -> io::Result<()> {
     let editor = crate::run::editor_from_env();
-    let tmp = std::env::temp_dir().join("shore_input.md");
+    let sessions = draft::editor_dir(&draft::drafts_dir());
+    std::fs::create_dir_all(&sessions)?;
+    let tmp = draft::editor_session_path(&draft::drafts_dir(), &draft::stamp_now());
     std::fs::write(&tmp, editor_buffer(input.text.as_str(), last_reply))?;
 
     execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
@@ -585,7 +589,23 @@ fn open_in_editor(
     if let Ok(contents) = std::fs::read_to_string(&tmp) {
         input.set_text(strip_editor_fence(&contents));
     }
+    draft::prune_editor_sessions_to_default(&draft::drafts_dir());
     Ok(())
+}
+
+fn restore_draft(app: &mut App, dir: &Path) {
+    let Some(text) = draft::load(dir) else {
+        return;
+    };
+    app.input.set_text(text);
+    app.input.reset_history();
+    app.set_status("restored the draft you left in the input box");
+}
+
+fn save_draft(app: &App, dir: &Path) {
+    if let Err(e) = draft::save(dir, app.input.text.as_str()) {
+        warn!("failed to keep the unsent draft: {e}");
+    }
 }
 
 fn pick_image(
@@ -1006,6 +1026,7 @@ async fn run_tui(
     if !fixture_mode {
         load_prefs(&mut app);
         load_keymap(&mut app);
+        restore_draft(&mut app, &draft::drafts_dir());
     }
 
     let (cmd_tx, mut event_rx) = if fixture_mode {
@@ -1022,6 +1043,9 @@ async fn run_tui(
     stream_frame.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut notif_tick = tokio::time::interval(Duration::from_millis(250));
     notif_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut draft_tick = tokio::time::interval(DRAFT_AUTOSAVE_INTERVAL);
+    draft_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut saved_draft = app.input.text.clone();
     let mut needs_redraw = true;
     let mut deferred_stream_dirty = false;
     let mut needs_full_redraw = false;
@@ -1122,6 +1146,12 @@ async fn run_tui(
                     needs_redraw = true;
                 }
             }
+            _ = draft_tick.tick(), if !fixture_mode => {
+                if saved_draft != app.input.text {
+                    save_draft(&app, &draft::drafts_dir());
+                    saved_draft.clone_from(&app.input.text);
+                }
+            }
         }
 
         if app.should_quit {
@@ -1132,6 +1162,7 @@ async fn run_tui(
     info!("TUI exiting");
     if !fixture_mode {
         save_prefs(&app);
+        save_draft(&app, &draft::drafts_dir());
         drop(cmd_tx.send(ConnCommand::Shutdown).await);
     }
 
@@ -4353,6 +4384,79 @@ mod redraw_tests {
                     t.msg_id.as_deref() == Some("m_missing_from_history") && t.metadata.is_some()
                 })
         );
+    }
+}
+
+#[cfg(test)]
+mod draft_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn quitting_with_text_in_the_box_brings_it_back_next_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut leaving = App::default();
+        leaving
+            .input
+            .set_text("the thing I was halfway through saying".to_owned());
+        save_draft(&leaving, tmp.path());
+
+        let mut arriving = App::default();
+        restore_draft(&mut arriving, tmp.path());
+
+        assert_eq!(
+            arriving.input.text,
+            "the thing I was halfway through saying"
+        );
+        assert!(
+            arriving
+                .notifications
+                .iter()
+                .any(|n| n.content.contains("restored the draft")),
+            "the restore should say so: {:?}",
+            arriving.notifications
+        );
+    }
+
+    #[test]
+    fn undo_cannot_wipe_a_draft_the_moment_it_is_restored() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut leaving = App::default();
+        leaving.input.set_text("keep me".to_owned());
+        save_draft(&leaving, tmp.path());
+
+        let mut arriving = App::default();
+        restore_draft(&mut arriving, tmp.path());
+
+        assert!(
+            !arriving.input.undo(),
+            "there is nothing before the restore"
+        );
+        assert_eq!(arriving.input.text, "keep me");
+    }
+
+    #[test]
+    fn sending_the_message_leaves_no_draft_behind() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = App::default();
+        app.input.set_text("about to send".to_owned());
+        save_draft(&app, tmp.path());
+
+        let _sent = app.input.take_text();
+        save_draft(&app, tmp.path());
+
+        let mut next = App::default();
+        restore_draft(&mut next, tmp.path());
+        assert_eq!(next.input.text, "");
+        assert!(next.notifications.is_empty());
+    }
+
+    #[test]
+    fn an_empty_box_on_a_fresh_start_stays_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = App::default();
+        restore_draft(&mut app, tmp.path());
+        assert_eq!(app.input.text, "");
+        assert!(app.notifications.is_empty());
     }
 }
 

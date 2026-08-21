@@ -1983,7 +1983,7 @@ fn draw_output_pager(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     frame.render_widget(body, popup_area);
 }
 
-fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn draw_help(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let heading = |text: &str| {
         Line::from(vec![Span::styled(
             format!("  {text}"),
@@ -2026,6 +2026,17 @@ fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
     lines.push(row("q", "close an overlay"));
 
     lines.push(Line::from(""));
+    lines.push(heading("Input box (insert mode, not bindable)"));
+    lines.push(row("Ctrl+Z / Ctrl+Y", "undo / redo your typing"));
+    lines.push(row("Ctrl+G", "rewrite the box in $EDITOR"));
+    lines.push(row("Ctrl+A / Ctrl+E", "start / end of line"));
+    lines.push(row("Alt+Backspace", "delete the word behind the cursor"));
+    lines.push(Line::from(Span::styled(
+        "    Unsent drafts come back next time you open shore.".to_owned(),
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    lines.push(Line::from(""));
     lines.push(heading("Rebinding"));
     for hint in [
         "    :ui bind <key> <command>      add --global for every mode",
@@ -2048,7 +2059,8 @@ fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
     )));
     lines.push(Line::from(""));
 
-    let height = usize_to_u16(lines.len()).saturating_add(2).min(area.height);
+    let total = lines.len();
+    let height = usize_to_u16(total).saturating_add(2).min(area.height);
     let width = 68_u16.min(area.width);
     let x = area.x.saturating_add(
         area.width
@@ -2064,17 +2076,35 @@ fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
     );
     let popup_area = Rect::new(x, y, width, height);
 
+    let visible = usize::from(height.saturating_sub(2));
+    app.help_scroll = help_scroll_offset(app.help_scroll, total, visible);
+    let offset = app.help_scroll;
+    let title = if total > visible {
+        format!(
+            " Keyboard Shortcuts  ({}-{} of {total}, ↑↓ to scroll) ",
+            offset.saturating_add(1),
+            offset.saturating_add(visible).min(total),
+        )
+    } else {
+        " Keyboard Shortcuts ".to_owned()
+    };
+
     let popup = Paragraph::new(Text::from(lines))
+        .scroll((usize_to_u16(offset), 0))
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Keyboard Shortcuts ")
+                .title(title)
                 .border_style(Style::default().fg(Color::Yellow)),
         )
         .style(Style::default().bg(Color::Rgb(20, 20, 30)));
 
     frame.render_widget(Clear, popup_area);
     frame.render_widget(popup, popup_area);
+}
+
+pub(crate) fn help_scroll_offset(requested: usize, total: usize, visible: usize) -> usize {
+    requested.min(total.saturating_sub(visible))
 }
 
 fn completion_window_start(
@@ -4547,6 +4577,61 @@ pub(crate) mod scenario_tests {
         assert_eq!(h.app.completion.scope, crate::cli::PaletteScope::Full);
         let frame = h.render("edit loaded into the full palette");
         assert!(frame.contains("msg edit"), "{frame}");
+    }
+
+    #[test]
+    fn the_help_overlay_names_the_keys_that_get_lost_text_back() {
+        let mut h = Harness::with_size(90, 50);
+        h.app.show_help = true;
+
+        let frame = h.render("help overlay, input box section");
+        assert!(frame.contains("Ctrl+Z / Ctrl+Y"), "{frame}");
+        assert!(frame.contains("undo / redo"), "{frame}");
+        assert!(
+            frame.contains("Unsent drafts come back next time you open shore."),
+            "the draft note must fit the panel rather than run off it: {frame}"
+        );
+    }
+
+    #[test]
+    fn a_help_overlay_taller_than_the_terminal_scrolls_to_its_end() {
+        let mut h = Harness::with_size(90, 30);
+        h.app.show_help = true;
+
+        let first = h.render("help overlay, top");
+        assert!(first.contains("Normal mode"), "{first}");
+        assert!(
+            !first.contains("Press any key to close"),
+            "the tail should be below the fold to begin with: {first}"
+        );
+        assert!(first.contains("to scroll"), "{first}");
+
+        for _ in 0_u8..40 {
+            h.press(KeyCode::Down);
+        }
+        let bottom = h.render("help overlay, scrolled to the end");
+        assert!(
+            bottom.contains("Press any key to close"),
+            "scrolling should reach the last line: {bottom}"
+        );
+        assert!(bottom.contains(":ui bind <key> <command>"), "{bottom}");
+
+        h.press(KeyCode::Home);
+        let back = h.render("help overlay, home again");
+        assert!(back.contains("Normal mode"), "{back}");
+
+        h.press(KeyCode::Char('q'));
+        assert!(!h.app.show_help, "any other key still closes it");
+    }
+
+    #[test]
+    fn a_help_overlay_that_fits_says_nothing_about_scrolling() {
+        let mut h = Harness::with_size(90, 60);
+        h.app.show_help = true;
+
+        let frame = h.render("help overlay, fits");
+        assert!(frame.contains("Press any key to close"), "{frame}");
+        assert!(!frame.contains("to scroll"), "{frame}");
     }
 
     #[test]
