@@ -27,9 +27,12 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
         .saturating_add(1)
         .min(8);
 
-    let show_value_editor = app.input.mode == InputMode::Command && app.is_value_editor_open();
-    let show_completions =
-        app.input.mode == InputMode::Command && !app.completion.candidates.is_empty();
+    let confirming = app.palette_confirmation.is_some();
+    let show_value_editor =
+        app.input.mode == InputMode::Command && !confirming && app.is_value_editor_open();
+    let show_completions = app.input.mode == InputMode::Command
+        && !confirming
+        && !app.completion.candidates.is_empty();
     let show_alt_picker = app.alt_picker.is_some();
     let completion_height = if show_value_editor {
         4
@@ -1087,6 +1090,15 @@ fn usage_chip(
 
 fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
     if app.input.mode == InputMode::Command {
+        if let Some(confirmation) = &app.palette_confirmation {
+            let block = Block::default()
+                .borders(Borders::TOP)
+                .title(" [CONFIRM] ")
+                .border_style(Style::default().fg(Color::Yellow));
+            let display = format!("{}  Enter: run · Esc: cancel", confirmation.prompt);
+            frame.render_widget(Paragraph::new(display).block(block), area);
+            return;
+        }
         let (title, prefix): (String, &str) = match &app.completion.mode {
             PaletteMode::Top => (" [COMMAND] ".to_owned(), ":"),
             PaletteMode::Submenu(s) => (format!(" [{}] ", s.parent), ""),
@@ -1995,7 +2007,7 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect) {
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(Span::styled(
-            "    CLI syntax works here; type a space to browse",
+            "    CLI syntax works here; Tab advances through commands, flags, and values",
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(""),
@@ -2088,7 +2100,7 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
     {
         let i = window_start.saturating_add(offset);
         let selected = app.completion.selected == Some(i);
-        let desc = App::command_description(c);
+        let desc = app.command_description(c);
         let is_active = match &app.completion.mode {
             PaletteMode::Submenu(s) if s.parent == "model" => app.is_active_model_candidate(c),
             PaletteMode::Submenu(s) if s.parent == "character" => {
@@ -3118,6 +3130,10 @@ pub(crate) mod scenario_tests {
 
         h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('j'));
         assert_eq!(h.app.completion.selected, Some(0));
+        assert!(
+            h.app.input.cmd_text.is_empty(),
+            "moving the selection must not rewrite the command"
+        );
 
         h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('j'));
         assert_eq!(h.app.completion.selected, Some(1));
@@ -3145,10 +3161,12 @@ pub(crate) mod scenario_tests {
         let palette_frame = h.render("palette open");
 
         for (cmd, desc) in [
-            ("compact", "Summarize and shrink the conversation"),
-            ("regen", "Regenerate the last assistant reply"),
-            ("setting", "View or change sampler settings"),
-            ("help", "Show keyboard shortcuts"),
+            (
+                "compact",
+                "Summarize the conversation into memory and shorten the active",
+            ),
+            ("msg", "Send or change messages"),
+            ("model", "List models, switch the active one"),
         ] {
             let row = palette_frame
                 .lines()
@@ -3167,10 +3185,10 @@ pub(crate) mod scenario_tests {
         h.app.model_names = vec!["alpha-1".into(), "beta-2".into()];
         h.press_mod(KeyModifiers::NONE, KeyCode::Backspace);
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("model ");
+        h.type_str("model use ");
         let model_submenu = h.render("model submenu");
         assert!(
-            model_submenu.contains("alpha-1") || model_submenu.contains("model alpha-1"),
+            model_submenu.contains("alpha-1") || model_submenu.contains("model use alpha-1"),
             "model candidate visible"
         );
         assert!(

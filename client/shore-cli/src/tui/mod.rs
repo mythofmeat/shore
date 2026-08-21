@@ -1,5 +1,6 @@
 mod app;
 mod clipboard;
+mod command_output;
 mod connection;
 mod images;
 mod input;
@@ -1118,6 +1119,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
             app.pending_palette_commands.clear();
+            app.invalidate_palette_catalog();
             app.usage_budgets.clear();
             app.characters.clone_from(&characters);
 
@@ -1152,6 +1154,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
             app.pending_palette_commands.clear();
+            app.invalidate_palette_catalog();
             app.history_page_loading = false;
             app.pending_subagent_trace_ids.clear();
             app.usage_budgets.clear();
@@ -1637,6 +1640,115 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
     })
 }
 
+fn named_palette_values(data: &serde_json::Value, array: &str) -> Vec<crate::cli::PaletteValue> {
+    data.get(array)
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let value = item
+                .as_str()
+                .or_else(|| item.get("name").and_then(serde_json::Value::as_str))
+                .or_else(|| item.get("tool").and_then(serde_json::Value::as_str))?;
+            let help = item
+                .get("description")
+                .and_then(serde_json::Value::as_str)
+                .or_else(|| item.get("type").and_then(serde_json::Value::as_str))
+                .map(str::to_owned);
+            Some(crate::cli::PaletteValue {
+                value: value.to_owned(),
+                help,
+            })
+        })
+        .collect()
+}
+
+fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
+    match kind {
+        "providers" => {
+            app.palette_catalog.providers = named_palette_values(data, "providers");
+        }
+        "status" => {
+            app.palette_catalog.status_sections = data
+                .get("sections")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+                .map(crate::cli::PaletteValue::plain)
+                .collect();
+        }
+        "tools" => {
+            let mut tools = named_palette_values(data, "tools");
+            tools.extend(named_palette_values(data, "mcp"));
+            tools.extend(
+                named_palette_values(data, "subagents")
+                    .into_iter()
+                    .map(|value| crate::cli::PaletteValue {
+                        value: format!("ask_{}", value.value),
+                        help: value.help,
+                    }),
+            );
+            tools.sort_by(|left, right| left.value.cmp(&right.value));
+            tools.dedup_by(|left, right| left.value == right.value);
+            app.palette_catalog.tools = tools;
+            app.palette_catalog.subagents = named_palette_values(data, "subagents");
+        }
+        "config" => {
+            app.palette_catalog.config_schema = Some(data.clone());
+            let entries = data
+                .get("schema")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten();
+            let mut sections = Vec::new();
+            let mut keys = Vec::new();
+            for entry in entries {
+                let Some(key) = entry.get("key").and_then(serde_json::Value::as_str) else {
+                    continue;
+                };
+                let setting_kind = entry
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("value");
+                let restart = entry
+                    .get("restart_required")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                let help = if restart {
+                    format!("{setting_kind}; daemon restart required")
+                } else {
+                    setting_kind.to_owned()
+                };
+                let value = crate::cli::PaletteValue {
+                    value: key.to_owned(),
+                    help: Some(help),
+                };
+                sections.push(value.clone());
+                if entry
+                    .get("settable")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    keys.push(value);
+                }
+            }
+            app.palette_catalog.config_sections = sections;
+            app.palette_catalog.config_keys = keys;
+        }
+        "settings" => {
+            if let Some(snapshot) = EffectiveSamplerSnapshot::from_model_settings(data) {
+                app.note_active_model_from_snapshot(&snapshot);
+                app.effective_sampler = Some(snapshot);
+            }
+        }
+        _ => {}
+    }
+    if app.input.mode == app::InputMode::Command {
+        app.update_completions();
+    }
+}
+
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
     if msg.task_id().is_some() || msg.subagent().is_some() {
         return route_subagent_task_frame(app, msg);
@@ -1804,7 +1916,80 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::CommandOutput(co) => {
+            if let Some(kind) = app.take_palette_catalog_request(co.rid.as_deref()) {
+                absorb_palette_catalog(app, &kind, &co.data);
+                return UiEffect::redraw(RedrawEffect::Immediate);
+            }
             let palette_command = app.take_palette_command(co.rid.as_deref());
+            if co.name == "config_reload"
+                && co.data.get("applied").is_none()
+                && let Some((command_text, yes)) = palette_command.as_deref().and_then(|text| {
+                    let parsed = crate::cli::parse_palette_command(text).ok()?;
+                    let crate::cli::CliCommand::Config {
+                        subcommand: Some(crate::cli::ConfigCommand::Reload { yes, .. }),
+                        ..
+                    } = parsed
+                    else {
+                        return None;
+                    };
+                    Some((text.to_owned(), yes))
+                })
+            {
+                let changed = co
+                    .data
+                    .get("changed_prompt_files")
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(serde_json::Value::as_str)
+                    .collect::<Vec<_>>();
+                if !changed.is_empty() && !yes {
+                    app.set_warning(format!(
+                        "System prompt files changed: {}. Config reloaded without activating them; review them, then run `:config reload --yes`.",
+                        changed.join(", ")
+                    ));
+                }
+                let rid = app.begin_palette_command(&command_text);
+                return UiEffect {
+                    cmds: vec![ConnCommand::Send(ClientMessage::Command(Command {
+                        rid: Some(rid),
+                        name: "config_reload".into(),
+                        args: serde_json::json!({
+                            "apply": true,
+                            "refresh_prompts": yes && !changed.is_empty()
+                        }),
+                    }))],
+                    redraw: RedrawEffect::Immediate,
+                };
+            }
+            let palette_rendered = palette_command.as_deref().and_then(|command| {
+                command_output::render(command, &co.name, &co.data, &app.character_name)
+            });
+            let palette_log_is_display = palette_command
+                .as_deref()
+                .and_then(|command| crate::cli::parse_palette_command(command).ok())
+                .is_some_and(|command| {
+                    matches!(
+                        command,
+                        crate::cli::CliCommand::Log { json: true, .. }
+                            | crate::cli::CliCommand::Log { content: true, .. }
+                    )
+                });
+            let palette_character_json = palette_command
+                .as_deref()
+                .and_then(|command| crate::cli::parse_palette_command(command).ok())
+                .is_some_and(|command| {
+                    matches!(
+                        command,
+                        crate::cli::CliCommand::Character { json: true, .. }
+                    )
+                });
+            if co.name == "log" && palette_log_is_display {
+                if let (Some(command), Some(rendered)) = (palette_command, palette_rendered) {
+                    app.push_command_text(&command, rendered);
+                }
+                return UiEffect::redraw(RedrawEffect::Immediate);
+            }
             match co.name.as_str() {
                 "log" => {
                     if let Some(messages) = co.data.get("messages").and_then(|v| v.as_array()) {
@@ -1852,6 +2037,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 "subagent_trace" => {
                     absorb_subagent_traces(app, &co.data);
+                    if let (Some(command), Some(rendered)) = (palette_command, palette_rendered) {
+                        app.push_command_text(&command, rendered);
+                    }
                     return UiEffect {
                         cmds: subagent_trace_fetch(app),
                         redraw: RedrawEffect::Immediate,
@@ -1871,25 +2059,27 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             return UiEffect::redraw(RedrawEffect::Immediate);
                         }
 
-                        let list = chars
-                            .iter()
-                            .filter_map(|c| c.get("name").and_then(|n| n.as_str()))
-                            .map(|n| {
-                                if n == active {
-                                    format!("  * {n}")
-                                } else {
-                                    format!("    {n}")
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        app.entries.push(ConversationEntry::System {
-                            content: format!("Characters:\n{list}"),
-                            count: 1,
-                            timestamp: String::new(),
-                        });
-                        if app.auto_scroll {
-                            app.scroll_to_bottom();
+                        if !palette_character_json {
+                            let list = chars
+                                .iter()
+                                .filter_map(|c| c.get("name").and_then(|n| n.as_str()))
+                                .map(|n| {
+                                    if n == active {
+                                        format!("  * {n}")
+                                    } else {
+                                        format!("    {n}")
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            app.entries.push(ConversationEntry::System {
+                                content: format!("Characters:\n{list}"),
+                                count: 1,
+                                timestamp: String::new(),
+                            });
+                            if app.auto_scroll {
+                                app.scroll_to_bottom();
+                            }
                         }
                     }
                 }
@@ -1917,6 +2107,18 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     }
                     if let Some(name) = co.data.get("character").and_then(|v| v.as_str()) {
                         app.set_status(format!("switched to {name}"));
+                    }
+                }
+                "create_character" => {
+                    if let Some(name) = co
+                        .data
+                        .get("character")
+                        .or_else(|| co.data.get("name"))
+                        .and_then(serde_json::Value::as_str)
+                        && !app.characters.iter().any(|known| known.name == name)
+                    {
+                        app.characters
+                            .push(shore_common::protocol::types::CharacterInfo::new(name));
                     }
                 }
                 "list_models" => {
@@ -2068,6 +2270,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     } else {
                         app.set_status(format!("setting {key} updated"));
                     }
+                    if let (Some(command), Some(rendered)) = (palette_command, palette_rendered) {
+                        app.push_command_text(&command, rendered);
+                    }
                     return UiEffect {
                         cmds: vec![model_settings_conn_command(app, Some(refresh_rid))],
                         redraw: RedrawEffect::Immediate,
@@ -2165,22 +2370,8 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     app.set_status(format!("cmd:{} completed", co.name));
                 }
             }
-            if let Some(command) = palette_command
-                && !matches!(
-                    co.name.as_str(),
-                    "log"
-                        | "list_characters"
-                        | "list_models"
-                        | "switch_character"
-                        | "switch_model"
-                        | "reset_model"
-                        | "set_model_setting"
-                        | "delete"
-                        | "list_alternatives"
-                        | "alt"
-                )
-            {
-                app.push_command_output(&command, &co.data);
+            if let (Some(command), Some(rendered)) = (palette_command, palette_rendered) {
+                app.push_command_text(&command, rendered);
             }
             RedrawEffect::Immediate
         }
@@ -2196,6 +2387,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.finish_sampler_settings_refresh();
             }
             let palette_command = app.take_palette_command(err.rid.as_deref());
+            if app
+                .take_palette_catalog_request(err.rid.as_deref())
+                .is_some()
+            {
+                app.palette_catalog_loaded = false;
+            }
             app.history_page_loading = false;
             if sampler_settings_error && app.is_setting_palette_open() {
                 app.update_completions();
@@ -2986,6 +3183,93 @@ mod redraw_tests {
         };
         assert!(content.contains(":status --section daemon"));
         assert!(content.contains("running"));
+    }
+
+    #[test]
+    fn palette_catalog_responses_feed_dynamic_argument_completion_silently() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.input.cmd_text = "config set ".into();
+        app.input.cmd_cursor = app.input.cmd_text.len();
+        let rid = app.begin_palette_catalog_request("config");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(rid),
+                name: "config_schema".into(),
+                data: serde_json::json!({
+                    "schema": [{
+                        "key": "defaults.stream",
+                        "type": "boolean",
+                        "settable": true,
+                        "values": ["true", "false"]
+                    }]
+                }),
+            }),
+        );
+
+        assert!(
+            app.entries.is_empty(),
+            "catalog prefetch must stay out of chat"
+        );
+        assert!(
+            app.completion
+                .candidates
+                .contains(&"config set defaults.stream".to_owned())
+        );
+    }
+
+    #[test]
+    fn config_reload_applies_safe_changes_without_activating_changed_prompts() {
+        let mut app = App::default();
+        let check_rid = app.begin_palette_command("config reload");
+
+        let check = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(check_rid),
+                name: "config_reload".into(),
+                data: serde_json::json!({
+                    "changed_prompt_files": ["system.md"]
+                }),
+            }),
+        );
+
+        let Some(ConnCommand::Send(ClientMessage::Command(apply))) = check.cmds.first() else {
+            panic!("reload check should be followed by apply");
+        };
+        assert_eq!(apply.args.get("apply"), Some(&serde_json::json!(true)));
+        assert_eq!(
+            apply.args.get("refresh_prompts"),
+            Some(&serde_json::json!(false))
+        );
+        assert!(apply.rid.is_some());
+    }
+
+    #[test]
+    fn character_json_uses_one_palette_result_instead_of_also_printing_native_list() {
+        let mut app = App::default();
+        let rid = app.begin_palette_command("character --json");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(rid),
+                name: "list_characters".into(),
+                data: serde_json::json!({
+                    "active": "ada",
+                    "characters": [{ "name": "ada" }, { "name": "lin" }]
+                }),
+            }),
+        );
+
+        assert_eq!(system_entry_count(&app), 1);
+        let Some(ConversationEntry::System { content, .. }) = app.entries.last() else {
+            panic!("json palette result should be visible");
+        };
+        assert!(content.contains(":character --json"));
+        assert!(!content.contains("Characters:"));
     }
 
     #[test]

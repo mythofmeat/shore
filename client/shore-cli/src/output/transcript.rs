@@ -547,17 +547,19 @@ pub(crate) fn print_single_message(
 pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let width = term_width();
+    write_heartbeat_log(&mut out, data, term_width());
+}
 
+pub(crate) fn write_heartbeat_log<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     let events: &[serde_json::Value] = data["events"].as_array().map_or(&[], Vec::as_slice);
     if events.is_empty() {
-        write_section_header(&mut out, "heartbeat events", "", width);
-        print_dim_line(&mut out, "(no heartbeat events)");
+        write_section_header(out, "heartbeat events", "", width);
+        print_dim_line(out, "(no heartbeat events)");
         return;
     }
 
     write_section_header(
-        &mut out,
+        out,
         "heartbeat events",
         &format!("{} events", events.len()),
         width,
@@ -588,8 +590,8 @@ pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
             _ => Tone::Heading,
         };
 
-        paint(&mut out, Tone::Muted, &format!("  {time_str:<16}"));
-        paint(&mut out, kind_color, &format!("{kind:<18}"));
+        paint(out, Tone::Muted, &format!("  {time_str:<16}"));
+        paint(out, kind_color, &format!("{kind:<18}"));
         let _ignored = writeln!(out, "{detail}");
     }
     let _ignored = writeln!(out);

@@ -136,44 +136,46 @@ const CALL_BODY_PREVIEW: usize = 4000;
 fn print_call_log(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let width = term_width();
+    write_call_log(&mut out, data, term_width());
+}
 
+pub(crate) fn write_call_log<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     if data.get("enabled").is_some_and(|v| v == false) {
-        print_dim_line(&mut out, "(call payload capture is disabled)");
+        print_dim_line(out, "(call payload capture is disabled)");
         return;
     }
 
     if let Some(call) = data.get("call").filter(|c| !c.is_null()) {
         if let Some(diff) = data.get("diff").filter(|d| !d.is_null()) {
-            print_call_diff(&mut out, call, diff, width);
+            print_call_diff(out, call, diff, width);
         } else {
-            print_one_call(&mut out, call, width);
+            print_one_call(out, call, width);
         }
-        print_wire_exchanges(&mut out, data.get("wire"), width);
+        print_wire_exchanges(out, data.get("wire"), width);
         return;
     }
 
     let Some(entries) = data["entries"].as_array().filter(|e| !e.is_empty()) else {
-        print_dim_line(&mut out, "(no calls recorded)");
+        print_dim_line(out, "(no calls recorded)");
         return;
     };
     let count = entries.len();
     let plural = if count == 1 { "call" } else { "calls" };
-    write_section_header(&mut out, "call log", &format!("{count} {plural}"), width);
+    write_section_header(out, "call log", &format!("{count} {plural}"), width);
     for entry in entries {
         let usage = &entry["usage"];
         write_fg(
-            &mut out,
+            out,
             Tone::Muted,
             &format!("  #{:<6}", entry["id"].as_i64().unwrap_or(0)),
         );
         write_fg(
-            &mut out,
+            out,
             Tone::Active,
             &format!("{:<18}", entry["call_type"].as_str().unwrap_or("?")),
         );
         write_fg(
-            &mut out,
+            out,
             Tone::Thinking,
             &format!(
                 "{}/{}",
@@ -186,7 +188,7 @@ fn print_call_log(data: &serde_json::Value) {
             .as_str()
             .map_or_else(String::new, |e| format!("  ERROR: {e}"));
         write_dim(
-            &mut out,
+            out,
             &format!(
                 "          in={} out={} cache={}/{}  {}ms  {}B{}",
                 usage["input_tokens"].as_u64().unwrap_or(0),
@@ -204,7 +206,7 @@ fn print_call_log(data: &serde_json::Value) {
         _ = writeln!(out);
     }
     print_dim_line(
-        &mut out,
+        out,
         "(shore trace calls <id> to dump one call; --json for raw)",
     );
 }
@@ -468,22 +470,29 @@ fn print_call_diff(
 fn print_transcript(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let width = term_width();
+    write_trace_transcript(&mut out, data, term_width());
+}
+
+pub(crate) fn write_trace_transcript<W: Write>(
+    out: &mut W,
+    data: &serde_json::Value,
+    width: usize,
+) {
     let source = data["source"].as_str().unwrap_or("heartbeat");
     let char_name = data["character"].as_str().unwrap_or("?");
-    write_section_header(&mut out, &format!("{source} transcript"), char_name, width);
+    write_section_header(out, &format!("{source} transcript"), char_name, width);
 
     if data.get("enabled").is_some_and(|v| v == false) {
-        print_dim_line(&mut out, "(payload capture is disabled)");
+        print_dim_line(out, "(payload capture is disabled)");
         return;
     }
     let Some(entries) = data["entries"].as_array().filter(|e| !e.is_empty()) else {
-        print_dim_line(&mut out, "(no transcript entries yet)");
+        print_dim_line(out, "(no transcript entries yet)");
         return;
     };
     let mut prev_date: Option<String> = None;
     for entry in entries {
-        print_transcript_entry(&mut out, entry, &mut prev_date);
+        print_transcript_entry(out, entry, &mut prev_date);
     }
 }
 
@@ -576,17 +585,20 @@ fn print_transcript_entry(
 fn print_subagent_trace(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let width = term_width();
+    write_subagent_trace(&mut out, data, term_width());
+}
+
+pub(crate) fn write_subagent_trace<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     let char_name = data["character"].as_str().unwrap_or("?");
-    write_section_header(&mut out, "sub-agent runs", char_name, width);
+    write_section_header(out, "sub-agent runs", char_name, width);
 
     let Some(entries) = data["entries"].as_array().filter(|e| !e.is_empty()) else {
-        print_dim_line(&mut out, &subagent_trace_empty_message(data));
+        print_dim_line(out, &subagent_trace_empty_message(data));
         return;
     };
     let mut prev_date: Option<String> = None;
     for entry in entries {
-        print_subagent_run(&mut out, entry, &mut prev_date);
+        print_subagent_run(out, entry, &mut prev_date);
     }
 }
 
@@ -795,15 +807,17 @@ fn print_keepalive_ping(data: &serde_json::Value) {
 fn print_tool_definition(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let width = term_width();
+    write_tool_definition(&mut out, data, term_width());
+}
 
+fn write_tool_definition<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     let tool = data["tool"].as_str().unwrap_or("?");
     let kind = data["kind"].as_str().unwrap_or("?");
-    write_section_header(&mut out, tool, kind, width);
+    write_section_header(out, tool, kind, width);
 
     if data["enabled"].as_bool() == Some(false) {
         print_dim_line(
-            &mut out,
+            out,
             "(not enabled for this character — it is not on the wire)",
         );
         _ = writeln!(out);
@@ -811,7 +825,7 @@ fn print_tool_definition(data: &serde_json::Value) {
 
     let description = data["description"].as_str().unwrap_or("");
     if description.is_empty() {
-        print_dim_line(&mut out, "(no description)");
+        print_dim_line(out, "(no description)");
     } else {
         for line in description.lines() {
             if line.trim().is_empty() {
@@ -819,17 +833,17 @@ fn print_tool_definition(data: &serde_json::Value) {
                 continue;
             }
             for wrapped in wrap_line(line, width.saturating_sub(4)) {
-                indent_to(&mut out, 0);
+                indent_to(out, 0);
                 _ = writeln!(out, "{wrapped}");
             }
         }
     }
     _ = writeln!(out);
 
-    write_section_header(&mut out, "input schema", "", width);
+    write_section_header(out, "input schema", "", width);
     let rendered = display_payload_body(&data["input_schema"]);
     for line in rendered.lines() {
-        indent_to(&mut out, 0);
+        indent_to(out, 0);
         _ = writeln!(out, "{line}");
     }
 }
@@ -844,7 +858,11 @@ fn print_run_tool(data: &serde_json::Value) {
     write_run_tool(&mut out, data, term_width());
 }
 
-fn write_run_tool<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
+pub(crate) fn write_run_tool<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
+    if data["mode"].as_str() == Some("tool_definition") {
+        write_tool_definition(out, data, width);
+        return;
+    }
     let tool = data["tool"].as_str().unwrap_or("?");
     let ok = data["ok"].as_bool().unwrap_or(false);
     write_section_header(out, tool, run_tool_subtitle(data), width);

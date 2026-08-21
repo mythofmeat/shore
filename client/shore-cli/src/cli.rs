@@ -1210,74 +1210,351 @@ fn grouped_names() -> impl Iterator<Item = &'static str> {
         .flat_map(|(_, names)| names.iter().copied())
 }
 
-/// User-facing CLI commands exposed to the TUI command palette.
-///
-/// Keeping this derived from clap makes newly-added CLI command families show
-/// up in the TUI without maintaining a second catalog.
-pub(crate) fn palette_top_level_commands() -> Vec<String> {
-    use clap::CommandFactory;
-    Cli::command()
-        .get_subcommands()
-        .filter(|command| !command.is_hide_set())
-        .filter(|command| command.get_name() != "completions")
-        .map(|command| command.get_name().to_owned())
-        .collect()
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PaletteValue {
+    pub value: String,
+    pub help: Option<String>,
 }
 
-/// Complete a possibly-nested CLI command path for the TUI palette.
-pub(crate) fn palette_cli_completions(input: &str) -> Vec<String> {
+impl PaletteValue {
+    pub(crate) fn plain(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            help: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PaletteCatalog {
+    pub models: Vec<PaletteValue>,
+    pub characters: Vec<PaletteValue>,
+    pub providers: Vec<PaletteValue>,
+    pub status_sections: Vec<PaletteValue>,
+    pub tools: Vec<PaletteValue>,
+    pub subagents: Vec<PaletteValue>,
+    pub setting_keys: Vec<PaletteValue>,
+    pub message_refs: Vec<PaletteValue>,
+    pub config_keys: Vec<PaletteValue>,
+    pub config_sections: Vec<PaletteValue>,
+    pub config_schema: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PaletteCandidate {
+    pub replacement: String,
+    pub help: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PaletteCompletions {
+    pub candidates: Vec<PaletteCandidate>,
+    pub header: Option<String>,
+}
+
+fn completion_values(values: &[PaletteValue]) -> clap_complete::engine::ArgValueCandidates {
+    use clap_complete::engine::{ArgValueCandidates, CompletionCandidate};
+
+    let owned_values = values.to_vec();
+    ArgValueCandidates::new(move || {
+        owned_values
+            .iter()
+            .map(|candidate| {
+                CompletionCandidate::new(&candidate.value).help(
+                    candidate
+                        .help
+                        .as_ref()
+                        .map(|help| clap::builder::StyledStr::from(help.clone())),
+                )
+            })
+            .collect()
+    })
+}
+
+fn with_palette_values(
+    command: clap::Command,
+    arg: &str,
+    values: &[PaletteValue],
+) -> clap::Command {
+    let candidates = completion_values(values);
+    let index = command
+        .get_arguments()
+        .find(|argument| argument.get_id() == arg)
+        .and_then(clap::Arg::get_index);
+    command.mut_arg(arg, move |argument| {
+        let updated_argument = argument.add(candidates.clone());
+        match index {
+            Some(position) => updated_argument.index(position),
+            None => updated_argument,
+        }
+    })
+}
+
+fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
     use clap::CommandFactory;
 
-    let words: Vec<&str> = input.split_whitespace().collect();
+    let config_value_key = shlex::split(input).and_then(|words| {
+        (words.first().map(String::as_str) == Some("config")
+            && words.get(1).map(String::as_str) == Some("set"))
+        .then(|| words.get(2).cloned())
+        .flatten()
+    });
+    let config_values = config_value_key
+        .as_deref()
+        .zip(catalog.config_schema.as_ref())
+        .map_or_else(Vec::new, |(key, data)| {
+            crate::run::config_value_candidates_for_key(key, data)
+                .into_iter()
+                .map(PaletteValue::plain)
+                .collect()
+        });
+    let setting_values = shlex::split(input)
+        .and_then(|words| {
+            (words.first().map(String::as_str) == Some("model")
+                && words.get(1).map(String::as_str) == Some("setting"))
+            .then(|| words.get(2).cloned())
+            .flatten()
+        })
+        .map_or_else(Vec::new, |key| {
+            let values: &[&str] = match key.as_str() {
+                "reasoning_effort" => &["low", "medium", "high", "xhigh", "max", "off"],
+                "replay_prior_thinking" => &["all", "none"],
+                "zai_clear_thinking" | "zai_subscription" => &["true", "false"],
+                "sdk" => &[
+                    "anthropic",
+                    "openai",
+                    "openrouter",
+                    "gemini",
+                    "zai",
+                    "deepseek",
+                    "moonshot",
+                ],
+                "cache_ttl" => &["5m", "1h"],
+                "cache_keepalive" => &["off", "55m"],
+                "budget_tokens" => &["1024", "2048", "4096", "8192", "16384", "32768"],
+                "max_output_tokens" => &["16384", "32768", "65536"],
+                "max_tool_iterations" => &["8", "16", "32", "64"],
+                _ => &[],
+            };
+            values.iter().copied().map(PaletteValue::plain).collect()
+        });
+
+    let model_values = catalog.models.clone();
+    let subagent_values = catalog.subagents.clone();
+    let message_refs = catalog.message_refs.clone();
+    let mut command = Cli::command();
+    command.build();
+    command = command
+        .mut_arg("character", |argument| argument.hide(true))
+        .mut_arg("addr", |argument| argument.hide(true))
+        .mut_arg("help", |argument| argument.hide(true))
+        .mut_arg("version", |argument| argument.hide(true))
+        .mut_subcommand("completions", |subcommand| subcommand.hide(true))
+        .mut_subcommand("model", |subcommand| {
+            subcommand
+                .mut_subcommand("use", |leaf| {
+                    with_palette_values(
+                        with_palette_values(leaf, "subagent", &subagent_values),
+                        "name",
+                        &model_values,
+                    )
+                })
+                .mut_subcommand("info", |leaf| {
+                    with_palette_values(
+                        with_palette_values(leaf, "subagent", &subagent_values),
+                        "name",
+                        &model_values,
+                    )
+                })
+                .mut_subcommand("setting", |leaf| {
+                    with_palette_values(
+                        with_palette_values(
+                            with_palette_values(
+                                with_palette_values(leaf, "subagent", &subagent_values),
+                                "model",
+                                &model_values,
+                            ),
+                            "key",
+                            &catalog.setting_keys,
+                        ),
+                        "value",
+                        &setting_values,
+                    )
+                })
+                .mut_subcommand("reset", |leaf| {
+                    with_palette_values(leaf, "subagent", &subagent_values)
+                })
+        })
+        .mut_subcommand("character", |subcommand| {
+            subcommand.mut_subcommand("use", |leaf| {
+                with_palette_values(leaf, "name", &catalog.characters)
+            })
+        })
+        .mut_subcommand("msg", |subcommand| {
+            subcommand
+                .mut_subcommand("alt", |leaf| {
+                    let selectors = ["list", "prev", "next", "first", "last", "1", "2", "3"]
+                        .into_iter()
+                        .map(PaletteValue::plain)
+                        .collect::<Vec<_>>();
+                    with_palette_values(
+                        with_palette_values(leaf, "selector", &selectors),
+                        "msg_ref",
+                        &message_refs,
+                    )
+                })
+                .mut_subcommand("edit", |leaf| {
+                    with_palette_values(leaf, "msg_ref", &message_refs)
+                })
+                .mut_subcommand("delete", |leaf| {
+                    with_palette_values(leaf, "msg_refs", &message_refs)
+                })
+        })
+        .mut_subcommand("log", |leaf| {
+            with_palette_values(leaf, "msg_ref", &message_refs)
+        })
+        .mut_subcommand("provider", |subcommand| {
+            subcommand
+                .mut_subcommand("models", |leaf| {
+                    with_palette_values(leaf, "name", &catalog.providers)
+                })
+                .mut_subcommand("refresh", |leaf| {
+                    with_palette_values(leaf, "name", &catalog.providers)
+                })
+        })
+        .mut_subcommand("status", |leaf| {
+            with_palette_values(leaf, "section", &catalog.status_sections)
+        })
+        .mut_subcommand("debug", |subcommand| {
+            subcommand
+                .mut_subcommand("tool", |leaf| {
+                    with_palette_values(leaf, "name", &catalog.tools)
+                })
+                .mut_subcommand("subagent", |leaf| {
+                    with_palette_values(leaf, "name", &catalog.subagents)
+                })
+        })
+        .mut_subcommand("config", |subcommand| {
+            subcommand
+                .mut_subcommand("get", |leaf| {
+                    with_palette_values(leaf, "key", &catalog.config_sections)
+                })
+                .mut_subcommand("set", |leaf| {
+                    with_palette_values(
+                        with_palette_values(leaf, "key", &catalog.config_keys),
+                        "value",
+                        &config_values,
+                    )
+                })
+        });
+
+    for local in [
+        clap::Command::new("cancel").about("Stop the current generation"),
+        clap::Command::new("help").about("Show TUI keyboard shortcuts"),
+        clap::Command::new("image")
+            .about("Manage images attached to the next message")
+            .subcommand(clap::Command::new("clear").about("Remove pending image attachments")),
+        clap::Command::new("view")
+            .about("Configure TUI display options")
+            .arg(
+                clap::Arg::new("option")
+                    .value_parser([
+                        "timestamps",
+                        "thinking",
+                        "tools",
+                        "subagent",
+                        "images",
+                        "metadata",
+                        "usage",
+                        "budget",
+                    ])
+                    .help("Display option to change"),
+            )
+            .arg(
+                clap::Arg::new("value")
+                    .value_parser([
+                        "on", "off", "toggle", "always", "warn", "auto", "cap", "pace",
+                    ])
+                    .help("New display value"),
+            ),
+    ] {
+        command = command.subcommand(local);
+    }
+    command
+}
+
+fn completion_argv(input: &str) -> (Vec<std::ffi::OsString>, usize) {
     let trailing_space = input.chars().last().is_some_and(char::is_whitespace);
-    let (parents, fragment) = if trailing_space {
-        (words.as_slice(), "")
-    } else {
-        match words.split_last() {
-            Some((last, parents)) => (parents, *last),
-            None => (&[][..], ""),
+    let mut words = shlex::split(input).unwrap_or_else(|| {
+        input
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    });
+    if trailing_space || words.is_empty() {
+        words.push(String::new());
+    }
+    let mut argv = vec![std::ffi::OsString::from("shore")];
+    argv.extend(words.into_iter().map(std::ffi::OsString::from));
+    let target = argv.len().saturating_sub(1);
+    (argv, target)
+}
+
+fn completion_prefix(input: &str) -> &str {
+    let mut quote = None;
+    let mut escaped = false;
+    let mut start = 0;
+    for (index, ch) in input.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
         }
+        match ch {
+            '\\' if quote != Some('\'') => escaped = true,
+            '\'' | '"' if quote == Some(ch) => quote = None,
+            '\'' | '"' if quote.is_none() => quote = Some(ch),
+            _ if ch.is_whitespace() && quote.is_none() => {
+                start = index.saturating_add(ch.len_utf8());
+            }
+            _ => {}
+        }
+    }
+    input.get(..start).unwrap_or_default()
+}
+
+/// Complete the TUI command line with clap's shell-independent engine.
+///
+/// Clap remains the grammar authority while the live catalog supplies values
+/// that only the connected daemon knows about.
+pub(crate) fn palette_completions(input: &str, catalog: &PaletteCatalog) -> PaletteCompletions {
+    let (argv, target) = completion_argv(input);
+    let prefix = completion_prefix(input);
+    let mut command = palette_command(catalog, input);
+    let Ok(raw) = clap_complete::engine::complete(&mut command, argv, target, None) else {
+        return PaletteCompletions::default();
     };
 
-    let root = Cli::command();
-    let mut command = &root;
-    for parent in parents {
-        let Some(next) = command.find_subcommand(parent) else {
-            return Vec::new();
-        };
-        command = next;
-    }
-
-    command
-        .get_subcommands()
-        .filter(|candidate| !candidate.is_hide_set())
-        .filter(|candidate| {
-            candidate.get_name().starts_with(fragment)
-                && !(parents.is_empty() && candidate.get_name() == "completions")
+    let mut candidates = raw
+        .into_iter()
+        .filter_map(|candidate| {
+            let value = candidate.get_value().to_str()?;
+            if matches!(value, "-h" | "--help" | "-V" | "--version") {
+                return None;
+            }
+            let quoted = shlex::try_quote(value).ok()?;
+            Some(PaletteCandidate {
+                replacement: format!("{prefix}{quoted}"),
+                help: candidate.get_help().map(ToString::to_string),
+            })
         })
-        .map(|candidate| {
-            parents
-                .iter()
-                .copied()
-                .chain(std::iter::once(candidate.get_name()))
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
-        .collect()
-}
+        .collect::<Vec<_>>();
+    let mut seen = std::collections::HashSet::new();
+    candidates.retain(|candidate| seen.insert(candidate.replacement.clone()));
 
-pub(crate) fn palette_command_description(path: &str) -> Option<String> {
-    use clap::CommandFactory;
-
-    let root = Cli::command();
-    let mut command = &root;
-    for name in path.split_whitespace() {
-        command = command.find_subcommand(name)?;
+    PaletteCompletions {
+        header: (!candidates.is_empty()).then(|| "command, option, or value".to_owned()),
+        candidates,
     }
-    command
-        .get_about()
-        .map(ToString::to_string)
-        .map(|about| first_line(&about))
 }
 
 pub(crate) fn parse_palette_command(input: &str) -> Result<CliCommand, String> {
@@ -1952,6 +2229,100 @@ mod tests {
 
     fn arg<'val>(args: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
         args.get(key).expect("expected command argument")
+    }
+
+    fn palette_replacements(input: &str, catalog: &PaletteCatalog) -> Vec<String> {
+        palette_completions(input, catalog)
+            .candidates
+            .into_iter()
+            .map(|candidate| candidate.replacement)
+            .collect()
+    }
+
+    fn assert_palette_covers_subcommands(
+        command: &clap::Command,
+        parent: &str,
+        catalog: &PaletteCatalog,
+    ) {
+        let input = if parent.is_empty() {
+            String::new()
+        } else {
+            format!("{parent} ")
+        };
+        let offered = palette_replacements(&input, catalog);
+        for child in command.get_subcommands().filter(|child| {
+            !child.is_hide_set() && !matches!(child.get_name(), "completions" | "complete")
+        }) {
+            let path = if parent.is_empty() {
+                child.get_name().to_owned()
+            } else {
+                format!("{parent} {}", child.get_name())
+            };
+            assert!(
+                offered.iter().any(|candidate| candidate == &path),
+                "palette omitted clap command {path:?}; offered {offered:?}"
+            );
+            assert_palette_covers_subcommands(child, &path, catalog);
+        }
+    }
+
+    #[test]
+    fn palette_recursively_covers_every_visible_cli_command() {
+        use clap::CommandFactory;
+
+        let mut command = Cli::command();
+        command.build();
+        assert_palette_covers_subcommands(&command, "", &PaletteCatalog::default());
+    }
+
+    #[test]
+    fn palette_uses_one_canonical_spelling_for_cli_actions() {
+        let offered = palette_replacements("", &PaletteCatalog::default());
+        for duplicate in ["regen", "alt", "edit", "delete", "sys", "setting"] {
+            assert!(!offered.iter().any(|candidate| candidate == duplicate));
+        }
+        for canonical in ["msg", "model", "character"] {
+            assert!(offered.iter().any(|candidate| candidate == canonical));
+        }
+    }
+
+    #[test]
+    fn palette_completes_flags_enums_and_live_values() {
+        let catalog = PaletteCatalog {
+            models: vec![PaletteValue::plain("anthropic:opus")],
+            characters: vec![PaletteValue::plain("ada")],
+            providers: vec![PaletteValue::plain("anthropic")],
+            status_sections: vec![PaletteValue::plain("daemon")],
+            tools: vec![PaletteValue::plain("read")],
+            subagents: vec![PaletteValue::plain("librarian")],
+            setting_keys: vec![PaletteValue::plain("temperature")],
+            config_keys: vec![PaletteValue::plain("defaults.stream")],
+            config_sections: vec![PaletteValue::plain("defaults")],
+            config_schema: Some(serde_json::json!({
+                "schema": [{
+                    "key": "defaults.stream",
+                    "settable": true,
+                    "values": ["true", "false"]
+                }]
+            })),
+            ..PaletteCatalog::default()
+        };
+
+        assert!(palette_replacements("log --", &catalog).contains(&"log --reasoning".into()));
+        assert!(palette_replacements("log --role ", &catalog).contains(&"log --role user".into()));
+        assert!(
+            palette_replacements("model use ", &catalog)
+                .contains(&"model use anthropic:opus".into())
+        );
+        assert!(
+            palette_replacements("status --section ", &catalog)
+                .contains(&"status --section daemon".into())
+        );
+        assert!(
+            palette_replacements("config set defaults.stream ", &catalog)
+                .contains(&"config set defaults.stream true".into())
+        );
+        assert!(!palette_replacements("model --", &catalog).contains(&"model --help".into()));
     }
 
     #[test]

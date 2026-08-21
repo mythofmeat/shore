@@ -200,7 +200,7 @@ pub(crate) async fn execute(
     Ok(())
 }
 
-fn wants_json(other: &CliCommand) -> bool {
+pub(crate) fn wants_json(other: &CliCommand) -> bool {
     match other {
         CliCommand::Model {
             json, subcommand, ..
@@ -324,7 +324,7 @@ async fn handle_generic_swp_command(
     Ok(())
 }
 
-fn config_keys_filter(other: &CliCommand) -> Option<&str> {
+pub(crate) fn config_keys_filter(other: &CliCommand) -> Option<&str> {
     let CliCommand::Config {
         subcommand: Some(crate::cli::ConfigCommand::Keys { filter, .. }),
         ..
@@ -346,7 +346,7 @@ fn catalog_render(name: &str) -> Option<fn(&serde_json::Value)> {
     }
 }
 
-fn usage_view(cmd: &CliCommand) -> Option<output::usage::View> {
+pub(crate) fn usage_view(cmd: &CliCommand) -> Option<output::usage::View> {
     use crate::cli::UsageCommand;
     use output::usage::View;
     let CliCommand::Usage { subcommand, .. } = cmd else {
@@ -1084,6 +1084,17 @@ fn config_value_candidates(entry: &serde_json::Value, data: &serde_json::Value) 
     json_strings(entry.get("values"))
 }
 
+pub(crate) fn config_value_candidates_for_key(key: &str, data: &serde_json::Value) -> Vec<String> {
+    data.get("schema")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|entries| {
+            entries
+                .iter()
+                .find(|entry| entry.get("key").and_then(serde_json::Value::as_str) == Some(key))
+        })
+        .map_or_else(Vec::new, |entry| config_value_candidates(entry, data))
+}
+
 fn config_dir() -> PathBuf {
     shore_common::dirs::config_dir()
 }
@@ -1114,6 +1125,15 @@ fn print_config_toml(
     data: &serde_json::Value,
     show_all: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let rendered = render_config_toml(data, show_all)?;
+    cli_write!("{rendered}");
+    Ok(())
+}
+
+pub(crate) fn render_config_toml(
+    data: &serde_json::Value,
+    show_all: bool,
+) -> Result<String, Box<dyn std::error::Error>> {
     let payload = data.get("config").unwrap_or(data);
     let key = data.get("key").and_then(|v| v.as_str());
     let defaults: Option<&serde_json::Value> = data.get("defaults");
@@ -1147,8 +1167,7 @@ fn print_config_toml(
         | toml::Value::Datetime(_)
         | toml::Value::Array(_)) => toml::to_string_pretty(&other)?,
     };
-    cli_write!("{rendered}");
-    Ok(())
+    Ok(rendered)
 }
 
 fn filter_non_defaults(

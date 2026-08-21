@@ -25,6 +25,12 @@ pub(crate) struct PendingEditPrefill {
     pub msg_ref: String,
 }
 
+#[derive(Clone)]
+pub(crate) struct PaletteConfirmation {
+    pub command: String,
+    pub prompt: String,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConnectionStatus {
     Disconnected,
@@ -220,6 +226,7 @@ impl EffectiveSamplerSnapshot {
 #[derive(Default)]
 pub(crate) struct CompletionState {
     pub candidates: Vec<String>,
+    pub descriptions: std::collections::HashMap<String, String>,
     pub selected: Option<usize>,
     pub header: Option<String>,
     pub mode: PaletteMode,
@@ -228,6 +235,7 @@ pub(crate) struct CompletionState {
 impl CompletionState {
     pub(crate) fn clear(&mut self) {
         self.candidates.clear();
+        self.descriptions.clear();
         self.selected = None;
         self.header = None;
         self.mode = PaletteMode::Top;
@@ -261,6 +269,11 @@ pub(crate) struct App {
     pub sampler_settings_request_seq: u64,
     pub pending_palette_commands: std::collections::HashMap<String, String>,
     pub palette_command_request_seq: u64,
+    pub palette_catalog: crate::cli::PaletteCatalog,
+    pub palette_catalog_loaded: bool,
+    pub pending_palette_catalog: std::collections::HashMap<String, String>,
+    pub palette_confirmation: Option<PaletteConfirmation>,
+    pub confirmed_palette_command: Option<String>,
     pub tokens: TokenCounts,
     pub is_private: bool,
     pub should_quit: bool,
@@ -322,6 +335,11 @@ impl Default for App {
             sampler_settings_request_seq: 0,
             pending_palette_commands: std::collections::HashMap::new(),
             palette_command_request_seq: 0,
+            palette_catalog: crate::cli::PaletteCatalog::default(),
+            palette_catalog_loaded: false,
+            pending_palette_catalog: std::collections::HashMap::new(),
+            palette_confirmation: None,
+            confirmed_palette_command: None,
             tokens: TokenCounts {
                 input: 0,
                 output: 0,
@@ -702,20 +720,36 @@ impl App {
         rid
     }
 
+    pub(crate) fn begin_palette_catalog_request(&mut self, kind: &str) -> String {
+        self.palette_command_request_seq = self.palette_command_request_seq.wrapping_add(1);
+        let rid = format!("tui_palette_catalog_{}", self.palette_command_request_seq);
+        let _ = self
+            .pending_palette_catalog
+            .insert(rid.clone(), kind.to_owned());
+        rid
+    }
+
+    pub(crate) fn take_palette_catalog_request(&mut self, rid: Option<&str>) -> Option<String> {
+        self.pending_palette_catalog.remove(rid?)
+    }
+
+    pub(crate) fn invalidate_palette_catalog(&mut self) {
+        self.palette_catalog_loaded = false;
+        self.pending_palette_catalog.clear();
+        self.palette_catalog.providers.clear();
+        self.palette_catalog.status_sections.clear();
+        self.palette_catalog.tools.clear();
+        self.palette_catalog.subagents.clear();
+        self.palette_catalog.config_keys.clear();
+        self.palette_catalog.config_sections.clear();
+        self.palette_catalog.config_schema = None;
+    }
+
     pub(crate) fn take_palette_command(&mut self, rid: Option<&str>) -> Option<String> {
         self.pending_palette_commands.remove(rid?)
     }
 
-    pub(crate) fn push_command_output(&mut self, command: &str, data: &serde_json::Value) {
-        let redact_config = command.split_whitespace().next() == Some("config")
-            && !command.split_whitespace().any(|word| word == "--json");
-        let display_data = if redact_config {
-            crate::output::config::redact_json_for_display(data)
-        } else {
-            data.clone()
-        };
-        let rendered = serde_json::to_string_pretty(&display_data)
-            .unwrap_or_else(|_| display_data.to_string());
+    pub(crate) fn push_command_text(&mut self, command: &str, rendered: String) {
         self.entries.push(ConversationEntry::System {
             content: format!(":{command}\n{rendered}"),
             count: 1,
@@ -931,7 +965,7 @@ impl App {
         match name {
             "model" => Some("model"),
             "character" | "characters" => Some("character"),
-            "setting" => Some("setting"),
+            "model setting" | "setting" => Some("setting"),
             "view" => Some("view"),
             _ => None,
         }
@@ -1073,40 +1107,8 @@ impl App {
             || (!self.model.is_empty() && Self::model_identifier_matches(&self.model, candidate))
     }
 
-    const TUI_COMMANDS: &'static [(&'static str, &'static str)] = &[
-        ("cancel", "Stop the current generation"),
-        ("character", "Switch active character"),
-        ("compact", "Summarize and shrink the conversation"),
-        ("delete", "Delete a message by reference"),
-        ("edit", "Edit a previous message"),
-        ("help", "Show keyboard shortcuts"),
-        ("image", "Attach an image to the next message"),
-        ("model", "Switch the active model"),
-        ("regen", "Regenerate the last assistant reply"),
-        ("setting", "View or change sampler settings"),
-        ("alt", "Choose an alternate response"),
-        ("sys", "Inject a system instruction"),
-        ("view", "Configure TUI display options"),
-    ];
-
-    fn top_level_commands() -> Vec<String> {
-        let mut commands: Vec<String> = Self::TUI_COMMANDS
-            .iter()
-            .map(|(name, _)| (*name).to_owned())
-            .collect();
-        for command in crate::cli::palette_top_level_commands() {
-            if !commands.contains(&command) {
-                commands.push(command);
-            }
-        }
-        commands
-    }
-
-    pub(crate) fn command_description(name: &str) -> Option<String> {
-        Self::TUI_COMMANDS
-            .iter()
-            .find_map(|(n, d)| (*n == name).then_some((*d).to_owned()))
-            .or_else(|| crate::cli::palette_command_description(name))
+    pub(crate) fn command_description(&self, candidate: &str) -> Option<String> {
+        self.completion.descriptions.get(candidate).cloned()
     }
 
     const SETTING_KEYS: &'static [&'static str] = &[
@@ -1483,6 +1485,7 @@ impl App {
     pub(crate) fn update_completions(&mut self) {
         self.completion.selected = None;
         self.completion.header = None;
+        self.completion.descriptions.clear();
 
         if matches!(self.completion.mode, PaletteMode::Submenu(_)) {
             self.update_submenu_candidates();
@@ -1494,146 +1497,50 @@ impl App {
             return;
         }
 
-        let input = &self.input.cmd_text;
+        self.palette_catalog.models = self
+            .model_names
+            .iter()
+            .cloned()
+            .map(crate::cli::PaletteValue::plain)
+            .collect();
+        self.palette_catalog.characters = self
+            .characters
+            .iter()
+            .map(|character| crate::cli::PaletteValue::plain(&character.name))
+            .collect();
+        self.palette_catalog.setting_keys = self
+            .visible_setting_keys()
+            .into_iter()
+            .map(crate::cli::PaletteValue::plain)
+            .collect();
+        let mut message_refs = ["last", "-1", "-2", "-3"]
+            .into_iter()
+            .map(crate::cli::PaletteValue::plain)
+            .collect::<Vec<_>>();
+        message_refs.extend(self.entries.iter().filter_map(|entry| {
+            entry
+                .as_turn()
+                .and_then(|turn| turn.msg_id.as_deref())
+                .map(crate::cli::PaletteValue::plain)
+        }));
+        self.palette_catalog.message_refs = message_refs;
 
-        if input.is_empty() {
-            self.completion.candidates = Self::top_level_commands();
-            return;
-        }
-
-        let mut parts = input.splitn(2, ' ');
-        let cmd = parts.next().unwrap_or("");
-        let has_space = parts.next().is_some();
-
-        if has_space {
-            let arg = input.split_once(' ').map_or("", |x| x.1).trim();
-            match cmd {
-                "character" => {
-                    self.completion.header = Some("character or action".into());
-                    let (prefix, name_filter) = arg
-                        .strip_prefix("use ")
-                        .map_or(("character ", arg), |filter| ("character use ", filter));
-                    let mut candidates = if arg == "use" || arg.starts_with("use ") {
-                        Vec::new()
-                    } else {
-                        crate::cli::palette_cli_completions(input)
-                    };
-                    candidates.extend(
-                        self.characters
-                            .iter()
-                            .map(|character| character.name.clone())
-                            .filter(|name| {
-                                name_filter.is_empty()
-                                    || name.to_lowercase().starts_with(&name_filter.to_lowercase())
-                            })
-                            .map(|name| format!("{prefix}{name}")),
-                    );
-                    candidates.sort();
-                    candidates.dedup();
-                    self.completion.candidates = candidates;
+        let completed =
+            crate::cli::palette_completions(&self.input.cmd_text, &self.palette_catalog);
+        self.completion.header = completed.header;
+        self.completion.candidates = completed
+            .candidates
+            .into_iter()
+            .map(|candidate| {
+                if let Some(help) = candidate.help {
+                    let _ = self
+                        .completion
+                        .descriptions
+                        .insert(candidate.replacement.clone(), help);
                 }
-                "model" => {
-                    self.completion.header = Some("model or action".into());
-                    let (prefix, name_filter) = arg
-                        .strip_prefix("use ")
-                        .map_or(("model ", arg), |filter| ("model use ", filter));
-                    let mut candidates = if arg == "use" || arg.starts_with("use ") {
-                        Vec::new()
-                    } else {
-                        crate::cli::palette_cli_completions(input)
-                    };
-                    candidates.extend(
-                        self.model_names
-                            .iter()
-                            .filter(|name| {
-                                name_filter.is_empty()
-                                    || name.to_lowercase().contains(&name_filter.to_lowercase())
-                            })
-                            .map(|name| format!("{prefix}{name}")),
-                    );
-                    candidates.sort();
-                    candidates.dedup();
-                    self.completion.candidates = candidates;
-                }
-                "image" => {
-                    self.completion.header = Some("image action".into());
-                    self.completion.candidates = ["clear"]
-                        .iter()
-                        .filter(|s| s.starts_with(&arg.to_lowercase()))
-                        .map(|s| format!("image {s}"))
-                        .collect();
-                }
-                "setting" => {
-                    let (head, has_second) = match arg.split_once(' ') {
-                        Some((h, _)) => (h, true),
-                        None => (arg, false),
-                    };
-                    if has_second {
-                        if head == "reset" {
-                            self.completion.header = Some("setting key".into());
-                            let key_arg = arg.split_once(' ').map_or("", |x| x.1).trim();
-                            self.completion.candidates = Self::SETTING_KEYS
-                                .iter()
-                                .filter(|k| {
-                                    key_arg.is_empty()
-                                        || k.to_lowercase().starts_with(&key_arg.to_lowercase())
-                                })
-                                .map(|k| format!("setting reset {k}"))
-                                .collect();
-                        } else {
-                            self.completion.candidates.clear();
-                        }
-                    } else {
-                        self.completion.header = Some("setting key".into());
-                        let visible = self.visible_setting_keys();
-                        let mut candidates: Vec<String> = visible
-                            .iter()
-                            .filter(|k| {
-                                head.is_empty()
-                                    || k.to_lowercase().starts_with(&head.to_lowercase())
-                            })
-                            .map(|k| format!("setting {k}"))
-                            .collect();
-                        if "reset".starts_with(&head.to_lowercase()) {
-                            candidates.push("setting reset".into());
-                        }
-                        self.completion.candidates = candidates;
-                    }
-                }
-                "view" => {
-                    self.completion.header = Some("view option".into());
-                    let (head, has_second) = match arg.split_once(' ') {
-                        Some((h, _)) => (h, true),
-                        None => (arg, false),
-                    };
-                    if has_second {
-                        let value_arg = arg.split_once(' ').map_or("", |x| x.1).trim();
-                        self.completion.candidates = self
-                            .view_value_presets(head, value_arg)
-                            .into_iter()
-                            .map(|value| format!("view {head} {value}"))
-                            .collect();
-                    } else {
-                        self.completion.candidates = Self::VIEW_KEYS
-                            .iter()
-                            .filter(|key| {
-                                head.is_empty()
-                                    || key.to_lowercase().starts_with(&head.to_lowercase())
-                            })
-                            .map(|key| format!("view {key}"))
-                            .collect();
-                    }
-                }
-                _ => {
-                    self.completion.candidates = crate::cli::palette_cli_completions(input);
-                }
-            }
-        } else {
-            self.completion.candidates = Self::top_level_commands()
-                .into_iter()
-                .filter(|name| name.starts_with(cmd))
-                .collect();
-        }
+                candidate.replacement
+            })
+            .collect();
     }
 
     pub(crate) fn apply_completion(&mut self) {
@@ -1645,7 +1552,7 @@ impl App {
         {
             self.input.cmd_text = text.clone();
             self.input.cmd_cursor = text.len();
-            if !text.contains(' ') {
+            if !text.ends_with(char::is_whitespace) {
                 self.input.cmd_text.push(' ');
                 self.input.cmd_cursor = self.input.cmd_cursor.saturating_add(1);
             }
@@ -1837,27 +1744,6 @@ impl App {
             }
             _ => None,
         };
-    }
-
-    fn view_value_presets(&self, key: &str, filter: &str) -> Vec<String> {
-        let normalized_filter = filter.to_lowercase();
-        match key {
-            "usage" => {
-                Self::filtered_presets(&["off", "always", "warn", "toggle"], &normalized_filter)
-            }
-            "budget" => {
-                let mut candidates =
-                    Self::filtered_presets(&["auto", "cap", "pace", "toggle"], &normalized_filter);
-                candidates.extend(self.usage_budgets.iter().map(|b| b.name.clone()).filter(
-                    |name| {
-                        normalized_filter.is_empty()
-                            || name.to_lowercase().starts_with(&normalized_filter)
-                    },
-                ));
-                candidates
-            }
-            _ => Self::filtered_presets(&["on", "off", "toggle"], &normalized_filter),
-        }
     }
 
     fn filtered_presets(presets: &[&str], filter: &str) -> Vec<String> {
@@ -2113,7 +1999,6 @@ impl App {
                 .unwrap_or_default(),
             None => 0,
         });
-        self.apply_completion();
     }
 
     pub(crate) fn prev_completion(&mut self) {
@@ -2125,7 +2010,6 @@ impl App {
             Some(0) | None => len.saturating_sub(1),
             Some(i) => i.saturating_sub(1),
         });
-        self.apply_completion();
     }
 }
 

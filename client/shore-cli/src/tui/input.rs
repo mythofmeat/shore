@@ -251,11 +251,40 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             debug!("Input: Normal → Command");
             app.input.enter_command_mode();
             app.update_completions();
-            Action::Redraw
+            let commands = palette_catalog_commands(app);
+            if commands.is_empty() {
+                Action::Redraw
+            } else {
+                Action::SendMulti(commands)
+            }
         }
 
         _ => Action::None,
     }
+}
+
+fn palette_catalog_commands(app: &mut App) -> Vec<ConnCommand> {
+    if app.palette_catalog_loaded || !app.pending_palette_catalog.is_empty() {
+        return Vec::new();
+    }
+    app.palette_catalog_loaded = true;
+    [
+        ("providers", "list_providers"),
+        ("status", "status"),
+        ("tools", "tools"),
+        ("config", "config_schema"),
+        ("settings", "model_settings"),
+    ]
+    .into_iter()
+    .map(|(kind, name)| {
+        let rid = app.begin_palette_catalog_request(kind);
+        ConnCommand::Send(ClientMessage::Command(Command {
+            rid: Some(rid),
+            name: name.to_owned(),
+            args: serde_json::json!({}),
+        }))
+    })
+    .collect()
 }
 
 fn handle_subagent_panel(app: &mut App, key: KeyEvent) -> Action {
@@ -441,6 +470,9 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
 }
 
 fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
+    if app.palette_confirmation.is_some() {
+        return handle_palette_confirmation(app, key);
+    }
     if matches!(app.completion.mode, PaletteMode::ValueEditor(_)) {
         return handle_value_editor_mode(app, key);
     }
@@ -457,7 +489,11 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
         }
 
         (KeyModifiers::NONE, KeyCode::Tab) => {
-            app.next_completion();
+            if app.completion.selected.is_none() {
+                app.next_completion();
+            }
+            app.apply_completion();
+            app.update_completions();
             enter_completed_submenu(app).unwrap_or(Action::Redraw)
         }
 
@@ -467,7 +503,11 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
         }
 
         (KeyModifiers::SHIFT | KeyModifiers::NONE, KeyCode::BackTab) => {
-            app.prev_completion();
+            if app.completion.selected.is_none() {
+                app.prev_completion();
+            }
+            app.apply_completion();
+            app.update_completions();
             enter_completed_submenu(app).unwrap_or(Action::Redraw)
         }
 
@@ -477,10 +517,20 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
         }
 
         (KeyModifiers::NONE, KeyCode::Enter) => {
+            let committed_completion = app.completion.selected.is_some();
+            if committed_completion {
+                app.apply_completion();
+                app.update_completions();
+            }
             let trimmed = app.input.cmd_text.trim().to_owned();
             if let Some(parent) = App::canonical_submenu_parent(&trimmed) {
                 app.enter_submenu(parent);
                 submenu_fetch_action(app, parent)
+            } else if committed_completion
+                && crate::cli::parse_palette_command(&trimmed).is_err()
+                && !app.completion.candidates.is_empty()
+            {
+                Action::Redraw
             } else {
                 app.completion.clear();
                 let text = app.input.take_cmd_text();
@@ -511,6 +561,26 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
+        _ => Action::None,
+    }
+}
+
+fn handle_palette_confirmation(app: &mut App, key: KeyEvent) -> Action {
+    match (key.modifiers, key.code) {
+        (KeyModifiers::NONE, KeyCode::Enter | KeyCode::Char('y')) => {
+            let Some(confirmation) = app.palette_confirmation.take() else {
+                return Action::Redraw;
+            };
+            app.confirmed_palette_command = Some(confirmation.command.clone());
+            app.input.mode = InputMode::Normal;
+            parse_command(app, &confirmation.command)
+        }
+        (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('n')) => {
+            app.palette_confirmation = None;
+            app.input.exit_command_mode();
+            app.set_status("command cancelled");
+            Action::Redraw
+        }
         _ => Action::None,
     }
 }
@@ -803,7 +873,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
 
         "model" => {
             if arg.split_whitespace().next().is_some_and(|word| {
-                matches!(word, "use" | "info" | "setting") || word.starts_with('-')
+                matches!(word, "use" | "info" | "setting" | "reset") || word.starts_with('-')
             }) {
                 return dispatch_cli_command(app, trimmed_input);
             }
@@ -885,34 +955,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             }
         }
 
-        "compact" => {
-            if arg.split_whitespace().any(|word| word.starts_with('-')) {
-                return dispatch_cli_command(app, trimmed_input);
-            }
-            let mut args = serde_json::json!({});
-            for word in arg.split_whitespace() {
-                if word == "restart" {
-                    if let Some(argument_map) = args.as_object_mut() {
-                        let _previous =
-                            argument_map.insert("restart".into(), serde_json::json!(true));
-                    }
-                } else if let Ok(n) = word.parse::<u32>() {
-                    if let Some(argument_map) = args.as_object_mut() {
-                        let _previous =
-                            argument_map.insert("keep_turns".into(), serde_json::json!(n));
-                    }
-                } else {
-                    app.set_status("usage: :compact [keep_turns] [restart]");
-                    return Action::Redraw;
-                }
-            }
-            Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                rid: None,
-
-                name: "compact".into(),
-                args,
-            })))
-        }
+        "compact" => dispatch_cli_command(app, trimmed_input),
 
         "delete" => {
             if arg.is_empty() {
@@ -1145,6 +1188,16 @@ fn palette_swp_command(
 }
 
 fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
+    if shlex::split(input).is_some_and(|words| {
+        words.iter().any(|word| {
+            matches!(word.as_str(), "--addr" | "--character" | "-c")
+                || word.starts_with("--addr=")
+                || word.starts_with("--character=")
+        })
+    }) {
+        app.set_error("the TUI is already attached to a daemon and character; switch with `character use` instead");
+        return Action::Redraw;
+    }
     let command = match crate::cli::parse_palette_command(input) {
         Ok(command) => command,
         Err(error) => {
@@ -1157,6 +1210,72 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
             return Action::Redraw;
         }
     };
+
+    match &command {
+        CliCommand::Completions { .. } | CliCommand::Complete { .. } => {
+            app.set_error("shell completion generation is a terminal-only CLI operation");
+            return Action::Redraw;
+        }
+        CliCommand::Status {
+            section: Some(section),
+            ..
+        } if !app.palette_catalog.status_sections.is_empty()
+            && !app
+                .palette_catalog
+                .status_sections
+                .iter()
+                .any(|candidate| candidate.value == *section) =>
+        {
+            app.set_error(format!("no status section named {section:?}"));
+            return Action::Redraw;
+        }
+        CliCommand::Log {
+            reasoning,
+            tools,
+            subagent_tools,
+            follow,
+            ..
+        } => {
+            if *reasoning {
+                app.show_thinking = true;
+            }
+            if *tools {
+                app.show_tools = true;
+            }
+            if *subagent_tools {
+                app.show_subagent = true;
+            }
+            if *follow {
+                app.set_status("the TUI already follows this conversation live");
+            }
+        }
+        CliCommand::Msg { .. }
+        | CliCommand::Compact { .. }
+        | CliCommand::Segments { .. }
+        | CliCommand::Clear { .. }
+        | CliCommand::Trace { .. }
+        | CliCommand::Character { .. }
+        | CliCommand::Status { .. }
+        | CliCommand::Debug { .. }
+        | CliCommand::Model { .. }
+        | CliCommand::Provider { .. }
+        | CliCommand::Config { .. }
+        | CliCommand::Usage { .. } => {}
+    }
+
+    if let Some(prompt) = palette_confirmation_prompt(&command)
+        && app.confirmed_palette_command.as_deref() != Some(input)
+    {
+        app.palette_confirmation = Some(crate::tui::app::PaletteConfirmation {
+            command: input.to_owned(),
+            prompt,
+        });
+        app.input.mode = InputMode::Command;
+        return Action::Redraw;
+    }
+    if app.confirmed_palette_command.as_deref() == Some(input) {
+        app.confirmed_palette_command = None;
+    }
 
     match &command {
         CliCommand::Msg {
@@ -1189,6 +1308,23 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
                 stream: true,
             })))
         }
+        CliCommand::Msg {
+            command: MsgCommand::Alt {
+                selector, msg_ref, ..
+            },
+        } if selector.as_deref().is_none_or(|value| value == "list") => {
+            let target_ref = msg_ref.clone();
+            app.start_alt_picker(target_ref.clone());
+            let mut args = serde_json::Map::new();
+            if let Some(selected_ref) = target_ref {
+                let _ = args.insert("ref".into(), serde_json::json!(selected_ref));
+            }
+            Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
+                rid: None,
+                name: "list_alternatives".into(),
+                args: serde_json::Value::Object(args),
+            })))
+        }
         CliCommand::Character {
             subcommand: None,
             info: false,
@@ -1213,30 +1349,12 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
             serde_json::json!({ "name": name }),
         ),
         CliCommand::Config { path: true, .. } => {
-            app.push_command_output(
-                input,
-                &serde_json::json!({
-                    "path": shore_common::dirs::config_dir().display().to_string()
-                }),
-            );
-            Action::Redraw
+            palette_swp_command(app, input, "status", serde_json::json!({}))
         }
         CliCommand::Config {
-            subcommand: Some(ConfigCommand::Reload { yes: false, .. }),
+            subcommand: Some(ConfigCommand::Reload { .. }),
             ..
-        } => {
-            app.set_status("config reload may invalidate the prompt cache; use :config reload --yes to confirm");
-            Action::Redraw
-        }
-        CliCommand::Config {
-            subcommand: Some(ConfigCommand::Reload { yes: true, .. }),
-            ..
-        } => palette_swp_command(
-            app,
-            input,
-            "config_reload",
-            serde_json::json!({ "apply": true, "refresh_prompts": true }),
-        ),
+        } => palette_swp_command(app, input, "config_reload", serde_json::json!({})),
         CliCommand::Trace { subcommand: None } => {
             app.set_status("usage: :trace [calls|heartbeat|events|errors|subagent]");
             Action::Redraw
@@ -1246,9 +1364,11 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
             Action::Redraw
         }
         CliCommand::Model {
-            subcommand: None, ..
+            subcommand: None,
+            json,
+            ..
         } => {
-            app.show_model_list = true;
+            app.show_model_list = !json;
             let Some((name, args)) =
                 crate::cli::to_swp_command(&command, Some(&app.character_name))
             else {
@@ -1280,6 +1400,56 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
             };
             palette_swp_command(app, input, name, args)
         }
+    }
+}
+
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "only a deliberately small subset of commands needs confirmation"
+)]
+fn palette_confirmation_prompt(command: &CliCommand) -> Option<String> {
+    match command {
+        CliCommand::Msg {
+            command: MsgCommand::Delete { msg_refs, .. },
+        } => Some(format!(
+            "Delete {} conversation {}?",
+            msg_refs.len(),
+            if msg_refs.len() == 1 {
+                "entry"
+            } else {
+                "entries"
+            }
+        )),
+        CliCommand::Msg {
+            command: MsgCommand::Edit { msg_ref, .. },
+        } => Some(format!("Replace the content of message {msg_ref:?}?")),
+        CliCommand::Compact { .. } => {
+            Some("Summarize and archive older conversation turns?".to_owned())
+        }
+        CliCommand::Clear { .. } => Some("Archive and clear the active conversation?".to_owned()),
+        CliCommand::Character {
+            subcommand: Some(CharacterCommand::New { name }),
+            ..
+        } => Some(format!("Create character workspace {name:?}?")),
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Set { key, .. }),
+            ..
+        } => Some(format!("Write setting {key:?} to the config?")),
+        CliCommand::Debug {
+            subcommand:
+                Some(crate::cli::DebugCommand::Tool {
+                    name,
+                    describe: false,
+                    ..
+                }),
+        } => Some(format!("Run tool {name:?}? Its side effects are real.")),
+        CliCommand::Debug {
+            subcommand: Some(crate::cli::DebugCommand::Subagent { name, .. }),
+        } => Some(format!("Run sub-agent {name:?}? This spends tokens.")),
+        CliCommand::Debug {
+            subcommand: Some(_),
+        } => Some("Run this daemon debug operation now?".to_owned()),
+        _ => None,
     }
 }
 
@@ -1717,9 +1887,42 @@ mod tests {
     }
 
     #[test]
-    fn updated_character_and_model_cli_grammar_is_not_shadowed_by_tui_aliases() {
+    fn side_effectful_cli_commands_require_an_explicit_tui_confirmation() {
         let mut app = App::default();
+        let action = parse_command(&mut app, "config set defaults.stream false");
+        assert!(matches!(action, Action::Redraw));
+        assert_eq!(
+            app.palette_confirmation
+                .as_ref()
+                .map(|confirmation| confirmation.command.as_str()),
+            Some("config set defaults.stream false")
+        );
+        assert_eq!(app.input.mode, InputMode::Command);
+        assert!(
+            !app.palette_confirmation
+                .as_ref()
+                .is_some_and(|confirmation| confirmation.prompt.contains("false")),
+            "confirmation copy must not echo config values because they may be secrets"
+        );
 
+        let sent = sent_command(handle_palette_confirmation(
+            &mut app,
+            make_key(KeyModifiers::NONE, KeyCode::Enter),
+        ));
+        assert_eq!(sent.name, "config");
+        assert_eq!(
+            sent.args.get("key"),
+            Some(&serde_json::json!("defaults.stream"))
+        );
+        assert_eq!(sent.args.get("value"), Some(&serde_json::json!("false")));
+    }
+
+    #[test]
+    fn updated_character_and_model_cli_grammar_is_not_shadowed_by_tui_aliases() {
+        let mut app = App {
+            confirmed_palette_command: Some("character new Ada".into()),
+            ..App::default()
+        };
         let create = sent_command(parse_command(&mut app, "character new Ada"));
         assert_eq!(create.name, "create_character");
         assert_eq!(create.args.get("name"), Some(&serde_json::json!("Ada")));
@@ -1728,6 +1931,7 @@ mod tests {
         assert_eq!(switch.name, "switch_model");
         assert_eq!(switch.args.get("name"), Some(&serde_json::json!("opus")));
 
+        app.confirmed_palette_command = Some("compact 4 --restart".into());
         let compact = sent_command(parse_command(&mut app, "compact 4 --restart"));
         assert_eq!(compact.name, "compact");
         assert_eq!(compact.args.get("keep_turns"), Some(&serde_json::json!(4)));
