@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub(crate) const RESERVED_KEYS: [&str; 3] = ["esc", ":", "ctrl+c"];
 
-pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 19] = [
+pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 21] = [
     ("i", "ui insert"),
     ("a", "ui insert --end"),
     ("A", "ui insert --end"),
@@ -24,6 +24,19 @@ pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 19] = [
     ("o", "ui images"),
     ("r", "msg regen"),
     ("ctrl+g", "ui editor"),
+    ("/", "ui palette shortcuts"),
+    ("ctrl+p", "ui palette config"),
+];
+
+pub(crate) const DEFAULT_SHORTCUTS: [(&str, &str); 8] = [
+    ("regen", "msg regen"),
+    ("edit", "msg edit"),
+    ("alt", "msg alt"),
+    ("delete", "msg delete"),
+    ("compact", "compact"),
+    ("usage", "usage"),
+    ("status", "status"),
+    ("clear", "clear"),
 ];
 
 const NAMED_KEYS: [&str; 15] = [
@@ -65,6 +78,9 @@ const SEED_HEADER: &str = "\
 # write `T`, not `shift+t`, because that is how a terminal reports it.
 #
 # esc, : and ctrl+c belong to the TUI and cannot be bound.
+#
+# [shortcuts] is the `/` menu: a name and the command it runs. A shortcut whose
+# command is also on a key shows that key beside it.
 
 ";
 
@@ -72,11 +88,13 @@ const SEED_HEADER: &str = "\
 pub(crate) struct Binding {
     pub(crate) written: String,
     pub(crate) command: String,
+    pub(crate) needs_more_input: bool,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct Keymap {
     normal: Vec<(String, Binding)>,
+    shortcuts: Vec<(String, Binding)>,
     pub(crate) warnings: Vec<String>,
 }
 
@@ -84,10 +102,16 @@ impl Default for Keymap {
     fn default() -> Self {
         let mut keymap = Self {
             normal: Vec::new(),
+            shortcuts: Vec::new(),
             warnings: Vec::new(),
         };
         for (key, command) in DEFAULT_NORMAL_KEYS {
             if let Err(problem) = keymap.bind(key, command) {
+                keymap.warnings.push(problem);
+            }
+        }
+        for (name, command) in DEFAULT_SHORTCUTS {
+            if let Err(problem) = keymap.add_shortcut(name, command) {
                 keymap.warnings.push(problem);
             }
         }
@@ -114,6 +138,7 @@ impl Keymap {
     pub(crate) fn parse(text: &str) -> Self {
         let mut keymap = Self {
             normal: Vec::new(),
+            shortcuts: Vec::new(),
             warnings: Vec::new(),
         };
 
@@ -129,25 +154,81 @@ impl Keymap {
             }
         };
 
-        let Some(normal) = table.get("normal").and_then(toml::Value::as_table) else {
+        if let Some(normal) = table.get("normal").and_then(toml::Value::as_table) {
+            for (key, value) in normal {
+                let Some(command) = value.as_str() else {
+                    keymap
+                        .warnings
+                        .push(format!("{key} is not bound to a command string"));
+                    continue;
+                };
+                if let Err(problem) = keymap.bind(key, command) {
+                    keymap.warnings.push(problem);
+                }
+            }
+        } else {
             keymap
                 .warnings
                 .push("tui.toml has no [normal] section, so no key is bound".to_owned());
-            return keymap;
-        };
+        }
 
-        for (key, value) in normal {
-            let Some(command) = value.as_str() else {
-                keymap
-                    .warnings
-                    .push(format!("{key} is not bound to a command string"));
-                continue;
-            };
-            if let Err(problem) = keymap.bind(key, command) {
-                keymap.warnings.push(problem);
+        if let Some(shortcuts) = table.get("shortcuts").and_then(toml::Value::as_table) {
+            for (name, value) in shortcuts {
+                let Some(command) = value.as_str() else {
+                    keymap
+                        .warnings
+                        .push(format!("/{name} is not set to a command string"));
+                    continue;
+                };
+                if let Err(problem) = keymap.add_shortcut(name, command) {
+                    keymap.warnings.push(problem);
+                }
             }
         }
         keymap
+    }
+
+    pub(crate) fn add_shortcut(&mut self, name: &str, command: &str) -> Result<(), String> {
+        let label = name.trim().to_owned();
+        if label.is_empty() || label.split_whitespace().count() != 1 {
+            return Err(format!("{name:?} is not a usable shortcut name"));
+        }
+        let binding = Self::checked_binding(&format!("/{label}"), command)?;
+        match self.shortcuts.iter_mut().find(|(bound, _)| bound == &label) {
+            Some((_, existing)) => *existing = binding,
+            None => self.shortcuts.push((label, binding)),
+        }
+        Ok(())
+    }
+
+    pub(crate) fn shortcuts(&self) -> &[(String, Binding)] {
+        &self.shortcuts
+    }
+
+    pub(crate) fn key_for_command(&self, command: &str) -> Option<&str> {
+        self.normal
+            .iter()
+            .find(|(_, binding)| binding.command == command)
+            .map(|(key, _)| key.as_str())
+    }
+
+    fn checked_binding(label: &str, command: &str) -> Result<Binding, String> {
+        let expanded = crate::tui::input::expand_aliases(command);
+        match crate::cli::palette_command_needs_more_input(&expanded) {
+            Ok(needs_more_input) => Ok(Binding {
+                written: command.to_owned(),
+                command: expanded,
+                needs_more_input,
+            }),
+            Err(problem) => {
+                let first = problem
+                    .lines()
+                    .find(|line| !line.trim().is_empty())
+                    .unwrap_or("is not a command")
+                    .trim();
+                Err(format!("{label} is set to {command:?}, which {first}"))
+            }
+        }
     }
 
     pub(crate) fn bind(&mut self, key: &str, command: &str) -> Result<(), String> {
@@ -155,19 +236,12 @@ impl Keymap {
         if RESERVED_KEYS.contains(&token.as_str()) {
             return Err(format!("{token} belongs to the TUI and cannot be bound"));
         }
-        let expanded = crate::tui::input::expand_aliases(command);
-        if let Err(problem) = crate::cli::parse_palette_command(&expanded) {
-            let first = problem
-                .lines()
-                .find(|line| !line.trim().is_empty())
-                .unwrap_or("is not a command")
-                .trim();
-            return Err(format!("{token} is bound to {command:?}, which {first}"));
+        let binding = Self::checked_binding(&token, command)?;
+        if binding.needs_more_input {
+            return Err(format!(
+                "{token} is bound to {command:?}, which still needs an argument; a key runs its command as written"
+            ));
         }
-        let binding = Binding {
-            written: command.to_owned(),
-            command: expanded,
-        };
         match self.normal.iter_mut().find(|(bound, _)| bound == &token) {
             Some((_, existing)) => *existing = binding,
             None => self.normal.push((token, binding)),
@@ -209,6 +283,14 @@ impl Keymap {
             out.push_str(&format!(
                 "{} = {}\n",
                 toml::Value::String(key.clone()),
+                toml::Value::String(binding.written.clone())
+            ));
+        }
+        out.push_str("\n[shortcuts]\n");
+        for (name, binding) in &self.shortcuts {
+            out.push_str(&format!(
+                "{} = {}\n",
+                toml::Value::String(name.clone()),
                 toml::Value::String(binding.written.clone())
             ));
         }
@@ -425,6 +507,84 @@ mod tests {
         let binding = keymap.lookup("R").unwrap();
         assert_eq!(binding.written, "regen");
         assert_eq!(binding.command, "msg regen");
+    }
+
+    #[test]
+    fn shortcuts_are_seeded_and_carry_the_key_that_also_runs_them() {
+        let keymap = Keymap::default();
+        assert!(keymap.warnings.is_empty(), "{:?}", keymap.warnings);
+        assert_eq!(keymap.shortcuts().len(), DEFAULT_SHORTCUTS.len());
+        assert_eq!(keymap.key_for_command("msg regen"), Some("r"));
+        assert_eq!(keymap.key_for_command("usage"), None);
+    }
+
+    #[test]
+    fn a_shortcut_may_be_a_prefix_but_a_key_may_not() {
+        let mut keymap = Keymap::default();
+
+        keymap.add_shortcut("edit", "msg edit").unwrap();
+        let (_, edit) = keymap
+            .shortcuts()
+            .iter()
+            .find(|(name, _)| name == "edit")
+            .unwrap();
+        assert!(
+            edit.needs_more_input,
+            "`msg edit` still wants a reference, so /edit should load the line"
+        );
+
+        let (_, regen) = keymap
+            .shortcuts()
+            .iter()
+            .find(|(name, _)| name == "regen")
+            .unwrap();
+        assert!(
+            !regen.needs_more_input,
+            "`msg regen` is complete on its own"
+        );
+
+        let problem = keymap.bind("e", "msg edit").unwrap_err();
+        assert!(problem.contains("still needs an argument"), "{problem}");
+    }
+
+    #[test]
+    fn a_shortcut_naming_a_command_that_does_not_exist_is_refused() {
+        let mut keymap = Keymap::default();
+        let problem = keymap.add_shortcut("boom", "not a command").unwrap_err();
+        assert!(problem.contains("/boom"), "{problem}");
+        assert!(keymap.shortcuts().iter().all(|(n, _)| n != "boom"));
+    }
+
+    #[test]
+    fn a_shortcut_name_is_one_word() {
+        let mut keymap = Keymap::default();
+        assert!(keymap.add_shortcut("two words", "usage").is_err());
+        assert!(keymap.add_shortcut("  ", "usage").is_err());
+        assert!(keymap.add_shortcut("compact", "compact --restart").is_ok());
+    }
+
+    #[test]
+    fn both_sections_survive_a_round_trip() {
+        let mut keymap = Keymap::default();
+        keymap.add_shortcut("wipe", "clear").unwrap();
+        let dir = std::env::temp_dir().join(format!("shore-shortcuts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tui.toml");
+        keymap.save_to(&path).unwrap();
+        let reloaded = Keymap::load_from(&path);
+        drop(std::fs::remove_dir_all(&dir));
+
+        assert!(reloaded.warnings.is_empty(), "{:?}", reloaded.warnings);
+        assert_eq!(reloaded.bindings().len(), keymap.bindings().len());
+        assert_eq!(reloaded.shortcuts().len(), keymap.shortcuts().len());
+        assert!(reloaded.shortcuts().iter().any(|(n, _)| n == "wipe"));
+    }
+
+    #[test]
+    fn a_file_with_no_shortcuts_section_simply_has_none() {
+        let keymap = Keymap::parse("[normal]\n\"j\" = \"ui scroll down 1\"\n");
+        assert!(keymap.warnings.is_empty(), "{:?}", keymap.warnings);
+        assert!(keymap.shortcuts().is_empty());
     }
 
     #[test]

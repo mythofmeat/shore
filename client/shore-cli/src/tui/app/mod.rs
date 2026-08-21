@@ -230,6 +230,7 @@ pub(crate) struct CompletionState {
     pub selected: Option<usize>,
     pub header: Option<String>,
     pub mode: PaletteMode,
+    pub scope: crate::cli::PaletteScope,
 }
 
 impl CompletionState {
@@ -239,6 +240,7 @@ impl CompletionState {
         self.selected = None;
         self.header = None;
         self.mode = PaletteMode::Top;
+        self.scope = crate::cli::PaletteScope::Full;
     }
 }
 
@@ -963,16 +965,6 @@ impl App {
         }
     }
 
-    pub(crate) fn canonical_submenu_parent(name: &str) -> Option<&'static str> {
-        match name {
-            "model" => Some("model"),
-            "character" | "characters" => Some("character"),
-            "model setting" | "setting" => Some("setting"),
-            "view" => Some("view"),
-            _ => None,
-        }
-    }
-
     pub(crate) fn is_submenu_open(&self, parent: &str) -> bool {
         matches!(&self.completion.mode, PaletteMode::Submenu(s) if s.parent == parent)
     }
@@ -980,8 +972,23 @@ impl App {
     pub(crate) fn is_setting_palette_open(&self) -> bool {
         matches!(
             &self.completion.mode,
-            PaletteMode::Submenu(s) if s.parent == "setting" || s.parent.starts_with("setting:")
+            PaletteMode::Submenu(s)
+                if s.parent == "config" || s.parent == "setting" || s.parent.starts_with("setting:")
         ) || matches!(&self.completion.mode, PaletteMode::ValueEditor(s) if Self::is_setting_key(&s.key))
+    }
+
+    pub(crate) fn selected_row_is_view_option(&self) -> bool {
+        self.completion
+            .selected
+            .and_then(|index| self.completion.candidates.get(index))
+            .is_some_and(|row| Self::is_view_key(Self::view_key_from_row(row)))
+    }
+
+    pub(crate) fn open_submenu_parent(&self) -> Option<String> {
+        match &self.completion.mode {
+            PaletteMode::Submenu(state) => Some(state.parent.clone()),
+            PaletteMode::Top | PaletteMode::ValueEditor(_) => None,
+        }
     }
 
     pub(crate) fn is_value_editor_open(&self) -> bool {
@@ -1489,6 +1496,10 @@ impl App {
         self.completion.header = None;
         self.completion.descriptions.clear();
 
+        if self.completion.scope == crate::cli::PaletteScope::Shortcuts {
+            self.update_shortcut_candidates();
+            return;
+        }
         if matches!(self.completion.mode, PaletteMode::Submenu(_)) {
             self.update_submenu_candidates();
             return;
@@ -1561,6 +1572,43 @@ impl App {
         }
     }
 
+    fn update_shortcut_candidates(&mut self) {
+        let filter = self.input.cmd_text.trim().to_lowercase();
+        self.completion.header = Some("shortcut".into());
+        self.completion.candidates = self
+            .keymap
+            .shortcuts()
+            .iter()
+            .filter(|(name, binding)| {
+                filter.is_empty()
+                    || name.to_lowercase().contains(&filter)
+                    || binding.written.to_lowercase().contains(&filter)
+            })
+            .map(|(name, binding)| {
+                let description = match self.keymap.key_for_command(&binding.command) {
+                    Some(bound_key) => format!("{}   ({bound_key})", binding.written),
+                    None => binding.written.clone(),
+                };
+                let _ = self
+                    .completion
+                    .descriptions
+                    .insert(name.clone(), description);
+                name.clone()
+            })
+            .collect();
+        if self.completion.candidates.is_empty() {
+            self.completion.header = Some("no shortcut matches".into());
+        }
+    }
+
+    pub(crate) fn shortcut_command(&self, name: &str) -> Option<(String, bool)> {
+        self.keymap
+            .shortcuts()
+            .iter()
+            .find(|(bound, _)| bound == name)
+            .map(|(_, binding)| (binding.command.clone(), binding.needs_more_input))
+    }
+
     fn update_submenu_candidates(&mut self) {
         let parent = match &self.completion.mode {
             PaletteMode::Submenu(s) => s.parent.clone(),
@@ -1569,6 +1617,7 @@ impl App {
         let raw_filter = self.input.cmd_text.trim();
         let filter = raw_filter.to_lowercase();
         self.completion.header = match parent.as_str() {
+            "config" => Some("what to change".into()),
             "setting" | "setting:reset" => Some("setting key".into()),
             setting_parent if setting_parent.starts_with("setting:") => {
                 Some("setting value".into())
@@ -1718,6 +1767,43 @@ impl App {
                     .filter(|key| filter.is_empty() || key.starts_with(&filter))
                     .map(|key| self.view_row_label(key))
                     .collect();
+            }
+            "config" => {
+                let mut rows: Vec<String> = Vec::new();
+                for (label, value) in [
+                    ("model", self.model.clone()),
+                    ("character", self.character_name.clone()),
+                ] {
+                    if filter.is_empty() || label.starts_with(&filter) {
+                        let shown = if value.is_empty() {
+                            "unset".to_owned()
+                        } else {
+                            value
+                        };
+                        rows.push(format!("{label} = {shown}"));
+                    }
+                }
+                rows.extend::<Vec<String>>(match self.setting_editor_blocked_row() {
+                    Some(blocked) => vec![blocked.to_owned()],
+                    None => self
+                        .visible_setting_keys()
+                        .iter()
+                        .filter(|key| filter.is_empty() || key.starts_with(&filter))
+                        .map(|key| self.setting_row_label(key))
+                        .collect(),
+                });
+                if self.setting_editor_blocked_row().is_none()
+                    && (filter.is_empty() || "reset".starts_with(&filter))
+                {
+                    rows.push("reset".into());
+                }
+                rows.extend(
+                    Self::VIEW_KEYS
+                        .iter()
+                        .filter(|key| filter.is_empty() || key.starts_with(&filter))
+                        .map(|key| self.view_row_label(key)),
+                );
+                self.completion.candidates = rows;
             }
             _ => self.completion.candidates.clear(),
         }
@@ -1907,6 +1993,27 @@ impl App {
         Some(format!("setting {} {value}", state.key))
     }
 
+    fn toggle_view_row(&mut self, key: &str, row: usize) -> Option<String> {
+        if key == "usage" {
+            let mode = self.cycle_usage_display();
+            self.set_status(format!("view usage: {}", mode.as_str()));
+        } else if key == "budget" {
+            let focus = self.cycle_budget_focus();
+            self.set_status(format!("view budget: {}", focus.as_token()));
+        } else {
+            let enabled = self.toggle_view_option(key)?;
+            self.set_status(format!(
+                "view {key}: {}",
+                if enabled { "on" } else { "off" }
+            ));
+        }
+        self.update_completions();
+        if row < self.completion.candidates.len() {
+            self.completion.selected = Some(row);
+        }
+        None
+    }
+
     pub(crate) fn is_view_submenu(&self) -> bool {
         matches!(&self.completion.mode, PaletteMode::Submenu(s) if s.parent == "view")
     }
@@ -1918,6 +2025,33 @@ impl App {
         };
         let idx = self.completion.selected?;
         let chosen = self.completion.candidates.get(idx)?.clone();
+
+        if parent == "config" {
+            let head = chosen.split(' ').next().unwrap_or_default().to_owned();
+            if head == "model" || head == "character" {
+                self.switch_submenu(&head);
+                return None;
+            }
+            let view_key = Self::view_key_from_row(&chosen).to_owned();
+            if Self::is_view_key(&view_key) {
+                return self.toggle_view_row(&view_key, idx);
+            }
+            if !self.setting_editors_ready() {
+                return None;
+            }
+            let key = Self::setting_key_from_row(&chosen).to_owned();
+            if key == "reset" {
+                self.switch_submenu("setting:reset");
+                return None;
+            }
+            if let Some(kind) = self.slider_kind_for_setting(&key) {
+                self.enter_value_editor(&key, kind);
+                return None;
+            }
+            self.switch_submenu(&format!("setting:{key}"));
+            return None;
+        }
+
         if parent == "setting" {
             if !self.setting_editors_ready() {
                 return None;

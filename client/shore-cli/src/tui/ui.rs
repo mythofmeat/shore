@@ -1099,10 +1099,14 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
             frame.render_widget(Paragraph::new(display).block(block), area);
             return;
         }
-        let (title, prefix): (String, &str) = match &app.completion.mode {
-            PaletteMode::Top => (" [COMMAND] ".to_owned(), ":"),
-            PaletteMode::Submenu(s) => (format!(" [{}] ", s.parent), ""),
-            PaletteMode::ValueEditor(s) => (format!(" [{}] ", s.key), ""),
+        let (title, prefix): (String, &str) = match (&app.completion.mode, app.completion.scope) {
+            (_, crate::cli::PaletteScope::Shortcuts) => (" [SHORTCUT] ".to_owned(), "/"),
+            (PaletteMode::Submenu(s), crate::cli::PaletteScope::Config) if s.parent == "config" => {
+                (" [CONFIG] ".to_owned(), "")
+            }
+            (PaletteMode::Top, _) => (" [COMMAND] ".to_owned(), ":"),
+            (PaletteMode::Submenu(s), _) => (format!(" [{}] ", s.parent), ""),
+            (PaletteMode::ValueEditor(s), _) => (format!(" [{}] ", s.key), ""),
         };
         let display = format!("{prefix}{}", app.input.cmd_text);
         let block = Block::default()
@@ -2562,11 +2566,36 @@ pub(crate) mod scenario_tests {
         command
     }
 
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "only the two sending actions carry commands to inspect"
+    )]
+    fn sent_commands(action: input::Action) -> Vec<shore_common::protocol::client_msg::Command> {
+        let conns = match action {
+            input::Action::Send(conn) => vec![conn],
+            input::Action::SendMulti(conns) => conns,
+            _ => panic!("expected at least one command send"),
+        };
+        conns
+            .into_iter()
+            .filter_map(|conn| match conn {
+                ConnCommand::Send(ClientMessage::Command(command)) => Some(command),
+                ConnCommand::Send(_) | ConnCommand::Shutdown => None,
+            })
+            .collect()
+    }
+
+    fn open_config_palette(h: &mut Harness) -> Vec<shore_common::protocol::client_msg::Command> {
+        sent_commands(h.press_mod_action(KeyModifiers::CONTROL, KeyCode::Char('p')))
+    }
+
     fn open_setting_menu_with_snapshot(h: &mut Harness) {
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("setting");
-        let cmd = sent_command(h.press_action(KeyCode::Enter));
-        assert_eq!(cmd.name, "model_settings");
+        let sent = sent_commands(h.press_mod_action(KeyModifiers::CONTROL, KeyCode::Char('p')));
+        assert!(
+            sent.iter().any(|command| command.name == "model_settings"),
+            "opening the config palette should fetch the live settings: {:?}",
+            sent.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
     }
 
@@ -2967,15 +2996,14 @@ pub(crate) mod scenario_tests {
 
         h.press(KeyCode::Tab);
         let after_completion = h.render("after tab completion");
-        assert!(after_completion.contains("[model]"), "model submenu opened");
-
-        h.press(KeyCode::Esc);
-        let after_escape = h.render("after escape");
-        assert!(
-            after_escape.contains("[COMMAND]"),
-            "top-level command palette restored"
+        assert_eq!(
+            h.app.input.cmd_text, "model ",
+            "Tab completes the word and stays in the grammar"
         );
-        assert!(after_escape.contains(":model"), "parent command restored");
+        assert!(
+            after_completion.contains("model use"),
+            "and offers the subcommands next; frame:\n{after_completion}"
+        );
 
         h.press(KeyCode::Esc);
         let after_second_escape = h.render("after second escape");
@@ -3123,8 +3151,8 @@ pub(crate) mod scenario_tests {
         h.app.input.mode = InputMode::Normal;
         h.app.model_names = vec!["alpha-1".into(), "beta-2".into()];
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("model");
+        h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('p'));
+        h.press(KeyCode::Down);
         h.press(KeyCode::Enter);
         let f = h.render("model submenu open");
 
@@ -3161,23 +3189,26 @@ pub(crate) mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("view");
-        h.press(KeyCode::Enter);
-        let f = h.render("view submenu open");
+        open_setting_menu_with_snapshot(&mut h);
+        h.type_str("timestamps");
+        let f = h.render("display options in the config palette");
 
         let PaletteMode::Submenu(submenu) = &h.app.completion.mode else {
-            panic!("expected view submenu");
+            panic!("expected the config palette");
         };
-        assert_eq!(submenu.parent, "view");
-        assert!(f.contains("[view]"), "view submenu title visible");
+        assert_eq!(submenu.parent, "config");
+        assert!(f.contains("[CONFIG]"), "config palette title visible");
         assert!(
             f.contains("timestamps = off"),
             "timestamp row should show current state; frame:\n{f}"
         );
 
+        h.press(KeyCode::Down);
         h.press(KeyCode::Enter);
-        assert!(h.app.show_timestamps, "Enter toggles selected view option");
+        assert!(
+            h.app.show_timestamps,
+            "Enter toggles the selected display option"
+        );
         assert_eq!(h.app.input.mode, InputMode::Command);
         assert!(
             h.app
@@ -3352,8 +3383,8 @@ pub(crate) mod scenario_tests {
         h.app.input.mode = InputMode::Normal;
         h.app.model_names = (0..20).map(|i| format!("model-{i:02}")).collect();
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("model");
+        h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('p'));
+        h.press(KeyCode::Down);
         h.press(KeyCode::Enter);
 
         for _ in 0..18 {
@@ -3380,8 +3411,8 @@ pub(crate) mod scenario_tests {
         h.app.model_names = (0..20).map(|i| format!("model-{i:02}")).collect();
         h.app.set_active_model(Some("chat.provider.model-17"));
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("model");
+        h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('p'));
+        h.press(KeyCode::Down);
         h.press(KeyCode::Enter);
 
         assert_eq!(h.app.completion.selected, Some(17));
@@ -3434,8 +3465,8 @@ pub(crate) mod scenario_tests {
         h.app.input.mode = InputMode::Normal;
         h.app.model_names = vec!["alpha-1".into(), "beta-2".into(), "alpha-2".into()];
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("model");
+        h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('p'));
+        h.press(KeyCode::Down);
         h.press(KeyCode::Enter);
         let _ = h.render("submenu opened");
 
@@ -3467,8 +3498,8 @@ pub(crate) mod scenario_tests {
             "Esc should pop submenu back to Top"
         );
         assert_eq!(
-            h.app.input.cmd_text, "model",
-            "parent cmd_text should be restored after Esc"
+            h.app.input.cmd_text, "",
+            "Esc returns to the config list, which starts unfiltered"
         );
     }
 
@@ -3506,14 +3537,12 @@ pub(crate) mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("setting");
-        h.press(KeyCode::Enter);
-        let f = h.render("setting submenu");
+        let _opened = open_config_palette(&mut h);
+        let f = h.render("config palette while settings load");
 
         assert!(
-            f.contains("setting key"),
-            "submenu header 'setting key' visible above candidates"
+            f.contains("what to change"),
+            "config header visible above candidates"
         );
         assert!(
             f.contains("loading sampler settings..."),
@@ -3531,7 +3560,7 @@ pub(crate) mod scenario_tests {
         let f = h.render("setting submenu with values");
 
         assert!(matches!(h.app.completion.mode, PaletteMode::Submenu(_)));
-        assert!(f.contains("setting key"), "setting header visible");
+        assert!(f.contains("what to change"), "config header visible");
         assert!(
             f.contains("temperature = 0.7"),
             "effective temperature should render next to its key; frame:\n{f}"
@@ -3546,12 +3575,14 @@ pub(crate) mod scenario_tests {
         h.app
             .set_active_model(Some("anthropic/claude-4.6-opus-20260205"));
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("setting");
-        let cmd = sent_command(h.press_action(KeyCode::Enter));
-
-        assert_eq!(cmd.name, "model_settings");
-        assert_eq!(cmd.args, serde_json::json!({}));
+        let sent = open_config_palette(&mut h);
+        let settings = sent
+            .iter()
+            .find(|command| {
+                command.name == "model_settings" && command.args == serde_json::json!({})
+            })
+            .expect("the config palette asks for settings without naming a model");
+        assert_eq!(settings.args, serde_json::json!({}));
     }
 
     #[test]
@@ -3638,10 +3669,8 @@ pub(crate) mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("setting");
-        let cmd = sent_command(h.press_action(KeyCode::Enter));
-        assert_eq!(cmd.name, "model_settings");
+        let sent = open_config_palette(&mut h);
+        assert!(sent.iter().any(|command| command.name == "model_settings"));
 
         h.type_str("temperature");
         let blocked = h.press_action(KeyCode::Enter);
@@ -3650,9 +3679,9 @@ pub(crate) mod scenario_tests {
             "Enter should not dispatch before sampler settings load"
         );
         let PaletteMode::Submenu(loading_submenu) = &h.app.completion.mode else {
-            panic!("expected to stay in setting submenu while loading");
+            panic!("expected to stay in the config palette while loading");
         };
-        assert_eq!(loading_submenu.parent, "setting");
+        assert_eq!(loading_submenu.parent, "config");
 
         let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
         h.press(KeyCode::Enter);
@@ -3668,18 +3697,16 @@ pub(crate) mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
 
-        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("setting");
-        let cmd = sent_command(h.press_action(KeyCode::Enter));
-        assert_eq!(cmd.name, "model_settings");
+        let sent = open_config_palette(&mut h);
+        assert!(sent.iter().any(|command| command.name == "model_settings"));
 
         h.type_str("reasoning");
         let blocked = h.press_action(KeyCode::Enter);
         assert!(matches!(blocked, input::Action::Redraw));
         let PaletteMode::Submenu(loading_submenu) = &h.app.completion.mode else {
-            panic!("expected to stay in setting submenu while loading");
+            panic!("expected to stay in the config palette while loading");
         };
-        assert_eq!(loading_submenu.parent, "setting");
+        assert_eq!(loading_submenu.parent, "config");
 
         let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
         h.press(KeyCode::Enter);
@@ -3814,6 +3841,118 @@ pub(crate) mod scenario_tests {
         let action = h.press_action(KeyCode::Enter);
 
         assert_set_model_setting(action, "sdk", &serde_json::json!("moonshot"));
+    }
+
+    #[test]
+    fn the_config_palette_lists_settings_and_display_options_together() {
+        let mut h = Harness::with_size(80, 40);
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('p'));
+        let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
+
+        let frame = h.render("config palette");
+        assert!(frame.contains("[CONFIG]"), "{frame}");
+        assert!(
+            frame.contains("temperature"),
+            "settings are listed: {frame}"
+        );
+        assert!(frame.contains("thinking"), "view options too: {frame}");
+    }
+
+    #[test]
+    fn a_display_option_toggles_in_place_in_the_config_palette() {
+        let mut h = Harness::with_size(80, 40);
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('p'));
+        let _ = crate::tui::handle_server_message(&mut h.app, sampler_settings_output());
+        h.type_str("thinking");
+
+        let before = h.app.show_thinking;
+        h.press(KeyCode::Down);
+        h.press(KeyCode::Enter);
+        assert_ne!(h.app.show_thinking, before, "enter should toggle the row");
+        assert_eq!(
+            h.app.input.mode,
+            InputMode::Command,
+            "the palette stays open so more can be toggled"
+        );
+    }
+
+    #[test]
+    fn the_full_palette_runs_a_command_instead_of_opening_a_picker() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
+        h.type_str("model");
+        let cmd = sent_command(h.press_action(KeyCode::Enter));
+        assert_eq!(
+            cmd.name, "list_models",
+            "`:model` should run the command, not open a submenu"
+        );
+        assert_eq!(h.app.input.mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn the_shortcuts_palette_lists_shortcuts_with_their_keys() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        h.press(KeyCode::Char('/'));
+        let frame = h.render("shortcuts palette");
+        assert!(frame.contains("[SHORTCUT]"), "{frame}");
+        assert!(frame.contains("regen"), "{frame}");
+        assert!(
+            frame.contains('r'),
+            "a shortcut whose command is on a key should show it: {frame}"
+        );
+
+        h.type_str("us");
+        let filtered = h.render("shortcuts filtered to us");
+        assert!(filtered.contains("usage"), "{filtered}");
+        assert!(!filtered.contains("compact"), "{filtered}");
+    }
+
+    #[test]
+    fn choosing_a_complete_shortcut_runs_it() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        h.press(KeyCode::Char('/'));
+        h.type_str("regen");
+        let action = h.press_action(KeyCode::Enter);
+        assert!(
+            matches!(
+                action,
+                input::Action::Send(ConnCommand::Send(ClientMessage::Regen(_)))
+            ),
+            "the regen shortcut should send a regen"
+        );
+        assert_eq!(h.app.input.mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn choosing_a_shortcut_that_needs_an_argument_loads_the_line() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        h.press(KeyCode::Char('/'));
+        h.type_str("edit");
+        let _opened = h.press_action(KeyCode::Enter);
+
+        assert_eq!(h.app.input.mode, InputMode::Command);
+        assert_eq!(h.app.input.cmd_text, "msg edit ");
+        assert_eq!(h.app.completion.scope, crate::cli::PaletteScope::Full);
+        let frame = h.render("edit loaded into the full palette");
+        assert!(frame.contains("msg edit"), "{frame}");
     }
 
     #[test]

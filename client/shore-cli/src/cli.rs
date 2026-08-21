@@ -767,9 +767,10 @@ pub(crate) enum ScrollDirection {
     Bottom,
 }
 
-#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum PaletteScope {
     /// Every command, typed
+    #[default]
     Full,
     /// The curated conversation shortcuts
     Shortcuts,
@@ -1735,6 +1736,37 @@ pub(crate) fn palette_completions(input: &str, catalog: &PaletteCatalog) -> Pale
     PaletteCompletions {
         header: (!candidates.is_empty()).then(|| "command, option, or value".to_owned()),
         candidates,
+    }
+}
+
+/// Whether `input` is a whole command or only the start of one.
+///
+/// A `/` shortcut is allowed to name a command that still needs an argument,
+/// like `msg edit`: choosing it should load the line for the user to finish.
+/// A command that is simply wrong is still an error.
+pub(crate) fn palette_command_needs_more_input(input: &str) -> Result<bool, String> {
+    let Some(words) = shlex::split(input) else {
+        return Err("unclosed quote in command".to_owned());
+    };
+    let argv = std::iter::once("shore".to_owned()).chain(words);
+    match Cli::try_parse_from(argv) {
+        Ok(parsed) => {
+            if parsed.command.is_some() {
+                Ok(false)
+            } else {
+                Err("missing command".to_owned())
+            }
+        }
+        Err(error)
+            if matches!(
+                error.kind(),
+                clap::error::ErrorKind::MissingRequiredArgument
+                    | clap::error::ErrorKind::MissingSubcommand
+            ) =>
+        {
+            Ok(true)
+        }
+        Err(error) => Err(error.to_string()),
     }
 }
 

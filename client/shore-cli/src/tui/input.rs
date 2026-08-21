@@ -136,6 +136,18 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
     dispatch_cli_command(app, &command)
 }
 
+fn open_palette(app: &mut App, scope: PaletteScope) -> Action {
+    app.input.enter_command_mode();
+    app.completion.scope = scope;
+    app.update_completions();
+    let commands = palette_catalog_commands(app);
+    if commands.is_empty() {
+        Action::Redraw
+    } else {
+        Action::SendMulti(commands)
+    }
+}
+
 fn palette_catalog_commands(app: &mut App) -> Vec<ConnCommand> {
     if app.palette_catalog_loaded || !app.pending_palette_catalog.is_empty() {
         return Vec::new();
@@ -367,7 +379,7 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
             }
             app.apply_completion();
             app.update_completions();
-            enter_completed_submenu(app).unwrap_or(Action::Redraw)
+            Action::Redraw
         }
 
         (KeyModifiers::CONTROL, KeyCode::Char('j')) | (KeyModifiers::NONE, KeyCode::Down) => {
@@ -381,12 +393,16 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
             }
             app.apply_completion();
             app.update_completions();
-            enter_completed_submenu(app).unwrap_or(Action::Redraw)
+            Action::Redraw
         }
 
         (KeyModifiers::CONTROL, KeyCode::Char('k')) | (KeyModifiers::NONE, KeyCode::Up) => {
             app.prev_completion();
             Action::Redraw
+        }
+
+        (KeyModifiers::NONE, KeyCode::Enter) if app.completion.scope == PaletteScope::Shortcuts => {
+            run_selected_shortcut(app)
         }
 
         (KeyModifiers::NONE, KeyCode::Enter) => {
@@ -396,10 +412,7 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
                 app.update_completions();
             }
             let trimmed = app.input.cmd_text.trim().to_owned();
-            if let Some(parent) = App::canonical_submenu_parent(&trimmed) {
-                app.enter_submenu(parent);
-                submenu_fetch_action(app, parent)
-            } else if committed_completion
+            if committed_completion
                 && crate::cli::parse_palette_command(&trimmed).is_err()
                 && !app.completion.candidates.is_empty()
             {
@@ -438,6 +451,39 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
     }
 }
 
+fn run_selected_shortcut(app: &mut App) -> Action {
+    let chosen = app
+        .completion
+        .selected
+        .and_then(|index| app.completion.candidates.get(index).cloned())
+        .or_else(|| {
+            let typed = app.input.cmd_text.trim().to_lowercase();
+            (app.completion.candidates.len() == 1 || !typed.is_empty())
+                .then(|| app.completion.candidates.first().cloned())
+                .flatten()
+        });
+    let Some(name) = chosen else {
+        app.set_error("no shortcut matches");
+        return Action::Redraw;
+    };
+    let Some((command, needs_more_input)) = app.shortcut_command(&name) else {
+        app.set_error(format!("/{name} is no longer defined"));
+        return Action::Redraw;
+    };
+
+    app.completion.clear();
+    let _discarded = app.input.take_cmd_text();
+    if needs_more_input {
+        app.input.enter_command_mode();
+        app.input.cmd_text = format!("{command} ");
+        app.input.cmd_cursor = app.input.cmd_text.len();
+        app.update_completions();
+        return Action::Redraw;
+    }
+    app.input.exit_command_mode();
+    dispatch_cli_command(app, &command)
+}
+
 fn handle_palette_confirmation(app: &mut App, key: KeyEvent) -> Action {
     match (key.modifiers, key.code) {
         (KeyModifiers::NONE, KeyCode::Enter | KeyCode::Char('y')) => {
@@ -456,15 +502,6 @@ fn handle_palette_confirmation(app: &mut App, key: KeyEvent) -> Action {
         }
         _ => Action::None,
     }
-}
-
-fn enter_completed_submenu(app: &mut App) -> Option<Action> {
-    let trimmed = app.input.cmd_text.trim();
-    let parent = App::canonical_submenu_parent(trimmed)?;
-    app.input.cmd_text = parent.to_owned();
-    app.input.cmd_cursor = parent.len();
-    app.enter_submenu(parent);
-    Some(submenu_fetch_action(app, parent))
 }
 
 fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
@@ -492,9 +529,19 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
                 app.completion.selected = Some(0);
             }
             let in_view_submenu = app.is_view_submenu();
+            let toggled_view_row =
+                app.is_submenu_open("config") && app.selected_row_is_view_option();
+            let before = app.open_submenu_parent();
             if let Some(cmd) = app.apply_submenu() {
-                parse_command(app, &cmd)
-            } else if in_view_submenu {
+                return parse_command(app, &cmd);
+            }
+            let after = app.open_submenu_parent();
+            if before != after
+                && let Some(parent) = after
+            {
+                return submenu_fetch_action(app, &parent);
+            }
+            if in_view_submenu || toggled_view_row {
                 Action::SavePrefs
             } else {
                 Action::Redraw
@@ -828,19 +875,20 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
         }
 
         UiCommand::Palette { scope } => match scope {
-            PaletteScope::Full => {
-                app.input.enter_command_mode();
+            PaletteScope::Full | PaletteScope::Shortcuts => open_palette(app, *scope),
+            PaletteScope::Config => {
+                let opened = open_palette(app, PaletteScope::Config);
+                app.enter_submenu("config");
+                let fetch = submenu_fetch_action(app, "setting");
                 app.update_completions();
-                let commands = palette_catalog_commands(app);
-                if commands.is_empty() {
-                    Action::Redraw
-                } else {
-                    Action::SendMulti(commands)
+                match (opened, fetch) {
+                    (Action::SendMulti(mut commands), Action::Send(settings)) => {
+                        commands.push(settings);
+                        Action::SendMulti(commands)
+                    }
+                    (Action::SendMulti(commands), _) => Action::SendMulti(commands),
+                    (_, only) => only,
                 }
-            }
-            PaletteScope::Shortcuts | PaletteScope::Config => {
-                app.set_status("that palette is not built yet");
-                Action::Redraw
             }
         },
 
@@ -1591,7 +1639,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_completion_enters_submenu_parent() {
+    fn tab_completes_the_word_instead_of_opening_a_picker() {
         let mut app = App::default();
         app.input.enter_command_mode();
         for c in "chara".chars() {
@@ -1601,12 +1649,19 @@ mod tests {
 
         let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Tab));
         assert!(
-            matches!(app.completion.mode, PaletteMode::Submenu(_)),
-            "Tab on a submenu parent should enter the child picker"
+            matches!(app.completion.mode, PaletteMode::Top),
+            "the : prompt is the grammar, not a menu"
         );
-        assert_eq!(app.input.cmd_text, "");
-        let cmd = sent_command(action);
-        assert_eq!(cmd.name, "list_characters");
+        assert!(matches!(action, Action::Redraw));
+        assert_eq!(app.input.cmd_text, "character ");
+        assert!(
+            app.completion
+                .candidates
+                .iter()
+                .any(|candidate| candidate == "character use"),
+            "and it goes on to offer the subcommands: {:?}",
+            app.completion.candidates
+        );
     }
 
     #[test]
