@@ -1392,8 +1392,14 @@ impl App {
         }
     }
 
-    fn setting_key_from_row(row: &str) -> &str {
+    pub(crate) fn setting_key_from_row(row: &str) -> &str {
         row.split_once(" = ").map_or(row, |(key, _)| key)
+    }
+
+    pub(crate) fn setting_origin(&self, key: &str) -> Option<&str> {
+        self.effective_sampler
+            .as_ref()
+            .and_then(|snapshot| snapshot.scope(key))
     }
 
     fn setting_scope_is_override(&self, key: &str) -> bool {

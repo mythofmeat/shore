@@ -31,8 +31,10 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
     let confirming = app.palette_confirmation.is_some();
     let show_value_editor =
         app.input.mode == InputMode::Command && !confirming && app.is_value_editor_open();
+    let show_config_panel = config_panel_is_open(app);
     let show_completions = app.input.mode == InputMode::Command
         && !confirming
+        && !show_config_panel
         && !app.completion.candidates.is_empty();
     let show_alt_picker = app.alt_picker.is_some();
     let completion_height = if show_value_editor {
@@ -76,7 +78,11 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
 
     draw_conversation(frame, &mut *app, conversation_area);
 
-    if app.subagent_panel.is_some() || app.output_pager.is_some() || app.show_help {
+    if app.subagent_panel.is_some()
+        || app.output_pager.is_some()
+        || app.show_help
+        || show_config_panel
+    {
         recede(frame, conversation_area);
     }
 
@@ -97,6 +103,10 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
             draw_alt_picker_inline(frame, app, picker_area);
         }
     } else {
+    }
+
+    if show_config_panel {
+        draw_config_panel(frame, app, conversation_area);
     }
 
     if app.subagent_panel.is_some() {
@@ -2080,6 +2090,206 @@ fn completion_window_start(
         .min(total_rows.saturating_sub(visible_rows))
 }
 
+const CONFIG_PANEL_CHROME: u16 = 4;
+
+pub(crate) fn config_panel_is_open(app: &App) -> bool {
+    app.input.mode == InputMode::Command
+        && app.palette_confirmation.is_none()
+        && app.completion.scope == crate::cli::PaletteScope::Config
+        && app.is_submenu_open("config")
+}
+
+fn config_group_of(row: &str) -> &'static str {
+    let key = App::view_key_from_row(row);
+    if matches!(key, "model" | "character") {
+        "Session"
+    } else if App::is_view_key(key) {
+        "Display"
+    } else if key == "reset" {
+        "Actions"
+    } else {
+        "Model settings"
+    }
+}
+
+fn config_origin(app: &App, row: &str) -> Option<String> {
+    let key = App::setting_key_from_row(row);
+    let scope = app.setting_origin(key)?;
+    Some(match scope {
+        "static_default" => "default".to_owned(),
+        other => other
+            .strip_suffix("_model")
+            .unwrap_or(other)
+            .replace('_', " "),
+    })
+}
+
+struct ConfigRow {
+    index: usize,
+    group: &'static str,
+    key: String,
+    value: Option<String>,
+    origin: Option<String>,
+}
+
+fn config_rows(app: &App) -> Vec<ConfigRow> {
+    app.completion
+        .candidates
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let group = config_group_of(row);
+            let (key, shown) = match row.split_once(" = ") {
+                Some((key, shown)) => (key.to_owned(), Some(shown.to_owned())),
+                None => (row.clone(), None),
+            };
+            let origin = if group == "Actions" {
+                Some("clear a saved setting".to_owned())
+            } else {
+                config_origin(app, row)
+            };
+            ConfigRow {
+                index,
+                group,
+                key,
+                value: shown.filter(|text| text != "unset"),
+                origin,
+            }
+        })
+        .collect()
+}
+
+fn draw_config_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    let rows = config_rows(app);
+    let key_width = rows
+        .iter()
+        .map(|row| unicode_width::UnicodeWidthStr::width(row.key.as_str()))
+        .max()
+        .unwrap_or(0)
+        .clamp(8, 24);
+    let value_width = rows
+        .iter()
+        .filter_map(|row| row.value.as_deref())
+        .map(unicode_width::UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0)
+        .clamp(5, 22);
+
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut selected_line: Option<usize> = None;
+    let mut group_shown: Option<&'static str> = None;
+
+    for row in &rows {
+        let ConfigRow {
+            index,
+            group,
+            key,
+            value,
+            origin,
+        } = row;
+        if group_shown != Some(*group) {
+            if group_shown.is_some() {
+                lines.push(Line::from(""));
+            }
+            lines.push(Line::from(Span::styled(
+                format!("  {group}"),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )));
+            group_shown = Some(*group);
+        }
+
+        let selected = app.completion.selected == Some(*index);
+        if selected {
+            selected_line = Some(lines.len());
+        }
+
+        if key.contains(' ') && value.is_none() {
+            lines.push(Line::from(Span::styled(
+                format!("   {key}"),
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC),
+            )));
+            continue;
+        }
+
+        let inherited = origin.as_deref() == Some("default");
+        let key_cell = format!("   {key:key_width$}  ");
+        let value_cell = match (value, *group) {
+            (Some(shown), _) => format!("{shown:value_width$}  "),
+            (None, "Actions") => format!("{:value_width$}  ", ""),
+            (None, _) => format!("{:value_width$}  ", "—"),
+        };
+        let origin_cell = origin.clone().unwrap_or_default();
+
+        if selected {
+            lines.push(Line::from(Span::styled(
+                format!("{key_cell}{value_cell}{origin_cell}"),
+                Style::default().fg(Color::Black).bg(Color::Yellow),
+            )));
+        } else {
+            let value_style = if value.is_none() {
+                Style::default().fg(Color::DarkGray)
+            } else if inherited {
+                Style::default().fg(Color::Gray).add_modifier(Modifier::DIM)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            lines.push(Line::from(vec![
+                Span::styled(key_cell, Style::default().fg(Color::White)),
+                Span::styled(value_cell, value_style),
+                Span::styled(
+                    origin_cell,
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::DIM),
+                ),
+            ]));
+        }
+    }
+
+    let ceiling = area
+        .height
+        .saturating_sub(4)
+        .max(CONFIG_PANEL_CHROME.saturating_add(1));
+    let height = usize_to_u16(lines.len())
+        .saturating_add(CONFIG_PANEL_CHROME)
+        .clamp(CONFIG_PANEL_CHROME.saturating_add(1), ceiling);
+    let viewport = usize::from(height.saturating_sub(CONFIG_PANEL_CHROME));
+    let width = area.width.saturating_sub(4).max(1);
+    let x = area
+        .x
+        .saturating_add(area.width.saturating_sub(width).checked_div(2).unwrap_or(0));
+    let y = area.y.saturating_add(
+        area.height
+            .saturating_sub(height)
+            .checked_div(2)
+            .unwrap_or(0),
+    );
+
+    let scroll = usize_to_u16(completion_window_start(
+        selected_line,
+        viewport,
+        lines.len(),
+    ));
+
+    let hint = " type to filter · Enter to change · Esc to close ";
+
+    let panel = Paragraph::new(Text::from(lines)).scroll((scroll, 0)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .padding(Padding::vertical(1))
+            .title_top(Line::from(" config ").right_aligned())
+            .title_bottom(Line::from(hint).right_aligned())
+            .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM)),
+    );
+
+    frame.render_widget(Clear, Rect::new(x, y, width, height));
+    frame.render_widget(panel, Rect::new(x, y, width, height));
+}
+
 fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
     const ACTIVE_MARKER: &str = "  ● active";
 
@@ -3337,7 +3547,7 @@ pub(crate) mod scenario_tests {
         assert_eq!(submenu.parent, "config");
         assert!(f.contains("[CONFIG]"), "config palette title visible");
         assert!(
-            f.contains("timestamps = off"),
+            f.contains("timestamps") && f.contains("off"),
             "timestamp row should show current state; frame:\n{f}"
         );
 
@@ -3678,10 +3888,7 @@ pub(crate) mod scenario_tests {
         let _opened = open_config_palette(&mut h);
         let f = h.render("config palette while settings load");
 
-        assert!(
-            f.contains("what to change"),
-            "config header visible above candidates"
-        );
+        assert!(f.contains("config"), "the config panel is on screen: {f}");
         assert!(
             f.contains("loading sampler settings..."),
             "loading row visible until settings arrive"
@@ -3698,9 +3905,9 @@ pub(crate) mod scenario_tests {
         let f = h.render("setting submenu with values");
 
         assert!(matches!(h.app.completion.mode, PaletteMode::Submenu(_)));
-        assert!(f.contains("what to change"), "config header visible");
+        assert!(f.contains("Model settings"), "settings are grouped: {f}");
         assert!(
-            f.contains("temperature = 0.7"),
+            f.contains("temperature") && f.contains("0.7"),
             "effective temperature should render next to its key; frame:\n{f}"
         );
     }
@@ -4048,6 +4255,31 @@ pub(crate) mod scenario_tests {
 
     #[test]
     #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
+    fn preview_config_panel() {
+        let mut h = Harness::with_size(76, 30);
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+        for turn in 0..3 {
+            h.app.entries.push(ConversationEntry::user(
+                format!("turn {turn} behind the panel"),
+                vec![],
+                format!("t{turn}"),
+            ));
+        }
+        h.app.model = "test/provider-model".to_owned();
+        h.app.character_name = "ada".to_owned();
+        open_setting_menu_with_snapshot(&mut h);
+
+        let _ = h.render("config");
+        eprintln!("=== config panel ===\n{}", h.ansi_dump());
+
+        h.type_str("cache");
+        let _ = h.render("filtered");
+        eprintln!("=== filtered to cache ===\n{}", h.ansi_dump());
+    }
+
+    #[test]
+    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
     fn preview_output_pager_over_a_dimmed_conversation() {
         let mut h = Harness::with_size(76, 22);
         h.app.connection_status = ConnectionStatus::Connected;
@@ -4201,7 +4433,10 @@ pub(crate) mod scenario_tests {
             !unrelated.contains("loading sampler settings"),
             "nothing under this filter is a setting: {unrelated}"
         );
-        assert!(unrelated.contains("timestamps = off"), "{unrelated}");
+        assert!(
+            unrelated.contains("timestamps") && unrelated.contains("off"),
+            "{unrelated}"
+        );
         assert_eq!(
             h.app.completion.candidates.len(),
             1,
