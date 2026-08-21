@@ -1783,19 +1783,24 @@ impl App {
                         rows.push(format!("{label} = {shown}"));
                     }
                 }
-                rows.extend::<Vec<String>>(match self.setting_editor_blocked_row() {
-                    Some(blocked) => vec![blocked.to_owned()],
-                    None => self
-                        .visible_setting_keys()
-                        .iter()
-                        .filter(|key| filter.is_empty() || key.starts_with(&filter))
-                        .map(|key| self.setting_row_label(key))
-                        .collect(),
-                });
-                if self.setting_editor_blocked_row().is_none()
-                    && (filter.is_empty() || "reset".starts_with(&filter))
-                {
-                    rows.push("reset".into());
+                let matching_settings: Vec<&'static str> = self
+                    .visible_setting_keys()
+                    .into_iter()
+                    .filter(|key| filter.is_empty() || key.starts_with(&filter))
+                    .collect();
+                match self.setting_editor_blocked_row() {
+                    Some(blocked) if !matching_settings.is_empty() => rows.push(blocked.to_owned()),
+                    Some(_) => {}
+                    None => {
+                        rows.extend(
+                            matching_settings
+                                .iter()
+                                .map(|key| self.setting_row_label(key)),
+                        );
+                        if filter.is_empty() || "reset".starts_with(&filter) {
+                            rows.push("reset".into());
+                        }
+                    }
                 }
                 rows.extend(
                     Self::VIEW_KEYS

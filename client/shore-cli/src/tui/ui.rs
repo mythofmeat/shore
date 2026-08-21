@@ -3862,6 +3862,38 @@ pub(crate) mod scenario_tests {
     }
 
     #[test]
+    fn the_loading_row_only_stands_in_for_settings_that_would_have_matched() {
+        let mut h = Harness::with_size(80, 40);
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+        let _opening = open_config_palette(&mut h);
+
+        h.type_str("timestamps");
+        let unrelated = h.render("filtered to a display option while settings load");
+        assert!(
+            !unrelated.contains("loading sampler settings"),
+            "nothing under this filter is a setting: {unrelated}"
+        );
+        assert!(unrelated.contains("timestamps = off"), "{unrelated}");
+        assert_eq!(
+            h.app.completion.candidates.len(),
+            1,
+            "the match should be the only row, so Enter reaches it: {:?}",
+            h.app.completion.candidates
+        );
+
+        for _ in 0.."timestamps".len() {
+            h.press(KeyCode::Backspace);
+        }
+        h.type_str("temp");
+        let settings = h.render("filtered to a setting while it loads");
+        assert!(
+            settings.contains("loading sampler settings"),
+            "temperature is still coming, so say so: {settings}"
+        );
+    }
+
+    #[test]
     fn a_display_option_toggles_in_place_in_the_config_palette() {
         let mut h = Harness::with_size(80, 40);
         h.app.connection_status = ConnectionStatus::Connected;
