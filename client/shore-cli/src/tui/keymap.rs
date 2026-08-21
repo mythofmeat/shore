@@ -459,6 +459,11 @@ pub(crate) fn canonical_key(written: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::print_stderr,
+        reason = "the live-config check dumps what it loaded for `cargo test -- --nocapture`"
+    )]
+
     use super::*;
     use crossterm::event::{KeyEventKind, KeyEventState};
 
@@ -645,6 +650,23 @@ mod tests {
         let keymap = Keymap::parse("[normal]\n\"j\" = \"ui scroll down 1\"\n");
         assert!(keymap.warnings.is_empty(), "{:?}", keymap.warnings);
         assert!(keymap.shortcuts().is_empty());
+    }
+
+    #[test]
+    #[ignore = "reads the real ~/.config/shore/tui.toml; run explicitly"]
+    fn the_live_config_file_loads_without_complaint() {
+        let keymap =
+            Keymap::parse(&std::fs::read_to_string(keymap_path()).expect("a tui.toml to check"));
+        eprintln!("warnings: {:?}", keymap.warnings);
+        for scope in [Scope::Global, Scope::Normal] {
+            for (key, binding) in keymap.bindings(scope) {
+                eprintln!("{scope:?} {key} -> {}", binding.command);
+            }
+        }
+        for (name, binding) in keymap.shortcuts() {
+            eprintln!("/{name} -> {}", binding.command);
+        }
+        assert!(keymap.warnings.is_empty(), "{:?}", keymap.warnings);
     }
 
     #[test]
