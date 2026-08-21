@@ -1285,6 +1285,31 @@ pub(crate) fn editor_from_env() -> String {
     resolve_editor(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok())
 }
 
+const SHELL_METACHARACTERS: &str = "|&;<>()$`\\\"' \t\n*?[#~=%";
+
+fn needs_a_shell(editor: &str) -> bool {
+    editor.chars().any(|c| SHELL_METACHARACTERS.contains(c))
+}
+
+pub(crate) fn editor_invocation(
+    editor: &str,
+    path: &std::path::Path,
+) -> (String, Vec<std::ffi::OsString>) {
+    if needs_a_shell(editor) {
+        (
+            "sh".to_owned(),
+            vec![
+                "-c".into(),
+                format!("{editor} \"$@\"").into(),
+                editor.into(),
+                path.into(),
+            ],
+        )
+    } else {
+        (editor.to_owned(), vec![path.into()])
+    }
+}
+
 fn resolve_editor(visual: Option<String>, editor: Option<String>) -> String {
     [visual, editor]
         .into_iter()
@@ -1304,7 +1329,8 @@ fn edit_message_in_editor() -> Result<String, Box<dyn std::error::Error>> {
 
     let path = tmp.path().to_path_buf();
 
-    let status = std::process::Command::new(&editor).arg(&path).status()?;
+    let (program, args) = editor_invocation(&editor, &path);
+    let status = std::process::Command::new(program).args(args).status()?;
 
     if !status.success() {
         return Ok(String::new());
@@ -2129,6 +2155,31 @@ mod tests {
             "nano"
         );
         assert_eq!(super::resolve_editor(Some(String::new()), None), "vi");
+    }
+
+    #[test]
+    fn a_bare_editor_name_is_launched_directly() {
+        let (program, args) = super::editor_invocation("nvim", std::path::Path::new("/tmp/d.md"));
+        assert_eq!(program, "nvim");
+        assert_eq!(args, ["/tmp/d.md"]);
+    }
+
+    #[test]
+    fn an_editor_with_arguments_goes_through_a_shell() {
+        let (program, args) =
+            super::editor_invocation("code -w", std::path::Path::new("/tmp/d.md"));
+        assert_eq!(program, "sh");
+        assert_eq!(args, ["-c", "code -w \"$@\"", "code -w", "/tmp/d.md"]);
+    }
+
+    #[test]
+    fn a_path_the_shell_would_split_is_still_passed_as_one_argument() {
+        let (_, args) = super::editor_invocation("code -w", std::path::Path::new("/tmp/my d.md"));
+        assert_eq!(
+            args.last().map(std::ffi::OsString::as_os_str),
+            Some(std::ffi::OsStr::new("/tmp/my d.md")),
+            "the file is a positional argument, not part of the command string",
+        );
     }
 
     #[test]

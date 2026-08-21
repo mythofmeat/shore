@@ -552,7 +552,8 @@ fn open_in_editor(
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
-    drop(std::process::Command::new(&editor).arg(&tmp).status());
+    let (program, args) = crate::run::editor_invocation(&editor, &tmp);
+    drop(std::process::Command::new(program).args(args).status());
 
     enable_raw_mode()?;
     execute!(
