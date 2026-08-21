@@ -271,6 +271,8 @@ const DOCUMENT_PATH_ONLY = new Set([
   "backend_wrong_type",
 ]);
 
+const BUN_REFUSES_THE_DOCUMENT = new Set(["threshold_i64_max"]);
+
 describe("[notifications] parsing", () => {
   const emptyCase = (f["config_parse"] as Row[]).find((c) => c["name"] === "empty")?.["ok"] as
     | Row
@@ -279,6 +281,7 @@ describe("[notifications] parsing", () => {
 
   for (const c of f["config_parse"] as Row[]) {
     if (DOCUMENT_PATH_ONLY.has(c["name"] as string)) continue;
+    if (BUN_REFUSES_THE_DOCUMENT.has(c["name"] as string)) continue;
     test(c["name"] as string, () => {
       const table = Bun.TOML.parse(c["toml"] as string) as Record<string, unknown>;
       const parsed = readNotificationsConfig(table);
@@ -301,10 +304,17 @@ describe("[notifications] parsing", () => {
     });
   }
 
-  test("Bun's TOML parser mishandles the float literals nan/inf/-inf", () => {
-    expect(Bun.TOML.parse("a = nan")).toEqual({ a: "nan" });
-    expect(Bun.TOML.parse("a = inf")).toEqual({ a: "inf" });
-    expect(Object.is((Bun.TOML.parse("a = -inf") as Row)["a"], -0)).toBe(true);
+  test("the float literals nan/inf/-inf decode as floats", () => {
+    expect(Bun.TOML.parse("a = nan")).toEqual({ a: Number.NaN });
+    expect(Bun.TOML.parse("a = inf")).toEqual({ a: Infinity });
+    expect((Bun.TOML.parse("a = -inf") as Row)["a"]).toBe(-Infinity);
+  });
+
+  test("the recorded i64::MAX threshold cannot be replayed — Bun refuses the document", () => {
+    const c = (f["config_parse"] as Row[]).find((x) => x["name"] === "threshold_i64_max");
+    if (c === undefined) throw new Error("fixture case missing");
+    expect((c["ok"] as Row)["generation_threshold_ms"]).toBe("18446744073709551615");
+    expect(() => Bun.TOML.parse(c["toml"] as string)).toThrow("losslessly");
   });
 
   test("a bare number on generation_threshold is seconds", () => {

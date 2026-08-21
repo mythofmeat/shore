@@ -255,8 +255,6 @@ const BUN_CANNOT_SEE = new Set([
   "a float that happens to be whole is still a float",
   "exponent notation is a float too",
   "u64 fields hold values a double cannot",
-  "seq: UsageBudgetConfig, at its minimum",
-  "a required field supplied positionally",
 ]);
 
 describe("the fixture is real", () => {
@@ -640,15 +638,21 @@ describe("the two parse paths, where they disagree", () => {
   });
 });
 
-describe("distinctions Bun's TOML parser destroys", () => {
-  test("a datetime never reaches app.ts — Bun rejects the document", () => {
+describe("where Bun's TOML parser and Rust's toml still differ", () => {
+  test("a datetime parses, and lands on the error Rust's document path gives", () => {
     const c = fixture.parse.find((x) => x.name === "datetime where a string is expected");
     if (c === undefined) throw new Error("fixture case missing");
-    expect(() => parseToml(c.toml)).toThrow();
-    const table = c.table?.ok as { defaults: { model: string } } | undefined;
-    if (table === undefined) throw new Error("expected a table-path success");
-    expect(table.defaults.model).toBe("1979-05-27T07:32:00Z");
-    expect(c.doc?.err).toBe("invalid type: map, expected a string");
+    const table = parseToml(c.toml) as { defaults: { model: unknown } };
+    expect(Object.prototype.toString.call(table.defaults.model)).toBe("[object Temporal.Instant]");
+
+    const docErr = c.doc?.err;
+    if (docErr === undefined) throw new Error("expected a recorded document-path error");
+    const parsed = parseAppConfig(parseToml(c.toml));
+    expect("err" in parsed ? parsed.err : "").toBe(docErr);
+
+    const recorded = c.table?.ok as { defaults: { model: string } } | undefined;
+    if (recorded === undefined) throw new Error("expected a table-path success");
+    expect(recorded.defaults.model).toBe("1979-05-27T07:32:00Z");
   });
 
   for (const name of ["a float that happens to be whole is still a float", "exponent notation is a float too"]) {
@@ -663,38 +667,38 @@ describe("distinctions Bun's TOML parser destroys", () => {
     });
   }
 
-  test("a nested array literal is rejected by Bun, whatever the Rust says", () => {
-    expect(() => parseToml("a = [[1]]")).toThrow();
+  test("a nested array literal parses, so the seq cases replay against the recording", () => {
+    expect(parseToml("a = [[1]]")).toEqual({ a: [[1]] });
     for (const name of ["seq: UsageBudgetConfig, at its minimum", "a required field supplied positionally"]) {
-      const c = fixture.parse.find((x) => x.name === name);
-      if (c === undefined) throw new Error(`fixture case missing: ${name}`);
-      expect(() => parseToml(c.toml)).toThrow();
+      expect(BUN_CANNOT_SEE.has(name)).toBe(false);
     }
-    expect(() =>
-      parseToml('[[usage.budgets]]\ncost_usd = 1.0\nwarn_at = [0.5]\n'),
-    ).not.toThrow();
   });
 
-  test("the recorded u64 case set `max_image_size`, which is now rejected by name", () => {
+  test("the recorded u64 case is refused outright, where Rust took the value", () => {
     const c = fixture.parse.find((x) => x.name === "u64 fields hold values a double cannot");
     if (c === undefined) throw new Error("fixture case missing");
     const rust = c.ok as { advanced: Record<string, unknown> } | undefined;
     if (rust === undefined) throw new Error("expected a recorded success");
     expect(rust.advanced.max_image_size).toBe(9007199254740992);
 
-    const parsed = parseAppConfig(parseToml(c.toml));
-    expect("err" in parsed).toBe(true);
-    expect((parsed as { err: string }).err).toBe(
+    expect(() => parseToml(c.toml)).toThrow("losslessly");
+
+    const parsed = parseAppConfig(parseToml("[advanced]\nmax_image_size = 1\n"));
+    expect("err" in parsed ? parsed.err : "").toBe(
       "unknown field `max_image_size`, expected `max_retries` or `retry_backoff`",
     );
   });
 
-  test("a u64 past 2^53 still loses its last digit on a surviving field", () => {
+  test("a u64 past 2^53 fails the whole document instead of losing its last digit", () => {
+    expect(() => parseToml(`[memory.retrieval]\nmax_file_bytes = 9007199254740993\n`)).toThrow(
+      "losslessly",
+    );
+
     const parsed = parseAppConfig(
-      parseToml(`[memory.retrieval]\nmax_file_bytes = 9007199254740993\n`),
+      parseToml(`[memory.retrieval]\nmax_file_bytes = 9007199254740991\n`),
     );
     if ("err" in parsed) throw new Error(parsed.err);
-    expect(parsed.ok.memory.retrieval.max_file_bytes).toBe(9007199254740992);
+    expect(parsed.ok.memory.retrieval.max_file_bytes).toBe(9007199254740991);
   });
 });
 

@@ -199,18 +199,18 @@ describe("parseConfigTable + validateConfig", () => {
 });
 
 describe("Bun.TOML.parse non-finite floats", () => {
-  test("decodes them wrongly, in these specific ways", () => {
+  test("decodes them as the floats they are", () => {
     const decode = (src: string): unknown => (Bun.TOML.parse(src) as { a: unknown }).a;
 
-    expect(decode("a = nan")).toBe("nan");
-    expect(decode("a = inf")).toBe("inf");
-    expect(decode("a = [nan]")).toEqual(["nan"]);
+    expect(decode("a = nan")).toBeNaN();
+    expect(decode("a = inf")).toBe(Infinity);
+    expect(decode("a = [nan]")).toEqual([Number.NaN]);
 
-    expect(Object.is(decode("a = -inf"), -0)).toBe(true);
-    expect(Object.is(decode("a = +inf"), 0)).toBe(true);
-    expect(Object.is(decode("a = +nan"), 0)).toBe(true);
+    expect(decode("a = -inf")).toBe(-Infinity);
+    expect(decode("a = +inf")).toBe(Infinity);
+    expect(decode("a = +nan")).toBeNaN();
 
-    expect(() => Bun.TOML.parse("a = 1e400")).toThrow();
+    expect(decode("a = 1e400")).toBe(Infinity);
 
     expect(Object.is(decode("a = -0.0"), -0)).toBe(true);
     expect(decode("a = 1.5")).toBe(1.5);

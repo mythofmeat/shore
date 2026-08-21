@@ -221,9 +221,9 @@ describe("load_raw_config_table", () => {
     expect(oks.length).toBeGreaterThanOrEqual(8);
   });
 
-  test("Bun's TOML parser accepts an unterminated table header Rust rejects", () => {
-    expect(Bun.TOML.parse("[unclosed")).toEqual({ unclosed: {} });
-    expect(Bun.TOML.parse("[[a]\nx=1")).toEqual({ a: [{ x: 1 }] });
+  test("an unterminated table header is rejected, the way Rust rejects it", () => {
+    expect(() => Bun.TOML.parse("[unclosed")).toThrow();
+    expect(() => Bun.TOML.parse("[[a]\nx=1")).toThrow();
     expect(() => Bun.TOML.parse("this is not toml")).toThrow();
     expect(() => Bun.TOML.parse("= nope")).toThrow();
   });
