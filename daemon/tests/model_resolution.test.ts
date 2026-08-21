@@ -18,6 +18,7 @@ import {
   keepaliveToString,
   mergeFrom,
   orFallback,
+  readModelConfigFields,
   resolvedModelFromParts,
   sdkEchoesUnsignedThinking,
   sdkFromWire,
@@ -512,6 +513,43 @@ describe("catalogFromSections", () => {
     expect(model.temperature).toBe(0.7);
     expect(model.baseUrl).toBe("https://custom.example/v1");
     expect(model.sdk).toBe("openai");
+  });
+
+  test("a provider default idle ceiling reaches its models, and a model overrides it", () => {
+    const chat = Bun.TOML.parse(
+      '[moonshotai.k3]\nmodel_id = "kimi-k3"\n' +
+        '[moonshotai.k3-long]\nmodel_id = "kimi-k3"\ncache_keepalive_max = "6h"\n',
+    ) as Record<string, unknown>;
+    const read = readModelConfigFields(
+      Bun.TOML.parse('cache_keepalive = "10m"\ncache_keepalive_max = "90m"\n') as Record<
+        string,
+        unknown
+      >,
+    );
+    if ("err" in read) throw new Error(read.err);
+    const registry: ProviderRegistryView = {
+      get: () => ({ sdk: "openai", defaults: read.ok }),
+    };
+    const catalog = catalogFromSections(chat, undefined, undefined, registry);
+
+    const inherited = catalog.chat.get("chat.moonshotai.k3") as ResolvedModel;
+    expect(inherited.cacheKeepaliveMax?.toString()).toBe("90m");
+
+    const overridden = catalog.chat.get("chat.moonshotai.k3-long") as ResolvedModel;
+    expect(overridden.cacheKeepaliveMax?.toString()).toBe("6h");
+  });
+
+  test("a model that names no ceiling leaves the field absent for the global to fill", () => {
+    const catalog = catalogFromSections(
+      Bun.TOML.parse('[anthropic.main]\nmodel_id = "claude-opus-4-6"\n') as Record<
+        string,
+        unknown
+      >,
+      undefined,
+      undefined,
+    );
+    expect((catalog.chat.get("chat.anthropic.main") as ResolvedModel).cacheKeepaliveMax)
+      .toBeUndefined();
   });
 
   test("registry credentials deliberately do not cascade", () => {

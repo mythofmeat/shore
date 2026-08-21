@@ -2,7 +2,7 @@ import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import type { BuiltRequest } from "../llm/request.ts";
-import type { SidecarRequest } from "../llm/types.ts";
+import type { CallContext, SidecarRequest } from "../llm/types.ts";
 import type { KeepalivePrefix, KeepaliveService } from "./keepalive.ts";
 import { rebuildRequestFromDisk, type RebuildDeps } from "./rebuild.ts";
 
@@ -13,8 +13,15 @@ export type InvalidationReason =
   | "prompt_reload"
   | "mcp_reload";
 
+const UNARMED: KeepaliveArming = { intervalMs: undefined, maxSecs: undefined };
+
+export interface KeepaliveArming {
+  intervalMs: number | undefined;
+  maxSecs: number | undefined;
+}
+
 export type KeepaliveReprime =
-  | { kind: "push"; request: SidecarRequest; keepaliveIntervalMs: number | undefined }
+  | { kind: "push"; request: SidecarRequest; keepalive: KeepaliveArming }
   | { kind: "disarm" };
 
 export function reprimeDecision(rebuilt: BuiltRequest | undefined): KeepaliveReprime {
@@ -23,7 +30,10 @@ export function reprimeDecision(rebuilt: BuiltRequest | undefined): KeepaliveRep
     : {
         kind: "push",
         request: rebuilt.request,
-        keepaliveIntervalMs: rebuilt.keepalive_interval_ms,
+        keepalive: {
+          intervalMs: rebuilt.keepalive_interval_ms,
+          maxSecs: rebuilt.keepalive_max_secs,
+        },
       };
 }
 
@@ -43,9 +53,13 @@ export class LastRequestCache {
     return [...this.#bodies.keys()];
   }
 
-  set(character: string, request: SidecarRequest, keepaliveIntervalMs: number | undefined): void {
+  set(
+    character: string,
+    request: SidecarRequest,
+    keepalive?: KeepaliveArming,
+  ): void {
     this.#bodies.set(character, request);
-    this.#keepalive?.arm(toPrefix(character, request, keepaliveIntervalMs), true);
+    this.#keepalive?.arm(toPrefix(character, request, keepalive ?? UNARMED), true);
   }
 
   invalidate(character: string, reason: InvalidationReason): void {
@@ -66,7 +80,7 @@ export class LastRequestCache {
     );
     if (decision.kind === "push") {
       this.#bodies.set(character, decision.request);
-      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepaliveIntervalMs));
+      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepalive));
     } else {
       this.#keepalive?.disarm(character);
     }
@@ -77,15 +91,19 @@ export class LastRequestCache {
 function toPrefix(
   character: string,
   request: SidecarRequest,
-  keepaliveIntervalMs: number | undefined,
+  keepalive: KeepaliveArming,
 ): KeepalivePrefix {
   const context = request.context;
+  const base: CallContext =
+    context === undefined
+      ? { character, call_type: "keepalive", thinking_enabled: false }
+      : { ...context, character };
   return {
     ...request,
     context:
-      context === undefined
-        ? { character, call_type: "keepalive", thinking_enabled: false }
-        : { ...context, character },
-    ...(keepaliveIntervalMs === undefined ? {} : { keepalive_interval_ms: keepaliveIntervalMs }),
+      keepalive.maxSecs === undefined ? base : { ...base, keepalive_max_secs: keepalive.maxSecs },
+    ...(keepalive.intervalMs === undefined
+      ? {}
+      : { keepalive_interval_ms: keepalive.intervalMs }),
   };
 }

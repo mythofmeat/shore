@@ -9,6 +9,7 @@ import {
   defaultSdk,
   keepaliveToString,
   parseCacheKeepalive,
+  parseCacheKeepaliveMax,
   resolvedModelFromParts,
   sdkFromWire,
   type CacheKeepaliveSetting,
@@ -18,6 +19,7 @@ import {
   type Sdk,
 } from "./models.ts";
 import { invalidType } from "./models.ts";
+import { ConfigDuration } from "./duration.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ProviderRegistry } from "./providers.ts";
@@ -58,6 +60,7 @@ export interface SamplerSettings {
   maxOutputTokens?: number;
   cacheTtl?: string;
   cacheKeepalive?: CacheKeepaliveSetting;
+  cacheKeepaliveMax?: ConfigDuration;
   sdk?: string;
   replayPriorThinking?: ThinkingReplay;
   maxToolIterations?: number;
@@ -76,6 +79,7 @@ const SAMPLER_FIELDS = [
   ["maxOutputTokens", "max_output_tokens"],
   ["cacheTtl", "cache_ttl"],
   ["cacheKeepalive", "cache_keepalive"],
+  ["cacheKeepaliveMax", "cache_keepalive_max"],
   ["sdk", "sdk"],
   ["replayPriorThinking", "replay_prior_thinking"],
   ["maxToolIterations", "max_tool_iterations"],
@@ -938,6 +942,14 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
     out.cacheKeepalive = parsed.ok;
   }
 
+  const keepaliveMax = table["cache_keepalive_max"];
+  if (keepaliveMax !== undefined) {
+    if (typeof keepaliveMax !== "string") return { err: invalidType(keepaliveMax, "a string") };
+    const parsed = parseCacheKeepaliveMax(keepaliveMax);
+    if ("err" in parsed) return parsed;
+    out.cacheKeepaliveMax = parsed.ok;
+  }
+
   const replay = table["replay_prior_thinking"];
   if (replay !== undefined) {
     const parsed = readThinkingReplay(replay);
@@ -1070,6 +1082,8 @@ function samplerLines(sampler: SamplerSettings): string[] {
     if (value === undefined) continue;
     if (field === "cacheKeepalive") {
       out.push(`${key} = ${tomlString(keepaliveToString(value as CacheKeepaliveSetting))}`);
+    } else if (field === "cacheKeepaliveMax") {
+      out.push(`${key} = ${tomlString((value as ConfigDuration).toString())}`);
     } else if (field === "temperature" || field === "topP") {
       out.push(`${key} = ${tomlFloat(value as number)}`);
     } else if (typeof value === "string") {

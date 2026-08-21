@@ -177,6 +177,29 @@ describe("buildRequestWithResolvedKey", () => {
     }
   });
 
+  test("the model's idle ceiling arrives in seconds and stays off the wire", () => {
+    const built = buildRequestWithResolvedKey(
+      model({
+        ...required(fixture.build_request_with_resolved_key[0]).model,
+        cache_keepalive_max: "90m",
+      } as never),
+      "k",
+      { messages: [], replay: "all" },
+    );
+    expect(built.keepalive_max_secs).toBe(5400);
+    expect(Object.keys(built.request)).not.toContain("cache_keepalive_max");
+    expect(Object.keys(built.request)).not.toContain("keepalive_max_secs");
+  });
+
+  test("a model with no ceiling leaves the field absent rather than zero", () => {
+    const built = buildRequestWithResolvedKey(
+      model(required(fixture.build_request_with_resolved_key[0]).model),
+      "k",
+      { messages: [], replay: "all" },
+    );
+    expect(built.keepalive_max_secs).toBeUndefined();
+  });
+
   test("caller-supplied provider options replace the derived ones", () => {
     const withEffort = model({
       ...required(fixture.provider_options_for[0]).model,

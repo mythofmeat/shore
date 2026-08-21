@@ -1,4 +1,4 @@
-import { ConfigDuration, type ParseResult } from "./duration.ts";
+import { ConfigDuration, rustTrim, type ParseResult } from "./duration.ts";
 
 export type CacheKeepaliveSetting =
   | { kind: "off" }
@@ -16,6 +16,17 @@ export function parseCacheKeepalive(raw: string): ParseResult<CacheKeepaliveSett
     return { err: 'cache_keepalive interval must be > 0; use "off" to disable' };
   }
   return { ok: { kind: "every", interval: interval.ok } };
+}
+
+export function parseCacheKeepaliveMax(raw: string): ParseResult<ConfigDuration> {
+  const parsed = ConfigDuration.parse(rustTrim(raw));
+  if ("err" in parsed) return parsed;
+  if (parsed.ok.asMillisExact() === 0n) {
+    return {
+      err: 'cache_keepalive_max must be > 0; use cache_keepalive = "off" to stop pinging entirely',
+    };
+  }
+  return { ok: parsed.ok };
 }
 
 export function keepaliveIntervalMs(setting: CacheKeepaliveSetting): number | undefined {

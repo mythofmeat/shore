@@ -1,6 +1,8 @@
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
+
+import type { KeepaliveArming } from "../src/cache/last_request.ts";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -460,16 +462,41 @@ describe("the autonomy surface a turn drives", () => {
     });
     const bridge = new TurnAutonomyBridge(recordingService(gate));
     const autonomy = turnAutonomy(bridge, {
-      set: (character: string, _request: unknown, keepaliveIntervalMs?: number) =>
-        cached.push([character, keepaliveIntervalMs]),
+      set: (character: string, _request: unknown, keepalive?: KeepaliveArming) =>
+        cached.push([character, keepalive?.intervalMs]),
     });
 
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
-    autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, 55 * 60_000);
+    autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, {
+      intervalMs: 55 * 60_000,
+      maxSecs: undefined,
+    });
 
     expect(cached, "the cadence rides along, or the armed prefix has none").toEqual([
       ["ada", 55 * 60_000],
     ]);
+    release();
+  });
+
+  test("the ceiling rides along with the cadence, not just the cadence", () => {
+    const cached: Array<KeepaliveArming | undefined> = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const bridge = new TurnAutonomyBridge(recordingService(gate));
+    const autonomy = turnAutonomy(bridge, {
+      set: (_character: string, _request: unknown, keepalive?: KeepaliveArming) =>
+        cached.push(keepalive),
+    });
+
+    autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
+    autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, {
+      intervalMs: 10 * 60_000,
+      maxSecs: 5400,
+    });
+
+    expect(cached).toEqual([{ intervalMs: 10 * 60_000, maxSecs: 5400 }]);
     release();
   });
 
@@ -1291,7 +1318,7 @@ describe("the shape of what is cached", () => {
       model: "m",
       provider_key: "anthropic",
       messages: [{ role: "user", content: "hi" } as never],
-    }, undefined);
+    }, { intervalMs: undefined, maxSecs: undefined });
 
     expect(seen[0]?.provider_key).toBe("anthropic");
     expect(seen[0]?.messages).toHaveLength(1);

@@ -232,7 +232,10 @@ describe("session_activate", () => {
     const h = await harnessFor(BETWEEN_TURNS);
     const built = await rebuildRequestFromDisk(CHARACTER, h.dataDir, h.config, {});
     if (built === undefined) throw new Error("the fixture conversation did not rebuild");
-    h.cache.set(CHARACTER, built.request, built.keepalive_interval_ms);
+    h.cache.set(CHARACTER, built.request, {
+      intervalMs: built.keepalive_interval_ms,
+      maxSecs: built.keepalive_max_secs,
+    });
 
     const activated = await h.activate();
 

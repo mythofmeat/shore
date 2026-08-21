@@ -89,12 +89,17 @@ export async function keepalivePingNowCommand(
     cache_read_tokens: ping.usage.cacheReadTokens,
     cache_creation_tokens: ping.usage.cacheCreationTokens,
     note: ping.cold
-      ? "Read 0 and paid a write: this ping recreated the prefix at full " +
-        "price rather than refreshing it. The autonomous keepalive treats " +
-        "this as proof the prefix is gone and disarms."
+      ? ping.usage.cacheCreationTokens > 0
+        ? "Read 0 and paid a write: this ping recreated the prefix at full " +
+          "price rather than refreshing it. The autonomous keepalive treats " +
+          "this as proof the prefix is gone and disarms."
+        : "Read 0 cached tokens, and this provider itemises no write — the " +
+          "prefix is not in the cache, so the ping paid full input price for " +
+          "nothing. The autonomous keepalive disarms on this."
       : ping.usage.cacheReadTokens === 0
-        ? "Read 0 with no write — caching is off for this model, or a " +
-          "non-cached fallback answered. Not a cold write."
+        ? "Read 0 with no write — nothing on this request carried a " +
+          "cache_control marker, or a non-cached fallback answered. Not a " +
+          "cold write."
         : "Read the cached prefix, which is what the keepalive exists to do.",
   };
 }

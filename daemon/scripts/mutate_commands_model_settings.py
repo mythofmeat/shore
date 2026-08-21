@@ -282,11 +282,26 @@ MUTANTS = [
      '  if (field === "cache_keepalive") {',
      "  if (false as boolean) {"),
     ("validate: a non-string keepalive is accepted", CAPS,
+     '    const allowed = "off, or a duration string like 55m / 6h / 30s";\n'
      '    if (probe === true) return outOfDomain("true", allowed);',
+     '    const allowed = "off, or a duration string like 55m / 6h / 30s";\n'
      "    if (probe === true) return undefined;"),
     ("validate: a non-string keepalive reports the wrong value", CAPS,
+     '    const allowed = "off, or a duration string like 55m / 6h / 30s";\n'
      '    if (probe === true) return outOfDomain("true", allowed);',
+     '    const allowed = "off, or a duration string like 55m / 6h / 30s";\n'
      '    if (probe === true) return outOfDomain("<non-string>", allowed);'),
+    ("validate: a non-string idle ceiling is accepted", CAPS,
+     '    const allowed = "a duration string like 90m / 12h";\n'
+     '    if (probe === true) return outOfDomain("true", allowed);',
+     '    const allowed = "a duration string like 90m / 12h";\n'
+     "    if (probe === true) return undefined;"),
+    ("validate: an unparseable idle ceiling is accepted", CAPS,
+     '    if ("err" in parseCacheKeepaliveMax(probe)) return outOfDomain(probe, allowed);',
+     "    void parseCacheKeepaliveMax;"),
+    ("validate: the idle ceiling accepts off, which stops nothing", CAPS,
+     '    if ("err" in parseCacheKeepaliveMax(probe)) return outOfDomain(probe, allowed);',
+     '    if ("err" in parseCacheKeepalive(probe)) return outOfDomain(probe, allowed);'),
     ("validate: an unparseable keepalive is accepted", CAPS,
      '    if ("err" in parseCacheKeepalive(probe)) return outOfDomain(probe, allowed);',
      "    void parseCacheKeepalive;"),

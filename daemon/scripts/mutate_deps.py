@@ -85,11 +85,11 @@ MUTANTS = [
 
     # --- the autonomy surface -------------------------------------------------
     ("autonomy: the cached body is queued behind registration, leaving a live prefix unarmed", D,
-     "    notifyLastRequest: (character, request, keepaliveIntervalMs) => {\n"
-     "      cache.set(character, request as SidecarRequest, keepaliveIntervalMs);\n    },",
-     "    notifyLastRequest: (character, request, keepaliveIntervalMs) => {\n"
+     "    notifyLastRequest: (character, request, keepalive) => {\n"
+     "      cache.set(character, request as SidecarRequest, keepalive);\n    },",
+     "    notifyLastRequest: (character, request, keepalive) => {\n"
      "      void bridge.settled(character).then(() => {\n"
-     "        cache.set(character, request as SidecarRequest, keepaliveIntervalMs);\n"
+     "        cache.set(character, request as SidecarRequest, keepalive);\n"
      "      });\n    },"),
     ("autonomy: the assistant turn is reported to nobody",
      D,
@@ -97,14 +97,19 @@ MUTANTS = [
      "      bridge.onAssistantMessage(character, turnCount);\n    },",
      "    notifyAssistantMessage: () => {},"),
     ("autonomy: only the model and the messages are cached, dropping the prefix's key", D,
-     "      cache.set(character, request as SidecarRequest, keepaliveIntervalMs);",
+     "      cache.set(character, request as SidecarRequest, keepalive);",
      "      cache.set(\n"
      "        character,\n"
      "        { model: request.model, messages: request.messages } as SidecarRequest,\n"
-     "        keepaliveIntervalMs,\n      );"),
+     "        keepalive,\n      );"),
     ("autonomy: the keepalive interval is dropped, so the armed prefix has no cadence", D,
-     "      cache.set(character, request as SidecarRequest, keepaliveIntervalMs);",
+     "      cache.set(character, request as SidecarRequest, keepalive);",
      "      cache.set(character, request as SidecarRequest, undefined);"),
+    ("autonomy: the arming loses its ceiling, so every model falls back to the global", D,
+     "      cache.set(character, request as SidecarRequest, keepalive);",
+     "      cache.set(character, request as SidecarRequest, {\n"
+     "        intervalMs: keepalive?.intervalMs,\n"
+     "        maxSecs: undefined,\n      });"),
 
     # --- the inline compaction ------------------------------------------------
 

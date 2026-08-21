@@ -127,13 +127,20 @@ MUTANTS = [
      "    copy.context = { ...rest };"),
     ("prepare: a cold rebuild is not cached, so keepalive pings no-op until a user speaks",
      H,
-     "    deps.cache.set(character, source, rebuilt.keepalive_interval_ms);",
+     "    deps.cache.set(character, source, {\n"
+     "      intervalMs: rebuilt.keepalive_interval_ms,\n"
+     "      maxSecs: rebuilt.keepalive_max_secs,\n"
+     "    });",
      "    void rebuilt.keepalive_interval_ms;"),
+    ("prepare: the rebuilt body is armed without the model's ceiling",
+     H,
+     "      maxSecs: rebuilt.keepalive_max_secs,",
+     "      maxSecs: undefined,"),
     ("prepare: the body carrying the heartbeat prompt is what gets cached",
      H,
      "  pushInlineSystem(request, prompt);",
      "  pushInlineSystem(request, prompt);\n"
-     "  deps.cache.set(character, request, deps.rebuild?.keepaliveIntervalMs);"),
+     "  deps.cache.set(character, request, undefined);"),
     ("prepare: a mid-turn conversation ticks anyway on an empty body",
      H,
      "    if (rebuilt === undefined) {\n"
