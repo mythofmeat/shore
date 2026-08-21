@@ -58,6 +58,12 @@ const KEY_CASES: readonly KeyCase[] = [
   { key: "max_output_tokens", accepts: 4096, rejects: [-1, 2.5, "4096"] },
   { key: "cache_ttl", accepts: "1h", rejects: [1, true] },
   { key: "cache_keepalive", accepts: "55m", stored: undefined, rejects: ["soon", "0s", 55, true] },
+  {
+    key: "cache_keepalive_max",
+    accepts: "90m",
+    stored: undefined,
+    rejects: ["soon", "0s", 90, true],
+  },
   { key: "sdk", accepts: "anthropic", rejects: ["nope", 1, true] },
   { key: "replay_prior_thinking", accepts: "none", rejects: ["maybe", 1] },
   { key: "max_tool_iterations", accepts: 4, rejects: [0, -1, "4"] },
@@ -138,6 +144,7 @@ describe("capabilityCheck follows applicability, for every sdk and key", () => {
     const inDomain = (sdk: Sdk, model: string, key: string): unknown => {
       if (key === "reasoning_effort") return reasoningEffortDomain(sdk)[0] ?? "low";
       if (key === "cache_keepalive") return "55m";
+      if (key === "cache_keepalive_max") return "90m";
       return 1;
     };
     for (const sdk of SDK_VARIANTS) {
@@ -187,6 +194,23 @@ describe("the three refusals, spelled out", () => {
     expect(capabilityCheck("anthropic", "cache_keepalive", 55)?.message).toBe(
       '`cache_keepalive` value "true" is out of domain; allowed: off, or a duration string like 55m / 6h / 30s',
     );
+  });
+
+  test("a non-string idle ceiling is reported as the string it is not", () => {
+    expect(capabilityCheck("anthropic", "cache_keepalive_max", 90)?.message).toBe(
+      '`cache_keepalive_max` value "true" is out of domain; allowed: a duration string like 90m / 12h',
+    );
+  });
+
+  test("an unparseable idle ceiling is refused, with its own domain", () => {
+    expect(capabilityCheck("anthropic", "cache_keepalive_max", "soon")?.message).toBe(
+      '`cache_keepalive_max` value "soon" is out of domain; allowed: a duration string like 90m / 12h',
+    );
+  });
+
+  test("`off` is a keepalive value but never a ceiling — a ceiling of none stops nothing", () => {
+    expect(capabilityCheck("anthropic", "cache_keepalive_max", "off")).toBeInstanceOf(CommandError);
+    expect(capabilityCheck("anthropic", "cache_keepalive_max", "90m")).toBeUndefined();
   });
 
   test("an effort outside the model's domain names the domain", () => {

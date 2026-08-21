@@ -241,7 +241,7 @@ export async function runGeneration(
   const request: SidecarRequest = {
     ...built.request,
     messages: droppedHistoryImages(built.request.messages, imageSupport, resolved),
-    context: callContext(deps, config, charName, params.rid, (built.request.provider_options === undefined
+    context: callContext(deps, config, charName, params.rid, built.keepalive_max_secs, (built.request.provider_options === undefined
         ? {}
         : { options: built.request.provider_options })),
   };
@@ -292,6 +292,7 @@ export async function runGeneration(
       ...(params.rid === null ? {} : { rid: params.rid }),
     },
     keepaliveIntervalMs: built.keepalive_interval_ms,
+    keepaliveMaxSecs: built.keepalive_max_secs,
     toolIntermediateMessages: intermediate,
     wallClockMs: clock() - startedAt,
     ...(regenAlt === undefined ? {} : { regenAlt }),
@@ -530,9 +531,10 @@ function callContext(
   config: LoadedConfig,
   charName: string,
   rid: string | null,
+  modelKeepaliveMaxSecs: number | undefined,
   call: { options?: ProviderOptions },
 ): CallContext {
-  const ceiling = deps.keepaliveMaxSecs?.();
+  const ceiling = modelKeepaliveMaxSecs ?? deps.keepaliveMaxSecs?.();
   const usage = usageConfigView(config.app.usage);
   const forensics = config.app.cache.forensics ? config.dirs.cache : undefined;
   const effort = resolvedReasoningEffort(call.options);

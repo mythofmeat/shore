@@ -33,6 +33,7 @@ export interface ResolvedModel {
   budget_tokens?: number;
   cache_ttl?: string;
   cache_keepalive?: string;
+  cache_keepalive_max?: string;
   openrouter_provider?: unknown;
   gemini_generation?: number;
   zai_clear_thinking?: boolean;
@@ -45,6 +46,7 @@ export interface BuiltRequest {
   request: SidecarRequest;
   api_key_name?: string;
   keepalive_interval_ms?: number;
+  keepalive_max_secs?: number;
 }
 
 export class MissingApiKey extends Error {
@@ -167,10 +169,18 @@ export function buildRequestWithResolvedKey(
   };
 
   const intervalMs = keepaliveIntervalMs(model.cache_keepalive);
+  const maxSecs = keepaliveMaxSecs(model.cache_keepalive_max);
   return {
     request,
     ...(intervalMs !== undefined ? { keepalive_interval_ms: intervalMs } : {}),
+    ...(maxSecs !== undefined ? { keepalive_max_secs: maxSecs } : {}),
   };
+}
+
+function keepaliveMaxSecs(setting: string | undefined): number | undefined {
+  if (setting === undefined) return undefined;
+  const ms = parseDurationMs(setting);
+  return ms === undefined ? undefined : Math.trunc(ms / 1000);
 }
 
 function keepaliveIntervalMs(setting: string | undefined): number | undefined {

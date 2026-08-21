@@ -376,6 +376,7 @@ const INFO_SCOPE_FIELDS = [
   ["max_output_tokens", "maxOutputTokens"],
   ["cache_ttl", "cacheTtl"],
   ["cache_keepalive", "cacheKeepalive"],
+  ["cache_keepalive_max", "cacheKeepaliveMax"],
   ["sdk", "sdk"],
   ["replay_prior_thinking", "replayPriorThinking"],
   ["max_tool_iterations", "maxToolIterations"],
@@ -412,6 +413,7 @@ function samplerToWire(s: SamplerSettings): Record<string, unknown> {
         : keepalive.kind === "off"
           ? "off"
           : keepalive.interval.toString(),
+    cache_keepalive_max: s.cacheKeepaliveMax?.toString(),
     sdk: s.sdk,
     replay_prior_thinking: s.replayPriorThinking,
     max_tool_iterations: s.maxToolIterations,

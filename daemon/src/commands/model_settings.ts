@@ -3,7 +3,13 @@ import {
   SAMPLER_KEYS,
   type SamplerSettings,
 } from "../config/preferences.ts";
-import { parseCacheKeepalive, sdkFromWire, SDK_VARIANTS, type Sdk } from "../config/models.ts";
+import {
+  parseCacheKeepalive,
+  parseCacheKeepaliveMax,
+  sdkFromWire,
+  SDK_VARIANTS,
+  type Sdk,
+} from "../config/models.ts";
 import { parseThinkingReplay } from "../config/app.ts";
 import {
   applicability,
@@ -47,6 +53,13 @@ const PARSERS: Record<string, (v: unknown) => Parsed> = {
   zai_clear_thinking: boolean("zai_clear_thinking"),
   zai_subscription: boolean("zai_subscription"),
   supports_images: boolean("supports_images"),
+
+  cache_keepalive_max: (v) => {
+    const raw = string("cache_keepalive_max")(v);
+    if ("error" in raw) return raw;
+    const parsed = parseCacheKeepaliveMax(raw.value as string);
+    return "err" in parsed ? { error: `cache_keepalive_max: ${parsed.err}` } : { value: parsed.ok };
+  },
 
   cache_keepalive: (v) => {
     const raw = string("cache_keepalive")(v);

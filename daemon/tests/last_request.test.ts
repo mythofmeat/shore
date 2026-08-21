@@ -317,7 +317,7 @@ describe("LastRequestCache", () => {
   test("caching arms the keepalive from the body, with the cadence beside it", () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);
-    cache.set("ada", body("claude-fixture"), 3_300_000);
+    cache.set("ada", body("claude-fixture"), { intervalMs: 3_300_000, maxSecs: undefined });
 
     expect(cache.get("ada")).toEqual(body("claude-fixture"));
     expect(k.armed).toHaveLength(1);
@@ -394,7 +394,7 @@ describe("LastRequestCache", () => {
     } as never);
 
     const decision = await cache.reprimeFromDisk("ada", dataDir, config);
-    expect(decision.kind === "push" && decision.keepaliveIntervalMs).toBe(3_300_000);
+    expect(decision.kind === "push" && decision.keepalive.intervalMs).toBe(3_300_000);
     expect(k.armed[0]?.keepalive_interval_ms).toBe(3_300_000);
   });
 
@@ -408,6 +408,36 @@ describe("LastRequestCache", () => {
 
     await cache.reprimeFromDisk("ada", dataDir, config);
     expect("keepalive_interval_ms" in (k.armed[0] ?? {})).toBe(false);
+  });
+
+  test("the ceiling the rebuilt model asks for is armed with it", async () => {
+    const k = spy();
+    const cache = new LastRequestCache(k.service as never);
+    const { config, dataDir } = await world([
+      fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false }),
+      fromShape({ role: "assistant", msg_id: "m_2", content: "hi", autonomous: false, tool_result_only: false }),
+    ]);
+    config.models.chat.set("chat.fixture", {
+      ...(FIXTURE_MODEL as object),
+      cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(600) },
+      cacheKeepaliveMax: ConfigDuration.fromSecs(5400),
+    } as never);
+
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config);
+    expect(decision.kind === "push" && decision.keepalive.maxSecs).toBe(5400);
+    expect(k.armed[0]?.context?.keepalive_max_secs).toBe(5400);
+  });
+
+  test("a rebuilt model that names no ceiling arms with no ceiling key at all", async () => {
+    const k = spy();
+    const cache = new LastRequestCache(k.service as never);
+    const { config, dataDir } = await world([
+      fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false }),
+      fromShape({ role: "assistant", msg_id: "m_2", content: "hi", autonomous: false, tool_result_only: false }),
+    ]);
+
+    await cache.reprimeFromDisk("ada", dataDir, config);
+    expect("keepalive_max_secs" in (k.armed[0]?.context ?? {})).toBe(false);
   });
 
   test("repriming a mid-turn conversation disarms rather than leaving the old body armed", async () => {

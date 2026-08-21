@@ -6,7 +6,7 @@ import { ChatRequestEffort } from "@openrouter/sdk/models";
 import type { ReasoningEffort as OpenAiReasoningEffort } from "openai/resources/shared";
 import type { ZhipuReasoningEffort } from "zhipu-ai-provider";
 
-import { parseCacheKeepalive } from "../config/keepalive.ts";
+import { parseCacheKeepalive, parseCacheKeepaliveMax } from "../config/keepalive.ts";
 
 export type Sdk =
   | "anthropic"
@@ -141,6 +141,7 @@ export type Field =
   | "budget_tokens"
   | "cache_ttl"
   | "cache_keepalive"
+  | "cache_keepalive_max"
   | "openrouter_provider"
   | "gemini_generation"
   | "zai_clear_thinking"
@@ -156,6 +157,7 @@ export const FIELDS: readonly Field[] = [
   "budget_tokens",
   "cache_ttl",
   "cache_keepalive",
+  "cache_keepalive_max",
   "openrouter_provider",
   "gemini_generation",
   "zai_clear_thinking",
@@ -190,6 +192,7 @@ export function applicability(
     case "max_context_tokens":
     case "max_output_tokens":
     case "cache_keepalive":
+    case "cache_keepalive_max":
     case "reasoning_effort":
       return "honored";
 
@@ -270,6 +273,12 @@ export function validate(
     const allowed = "off, or a duration string like 55m / 6h / 30s";
     if (probe === true) return outOfDomain("true", allowed);
     if ("err" in parseCacheKeepalive(probe)) return outOfDomain(probe, allowed);
+  }
+
+  if (field === "cache_keepalive_max") {
+    const allowed = "a duration string like 90m / 12h";
+    if (probe === true) return outOfDomain("true", allowed);
+    if ("err" in parseCacheKeepaliveMax(probe)) return outOfDomain(probe, allowed);
   }
 
   return undefined;

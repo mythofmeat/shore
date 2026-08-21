@@ -37,7 +37,11 @@ function response(): GenerateResponse {
   } as unknown as GenerateResponse;
 }
 
-function turnFor(chatToml: string): { request: SidecarRequest; intervalMs: number | undefined } {
+function turnFor(chatToml: string): {
+  request: SidecarRequest;
+  intervalMs: number | undefined;
+  maxSecs: number | undefined;
+} {
   const catalog = catalogFromSections(
     Bun.TOML.parse(chatToml) as Record<string, unknown>,
     undefined,
@@ -57,6 +61,7 @@ function turnFor(chatToml: string): { request: SidecarRequest; intervalMs: numbe
       context: { character: CHARACTER, call_type: "message", thinking_enabled: false },
     },
     intervalMs: built.keepalive_interval_ms,
+    maxSecs: built.keepalive_max_secs,
   };
 }
 
@@ -121,7 +126,7 @@ async function turnPersisted(
     onAssistantMessage: () => {},
   } as never);
 
-  const { request, intervalMs } = turnFor(chatToml);
+  const { request, intervalMs, maxSecs } = turnFor(chatToml);
   const { context: _perCall, ...sentBody } = request;
 
   const ctx = {
@@ -141,11 +146,12 @@ async function turnPersisted(
     result: streamResult(),
     request: sentBody,
     keepaliveIntervalMs: intervalMs,
+    keepaliveMaxSecs: maxSecs,
     toolIntermediateMessages: [],
     wallClockMs: 10,
   });
 
-  return { service, sent, intervalMs };
+  return { service, sent, intervalMs, maxSecs };
 }
 
 const DEFAULTED = `
@@ -157,6 +163,13 @@ const CONFIGURED = `
 [anthropic.main]
 model_id = "claude-opus-4-6"
 cache_keepalive = "55m"
+`;
+
+const MODEL_CEILING = `
+[anthropic.main]
+model_id = "claude-opus-4-6"
+cache_keepalive = "55m"
+cache_keepalive_max = "90m"
 `;
 
 const EXPLICIT_OFF = `
@@ -246,6 +259,59 @@ describe("the configured idle ceiling reaches the schedule", () => {
     clock.advance(55 * MINUTE);
     await service.tick();
 
+    expect(sent[0]?.context?.keepalive_max_secs).toBe(TWENTY_HOURS);
+  });
+});
+
+describe("a model brings its own idle ceiling", () => {
+  const NINETY_MINUTES = 90 * 60;
+  const TWENTY_HOURS = 20 * 60 * 60;
+
+  async function armedFrom(chatToml: string, clock: ReturnType<typeof fakeClock>) {
+    const armed = await turnPersisted(chatToml, clock, { maxIdleSecs: () => TWENTY_HOURS });
+    armed.service.observe(CHARACTER, "claude-opus-4-6", "message", undefined);
+    return armed;
+  }
+
+  test("the model's 90m stops the pinging that the global 20h would have allowed", async () => {
+    const clock = fakeClock();
+    const { service, sent } = await armedFrom(MODEL_CEILING, clock);
+
+    clock.advance(2 * 60 * MINUTE);
+    await service.tick();
+
+    expect(sent).toHaveLength(0);
+  });
+
+  test("inside the model's own ceiling it still pings", async () => {
+    const clock = fakeClock();
+    const { service, sent } = await armedFrom(MODEL_CEILING, clock);
+
+    clock.advance(80 * MINUTE);
+    await service.tick();
+
+    expect(sent).toHaveLength(1);
+  });
+
+  test("the ping carries the model's ceiling, not the global one", async () => {
+    const clock = fakeClock();
+    const { service, sent } = await armedFrom(MODEL_CEILING, clock);
+
+    clock.advance(55 * MINUTE);
+    await service.tick();
+
+    expect(sent[0]?.context?.keepalive_max_secs).toBe(NINETY_MINUTES);
+  });
+
+  test("a model that sets no ceiling of its own still takes the global one", async () => {
+    const clock = fakeClock();
+    const { service, sent, maxSecs } = await armedFrom(CONFIGURED, clock);
+    expect(maxSecs, "the producer's half").toBeUndefined();
+
+    clock.advance(13 * 60 * MINUTE);
+    await service.tick();
+
+    expect(sent).toHaveLength(1);
     expect(sent[0]?.context?.keepalive_max_secs).toBe(TWENTY_HOURS);
   });
 });

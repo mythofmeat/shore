@@ -16,6 +16,7 @@ import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
+import type { KeepalivePrefix } from "../src/cache/keepalive.ts";
 import { testTmp } from "./support/tmp.ts";
 
 afterAll(restoreTestEnv);
@@ -353,6 +354,28 @@ describe("preparing a heartbeat body", () => {
     const now = cache.get("alice");
     expect(now).toBeDefined();
     expect(now?.messages.at(-1)?.role).not.toBe("system");
+  });
+
+  test("the cold rebuild arms with the model's own ceiling, not a bare cadence", async () => {
+    const config = await baseConfig();
+    await withConversation(config);
+    const sonnet = config.models.chat.get("chat.anthropic.sonnet") as unknown as Record<
+      string,
+      unknown
+    >;
+    sonnet["cacheKeepalive"] = { kind: "every", interval: ConfigDuration.fromSecs(600) };
+    sonnet["cacheKeepaliveMax"] = ConfigDuration.fromSecs(5400);
+
+    const armed: KeepalivePrefix[] = [];
+    const cache = new LastRequestCache({
+      arm: (prefix: KeepalivePrefix) => armed.push(prefix),
+      disarm: () => {},
+    } as never);
+
+    await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+
+    expect(armed[0]?.keepalive_interval_ms).toBe(600_000);
+    expect(armed[0]?.context?.keepalive_max_secs).toBe(5400);
   });
 
   test("skips the tick when the conversation is mid-turn", async () => {

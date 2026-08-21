@@ -177,10 +177,10 @@ export class KeepaliveService {
     this.#configuredMaxIdleSecs = opts.maxIdleSecs ?? (() => DEFAULT_MAX_IDLE_SECS);
   }
 
-  #labels(): KeepaliveCallLabels {
+  #labels(entry: Entry): KeepaliveCallLabels {
     return {
       ...(this.#ledgerPath === undefined ? {} : { ledgerPath: this.#ledgerPath }),
-      maxIdleSecs: this.#configuredMaxIdleSecs(),
+      maxIdleSecs: entry.maxIdleSecs,
     };
   }
 
@@ -272,11 +272,12 @@ export class KeepaliveService {
   }
 
   async pingNow(character: string): Promise<PingNowOutcome> {
-    const prefix = this.#entries.get(character)?.prefix;
-    if (prefix === undefined) {
+    const entry = this.#entries.get(character);
+    const prefix = entry?.prefix;
+    if (entry === undefined || prefix === undefined) {
       return { status: "skipped", cold: false, reason: "no_prefix", detail: "no cached request" };
     }
-    const ping = buildKeepalivePing(prefix, this.#labels());
+    const ping = buildKeepalivePing(prefix, this.#labels(entry));
     const blocked = budgetBlockFor(ping, this.#now());
     if (blocked !== undefined) {
       return {
@@ -387,7 +388,7 @@ export class KeepaliveService {
       return;
     }
 
-    const ping = buildKeepalivePing(prefix, this.#labels());
+    const ping = buildKeepalivePing(prefix, this.#labels(entry));
 
     const blocked = budgetBlockFor(ping, this.#now());
     if (blocked !== undefined) {

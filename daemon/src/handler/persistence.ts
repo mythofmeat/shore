@@ -9,6 +9,7 @@ import { rustTrim } from "../memory/lines.ts";
 import type { UsageBudgetWarningEvent } from "../ledger/budget.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import type { WireMessage } from "../llm/types.ts";
+import type { KeepaliveArming } from "../cache/last_request.ts";
 import type { NotificationService } from "../notifications.ts";
 
 export interface CompletedResponseMessage {
@@ -24,11 +25,7 @@ export interface PersistEngine {
 }
 
 export interface PersistAutonomy {
-  notifyLastRequest(
-    character: string,
-    request: WireRequest,
-    keepaliveIntervalMs: number | undefined,
-  ): void;
+  notifyLastRequest(character: string, request: WireRequest, keepalive: KeepaliveArming): void;
   notifyAssistantMessage(character: string, turnCount: number): void;
 }
 
@@ -55,6 +52,7 @@ export interface PersistParams {
   result: StreamResult;
   request: WireRequest;
   keepaliveIntervalMs: number | undefined;
+  keepaliveMaxSecs?: number | undefined;
   toolIntermediateMessages: Message[];
   wallClockMs: number;
   regenAlt?: PendingAlt;
@@ -69,11 +67,10 @@ export async function persistAndNotify(
 
   const completedMessages = completedResponseMessages(result);
 
-  ctx.autonomy.notifyLastRequest(
-    charName,
-    lastRequestWithResponse(request, completedMessages),
-    params.keepaliveIntervalMs,
-  );
+  ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse(request, completedMessages), {
+    intervalMs: params.keepaliveIntervalMs,
+    maxSecs: params.keepaliveMaxSecs,
+  });
   const notifyContent = notifyContentFromResponseMessages(completedMessages);
 
   const mintingProvider = request.provider_key ?? resolvedProviderKey;
