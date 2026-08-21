@@ -1939,7 +1939,7 @@ impl App {
             }
             self.completion.clear();
             self.input.exit_command_mode();
-            return Some(format!("setting reset {chosen}"));
+            return Some(format!("setting {chosen} --reset"));
         }
 
         if let Some(key) = parent.strip_prefix("setting:") {
@@ -1953,7 +1953,7 @@ impl App {
             self.completion.clear();
             self.input.exit_command_mode();
             if value == "reset" {
-                return Some(format!("setting reset {key}"));
+                return Some(format!("setting {key} --reset"));
             }
             return Some(format!("setting {key} {value}"));
         }

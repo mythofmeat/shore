@@ -4,7 +4,10 @@ use shore_common::protocol::client_msg::{
 };
 use tracing::debug;
 
-use crate::cli::{CharacterCommand, CliCommand, ConfigCommand, MsgCommand};
+use crate::cli::{
+    CharacterCommand, CliCommand, ConfigCommand, MsgCommand, PaletteScope, ScrollDirection,
+    UiCommand, ViewKey,
+};
 use crate::tui::app::{App, InputMode, PaletteMode};
 use crate::tui::connection::ConnCommand;
 
@@ -103,164 +106,100 @@ fn redraw_or_load_older_history(app: &mut App) -> Action {
     })))
 }
 
-fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
-    match (key.modifiers, key.code) {
-        (KeyModifiers::NONE, KeyCode::Esc) => {
-            if app.dismiss_latest_notification() {
-                Action::Redraw
-            } else {
-                Action::None
-            }
-        }
+const DEFAULT_NORMAL_KEYS: [(&str, &str); 19] = [
+    ("i", "ui insert"),
+    ("a", "ui insert --end"),
+    ("A", "ui insert --end"),
+    ("I", "ui insert --home"),
+    ("j", "ui scroll down 1"),
+    ("down", "ui scroll down 1"),
+    ("k", "ui scroll up 1"),
+    ("up", "ui scroll up 1"),
+    ("d", "ui scroll down 10"),
+    ("u", "ui scroll up 10"),
+    ("G", "ui scroll bottom"),
+    ("t", "view thinking"),
+    ("T", "view tools"),
+    ("s", "view subagent"),
+    ("p", "view images"),
+    ("S", "ui subagents"),
+    ("o", "ui images"),
+    ("r", "msg regen"),
+    ("ctrl+g", "ui editor"),
+];
 
-        (KeyModifiers::NONE, KeyCode::Char('i')) => {
-            debug!("Input: Normal → Insert");
-            app.input.mode = InputMode::Insert;
-            Action::Redraw
-        }
-        (KeyModifiers::NONE, KeyCode::Char('a')) => {
-            debug!("Input: Normal → Insert (append)");
-            app.input.move_right();
-            app.input.mode = InputMode::Insert;
-            Action::Redraw
-        }
-        (KeyModifiers::SHIFT, KeyCode::Char('A')) => {
-            debug!("Input: Normal → Insert (end)");
-            app.input.move_end();
-            app.input.mode = InputMode::Insert;
-            Action::Redraw
-        }
-        (KeyModifiers::SHIFT, KeyCode::Char('I')) => {
-            debug!("Input: Normal → Insert (home)");
-            app.input.move_home();
-            app.input.mode = InputMode::Insert;
-            Action::Redraw
-        }
-
-        (KeyModifiers::NONE, KeyCode::Char('h') | KeyCode::Left) => {
-            app.input.move_left();
-            Action::Redraw
-        }
-        (KeyModifiers::NONE, KeyCode::Char('l') | KeyCode::Right) => {
-            app.input.move_right();
-            Action::Redraw
-        }
-        (KeyModifiers::NONE, KeyCode::Char('0') | KeyCode::Home) => {
-            app.input.move_home();
-            Action::Redraw
-        }
-        (KeyModifiers::NONE, KeyCode::Char('$') | KeyCode::End) => {
-            app.input.move_end();
-            Action::Redraw
-        }
-
-        (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
-            app.scroll_up(1);
-            redraw_or_load_older_history(app)
-        }
-        (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
-            app.scroll_down(1);
-            Action::Redraw
-        }
-        (KeyModifiers::NONE, KeyCode::Char('u')) => {
-            app.scroll_up(10);
-            redraw_or_load_older_history(app)
-        }
-        (KeyModifiers::NONE, KeyCode::Char('d')) => {
-            app.scroll_down(10);
-            Action::Redraw
-        }
-        (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-            app.scroll_to_bottom();
-            Action::Redraw
-        }
-
-        (KeyModifiers::NONE, KeyCode::Char('t')) => {
-            app.show_thinking = !app.show_thinking;
-            Action::SavePrefs
-        }
-
-        (KeyModifiers::SHIFT, KeyCode::Char('T')) => {
-            app.show_tools = !app.show_tools;
-            Action::SavePrefs
-        }
-
-        (KeyModifiers::NONE, KeyCode::Char('s')) => {
-            app.show_subagent = !app.show_subagent;
-            Action::SendAndSavePrefs(crate::tui::subagent_trace_fetch(app))
-        }
-
-        (KeyModifiers::SHIFT, KeyCode::Char('S')) => {
-            if app.subagent_tasks.is_empty() {
-                app.set_status("no background sub-agents yet");
-                return Action::Redraw;
-            }
-            app.open_subagent_panel();
-            Action::Redraw
-        }
-
-        (KeyModifiers::NONE, KeyCode::Char('p')) => {
-            app.show_images = !app.show_images;
-            Action::SavePrefs
-        }
-
-        (KeyModifiers::CONTROL, KeyCode::Char('g')) => Action::OpenInEditor,
-
-        (KeyModifiers::NONE, KeyCode::Char('r')) => {
-            app.begin_regen_optimistic();
-            let msg = ClientMessage::Regen(Regen {
-                rid: None,
-                stream: true,
-            });
-            Action::Send(ConnCommand::Send(msg))
-        }
-
-        (KeyModifiers::NONE, KeyCode::Char('o')) => {
-            if app.image_index.is_empty() {
-                return Action::None;
-            }
-            let term_height = crossterm::terminal::size().map_or(24, |(_, h)| h);
-            let visible_h = usize::from(
-                term_height
-                    .saturating_mul(80)
-                    .checked_div(100)
-                    .unwrap_or(1)
-                    .max(1),
-            );
-            let last_line = app.image_index.last().map_or(0, |e| e.line);
-            let total_approx = last_line.saturating_add(visible_h);
-            let half_visible = visible_h.checked_div(2).unwrap_or_default();
-            let center = if app.auto_scroll {
-                total_approx.saturating_sub(half_visible)
-            } else {
-                total_approx
-                    .saturating_sub(usize::from(app.scroll_offset))
-                    .saturating_sub(half_visible)
-            };
-            let best = app
-                .image_index
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, entry)| entry.line.abs_diff(center))
-                .map_or(0, |(i, _)| i);
-            app.fullscreen = Some(best);
-            Action::Redraw
-        }
-
-        (KeyModifiers::SHIFT | KeyModifiers::NONE, KeyCode::Char(':')) => {
-            debug!("Input: Normal → Command");
-            app.input.enter_command_mode();
-            app.update_completions();
-            let commands = palette_catalog_commands(app);
-            if commands.is_empty() {
-                Action::Redraw
-            } else {
-                Action::SendMulti(commands)
-            }
-        }
-
-        _ => Action::None,
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "keys with no spelling cannot be bound; a new one clap adds is simply unbindable"
+)]
+pub(crate) fn key_token(key: KeyEvent) -> Option<String> {
+    let mut token = String::new();
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        token.push_str("ctrl+");
     }
+    if key.modifiers.contains(KeyModifiers::ALT) {
+        token.push_str("alt+");
+    }
+    let named = match key.code {
+        KeyCode::Char(c) => {
+            token.push(c);
+            return Some(token);
+        }
+        KeyCode::Up => "up",
+        KeyCode::Down => "down",
+        KeyCode::Left => "left",
+        KeyCode::Right => "right",
+        KeyCode::Home => "home",
+        KeyCode::End => "end",
+        KeyCode::PageUp => "pageup",
+        KeyCode::PageDown => "pagedown",
+        KeyCode::Tab => "tab",
+        KeyCode::BackTab => "backtab",
+        KeyCode::Enter => "enter",
+        KeyCode::Backspace => "backspace",
+        KeyCode::Delete => "delete",
+        KeyCode::Insert => "insert",
+        KeyCode::Esc => "esc",
+        _ => return None,
+    };
+    if key.modifiers.contains(KeyModifiers::SHIFT) {
+        token.push_str("shift+");
+    }
+    token.push_str(named);
+    Some(token)
+}
+
+fn bound_command(token: &str) -> Option<&'static str> {
+    DEFAULT_NORMAL_KEYS
+        .iter()
+        .find(|&&(key, _)| key == token)
+        .map(|&(_, command)| command)
+}
+
+fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
+    if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Esc {
+        return if app.dismiss_latest_notification() {
+            Action::Redraw
+        } else {
+            Action::None
+        };
+    }
+    if key.code == KeyCode::Char(':')
+        && (key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT)
+    {
+        debug!("Input: Normal -> Command");
+        return run_ui_command(
+            app,
+            &UiCommand::Palette {
+                scope: PaletteScope::Full,
+            },
+        );
+    }
+
+    let Some(command) = key_token(key).and_then(|token| bound_command(&token)) else {
+        return Action::None;
+    };
+    parse_command(app, command)
 }
 
 fn palette_catalog_commands(app: &mut App) -> Vec<ConnCommand> {
@@ -742,19 +681,204 @@ fn submenu_fetch_action(app: &mut App, parent: &str) -> Action {
     })))
 }
 
+const PALETTE_ALIASES: [(&str, &str); 13] = [
+    ("regen", "msg regen"),
+    ("edit", "msg edit"),
+    ("delete", "msg delete"),
+    ("alt", "msg alt"),
+    ("send", "msg send"),
+    ("sys", "msg send --system"),
+    ("system", "msg send --system"),
+    ("setting", "model setting"),
+    ("reasoning", "model setting reasoning_effort"),
+    ("characters", "character"),
+    ("cancel", "ui cancel"),
+    ("help", "ui help"),
+    ("image", "ui image"),
+];
+
+pub(crate) fn expand_aliases(input: &str) -> String {
+    let trimmed = input.trim();
+    let (head, rest) = trimmed
+        .split_once(char::is_whitespace)
+        .unwrap_or((trimmed, ""));
+    let Some((_, expansion)) = PALETTE_ALIASES
+        .iter()
+        .find(|&&(shorthand, _)| shorthand == head)
+    else {
+        return trimmed.to_owned();
+    };
+    if rest.trim().is_empty() {
+        (*expansion).to_owned()
+    } else {
+        format!("{expansion} {}", rest.trim())
+    }
+}
+
 fn parse_command(app: &mut App, input: &str) -> Action {
-    let trimmed_input = input.trim();
-    if trimmed_input.is_empty() {
+    let expanded = expand_aliases(input);
+    if expanded.is_empty() {
         return Action::Redraw;
     }
+    debug!(command = %expanded, "TUI command dispatched");
+    dispatch_cli_command(app, &expanded)
+}
 
-    let mut parts = trimmed_input.splitn(2, ' ');
-    let cmd = parts.next().unwrap_or("");
-    let arg = parts.next().unwrap_or("").trim();
+fn run_view_command(app: &mut App, key: ViewKey, value: Option<&str>) -> Action {
+    let raw = value.unwrap_or("toggle");
+    let lowered = raw.to_ascii_lowercase();
 
-    debug!(cmd, has_arg = !arg.is_empty(), "TUI command dispatched");
-    match cmd {
-        "cancel" => {
+    match key {
+        ViewKey::Usage => {
+            let mode = if lowered == "toggle" {
+                app.cycle_usage_display()
+            } else if let Some(mode) = crate::tui::app::UsageDisplay::from_token(&lowered) {
+                app.set_usage_display(mode);
+                mode
+            } else {
+                app.set_error(unusable_view_value(key, raw));
+                return Action::Redraw;
+            };
+            app.update_completions();
+            app.set_status(format!("view usage: {}", mode.as_str()));
+            Action::SavePrefs
+        }
+
+        ViewKey::Budget => {
+            let focus = if lowered == "toggle" {
+                app.cycle_budget_focus()
+            } else if let Some(focus) = crate::tui::app::BudgetFocus::from_token(raw) {
+                app.set_budget_focus(focus.clone());
+                focus
+            } else {
+                app.set_error(unusable_view_value(key, raw));
+                return Action::Redraw;
+            };
+            app.update_completions();
+            let token = focus.as_token();
+            app.set_status(if focus.name.is_some() && app.focused_budget().is_none() {
+                format!("view budget: {token} (no such budget reported yet)")
+            } else {
+                format!("view budget: {token}")
+            });
+            Action::SavePrefs
+        }
+
+        ViewKey::Timestamps
+        | ViewKey::Thinking
+        | ViewKey::Tools
+        | ViewKey::Subagent
+        | ViewKey::Images
+        | ViewKey::Metadata => {
+            let name = key.as_str();
+            let enabled = match lowered.as_str() {
+                "on" | "true" | "yes" | "1" => {
+                    let _ignored = app.set_view_option(name, true);
+                    true
+                }
+                "off" | "false" | "no" | "0" => {
+                    let _ignored = app.set_view_option(name, false);
+                    false
+                }
+                "toggle" => app.toggle_view_option(name).unwrap_or(false),
+                _ => {
+                    app.set_error(unusable_view_value(key, raw));
+                    return Action::Redraw;
+                }
+            };
+            app.update_completions();
+            app.set_status(format!(
+                "view {name}: {}",
+                if enabled { "on" } else { "off" }
+            ));
+            if key == ViewKey::Subagent && enabled {
+                Action::SendAndSavePrefs(crate::tui::subagent_trace_fetch(app))
+            } else {
+                Action::SavePrefs
+            }
+        }
+    }
+}
+
+fn unusable_view_value(key: ViewKey, raw: &str) -> String {
+    format!(
+        "view {} takes {}, not {raw:?}",
+        key.as_str(),
+        key.values().join(" | ")
+    )
+}
+
+fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
+    match command {
+        UiCommand::Insert { home, end } => {
+            if *home {
+                app.input.move_home();
+            }
+            if *end {
+                app.input.move_end();
+            }
+            app.input.mode = InputMode::Insert;
+            Action::Redraw
+        }
+
+        UiCommand::Normal => {
+            app.input.mode = InputMode::Normal;
+            Action::Redraw
+        }
+
+        UiCommand::Scroll { direction, amount } => {
+            let lines = amount.unwrap_or(1);
+            match direction {
+                ScrollDirection::Up => {
+                    app.scroll_up(lines);
+                    return redraw_or_load_older_history(app);
+                }
+                ScrollDirection::Down => app.scroll_down(lines),
+                ScrollDirection::Top => {
+                    app.scroll_up(u16::MAX);
+                    return redraw_or_load_older_history(app);
+                }
+                ScrollDirection::Bottom => app.scroll_to_bottom(),
+            }
+            Action::Redraw
+        }
+
+        UiCommand::Images => {
+            let Some(index) = nearest_image(app) else {
+                app.set_status("no images in view");
+                return Action::Redraw;
+            };
+            app.fullscreen = Some(index);
+            Action::Redraw
+        }
+
+        UiCommand::Subagents => {
+            if app.subagent_tasks.is_empty() {
+                app.set_status("no background sub-agents yet");
+            } else {
+                app.open_subagent_panel();
+            }
+            Action::Redraw
+        }
+
+        UiCommand::Editor => Action::OpenInEditor,
+
+        UiCommand::Image { target } => run_ui_image_command(app, target.as_deref()),
+
+        UiCommand::EditCancel => {
+            if app.editing_ref.is_some() || app.pending_edit_prefill.is_some() {
+                app.editing_ref = None;
+                app.cancel_edit_prefill();
+                app.input.text.clear();
+                app.input.cursor = 0;
+                app.set_status("edit cancelled");
+            } else {
+                app.set_status("no edit in progress");
+            }
+            Action::Redraw
+        }
+
+        UiCommand::Cancel => {
             if app.stream.active {
                 app.stream.reset();
                 Action::Send(ConnCommand::Send(ClientMessage::Cancel(Cancel {})))
@@ -764,362 +888,100 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             }
         }
 
-        "help" => {
+        UiCommand::Help => {
             app.show_help = true;
             Action::Redraw
         }
 
-        "view" => {
-            let mut view_parts = arg.split_whitespace();
-            let Some(key) = view_parts.next() else {
-                app.enter_submenu("view");
-                return Action::Redraw;
-            };
-            if !App::is_view_key(key) {
-                app.set_status(format!("unknown view option: {key}"));
-                return Action::Redraw;
-            }
-            let value = view_parts.next().unwrap_or("toggle");
-            if view_parts.next().is_some() {
-                app.set_status(
-                    "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage|budget] [on|off|toggle]",
-                );
-                return Action::Redraw;
-            }
-            if key == "usage" {
-                let lowered = value.to_ascii_lowercase();
-                let mode = if lowered == "toggle" {
-                    app.cycle_usage_display()
-                } else if let Some(mode) = crate::tui::app::UsageDisplay::from_token(&lowered) {
-                    app.set_usage_display(mode);
-                    mode
-                } else {
-                    app.set_status("usage: :view usage [off|always|warn|toggle]");
-                    return Action::Redraw;
-                };
+        UiCommand::Palette { scope } => match scope {
+            PaletteScope::Full => {
+                app.input.enter_command_mode();
                 app.update_completions();
-                app.set_status(format!("view usage: {}", mode.as_str()));
-                return Action::SavePrefs;
-            }
-            if key == "budget" {
-                let focus = if value.eq_ignore_ascii_case("toggle") {
-                    app.cycle_budget_focus()
-                } else if let Some(focus) = crate::tui::app::BudgetFocus::from_token(value) {
-                    app.set_budget_focus(focus.clone());
-                    focus
-                } else {
-                    app.set_status("usage: :view budget [auto|cap|pace|<budget>|<budget>:pace]");
-                    return Action::Redraw;
-                };
-                app.update_completions();
-                let unknown = focus.name.is_some() && app.focused_budget().is_none();
-                let token = focus.as_token();
-                app.set_status(if unknown {
-                    format!("view budget: {token} (no such budget reported yet)")
-                } else {
-                    format!("view budget: {token}")
-                });
-                return Action::SavePrefs;
-            }
-            let enabled = match value.to_ascii_lowercase().as_str() {
-                "on" | "true" | "yes" | "1" => {
-                    let _ = app.set_view_option(key, true);
-                    true
-                }
-                "off" | "false" | "no" | "0" => {
-                    let _ = app.set_view_option(key, false);
-                    false
-                }
-                "toggle" => app.toggle_view_option(key).unwrap_or(false),
-                _ => {
-                    app.set_status(
-                        "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage|budget] [on|off|toggle]",
-                    );
-                    return Action::Redraw;
-                }
-            };
-            app.update_completions();
-            app.set_status(format!(
-                "view {key}: {}",
-                if enabled { "on" } else { "off" }
-            ));
-            Action::SavePrefs
-        }
-
-        "character" | "characters" => {
-            if cmd == "character"
-                && arg.split_whitespace().next().is_some_and(|word| {
-                    matches!(word, "use" | "info" | "new") || word.starts_with('-')
-                })
-            {
-                return dispatch_cli_command(app, trimmed_input);
-            }
-            if arg.is_empty() {
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-
-                    name: "list_characters".into(),
-                    args: serde_json::json!({}),
-                })))
-            } else {
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-
-                    name: "switch_character".into(),
-                    args: serde_json::json!({ "name": arg }),
-                })))
-            }
-        }
-
-        "model" => {
-            if arg.split_whitespace().next().is_some_and(|word| {
-                matches!(word, "use" | "info" | "setting" | "reset") || word.starts_with('-')
-            }) {
-                return dispatch_cli_command(app, trimmed_input);
-            }
-            let (include_hidden, rest) = match arg.split_once(' ') {
-                Some(("all", rest)) => (true, rest.trim()),
-                _ if arg == "all" => (true, ""),
-                _ => (false, arg),
-            };
-            if rest.is_empty() {
-                app.show_model_list = true;
-                let mut args = serde_json::json!({});
-                if include_hidden && let Some(argument_map) = args.as_object_mut() {
-                    let _previous =
-                        argument_map.insert("include_hidden".into(), serde_json::json!(true));
-                }
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-                    name: "list_models".into(),
-                    args,
-                })))
-            } else if rest == "reset" {
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-                    name: "reset_model".into(),
-                    args: serde_json::json!({}),
-                })))
-            } else {
-                let mut args = serde_json::json!({ "name": rest });
-                if include_hidden && let Some(argument_map) = args.as_object_mut() {
-                    let _previous =
-                        argument_map.insert("include_hidden".into(), serde_json::json!(true));
-                }
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-                    name: "switch_model".into(),
-                    args,
-                })))
-            }
-        }
-
-        "setting" => {
-            let trimmed = arg.trim();
-            if trimmed.is_empty() {
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-                    name: "model_settings".into(),
-                    args: serde_json::json!({}),
-                })))
-            } else if let Some(("reset", raw_key)) = trimmed.split_once(' ') {
-                let trimmed_key = raw_key.trim();
-                if trimmed_key.is_empty() {
-                    app.set_status("usage: :setting reset <key>");
+                let commands = palette_catalog_commands(app);
+                if commands.is_empty() {
                     Action::Redraw
                 } else {
-                    Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                        rid: None,
-                        name: "set_model_setting".into(),
-                        args: serde_json::json!({
-                            "key": trimmed_key,
-                            "value": serde_json::Value::Null,
-                            "scope": "character",
-                        }),
-                    })))
+                    Action::SendMulti(commands)
                 }
-            } else if let Some((key, raw_value)) = trimmed.split_once(' ') {
-                let trimmed_value = raw_value.trim();
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-                    name: "set_model_setting".into(),
-                    args: serde_json::json!({
-                        "key": key,
-                        "value": parse_setting_value_str(key, trimmed_value),
-                        "scope": "character",
-                    }),
-                })))
-            } else {
-                app.set_status("usage: :setting [<key> <value>] | :setting reset <key>");
+            }
+            PaletteScope::Shortcuts | PaletteScope::Config => {
+                app.set_status("that palette is not built yet");
                 Action::Redraw
             }
-        }
+        },
 
-        "compact" => dispatch_cli_command(app, trimmed_input),
-
-        "delete" => {
-            if arg.is_empty() {
-                app.set_status("usage: :delete <ref>  (e.g. last, -1, -2)");
-                Action::Redraw
-            } else {
-                let refs: Vec<&str> = arg.split_whitespace().collect();
-                let args = if refs.len() == 1 {
-                    serde_json::json!({ "refs": refs.first().copied().unwrap_or_default() })
-                } else {
-                    serde_json::json!({ "refs": refs })
-                };
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-
-                    name: "delete".into(),
-                    args,
-                })))
-            }
-        }
-
-        "edit" => {
-            if arg.is_empty() || arg == "cancel" {
-                if app.editing_ref.is_some() || app.pending_edit_prefill.is_some() {
-                    app.editing_ref = None;
-                    app.cancel_edit_prefill();
-                    app.input.text.clear();
-                    app.input.cursor = 0;
-                    app.set_status("edit cancelled");
-                } else {
-                    app.set_status("usage: :edit <ref>  (e.g. last, -1, 3, m_...)");
-                }
-                Action::Redraw
-            } else {
-                let rid = app.begin_edit_prefill(arg);
-                app.set_status(format!("loading {arg}..."));
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: Some(rid),
-                    name: "get".into(),
-                    args: serde_json::json!({ "ref": arg }),
-                })))
-            }
-        }
-
-        "regen" => {
-            app.begin_regen_optimistic();
-            let msg = ClientMessage::Regen(Regen {
-                rid: None,
-                stream: true,
-            });
-            Action::Send(ConnCommand::Send(msg))
-        }
-
-        "alt" => {
-            let mut alt_parts = arg.split_whitespace();
-            let first = alt_parts.next();
-            let msg_ref = match first {
-                None | Some("list") => alt_parts.next(),
-                Some(other) => Some(other),
-            };
-            if alt_parts.next().is_some() {
-                app.set_status("usage: :alt [ref]");
-                return Action::Redraw;
-            }
-            let target_ref = msg_ref.map(str::to_owned);
-            app.start_alt_picker(target_ref.clone());
-            let mut args = serde_json::Map::new();
-            if let Some(selected_ref) = target_ref {
-                let _previous = args.insert("ref".into(), serde_json::json!(selected_ref));
-            }
-            let msg = ClientMessage::Command(Command {
-                rid: None,
-                name: "list_alternatives".into(),
-                args: serde_json::Value::Object(args),
-            });
-            Action::Send(ConnCommand::Send(msg))
-        }
-
-        "image" => {
-            if arg == "clear" {
-                let count = app.pending_images.len();
-                app.pending_images.clear();
-                app.set_status(format!("cleared {count} pending image(s)"));
-                Action::Redraw
-            } else if arg.is_empty() {
-                Action::PickImage(None)
-            } else {
-                let expanded = if arg.starts_with('~') {
-                    if let Ok(home) = std::env::var("HOME") {
-                        arg.replacen('~', &home, 1)
-                    } else {
-                        arg.to_owned()
-                    }
-                } else {
-                    arg.to_owned()
-                };
-                let path = if std::path::Path::new(&expanded).is_absolute() {
-                    expanded
-                } else {
-                    std::env::current_dir()
-                        .map(|d| d.join(&expanded).to_string_lossy().to_string())
-                        .unwrap_or(expanded)
-                };
-                if std::path::Path::new(&path).exists() {
-                    app.pending_images.push(path.clone());
-                    app.set_status(format!(
-                        "attached image ({} pending)",
-                        app.pending_images.len()
-                    ));
-                    Action::Redraw
-                } else {
-                    app.set_error(format!("file not found: {path}"));
-                    Action::Redraw
-                }
-            }
-        }
-
-        "sys" | "system" => {
-            if arg.is_empty() {
-                app.set_status("usage: :sys <instruction>");
-                Action::Redraw
-            } else {
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-
-                    name: "inject_system".into(),
-                    args: serde_json::json!({ "text": arg }),
-                })))
-            }
-        }
-
-        "reasoning" => {
-            let command = if arg.is_empty() {
-                Command {
-                    rid: None,
-                    name: "model_settings".into(),
-                    args: serde_json::json!({}),
-                }
-            } else if arg.eq_ignore_ascii_case("reset") {
-                Command {
-                    rid: None,
-                    name: "set_model_setting".into(),
-                    args: serde_json::json!({
-                        "key": "reasoning_effort",
-                        "value": serde_json::Value::Null,
-                        "scope": "character",
-                    }),
-                }
-            } else {
-                Command {
-                    rid: None,
-                    name: "set_model_setting".into(),
-                    args: serde_json::json!({
-                        "key": "reasoning_effort",
-                        "value": parse_setting_value_str("reasoning_effort", arg),
-                        "scope": "character",
-                    }),
-                }
-            };
-            Action::Send(ConnCommand::Send(ClientMessage::Command(command)))
-        }
-
-        _ => dispatch_cli_command(app, trimmed_input),
+        UiCommand::Quit => Action::Quit,
     }
+}
+
+fn run_ui_image_command(app: &mut App, target: Option<&str>) -> Action {
+    match target {
+        None => Action::PickImage(None),
+        Some("paste") => Action::PasteImage,
+        Some("clear") => {
+            let count = app.pending_images.len();
+            app.pending_images.clear();
+            app.set_status(format!("cleared {count} pending image(s)"));
+            Action::Redraw
+        }
+        Some(path) => {
+            let expanded = match path.strip_prefix('~') {
+                Some(tail) if !tail.starts_with(|c: char| c.is_alphanumeric()) => {
+                    match std::env::var("HOME") {
+                        Ok(home) => format!("{home}{tail}"),
+                        Err(_) => path.to_owned(),
+                    }
+                }
+                _ => path.to_owned(),
+            };
+            let resolved = if std::path::Path::new(&expanded).is_absolute() {
+                expanded
+            } else {
+                std::env::current_dir()
+                    .map(|dir| dir.join(&expanded).to_string_lossy().into_owned())
+                    .unwrap_or(expanded)
+            };
+            if std::path::Path::new(&resolved).exists() {
+                app.pending_images.push(resolved);
+                app.set_status(format!(
+                    "attached image ({} pending)",
+                    app.pending_images.len()
+                ));
+            } else {
+                app.set_error(format!("file not found: {resolved}"));
+            }
+            Action::Redraw
+        }
+    }
+}
+
+fn nearest_image(app: &App) -> Option<usize> {
+    if app.image_index.is_empty() {
+        return None;
+    }
+    let term_height = crossterm::terminal::size().map_or(24, |(_, height)| height);
+    let visible = usize::from(
+        term_height
+            .saturating_mul(80)
+            .checked_div(100)
+            .unwrap_or(1)
+            .max(1),
+    );
+    let last_line = app.image_index.last().map_or(0, |entry| entry.line);
+    let total = last_line.saturating_add(visible);
+    let half = visible.checked_div(2).unwrap_or_default();
+    let center = if app.auto_scroll {
+        total.saturating_sub(half)
+    } else {
+        total
+            .saturating_sub(usize::from(app.scroll_offset))
+            .saturating_sub(half)
+    };
+    app.image_index
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, entry)| entry.line.abs_diff(center))
+        .map(|(index, _)| index)
 }
 
 fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action {
@@ -1211,6 +1073,13 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
         }
     };
 
+    if let CliCommand::View { key, value } = &command {
+        return run_view_command(app, *key, value.as_deref());
+    }
+    if let CliCommand::Ui { command: ui } = &command {
+        return run_ui_command(app, ui);
+    }
+
     match &command {
         CliCommand::Completions { .. } | CliCommand::Complete { .. } => {
             app.set_error("shell completion generation is a terminal-only CLI operation");
@@ -1260,7 +1129,9 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
         | CliCommand::Model { .. }
         | CliCommand::Provider { .. }
         | CliCommand::Config { .. }
-        | CliCommand::Usage { .. } => {}
+        | CliCommand::Usage { .. }
+        | CliCommand::View { .. }
+        | CliCommand::Ui { .. } => {}
     }
 
     if let Some(prompt) = palette_confirmation_prompt(&command)
@@ -1299,6 +1170,19 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
             "inject_system",
             serde_json::json!({ "text": message.join(" ") }),
         ),
+        CliCommand::Msg {
+            command: MsgCommand::Edit {
+                msg_ref, content, ..
+            },
+        } if content.is_empty() => {
+            let rid = app.begin_edit_prefill(msg_ref);
+            app.set_status(format!("loading {msg_ref}..."));
+            Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
+                rid: Some(rid),
+                name: "get".into(),
+                args: serde_json::json!({ "ref": msg_ref }),
+            })))
+        }
         CliCommand::Msg {
             command: MsgCommand::Regen,
         } => {
@@ -1391,7 +1275,9 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Completions { .. }
-        | CliCommand::Complete { .. } => {
+        | CliCommand::Complete { .. }
+        | CliCommand::View { .. }
+        | CliCommand::Ui { .. } => {
             let Some((name, args)) =
                 crate::cli::to_swp_command(&command, Some(&app.character_name))
             else {
@@ -1421,8 +1307,10 @@ fn palette_confirmation_prompt(command: &CliCommand) -> Option<String> {
             }
         )),
         CliCommand::Msg {
-            command: MsgCommand::Edit { msg_ref, .. },
-        } => Some(format!("Replace the content of message {msg_ref:?}?")),
+            command: MsgCommand::Edit {
+                msg_ref, content, ..
+            },
+        } if !content.is_empty() => Some(format!("Replace the content of message {msg_ref:?}?")),
         CliCommand::Compact { .. } => {
             Some("Summarize and archive older conversation turns?".to_owned())
         }
@@ -1453,103 +1341,16 @@ fn palette_confirmation_prompt(command: &CliCommand) -> Option<String> {
     }
 }
 
-fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
-    use serde_json::Value;
-    let trimmed = raw.trim();
-    match key {
-        "replay_prior_thinking" | "zai_clear_thinking" | "zai_subscription" => {
-            match trimmed.to_ascii_lowercase().as_str() {
-                "true" | "yes" | "on" => Value::Bool(true),
-                "false" | "no" | "off" => Value::Bool(false),
-                _ => Value::String(trimmed.to_owned()),
-            }
-        }
-        "temperature" | "top_p" => trimmed
-            .parse::<f64>()
-            .ok()
-            .and_then(serde_json::Number::from_f64)
-            .map_or_else(|| Value::String(trimmed.to_owned()), Value::Number),
-        "budget_tokens" | "max_output_tokens" | "gemini_generation" | "max_tool_iterations" => {
-            trimmed.parse::<u64>().map_or_else(
-                |_| Value::String(trimmed.to_owned()),
-                |n| Value::Number(n.into()),
-            )
-        }
-        "reasoning_effort" => match trimmed.to_ascii_lowercase().as_str() {
-            "off" | "none" | "disable" | "disabled" | "unset" | "" => Value::String("off".into()),
-            _ => Value::String(trimmed.to_owned()),
-        },
-        "openrouter_provider" => serde_json::from_str::<Value>(trimmed)
-            .unwrap_or_else(|_| Value::String(trimmed.to_owned())),
-        _ => Value::String(trimmed.to_owned()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crossterm::event::{KeyEventKind, KeyEventState};
-    use serde_json::json;
 
     fn sent_command(action: Action) -> Command {
         let Action::Send(ConnCommand::Send(ClientMessage::Command(command))) = action else {
             panic!("expected command send");
         };
         command
-    }
-
-    #[test]
-    fn parse_setting_value_coerces_daemon_sampler_keys() {
-        assert_eq!(
-            parse_setting_value_str("replay_prior_thinking", "last_turn"),
-            json!("last_turn")
-        );
-        assert_eq!(
-            parse_setting_value_str("replay_prior_thinking", "off"),
-            json!(false)
-        );
-
-        assert_eq!(
-            parse_setting_value_str("zai_clear_thinking", "false"),
-            json!(false)
-        );
-        assert_eq!(
-            parse_setting_value_str("zai_subscription", "yes"),
-            json!(true)
-        );
-
-        assert_eq!(parse_setting_value_str("gemini_generation", "3"), json!(3));
-
-        assert_eq!(
-            parse_setting_value_str("max_tool_iterations", "16"),
-            json!(16)
-        );
-        assert_eq!(
-            parse_setting_value_str("cache_keepalive", "55m"),
-            json!("55m")
-        );
-        assert_eq!(
-            parse_setting_value_str("cache_keepalive", "off"),
-            json!("off")
-        );
-
-        assert_eq!(
-            parse_setting_value_str("openrouter_provider", r#"{"order":["Anthropic"]}"#),
-            json!({"order": ["Anthropic"]})
-        );
-        assert_eq!(
-            parse_setting_value_str("openrouter_provider", "Anthropic"),
-            json!("Anthropic")
-        );
-
-        assert_eq!(
-            parse_setting_value_str("reasoning_effort", "none"),
-            json!("off")
-        );
-        assert_eq!(
-            parse_setting_value_str("reasoning_effort", "high"),
-            json!("high")
-        );
     }
 
     fn make_key(modifiers: KeyModifiers, code: KeyCode) -> KeyEvent {
@@ -1810,7 +1611,7 @@ mod tests {
     #[test]
     fn character_command_sends_single_switch_request() {
         let mut app = App::default();
-        let cmd = sent_command(parse_command(&mut app, "character Bob"));
+        let cmd = sent_command(parse_command(&mut app, "character use Bob"));
         assert_eq!(cmd.name, "switch_character");
         assert_eq!(cmd.args.get("name"), Some(&serde_json::json!("Bob")));
     }
@@ -1941,9 +1742,15 @@ mod tests {
     #[test]
     fn delete_command_sends_single_delete_request() {
         let mut app = App::default();
+        assert!(
+            matches!(parse_command(&mut app, "delete last"), Action::Redraw),
+            "deleting a message should ask first"
+        );
+        app.palette_confirmation = None;
+        app.confirmed_palette_command = Some("msg delete last".into());
         let cmd = sent_command(parse_command(&mut app, "delete last"));
         assert_eq!(cmd.name, "delete");
-        assert_eq!(cmd.args.get("refs"), Some(&serde_json::json!("last")));
+        assert_eq!(cmd.args.get("refs"), Some(&serde_json::json!(["last"])));
     }
 
     #[test]
@@ -1962,7 +1769,7 @@ mod tests {
         let mut app = App::default();
         let _ = parse_command(&mut app, "edit 3");
 
-        let action = parse_command(&mut app, "edit cancel");
+        let action = parse_command(&mut app, "ui edit-cancel");
 
         assert!(matches!(action, Action::Redraw));
         assert!(app.pending_edit_prefill.is_none());
@@ -1986,7 +1793,7 @@ mod tests {
     #[test]
     fn alt_command_accepts_message_ref() {
         let mut app = App::default();
-        let cmd = sent_command(parse_command(&mut app, "alt -2"));
+        let cmd = sent_command(parse_command(&mut app, "alt --ref -2"));
         assert_eq!(cmd.name, "list_alternatives");
         assert_eq!(cmd.args.get("ref"), Some(&serde_json::json!("-2")));
     }

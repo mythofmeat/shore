@@ -181,6 +181,11 @@ pub(crate) async fn execute(
             };
             apply_model_change(&mut conn, command_ref, change).await?;
         }
+        refused @ (CliCommand::View { .. } | CliCommand::Ui { .. }) => {
+            return Err(tui_only_refusal(refused)
+                .unwrap_or_else(|| "this command only applies inside `shore tui`".to_owned())
+                .into());
+        }
         other @ (CliCommand::Character { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Debug { .. }
@@ -260,7 +265,9 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         CliCommand::Log { .. }
         | CliCommand::Status { .. }
         | CliCommand::Completions { .. }
-        | CliCommand::Complete { .. } => false,
+        | CliCommand::Complete { .. }
+        | CliCommand::View { .. }
+        | CliCommand::Ui { .. } => false,
     }
 }
 
@@ -822,7 +829,29 @@ async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::erro
         let _ignored = handle_complete_query(*kind, arg.as_deref(), cli).await;
         return Some(Ok(()));
     }
+    if let Some(command) = &cli.command
+        && let Some(message) = tui_only_refusal(command)
+    {
+        return Some(Err(message.into()));
+    }
     None
+}
+
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "every command except these two is a normal daemon-backed command"
+)]
+pub(crate) fn tui_only_refusal(command: &CliCommand) -> Option<String> {
+    match command {
+        CliCommand::View { key, .. } => Some(format!(
+            "`view {}` changes what the TUI draws, so it only applies inside `shore tui`",
+            key.as_str()
+        )),
+        CliCommand::Ui { .. } => {
+            Some("`ui` drives a running TUI; run it from inside `shore tui`".to_owned())
+        }
+        _ => None,
+    }
 }
 
 async fn handle_switch_character(
@@ -1547,6 +1576,37 @@ mod tests {
         }
     }
 
+    use crate::cli::{UiCommand, ViewKey};
+    use crate::run::tui_only_refusal;
+
+    #[test]
+    fn the_terminal_refuses_screen_commands_by_naming_where_they_work() {
+        let view = CliCommand::View {
+            key: ViewKey::Thinking,
+            value: None,
+        };
+        let refusal = tui_only_refusal(&view).expect("view needs a screen");
+        assert!(refusal.contains("thinking"), "{refusal}");
+        assert!(refusal.contains("shore tui"), "{refusal}");
+
+        let ui = CliCommand::Ui {
+            command: UiCommand::Normal,
+        };
+        assert!(
+            tui_only_refusal(&ui).is_some_and(|message| message.contains("shore tui")),
+            "ui needs a screen too"
+        );
+    }
+
+    #[test]
+    fn a_daemon_backed_command_is_not_mistaken_for_a_screen_command() {
+        let status = CliCommand::Status {
+            section: None,
+            json: false,
+        };
+        assert_eq!(tui_only_refusal(&status), None);
+    }
+
     #[test]
     fn switching_models_clears_the_local_pin() {
         let cmd = model_command(Some(ModelCommand::Use {
@@ -1626,6 +1686,9 @@ mod tests {
             panic!("expected a command");
         };
         match command {
+            CliCommand::View { .. } | CliCommand::Ui { .. } => {
+                panic!("client-side commands never reach the daemon harness")
+            }
             CliCommand::Msg {
                 command:
                     MsgCommand::Send {

@@ -499,6 +499,30 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
+    /// Turn a TUI display element on or off. Only meaningful inside `shore tui`
+    ///
+    /// Hidden from the terminal's help and shell completions because this
+    /// process has no screen to change; `palette_command` un-hides it.
+    #[command(hide = true)]
+    View {
+        /// Which display element to change
+        key: ViewKey,
+
+        /// New state. Defaults to `toggle`; `usage` and `budget` take their own
+        /// values, which `shore complete view-values` lists
+        value: Option<String>,
+    },
+
+    /// Drive the running TUI: scroll, panels, pickers, palettes. Only
+    /// meaningful inside `shore tui`
+    ///
+    /// Hidden alongside `view`, and un-hidden the same way.
+    #[command(hide = true)]
+    Ui {
+        #[command(subcommand)]
+        command: UiCommand,
+    },
+
     /// Generate shell completions
     #[command(display_order = 12)]
     Completions {
@@ -596,6 +620,141 @@ pub(crate) enum SegmentsCommand {
 
     /// Set a segment note, or omit NOTE to clear it
     Note { index: u32, note: Option<String> },
+}
+
+/// Display elements `shore view` can change. Every one of these persists into
+/// the TUI's preferences file.
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ViewKey {
+    /// Message timestamps
+    Timestamps,
+    /// Reasoning and thinking blocks
+    Thinking,
+    /// Tool calls and their results
+    Tools,
+    /// Nested sub-agent tool activity
+    Subagent,
+    /// Inline images
+    Images,
+    /// Per-message metadata line
+    Metadata,
+    /// Token usage readout: off, always, warn, or toggle
+    Usage,
+    /// Budget readout: auto, cap, pace, a budget name, or toggle
+    Budget,
+}
+
+impl ViewKey {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            ViewKey::Timestamps => "timestamps",
+            ViewKey::Thinking => "thinking",
+            ViewKey::Tools => "tools",
+            ViewKey::Subagent => "subagent",
+            ViewKey::Images => "images",
+            ViewKey::Metadata => "metadata",
+            ViewKey::Usage => "usage",
+            ViewKey::Budget => "budget",
+        }
+    }
+
+    /// Values this key accepts, for completion and for the error text when a
+    /// value does not parse. `budget` also takes any configured budget name,
+    /// which only the running daemon knows.
+    pub(crate) fn values(self) -> &'static [&'static str] {
+        match self {
+            ViewKey::Usage => &["off", "always", "warn", "toggle"],
+            ViewKey::Budget => &["auto", "cap", "pace", "toggle"],
+            ViewKey::Timestamps
+            | ViewKey::Thinking
+            | ViewKey::Tools
+            | ViewKey::Subagent
+            | ViewKey::Images
+            | ViewKey::Metadata => &["on", "off", "toggle"],
+        }
+    }
+}
+
+/// Actions that only exist while a TUI is on screen. These never reach the
+/// daemon; `to_swp_command` returns `None` for all of them.
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum UiCommand {
+    /// Leave normal mode and start typing
+    Insert {
+        /// Put the cursor at the start of the input
+        #[arg(long, conflicts_with = "end")]
+        home: bool,
+
+        /// Put the cursor at the end of the input
+        #[arg(long)]
+        end: bool,
+    },
+
+    /// Leave insert mode
+    Normal,
+
+    /// Move the transcript viewport
+    Scroll {
+        /// Which way to move
+        direction: ScrollDirection,
+
+        /// How many lines, for `up` and `down`. Defaults to 1
+        amount: Option<u16>,
+    },
+
+    /// Open the fullscreen image viewer on the nearest image
+    Images,
+
+    /// Open the sub-agent panel
+    Subagents,
+
+    /// Open the current input in $EDITOR
+    Editor,
+
+    /// Attach, paste, or drop images queued for the next message
+    Image {
+        /// `paste` to take one from the clipboard, `clear` to drop the queue, a
+        /// file path to attach it, or nothing to open the picker. A file
+        /// actually named `paste` or `clear` has to go through the picker
+        target: Option<String>,
+    },
+
+    /// Stop the in-flight response, if there is one
+    Cancel,
+
+    /// Abandon a `msg edit` that is loaded in the input box, including one
+    /// whose fetch is still in flight
+    EditCancel,
+
+    /// Show the key and command reference
+    Help,
+
+    /// Open a command palette
+    Palette {
+        /// Which palette to open
+        scope: PaletteScope,
+    },
+
+    /// Leave the TUI
+    Quit,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ScrollDirection {
+    Up,
+    Down,
+    Top,
+    Bottom,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PaletteScope {
+    /// Every command, typed
+    Full,
+    /// The curated conversation shortcuts
+    Shortcuts,
+    /// The settings browser
+    Config,
 }
 
 /// Targets for the hidden `__complete` helper.
@@ -1350,6 +1509,8 @@ fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
         .mut_arg("help", |argument| argument.hide(true))
         .mut_arg("version", |argument| argument.hide(true))
         .mut_subcommand("completions", |subcommand| subcommand.hide(true))
+        .mut_subcommand("view", |subcommand| subcommand.hide(false))
+        .mut_subcommand("ui", |subcommand| subcommand.hide(false))
         .mut_subcommand("model", |subcommand| {
             subcommand
                 .mut_subcommand("use", |leaf| {
@@ -1636,20 +1797,51 @@ const INTERNAL_HELPER_HELP: &str = "Emit plain names for shell completion helper
 
 const SUPERSEDED_HELP: &str = "Superseded by";
 
+/// Marks `view` and `ui` in generated help text. Both parse everywhere so the
+/// TUI can bind keys to them, but neither does anything in a terminal.
+const TUI_ONLY_HELP: &str = "Only meaningful inside";
+
+/// Commands a shell must never offer: clap's own completion helper, plus the
+/// two that need a running TUI.
+const NOISE_COMMANDS: [&str; 3] = ["complete", "view", "ui"];
+
 pub(crate) fn suppress_noise_completions(shell: Shell, script: &str) -> String {
     let mut out = String::with_capacity(script.len());
     for line in script.lines() {
-        if line.contains(INTERNAL_HELPER_HELP) || line.contains(SUPERSEDED_HELP) {
+        if line.contains(INTERNAL_HELPER_HELP)
+            || line.contains(SUPERSEDED_HELP)
+            || line.contains(TUI_ONLY_HELP)
+        {
             continue;
         }
         if shell == Shell::Bash && line.trim_start().starts_with("opts=") {
-            out.push_str(&line.replacen(" complete\"", "\"", 1));
+            out.push_str(&strip_noise_words(line));
         } else {
             out.push_str(line);
         }
         out.push('\n');
     }
     out
+}
+
+/// Drop the noise commands from one bash `opts="…"` word list.
+///
+/// Fish and zsh put each command on its own line next to its help text, so the
+/// filter above can recognise them. Bash emits a flat list of bare words with no
+/// help and no fixed order, so the only handle left is the name itself.
+fn strip_noise_words(line: &str) -> String {
+    let Some((head, rest)) = line.split_once('"') else {
+        return line.to_owned();
+    };
+    let Some((words, tail)) = rest.rsplit_once('"') else {
+        return line.to_owned();
+    };
+    let kept = words
+        .split_whitespace()
+        .filter(|word| !NOISE_COMMANDS.contains(word))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("{head}\"{kept}\"{tail}")
 }
 
 pub(crate) fn fish_dynamic_completions_footer() -> &'static str {
@@ -1770,6 +1962,8 @@ pub(crate) fn to_swp_command(
     match cmd {
         CliCommand::Completions { .. }
         | CliCommand::Complete { .. }
+        | CliCommand::View { .. }
+        | CliCommand::Ui { .. }
         | CliCommand::Config {
             path: true,
             check: false,
@@ -2273,6 +2467,31 @@ mod tests {
         let mut command = Cli::command();
         command.build();
         assert_palette_covers_subcommands(&command, "", &PaletteCatalog::default());
+    }
+
+    #[test]
+    fn palette_offers_the_tui_only_commands() {
+        let offered = palette_replacements("", &PaletteCatalog::default());
+        for name in ["view", "ui"] {
+            assert!(
+                offered.iter().any(|candidate| candidate == name),
+                "palette stopped offering `{name}`: {offered:?}"
+            );
+        }
+
+        let ui = palette_replacements("ui ", &PaletteCatalog::default());
+        for leaf in ["ui scroll", "ui insert", "ui palette"] {
+            assert!(
+                ui.iter().any(|candidate| candidate == leaf),
+                "palette stopped offering `{leaf}`: {ui:?}"
+            );
+        }
+
+        let view = palette_replacements("view ", &PaletteCatalog::default());
+        assert!(
+            view.iter().any(|candidate| candidate == "view thinking"),
+            "palette stopped offering view keys: {view:?}"
+        );
     }
 
     #[test]
@@ -4983,6 +5202,43 @@ mod tests {
             filtered.contains("usage completions\""),
             "bash lost its real subcommands: {filtered}"
         );
+    }
+
+    #[test]
+    fn tui_only_commands_are_never_offered_by_the_shell() {
+        let offers = |shell: Shell, script: &str, name: &str| {
+            if shell == Shell::Fish {
+                script.contains(&format!("-a \"{name}\""))
+            } else if shell == Shell::Zsh {
+                script.contains(&format!("'{name}:"))
+            } else {
+                script
+                    .lines()
+                    .filter(|line| line.trim_start().starts_with("opts="))
+                    .any(|line| {
+                        line.split_whitespace()
+                            .any(|word| word.trim_matches('"') == name)
+                    })
+            }
+        };
+
+        for shell in [Shell::Fish, Shell::Zsh, Shell::Bash] {
+            let (raw, filtered) = generated_for(shell);
+            for name in ["view", "ui"] {
+                assert!(
+                    offers(shell, &raw, name),
+                    "{shell:?} generator stopped listing `{name}`; the filter may be stale"
+                );
+                assert!(
+                    !offers(shell, &filtered, name),
+                    "{shell:?} still offers `{name}`:\n{filtered}"
+                );
+            }
+            assert!(
+                offers(shell, &filtered, "usage"),
+                "{shell:?} lost its real subcommands: {filtered}"
+            );
+        }
     }
 
     #[test]
