@@ -581,7 +581,8 @@ pub(crate) enum MsgCommand {
         #[arg(allow_hyphen_values = true, value_parser = message_ref)]
         msg_ref: String,
 
-        /// New content
+        /// New content. Left off, the message opens in $EDITOR for you to
+        /// rewrite; saving it unchanged or empty leaves the message alone
         content: Vec<String>,
 
         /// Output raw JSON

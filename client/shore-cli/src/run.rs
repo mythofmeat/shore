@@ -111,10 +111,7 @@ pub(crate) async fn execute(
                 recv_streaming_response(&mut conn).await?;
             }
             MsgCommand::Alt { .. } => handle_alt_command(&mut conn, message).await?,
-            MsgCommand::Edit { msg_ref, json, .. } => {
-                let one = std::slice::from_ref(msg_ref);
-                handle_message_change(&mut conn, command_ref, *json, one).await?;
-            }
+            MsgCommand::Edit { .. } => handle_edit_command(&mut conn, message).await?,
             MsgCommand::Delete { msg_refs, json } => {
                 handle_message_change(&mut conn, command_ref, *json, msg_refs).await?;
             }
@@ -672,7 +669,7 @@ async fn handle_send_command(
     } else if !io::stdin().is_terminal() {
         read_stdin()?
     } else {
-        edit_message_in_editor()?
+        edit_text_in_editor("")?
     };
     if text.is_empty() && images.is_empty() {
         return Ok(());
@@ -690,6 +687,97 @@ async fn handle_send_command(
         recv_streaming_response(conn).await?;
     }
     Ok(())
+}
+
+async fn handle_edit_command(
+    conn: &mut SWPConnection,
+    cmd: &MsgCommand,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let MsgCommand::Edit {
+        msg_ref,
+        content,
+        json,
+    } = cmd
+    else {
+        return Ok(());
+    };
+
+    let replacement = match typed_replacement(content, msg_ref)? {
+        Some(text) => text,
+        None if !io::stdin().is_terminal() => {
+            typed_replacement(std::slice::from_ref(&read_stdin()?), msg_ref)?
+                .ok_or_else(|| empty_edit_refusal(msg_ref))?
+        }
+        None => {
+            let current = message_text(&fetch_single_message(conn, msg_ref, None).await?);
+            let edited = edit_text_in_editor(&current)?;
+            let Some(text) = editor_replacement(&current, &edited) else {
+                cli_out!("nothing to change, {msg_ref} left alone");
+                return Ok(());
+            };
+            text
+        }
+    };
+
+    _ = conn
+        .send_command(
+            "edit",
+            serde_json::json!({ "ref": msg_ref, "content": replacement }),
+        )
+        .await?;
+    let data = recv_command_data(conn).await?;
+    if *json {
+        cli_out!("{}", serde_json::to_string_pretty(&data)?);
+        return Ok(());
+    }
+    output::format_command(
+        "edit",
+        &response_with_display_refs(data, std::slice::from_ref(msg_ref)),
+    );
+    Ok(())
+}
+
+fn typed_replacement(
+    content: &[String],
+    msg_ref: &str,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    if content.is_empty() {
+        return Ok(None);
+    }
+    let typed = content.join(" ").trim().to_owned();
+    if typed.is_empty() {
+        return Err(empty_edit_refusal(msg_ref).into());
+    }
+    Ok(Some(typed))
+}
+
+fn editor_replacement(current: &str, edited: &str) -> Option<String> {
+    let saved = edited.trim();
+    (!saved.is_empty() && saved != current.trim()).then(|| saved.to_owned())
+}
+
+fn empty_edit_refusal(msg_ref: &str) -> String {
+    format!(
+        "`msg edit {msg_ref}` with empty replacement text would erase the message. Give it \
+         content, or run `shore msg delete {msg_ref}` if removing it is what you meant."
+    )
+}
+
+fn message_text(data: &serde_json::Value) -> String {
+    if let Some(blocks) = data["content_blocks"].as_array()
+        && !blocks.is_empty()
+    {
+        let text = blocks
+            .iter()
+            .filter(|b| b["type"].as_str() == Some("text"))
+            .filter_map(|b| b["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !text.is_empty() {
+            return text;
+        }
+    }
+    data["content"].as_str().unwrap_or_default().to_owned()
 }
 
 async fn handle_alt_command(
@@ -1319,17 +1407,28 @@ fn resolve_editor(visual: Option<String>, editor: Option<String>) -> String {
         .unwrap_or_else(|| "vi".into())
 }
 
-fn edit_message_in_editor() -> Result<String, Box<dyn std::error::Error>> {
-    let editor = editor_from_env();
+fn seed_editor_file(path: &std::path::Path, seed: &str) -> io::Result<()> {
+    let trimmed = seed.trim_end();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    std::fs::write(path, format!("{trimmed}\n"))
+}
 
+fn edit_text_in_editor(seed: &str) -> Result<String, Box<dyn std::error::Error>> {
+    edit_text_with(&editor_from_env(), seed)
+}
+
+fn edit_text_with(editor: &str, seed: &str) -> Result<String, Box<dyn std::error::Error>> {
     let tmp = tempfile::Builder::new()
         .prefix("shore-")
         .suffix(".md")
         .tempfile()?;
 
     let path = tmp.path().to_path_buf();
+    seed_editor_file(&path, seed)?;
 
-    let (program, args) = editor_invocation(&editor, &path);
+    let (program, args) = editor_invocation(editor, &path);
     let status = std::process::Command::new(program).args(args).status()?;
 
     if !status.success() {
@@ -1983,6 +2082,106 @@ mod tests {
         }));
         let received = execute_with_mock(cli, responses).await;
         assert!(matches!(received, ClientMessage::Message(_)));
+    }
+
+    #[test]
+    fn an_edit_with_no_replacement_text_asks_the_editor_instead_of_erasing() {
+        let none: Vec<String> = vec![];
+        assert!(
+            super::typed_replacement(&none, "last")
+                .expect("no arguments is not an error")
+                .is_none(),
+            "bare `msg edit last` should fall through to the editor"
+        );
+    }
+
+    #[test]
+    fn an_explicitly_empty_edit_is_refused_and_points_at_delete() {
+        for empty in [vec![String::new()], vec!["   ".to_owned()]] {
+            let refusal = super::typed_replacement(&empty, "-2")
+                .expect_err("empty replacement text must not reach the daemon")
+                .to_string();
+            assert!(refusal.contains("-2"), "{refusal}");
+            assert!(refusal.contains("msg delete"), "{refusal}");
+        }
+    }
+
+    #[test]
+    fn typed_replacement_text_is_joined_and_trimmed() {
+        let typed = super::typed_replacement(&["  hello".to_owned(), "there  ".to_owned()], "last")
+            .expect("valid")
+            .expect("some");
+        assert_eq!(typed, "hello there");
+    }
+
+    #[test]
+    fn closing_the_editor_unchanged_or_empty_leaves_the_message_alone() {
+        assert_eq!(
+            super::editor_replacement("the original", "the original"),
+            None
+        );
+        assert_eq!(
+            super::editor_replacement("the original", "the original\n"),
+            None,
+            "a trailing newline the editor added is not a change"
+        );
+        assert_eq!(super::editor_replacement("the original", ""), None);
+        assert_eq!(super::editor_replacement("the original", "   \n "), None);
+        assert_eq!(
+            super::editor_replacement("the original", " a rewrite \n"),
+            Some("a rewrite".to_owned())
+        );
+    }
+
+    #[test]
+    fn the_editor_opens_on_the_text_the_message_actually_holds() {
+        let blocks = serde_json::json!({
+            "content": "",
+            "content_blocks": [
+                { "type": "thinking", "text": "ignore me" },
+                { "type": "text", "text": "first" },
+                { "type": "text", "text": "second" },
+            ],
+        });
+        assert_eq!(super::message_text(&blocks), "first\nsecond");
+
+        let plain = serde_json::json!({ "content": "just content" });
+        assert_eq!(super::message_text(&plain), "just content");
+
+        let neither = serde_json::json!({ "content_blocks": [] });
+        assert_eq!(super::message_text(&neither), "");
+    }
+
+    #[test]
+    fn the_editor_buffer_starts_from_the_current_message() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("seed.md");
+        super::seed_editor_file(&path, "the original\n\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "the original\n");
+
+        let blank = tmp.path().join("blank.md");
+        super::seed_editor_file(&blank, "  \n ").unwrap();
+        assert!(
+            !blank.exists(),
+            "an empty message should leave the editor on an untouched buffer"
+        );
+    }
+
+    #[test]
+    fn the_editor_sees_the_old_text_and_its_save_becomes_the_replacement() {
+        let rewritten = super::edit_text_with("sed -i s/original/rewritten/", "the original")
+            .expect("the editor ran");
+        assert_eq!(rewritten, "the rewritten");
+    }
+
+    #[test]
+    fn an_editor_that_exits_badly_changes_nothing() {
+        let left_alone = super::edit_text_with("false", "the original").expect("no hard failure");
+        assert_eq!(
+            super::editor_replacement("the original", &left_alone),
+            None,
+            "a failed editor must not be read as an empty rewrite"
+        );
     }
 
     #[test]
