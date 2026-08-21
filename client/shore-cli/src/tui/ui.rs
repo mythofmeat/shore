@@ -3,7 +3,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Wrap};
 use shore_common::duration::format_duration_ms;
 use shore_common::protocol::tool_display::{format_tool_input, format_tool_output};
 use shore_common::protocol::types::Role;
@@ -1909,11 +1909,16 @@ fn recede(frame: &mut Frame<'_>, area: Rect) {
     }
 }
 
+const PAGER_CHROME: u16 = 4;
+
 pub(crate) fn output_pager_layout(area: Rect, line_count: usize) -> (Rect, u16) {
     let width = area.width.saturating_sub(4).max(1);
-    let ceiling = area.height.saturating_sub(4).max(3);
-    let wanted = usize_to_u16(line_count).saturating_add(2);
-    let height = wanted.clamp(3, ceiling);
+    let ceiling = area
+        .height
+        .saturating_sub(4)
+        .max(PAGER_CHROME.saturating_add(1));
+    let wanted = usize_to_u16(line_count).saturating_add(PAGER_CHROME);
+    let height = wanted.clamp(PAGER_CHROME.saturating_add(1), ceiling);
     let x = area
         .x
         .saturating_add(area.width.saturating_sub(width).checked_div(2).unwrap_or(0));
@@ -1923,7 +1928,10 @@ pub(crate) fn output_pager_layout(area: Rect, line_count: usize) -> (Rect, u16) 
             .checked_div(2)
             .unwrap_or(0),
     );
-    (Rect::new(x, y, width, height), height.saturating_sub(2))
+    (
+        Rect::new(x, y, width, height),
+        height.saturating_sub(PAGER_CHROME),
+    )
 }
 
 fn draw_output_pager(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
@@ -1952,6 +1960,7 @@ fn draw_output_pager(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .padding(Padding::vertical(1))
                 .title(format!(" output · :{} ", pager.command))
                 .title_bottom(format!(" j/k scroll · Esc close   {position} "))
                 .border_style(Style::default().fg(Color::Cyan)),
