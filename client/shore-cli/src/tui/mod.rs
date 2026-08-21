@@ -11,7 +11,7 @@ mod ui;
 
 use std::io;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste, poll, read};
@@ -402,11 +402,29 @@ fn persist_active_character(name: &str) {
 }
 
 fn prefs_path() -> PathBuf {
-    shore_common::dirs::config_dir().join("tui_prefs.json")
+    shore_common::dirs::data_dir().join("tui_prefs.json")
 }
 
-fn legacy_prefs_path() -> PathBuf {
-    shore_common::dirs::runtime_dir().join("tui_prefs.json")
+fn legacy_prefs_paths() -> [PathBuf; 2] {
+    [
+        shore_common::dirs::config_dir().join("tui_prefs.json"),
+        shore_common::dirs::runtime_dir().join("tui_prefs.json"),
+    ]
+}
+
+fn migrate_prefs(current: &Path, legacy: &[PathBuf]) -> Option<String> {
+    for old in legacy {
+        let Ok(data) = std::fs::read_to_string(old) else {
+            continue;
+        };
+        if write_prefs_file(current, &data).is_ok()
+            && let Err(e) = std::fs::remove_file(old)
+        {
+            warn!("kept {} after migrating it: {e}", old.display());
+        }
+        return Some(data);
+    }
+    None
 }
 
 fn load_keymap(app: &mut App) {
@@ -417,9 +435,11 @@ fn load_keymap(app: &mut App) {
 }
 
 fn load_prefs(app: &mut App) {
-    let prefs_data = std::fs::read_to_string(prefs_path())
-        .or_else(|_| std::fs::read_to_string(legacy_prefs_path()));
-    if let Ok(data) = prefs_data
+    let path = prefs_path();
+    let prefs_data = std::fs::read_to_string(&path)
+        .ok()
+        .or_else(|| migrate_prefs(&path, &legacy_prefs_paths()));
+    if let Some(data) = prefs_data
         && let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&data)
     {
         if let Some(b) = prefs
@@ -490,22 +510,20 @@ fn save_prefs(app: &App) {
         "usage_display": app.usage_display.as_str(),
         "budget_focus": app.budget_focus.as_token(),
     });
-    let path = prefs_path();
-    if let Some(dir) = path.parent()
-        && let Err(e) = std::fs::create_dir_all(dir)
-    {
-        warn!("failed to create prefs dir {}: {e}", dir.display());
-        return;
+    if let Err(e) = write_prefs_file(&prefs_path(), &v.to_string()) {
+        warn!("failed to persist prefs: {e}");
+    }
+}
+
+fn write_prefs_file(path: &Path, body: &str) -> io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
     }
     let tmp = path.with_extension("json.tmp");
-    if let Err(e) = std::fs::write(&tmp, v.to_string()) {
-        warn!("failed to write prefs: {e}");
-        return;
-    }
-    if let Err(e) = std::fs::rename(&tmp, &path) {
-        warn!("failed to persist prefs: {e}");
+    std::fs::write(&tmp, body)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
         drop(std::fs::remove_file(&tmp));
-    }
+    })
 }
 
 fn force_full_redraw(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
@@ -615,7 +633,7 @@ fn pick_image(
     }
 }
 
-fn try_yazi(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
+fn try_yazi(chooser_file: &Path, start: &str) -> Option<bool> {
     let status = std::process::Command::new("yazi")
         .arg(start)
         .arg("--chooser-file")
@@ -625,7 +643,7 @@ fn try_yazi(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
     Some(status.success() && chooser_file.exists())
 }
 
-fn try_fzf(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
+fn try_fzf(chooser_file: &Path, start: &str) -> Option<bool> {
     let mut find = std::process::Command::new("find")
         .arg(start)
         .arg("-type")
@@ -2534,7 +2552,7 @@ mod redraw_tests {
     use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
 
     #[expect(unsafe_code, reason = "env::set_var is unsafe as of edition 2024")]
-    fn set_env(key: &str, value: &std::path::Path) {
+    fn set_env(key: &str, value: &Path) {
         // SAFETY: the one test that touches env holds it for its whole body.
         unsafe { std::env::set_var(key, value) }
     }
@@ -4335,5 +4353,53 @@ mod redraw_tests {
                     t.msg_id.as_deref() == Some("m_missing_from_history") && t.metadata.is_some()
                 })
         );
+    }
+}
+
+#[cfg(test)]
+mod prefs_path_tests {
+    use super::*;
+
+    #[test]
+    fn a_prefs_file_left_in_the_config_dir_moves_to_the_data_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data/tui_prefs.json");
+        let config = tmp.path().join("config/tui_prefs.json");
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        std::fs::write(&config, r#"{"show_tools":false}"#).unwrap();
+
+        let found = migrate_prefs(&data, std::slice::from_ref(&config));
+
+        assert_eq!(found.as_deref(), Some(r#"{"show_tools":false}"#));
+        assert_eq!(
+            std::fs::read_to_string(&data).unwrap(),
+            r#"{"show_tools":false}"#
+        );
+        assert!(!config.exists(), "the old copy should not be left behind");
+    }
+
+    #[test]
+    fn the_first_legacy_location_that_has_a_file_wins() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data/tui_prefs.json");
+        let config = tmp.path().join("config/tui_prefs.json");
+        let runtime = tmp.path().join("runtime/tui_prefs.json");
+        std::fs::create_dir_all(runtime.parent().unwrap()).unwrap();
+        std::fs::write(&runtime, r#"{"show_thinking":true}"#).unwrap();
+
+        let found = migrate_prefs(&data, &[config, runtime.clone()]);
+
+        assert_eq!(found.as_deref(), Some(r#"{"show_thinking":true}"#));
+        assert!(!runtime.exists());
+    }
+
+    #[test]
+    fn nothing_to_migrate_leaves_the_data_dir_untouched() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data/tui_prefs.json");
+        let missing = tmp.path().join("config/tui_prefs.json");
+
+        assert!(migrate_prefs(&data, &[missing]).is_none());
+        assert!(!data.exists());
     }
 }
