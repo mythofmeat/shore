@@ -2168,6 +2168,9 @@ impl App {
 
         self.completion.clear();
         self.input.exit_command_mode();
+        if (parent == "model" || parent == "character") && chosen != "reset" {
+            return Some(format!("{parent} use {chosen}"));
+        }
         Some(format!("{parent} {chosen}"))
     }
 

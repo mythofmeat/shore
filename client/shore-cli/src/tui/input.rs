@@ -1821,6 +1821,56 @@ mod tests {
     }
 
     #[test]
+    fn picking_a_model_from_the_submenu_switches_to_it() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.model_names = vec!["deepseek:deepseek-v4-pro".into()];
+        app.enter_submenu("model");
+        app.completion.selected = Some(0);
+
+        let cmd = sent_command(handle_submenu_mode(
+            &mut app,
+            make_key(KeyModifiers::NONE, KeyCode::Enter),
+        ));
+        assert_eq!(cmd.name, "switch_model");
+        assert_eq!(
+            cmd.args.get("name"),
+            Some(&serde_json::json!("deepseek:deepseek-v4-pro"))
+        );
+    }
+
+    #[test]
+    fn the_model_submenu_reset_row_still_resets() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.enter_submenu("model");
+        assert_eq!(app.completion.candidates, vec!["reset"]);
+        app.completion.selected = Some(0);
+
+        let cmd = sent_command(handle_submenu_mode(
+            &mut app,
+            make_key(KeyModifiers::NONE, KeyCode::Enter),
+        ));
+        assert_eq!(cmd.name, "reset_model");
+    }
+
+    #[test]
+    fn picking_a_character_from_the_submenu_switches_to_it() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.characters = vec![shore_common::protocol::types::CharacterInfo::new("scribe")];
+        app.enter_submenu("character");
+        app.completion.selected = Some(0);
+
+        let cmd = sent_command(handle_submenu_mode(
+            &mut app,
+            make_key(KeyModifiers::NONE, KeyCode::Enter),
+        ));
+        assert_eq!(cmd.name, "switch_character");
+        assert_eq!(cmd.args.get("name"), Some(&serde_json::json!("scribe")));
+    }
+
+    #[test]
     fn shared_cli_parser_preserves_quoted_arguments() {
         let mut app = App::default();
         let cmd = sent_command(parse_command(

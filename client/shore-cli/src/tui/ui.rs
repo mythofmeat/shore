@@ -3873,7 +3873,7 @@ pub(crate) mod scenario_tests {
             .clone();
 
         let cmd = app.apply_submenu().expect("apply_submenu yields a command");
-        assert_eq!(cmd, format!("model {chosen}"));
+        assert_eq!(cmd, format!("model use {chosen}"));
         assert!(app.completion.candidates.is_empty());
         assert!(matches!(app.completion.mode, PaletteMode::Top));
         assert_ne!(app.input.mode, InputMode::Command, "command mode exited");
