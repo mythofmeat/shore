@@ -14,20 +14,36 @@ run() {
 }
 
 cd "$root/daemon" || exit 1
-run bun-updates bun update --latest
-run install bun install
-run comments bun run lint:comments
-run citations bun run lint:citations
-run typecheck bun run typecheck
-run daemon-tests bun test
-run lint bun run lint
-run mutate-stale bun run mutate --stale
+run "bun-updates" \
+    bun update --latest
+run "bun-install" \
+    bun install
+run "bun-lint" \
+    bun run lint
+run "bun-lint-comments" \
+    bun run lint:comments
+run "bun-lint-citations" \
+    bun run lint:citations
+run "bun-typecheck" \
+    bun run typecheck
+run "bun-test" \
+    bun test
+run "bun-mutate-stale" \
+    bun run mutate --stale
+run "bun-build" \
+    bun run build
 
 cd "$root/client" || exit 1
-run cargo-upgrade cargo upgrade --incompatible
-run client-tests cargo test --workspace
-run fmt cargo fmt --all --check
-run clippy cargo clippy --workspace --all-targets
+run "cargo-upgrade" \
+    cargo upgrade --incompatible
+run "cargo-test" \
+    cargo test --workspace
+run "cargo-fmt" \
+    cargo fmt --all --check
+run "cargo-clippy" \
+    cargo clippy --workspace --all-targets
+run "cargo-build" \
+    cargo build --workspace
 
 if [ -n "$failed" ]; then
     printf '\nfailed:%s\n' "$failed"
