@@ -75,6 +75,10 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
 
     draw_conversation(frame, &mut *app, conversation_area);
 
+    if app.subagent_panel.is_some() || app.output_pager.is_some() || app.show_help {
+        recede(frame, conversation_area);
+    }
+
     draw_notifications(frame, app, conversation_area);
 
     draw_input(frame, app, input_area);
@@ -1889,6 +1893,22 @@ mod subagent_panel_tests {
     }
 }
 
+fn recede(frame: &mut Frame<'_>, area: Rect) {
+    let dimmed = Style::default()
+        .fg(Color::DarkGray)
+        .bg(Color::Reset)
+        .remove_modifier(Modifier::BOLD | Modifier::ITALIC | Modifier::REVERSED)
+        .add_modifier(Modifier::DIM);
+    let buffer = frame.buffer_mut();
+    for y in area.y..area.y.saturating_add(area.height) {
+        for x in area.x..area.x.saturating_add(area.width) {
+            if let Some(cell) = buffer.cell_mut((x, y)) {
+                let _restyled = cell.set_style(dimmed);
+            }
+        }
+    }
+}
+
 pub(crate) fn output_pager_layout(area: Rect, line_count: usize) -> (Rect, u16) {
     let width = area.width.saturating_sub(4).max(1);
     let ceiling = area.height.saturating_sub(4).max(3);
@@ -2433,6 +2453,49 @@ pub(crate) mod scenario_tests {
                 app: App::default(),
                 frames: Vec::new(),
             }
+        }
+
+        pub(crate) fn ansi_dump(&self) -> String {
+            let buffer = self.terminal.backend().buffer();
+            let mut out = String::new();
+            let mut current: Option<Style> = None;
+            for y in 0..buffer.area.height {
+                for x in 0..buffer.area.width {
+                    let Some(cell) = buffer.cell((x, y)) else {
+                        continue;
+                    };
+                    let style = cell.style();
+                    if current != Some(style) {
+                        out.push_str("\u{1b}[0m");
+                        if style.add_modifier.contains(Modifier::BOLD) {
+                            out.push_str("\u{1b}[1m");
+                        }
+                        if style.add_modifier.contains(Modifier::DIM) {
+                            out.push_str("\u{1b}[2m");
+                        }
+                        if let Some(color) = style.fg {
+                            out.push_str(&sgr(color, true));
+                        }
+                        if let Some(color) = style.bg {
+                            out.push_str(&sgr(color, false));
+                        }
+                        current = Some(style);
+                    }
+                    out.push_str(cell.symbol());
+                }
+                out.push_str("\u{1b}[0m\n");
+                current = None;
+            }
+            out
+        }
+
+        pub(crate) fn cell_style(&self, x: u16, y: u16) -> Style {
+            self.terminal
+                .backend()
+                .buffer()
+                .cell((x, y))
+                .map(|cell| cell.style())
+                .unwrap_or_default()
         }
 
         pub(crate) fn render(&mut self, label: &str) -> String {
@@ -3934,6 +3997,133 @@ pub(crate) mod scenario_tests {
 
         h.press(KeyCode::Esc);
         assert!(h.app.output_pager.is_none(), "Esc closes the pager");
+    }
+
+    fn sgr(color: Color, foreground: bool) -> String {
+        let base: u16 = if foreground { 30 } else { 40 };
+        let bright: u16 = if foreground { 90 } else { 100 };
+        let extended = base.saturating_add(8);
+        let offset = |from: u16, n: u16| from.saturating_add(n);
+        let code = match color {
+            Color::Black => base,
+            Color::Red => offset(base, 1),
+            Color::Green => offset(base, 2),
+            Color::Yellow => offset(base, 3),
+            Color::Blue => offset(base, 4),
+            Color::Magenta => offset(base, 5),
+            Color::Cyan => offset(base, 6),
+            Color::Gray => offset(base, 7),
+            Color::DarkGray => bright,
+            Color::LightRed => offset(bright, 1),
+            Color::LightGreen => offset(bright, 2),
+            Color::LightYellow => offset(bright, 3),
+            Color::LightBlue => offset(bright, 4),
+            Color::LightMagenta => offset(bright, 5),
+            Color::LightCyan => offset(bright, 6),
+            Color::White => offset(bright, 7),
+            Color::Indexed(n) => return format!("\u{1b}[{extended};5;{n}m"),
+            Color::Rgb(r, g, b) => return format!("\u{1b}[{extended};2;{r};{g};{b}m"),
+            Color::Reset => return String::new(),
+        };
+        format!("\u{1b}[{code}m")
+    }
+
+    #[test]
+    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
+    fn preview_output_pager_over_a_dimmed_conversation() {
+        let mut h = Harness::with_size(76, 22);
+        h.app.connection_status = ConnectionStatus::Connected;
+        for turn in 0..4 {
+            h.app.entries.push(ConversationEntry::user(
+                format!("what does turn {turn} look like behind the scrim?"),
+                vec![],
+                format!("t{turn}"),
+            ));
+            h.app.entries.push(ConversationEntry::assistant(
+                None,
+                format!("Reply {turn} with some length to it so the dimming is visible."),
+                vec![],
+                format!("a{turn}"),
+                None,
+            ));
+        }
+        h.app.scroll_to_bottom();
+
+        let _before = h.render("before");
+        eprintln!("=== conversation ===\n{}", h.ansi_dump());
+
+        h.app.push_command_text(
+            "status",
+            "\u{1b}[1mdaemon\u{1b}[0m    \u{1b}[32mrunning\u{1b}[0m   pid 41221\n\u{1b}[1mmodel\u{1b}[0m     \u{1b}[36mkimi-k3\u{1b}[0m   moonshot\n\u{1b}[1mcache\u{1b}[0m     1h        \u{1b}[33mwarm 41m\u{1b}[0m"
+                .to_owned(),
+        );
+        let _after = h.render("after");
+        eprintln!(
+            "=== pager over a dimmed conversation ===\n{}",
+            h.ansi_dump()
+        );
+    }
+
+    #[test]
+    fn an_overlay_pushes_the_conversation_back_but_leaves_the_input_alone() {
+        let mut h = Harness::with_size(80, 24);
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.entries.push(ConversationEntry::user(
+            "a message with colour in it".to_owned(),
+            vec![],
+            "t0".to_owned(),
+        ));
+
+        let _plain = h.render("no overlay");
+        let conversation_before = h.cell_style(2, 1);
+        let input_before = h.cell_style(2, 22);
+        assert!(
+            !conversation_before.add_modifier.contains(Modifier::DIM),
+            "nothing is dimmed before an overlay opens"
+        );
+
+        h.app
+            .push_command_text("status", "daemon   running".to_owned());
+        let _overlaid = h.render("pager over a dimmed conversation");
+
+        let conversation_after = h.cell_style(2, 1);
+        assert!(
+            conversation_after.add_modifier.contains(Modifier::DIM),
+            "the conversation should recede behind the pager"
+        );
+        assert_eq!(conversation_after.fg, Some(Color::DarkGray));
+        assert_eq!(
+            h.cell_style(2, 22),
+            input_before,
+            "the input keeps its brightness so it still reads as usable"
+        );
+    }
+
+    #[test]
+    fn a_command_can_be_run_without_closing_the_pager_first() {
+        let mut h = Harness::with_size(80, 24);
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+        h.app
+            .push_command_text("status", "daemon   running".to_owned());
+
+        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
+        assert_eq!(h.app.input.mode, InputMode::Command);
+        assert!(
+            h.app.output_pager.is_some(),
+            "the output stays up while you type the next command"
+        );
+
+        h.type_str("usa");
+        assert!(
+            h.app
+                .completion
+                .candidates
+                .iter()
+                .any(|candidate| candidate == "usage"),
+            "the palette works normally over the pager: {:?}",
+            h.app.completion.candidates
+        );
     }
 
     #[test]

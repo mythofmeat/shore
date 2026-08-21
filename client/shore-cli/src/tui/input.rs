@@ -188,6 +188,24 @@ fn handle_output_pager(app: &mut App, key: KeyEvent) -> Action {
             app.output_pager = None;
             Action::Redraw
         }
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(':')) => run_ui_command(
+            app,
+            &UiCommand::Palette {
+                scope: PaletteScope::Full,
+            },
+        ),
+        (KeyModifiers::NONE, KeyCode::Char('/')) => run_ui_command(
+            app,
+            &UiCommand::Palette {
+                scope: PaletteScope::Shortcuts,
+            },
+        ),
+        (KeyModifiers::CONTROL, KeyCode::Char('p')) => run_ui_command(
+            app,
+            &UiCommand::Palette {
+                scope: PaletteScope::Config,
+            },
+        ),
         (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
             app.scroll_output_pager(1);
             Action::Redraw
