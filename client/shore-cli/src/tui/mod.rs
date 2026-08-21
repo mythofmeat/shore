@@ -1675,6 +1675,11 @@ fn named_palette_values(data: &serde_json::Value, array: &str) -> Vec<crate::cli
 
 fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
     match kind {
+        "models" => {
+            if let Some(models) = data.get("models").and_then(|value| value.as_array()) {
+                app.model_names = models.iter().filter_map(model_switch_name).collect();
+            }
+        }
         "providers" => {
             app.palette_catalog.providers = named_palette_values(data, "providers");
         }
@@ -3213,6 +3218,81 @@ mod redraw_tests {
             ansi::plain(&pager_text(pager)).contains("running"),
             "{:?}",
             pager_text(pager)
+        );
+    }
+
+    #[test]
+    fn opening_the_palette_asks_for_everything_its_arguments_complete_from() {
+        let mut app = App {
+            connection_status: ConnectionStatus::Connected,
+            ..App::default()
+        };
+        app.input.mode = app::InputMode::Normal;
+
+        let action = input::handle_event(
+            &mut app,
+            crossterm::event::Event::Key(crossterm::event::KeyEvent {
+                code: crossterm::event::KeyCode::Char(':'),
+                modifiers: crossterm::event::KeyModifiers::SHIFT,
+                kind: crossterm::event::KeyEventKind::Press,
+                state: crossterm::event::KeyEventState::NONE,
+            }),
+        );
+        let Action::SendMulti(sent) = action else {
+            panic!("opening the palette should fetch its catalog");
+        };
+        let names: Vec<String> = sent
+            .into_iter()
+            .filter_map(|conn| match conn {
+                ConnCommand::Send(ClientMessage::Command(command)) => Some(command.name),
+                ConnCommand::Send(_) | ConnCommand::Shutdown => None,
+            })
+            .collect();
+
+        for wanted in [
+            "list_models",
+            "list_providers",
+            "status",
+            "tools",
+            "config_schema",
+            "model_settings",
+        ] {
+            assert!(
+                names.iter().any(|name| name == wanted),
+                "`{wanted}` feeds a completion the palette offers, so it has to be asked for: {names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_model_name_can_be_completed_as_soon_as_the_palette_opens() {
+        let mut app = App::default();
+        let rid = app.begin_palette_catalog_request("models");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(rid),
+                name: "list_models".into(),
+                data: serde_json::json!({
+                    "models": [{ "name": "kimi-k3" }, { "name": "opus" }]
+                }),
+            }),
+        );
+
+        app.input.enter_command_mode();
+        for c in "model use ".chars() {
+            app.input.cmd_insert_char(c);
+        }
+        app.update_completions();
+
+        assert!(
+            app.completion
+                .candidates
+                .iter()
+                .any(|candidate| candidate.ends_with("kimi-k3")),
+            "`model use` should offer the live models: {:?}",
+            app.completion.candidates
         );
     }
 
