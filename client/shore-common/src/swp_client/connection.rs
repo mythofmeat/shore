@@ -17,6 +17,7 @@ impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin> AsyncReadWr
 
 pub struct SWPConnection {
     reader: BufReader<Box<dyn AsyncReadWrite>>,
+    read_pending: Vec<u8>,
     writer: BufWriter<Box<dyn AsyncReadWrite>>,
 }
 
@@ -37,6 +38,7 @@ impl SWPConnection {
         debug!(addr = %addr.0, "tcp connected");
         Ok(Self {
             reader: BufReader::new(Box::new(tokio::io::join(r, tokio::io::sink()))),
+            read_pending: Vec::new(),
             writer: BufWriter::new(Box::new(tokio::io::join(tokio::io::empty(), w))),
         })
     }
@@ -211,7 +213,7 @@ impl SWPConnection {
     }
 
     pub async fn recv(&mut self) -> Result<ServerMessage> {
-        let line = read_json_line_bounded(&mut self.reader).await?;
+        let line = read_json_line_bounded(&mut self.reader, &mut self.read_pending).await?;
         let msg: ServerMessage = serde_json::from_str(line.trim()).map_err(|e| {
             warn!(error = %e, raw_len = line.len(), "failed to deserialize server message");
             ClientError::Deserialize(e)
@@ -302,6 +304,7 @@ impl SWPConnection {
         let (r, w) = tokio::io::split(stream);
         Self {
             reader: BufReader::new(Box::new(tokio::io::join(r, tokio::io::sink()))),
+            read_pending: Vec::new(),
             writer: BufWriter::new(Box::new(tokio::io::join(tokio::io::empty(), w))),
         }
     }
@@ -323,15 +326,17 @@ impl SWPConnection {
     }
 }
 
-async fn read_json_line_bounded<R>(reader: &mut BufReader<R>) -> Result<String>
+async fn read_json_line_bounded<R>(
+    reader: &mut BufReader<R>,
+    pending: &mut Vec<u8>,
+) -> Result<String>
 where
     R: tokio::io::AsyncRead + Unpin,
 {
-    let mut bytes: Vec<u8> = Vec::new();
     loop {
         let buf = reader.fill_buf().await.map_err(ClientError::Io)?;
         if buf.is_empty() {
-            if bytes.is_empty() {
+            if pending.is_empty() {
                 debug!("EOF on connection — disconnected");
                 return Err(ClientError::Disconnected);
             }
@@ -350,7 +355,7 @@ where
             None => (buf.len(), false),
         };
 
-        let Some(total_len) = bytes.len().checked_add(consume) else {
+        let Some(total_len) = pending.len().checked_add(consume) else {
             return Err(ClientError::Protocol(format!(
                 "server message exceeds maximum size of {MAX_WIRE_MESSAGE_SIZE} bytes"
             )));
@@ -367,14 +372,14 @@ where
                 "server message framing exceeded read buffer".into(),
             ));
         };
-        bytes.extend_from_slice(chunk);
+        pending.extend_from_slice(chunk);
         reader.consume(consume);
         if done {
             break;
         }
     }
 
-    String::from_utf8(bytes)
+    String::from_utf8(std::mem::take(pending))
         .map_err(|e| ClientError::Protocol(format!("server sent invalid UTF-8 framing: {e}")))
 }
 
@@ -394,6 +399,39 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::AsyncWriteExt;
+    use tokio::time::{Duration, timeout};
+
+    #[tokio::test]
+    async fn cancelled_receive_keeps_the_partial_frame() {
+        let (client_stream, mut server_stream) = tokio::io::duplex(256);
+        let mut conn = SWPConnection::from_raw_stream(client_stream);
+
+        server_stream
+            .write_all(br#"{"type":"stream_chunk","text":"hel"#)
+            .await
+            .unwrap();
+
+        assert!(
+            timeout(Duration::from_millis(10), conn.recv())
+                .await
+                .is_err()
+        );
+
+        server_stream
+            .write_all(b"lo\",\"content_type\":\"text\"}\n")
+            .await
+            .unwrap();
+
+        let msg = timeout(Duration::from_secs(1), conn.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let ServerMessage::StreamChunk(chunk) = msg else {
+            panic!("expected stream chunk");
+        };
+        assert_eq!(chunk.text, "hello");
+    }
 
     #[test]
     fn uuid_v4_unique_under_concurrent_calls() {
