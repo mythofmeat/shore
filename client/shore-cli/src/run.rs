@@ -1281,6 +1281,10 @@ fn read_stdin() -> Result<String, Box<dyn std::error::Error>> {
     Ok(buf.trim().to_owned())
 }
 
+pub(crate) fn editor_from_env() -> String {
+    resolve_editor(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok())
+}
+
 fn resolve_editor(visual: Option<String>, editor: Option<String>) -> String {
     [visual, editor]
         .into_iter()
@@ -1291,7 +1295,7 @@ fn resolve_editor(visual: Option<String>, editor: Option<String>) -> String {
 }
 
 fn edit_message_in_editor() -> Result<String, Box<dyn std::error::Error>> {
-    let editor = resolve_editor(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok());
+    let editor = editor_from_env();
 
     let tmp = tempfile::Builder::new()
         .prefix("shore-")

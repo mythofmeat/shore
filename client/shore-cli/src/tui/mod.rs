@@ -544,7 +544,7 @@ fn open_in_editor(
     input: &mut InputState,
     last_reply: Option<&str>,
 ) -> io::Result<()> {
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_owned());
+    let editor = crate::run::editor_from_env();
     let tmp = std::env::temp_dir().join("shore_input.md");
     std::fs::write(&tmp, editor_buffer(input.text.as_str(), last_reply))?;
 
