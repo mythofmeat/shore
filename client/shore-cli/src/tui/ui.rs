@@ -99,7 +99,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
     }
 
     if app.show_help {
-        draw_help(frame, size);
+        draw_help(frame, app, size);
     }
 
     if app.fullscreen.is_some() {
@@ -1881,147 +1881,66 @@ mod subagent_panel_tests {
     }
 }
 
-fn draw_help(frame: &mut Frame<'_>, area: Rect) {
-    let lines = vec![
-        Line::from(""),
+fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    let heading = |text: &str| {
         Line::from(vec![Span::styled(
-            "  Navigation",
+            format!("  {text}"),
             Style::default()
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
-        )]),
-        Line::from(Span::styled(
-            "    j / k           scroll down / up",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    d / u           scroll down / up (10 lines)",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    G               jump to bottom",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Input",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )]),
-        Line::from(Span::styled(
-            "    i / a / I / A   enter insert mode",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    Enter           send message",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    Shift+Enter     newline",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    Ctrl+G          open input in $EDITOR",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    Esc             normal mode",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Toggles",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )]),
-        Line::from(Span::styled(
-            "    t               toggle thinking blocks",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    T               toggle tool-use blocks",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    s               toggle sub-agent sections",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    p               toggle inline images",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    o               fullscreen image viewer",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    S               background sub-agent panel",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(""),
+        )])
+    };
+    let row = |left: &str, right: &str| {
         Line::from(vec![
-            Span::styled(
-                "  Commands  ",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("(press : to open)", Style::default().fg(Color::DarkGray)),
-        ]),
-        Line::from(Span::styled(
-            "    :help           this screen",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :character      switch character",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :model          switch model (`:model all` includes hidden)",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :setting        view/set sampler settings (picker on Enter)",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :view           toggle TUI display preferences",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :image          attach image (picker)",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :edit <ref>     edit message (last, -1, -2)",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :alt           choose alternate response",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :status  :usage  :trace  :config",
-            Style::default().fg(Color::DarkGray),
-        )),
-        Line::from(Span::styled(
-            "    CLI syntax works here; Tab advances through commands, flags, and values",
-            Style::default().fg(Color::DarkGray),
-        )),
-        Line::from(""),
-        Line::from(Span::styled(
-            "  Press any key to close",
-            Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::ITALIC),
-        )),
-        Line::from(""),
-    ];
+            Span::styled(format!("    {left:<16}"), Style::default().fg(Color::White)),
+            Span::styled(right.to_owned(), Style::default().fg(Color::Gray)),
+        ])
+    };
 
-    let height = usize_to_u16(lines.len()).saturating_add(2);
-    let width = 56_u16.min(area.width);
+    let mut lines = vec![Line::from(""), heading("Your keys")];
+    if app.keymap.bindings().is_empty() {
+        lines.push(Line::from(Span::styled(
+            "    nothing is bound; edit tui.toml or use `ui bind`",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+    for (key, binding) in app.keymap.bindings() {
+        lines.push(row(key, &binding.written));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(heading("Always"));
+    lines.push(row("Esc", "normal mode, or dismiss a notice"));
+    lines.push(row(":", "command palette"));
+    lines.push(row("Ctrl+C", "quit"));
+    lines.push(row("Enter", "send message"));
+    lines.push(row("Shift+Enter", "newline"));
+
+    lines.push(Line::from(""));
+    lines.push(heading("Rebinding"));
+    for hint in [
+        "    :ui bind <key> <command>      :ui unbind <key>",
+        "    e.g. :ui bind 1 \"model use kimi-k3\"",
+        "    Anything the : prompt takes can be bound. Tab completes it.",
+        "    Or edit tui.toml directly; it is read at startup.",
+    ] {
+        lines.push(Line::from(Span::styled(
+            hint.to_owned(),
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  Press any key to close",
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC),
+    )));
+    lines.push(Line::from(""));
+
+    let height = usize_to_u16(lines.len()).saturating_add(2).min(area.height);
+    let width = 68_u16.min(area.width);
     let x = area.x.saturating_add(
         area.width
             .saturating_sub(width)
@@ -3895,6 +3814,33 @@ pub(crate) mod scenario_tests {
         let action = h.press_action(KeyCode::Enter);
 
         assert_set_model_setting(action, "sdk", &serde_json::json!("moonshot"));
+    }
+
+    #[test]
+    fn the_help_overlay_lists_the_live_keymap() {
+        let mut h = Harness::with_size(90, 50);
+        h.app.keymap.bind("1", "model use kimi-k3").unwrap();
+        h.app.keymap.bind("shift+f", "view thinking").unwrap();
+        let _dropped = h.app.keymap.unbind("o").unwrap();
+        h.app.show_help = true;
+
+        let frame = h.render("help overlay");
+        assert!(
+            frame.contains("model use kimi-k3"),
+            "a rebound key should show its command: {frame}"
+        );
+        assert!(
+            frame.contains("ui scroll down 1"),
+            "the defaults should still be listed: {frame}"
+        );
+        assert!(
+            !frame.contains("fullscreen image viewer"),
+            "the overlay should not describe a key that was unbound: {frame}"
+        );
+        assert!(
+            frame.contains("Ctrl+C"),
+            "reserved keys are not in the keymap, so the overlay states them: {frame}"
+        );
     }
 
     #[test]

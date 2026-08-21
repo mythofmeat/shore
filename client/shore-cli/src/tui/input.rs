@@ -10,6 +10,7 @@ use crate::cli::{
 };
 use crate::tui::app::{App, InputMode, PaletteMode};
 use crate::tui::connection::ConnCommand;
+use crate::tui::keymap::key_token;
 
 const HISTORY_PAGE_TURNS: u32 = 64;
 
@@ -106,76 +107,6 @@ fn redraw_or_load_older_history(app: &mut App) -> Action {
     })))
 }
 
-const DEFAULT_NORMAL_KEYS: [(&str, &str); 19] = [
-    ("i", "ui insert"),
-    ("a", "ui insert --end"),
-    ("A", "ui insert --end"),
-    ("I", "ui insert --home"),
-    ("j", "ui scroll down 1"),
-    ("down", "ui scroll down 1"),
-    ("k", "ui scroll up 1"),
-    ("up", "ui scroll up 1"),
-    ("d", "ui scroll down 10"),
-    ("u", "ui scroll up 10"),
-    ("G", "ui scroll bottom"),
-    ("t", "view thinking"),
-    ("T", "view tools"),
-    ("s", "view subagent"),
-    ("p", "view images"),
-    ("S", "ui subagents"),
-    ("o", "ui images"),
-    ("r", "msg regen"),
-    ("ctrl+g", "ui editor"),
-];
-
-#[expect(
-    clippy::wildcard_enum_match_arm,
-    reason = "keys with no spelling cannot be bound; a new one clap adds is simply unbindable"
-)]
-pub(crate) fn key_token(key: KeyEvent) -> Option<String> {
-    let mut token = String::new();
-    if key.modifiers.contains(KeyModifiers::CONTROL) {
-        token.push_str("ctrl+");
-    }
-    if key.modifiers.contains(KeyModifiers::ALT) {
-        token.push_str("alt+");
-    }
-    let named = match key.code {
-        KeyCode::Char(c) => {
-            token.push(c);
-            return Some(token);
-        }
-        KeyCode::Up => "up",
-        KeyCode::Down => "down",
-        KeyCode::Left => "left",
-        KeyCode::Right => "right",
-        KeyCode::Home => "home",
-        KeyCode::End => "end",
-        KeyCode::PageUp => "pageup",
-        KeyCode::PageDown => "pagedown",
-        KeyCode::Tab => "tab",
-        KeyCode::BackTab => "backtab",
-        KeyCode::Enter => "enter",
-        KeyCode::Backspace => "backspace",
-        KeyCode::Delete => "delete",
-        KeyCode::Insert => "insert",
-        KeyCode::Esc => "esc",
-        _ => return None,
-    };
-    if key.modifiers.contains(KeyModifiers::SHIFT) {
-        token.push_str("shift+");
-    }
-    token.push_str(named);
-    Some(token)
-}
-
-fn bound_command(token: &str) -> Option<&'static str> {
-    DEFAULT_NORMAL_KEYS
-        .iter()
-        .find(|&&(key, _)| key == token)
-        .map(|&(_, command)| command)
-}
-
 fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
     if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Esc {
         return if app.dismiss_latest_notification() {
@@ -196,10 +127,13 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
         );
     }
 
-    let Some(command) = key_token(key).and_then(|token| bound_command(&token)) else {
+    let Some(command) = key_token(key)
+        .and_then(|token| app.keymap.lookup(&token))
+        .map(|binding| binding.command.clone())
+    else {
         return Action::None;
     };
-    parse_command(app, command)
+    dispatch_cli_command(app, &command)
 }
 
 fn palette_catalog_commands(app: &mut App) -> Vec<ConnCommand> {
@@ -910,8 +844,48 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
             }
         },
 
+        UiCommand::Bind {
+            key,
+            command: words,
+        } => run_bind_command(app, key, &words.join(" ")),
+
+        UiCommand::Unbind { key } => run_unbind_command(app, key),
+
         UiCommand::Quit => Action::Quit,
     }
+}
+
+fn run_bind_command(app: &mut App, key: &str, command: &str) -> Action {
+    if let Err(problem) = app.keymap.bind(key, command) {
+        app.set_error(problem);
+        return Action::Redraw;
+    }
+    match app.keymap.save() {
+        Ok(()) => app.set_status(format!("{key} runs {command}")),
+        Err(error) => app.set_error(format!("bound {key} for this session only: {error}")),
+    }
+    Action::Redraw
+}
+
+fn run_unbind_command(app: &mut App, key: &str) -> Action {
+    match app.keymap.unbind(key) {
+        Err(problem) => {
+            app.set_error(problem);
+            return Action::Redraw;
+        }
+        Ok(None) => {
+            app.set_status(format!("{key} was not bound"));
+            return Action::Redraw;
+        }
+        Ok(Some(previous)) => {
+            if let Err(error) = app.keymap.save() {
+                app.set_error(format!("freed {key} for this session only: {error}"));
+                return Action::Redraw;
+            }
+            app.set_status(format!("{key} no longer runs {previous}"));
+        }
+    }
+    Action::Redraw
 }
 
 fn run_ui_image_command(app: &mut App, target: Option<&str>) -> Action {

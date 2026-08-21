@@ -4,6 +4,7 @@ mod command_output;
 mod connection;
 mod images;
 mod input;
+mod keymap;
 mod markdown;
 mod ui;
 
@@ -402,6 +403,13 @@ fn prefs_path() -> PathBuf {
 
 fn legacy_prefs_path() -> PathBuf {
     shore_common::dirs::runtime_dir().join("tui_prefs.json")
+}
+
+fn load_keymap(app: &mut App) {
+    app.keymap = keymap::Keymap::load();
+    for warning in app.keymap.warnings.clone() {
+        app.set_error(warning);
+    }
 }
 
 fn load_prefs(app: &mut App) {
@@ -942,6 +950,7 @@ async fn run_tui(
     }
     if !fixture_mode {
         load_prefs(&mut app);
+        load_keymap(&mut app);
     }
 
     let (cmd_tx, mut event_rx) = if fixture_mode {

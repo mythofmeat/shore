@@ -735,6 +735,26 @@ pub(crate) enum UiCommand {
         scope: PaletteScope,
     },
 
+    /// Bind a key to a command and save it to `tui.toml`
+    ///
+    /// The command is anything the `:` prompt takes, so `ui bind q "ui quit"`
+    /// and typing `ui quit` do the same thing. Write modifiers as `ctrl+`,
+    /// `alt+` and `shift+`; a shifted letter is just its capital.
+    Bind {
+        /// Key to bind, such as `q`, `ctrl+g` or `shift+f`
+        key: String,
+
+        /// Command to run, quoted if it has spaces
+        #[arg(required = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+
+    /// Remove a key binding and save `tui.toml`
+    Unbind {
+        /// Key to free up
+        key: String,
+    },
+
     /// Leave the TUI
     Quit,
 }
@@ -2480,7 +2500,13 @@ mod tests {
         }
 
         let ui = palette_replacements("ui ", &PaletteCatalog::default());
-        for leaf in ["ui scroll", "ui insert", "ui palette"] {
+        for leaf in [
+            "ui scroll",
+            "ui insert",
+            "ui palette",
+            "ui bind",
+            "ui unbind",
+        ] {
             assert!(
                 ui.iter().any(|candidate| candidate == leaf),
                 "palette stopped offering `{leaf}`: {ui:?}"
