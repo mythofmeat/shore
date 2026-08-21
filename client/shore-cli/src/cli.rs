@@ -735,6 +735,9 @@ pub(crate) enum UiCommand {
         scope: PaletteScope,
     },
 
+    /// Reopen the output of the last command you ran
+    Output,
+
     /// Bind a key to a command and save it to `tui.toml`
     ///
     /// The command is anything the `:` prompt takes, so `ui bind q "ui quit"`

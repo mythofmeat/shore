@@ -223,6 +223,13 @@ impl EffectiveSamplerSnapshot {
     }
 }
 
+pub(crate) struct OutputPager {
+    pub command: String,
+    pub lines: Vec<Line<'static>>,
+    pub scroll: u16,
+    pub viewport: u16,
+}
+
 #[derive(Default)]
 pub(crate) struct CompletionState {
     pub candidates: Vec<String>,
@@ -300,6 +307,7 @@ pub(crate) struct App {
     pub usage_display: UsageDisplay,
     pub budget_focus: BudgetFocus,
     pub show_help: bool,
+    pub output_pager: Option<OutputPager>,
     pub keymap: crate::tui::keymap::Keymap,
     pub usage_budgets: Vec<UsageBudget>,
     pub pending_images: Vec<String>,
@@ -372,6 +380,7 @@ impl Default for App {
             usage_display: UsageDisplay::Off,
             budget_focus: BudgetFocus::default(),
             show_help: false,
+            output_pager: None,
             keymap: crate::tui::keymap::Keymap::default(),
             usage_budgets: Vec::new(),
             pending_images: Vec::new(),
@@ -754,15 +763,32 @@ impl App {
     }
 
     pub(crate) fn push_command_text(&mut self, command: &str, rendered: String) {
-        self.entries.push(ConversationEntry::System {
-            content: format!(":{command}\n{rendered}"),
-            count: 1,
-            timestamp: String::new(),
+        self.output_pager = Some(OutputPager {
+            command: command.to_owned(),
+            lines: crate::tui::ansi::to_lines(&rendered),
+            scroll: 0,
+            viewport: 1,
         });
-        self.history_version = self.history_version.wrapping_add(1);
-        if self.auto_scroll {
-            self.scroll_to_bottom();
+    }
+
+    pub(crate) fn reopen_output_pager(&mut self) -> bool {
+        match &mut self.output_pager {
+            Some(pager) => {
+                pager.scroll = 0;
+                true
+            }
+            None => false,
         }
+    }
+
+    pub(crate) fn scroll_output_pager(&mut self, delta: i32) {
+        let Some(pager) = &mut self.output_pager else {
+            return;
+        };
+        let total = u16::try_from(pager.lines.len()).unwrap_or(u16::MAX);
+        let last = total.saturating_sub(pager.viewport.max(1));
+        let next = i64::from(pager.scroll).saturating_add(i64::from(delta));
+        pager.scroll = next.clamp(0, i64::from(last)).try_into().unwrap_or(0);
     }
 
     pub(crate) fn start_editing(&mut self, msg_ref: String, content: String) {

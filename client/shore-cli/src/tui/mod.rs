@@ -1,3 +1,4 @@
+mod ansi;
 mod app;
 mod clipboard;
 mod command_output;
@@ -2865,6 +2866,20 @@ mod redraw_tests {
         })
     }
 
+    fn pager_text(pager: &app::OutputPager) -> String {
+        pager
+            .lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     fn system_entry_count(app: &App) -> usize {
         app.entries
             .iter()
@@ -3187,11 +3202,18 @@ mod redraw_tests {
         );
 
         assert!(!app.pending_palette_commands.contains_key(&rid));
-        let Some(ConversationEntry::System { content, .. }) = app.entries.last() else {
-            panic!("palette output should become a system entry");
-        };
-        assert!(content.contains(":status --section daemon"));
-        assert!(content.contains("running"));
+        assert_eq!(
+            system_entry_count(&app),
+            0,
+            "command output no longer lands in the conversation"
+        );
+        let pager = app.output_pager.as_ref().expect("output opens the pager");
+        assert_eq!(pager.command, "status --section daemon");
+        assert!(
+            ansi::plain(&pager_text(pager)).contains("running"),
+            "{:?}",
+            pager_text(pager)
+        );
     }
 
     #[test]
@@ -3273,12 +3295,13 @@ mod redraw_tests {
             }),
         );
 
-        assert_eq!(system_entry_count(&app), 1);
-        let Some(ConversationEntry::System { content, .. }) = app.entries.last() else {
-            panic!("json palette result should be visible");
-        };
-        assert!(content.contains(":character --json"));
-        assert!(!content.contains("Characters:"));
+        assert_eq!(system_entry_count(&app), 0);
+        let pager = app
+            .output_pager
+            .as_ref()
+            .expect("json result opens the pager");
+        assert_eq!(pager.command, "character --json");
+        assert!(!pager_text(pager).contains("Characters:"));
     }
 
     #[test]

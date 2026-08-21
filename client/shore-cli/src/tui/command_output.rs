@@ -2,30 +2,10 @@ use crate::cli::{CliCommand, ConfigCommand};
 
 const TUI_OUTPUT_WIDTH: usize = 80;
 
-fn strip_terminal_escapes(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch != '\u{1b}' {
-            out.push(ch);
-            continue;
-        }
-        if chars.next_if_eq(&'[').is_none() {
-            continue;
-        }
-        for sequence in chars.by_ref() {
-            if sequence.is_ascii_alphabetic() {
-                break;
-            }
-        }
-    }
-    out.trim_end().to_owned()
-}
-
 fn written(write: impl FnOnce(&mut Vec<u8>)) -> String {
     let mut buffer = Vec::new();
     write(&mut buffer);
-    strip_terminal_escapes(&String::from_utf8_lossy(&buffer))
+    String::from_utf8_lossy(&buffer).trim_end().to_owned()
 }
 
 fn json(data: &serde_json::Value) -> String {
@@ -544,6 +524,7 @@ pub(crate) fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::ansi;
 
     #[test]
     fn status_section_is_selected_in_the_tui_renderer() {
@@ -557,8 +538,9 @@ mod tests {
             "ada",
         )
         .expect("rendered");
-        assert!(rendered.contains("running"));
-        assert!(!rendered.contains("turns"));
+        let text = ansi::plain(&rendered);
+        assert!(text.contains("running"));
+        assert!(!text.contains("turns"));
     }
 
     #[test]
@@ -575,8 +557,9 @@ mod tests {
             "ada",
         )
         .expect("rendered");
-        assert!(rendered.contains("cache.ttl"));
-        assert!(!rendered.contains("daemon.addr"));
+        let text = ansi::plain(&rendered);
+        assert!(text.contains("cache.ttl"));
+        assert!(!text.contains("daemon.addr"));
     }
 
     #[test]
@@ -599,8 +582,9 @@ mod tests {
             }]
         });
         let rendered = render("trace calls", "call_log", &data, "ada").expect("rendered");
-        assert!(rendered.contains("call log"));
-        assert!(rendered.contains("message"));
-        assert!(!rendered.contains("\"entries\""));
+        let text = ansi::plain(&rendered);
+        assert!(text.contains("call log"));
+        assert!(text.contains("message"));
+        assert!(!text.contains("\"entries\""));
     }
 }

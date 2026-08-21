@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub(crate) const RESERVED_KEYS: [&str; 3] = ["esc", ":", "ctrl+c"];
 
-pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 21] = [
+pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 22] = [
     ("i", "ui insert"),
     ("a", "ui insert --end"),
     ("A", "ui insert --end"),
@@ -26,6 +26,7 @@ pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 21] = [
     ("ctrl+g", "ui editor"),
     ("/", "ui palette shortcuts"),
     ("ctrl+p", "ui palette config"),
+    ("O", "ui output"),
 ];
 
 pub(crate) const DEFAULT_SHORTCUTS: [(&str, &str); 8] = [

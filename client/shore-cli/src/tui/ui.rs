@@ -98,6 +98,10 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
         draw_subagent_panel(frame, app, size);
     }
 
+    if app.output_pager.is_some() {
+        draw_output_pager(frame, app, size);
+    }
+
     if app.show_help {
         draw_help(frame, app, size);
     }
@@ -1885,6 +1889,58 @@ mod subagent_panel_tests {
     }
 }
 
+pub(crate) fn output_pager_layout(area: Rect, line_count: usize) -> (Rect, u16) {
+    let width = area.width.saturating_sub(4).max(1);
+    let ceiling = area.height.saturating_sub(4).max(3);
+    let wanted = usize_to_u16(line_count).saturating_add(2);
+    let height = wanted.clamp(3, ceiling);
+    let x = area
+        .x
+        .saturating_add(area.width.saturating_sub(width).checked_div(2).unwrap_or(0));
+    let y = area.y.saturating_add(
+        area.height
+            .saturating_sub(height)
+            .checked_div(2)
+            .unwrap_or(0),
+    );
+    (Rect::new(x, y, width, height), height.saturating_sub(2))
+}
+
+fn draw_output_pager(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
+    let Some(pager) = &mut app.output_pager else {
+        return;
+    };
+
+    let total = pager.lines.len();
+    let (popup_area, viewport) = output_pager_layout(area, total);
+    pager.viewport = viewport;
+    pager.scroll = pager
+        .scroll
+        .min(usize_to_u16(total).saturating_sub(viewport.max(1)));
+    let first_shown = usize::from(pager.scroll).saturating_add(1).min(total);
+    let last_shown = usize::from(pager.scroll)
+        .saturating_add(usize::from(viewport))
+        .min(total);
+    let position = if total == 0 {
+        "empty".to_owned()
+    } else {
+        format!("{first_shown}-{last_shown} of {total}")
+    };
+
+    let body = Paragraph::new(Text::from(pager.lines.clone()))
+        .scroll((pager.scroll, 0))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" output · :{} ", pager.command))
+                .title_bottom(format!(" j/k scroll · Esc close   {position} "))
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
+
+    frame.render_widget(Clear, popup_area);
+    frame.render_widget(body, popup_area);
+}
+
 fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let heading = |text: &str| {
         Line::from(vec![Span::styled(
@@ -1919,6 +1975,7 @@ fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
     lines.push(row("Ctrl+C", "quit"));
     lines.push(row("Enter", "send message"));
     lines.push(row("Shift+Enter", "newline"));
+    lines.push(row("q", "close an overlay"));
 
     lines.push(Line::from(""));
     lines.push(heading("Rebinding"));
@@ -3841,6 +3898,68 @@ pub(crate) mod scenario_tests {
         let action = h.press_action(KeyCode::Enter);
 
         assert_set_model_setting(action, "sdk", &serde_json::json!("moonshot"));
+    }
+
+    #[test]
+    fn command_output_opens_a_pager_with_the_cli_colours_intact() {
+        let mut h = Harness::with_size(80, 24);
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        h.app.push_command_text(
+            "status",
+            "\u{1b}[1mdaemon\u{1b}[0m   \u{1b}[32mrunning\u{1b}[0m\nmodel    kimi-k3".to_owned(),
+        );
+        let frame = h.render("output pager");
+
+        assert!(frame.contains("output · :status"), "{frame}");
+        assert!(frame.contains("running"), "{frame}");
+        assert!(frame.contains("1-2 of 2"), "{frame}");
+
+        let pager = h.app.output_pager.as_ref().expect("pager open");
+        let coloured = pager
+            .lines
+            .first()
+            .and_then(|line| {
+                line.spans
+                    .iter()
+                    .find(|span| span.content.contains("running"))
+            })
+            .expect("the running span");
+        assert_eq!(
+            coloured.style.fg,
+            Some(Color::Green),
+            "the renderer's green has to reach the screen"
+        );
+
+        h.press(KeyCode::Esc);
+        assert!(h.app.output_pager.is_none(), "Esc closes the pager");
+    }
+
+    #[test]
+    fn a_long_output_scrolls_and_reports_where_you_are() {
+        let mut h = Harness::with_size(80, 24);
+        let body = (1..=60)
+            .map(|n| format!("line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        h.app.push_command_text("log", body);
+
+        let top = h.render("pager at the top");
+        assert!(top.contains("line 1"), "{top}");
+        assert!(!top.contains("line 60"), "{top}");
+
+        h.press(KeyCode::Char('G'));
+        let bottom = h.render("pager at the bottom");
+        assert!(bottom.contains("line 60"), "{bottom}");
+        assert!(
+            bottom.contains("of 60"),
+            "the footer should say how far in you are: {bottom}"
+        );
+
+        h.press(KeyCode::Char('g'));
+        let back = h.render("pager back at the top");
+        assert!(back.contains("line 1"), "{back}");
     }
 
     #[test]

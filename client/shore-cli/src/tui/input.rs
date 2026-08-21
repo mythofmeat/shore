@@ -51,6 +51,10 @@ fn handle_key(app: &mut App, key: KeyEvent) -> Action {
         return Action::Redraw;
     }
 
+    if app.output_pager.is_some() {
+        return handle_output_pager(app, key);
+    }
+
     if app.fullscreen.is_some() {
         return handle_fullscreen(app, key);
     }
@@ -170,6 +174,47 @@ fn palette_catalog_commands(app: &mut App) -> Vec<ConnCommand> {
         }))
     })
     .collect()
+}
+
+fn handle_output_pager(app: &mut App, key: KeyEvent) -> Action {
+    let page = app
+        .output_pager
+        .as_ref()
+        .map_or(1, |pager| i32::from(pager.viewport).max(1));
+
+    match (key.modifiers, key.code) {
+        (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q'))
+        | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
+            app.output_pager = None;
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
+            app.scroll_output_pager(1);
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
+            app.scroll_output_pager(-1);
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('d') | KeyCode::PageDown) => {
+            app.scroll_output_pager(page);
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('u') | KeyCode::PageUp) => {
+            app.scroll_output_pager(page.saturating_neg());
+            Action::Redraw
+        }
+        (KeyModifiers::NONE, KeyCode::Char('g') | KeyCode::Home) => {
+            app.scroll_output_pager(i32::MIN);
+            Action::Redraw
+        }
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('G'))
+        | (KeyModifiers::NONE, KeyCode::End) => {
+            app.scroll_output_pager(i32::MAX);
+            Action::Redraw
+        }
+        _ => Action::None,
+    }
 }
 
 fn handle_subagent_panel(app: &mut App, key: KeyEvent) -> Action {
@@ -896,6 +941,15 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
             key,
             command: words,
         } => run_bind_command(app, key, &words.join(" ")),
+
+        UiCommand::Output => {
+            if app.reopen_output_pager() {
+                Action::Redraw
+            } else {
+                app.set_status("no command output yet");
+                Action::Redraw
+            }
+        }
 
         UiCommand::Unbind { key } => run_unbind_command(app, key),
 
