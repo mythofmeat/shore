@@ -991,6 +991,16 @@ impl App {
         }
     }
 
+    pub(crate) fn last_assistant_text(&self) -> Option<String> {
+        self.entries
+            .iter()
+            .rev()
+            .filter_map(ConversationEntry::as_turn)
+            .find(|turn| turn.role == Role::Assistant && !turn.is_streaming())
+            .map(Turn::joined_text)
+            .filter(|text| !text.trim().is_empty())
+    }
+
     pub(crate) fn is_submenu_open(&self, parent: &str) -> bool {
         matches!(&self.completion.mode, PaletteMode::Submenu(s) if s.parent == parent)
     }

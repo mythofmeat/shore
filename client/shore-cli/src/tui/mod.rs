@@ -40,6 +40,9 @@ use input::Action;
 
 const STREAM_FRAME_INTERVAL: Duration = Duration::from_millis(200);
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const EDITOR_FENCE: &str = "# ------------------------ >8 ------------------------";
+const EDITOR_FENCE_NOTE: &str =
+    "# Last assistant reply. Everything below is removed when you close the editor.";
 const ENV_TUI_FIXTURE: &str = "SHORE_TUI_FIXTURE";
 const ENV_TUI_FIXTURE_ROLE: &str = "SHORE_TUI_FIXTURE_ROLE";
 const ENV_TUI_FIXTURE_REPEAT: &str = "SHORE_TUI_FIXTURE_REPEAT";
@@ -510,13 +513,40 @@ fn force_full_redraw(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> i
     terminal.resize(area)
 }
 
+fn editor_buffer(input: &str, last_reply: Option<&str>) -> String {
+    let Some(reply) = last_reply else {
+        return input.to_owned();
+    };
+    let head = if input.is_empty() {
+        String::new()
+    } else {
+        format!("{input}\n")
+    };
+    format!(
+        "{head}\n{EDITOR_FENCE}\n{EDITOR_FENCE_NOTE}\n\n{}\n",
+        reply.trim_end_matches('\n')
+    )
+}
+
+fn strip_editor_fence(contents: &str) -> String {
+    let mut kept = String::new();
+    for line in contents.split_inclusive('\n') {
+        if line.trim_end() == EDITOR_FENCE {
+            break;
+        }
+        kept.push_str(line);
+    }
+    kept.trim_end_matches('\n').to_owned()
+}
+
 fn open_in_editor(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     input: &mut InputState,
+    last_reply: Option<&str>,
 ) -> io::Result<()> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_owned());
     let tmp = std::env::temp_dir().join("shore_input.md");
-    std::fs::write(&tmp, input.text.as_str())?;
+    std::fs::write(&tmp, editor_buffer(input.text.as_str(), last_reply))?;
 
     execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
     disable_raw_mode()?;
@@ -534,7 +564,7 @@ fn open_in_editor(
     force_full_redraw(terminal)?;
 
     if let Ok(contents) = std::fs::read_to_string(&tmp) {
-        input.set_text(contents.trim_end_matches('\n').to_owned());
+        input.set_text(strip_editor_fence(&contents));
     }
     Ok(())
 }
@@ -860,7 +890,12 @@ async fn handle_action(
             Ok(true)
         }
         Action::OpenInEditor => {
-            drop(open_in_editor(terminal, &mut app.input));
+            let last_reply = app.last_assistant_text();
+            drop(open_in_editor(
+                terminal,
+                &mut app.input,
+                last_reply.as_deref(),
+            ));
             Ok(true)
         }
         Action::PickImage(start_dir) => {
@@ -2545,6 +2580,94 @@ mod redraw_tests {
         });
         unset_env("SHORE_RUNTIME_DIR");
         result.unwrap();
+    }
+
+    #[test]
+    fn the_editor_buffer_carries_the_last_reply_below_the_fence() {
+        let buf = editor_buffer("my draft", Some("the reply\n## a heading"));
+        let (above, below) = buf.split_once(EDITOR_FENCE).expect("fence is present");
+        assert_eq!(above.trim_end(), "my draft");
+        assert!(below.contains("the reply"));
+        assert!(
+            below.contains("## a heading"),
+            "the reply is left as raw text"
+        );
+    }
+
+    #[test]
+    fn an_empty_draft_still_gets_the_reply() {
+        let buf = editor_buffer("", Some("the reply"));
+        assert!(buf.starts_with('\n'), "the cursor line stays empty");
+        assert!(buf.contains(EDITOR_FENCE));
+    }
+
+    #[test]
+    fn nothing_is_appended_without_a_previous_reply() {
+        assert_eq!(editor_buffer("my draft", None), "my draft");
+    }
+
+    #[test]
+    fn everything_from_the_fence_down_is_dropped() {
+        let buf = editor_buffer("my draft", Some("the reply"));
+        assert_eq!(strip_editor_fence(&buf), "my draft");
+    }
+
+    #[test]
+    fn a_quoted_line_pulled_above_the_fence_survives() {
+        let buf = editor_buffer("about this bit:", Some("line one\nline two"));
+        let edited = buf.replace("about this bit:", "about this bit:\n> line two");
+        assert_eq!(strip_editor_fence(&edited), "about this bit:\n> line two");
+    }
+
+    #[test]
+    fn a_buffer_without_a_fence_is_kept_whole() {
+        assert_eq!(
+            strip_editor_fence("# my own heading\nbody\n\n"),
+            "# my own heading\nbody"
+        );
+    }
+
+    #[test]
+    fn the_last_complete_assistant_turn_is_the_one_offered() {
+        let mut app = App::default();
+        app.entries.push(ConversationEntry::assistant(
+            None,
+            "older reply".into(),
+            Vec::new(),
+            String::new(),
+            None,
+        ));
+        app.entries.push(ConversationEntry::user(
+            "a question".into(),
+            Vec::new(),
+            String::new(),
+        ));
+        app.entries.push(ConversationEntry::assistant(
+            None,
+            "newer reply".into(),
+            Vec::new(),
+            String::new(),
+            None,
+        ));
+        assert_eq!(app.last_assistant_text().as_deref(), Some("newer reply"));
+
+        if let Some(turn) = app
+            .entries
+            .last_mut()
+            .and_then(ConversationEntry::as_turn_mut)
+        {
+            turn.state = TurnState::Streaming;
+        }
+        assert_eq!(
+            app.last_assistant_text().as_deref(),
+            Some("older reply"),
+            "a reply still streaming is not offered",
+        );
+    }
+
+    #[test]
+    fn an_empty_conversation_offers_nothing() {
+        assert_eq!(App::default().last_assistant_text(), None);
     }
 
     #[test]
