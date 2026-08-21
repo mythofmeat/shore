@@ -705,6 +705,8 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const retainedTurns = opts.resumable === true
     ? countRetainedTurns(liveLines.slice(checkpoint.splitAt))
     : originalRetainedTurns;
+  const archivedCount = opts.resumable === true ? checkpoint.splitAt : splitAt;
+  const archivedTurns = opts.resumable === true ? checkpoint.compactedTurns : compactedTurns;
   const memoryAfter = await tools.gitHead?.(workspaceDir);
 
   const newConversationId = await archiveCompactPrefix(
@@ -731,8 +733,8 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     memoryFilesWritten: markdownPaths,
     conversationId: opts.conversationId,
     newConversationId,
-    messageCount: splitAt,
-    compactedTurns,
+    messageCount: archivedCount,
+    compactedTurns: archivedTurns,
     retainedCount: retained,
     retainedTurns,
     markdownPaths,
@@ -814,7 +816,26 @@ async function resolveCheckpoint(
       );
     } else {
       const existing = await loadCompactionCheckpoint(opts.dataDir, opts.charName);
-      if (existing !== undefined) return existing;
+      if (existing !== undefined) {
+        if (opts.keepTurnsOverride === undefined || existing.splitAt === splitAt) return existing;
+        shoreLog.warn(
+          `shore: compaction checkpoint ${existing.id} for ${opts.charName} splits at ` +
+            `${String(existing.splitAt)}, but this pass was asked to keep ` +
+            `${String(opts.keepTurnsOverride)} turn(s), which splits at ${String(splitAt)}; ` +
+            `starting a fresh pass at the requested split. The memory it already wrote ` +
+            `(${JSON.stringify(existing.loop.writesApplied.map((w) => w.displayPath))}) stays on disk`,
+        );
+        await removeCompactionCheckpoint(opts.dataDir, opts.charName);
+        return newCompactionCheckpoint(
+          opts.charName,
+          opts.activeContent,
+          splitAt,
+          compactedTurns,
+          request,
+          opts.dryRun,
+          existing.memoryBefore ?? workspaceHead,
+        );
+      }
     }
   }
   return newCompactionCheckpoint(

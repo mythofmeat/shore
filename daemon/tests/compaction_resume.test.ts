@@ -158,6 +158,77 @@ test("the tool-round ceiling pauses work in resumable slices instead of making t
   expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
+test("an explicit keep-turns count wins over the split a stale checkpoint planned", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-keep-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(characterDir, { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+
+  const messages = conversation();
+  const activeContent = messages.map(activeLine).join("\n") + "\n";
+  await writeFile(join(characterDir, "active.jsonl"), activeContent, "utf8");
+
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    configDir: "",
+    dispatch: async (_name, input) => {
+      const edit = input as { path: string; content: string };
+      const path = join(workspace, edit.path);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, edit.content, "utf8");
+      return { output: "written", isError: false };
+    },
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+
+  const paused = await compact(
+    {
+      ...options(dataDir, workspace, memoryStore, messages, activeContent, tools, scripted([
+        response("tool_use", [
+          {
+            type: "tool_use",
+            id: "write-1",
+            name: "edit",
+            input: { path: "memory/half.md", content: "half\n" },
+          },
+        ]),
+      ])),
+      maxToolIterations: 1,
+    },
+    { keepRecentTurns: 1 },
+  );
+  expect(paused.kind).toBe("paused");
+  const stale = JSON.parse(await readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")) as {
+    splitAt: number;
+  };
+  expect(stale.splitAt).toBe(2);
+
+  const compacted = await compact(
+    {
+      ...options(dataDir, workspace, memoryStore, messages, activeContent, tools, scripted([
+        response("end_turn", [{ type: "text", text: "done" }]),
+      ])),
+      keepTurnsOverride: 0,
+    },
+    { keepRecentTurns: 1 },
+  );
+
+  expect(compacted).toMatchObject({
+    kind: "compacted",
+    messageCount: 4,
+    compactedTurns: 2,
+    retainedCount: 0,
+    retainedTurns: 0,
+  });
+  expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe("");
+  expect(await readFile(join(workspace, "memory/half.md"), "utf8")).toBe("half\n");
+});
+
 test("a durable archive that lost its checkpoint to a crash is recognised instead of re-run", async () => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-crash-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
