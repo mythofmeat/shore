@@ -133,8 +133,13 @@ mod tests {
     use super::*;
     use crate::test_env::{set_env, unset_env};
 
+    static REAL_ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn xdg_dirs_resolve() {
+        let _guard = REAL_ENV
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dirs = ShoreDirs::resolve();
         assert!(dirs.config.ends_with("shore"));
         assert!(dirs.data.ends_with("shore"));
@@ -143,6 +148,9 @@ mod tests {
 
     #[test]
     fn xdg_override_shore_config_dir() {
+        let _guard = REAL_ENV
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let tmp = tempfile::tempdir().unwrap();
         let custom = tmp.path().join("my_config");
         std::fs::create_dir_all(&custom).unwrap();
