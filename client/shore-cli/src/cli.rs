@@ -1210,6 +1210,85 @@ fn grouped_names() -> impl Iterator<Item = &'static str> {
         .flat_map(|(_, names)| names.iter().copied())
 }
 
+/// User-facing CLI commands exposed to the TUI command palette.
+///
+/// Keeping this derived from clap makes newly-added CLI command families show
+/// up in the TUI without maintaining a second catalog.
+pub(crate) fn palette_top_level_commands() -> Vec<String> {
+    use clap::CommandFactory;
+    Cli::command()
+        .get_subcommands()
+        .filter(|command| !command.is_hide_set())
+        .filter(|command| command.get_name() != "completions")
+        .map(|command| command.get_name().to_owned())
+        .collect()
+}
+
+/// Complete a possibly-nested CLI command path for the TUI palette.
+pub(crate) fn palette_cli_completions(input: &str) -> Vec<String> {
+    use clap::CommandFactory;
+
+    let words: Vec<&str> = input.split_whitespace().collect();
+    let trailing_space = input.chars().last().is_some_and(char::is_whitespace);
+    let (parents, fragment) = if trailing_space {
+        (words.as_slice(), "")
+    } else {
+        match words.split_last() {
+            Some((last, parents)) => (parents, *last),
+            None => (&[][..], ""),
+        }
+    };
+
+    let root = Cli::command();
+    let mut command = &root;
+    for parent in parents {
+        let Some(next) = command.find_subcommand(parent) else {
+            return Vec::new();
+        };
+        command = next;
+    }
+
+    command
+        .get_subcommands()
+        .filter(|candidate| !candidate.is_hide_set())
+        .filter(|candidate| {
+            candidate.get_name().starts_with(fragment)
+                && !(parents.is_empty() && candidate.get_name() == "completions")
+        })
+        .map(|candidate| {
+            parents
+                .iter()
+                .copied()
+                .chain(std::iter::once(candidate.get_name()))
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect()
+}
+
+pub(crate) fn palette_command_description(path: &str) -> Option<String> {
+    use clap::CommandFactory;
+
+    let root = Cli::command();
+    let mut command = &root;
+    for name in path.split_whitespace() {
+        command = command.find_subcommand(name)?;
+    }
+    command
+        .get_about()
+        .map(ToString::to_string)
+        .map(|about| first_line(&about))
+}
+
+pub(crate) fn parse_palette_command(input: &str) -> Result<CliCommand, String> {
+    let Some(words) = shlex::split(input) else {
+        return Err("unclosed quote in command".to_owned());
+    };
+    let argv = std::iter::once("shore".to_owned()).chain(words);
+    let parsed = Cli::try_parse_from(argv).map_err(|error| error.to_string())?;
+    parsed.command.ok_or_else(|| "missing command".to_owned())
+}
+
 #[expect(
     clippy::format_push_string,
     reason = "writeln! here would trip only_the_vocabulary_is_allowed_to_hardcode_indentation, and this builds clap help text rather than terminal output"

@@ -1991,7 +1991,11 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect) {
             Style::default().fg(Color::White),
         )),
         Line::from(Span::styled(
-            "    :compact  :regen",
+            "    :status  :usage  :trace  :config",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "    CLI syntax works here; type a space to browse",
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(""),
@@ -2103,9 +2107,9 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
         let name_text = format!("   {c}");
         let name_w = unicode_width::UnicodeWidthStr::width(name_text.as_str());
 
-        let (gap, desc_text) = if let Some(d) = desc {
+        let (gap, desc_text) = if let Some(d) = &desc {
             let gap = name_col.saturating_sub(name_w).max(2);
-            (" ".repeat(gap), d.to_owned())
+            (" ".repeat(gap), d.clone())
         } else if is_active {
             (String::new(), ACTIVE_MARKER.to_owned())
         } else {
@@ -3457,7 +3461,7 @@ pub(crate) mod scenario_tests {
     }
 
     #[test]
-    fn scenario_command_palette_submenu_space_trigger() {
+    fn scenario_command_palette_space_browses_cli_subcommands() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
@@ -3469,12 +3473,20 @@ pub(crate) mod scenario_tests {
         let _ = h.render("after space");
 
         assert!(
-            matches!(h.app.completion.mode, PaletteMode::Submenu(_)),
-            "Space on `:model` should open submenu, not insert a space"
+            matches!(h.app.completion.mode, PaletteMode::Top),
+            "Space keeps the palette at the CLI command level"
         );
         assert!(
-            h.app.input.cmd_text.is_empty(),
-            "Space should not have been inserted into cmd_text"
+            h.app.input.cmd_text == "model ",
+            "Space should open the nested CLI command path"
+        );
+        assert!(
+            h.app
+                .completion
+                .candidates
+                .iter()
+                .any(|candidate| candidate == "model use"),
+            "current model subcommands should be discoverable"
         );
     }
 
@@ -3558,7 +3570,8 @@ pub(crate) mod scenario_tests {
         h.app.input.mode = InputMode::Normal;
 
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.type_str("setting ");
+        h.type_str("setting");
+        h.press(KeyCode::Enter);
         let f = h.render("setting submenu");
 
         assert!(

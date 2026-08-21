@@ -1117,6 +1117,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.effective_sampler = None;
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
+            app.pending_palette_commands.clear();
             app.usage_budgets.clear();
             app.characters.clone_from(&characters);
 
@@ -1150,6 +1151,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.effective_sampler = None;
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
+            app.pending_palette_commands.clear();
             app.history_page_loading = false;
             app.pending_subagent_trace_ids.clear();
             app.usage_budgets.clear();
@@ -1802,6 +1804,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::CommandOutput(co) => {
+            let palette_command = app.take_palette_command(co.rid.as_deref());
             match co.name.as_str() {
                 "log" => {
                     if let Some(messages) = co.data.get("messages").and_then(|v| v.as_array()) {
@@ -2162,6 +2165,23 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     app.set_status(format!("cmd:{} completed", co.name));
                 }
             }
+            if let Some(command) = palette_command
+                && !matches!(
+                    co.name.as_str(),
+                    "log"
+                        | "list_characters"
+                        | "list_models"
+                        | "switch_character"
+                        | "switch_model"
+                        | "reset_model"
+                        | "set_model_setting"
+                        | "delete"
+                        | "list_alternatives"
+                        | "alt"
+                )
+            {
+                app.push_command_output(&command, &co.data);
+            }
             RedrawEffect::Immediate
         }
 
@@ -2175,11 +2195,14 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if sampler_settings_error {
                 app.finish_sampler_settings_refresh();
             }
+            let palette_command = app.take_palette_command(err.rid.as_deref());
             app.history_page_loading = false;
             if sampler_settings_error && app.is_setting_palette_open() {
                 app.update_completions();
             }
-            app.set_error(format!("error: {:?} - {}", err.code, err.message));
+            let context =
+                palette_command.map_or_else(String::new, |command| format!(":{command}: "));
+            app.set_error(format!("{context}error: {:?} - {}", err.code, err.message));
             RedrawEffect::Immediate
         }
 
@@ -2941,6 +2964,28 @@ mod redraw_tests {
         assert_eq!(system_entry_count(&app), 0, "background poll is silent");
         assert_eq!(app.usage_budgets.len(), 2);
         assert_eq!(app.focused_budget().unwrap().name, "monthly");
+    }
+
+    #[test]
+    fn palette_cli_command_output_is_rendered_in_the_conversation() {
+        let mut app = App::default();
+        let rid = app.begin_palette_command("status --section daemon");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(rid.clone()),
+                name: "status".into(),
+                data: serde_json::json!({ "daemon": { "state": "running" } }),
+            }),
+        );
+
+        assert!(!app.pending_palette_commands.contains_key(&rid));
+        let Some(ConversationEntry::System { content, .. }) = app.entries.last() else {
+            panic!("palette output should become a system entry");
+        };
+        assert!(content.contains(":status --section daemon"));
+        assert!(content.contains("running"));
     }
 
     #[test]

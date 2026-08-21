@@ -29,6 +29,7 @@ pulldown-cmark = { version = "0.13.4", default-features = false }
 unicode-width = "0.2"
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+shlex = "2"
 
 [dev-dependencies]
 insta = { workspace = true }

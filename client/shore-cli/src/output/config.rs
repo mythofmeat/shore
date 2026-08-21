@@ -40,6 +40,56 @@ fn redacted(value: &Value) -> String {
     }
 }
 
+pub(crate) fn redact_json_for_display(value: &Value) -> Value {
+    fn scoped_secret(scoped: &str) -> bool {
+        let mut segments = scoped.split('.').map(str::to_owned).collect::<Vec<_>>();
+        let Some(leaf) = segments.pop() else {
+            return false;
+        };
+        is_secret(&segments, &leaf)
+    }
+
+    fn visit(value: &Value, path: &mut Vec<String>) -> Value {
+        match value {
+            Value::Object(map) => {
+                let scoped = map
+                    .get("key")
+                    .and_then(Value::as_str)
+                    .or_else(|| map.get("set").and_then(Value::as_str));
+                let scoped_is_secret = scoped.is_some_and(scoped_secret);
+                Value::Object(
+                    map.iter()
+                        .map(|(key, child)| {
+                            let scoped_name = matches!(key.as_str(), "key" | "set");
+                            let scoped_value = matches!(
+                                key.as_str(),
+                                "config" | "defaults" | "value" | "previous"
+                            );
+                            let display = if scoped_name && scoped.is_some() {
+                                child.clone()
+                            } else if (scoped_is_secret && scoped_value) || is_secret(path, key) {
+                                Value::String(redacted(child))
+                            } else {
+                                path.push(key.clone());
+                                let visited = visit(child, path);
+                                let _ = path.pop();
+                                visited
+                            };
+                            (key.clone(), display)
+                        })
+                        .collect(),
+                )
+            }
+            Value::Array(items) => {
+                Value::Array(items.iter().map(|item| visit(item, path)).collect())
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => value.clone(),
+        }
+    }
+
+    visit(value, &mut Vec::new())
+}
+
 fn scalar(value: &Value) -> String {
     match value {
         Value::Null => "(none)".to_owned(),
@@ -419,6 +469,30 @@ mod tests {
         let mut buf = Vec::new();
         write_config(&mut buf, data, show_all);
         String::from_utf8(buf).unwrap_or_default()
+    }
+
+    #[test]
+    fn tui_json_redaction_handles_config_trees_and_leaf_wrappers() {
+        let tree = redact_json_for_display(&json!({
+            "config": {
+                "providers": { "openai": { "api_key": "sk-secret" } },
+                "mcp": { "remote": { "headers": { "Authorization": "Bearer secret" } } }
+            }
+        }));
+        let rendered = tree.to_string();
+        assert!(!rendered.contains("sk-secret"));
+        assert!(!rendered.contains("Bearer secret"));
+
+        let leaf = redact_json_for_display(&json!({
+            "key": "mcp.remote.headers.Authorization",
+            "config": "Bearer secret",
+            "defaults": null
+        }));
+        assert_eq!(
+            leaf.get("key").and_then(Value::as_str),
+            Some("mcp.remote.headers.Authorization")
+        );
+        assert_ne!(leaf.get("config"), Some(&json!("Bearer secret")));
     }
 
     fn payload() -> Value {

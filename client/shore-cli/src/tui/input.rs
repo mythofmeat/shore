@@ -4,6 +4,7 @@ use shore_common::protocol::client_msg::{
 };
 use tracing::debug;
 
+use crate::cli::{CharacterCommand, CliCommand, ConfigCommand, MsgCommand};
 use crate::tui::app::{App, InputMode, PaletteMode};
 use crate::tui::connection::ConnCommand;
 
@@ -375,52 +376,7 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             }
 
             let images = std::mem::take(&mut app.pending_images);
-            let mut image_uploads: Vec<shore_common::protocol::client_msg::ImageUpload> =
-                Vec::new();
-            let mut image_refs: Vec<shore_common::protocol::types::ImageRef> = Vec::new();
-            for p in &images {
-                match std::fs::read(p) {
-                    Ok(bytes) => {
-                        use base64::Engine;
-                        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                        let filename = std::path::Path::new(p).file_name().map_or_else(
-                            || "image".to_owned(),
-                            |f| f.to_string_lossy().to_string(),
-                        );
-                        image_refs.push(shore_common::protocol::types::ImageRef {
-                            path: p.clone(),
-                            caption: None,
-                            data: Some(b64.clone()),
-                        });
-                        image_uploads.push(shore_common::protocol::client_msg::ImageUpload {
-                            filename,
-                            data: b64,
-                            mime_type: None,
-                        });
-                    }
-                    Err(e) => {
-                        app.set_error(format!("failed to read image: {e}"));
-                    }
-                }
-            }
-            app.dismiss_notifications();
-            app.entries.push(crate::tui::app::ConversationEntry::user(
-                text.clone(),
-                image_refs,
-                String::new(),
-            ));
-            app.scroll_to_bottom();
-            app.stream.active = true;
-            let msg = ClientMessage::Message(ClientMessageBody {
-                rid: None,
-
-                text,
-                stream: true,
-                images,
-                image_data: image_uploads,
-                absence_seconds: None,
-            });
-            Action::Send(ConnCommand::Send(msg))
+            send_user_message(app, text, images)
         }
 
         (KeyModifiers::SHIFT | KeyModifiers::ALT, KeyCode::Enter) => {
@@ -533,15 +489,9 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
         }
 
         (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(' ')) => {
-            let trimmed = app.input.cmd_text.trim().to_owned();
-            if let Some(parent) = App::canonical_submenu_parent(&trimmed) {
-                app.enter_submenu(parent);
-                submenu_fetch_action(app, parent)
-            } else {
-                app.input.cmd_insert_char(' ');
-                app.update_completions();
-                Action::Redraw
-            }
+            app.input.cmd_insert_char(' ');
+            app.update_completions();
+            Action::Redraw
         }
 
         (_, KeyCode::Backspace) => {
@@ -827,6 +777,13 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "character" | "characters" => {
+            if cmd == "character"
+                && arg.split_whitespace().next().is_some_and(|word| {
+                    matches!(word, "use" | "info" | "new") || word.starts_with('-')
+                })
+            {
+                return dispatch_cli_command(app, trimmed_input);
+            }
             if arg.is_empty() {
                 Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
                     rid: None,
@@ -845,6 +802,11 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "model" => {
+            if arg.split_whitespace().next().is_some_and(|word| {
+                matches!(word, "use" | "info" | "setting") || word.starts_with('-')
+            }) {
+                return dispatch_cli_command(app, trimmed_input);
+            }
             let (include_hidden, rest) = match arg.split_once(' ') {
                 Some(("all", rest)) => (true, rest.trim()),
                 _ if arg == "all" => (true, ""),
@@ -924,6 +886,9 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "compact" => {
+            if arg.split_whitespace().any(|word| word.starts_with('-')) {
+                return dispatch_cli_command(app, trimmed_input);
+            }
             let mut args = serde_json::json!({});
             for word in arg.split_whitespace() {
                 if word == "restart" {
@@ -1110,9 +1075,210 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             Action::Send(ConnCommand::Send(ClientMessage::Command(command)))
         }
 
-        _ => {
-            app.set_status(format!("unknown command: {cmd}"));
+        _ => dispatch_cli_command(app, trimmed_input),
+    }
+}
+
+fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action {
+    if text.trim().is_empty() && images.is_empty() {
+        return Action::Redraw;
+    }
+
+    let mut image_uploads: Vec<shore_common::protocol::client_msg::ImageUpload> = Vec::new();
+    let mut image_refs: Vec<shore_common::protocol::types::ImageRef> = Vec::new();
+    for path in &images {
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                use base64::Engine;
+                let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                let filename = std::path::Path::new(path).file_name().map_or_else(
+                    || "image".to_owned(),
+                    |file| file.to_string_lossy().to_string(),
+                );
+                image_refs.push(shore_common::protocol::types::ImageRef {
+                    path: path.clone(),
+                    caption: None,
+                    data: Some(data.clone()),
+                });
+                image_uploads.push(shore_common::protocol::client_msg::ImageUpload {
+                    filename,
+                    data,
+                    mime_type: None,
+                });
+            }
+            Err(error) => app.set_error(format!("failed to read image: {error}")),
+        }
+    }
+
+    app.dismiss_notifications();
+    app.entries.push(crate::tui::app::ConversationEntry::user(
+        text.clone(),
+        image_refs,
+        String::new(),
+    ));
+    app.scroll_to_bottom();
+    app.stream.active = true;
+    Action::Send(ConnCommand::Send(ClientMessage::Message(
+        ClientMessageBody {
+            rid: None,
+            text,
+            stream: true,
+            images,
+            image_data: image_uploads,
+            absence_seconds: None,
+        },
+    )))
+}
+
+fn palette_swp_command(
+    app: &mut App,
+    label: &str,
+    name: impl Into<String>,
+    args: serde_json::Value,
+) -> Action {
+    let rid = app.begin_palette_command(label);
+    Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
+        rid: Some(rid),
+        name: name.into(),
+        args,
+    })))
+}
+
+fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
+    let command = match crate::cli::parse_palette_command(input) {
+        Ok(command) => command,
+        Err(error) => {
+            let message = error
+                .lines()
+                .find(|line| !line.trim().is_empty())
+                .unwrap_or("invalid command")
+                .trim();
+            app.set_error(message.to_owned());
+            return Action::Redraw;
+        }
+    };
+
+    match &command {
+        CliCommand::Msg {
+            command:
+                MsgCommand::Send {
+                    message,
+                    images,
+                    system: false,
+                },
+        } => send_user_message(app, message.join(" "), images.clone()),
+        CliCommand::Msg {
+            command:
+                MsgCommand::Send {
+                    message,
+                    system: true,
+                    ..
+                },
+        } => palette_swp_command(
+            app,
+            input,
+            "inject_system",
+            serde_json::json!({ "text": message.join(" ") }),
+        ),
+        CliCommand::Msg {
+            command: MsgCommand::Regen,
+        } => {
+            app.begin_regen_optimistic();
+            Action::Send(ConnCommand::Send(ClientMessage::Regen(Regen {
+                rid: None,
+                stream: true,
+            })))
+        }
+        CliCommand::Character {
+            subcommand: None,
+            info: false,
+            ..
+        } => palette_swp_command(app, input, "list_characters", serde_json::json!({})),
+        CliCommand::Character {
+            subcommand: Some(CharacterCommand::Use { name }),
+            ..
+        } => palette_swp_command(
+            app,
+            input,
+            "switch_character",
+            serde_json::json!({ "name": name }),
+        ),
+        CliCommand::Character {
+            subcommand: Some(CharacterCommand::New { name }),
+            ..
+        } => palette_swp_command(
+            app,
+            input,
+            "create_character",
+            serde_json::json!({ "name": name }),
+        ),
+        CliCommand::Config { path: true, .. } => {
+            app.push_command_output(
+                input,
+                &serde_json::json!({
+                    "path": shore_common::dirs::config_dir().display().to_string()
+                }),
+            );
             Action::Redraw
+        }
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Reload { yes: false, .. }),
+            ..
+        } => {
+            app.set_status("config reload may invalidate the prompt cache; use :config reload --yes to confirm");
+            Action::Redraw
+        }
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Reload { yes: true, .. }),
+            ..
+        } => palette_swp_command(
+            app,
+            input,
+            "config_reload",
+            serde_json::json!({ "apply": true, "refresh_prompts": true }),
+        ),
+        CliCommand::Trace { subcommand: None } => {
+            app.set_status("usage: :trace [calls|heartbeat|events|errors|subagent]");
+            Action::Redraw
+        }
+        CliCommand::Debug { subcommand: None } => {
+            app.set_status("usage: :debug <command> (type `debug ` to browse)");
+            Action::Redraw
+        }
+        CliCommand::Model {
+            subcommand: None, ..
+        } => {
+            app.show_model_list = true;
+            let Some((name, args)) =
+                crate::cli::to_swp_command(&command, Some(&app.character_name))
+            else {
+                app.set_error("model command is not available in the TUI");
+                return Action::Redraw;
+            };
+            palette_swp_command(app, input, name, args)
+        }
+        CliCommand::Msg { .. }
+        | CliCommand::Log { .. }
+        | CliCommand::Compact { .. }
+        | CliCommand::Segments { .. }
+        | CliCommand::Clear { .. }
+        | CliCommand::Trace { .. }
+        | CliCommand::Character { .. }
+        | CliCommand::Status { .. }
+        | CliCommand::Debug { .. }
+        | CliCommand::Model { .. }
+        | CliCommand::Provider { .. }
+        | CliCommand::Config { .. }
+        | CliCommand::Usage { .. }
+        | CliCommand::Completions { .. }
+        | CliCommand::Complete { .. } => {
+            let Some((name, args)) =
+                crate::cli::to_swp_command(&command, Some(&app.character_name))
+            else {
+                app.set_error(format!("command is not available in the TUI: {input}"));
+                return Action::Redraw;
+            };
+            palette_swp_command(app, input, name, args)
         }
     }
 }
@@ -1499,19 +1665,73 @@ mod tests {
     }
 
     #[test]
-    fn provider_command_is_not_a_tui_shortcut() {
+    fn cli_commands_are_discoverable_and_use_the_shared_wire_adapter() {
         let mut app = App::default();
         app.input.enter_command_mode();
         app.update_completions();
-        assert!(!app.completion.candidates.iter().any(|c| c == "provider"));
+        for expected in ["provider", "segments", "status", "usage", "trace", "config"] {
+            assert!(
+                app.completion
+                    .candidates
+                    .iter()
+                    .any(|candidate| candidate == expected),
+                "{expected} should be exposed by the shared CLI catalog"
+            );
+        }
 
-        let action = parse_command(&mut app, "provider refresh openai");
-        assert!(matches!(action, Action::Redraw));
+        app.input.cmd_text = "provider ".into();
+        app.input.cmd_cursor = app.input.cmd_text.len();
+        app.update_completions();
         assert!(
-            app.notifications
+            app.completion
+                .candidates
                 .iter()
-                .any(|n| n.content == "unknown command: provider")
+                .any(|candidate| candidate == "provider refresh"),
+            "nested CLI subcommands should be browsable"
         );
+
+        let cmd = sent_command(parse_command(&mut app, "provider refresh openai"));
+        assert_eq!(cmd.name, "refresh_provider_models");
+        assert_eq!(cmd.args.get("provider"), Some(&serde_json::json!("openai")));
+        let rid = cmd.rid.expect("palette CLI commands carry a request id");
+        assert_eq!(
+            app.pending_palette_commands.get(&rid).map(String::as_str),
+            Some("provider refresh openai")
+        );
+    }
+
+    #[test]
+    fn shared_cli_parser_preserves_quoted_arguments() {
+        let mut app = App::default();
+        let cmd = sent_command(parse_command(
+            &mut app,
+            "segments note 3 'important context'",
+        ));
+        assert_eq!(cmd.name, "segments");
+        assert_eq!(cmd.args.get("action"), Some(&serde_json::json!("note")));
+        assert_eq!(cmd.args.get("index"), Some(&serde_json::json!(3)));
+        assert_eq!(
+            cmd.args.get("value"),
+            Some(&serde_json::json!("important context"))
+        );
+    }
+
+    #[test]
+    fn updated_character_and_model_cli_grammar_is_not_shadowed_by_tui_aliases() {
+        let mut app = App::default();
+
+        let create = sent_command(parse_command(&mut app, "character new Ada"));
+        assert_eq!(create.name, "create_character");
+        assert_eq!(create.args.get("name"), Some(&serde_json::json!("Ada")));
+
+        let switch = sent_command(parse_command(&mut app, "model use opus"));
+        assert_eq!(switch.name, "switch_model");
+        assert_eq!(switch.args.get("name"), Some(&serde_json::json!("opus")));
+
+        let compact = sent_command(parse_command(&mut app, "compact 4 --restart"));
+        assert_eq!(compact.name, "compact");
+        assert_eq!(compact.args.get("keep_turns"), Some(&serde_json::json!(4)));
+        assert_eq!(compact.args.get("restart"), Some(&serde_json::json!(true)));
     }
 
     #[test]
