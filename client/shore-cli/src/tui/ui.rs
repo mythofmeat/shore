@@ -1961,9 +1961,11 @@ fn draw_output_pager(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .padding(Padding::vertical(1))
-                .title(format!(" output · :{} ", pager.command))
-                .title_bottom(format!(" j/k scroll · Esc close   {position} "))
-                .border_style(Style::default().fg(Color::Cyan)),
+                .title_top(Line::from(format!(" output · :{} ", pager.command)).right_aligned())
+                .title_bottom(
+                    Line::from(format!(" j/k scroll · Esc close   {position} ")).right_aligned(),
+                )
+                .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM)),
         );
 
     frame.render_widget(Clear, popup_area);
