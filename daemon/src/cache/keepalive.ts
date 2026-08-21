@@ -2,6 +2,7 @@ import { shoreLog } from "../log.ts";
 
 import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
 import { KEEPALIVE_REWRITE_TOKENS } from "./tracker.ts";
+import { reportsCacheWrites } from "../llm/cache_capability.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import {
   beginCallAttempt,
@@ -13,6 +14,7 @@ import { createHash } from "node:crypto";
 
 import type {
   GenerateResponse,
+  Sdk,
   SidecarRequest,
   SystemContent,
   Usage,
@@ -100,10 +102,14 @@ export function prefixIsStale(entry: {
   return entry.armedFingerprint !== entry.lastCallFingerprint;
 }
 
-export function pingLandedCold(usage: {
-  cache_read_tokens: number;
-  cache_creation_tokens: number;
-}): boolean {
+export function pingLandedCold(
+  usage: {
+    cache_read_tokens: number;
+    cache_creation_tokens: number;
+  },
+  sdk: Sdk,
+): boolean {
+  if (!reportsCacheWrites(sdk)) return usage.cache_read_tokens === 0;
   return usage.cache_read_tokens === 0 && usage.cache_creation_tokens > 0;
 }
 
@@ -111,7 +117,7 @@ export function pingRewrotePrefix(usage: {
   cache_read_tokens: number;
   cache_creation_tokens: number;
 }): boolean {
-  if (pingLandedCold(usage)) return false;
+  if (usage.cache_read_tokens === 0 && usage.cache_creation_tokens > 0) return false;
   return usage.cache_creation_tokens >= KEEPALIVE_REWRITE_TOKENS;
 }
 
@@ -186,13 +192,18 @@ export class KeepaliveService {
     return this.#halt;
   }
 
-  #haltAll(character: string, wroteTokens: number): void {
+  #haltAll(character: string, sdk: Sdk, usage: Usage): void {
+    const evidence = reportsCacheWrites(sdk)
+      ? `The first wrote ${String(usage.cache_creation_tokens)} tokens, which should have left ` +
+        `an entry the second one read — it did not. The cache is not holding what shore writes ` +
+        `to it`
+      : `Neither read a single cached token, and on ${sdk} the cache is implicit: the entry the ` +
+        `real turn left behind is the one a ping reads, so reading nothing twice means there is ` +
+        `nothing there to keep alive`;
     const reason =
-      `two keepalive pings in a row missed with nothing in between. The first wrote ` +
-      `${String(wroteTokens)} tokens, which should have left an entry the second one read — ` +
-      `it did not. The cache is not holding what shore writes to it, so every further ping ` +
-      `would pay full price for nothing. All keepalives are stopped for the life of this ` +
-      `daemon; nothing resumes them, because nothing that causes this is fixable at runtime`;
+      `two keepalive pings in a row missed with nothing in between. ${evidence}, so every ` +
+      `further ping would pay full price for nothing. All keepalives are stopped for the life ` +
+      `of this daemon; nothing resumes them, because nothing that causes this is fixable at runtime`;
     this.#halt = { character, reason, at: this.#now() };
     shoreLog.error(`shore: KEEPALIVE HALTED (${character}) — ${reason}`);
     this.#push({
@@ -283,7 +294,7 @@ export class KeepaliveService {
       recordGenerate(ping.context, ping, response, attempt);
       return {
         status: "sent",
-        cold: pingLandedCold(response.usage),
+        cold: pingLandedCold(response.usage, prefix.sdk),
         usage: response.usage,
       };
     } catch (e) {
@@ -405,10 +416,10 @@ export class KeepaliveService {
     recordGenerate(ping.context, ping, response, attempt);
 
     const usage = response.usage;
-    if (pingLandedCold(usage)) {
+    if (pingLandedCold(usage, prefix.sdk)) {
       entry.consecutiveMisses += 1;
       if (entry.consecutiveMisses >= 2) {
-        this.#haltAll(character, usage.cache_creation_tokens);
+        this.#haltAll(character, prefix.sdk, usage);
         return;
       }
       entry.keepalive.onCacheInvalidated();
@@ -416,8 +427,8 @@ export class KeepaliveService {
         character,
         outcome: "cold",
         detail:
-          `Cache refresh ping (COLD — wrote cache, disarmed; ` +
-          `cache_read: ${usage.cache_read_tokens}, input: ${usage.input_tokens})`,
+          `Cache refresh ping (COLD — ${reportsCacheWrites(prefix.sdk) ? "wrote cache" : "read nothing"}, ` +
+          `disarmed; cache_read: ${usage.cache_read_tokens}, input: ${usage.input_tokens})`,
         at: this.#now(),
       });
       return;

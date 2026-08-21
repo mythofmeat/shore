@@ -4,6 +4,8 @@ import type { Sdk } from "./types.ts";
 
 const RESPECTS_INLINE_HINTS: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic"]);
 
+const REPORTS_CACHE_WRITES: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic"]);
+
 const EXTENDED_TTL_HOSTS: readonly string[] = ["api.anthropic.com"];
 
 const EXTENDED_TTL_HOST_SUFFIXES: readonly string[] = ["-aiplatform.googleapis.com"];
@@ -20,6 +22,10 @@ export const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
 
 export function respectsInlineCacheHints(sdk: Sdk): boolean {
   return RESPECTS_INLINE_HINTS.has(sdk);
+}
+
+export function reportsCacheWrites(sdk: Sdk): boolean {
+  return REPORTS_CACHE_WRITES.has(sdk);
 }
 
 export function hostOfBaseUrl(baseUrl: string | undefined): string {

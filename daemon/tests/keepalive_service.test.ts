@@ -189,9 +189,9 @@ describe("firing", () => {
   });
 
   test("read 0 with no write is not cold", () => {
-    expect(pingLandedCold(usage(0, 0))).toBe(false);
-    expect(pingLandedCold(usage(0, 1))).toBe(true);
-    expect(pingLandedCold(usage(2200, 200))).toBe(false);
+    expect(pingLandedCold(usage(0, 0), "anthropic")).toBe(false);
+    expect(pingLandedCold(usage(0, 1), "anthropic")).toBe(true);
+    expect(pingLandedCold(usage(2200, 200), "anthropic")).toBe(false);
   });
 
   test("a failed ping backs off rather than retrying every tick", async () => {

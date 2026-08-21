@@ -46,6 +46,10 @@ function prefix(): KeepalivePrefix {
   };
 }
 
+function implicitPrefix(): KeepalivePrefix {
+  return { ...prefix(), sdk: "moonshot", provider_key: "moonshotai", model: "kimi-k3" };
+}
+
 function harness(read: number, write: number) {
   const events: KeepaliveEvent[] = [];
   let at = 0;
@@ -84,7 +88,7 @@ describe("pingRewrotePrefix", () => {
   });
 
   test("a pure write is the existing cold case, not this one", () => {
-    expect(pingLandedCold(usage(0, 10_000))).toBe(true);
+    expect(pingLandedCold(usage(0, 10_000), "anthropic")).toBe(true);
     expect(pingRewrotePrefix(usage(0, 10_000))).toBe(false);
   });
 });
@@ -409,5 +413,66 @@ describe("the tracker names the double miss", () => {
       call_type: "message",
     });
     expect(miss(tracker, "2026-08-12T10:55:00Z").anomaly).toBe("cold_keepalive");
+  });
+});
+
+describe("a provider that never reports cache writes", () => {
+  test("reading nothing is the miss, because there is no write to look for", () => {
+    expect(pingLandedCold(usage(0, 0), "moonshot")).toBe(true);
+    expect(pingLandedCold(usage(0, 0), "anthropic")).toBe(false);
+  });
+
+  test("a hit still looks like a hit even with the write field empty", () => {
+    expect(pingLandedCold(usage(10_240, 0), "moonshot")).toBe(false);
+  });
+
+  test("a missed ping disarms instead of scheduling another one", async () => {
+    const h = harness(0, 0);
+    h.service.arm(implicitPrefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold"]);
+    expect(h.events[0]?.detail).toContain("read nothing");
+    expect(h.service.nextPingAt("Rhia")).toBeUndefined();
+
+    h.advance(10_000);
+    await h.service.tick();
+    expect(h.sends()).toBe(1);
+  });
+
+  test("a ping that reads cached tokens keeps the schedule running", async () => {
+    const h = harness(10_240, 0);
+    h.service.arm(implicitPrefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["sent"]);
+    expect(h.service.nextPingAt("Rhia")).toBeDefined();
+  });
+
+  test("two empty reads in a row halt everything, with the implicit-cache reason", async () => {
+    const h = harness(0, 0);
+    h.service.arm(implicitPrefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    h.service.arm(implicitPrefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted?.character).toBe("Rhia");
+    expect(h.service.halted?.reason).toContain("two keepalive pings in a row missed");
+    expect(h.service.halted?.reason).toContain("the cache is implicit");
+  });
+
+  test("an anthropic prefix reading nothing with no write is still not a miss", async () => {
+    const h = harness(0, 0);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["sent"]);
+    expect(h.service.halted).toBeUndefined();
   });
 });

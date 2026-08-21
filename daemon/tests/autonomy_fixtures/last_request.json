@@ -767,6 +767,21 @@
       }
     },
     {
+      "note": "a cold read on a provider that itemises no write",
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "cold",
+          "character": "ada",
+          "source": "cached_last_request",
+          "input_tokens": 1200,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "note": "Read 0 cached tokens, and this provider itemises no write — the prefix is not in the cache, so the ping paid full input price for nothing. The autonomous keepalive disarms on this."
+        }
+      }
+    },
+    {
       "note": "a warm-status read of zero with no write — caching is off",
       "output": {
         "kind": "ok",
@@ -777,7 +792,7 @@
           "input_tokens": 1200,
           "cache_read_tokens": 0,
           "cache_creation_tokens": 0,
-          "note": "Read 0 with no write — caching is off for this model, or a non-cached fallback answered. Not a cold write."
+          "note": "Read 0 with no write — nothing on this request carried a cache_control marker, or a non-cached fallback answered. Not a cold write."
         }
       }
     },
