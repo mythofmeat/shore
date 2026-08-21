@@ -13,6 +13,7 @@ use crate::tui::app::{
     ValueEditorKind,
 };
 use crate::tui::images;
+use crate::tui::keymap::Scope;
 use crate::tui::markdown;
 
 fn usize_to_u16(value: usize) -> u16 {
@@ -1988,19 +1989,25 @@ fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
         ])
     };
 
-    let mut lines = vec![Line::from(""), heading("Your keys")];
-    if app.keymap.bindings().is_empty() {
+    let mut lines = vec![Line::from(""), heading("Normal mode")];
+    if app.keymap.bindings(Scope::Normal).is_empty() {
         lines.push(Line::from(Span::styled(
             "    nothing is bound; edit tui.toml or use `ui bind`",
             Style::default().fg(Color::DarkGray),
         )));
     }
-    for (key, binding) in app.keymap.bindings() {
+    for (key, binding) in app.keymap.bindings(Scope::Normal) {
         lines.push(row(key, &binding.written));
     }
 
     lines.push(Line::from(""));
-    lines.push(heading("Always"));
+    lines.push(heading("Every mode"));
+    for (key, binding) in app.keymap.bindings(Scope::Global) {
+        lines.push(row(key, &binding.written));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(heading("Reserved"));
     lines.push(row("Esc", "normal mode, or dismiss a notice"));
     lines.push(row(":", "command palette"));
     lines.push(row("Ctrl+C", "quit"));
@@ -2011,7 +2018,7 @@ fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
     lines.push(Line::from(""));
     lines.push(heading("Rebinding"));
     for hint in [
-        "    :ui bind <key> <command>      :ui unbind <key>",
+        "    :ui bind <key> <command>      add --global for every mode",
         "    e.g. :ui bind 1 \"model use kimi-k3\"",
         "    Anything the : prompt takes can be bound. Tab completes it.",
         "    Or edit tui.toml directly; it is read at startup.",
@@ -4126,14 +4133,14 @@ pub(crate) mod scenario_tests {
         );
 
         h.type_str("usa");
-        assert!(
-            h.app
-                .completion
-                .candidates
-                .iter()
-                .any(|candidate| candidate == "usage"),
-            "the palette works normally over the pager: {:?}",
-            h.app.completion.candidates
+        assert_eq!(
+            h.app.input.cmd_text, "usa",
+            "keys reach the palette, not the pager underneath it"
+        );
+        assert_eq!(
+            h.app.completion.candidates,
+            vec!["usage".to_owned()],
+            "and it completes as it normally would"
         );
     }
 
@@ -4310,9 +4317,15 @@ pub(crate) mod scenario_tests {
     #[test]
     fn the_help_overlay_lists_the_live_keymap() {
         let mut h = Harness::with_size(90, 50);
-        h.app.keymap.bind("1", "model use kimi-k3").unwrap();
-        h.app.keymap.bind("shift+f", "view thinking").unwrap();
-        let _dropped = h.app.keymap.unbind("o").unwrap();
+        h.app
+            .keymap
+            .bind(Scope::Normal, "1", "model use kimi-k3")
+            .unwrap();
+        h.app
+            .keymap
+            .bind(Scope::Normal, "shift+f", "view thinking")
+            .unwrap();
+        let _dropped = h.app.keymap.unbind(Scope::Normal, "o").unwrap();
         h.app.show_help = true;
 
         let frame = h.render("help overlay");

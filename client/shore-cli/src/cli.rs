@@ -750,12 +750,20 @@ pub(crate) enum UiCommand {
         /// Command to run, quoted if it has spaces
         #[arg(required = true, allow_hyphen_values = true)]
         command: Vec<String>,
+
+        /// Bind in every mode, including while typing, rather than normal mode
+        #[arg(long)]
+        global: bool,
     },
 
     /// Remove a key binding and save `tui.toml`
     Unbind {
         /// Key to free up
         key: String,
+
+        /// Free it from the every-mode bindings rather than normal mode
+        #[arg(long)]
+        global: bool,
     },
 
     /// Leave the TUI

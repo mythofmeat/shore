@@ -10,7 +10,7 @@ use crate::cli::{
 };
 use crate::tui::app::{App, InputMode, PaletteMode};
 use crate::tui::connection::ConnCommand;
-use crate::tui::keymap::key_token;
+use crate::tui::keymap::{Scope, key_token};
 
 const HISTORY_PAGE_TURNS: u32 = 64;
 
@@ -51,7 +51,18 @@ fn handle_key(app: &mut App, key: KeyEvent) -> Action {
         return Action::Redraw;
     }
 
-    if app.output_pager.is_some() {
+    if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c') {
+        return Action::Interrupt;
+    }
+
+    if let Some(command) = key_token(key)
+        .and_then(|token| app.keymap.lookup(Scope::Global, &token))
+        .map(|binding| binding.command.clone())
+    {
+        return dispatch_cli_command(app, &command);
+    }
+
+    if app.output_pager.is_some() && app.input.mode != InputMode::Command {
         return handle_output_pager(app, key);
     }
 
@@ -61,20 +72,6 @@ fn handle_key(app: &mut App, key: KeyEvent) -> Action {
 
     if app.subagent_panel.is_some() {
         return handle_subagent_panel(app, key);
-    }
-
-    match (key.modifiers, key.code) {
-        (KeyModifiers::CONTROL, KeyCode::Char('c')) => return Action::Interrupt,
-        (KeyModifiers::CONTROL, KeyCode::Char('q')) => return Action::Quit,
-        (KeyModifiers::CONTROL, KeyCode::Char('v')) => return Action::PasteImage,
-        (KeyModifiers::ALT, KeyCode::Char('c')) => {
-            if app.stream.active {
-                app.stream.reset();
-                return Action::Send(ConnCommand::Send(ClientMessage::Cancel(Cancel {})));
-            }
-            return Action::None;
-        }
-        _ => {}
     }
 
     if app.alt_picker.is_some() {
@@ -132,7 +129,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
     }
 
     let Some(command) = key_token(key)
-        .and_then(|token| app.keymap.lookup(&token))
+        .and_then(|token| app.keymap.lookup(Scope::Normal, &token))
         .map(|binding| binding.command.clone())
     else {
         return Action::None;
@@ -183,8 +180,7 @@ fn handle_output_pager(app: &mut App, key: KeyEvent) -> Action {
         .map_or(1, |pager| i32::from(pager.viewport).max(1));
 
     match (key.modifiers, key.code) {
-        (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q'))
-        | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
+        (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q')) => {
             app.output_pager = None;
             Action::Redraw
         }
@@ -958,7 +954,8 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
         UiCommand::Bind {
             key,
             command: words,
-        } => run_bind_command(app, key, &words.join(" ")),
+            global,
+        } => run_bind_command(app, scope_of(*global), key, &words.join(" ")),
 
         UiCommand::Output => {
             if app.reopen_output_pager() {
@@ -969,14 +966,18 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
             }
         }
 
-        UiCommand::Unbind { key } => run_unbind_command(app, key),
+        UiCommand::Unbind { key, global } => run_unbind_command(app, scope_of(*global), key),
 
         UiCommand::Quit => Action::Quit,
     }
 }
 
-fn run_bind_command(app: &mut App, key: &str, command: &str) -> Action {
-    if let Err(problem) = app.keymap.bind(key, command) {
+const fn scope_of(global: bool) -> Scope {
+    if global { Scope::Global } else { Scope::Normal }
+}
+
+fn run_bind_command(app: &mut App, scope: Scope, key: &str, command: &str) -> Action {
+    if let Err(problem) = app.keymap.bind(scope, key, command) {
         app.set_error(problem);
         return Action::Redraw;
     }
@@ -987,8 +988,8 @@ fn run_bind_command(app: &mut App, key: &str, command: &str) -> Action {
     Action::Redraw
 }
 
-fn run_unbind_command(app: &mut App, key: &str) -> Action {
-    match app.keymap.unbind(key) {
+fn run_unbind_command(app: &mut App, scope: Scope, key: &str) -> Action {
+    match app.keymap.unbind(scope, key) {
         Err(problem) => {
             app.set_error(problem);
             return Action::Redraw;
@@ -1548,11 +1549,57 @@ mod tests {
     }
 
     #[test]
-    fn alt_c_is_noop_without_stream() {
+    fn alt_c_says_so_when_there_is_nothing_to_cancel() {
         let mut app = App::default();
         assert!(!app.stream.active);
         let action = handle_key(&mut app, make_key(KeyModifiers::ALT, KeyCode::Char('c')));
-        assert!(matches!(action, Action::None));
+        assert!(matches!(action, Action::Redraw));
+        assert!(
+            app.notifications
+                .iter()
+                .any(|note| note.content == "nothing to cancel"),
+            "the hardcoded key used to swallow this silently"
+        );
+    }
+
+    #[test]
+    fn a_global_binding_fires_while_typing() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Insert;
+        app.stream.active = true;
+        let action = handle_key(&mut app, make_key(KeyModifiers::ALT, KeyCode::Char('c')));
+        assert!(matches!(
+            action,
+            Action::Send(ConnCommand::Send(ClientMessage::Cancel(_)))
+        ));
+        assert!(app.input.text.is_empty(), "the key is not typed as text");
+    }
+
+    #[test]
+    fn a_global_binding_outranks_an_overlay() {
+        let mut app = App::default();
+        app.stream.active = true;
+        app.push_command_text("status", "daemon running".to_owned());
+        let action = handle_key(&mut app, make_key(KeyModifiers::ALT, KeyCode::Char('c')));
+        assert!(
+            matches!(
+                action,
+                Action::Send(ConnCommand::Send(ClientMessage::Cancel(_)))
+            ),
+            "global means global, pager or not"
+        );
+    }
+
+    #[test]
+    fn rebinding_a_global_key_replaces_the_default() {
+        let mut app = App::default();
+        app.keymap
+            .bind(Scope::Global, "alt+c", "ui help")
+            .expect("rebind");
+        app.stream.active = true;
+        let _shown = handle_key(&mut app, make_key(KeyModifiers::ALT, KeyCode::Char('c')));
+        assert!(app.show_help, "the binding wins, not the old hardcoded arm");
+        assert!(app.stream.active, "and the stream was left alone");
     }
 
     #[test]

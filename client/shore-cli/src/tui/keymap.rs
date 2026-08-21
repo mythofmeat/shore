@@ -4,6 +4,27 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub(crate) const RESERVED_KEYS: [&str; 3] = ["esc", ":", "ctrl+c"];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Scope {
+    Global,
+    Normal,
+}
+
+impl Scope {
+    fn section(self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Normal => "normal",
+        }
+    }
+}
+
+pub(crate) const DEFAULT_GLOBAL_KEYS: [(&str, &str); 3] = [
+    ("alt+c", "ui cancel"),
+    ("ctrl+q", "ui quit"),
+    ("ctrl+v", "ui image paste"),
+];
+
 pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 22] = [
     ("i", "ui insert"),
     ("a", "ui insert --end"),
@@ -80,6 +101,9 @@ const SEED_HEADER: &str = "\
 #
 # esc, : and ctrl+c belong to the TUI and cannot be bound.
 #
+# [global] fires in every mode, including while you are typing, so keep it to
+# keys with a modifier. [normal] fires only in normal mode.
+#
 # [shortcuts] is the `/` menu: a name and the command it runs. A shortcut whose
 # command is also on a key shows that key beside it.
 
@@ -94,6 +118,7 @@ pub(crate) struct Binding {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Keymap {
+    global: Vec<(String, Binding)>,
     normal: Vec<(String, Binding)>,
     shortcuts: Vec<(String, Binding)>,
     pub(crate) warnings: Vec<String>,
@@ -101,13 +126,14 @@ pub(crate) struct Keymap {
 
 impl Default for Keymap {
     fn default() -> Self {
-        let mut keymap = Self {
-            normal: Vec::new(),
-            shortcuts: Vec::new(),
-            warnings: Vec::new(),
-        };
+        let mut keymap = Self::empty();
+        for (key, command) in DEFAULT_GLOBAL_KEYS {
+            if let Err(problem) = keymap.bind(Scope::Global, key, command) {
+                keymap.warnings.push(problem);
+            }
+        }
         for (key, command) in DEFAULT_NORMAL_KEYS {
-            if let Err(problem) = keymap.bind(key, command) {
+            if let Err(problem) = keymap.bind(Scope::Normal, key, command) {
                 keymap.warnings.push(problem);
             }
         }
@@ -136,12 +162,17 @@ impl Keymap {
         Self::parse(&text)
     }
 
-    pub(crate) fn parse(text: &str) -> Self {
-        let mut keymap = Self {
+    fn empty() -> Self {
+        Self {
+            global: Vec::new(),
             normal: Vec::new(),
             shortcuts: Vec::new(),
             warnings: Vec::new(),
-        };
+        }
+    }
+
+    pub(crate) fn parse(text: &str) -> Self {
+        let mut keymap = Self::empty();
 
         let table = match text.parse::<toml::Table>() {
             Ok(table) => table,
@@ -155,22 +186,26 @@ impl Keymap {
             }
         };
 
-        if let Some(normal) = table.get("normal").and_then(toml::Value::as_table) {
-            for (key, value) in normal {
+        for scope in [Scope::Global, Scope::Normal] {
+            let Some(section) = table.get(scope.section()).and_then(toml::Value::as_table) else {
+                if scope == Scope::Normal {
+                    keymap
+                        .warnings
+                        .push("tui.toml has no [normal] section, so no key is bound".to_owned());
+                }
+                continue;
+            };
+            for (key, value) in section {
                 let Some(command) = value.as_str() else {
                     keymap
                         .warnings
                         .push(format!("{key} is not bound to a command string"));
                     continue;
                 };
-                if let Err(problem) = keymap.bind(key, command) {
+                if let Err(problem) = keymap.bind(scope, key, command) {
                     keymap.warnings.push(problem);
                 }
             }
-        } else {
-            keymap
-                .warnings
-                .push("tui.toml has no [normal] section, so no key is bound".to_owned());
         }
 
         if let Some(shortcuts) = table.get("shortcuts").and_then(toml::Value::as_table) {
@@ -207,8 +242,9 @@ impl Keymap {
     }
 
     pub(crate) fn key_for_command(&self, command: &str) -> Option<&str> {
-        self.normal
+        self.global
             .iter()
+            .chain(self.normal.iter())
             .find(|(_, binding)| binding.command == command)
             .map(|(key, _)| key.as_str())
     }
@@ -232,7 +268,7 @@ impl Keymap {
         }
     }
 
-    pub(crate) fn bind(&mut self, key: &str, command: &str) -> Result<(), String> {
+    pub(crate) fn bind(&mut self, scope: Scope, key: &str, command: &str) -> Result<(), String> {
         let token = canonical_key(key)?;
         if RESERVED_KEYS.contains(&token.as_str()) {
             return Err(format!("{token} belongs to the TUI and cannot be bound"));
@@ -243,31 +279,43 @@ impl Keymap {
                 "{token} is bound to {command:?}, which still needs an argument; a key runs its command as written"
             ));
         }
-        match self.normal.iter_mut().find(|(bound, _)| bound == &token) {
+        let list = self.list_mut(scope);
+        match list.iter_mut().find(|(bound, _)| bound == &token) {
             Some((_, existing)) => *existing = binding,
-            None => self.normal.push((token, binding)),
+            None => list.push((token, binding)),
         }
         Ok(())
     }
 
-    pub(crate) fn unbind(&mut self, key: &str) -> Result<Option<String>, String> {
+    pub(crate) fn unbind(&mut self, scope: Scope, key: &str) -> Result<Option<String>, String> {
         let token = canonical_key(key)?;
-        let Some(index) = self.normal.iter().position(|(bound, _)| bound == &token) else {
+        let list = self.list_mut(scope);
+        let Some(index) = list.iter().position(|(bound, _)| bound == &token) else {
             return Ok(None);
         };
-        let (_, binding) = self.normal.remove(index);
+        let (_, binding) = list.remove(index);
         Ok(Some(binding.written))
     }
 
-    pub(crate) fn lookup(&self, token: &str) -> Option<&Binding> {
-        self.normal
+    pub(crate) fn lookup(&self, scope: Scope, token: &str) -> Option<&Binding> {
+        self.bindings(scope)
             .iter()
             .find(|(bound, _)| bound == token)
             .map(|(_, binding)| binding)
     }
 
-    pub(crate) fn bindings(&self) -> &[(String, Binding)] {
-        &self.normal
+    pub(crate) fn bindings(&self, scope: Scope) -> &[(String, Binding)] {
+        match scope {
+            Scope::Global => &self.global,
+            Scope::Normal => &self.normal,
+        }
+    }
+
+    fn list_mut(&mut self, scope: Scope) -> &mut Vec<(String, Binding)> {
+        match scope {
+            Scope::Global => &mut self.global,
+            Scope::Normal => &mut self.normal,
+        }
     }
 
     pub(crate) fn save(&self) -> std::io::Result<()> {
@@ -279,15 +327,18 @@ impl Keymap {
             std::fs::create_dir_all(parent)?;
         }
         let mut out = String::from(SEED_HEADER);
-        out.push_str("[normal]\n");
-        for (key, binding) in &self.normal {
-            out.push_str(&format!(
-                "{} = {}\n",
-                toml::Value::String(key.clone()),
-                toml::Value::String(binding.written.clone())
-            ));
+        for scope in [Scope::Global, Scope::Normal] {
+            out.push_str(&format!("[{}]\n", scope.section()));
+            for (key, binding) in self.bindings(scope) {
+                out.push_str(&format!(
+                    "{} = {}\n",
+                    toml::Value::String(key.clone()),
+                    toml::Value::String(binding.written.clone())
+                ));
+            }
+            out.push('\n');
         }
-        out.push_str("\n[shortcuts]\n");
+        out.push_str("[shortcuts]\n");
         for (name, binding) in &self.shortcuts {
             out.push_str(&format!(
                 "{} = {}\n",
@@ -478,14 +529,17 @@ mod tests {
             "seeded defaults should all be valid: {:?}",
             keymap.warnings
         );
-        assert_eq!(keymap.bindings().len(), DEFAULT_NORMAL_KEYS.len());
+        assert_eq!(
+            keymap.bindings(Scope::Normal).len(),
+            DEFAULT_NORMAL_KEYS.len()
+        );
     }
 
     #[test]
     fn reserved_keys_cannot_be_taken() {
         let mut keymap = Keymap::default();
         for key in ["esc", "escape", ":", "ctrl+c"] {
-            let problem = keymap.bind(key, "msg regen").unwrap_err();
+            let problem = keymap.bind(Scope::Normal, key, "msg regen").unwrap_err();
             assert!(
                 problem.contains("cannot be bound"),
                 "{key} should be reserved, got {problem}"
@@ -496,16 +550,18 @@ mod tests {
     #[test]
     fn a_binding_to_a_command_that_does_not_exist_is_refused() {
         let mut keymap = Keymap::default();
-        let problem = keymap.bind("q", "definitely not a command").unwrap_err();
+        let problem = keymap
+            .bind(Scope::Normal, "q", "definitely not a command")
+            .unwrap_err();
         assert!(problem.contains("definitely not a command"), "{problem}");
-        assert!(keymap.lookup("q").is_none());
+        assert!(keymap.lookup(Scope::Normal, "q").is_none());
     }
 
     #[test]
     fn palette_shorthand_works_in_a_binding() {
         let mut keymap = Keymap::default();
-        keymap.bind("R", "regen").unwrap();
-        let binding = keymap.lookup("R").unwrap();
+        keymap.bind(Scope::Normal, "R", "regen").unwrap();
+        let binding = keymap.lookup(Scope::Normal, "R").unwrap();
         assert_eq!(binding.written, "regen");
         assert_eq!(binding.command, "msg regen");
     }
@@ -544,7 +600,7 @@ mod tests {
             "`msg regen` is complete on its own"
         );
 
-        let problem = keymap.bind("e", "msg edit").unwrap_err();
+        let problem = keymap.bind(Scope::Normal, "e", "msg edit").unwrap_err();
         assert!(problem.contains("still needs an argument"), "{problem}");
     }
 
@@ -576,7 +632,10 @@ mod tests {
         drop(std::fs::remove_dir_all(&dir));
 
         assert!(reloaded.warnings.is_empty(), "{:?}", reloaded.warnings);
-        assert_eq!(reloaded.bindings().len(), keymap.bindings().len());
+        assert_eq!(
+            reloaded.bindings(Scope::Normal).len(),
+            keymap.bindings(Scope::Normal).len()
+        );
         assert_eq!(reloaded.shortcuts().len(), keymap.shortcuts().len());
         assert!(reloaded.shortcuts().iter().any(|(n, _)| n == "wipe"));
     }
@@ -589,12 +648,87 @@ mod tests {
     }
 
     #[test]
+    fn the_global_scope_is_seeded_and_kept_apart_from_normal_mode() {
+        let keymap = Keymap::default();
+        assert!(keymap.warnings.is_empty(), "{:?}", keymap.warnings);
+        assert_eq!(
+            keymap.bindings(Scope::Global).len(),
+            DEFAULT_GLOBAL_KEYS.len()
+        );
+        assert_eq!(
+            keymap
+                .lookup(Scope::Global, "alt+c")
+                .map(|b| b.command.as_str()),
+            Some("ui cancel")
+        );
+        assert!(
+            keymap.lookup(Scope::Normal, "alt+c").is_none(),
+            "a global key is not also a normal-mode key"
+        );
+    }
+
+    #[test]
+    fn the_same_key_can_mean_different_things_in_each_scope() {
+        let mut keymap = Keymap::default();
+        keymap.bind(Scope::Global, "ctrl+r", "ui help").unwrap();
+        keymap.bind(Scope::Normal, "ctrl+r", "msg regen").unwrap();
+        assert_eq!(
+            keymap
+                .lookup(Scope::Global, "ctrl+r")
+                .map(|b| b.command.as_str()),
+            Some("ui help")
+        );
+        assert_eq!(
+            keymap
+                .lookup(Scope::Normal, "ctrl+r")
+                .map(|b| b.command.as_str()),
+            Some("msg regen")
+        );
+        assert_eq!(
+            keymap.unbind(Scope::Global, "ctrl+r").unwrap().as_deref(),
+            Some("ui help")
+        );
+        assert!(keymap.lookup(Scope::Normal, "ctrl+r").is_some());
+    }
+
+    #[test]
+    fn both_key_scopes_survive_a_round_trip() {
+        let mut keymap = Keymap::default();
+        keymap.bind(Scope::Global, "ctrl+n", "ui help").unwrap();
+        let dir = std::env::temp_dir().join(format!("shore-global-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tui.toml");
+        keymap.save_to(&path).unwrap();
+        let reloaded = Keymap::load_from(&path);
+        drop(std::fs::remove_dir_all(&dir));
+
+        assert!(reloaded.warnings.is_empty(), "{:?}", reloaded.warnings);
+        assert_eq!(
+            reloaded.bindings(Scope::Global).len(),
+            keymap.bindings(Scope::Global).len()
+        );
+        assert_eq!(
+            reloaded
+                .lookup(Scope::Global, "ctrl+n")
+                .map(|b| b.command.as_str()),
+            Some("ui help")
+        );
+    }
+
+    #[test]
+    fn a_file_with_no_global_section_simply_has_none() {
+        let keymap = Keymap::parse("[normal]\n\"j\" = \"ui scroll down 1\"\n");
+        assert!(keymap.warnings.is_empty(), "{:?}", keymap.warnings);
+        assert!(keymap.bindings(Scope::Global).is_empty());
+    }
+
+    #[test]
     fn a_file_replaces_the_defaults_rather_than_adding_to_them() {
         let keymap = Keymap::parse("[normal]\n\"q\" = \"ui quit\"\n");
         assert!(keymap.warnings.is_empty(), "{:?}", keymap.warnings);
-        assert_eq!(keymap.bindings().len(), 1);
+        assert_eq!(keymap.bindings(Scope::Normal).len(), 1);
         assert!(
-            keymap.lookup("j").is_none(),
+            keymap.lookup(Scope::Normal, "j").is_none(),
             "a file with one binding should leave `j` unbound"
         );
     }
@@ -603,8 +737,8 @@ mod tests {
     fn a_bad_line_is_reported_and_the_rest_still_load() {
         let keymap =
             Keymap::parse("[normal]\n\"j\" = \"ui scroll down 1\"\n\"q\" = \"nonsense\"\n");
-        assert!(keymap.lookup("j").is_some());
-        assert!(keymap.lookup("q").is_none());
+        assert!(keymap.lookup(Scope::Normal, "j").is_some());
+        assert!(keymap.lookup(Scope::Normal, "q").is_none());
         assert_eq!(keymap.warnings.len(), 1);
         assert!(
             keymap
@@ -619,7 +753,10 @@ mod tests {
     #[test]
     fn unparseable_toml_falls_back_to_the_defaults_and_says_so() {
         let keymap = Keymap::parse("[normal\nbroken");
-        assert!(keymap.lookup("j").is_some(), "defaults should still work");
+        assert!(
+            keymap.lookup(Scope::Normal, "j").is_some(),
+            "defaults should still work"
+        );
         assert!(
             keymap.warnings.iter().any(|w| w.contains("using defaults")),
             "{:?}",
@@ -630,8 +767,8 @@ mod tests {
     #[test]
     fn what_is_saved_can_be_read_back() {
         let mut keymap = Keymap::default();
-        keymap.bind("ctrl+g", "ui editor").unwrap();
-        keymap.bind("+", "ui scroll up 1").unwrap();
+        keymap.bind(Scope::Normal, "ctrl+g", "ui editor").unwrap();
+        keymap.bind(Scope::Normal, "+", "ui scroll up 1").unwrap();
 
         let dir = std::env::temp_dir().join(format!("shore-keymap-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -642,19 +779,28 @@ mod tests {
 
         let reloaded = Keymap::parse(&text);
         assert!(reloaded.warnings.is_empty(), "{:?}", reloaded.warnings);
-        assert_eq!(reloaded.bindings().len(), keymap.bindings().len());
-        assert_eq!(reloaded.lookup("ctrl+g").unwrap().command, "ui editor");
-        assert_eq!(reloaded.lookup("+").unwrap().command, "ui scroll up 1");
+        assert_eq!(
+            reloaded.bindings(Scope::Normal).len(),
+            keymap.bindings(Scope::Normal).len()
+        );
+        assert_eq!(
+            reloaded.lookup(Scope::Normal, "ctrl+g").unwrap().command,
+            "ui editor"
+        );
+        assert_eq!(
+            reloaded.lookup(Scope::Normal, "+").unwrap().command,
+            "ui scroll up 1"
+        );
     }
 
     #[test]
     fn unbinding_reports_what_was_there() {
         let mut keymap = Keymap::default();
         assert_eq!(
-            keymap.unbind("shift+t").unwrap().as_deref(),
+            keymap.unbind(Scope::Normal, "shift+t").unwrap().as_deref(),
             Some("view tools")
         );
-        assert!(keymap.lookup("T").is_none());
-        assert_eq!(keymap.unbind("q").unwrap(), None);
+        assert!(keymap.lookup(Scope::Normal, "T").is_none());
+        assert_eq!(keymap.unbind(Scope::Normal, "q").unwrap(), None);
     }
 }
