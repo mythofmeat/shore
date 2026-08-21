@@ -9,6 +9,7 @@ import {
   type KeepaliveEvent,
   type KeepalivePrefix,
 } from "../src/cache/keepalive.ts";
+import { LastRequestCache } from "../src/cache/last_request.ts";
 import { CacheTracker, KEEPALIVE_REWRITE_TOKENS } from "../src/cache/tracker.ts";
 import type { GenerateResponse } from "../src/llm/types.ts";
 
@@ -275,6 +276,18 @@ describe("the tracker gives read-and-write its own name", () => {
 });
 
 describe("two misses in a row halt everything", () => {
+  function landRealTurn(h: ReturnType<typeof harness>, read: number) {
+    h.service.observe(
+      "Rhia",
+      "claude-opus-5",
+      "message",
+      undefined,
+      prefixFingerprint(prefix()),
+      usage(read, 0),
+    );
+    h.service.arm(prefix(), true);
+  }
+
   test("one miss alone does not halt", async () => {
     const h = harness(0, 14_144);
     h.service.arm(prefix(), true);
@@ -300,6 +313,21 @@ describe("two misses in a row halt everything", () => {
     expect(h.events.at(-1)?.outcome).toBe("halted");
   });
 
+  test("the halt is reachable the way production re-arms — a landed turn, not a bare arm", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    expect(h.service.halted).toBeUndefined();
+
+    landRealTurn(h, 0);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted?.character).toBe("Rhia");
+    expect(h.events.at(-1)?.outcome).toBe("halted");
+  });
+
   test("once halted it sends nothing, for any character", async () => {
     const h = harness(0, 14_144);
     h.service.arm(prefix(), true);
@@ -318,14 +346,41 @@ describe("two misses in a row halt everything", () => {
     expect(h.sends()).toBe(sentWhenHalted);
   });
 
-  test("a real call between the two misses is not a double miss", async () => {
+  test("a real call that read cached tokens between the two misses is not a double miss", async () => {
     const h = harness(0, 14_144);
     h.service.arm(prefix(), true);
     h.advance(10_000);
     await h.service.tick();
 
-    h.service.observe("Rhia", "claude-opus-5", "message", undefined, prefixFingerprint(prefix()));
+    landRealTurn(h, 40_000);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted).toBeUndefined();
+  });
+
+  test("a real call that read nothing is not proof the cache is holding", async () => {
+    const h = harness(0, 14_144);
     h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    landRealTurn(h, 0);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted).toBeDefined();
+  });
+
+  test("throwing the prefix away clears the count the misses were against", async () => {
+    const h = harness(0, 14_144);
+    const cache = new LastRequestCache(h.service);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    cache.invalidate("Rhia", "compaction");
+    landRealTurn(h, 0);
     h.advance(10_000);
     await h.service.tick();
 
@@ -401,18 +456,29 @@ describe("the tracker names the double miss", () => {
     expect(miss(tracker, "2026-08-12T10:55:00Z").anomaly).toBe("keepalive_double_miss");
   });
 
-  test("a real call between them breaks the run", () => {
-    const tracker = new CacheTracker(3600);
-    miss(tracker, "2026-08-12T10:00:00Z");
-    tracker.observe({
-      ts: "2026-08-12T10:30:00Z",
+  function realCall(tracker: CacheTracker, ts: string, read: number) {
+    return tracker.observe({
+      ts,
       model: "claude-opus-5",
       thinking_enabled: false,
-      cache_read_tokens: 40_000,
-      cache_write_tokens: 0,
+      cache_read_tokens: read,
+      cache_write_tokens: read === 0 ? 14_144 : 0,
       call_type: "message",
     });
+  }
+
+  test("a real call that read cached tokens between them breaks the run", () => {
+    const tracker = new CacheTracker(3600);
+    miss(tracker, "2026-08-12T10:00:00Z");
+    realCall(tracker, "2026-08-12T10:30:00Z", 40_000);
     expect(miss(tracker, "2026-08-12T10:55:00Z").anomaly).toBe("cold_keepalive");
+  });
+
+  test("a real call that read nothing does not break the run", () => {
+    const tracker = new CacheTracker(3600);
+    miss(tracker, "2026-08-12T10:00:00Z");
+    realCall(tracker, "2026-08-12T10:30:00Z", 0);
+    expect(miss(tracker, "2026-08-12T10:55:00Z").anomaly).toBe("keepalive_double_miss");
   });
 });
 

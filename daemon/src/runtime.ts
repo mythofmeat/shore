@@ -235,13 +235,14 @@ export function startRuntimeClocks(
   runtime: ShoreRuntime,
   intervals: RuntimeClockIntervals = {},
 ): { stop: () => void } {
-  setCallObserver((ctx, model, callType, req) => {
+  setCallObserver((ctx, model, callType, req, usage) => {
     runtime.keepalive.observe(
       ctx.character,
       model,
       callType,
       ctx.keepalive_max_secs,
       prefixFingerprint(req),
+      usage,
     );
   });
   const keepaliveTimer = startKeepaliveTimer(runtime.keepalive, intervals.keepaliveMs);

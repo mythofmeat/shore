@@ -81,6 +81,7 @@ type CallObserver = (
   model: string,
   callType: string,
   req: SidecarRequest,
+  usage: Usage,
 ) => void;
 
 let observer: CallObserver | undefined;
@@ -142,7 +143,7 @@ function tryRecord(
   const finishReason = call.finish_reason;
   if (observer === undefined || !callLanded(finishReason)) return;
   try {
-    observer(ctx, req.model, call.call_type ?? ctx.call_type, req);
+    observer(ctx, req.model, call.call_type ?? ctx.call_type, req, call.usage);
   } catch (e) {
     shoreLog.error(`shore: call observer failed: ${String(e)}`);
   }

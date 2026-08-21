@@ -202,7 +202,10 @@ export class CacheTracker {
         anomaly = "keepalive_rewrote";
       }
     }
-    this.#lastKeepaliveMissed = obs.call_type === "keepalive" ? pureMiss : false;
+    this.#lastKeepaliveMissed =
+      obs.call_type === "keepalive"
+        ? pureMiss
+        : this.#lastKeepaliveMissed && obs.cache_read_tokens === 0;
 
     if (loopKind !== undefined) {
       if (anomaly === undefined) {

@@ -64,6 +64,7 @@ export class LastRequestCache {
 
   invalidate(character: string, reason: InvalidationReason): void {
     const had = this.#bodies.delete(character);
+    this.#keepalive?.forgetMisses(character);
     shoreLog.debug(
       `shore: invalidated the cached request for ${character} (reason=${reason}, had=${had})`,
     );

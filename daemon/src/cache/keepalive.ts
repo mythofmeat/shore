@@ -240,6 +240,7 @@ export class KeepaliveService {
     callType: string,
     maxIdleSecs?: number,
     fingerprint?: string,
+    usage?: Pick<Usage, "cache_read_tokens">,
   ): void {
     if (callType === "keepalive") return;
     const entry =
@@ -248,8 +249,13 @@ export class KeepaliveService {
     if (fingerprint !== undefined && entry.prefix?.model === model) {
       entry.lastCallFingerprint = fingerprint;
     }
-    entry.consecutiveMisses = 0;
+    if (usage !== undefined && usage.cache_read_tokens > 0) entry.consecutiveMisses = 0;
     entry.keepalive.onCacheWarmed(model, this.#now());
+  }
+
+  forgetMisses(character: string): void {
+    const entry = this.#entries.get(character);
+    if (entry !== undefined) entry.consecutiveMisses = 0;
   }
 
   nextPingAt(character: string): number | undefined {

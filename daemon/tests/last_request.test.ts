@@ -296,11 +296,26 @@ describe("LastRequestCache", () => {
   function spy(): {
     armed: KeepalivePrefix[];
     disarmed: string[];
-    service: { arm: (p: KeepalivePrefix) => void; disarm: (c: string) => void };
+    forgotten: string[];
+    service: {
+      arm: (p: KeepalivePrefix) => void;
+      disarm: (c: string) => void;
+      forgetMisses: (c: string) => void;
+    };
   } {
     const armed: KeepalivePrefix[] = [];
     const disarmed: string[] = [];
-    return { armed, disarmed, service: { arm: (p) => armed.push(p), disarm: (c) => disarmed.push(c) } };
+    const forgotten: string[] = [];
+    return {
+      armed,
+      disarmed,
+      forgotten,
+      service: {
+        arm: (p) => armed.push(p),
+        disarm: (c) => disarmed.push(c),
+        forgetMisses: (c) => forgotten.push(c),
+      },
+    };
   }
 
   const body = (model: string): SidecarRequest =>
@@ -355,7 +370,7 @@ describe("LastRequestCache", () => {
     expect(k.armed[0]?.context?.call_type).toBe("keepalive");
   });
 
-  test("invalidating drops the body and touches the keepalive not at all", () => {
+  test("invalidating drops the body, clears the miss count, and disarms nothing", () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);
     cache.set("ada", body("claude-fixture"), undefined);
@@ -364,6 +379,7 @@ describe("LastRequestCache", () => {
     expect(cache.get("ada")).toBeUndefined();
     expect(k.disarmed).toEqual([]);
     expect(k.armed).toHaveLength(1);
+    expect(k.forgotten).toEqual(["ada"]);
   });
 
   test("repriming from a conversation worth pinging arms and re-caches", async () => {

@@ -152,6 +152,7 @@ function spyingCache(): { cache: LastRequestCache; armed: string[]; disarmed: st
   const cache = new LastRequestCache({
     arm: (p: { context?: { character: string } }) => armed.push(p.context?.character ?? "?"),
     disarm: (c: string) => disarmed.push(c),
+    forgetMisses: () => {},
   } as never);
   return { cache, armed, disarmed };
 }
