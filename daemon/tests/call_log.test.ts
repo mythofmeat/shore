@@ -15,7 +15,7 @@ import { recordedValue, recording } from "./support/rerecord.ts";
 const CAPTURE = "tests/command_captures/call_log.json";
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
-const root = mkdtempSync(join(tmpdir(), "call-log-parity-"));
+const root = mkdtempSync(join(tmpdir(), "call-log-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 function at(secs: number): Date {

@@ -247,7 +247,7 @@ class TopicEmbedder implements Embedder {
 let root = "";
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "wsi-parity-"));
+  root = await mkdtemp(join(tmpdir(), "wsi-"));
   clearEmbedderCache();
 });
 

@@ -40,7 +40,7 @@ describe("the wire format", () => {
     expect(HEARTBEAT_LOG_CAPACITY).toBe(fixture.capacity);
   });
 
-  test("every kind the Rust writes round-trips byte for byte", () => {
+  test("every kind of entry round-trips byte for byte", () => {
     expect(fixture.lines.length).toBe(fixture.display_names.length);
     expect(fixture.lines.length).toBeGreaterThan(9);
 

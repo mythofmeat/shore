@@ -138,7 +138,7 @@ const fx = fixture as unknown as {
 
 const roots: string[] = [];
 function tempRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), "prefs-parity-"));
+  const dir = mkdtempSync(join(tmpdir(), "prefs-"));
   roots.push(dir);
   return dir;
 }

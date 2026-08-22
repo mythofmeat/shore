@@ -1,3 +1,6 @@
+import { required } from "../src/util/required.ts";
+
+import { renderTemplate } from "../src/engine/prompt.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 
@@ -10,19 +13,12 @@ import {
   availableTools,
   renderToolDefs,
   subagentToolDefs,
+  templateVars,
   toolPatternMatches,
   type SubagentConfigView,
-  type ToolCategory,
   type ToolsConfigView,
 } from "../src/tools/registry.ts";
 import type { ToolDefinition } from "../src/llm/types.ts";
-
-interface FixtureToolDef {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  category: ToolCategory;
-}
 interface FixtureToolDefinition {
   name: string;
   description: string;
@@ -30,15 +26,12 @@ interface FixtureToolDefinition {
 }
 
 const fx = fixture as unknown as {
-  all_tools: FixtureToolDef[];
+  tool_names: string[];
   available_tools: Record<
     string,
     { enabled_tools: string[]; offered: string[]; any_enabled: boolean }
   >;
-  render_tool_defs: Record<
-    string,
-    { char_name: string; user_name: string; defs: FixtureToolDefinition[] }
-  >;
+  render_tool_defs: Record<string, { char_name: string; user_name: string; names: string[] }>;
   subagent_config: { name: string; description: string }[];
   subagent_tool_defs: Record<
     string,
@@ -68,31 +61,48 @@ function def(name: string): ToolDefinition {
 }
 
 describe("the registry itself", () => {
-  test("offers exactly the tools the Rust did, in the same order", () => {
-    expect(ALL_TOOLS.map((t) => t.name)).toEqual(fx.all_tools.map((t) => t.name));
+  test("offers exactly these tools, in this order", () => {
+    expect(ALL_TOOLS.map((t) => t.name)).toEqual(fx.tool_names);
   });
 
-  test.each(fx.all_tools.map((t): [string, FixtureToolDef] => [t.name, t]))(
-    "%s matches the Rust definition exactly",
-    (name, expected) => {
-      const actual = ALL_TOOLS.find((t) => t.name === name);
-      expect(actual).toBeDefined();
-      expect(actual?.description).toBe(expected.description);
-      expect(actual?.parameters).toEqual(expected.parameters);
-      expect(actual?.category).toBe(expected.category);
+  test.each(ALL_TOOLS.map((t): [string, (typeof ALL_TOOLS)[number]] => [t.name, t]))(
+    "%s is a definition a model can act on",
+    (name, tool) => {
+      expect(tool.description.length, `${name} says what it is for`).toBeGreaterThan(0);
+      expect(tool.description.endsWith("\n"), `${name} carries no trailing newline`).toBe(false);
+      expect(["web", "other"], `${name} is filed under a known category`).toContain(tool.category);
+
+      const schema = tool.parameters as {
+        type?: string;
+        properties?: Record<string, { type?: string; description?: string }>;
+        required?: string[];
+      };
+      expect(schema.type, `${name} takes an object`).toBe("object");
+      const properties = schema.properties ?? {};
+      for (const [argument, spec] of Object.entries(properties)) {
+        expect(typeof spec.type, `${name}.${argument} says what type it is`).toBe("string");
+        expect(
+          (spec.description ?? "").length,
+          `${name}.${argument} says what it is for`,
+        ).toBeGreaterThan(0);
+      }
+      for (const argument of schema.required ?? []) {
+        expect(
+          Object.keys(properties),
+          `${name} cannot require ${argument} without declaring it`,
+        ).toContain(argument);
+      }
     },
   );
 
-  test("descriptions carry no trailing newline", () => {
-    for (const t of ALL_TOOLS) {
-      expect(t.description.endsWith("\n")).toBe(false);
-      expect(t.description.length).toBeGreaterThan(0);
-    }
-  });
-
-  test("every category is one of the two known values", () => {
-    for (const t of fx.all_tools) {
-      expect(["web", "other"]).toContain(t.category);
+  test("a description asks only for names the renderer knows how to fill in", () => {
+    const known = new Set(templateVars("c", "u").keys());
+    for (const tool of ALL_TOOLS) {
+      for (const [, placeholder] of tool.description.matchAll(/\{\{(\w+)\}\}/g)) {
+        expect(known, `${tool.name} asks for {{${String(placeholder)}}}`).toContain(
+          String(placeholder),
+        );
+      }
     }
   });
 
@@ -132,10 +142,26 @@ describe("availableTools — the allowlist", () => {
 });
 
 describe("renderToolDefs — description templating", () => {
-  test.each(Object.entries(fx.render_tool_defs))("%s", (_label, c) => {
-    const enabled = c.defs.map((d) => d.name);
-    const actual = renderToolDefs(cfg(enabled), c.char_name, c.user_name);
-    expect(actual).toEqual(c.defs as ToolDefinition[]);
+  test.each(Object.entries(fx.render_tool_defs))("%s", (label, c) => {
+    const actual = renderToolDefs(cfg(c.names), c.char_name, c.user_name);
+    const vars = templateVars(c.char_name, c.user_name);
+
+    expect(
+      actual.map((d) => d.name),
+      `${label}: renders the tools that are enabled, in the order the registry lists them`,
+    ).toEqual(ALL_TOOLS.filter((t) => c.names.includes(t.name)).map((t) => t.name));
+
+    for (const rendered of actual) {
+      const source = required(ALL_TOOLS.find((t) => t.name === rendered.name));
+      expect(
+        rendered.description,
+        `${label}: ${rendered.name}'s description is its template with the names filled in`,
+      ).toBe(renderTemplate(source.description, vars));
+      expect(
+        rendered.input_schema,
+        `${label}: ${rendered.name}'s arguments are the registry's, untouched`,
+      ).toEqual(source.parameters);
+    }
   });
 
   test("no placeholder survives into a rendered description", () => {

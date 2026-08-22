@@ -174,7 +174,7 @@ describe("the keepalive schedule is all-or-nothing", () => {
 });
 
 describe("timestamps", () => {
-  test("round-trip through the Rust's spelling", () => {
+  test("round-trips through the spelling on disk", () => {
     const ms = Date.parse("2026-04-30T09:00:00Z");
     expect(toRfc3339(ms)).toBe("2026-04-30T09:00:00+00:00");
     expect(fromRfc3339(toRfc3339(ms))).toBe(ms);

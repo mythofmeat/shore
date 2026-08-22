@@ -197,7 +197,7 @@ describe("appendUserTurn", () => {
     });
   }
 
-  test("the minted id and timestamp match the shapes the Rust produced", () => {
+  test("a minted id is a uuid and a minted timestamp is local rfc3339", () => {
     let checked = 0;
     for (const c of fixture.append_user_turn) {
       if (c.output.events.length === 0) continue;

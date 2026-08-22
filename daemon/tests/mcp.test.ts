@@ -171,7 +171,7 @@ describe("toSpec", () => {
 });
 
 describe("the pinned sort", () => {
-  test("matches the Rust's order exactly", () => {
+  test("lists every tool it knows, in byte order", () => {
     expect(registry.allTools().map((t) => t.full_name)).toEqual(fx.sorted_full_names);
   });
 

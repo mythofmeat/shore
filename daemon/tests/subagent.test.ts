@@ -32,7 +32,7 @@ interface Layout {
 const layouts: Layout[] = [];
 
 function buildLayout(withSnapshot: boolean): Layout {
-  const root = mkdtempSync(join(tmpdir(), "subagent-parity-"));
+  const root = mkdtempSync(join(tmpdir(), "subagent-"));
   const data = join(root, "data");
   const ws = join(root, "ws");
   const outside = join(root, "outside");

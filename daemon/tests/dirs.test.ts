@@ -36,7 +36,7 @@ import {
 const roots: string[] = [];
 
 function scratch(): string {
-  const dir = mkdtempSync(join(tmpdir(), "dirs-parity-"));
+  const dir = mkdtempSync(join(tmpdir(), "dirs-"));
   roots.push(dir);
   return dir;
 }
@@ -221,7 +221,7 @@ describe("load_raw_config_table", () => {
     expect(oks.length).toBeGreaterThanOrEqual(8);
   });
 
-  test("an unterminated table header is rejected, the way Rust rejects it", () => {
+  test("an unterminated table header is rejected", () => {
     expect(() => Bun.TOML.parse("[unclosed")).toThrow();
     expect(() => Bun.TOML.parse("[[a]\nx=1")).toThrow();
     expect(() => Bun.TOML.parse("this is not toml")).toThrow();

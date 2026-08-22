@@ -55,7 +55,7 @@ describe("parseDiceNotation", () => {
     expect(Object.is(parsed.modifier, -0)).toBe(false);
   });
 
-  test("Rust's integer parsers accept a leading + and reject everything else", () => {
+  test("an integer argument accepts a leading + and rejects everything else", () => {
     expect(parseDiceNotation("+2d6")).toEqual({ count: 2, sides: 6, modifier: 0 });
     expect(() => parseDiceNotation("-2d6")).toThrow("Invalid dice count: -2");
     expect(() => parseDiceNotation("2.5d6")).toThrow("Invalid dice count: 2.5");
@@ -68,7 +68,7 @@ describe("parseDiceNotation", () => {
     expect(() => parseDiceNotation("2d6 +3")).toThrow("Invalid sides: 6 ");
   });
 
-  test("integer bounds are the Rust type's, not JavaScript's", () => {
+  test("integer bounds are i64, not JavaScript's safe range", () => {
     expect(parseDiceNotation("4294967295d6").count).toBe(4_294_967_295);
     expect(() => parseDiceNotation("4294967296d6")).toThrow("Invalid dice count: 4294967296");
     expect(parseDiceNotation("1d6+2147483647").modifier).toBe(2_147_483_647);

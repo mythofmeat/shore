@@ -61,7 +61,7 @@ const fixture = (await Bun.file(
 const opt = (value: string | null): string | undefined => value ?? undefined;
 
 describe("what a heartbeat asked to send", () => {
-  test("the tag, over every shape the Rust was driven with", () => {
+  test("the tag, over every shape a model might send it in", () => {
     expect(fixture.send_message_tag.length).toBeGreaterThan(0);
     for (const { content, extracted } of fixture.send_message_tag) {
       expect(extractSendMessage(content), JSON.stringify(content)).toBe(opt(extracted));
@@ -107,7 +107,7 @@ describe("what a heartbeat asked to send", () => {
 });
 
 describe("when the tool loop stops", () => {
-  test("every combination the Rust was swept over", () => {
+  test("every combination of what a heartbeat can carry", () => {
     expect(fixture.budget.length).toBe(24);
     for (const c of fixture.budget) {
       const label = `deadline=${c.deadline_reached} cap=${c.normal_cap_reached} grace=${c.wrap_up_grace} nudged=${c.wrap_up_nudged}`;
@@ -143,7 +143,7 @@ describe("when the tool loop stops", () => {
 });
 
 describe("the message it ends up sending", () => {
-  test("matches the Rust in every shape, image-only included", () => {
+  test("holds in every shape, image-only included", () => {
     const image: ImageRef = { path: "img/a.png", caption: "a cat", data: undefined };
     const built = {
       text_only: buildAutonomousMessage("hello there", [], "anthropic", "claude-opus-4-6"),

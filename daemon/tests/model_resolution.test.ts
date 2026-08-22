@@ -484,7 +484,7 @@ describe("catalogFromSections", () => {
     expect([...catalog.chat.keys()].sort()).not.toEqual([...catalog.chat.keys()]);
   });
 
-  test("the \\U escape decodes the way Rust's does", () => {
+  test("the \\U escape decodes a full code point", () => {
     expect(Bun.TOML.parse('a = "\\U0001F3B5"')).toEqual({ a: "🎵" });
     expect(Bun.TOML.parse('a = "\\u00e9"')).toEqual({ a: "é" });
     expect(Bun.TOML.parse('a = "🎵"')).toEqual({ a: "🎵" });

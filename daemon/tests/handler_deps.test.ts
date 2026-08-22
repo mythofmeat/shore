@@ -410,7 +410,7 @@ describe("the tool backends a character's turn gets", () => {
   });
 
   test("the heartbeat resolves it the same way the chat path a turn really takes does", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-subagent-parity-", withResearch, [
+    const { root, runtime } = await runtimeUnder("shore-deps-subagent-", withResearch, [
       "ada",
     ]);
     try {

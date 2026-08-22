@@ -147,7 +147,7 @@ function diagEntries(d: Diagnostics): void {
 
 let root: string;
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "shore-status-parity-"));
+  root = mkdtempSync(join(tmpdir(), "shore-status-"));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
