@@ -48,10 +48,6 @@ import {
   type NotificationSink,
 } from "../src/notifications.ts";
 
-import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
-import { recordedValue, recording } from "./support/rerecord.ts";
-
-const CAPTURE = "tests/handler_captures/stream.json";
 
 type Row = Record<string, unknown>;
 
@@ -279,10 +275,41 @@ const REJECTED_ONLY_BY_A_STRICTER_PARSER = new Set([
 const BUN_TOML_REFUSES = new Set(["threshold_i64_max"]);
 
 describe("[notifications] parsing", () => {
-  const emptyCase = (f["config_parse"] as Row[]).find((c) => c["name"] === "empty")?.["ok"] as
-    | Row
-    | undefined;
-  const recordedEventDefaults = emptyCase?.["events"];
+  const defaults = (): Row => {
+    const parsed = readNotificationsConfig({});
+    if ("err" in parsed) throw new Error(`the defaults do not parse: ${parsed.err}`);
+    return configToFixtureShape(parsed.ok);
+  };
+
+  function withOverrides(base: Row, overrides: Row | undefined): Row {
+    const out: Row = { ...base };
+    for (const [key, value] of Object.entries(overrides ?? {})) {
+      const under = out[key];
+      out[key] =
+        typeof value === "object" && value !== null && !Array.isArray(value)
+          ? withOverrides(under as Row, value as Row)
+          : value;
+    }
+    return out;
+  }
+
+  test("with nothing configured, notifications are off and ntfy points at ntfy.sh", () => {
+    expect(defaults()).toEqual({
+      enabled: false,
+      backend: "notify_send",
+      ntfy: { url: "https://ntfy.sh", topic: "", token: "" },
+      command: { template: "" },
+      generation_threshold_ms: "0",
+      events: {
+        autonomous_message: true,
+        cache_warning: false,
+        compaction_complete: false,
+        error: false,
+        message_complete: true,
+        usage_warning: false,
+      },
+    });
+  });
 
   for (const c of f["config_parse"] as Row[]) {
     if (REJECTED_ONLY_BY_A_STRICTER_PARSER.has(c["name"] as string)) continue;
@@ -297,15 +324,10 @@ describe("[notifications] parsing", () => {
         return;
       }
       expect("err" in parsed ? parsed.err : "").toBe("");
-      const expected = { ...(c["ok"] as Row) };
-      expected["generation_threshold_ms"] = String(expected["generation_threshold_ms"]);
-      expected["events"] = replayOntoCurrentDefaults(
-        expected["events"],
-        recordedEventDefaults,
-        { ...defaultNotificationEvents() },
-        pathsSetBy((table["events"] ?? {})),
-      );
-      expect(configToFixtureShape((parsed as { ok: NotificationsConfig }).ok)).toEqual(expected);
+      expect(
+        configToFixtureShape((parsed as { ok: NotificationsConfig }).ok),
+        "what is configured changes, and nothing else does",
+      ).toEqual(withOverrides(defaults(), c["ok"] as Row | undefined));
     });
   }
 
@@ -462,8 +484,60 @@ function fillEventDefaults(event: Row): Row {
   };
 }
 
+function eventsUpToDone(lines: readonly string[]): Row[] {
+  const events: Row[] = [];
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    let event: Row;
+    try {
+      event = JSON.parse(line) as Row;
+    } catch {
+      return events;
+    }
+    events.push(event);
+    if (event["type"] === "done" || event["type"] === "error") return events;
+  }
+  return events;
+}
+
+function expectedFrames(c: Row): Row[] {
+  const events = eventsUpToDone(c["lines"] as string[]);
+  const rid = c["rid"] as string | null;
+  const frames: Row[] = [];
+  for (const event of events) {
+    if (event["type"] === "start") {
+      frames.push({ type: "stream_start", rid, regen: c["regen"], subagent: null });
+      continue;
+    }
+    if (event["type"] !== "text" && event["type"] !== "thinking") continue;
+    frames.push({
+      type: "stream_chunk",
+      rid,
+      text: event["text"],
+      content_type: event["type"],
+      subagent: null,
+    });
+  }
+  return frames;
+}
+
+function expectedEchoes(c: Row): Row | undefined {
+  const events = eventsUpToDone(c["lines"] as string[]);
+  const done = events.find((e) => e["type"] === "done");
+  if (done === undefined) return undefined;
+  const start = events.find((e) => e["type"] === "start");
+  const usage = (done["usage"] ?? {}) as Row;
+  return {
+    model: start?.["model"] ?? "",
+    content: done["content"],
+    finish_reason: done["finish_reason"],
+    usage: { ...usage, total_cost_usd: usage["total_cost_usd"] ?? null },
+    timing: done["timing"],
+  };
+}
+
 describe("stream accumulation", () => {
-  for (const [index, c] of (f["streams"] as Row[]).entries()) {
+  for (const c of f["streams"] as Row[]) {
     test(c["name"] as string, async () => {
       const frames: ServerMessage[] = [];
       const sink: FrameSink = (m) => frames.push(m);
@@ -513,11 +587,21 @@ describe("stream accumulation", () => {
       }
 
       const shaped = frames.map(frameToFixtureShape);
-      recordedValue(CAPTURE, ["streams", index, "frames"], shaped);
-      if (recording) return;
+      expect(shaped, "a frame for the start, then one for every delta up to the last event").toEqual(
+        expectedFrames(c),
+      );
 
+      const echoes = expectedEchoes(c);
+      const ok = outcome["ok"] as Row | undefined;
+      if (echoes !== undefined && ok !== undefined) {
+        for (const [field, value] of Object.entries(echoes)) {
+          expect(ok[field], `${c["name"] as string}: ${field} is what the stream said it was`).toEqual(
+            value,
+          );
+          delete ok[field];
+        }
+      }
       expect(outcome).toEqual(expected);
-      expect(shaped).toEqual(c["frames"] as Row[]);
     });
   }
 

@@ -1,4 +1,40 @@
 {
+  "$shared": {
+    "s0": [
+      {
+        "content": [
+          {
+            "text": "q1",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "signature": "s1",
+            "thinking": "t1",
+            "type": "thinking"
+          },
+          {
+            "text": "a1",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "q2",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
   "truncate_summary": [
     {
       "input": "",
@@ -18,87 +54,87 @@
     {
       "input": "exactly-five!",
       "max": 12,
-      "output": "exactly-five…"
+      "output": "exactly-five\u2026"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 10,
-      "output": "ééééé"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u00e9"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 9,
-      "output": "éééé…"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u2026"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 8,
-      "output": "éééé…"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u2026"
     },
     {
-      "input": "aéb",
+      "input": "a\u00e9b",
       "max": 2,
-      "output": "a…"
+      "output": "a\u2026"
     },
     {
-      "input": "aéb",
+      "input": "a\u00e9b",
       "max": 3,
-      "output": "aé…"
+      "output": "a\u00e9\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 12,
-      "output": "🎵🎵🎵"
+      "output": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 11,
-      "output": "🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 9,
-      "output": "🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 4,
-      "output": "🎵…"
+      "output": "\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 3,
-      "output": "…"
+      "output": "\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 0,
-      "output": "…"
+      "output": "\u2026"
     },
     {
       "input": "abc",
       "max": 0,
-      "output": "…"
+      "output": "\u2026"
     },
     {
-      "input": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 200,
-      "output": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 1,
-      "output": "e…"
+      "output": "e\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 2,
-      "output": "e…"
+      "output": "e\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 3,
-      "output": "é…"
+      "output": "e\u0301\u2026"
     }
   ],
   "shell_escape": [
@@ -167,16 +203,16 @@
       "output": "'\\''('\\''"
     },
     {
-      "input": "🎵 unicode 🎵",
-      "output": "🎵 unicode 🎵"
+      "input": "\ud83c\udfb5 unicode \ud83c\udfb5",
+      "output": "\ud83c\udfb5 unicode \ud83c\udfb5"
     }
   ],
   "command_template": [
     {
       "template": "echo '{title}: {body}'",
-      "title": "Shore — Test",
+      "title": "Shore \u2014 Test",
       "body": "hello world",
-      "rendered": "echo 'Shore — Test: hello world'"
+      "rendered": "echo 'Shore \u2014 Test: hello world'"
     },
     {
       "template": "echo '{title}'",
@@ -574,34 +610,13 @@
   "config_parse": [
     {
       "name": "empty",
-      "toml": "",
-      "ok": {
-        "$ref": "s0"
-      }
+      "toml": ""
     },
     {
       "name": "threshold_float",
       "toml": "generation_threshold = 1.5\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "1500",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "generation_threshold_ms": "1500"
       }
     },
     {
@@ -616,10 +631,7 @@
     },
     {
       "name": "threshold_zero_int",
-      "toml": "generation_threshold = 0\n",
-      "ok": {
-        "$ref": "s0"
-      }
+      "toml": "generation_threshold = 0\n"
     },
     {
       "name": "threshold_bool",
@@ -633,84 +645,27 @@
     },
     {
       "name": "threshold_float_tiny",
-      "toml": "generation_threshold = 0.0005\n",
-      "ok": {
-        "$ref": "s0"
-      }
+      "toml": "generation_threshold = 0.0005\n"
     },
     {
       "name": "threshold_i64_max",
       "toml": "generation_threshold = 9223372036854775807\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "18446744073709551615",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "generation_threshold_ms": "18446744073709551615"
       }
     },
     {
       "name": "threshold_float_whole",
       "toml": "generation_threshold = 1.0\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "1000",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "generation_threshold_ms": "1000"
       }
     },
     {
       "name": "threshold_float_half_ms",
       "toml": "generation_threshold = 0.0015\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "1",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "generation_threshold_ms": "1"
       }
     },
     {
@@ -742,83 +697,26 @@
       "name": "enabled_only",
       "toml": "enabled = true\n",
       "ok": {
-        "enabled": true,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "enabled": true
       }
     },
     {
       "name": "backend_ntfy",
       "toml": "backend = \"ntfy\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "ntfy",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "backend": "ntfy"
       }
     },
     {
       "name": "backend_command",
       "toml": "backend = \"command\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "command",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "backend": "command"
       }
     },
     {
       "name": "backend_notify_send",
-      "toml": "backend = \"notify_send\"\n",
-      "ok": {
-        "$ref": "s0"
-      }
+      "toml": "backend = \"notify_send\"\n"
     },
     {
       "name": "backend_unknown",
@@ -834,24 +732,10 @@
       "name": "ntfy_full",
       "toml": "[ntfy]\nurl = \"https://push.example\"\ntopic = \"shore\"\ntoken = \"tk\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
         "ntfy": {
           "url": "https://push.example",
           "topic": "shore",
           "token": "tk"
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
         }
       }
     },
@@ -859,33 +743,14 @@
       "name": "ntfy_partial",
       "toml": "[ntfy]\ntopic = \"shore\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
         "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "shore",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
+          "topic": "shore"
         }
       }
     },
     {
       "name": "ntfy_empty_table",
-      "toml": "[ntfy]\n",
-      "ok": {
-        "$ref": "s0"
-      }
+      "toml": "[ntfy]\n"
     },
     {
       "name": "ntfy_unknown_field",
@@ -901,24 +766,8 @@
       "name": "command_template",
       "toml": "[command]\ntemplate = \"echo {body}\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
         "command": {
           "template": "echo {body}"
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
         }
       }
     },
@@ -931,75 +780,21 @@
       "name": "threshold_secs",
       "toml": "generation_threshold = \"30s\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "30000",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "generation_threshold_ms": "30000"
       }
     },
     {
       "name": "threshold_ms",
       "toml": "generation_threshold = \"1500ms\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "1500",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "generation_threshold_ms": "1500"
       }
     },
     {
       "name": "threshold_bare_int",
       "toml": "generation_threshold = \"45\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "45000",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "generation_threshold_ms": "45000"
       }
     },
     {
@@ -1016,58 +811,22 @@
       "name": "threshold_wrong_type",
       "toml": "generation_threshold = 30\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "30000",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "generation_threshold_ms": "30000"
       }
     },
     {
       "name": "events_partial",
       "toml": "[events]\nmessage_complete = true\nerror = false\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
         "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
           "error": false,
-          "message_complete": true,
-          "usage_warning": true
+          "message_complete": true
         }
       }
     },
     {
       "name": "events_empty",
-      "toml": "[events]\n",
-      "ok": {
-        "$ref": "s0"
-      }
+      "toml": "[events]\n"
     },
     {
       "name": "events_unknown",
@@ -1108,24 +867,9 @@
       "name": "ntfy_trailing_slashes",
       "toml": "[ntfy]\nurl = \"https://n.sh///\"\ntopic = \"t\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
         "ntfy": {
           "url": "https://n.sh///",
-          "topic": "t",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
+          "topic": "t"
         }
       }
     }
@@ -1186,7 +930,6 @@
       "lines": [],
       "regen": false,
       "rid": null,
-      "frames": [],
       "outcome": {
         "err": {
           "kind": "incomplete_stream"
@@ -1200,14 +943,6 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        }
-      ],
       "outcome": {
         "err": {
           "kind": "incomplete_stream"
@@ -1224,44 +959,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "Hello ",
-          "content_type": "text",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "world",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "claude-test",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1281,37 +980,8 @@
       ],
       "regen": true,
       "rid": "r-1",
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": "r-1",
-          "regen": true,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": "r-1",
-          "text": "x",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1329,23 +999,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": []
         }
@@ -1362,16 +1017,11 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        }
-      ],
       "outcome": {
-        "$ref": "s1"
+        "ok": {
+          "content_blocks": [],
+          "tool_uses": []
+        }
       }
     },
     {
@@ -1386,37 +1036,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "Hi",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1437,37 +1058,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "Hi",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1490,58 +1082,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t1",
-          "content_type": "thinking",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "a",
-          "content_type": "text",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t2",
-          "content_type": "thinking",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "b",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1583,25 +1125,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": {
-        "$ref": "s3"
-      },
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1630,37 +1155,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t",
-          "content_type": "thinking",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1686,37 +1182,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t",
-          "content_type": "thinking",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1742,37 +1209,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t",
-          "content_type": "thinking",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1798,25 +1236,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": {
-        "$ref": "s3"
-      },
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1851,25 +1272,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": {
-        "$ref": "s3"
-      },
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1900,51 +1304,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t1",
-          "content_type": "thinking",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "a",
-          "content_type": "text",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t2",
-          "content_type": "thinking",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -1982,44 +1343,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "a",
-          "content_type": "text",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t",
-          "content_type": "thinking",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -2054,25 +1379,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": {
-        "$ref": "s3"
-      },
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [
             {
               "id": "tu_1",
@@ -2127,37 +1435,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "intermediate",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "final",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 1,
-            "output_tokens": 1,
-            "cache_read_tokens": 0,
-            "cache_creation_tokens": 0,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 1,
-            "time_to_first_token_ms": 1
-          },
           "tool_uses": [],
           "content_blocks": [
             {
@@ -2177,37 +1456,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "gone",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "final",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 1,
-            "output_tokens": 1,
-            "cache_read_tokens": 0,
-            "cache_creation_tokens": 0,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 1,
-            "time_to_first_token_ms": 1
-          },
           "tool_uses": [],
           "content_blocks": []
         }
@@ -2222,21 +1472,6 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "partial",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "err": {
           "kind": "stream_errored",
@@ -2261,7 +1496,6 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [],
       "outcome": {
         "err": {
           "kind": "stream_errored",
@@ -2288,16 +1522,11 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        }
-      ],
       "outcome": {
-        "$ref": "s1"
+        "ok": {
+          "content_blocks": [],
+          "tool_uses": []
+        }
       }
     },
     {
@@ -2309,14 +1538,6 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        }
-      ],
       "outcome": {
         "err": {
           "kind": "deserialize",
@@ -2331,7 +1552,6 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [],
       "outcome": {
         "err": {
           "kind": "deserialize",
@@ -2347,30 +1567,8 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "c",
-          "model": "m",
-          "finish_reason": "stop",
-          "usage": {
-            "input_tokens": 1,
-            "output_tokens": 2,
-            "cache_read_tokens": 3,
-            "cache_creation_tokens": 4,
-            "total_cost_usd": 0.0125
-          },
-          "timing": {
-            "total_ms": 9,
-            "time_to_first_token_ms": 3
-          },
           "tool_uses": [],
           "content_blocks": []
         }
@@ -2386,85 +1584,30 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "",
-          "content_type": "text",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
-        "$ref": "s1"
+        "ok": {
+          "content_blocks": [],
+          "tool_uses": []
+        }
       }
     },
     {
       "name": "multibyte_text",
       "lines": [
         "{\"type\":\"start\",\"model\":\"m\"}",
-        "{\"type\":\"text\",\"text\":\"🎵\"}",
-        "{\"type\":\"text\",\"text\":\"é\"}",
+        "{\"type\":\"text\",\"text\":\"\ud83c\udfb5\"}",
+        "{\"type\":\"text\",\"text\":\"\u00e9\"}",
         "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "🎵",
-          "content_type": "text",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "é",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
       "outcome": {
         "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
           "tool_uses": [],
           "content_blocks": [
             {
               "type": "text",
-              "text": "🎵é"
+              "text": "\ud83c\udfb5\u00e9"
             }
           ]
         }
@@ -3149,13 +2292,13 @@
             {
               "type": "tool_result",
               "tool_use_id": "t",
-              "content": "﻿",
+              "content": "\ufeff",
               "is_error": false
             }
           ]
         }
       ],
-      "notify_content": "﻿"
+      "notify_content": "\ufeff"
     },
     {
       "name": "next_line_tool_result_is_blank",
@@ -3166,7 +2309,7 @@
             {
               "type": "tool_result",
               "tool_use_id": "t",
-              "content": "",
+              "content": "\u0085",
               "is_error": false
             }
           ]
@@ -3182,7 +2325,7 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": ""
+              "text": "\u0085"
             }
           ]
         }
@@ -3197,12 +2340,12 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": "﻿"
+              "text": "\ufeff"
             }
           ]
         }
       ],
-      "notify_content": "﻿"
+      "notify_content": "\ufeff"
     }
   ],
   "message_from_response": [
@@ -3350,19 +2493,19 @@
     {
       "name": "no_response",
       "sent": {
-        "$ref": "s4"
+        "$ref": "s0"
       },
       "provider_key": "anthropic",
       "response": [],
       "messages_after": {
-        "$ref": "s4"
+        "$ref": "s0"
       },
       "prefix_unchanged": true
     },
     {
       "name": "appends_without_touching_prefix",
       "sent": {
-        "$ref": "s4"
+        "$ref": "s0"
       },
       "provider_key": "anthropic",
       "response": [
@@ -3439,7 +2582,7 @@
     {
       "name": "empty_turn_skipped",
       "sent": {
-        "$ref": "s4"
+        "$ref": "s0"
       },
       "provider_key": "anthropic",
       "response": [
@@ -3507,7 +2650,7 @@
     {
       "name": "no_provider_key",
       "sent": {
-        "$ref": "s4"
+        "$ref": "s0"
       },
       "provider_key": null,
       "response": [
@@ -3728,107 +2871,5 @@
       }
     ],
     "count": 3
-  },
-  "$shared": {
-    "s0": {
-      "backend": "notify_send",
-      "command": {
-        "template": ""
-      },
-      "enabled": false,
-      "events": {
-        "autonomous_message": true,
-        "cache_warning": true,
-        "compaction_complete": true,
-        "error": true,
-        "message_complete": false,
-        "usage_warning": true
-      },
-      "generation_threshold_ms": "0",
-      "ntfy": {
-        "token": "",
-        "topic": "",
-        "url": "https://ntfy.sh"
-      }
-    },
-    "s1": {
-      "ok": {
-        "$ref": "s2"
-      }
-    },
-    "s2": {
-      "content": "C",
-      "content_blocks": [],
-      "finish_reason": "end_turn",
-      "model": "m",
-      "timing": {
-        "time_to_first_token_ms": 50,
-        "total_ms": 150
-      },
-      "tool_uses": [],
-      "usage": {
-        "cache_creation_tokens": 2,
-        "cache_read_tokens": 8,
-        "input_tokens": 10,
-        "output_tokens": 5,
-        "total_cost_usd": null
-      }
-    },
-    "s3": [
-      {
-        "regen": false,
-        "rid": null,
-        "subagent": null,
-        "type": "stream_start"
-      },
-      {
-        "content_type": "thinking",
-        "rid": null,
-        "subagent": null,
-        "text": "t",
-        "type": "stream_chunk"
-      },
-      {
-        "content_type": "text",
-        "rid": null,
-        "subagent": null,
-        "text": "a",
-        "type": "stream_chunk"
-      }
-    ],
-    "s4": [
-      {
-        "content": [
-          {
-            "text": "q1",
-            "type": "text"
-          }
-        ],
-        "role": "user"
-      },
-      {
-        "content": [
-          {
-            "signature": "s1",
-            "thinking": "t1",
-            "type": "thinking"
-          },
-          {
-            "text": "a1",
-            "type": "text"
-          }
-        ],
-        "role": "assistant"
-      },
-      {
-        "content": [
-          {
-            "text": "q2",
-            "type": "text"
-          }
-        ],
-        "role": "user"
-      }
-    ]
   }
 }
