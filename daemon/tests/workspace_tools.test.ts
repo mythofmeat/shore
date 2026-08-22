@@ -28,6 +28,7 @@ import {
   type ToolInput,
 } from "../src/tools/workspace";
 import { testTmp } from "./support/tmp.ts";
+import { compareRustStrings, rustLines } from "../src/memory/lines";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { recordedValue, recording } from "./support/rerecord.ts";
 
@@ -70,8 +71,8 @@ interface ReadCase {
   workspace_missing?: boolean;
 }
 
-interface EditCase extends ReadCase {
-  after: TreeNode[];
+interface EditCase extends Omit<ReadCase, "result"> {
+  result?: Outcome;
 }
 
 interface DeleteCase {
@@ -79,13 +80,14 @@ interface DeleteCase {
   tree: TreeNode[];
   input: ToolInput;
   with_data_dir: boolean;
-  result: Outcome;
-  after: TreeNode[];
-  trash: TreeNode[];
+  result?: Outcome;
 }
 
-interface SearchCase extends ReadCase {
+interface SearchCase extends Omit<ReadCase, "result"> {
   max_file_bytes: number | null;
+  result?: Outcome;
+  searched_files?: number;
+  skipped_binary_or_large?: number;
 }
 
 interface GitValidation {
@@ -231,19 +233,99 @@ function changedPaths(
   return [...paths].sort();
 }
 
+const NO_MATCH_EXCERPT_CHARS = 800;
+
+function applyEdits(
+  before: string,
+  edits: { old_string: string; new_string: string; replace_all?: unknown }[],
+): { text: string; replacements: number } {
+  let text = before;
+  let replacements = 0;
+  for (const edit of edits) {
+    if (edit.replace_all === true) {
+      replacements += text.split(edit.old_string).length - 1;
+      text = text.split(edit.old_string).join(edit.new_string);
+    } else {
+      text = text.replace(edit.old_string, edit.new_string);
+      replacements += 1;
+    }
+  }
+  return { text, replacements };
+}
+
+function comparable(nodes: readonly TreeNode[], skip?: string): TreeNode[] {
+  return nodes
+    .filter((n) => n.kind !== "dir" && n.path !== skip)
+    .map((n) => {
+      const { mtime_secs: _ignored, ...rest } = n;
+      return rest;
+    })
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+function expectEditShape(c: EditCase, got: Outcome, after: TreeNode[]): void {
+  const where = c.name;
+  const path = c.input.path as string;
+  const wholeFile = typeof c.input.content === "string" && c.input.edits === undefined;
+  const targeted = Array.isArray(c.input.edits) && c.input.edits.length > 0;
+
+  if ("err" in got) {
+    expect(comparable(after), `${where}: a refused edit writes nothing`).toEqual(comparable(c.tree));
+    const marker = "Current file contents:\n";
+    if (!got.err.includes(marker)) {
+      expect(got.err, `${where}: the refusal it gave`).toBe((c.result as { err: string }).err);
+      return;
+    }
+    const body = got.err.slice(got.err.indexOf(marker) + marker.length);
+    const onDisk = required(c.tree.find((n) => n.path === path)?.content);
+    const truncated = body.endsWith("\n... (truncated)");
+    expect(
+      truncated ? body.slice(0, -"\n... (truncated)".length) : body,
+      `${where}: a failed match quotes the file, cut to ${NO_MATCH_EXCERPT_CHARS} characters`,
+    ).toBe(truncated ? Array.from(onDisk).slice(0, NO_MATCH_EXCERPT_CHARS).join("") : onDisk);
+    expect(truncated, `${where}: and says so only when there was more`).toBe(
+      Array.from(onDisk).length > NO_MATCH_EXCERPT_CHARS,
+    );
+    return;
+  }
+
+  const written = required(after.find((n) => n.path === path));
+  expect(comparable(after, path), `${where}: no other file is touched`).toEqual(
+    comparable(c.tree, path),
+  );
+
+  if (wholeFile) {
+    expect(written.content, `${where}: the file now holds what was passed`).toBe(
+      c.input.content as string,
+    );
+    expect(got.ok, `${where}: and it reports the path and the bytes it wrote`).toEqual({
+      path,
+      bytes_written: Buffer.byteLength(c.input.content as string),
+    });
+    return;
+  }
+
+  expect(targeted, `${where}: an edit is either a whole file or a list of replacements`).toBe(true);
+  const before = required(c.tree.find((n) => n.path === path)?.content);
+  const applied = applyEdits(
+    before,
+    c.input.edits as { old_string: string; new_string: string; replace_all?: unknown }[],
+  );
+  expect(written.content, `${where}: each replacement is applied in turn`).toBe(applied.text);
+  expect(got.ok, `${where}: and it reports how many it made`).toEqual({
+    path,
+    replacements_made: applied.replacements,
+  });
+}
+
 describe("edit", () => {
-  for (const [index, c] of fixture.edit.entries()) {
+  for (const c of fixture.edit) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree);
       const before = await snapshot(workspace);
       const got = await outcome(() => handleEdit(c.input, workspace));
       const after = await snapshot(workspace);
-      recordedValue(CAPTURE, ["edit", index, "result"], got);
-      recordedValue(CAPTURE, ["edit", index, "after"], after);
-      if (!recording) {
-        expect(got).toEqual(c.result);
-        expect(after).toEqual(c.after);
-      }
+      expectEditShape(c, got, after);
 
       const written = "ok" in got ? (got.ok as { path?: string }).path : undefined;
       const touched = changedPaths(before, after);
@@ -375,14 +457,34 @@ describe("delete", () => {
       const { workspace, data } = await makeCase(c.tree);
       const dataDir = c.with_data_dir ? data : "";
       const got = await outcome(() => handleDelete(c.input, workspace, dataDir));
+      const after = await snapshot(workspace);
+      const trash = await snapshotTrash(data, c.with_data_dir);
 
-      const expected = await substituteStamp(c.result, data);
-      expect(got).toEqual(expected);
+      if ("err" in got) {
+        expect(got, c.name).toEqual(required(c.result) as { err: string });
+        expect(comparable(after), `${c.name}: a refused delete leaves everything`).toEqual(
+          comparable(c.tree),
+        );
+        expect(trash, `${c.name}: and puts nothing in the trash`).toEqual([]);
+        return;
+      }
 
-      expect(await snapshot(workspace)).toEqual(c.after);
-      expect(await snapshotTrash(data, c.with_data_dir)).toEqual(
-        c.trash.map((n) => ({ ...n, path: replaceStampInPath(n.path, "{stamp}") })),
+      const path = c.input.path as string;
+      const stamps = await readdir(join(data, "trash"));
+      expect(stamps, `${c.name}: one delete makes one trash folder`).toHaveLength(1);
+      expect(required(stamps[0]), `${c.name}: named for the moment it happened`).toMatch(STAMP);
+      expect(got.ok, `${c.name}: it says what it moved, and where`).toEqual({
+        path,
+        deleted: true,
+        trashed_to: `data/trash/${required(stamps[0])}/${path}`,
+      });
+      expect(comparable(after), `${c.name}: the file is gone and nothing else is`).toEqual(
+        comparable(c.tree, path),
       );
+      expect(
+        trash.filter((n) => n.kind !== "dir"),
+        `${c.name}: and is in the trash under the same relative path`,
+      ).toEqual([{ ...required(comparable(c.tree).find((n) => n.path === path)), path: `{stamp}/${path}` }]);
     });
   }
 
@@ -413,26 +515,101 @@ function replaceStampInPath(path: string, replacement: string): string {
   return path.replace(STAMP, replacement);
 }
 
-async function substituteStamp(expected: Outcome, dataDir: string): Promise<Outcome> {
-  if (!("ok" in expected)) return expected;
-  const ok = expected.ok as Record<string, unknown> | null;
-  if (ok === null || typeof ok !== "object" || typeof ok.trashed_to !== "string") return expected;
-
-  const stamps = await readdir(join(dataDir, "trash"));
-  expect(stamps).toHaveLength(1);
-  expect(stamps[0]).toMatch(new RegExp(`^${STAMP.source}$`));
-
-  return { ok: { ...ok, trashed_to: ok.trashed_to.replace(STAMP, required(stamps[0])) } };
-}
-
 async function snapshotTrash(dataDir: string, withDataDir: boolean): Promise<TreeNode[]> {
   if (!withDataDir) return [];
   const nodes = await snapshot(join(dataDir, "trash"));
   return nodes.map((n) => ({ ...n, path: replaceStampInPath(n.path, "{stamp}") }));
 }
 
+const SEARCH_DEFAULT_RESULTS = 20;
+const SEARCH_RESULT_CAP = 100;
+
+const SEARCH_NOTE =
+  "These are line-level excerpts, ordered by file recency. Call `read` on the top file paths " +
+  "to see surrounding context \u2014 excerpts almost never contain the full answer, and one file " +
+  "often references others worth reading too.";
+
+function searchableFiles(c: SearchCase): TreeNode[] {
+  const cap = c.max_file_bytes ?? DEFAULT_RETRIEVAL_CONFIG.maxFileBytes;
+  const scope = typeof c.input.path === "string" ? c.input.path : undefined;
+  const inScope = (path: string): boolean => {
+    if (scope === undefined || scope === "." || scope === "") return true;
+    return path === scope || path.startsWith(`${scope}/`);
+  };
+  return c.tree.filter(
+    (n) =>
+      n.kind === "file" &&
+      n.content !== undefined &&
+      inScope(n.path) &&
+      !n.path.split("/").includes(".git") &&
+      Buffer.byteLength(n.content) <= cap,
+  );
+}
+
+function expectedHits(c: SearchCase): { path: string; line: number; excerpt: string }[] {
+  const query = String(c.input.query).trim().toLowerCase();
+  const files = [...searchableFiles(c)].sort((a, b) => {
+    const byTime = required(b.mtime_secs) - required(a.mtime_secs);
+    return byTime !== 0 ? byTime : compareRustStrings(a.path, b.path);
+  });
+
+  const hits: { path: string; line: number; excerpt: string }[] = [];
+  for (const file of files) {
+    rustLines(required(file.content)).forEach((line, i) => {
+      const match = findCaseInsensitiveMatch(line, query);
+      if (match === undefined) return;
+      hits.push({ path: file.path, line: i + 1, excerpt: excerptLine(line, match[0], match[1]) });
+    });
+  }
+  return hits;
+}
+
+function expectSearchShape(c: SearchCase, ok: Record<string, unknown>): void {
+  const where = c.name;
+  const requested = c.input.max_results;
+  const limit = Math.min(
+    Math.max(typeof requested === "number" ? requested : SEARCH_DEFAULT_RESULTS, 1),
+    SEARCH_RESULT_CAP,
+  );
+
+  expect(ok.query, `${where}: it echoes the query, trimmed`).toBe(String(c.input.query).trim());
+  expect(ok.mode, `${where}: without an embedder every search is lexical`).toBe("lexical");
+  expect(
+    "semantic_unavailable" in ok,
+    `${where}: asking for semantics you cannot have is said out loud`,
+  ).toBe((c.input.mode ?? "hybrid") !== "lexical");
+
+  const results = ok.results as { path: string; line: number; excerpt: string }[];
+  const wanted = expectedHits(c);
+  expect(results, `${where}: every matching line, newest file first, up to the limit`).toEqual(
+    wanted.slice(0, limit),
+  );
+  expect(ok.count, `${where}: the count is how many came back`).toBe(results.length);
+
+  if (results.length === 0) {
+    expect("files" in ok, `${where}: nothing matched, so no file summary`).toBe(false);
+    const scope = typeof c.input.path === "string" ? c.input.path : undefined;
+    const exists =
+      scope === undefined ||
+      scope === "." ||
+      c.tree.some((n) => n.path === scope || n.path.startsWith(`${scope}/`));
+    expect(
+      ok.note,
+      `${where}: a path that is not there is worth saying; an empty result is not`,
+    ).toBe(exists ? undefined : "path does not exist");
+    return;
+  }
+
+  const hitsByPath = new Map<string, number>();
+  for (const hit of results) hitsByPath.set(hit.path, (hitsByPath.get(hit.path) ?? 0) + 1);
+  expect(ok.files, `${where}: the summary counts the hits per file, in the order they came`).toEqual(
+    [...hitsByPath].map(([path, hits]) => ({ path, hits })),
+  );
+  expect(ok.note, `${where}: and says these are excerpts, not answers`).toBe(SEARCH_NOTE);
+}
+
 describe("search", () => {
-  for (const [index, c] of fixture.search.entries()) {
+  for (const c of fixture.search) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree);
       const ws = c.workspace_unset === true ? "" : workspace;
@@ -441,9 +618,18 @@ describe("search", () => {
           ? undefined
           : { ...DEFAULT_RETRIEVAL_CONFIG, maxFileBytes: c.max_file_bytes };
       const got = await outcome(() => handleSearch(c.input, ws, config, undefined));
-      recordedValue(CAPTURE, ["search", index, "result"], got);
-      if (recording) return;
-      expect(got).toEqual(c.result);
+
+      if (c.result !== undefined) {
+        expect(got).toEqual(c.result);
+        return;
+      }
+      expect(got, c.name).toHaveProperty("ok");
+      const ok = (got as { ok: Record<string, unknown> }).ok;
+      expect(ok.searched_files, `${c.name}: how many files it read`).toBe(c.searched_files);
+      expect(ok.skipped_binary_or_large, `${c.name}: and how many it could not`).toBe(
+        c.skipped_binary_or_large,
+      );
+      expectSearchShape(c, ok);
     });
   }
 });

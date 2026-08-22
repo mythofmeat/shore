@@ -1,62 +1,235 @@
 {
+  "$shared": {
+    "s0": [
+      {
+        "content": "A",
+        "content_blocks": [
+          {
+            "text": "A",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m1",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "B",
+        "content_blocks": [
+          {
+            "text": "B",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m2",
+        "role": "assistant",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "C",
+        "content_blocks": [
+          {
+            "text": "C",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m3",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "D",
+        "content_blocks": [
+          {
+            "text": "D",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m4",
+        "role": "assistant",
+        "timestamp": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "s1": {
+      "content": "checking",
+      "content_blocks": [
+        {
+          "text": "checking",
+          "type": "text"
+        },
+        {
+          "id": "t1",
+          "input": {
+            "path": "notes.md"
+          },
+          "name": "read_file",
+          "type": "tool_use"
+        }
+      ],
+      "images": [],
+      "msg_id": "m2",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s2": {
+      "content": "file contents",
+      "content_blocks": [
+        {
+          "content": "file contents",
+          "is_error": false,
+          "tool_use_id": "t1",
+          "type": "tool_result"
+        }
+      ],
+      "images": [],
+      "msg_id": "m3",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s3": {
+      "content": "checking\ndone",
+      "content_blocks": [
+        {
+          "text": "checking",
+          "type": "text"
+        },
+        {
+          "id": "t1",
+          "input": {
+            "path": "notes.md"
+          },
+          "name": "read_file",
+          "type": "tool_use"
+        },
+        {
+          "content": "file contents",
+          "is_error": false,
+          "tool_use_id": "t1",
+          "type": "tool_result"
+        },
+        {
+          "text": "done",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m4",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s4": {
+      "content": "archived image",
+      "content_blocks": [
+        {
+          "text": "archived image",
+          "type": "text"
+        }
+      ],
+      "images": [
+        {
+          "caption": "old",
+          "path": "<tmp>/pic.bin"
+        }
+      ],
+      "msg_id": "m1",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s5": {
+      "content": "active image",
+      "content_blocks": [
+        {
+          "text": "active image",
+          "type": "text"
+        }
+      ],
+      "images": [
+        {
+          "caption": "new",
+          "path": "<tmp>/pic.bin"
+        }
+      ],
+      "msg_id": "m2",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s6": [
+      {
+        "content": "Prompt",
+        "content_blocks": [
+          {
+            "text": "Prompt",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "u1",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "alt_count": 3,
+        "alt_index": 2,
+        "alternatives": [
+          {
+            "content": "one",
+            "content_blocks": [
+              {
+                "text": "one",
+                "type": "text"
+              }
+            ],
+            "images": [],
+            "timestamp": "2026-01-01T00:00:00Z"
+          },
+          {
+            "content": "two",
+            "content_blocks": [
+              {
+                "text": "two",
+                "type": "text"
+              }
+            ],
+            "images": [],
+            "timestamp": "2026-01-01T00:00:01Z"
+          },
+          {
+            "content": "three",
+            "content_blocks": [
+              {
+                "text": "three",
+                "type": "text"
+              }
+            ],
+            "images": [],
+            "timestamp": "2026-01-01T00:00:02Z"
+          }
+        ],
+        "content": "Third",
+        "content_blocks": [
+          {
+            "text": "Third",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "a2",
+        "role": "assistant",
+        "timestamp": "2026-01-01T00:00:00Z"
+      }
+    ]
+  },
   "scenarios": [
     {
       "name": "log paging over a flat conversation",
       "archived": [],
-      "active": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "A",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "A"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m2",
-          "role": "assistant",
-          "content": "B",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "B"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m3",
-          "role": "user",
-          "content": "C",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "C"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m4",
-          "role": "assistant",
-          "content": "D",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "D"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "active": {
+        "$ref": "s0"
+      },
       "files": [],
       "steps": [
         {
@@ -505,40 +678,10 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "content": "checking",
-          "content_blocks": [
-            {
-              "text": "checking",
-              "type": "text"
-            },
-            {
-              "id": "t1",
-              "input": {
-                "path": "notes.md"
-              },
-              "name": "read_file",
-              "type": "tool_use"
-            }
-          ],
-          "images": [],
-          "msg_id": "m2",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s1"
         },
         {
-          "content": "file contents",
-          "content_blocks": [
-            {
-              "content": "file contents",
-              "is_error": false,
-              "tool_use_id": "t1",
-              "type": "tool_result"
-            }
-          ],
-          "images": [],
-          "msg_id": "m3",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s2"
         },
         {
           "msg_id": "m4",
@@ -596,35 +739,7 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "content": "checking\ndone",
-          "content_blocks": [
-            {
-              "text": "checking",
-              "type": "text"
-            },
-            {
-              "id": "t1",
-              "input": {
-                "path": "notes.md"
-              },
-              "name": "read_file",
-              "type": "tool_use"
-            },
-            {
-              "content": "file contents",
-              "is_error": false,
-              "tool_use_id": "t1",
-              "type": "tool_result"
-            },
-            {
-              "text": "done",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m4",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s3"
         },
         {
           "content": "thanks",
@@ -883,42 +998,12 @@
       "name": "image data is embedded for the active tail only",
       "archived": [
         {
-          "content": "archived image",
-          "content_blocks": [
-            {
-              "text": "archived image",
-              "type": "text"
-            }
-          ],
-          "images": [
-            {
-              "caption": "old",
-              "path": "<tmp>/pic.bin"
-            }
-          ],
-          "msg_id": "m1",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s4"
         }
       ],
       "active": [
         {
-          "msg_id": "m2",
-          "role": "user",
-          "content": "active image",
-          "images": [
-            {
-              "path": "<tmp>/pic.bin",
-              "caption": "new"
-            }
-          ],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "active image"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s5"
         }
       ],
       "files": [
@@ -929,40 +1014,10 @@
       ],
       "initial_display_history": [
         {
-          "content": "archived image",
-          "content_blocks": [
-            {
-              "text": "archived image",
-              "type": "text"
-            }
-          ],
-          "images": [
-            {
-              "caption": "old",
-              "path": "<tmp>/pic.bin"
-            }
-          ],
-          "msg_id": "m1",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s4"
         },
         {
-          "msg_id": "m2",
-          "role": "user",
-          "content": "active image",
-          "images": [
-            {
-              "path": "<tmp>/pic.bin",
-              "caption": "new"
-            }
-          ],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "active image"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s5"
         }
       ],
       "steps": [
@@ -1301,40 +1356,10 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "content": "checking",
-          "content_blocks": [
-            {
-              "text": "checking",
-              "type": "text"
-            },
-            {
-              "id": "t1",
-              "input": {
-                "path": "notes.md"
-              },
-              "name": "read_file",
-              "type": "tool_use"
-            }
-          ],
-          "images": [],
-          "msg_id": "m2",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s1"
         },
         {
-          "content": "file contents",
-          "content_blocks": [
-            {
-              "content": "file contents",
-              "is_error": false,
-              "tool_use_id": "t1",
-              "type": "tool_result"
-            }
-          ],
-          "images": [],
-          "msg_id": "m3",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s2"
         },
         {
           "msg_id": "m4",
@@ -1366,35 +1391,7 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "content": "checking\ndone",
-          "content_blocks": [
-            {
-              "text": "checking",
-              "type": "text"
-            },
-            {
-              "id": "t1",
-              "input": {
-                "path": "notes.md"
-              },
-              "name": "read_file",
-              "type": "tool_use"
-            },
-            {
-              "content": "file contents",
-              "is_error": false,
-              "tool_use_id": "t1",
-              "type": "tool_result"
-            },
-            {
-              "text": "done",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m4",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s3"
         }
       ],
       "steps": [
@@ -1420,60 +1417,9 @@
     {
       "name": "delete",
       "archived": [],
-      "active": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "A",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "A"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m2",
-          "role": "assistant",
-          "content": "B",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "B"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m3",
-          "role": "user",
-          "content": "C",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "C"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m4",
-          "role": "assistant",
-          "content": "D",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "D"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "active": {
+        "$ref": "s0"
+      },
       "files": [],
       "steps": [
         {
@@ -2099,136 +2045,12 @@
         }
       ],
       "files": [],
-      "initial_messages": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "Prompt",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "Prompt"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "Third",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "Third"
-            }
-          ],
-          "alt_index": 2,
-          "alt_count": 3,
-          "alternatives": [
-            {
-              "content": "one",
-              "content_blocks": [
-                {
-                  "text": "one",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "content": "two",
-              "content_blocks": [
-                {
-                  "text": "two",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "timestamp": "2026-01-01T00:00:01Z"
-            },
-            {
-              "content": "three",
-              "content_blocks": [
-                {
-                  "text": "three",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "timestamp": "2026-01-01T00:00:02Z"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
-      "initial_display_history": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "Prompt",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "Prompt"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "Third",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "Third"
-            }
-          ],
-          "alt_index": 2,
-          "alt_count": 3,
-          "alternatives": [
-            {
-              "content": "one",
-              "content_blocks": [
-                {
-                  "text": "one",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "content": "two",
-              "content_blocks": [
-                {
-                  "text": "two",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "timestamp": "2026-01-01T00:00:01Z"
-            },
-            {
-              "content": "three",
-              "content_blocks": [
-                {
-                  "text": "three",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "timestamp": "2026-01-01T00:00:02Z"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "initial_messages": {
+        "$ref": "s6"
+      },
+      "initial_display_history": {
+        "$ref": "s6"
+      },
       "steps": [
         {
           "op": "list_alternatives",

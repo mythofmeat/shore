@@ -1,4 +1,184 @@
 {
+  "$shared": {
+    "s0": [
+      {
+        "mtime": 1000,
+        "op": "write",
+        "path": "a.md",
+        "text": "# Notes\n\nThe garden is full of tea plants."
+      },
+      {
+        "mtime": 1001,
+        "op": "write",
+        "path": "b.md",
+        "text": "# Other\n\nThe accountant filed taxes."
+      },
+      {
+        "op": "search",
+        "run": 0
+      }
+    ],
+    "s1": {
+      "counts_only": false,
+      "embedded_paths": [
+        [
+          "a.md",
+          "b.md"
+        ]
+      ],
+      "mode": "hybrid",
+      "outcome": {
+        "embedded_files": 2,
+        "files": [
+          "a.md"
+        ],
+        "searched_files": 2,
+        "skipped_binary_or_large": 0
+      },
+      "path_filter": null,
+      "query": "tea"
+    },
+    "s2": [
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "in.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "in.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s3": [
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "note.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "note.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s4": [
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "a.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "a.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s5": [
+      {
+        "counts_only": false,
+        "embedded_paths": [],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "a.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s6": {
+      "op": "seed_index",
+      "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:3\",\"size\":3,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[-1.0,0.0,0.0]}}}"
+    },
+    "s7": [
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "a.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "a.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      },
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "a.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "a.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s8": [
+      {
+        "content": "tea",
+        "display_path": "a.md",
+        "modified_at_secs": 1000,
+        "size": 3,
+        "skip_reason": null
+      },
+      {
+        "content": null,
+        "display_path": "gone.md",
+        "modified_at_secs": 1001,
+        "size": 4,
+        "skip_reason": "read failed"
+      }
+    ]
+  },
   "cases": [
     {
       "name": "an empty workspace path is unconfigured",
@@ -164,24 +344,9 @@
       "missing_root": false,
       "fail_embed": null,
       "miscount_embed": false,
-      "script": [
-        {
-          "op": "write",
-          "path": "a.md",
-          "text": "# Notes\n\nThe garden is full of tea plants.",
-          "mtime": 1000
-        },
-        {
-          "op": "write",
-          "path": "b.md",
-          "text": "# Other\n\nThe accountant filed taxes.",
-          "mtime": 1001
-        },
-        {
-          "op": "search",
-          "run": 0
-        }
-      ],
+      "script": {
+        "$ref": "s0"
+      },
       "runs": [
         {
           "query": "growing tea in the garden",
@@ -217,24 +382,9 @@
       "missing_root": false,
       "fail_embed": null,
       "miscount_embed": false,
-      "script": [
-        {
-          "op": "write",
-          "path": "a.md",
-          "text": "# Notes\n\nThe garden is full of tea plants.",
-          "mtime": 1000
-        },
-        {
-          "op": "write",
-          "path": "b.md",
-          "text": "# Other\n\nThe accountant filed taxes.",
-          "mtime": 1001
-        },
-        {
-          "op": "search",
-          "run": 0
-        }
-      ],
+      "script": {
+        "$ref": "s0"
+      },
       "runs": [
         {
           "query": "growing tea in the garden",
@@ -580,24 +730,7 @@
       ],
       "runs": [
         {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "embedded_files": 2,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 2,
-            "skipped_binary_or_large": 0
-          },
-          "embedded_paths": [
-            [
-              "a.md",
-              "b.md"
-            ]
-          ]
+          "$ref": "s1"
         },
         {
           "query": "tea",
@@ -658,24 +791,7 @@
       ],
       "runs": [
         {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "embedded_files": 2,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 2,
-            "skipped_binary_or_large": 0
-          },
-          "embedded_paths": [
-            [
-              "a.md",
-              "b.md"
-            ]
-          ]
+          "$ref": "s1"
         },
         {
           "query": "tea",
@@ -825,24 +941,7 @@
       ],
       "runs": [
         {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "a.md",
-              "b.md"
-            ]
-          ]
+          "$ref": "s1"
         },
         {
           "query": "tea",
@@ -1213,27 +1312,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "in.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "in.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "a symlinked directory is skipped, so its contents never appear",
@@ -1270,27 +1351,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "in.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "in.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "a .git directory is skipped whole",
@@ -1328,27 +1391,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "note.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "note.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s3"
+      }
     },
     {
       "name": "a .git *file* from a linked worktree is skipped too",
@@ -1380,27 +1425,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "note.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "note.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s3"
+      }
     },
     {
       "name": "a nested .git is skipped at any depth",
@@ -1548,27 +1575,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "a corrupt index is discarded and rewritten",
@@ -1598,27 +1607,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "an index with the wrong shape is discarded",
@@ -1648,27 +1639,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "a seeded fresh entry is reused without re-embedding",
@@ -1698,23 +1671,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": []
-        }
-      ]
+      "runs": {
+        "$ref": "s5"
+      }
     },
     {
       "name": "a seeded entry from another model is stale",
@@ -1744,27 +1703,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "a legacy entry with no max_embed_chars_per_file is stale",
@@ -1794,27 +1735,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "a seeded entry for a file that no longer exists is pruned",
@@ -1965,23 +1888,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": []
-        }
-      ]
+      "runs": {
+        "$ref": "s5"
+      }
     },
     {
       "name": "an all-zero seeded vector scores no semantic signal",
@@ -2011,23 +1920,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": []
-        }
-      ]
+      "runs": {
+        "$ref": "s5"
+      }
     },
     {
       "name": "a negative cosine is clamped away before blending",
@@ -2049,8 +1944,7 @@
           "mtime": 1000
         },
         {
-          "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:3\",\"size\":3,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[-1.0,0.0,0.0]}}}"
+          "$ref": "s6"
         },
         {
           "op": "search",
@@ -2442,31 +2336,16 @@
           "mtime": 1000
         },
         {
-          "op": "seed_index",
-          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:3\",\"size\":3,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[-1.0,0.0,0.0]}}}"
+          "$ref": "s6"
         },
         {
           "op": "search",
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": []
-        }
-      ]
+      "runs": {
+        "$ref": "s5"
+      }
     },
     {
       "name": "a file with no lexical signal at all still ranks on its vector",
@@ -2496,23 +2375,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": []
-        }
-      ]
+      "runs": {
+        "$ref": "s5"
+      }
     },
     {
       "name": "the query is folded before scoring",
@@ -2714,27 +2579,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "a size change under an unchanged mtime is stale",
@@ -2770,46 +2617,9 @@
           "run": 1
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        },
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s7"
+      }
     },
     {
       "name": "an mtime change under an unchanged size is stale",
@@ -2845,46 +2655,9 @@
           "run": 1
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        },
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s7"
+      }
     },
     {
       "name": "a byte-order mark is content, not decoration",
@@ -2910,27 +2683,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              "a.md"
-            ]
-          },
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "a socket is neither a file nor a directory",
@@ -2960,27 +2715,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "one bad entry discards the whole index file",
@@ -3117,27 +2854,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "counts_only": false,
-          "mode": "hybrid",
-          "outcome": {
-            "embedded_files": 1,
-            "files": [
-              "a.md"
-            ],
-            "searched_files": 1,
-            "skipped_binary_or_large": 0
-          },
-          "path_filter": null,
-          "query": "tea",
-          "embedded_paths": [
-            [
-              "a.md"
-            ]
-          ]
-        }
-      ]
+      "runs": {
+        "$ref": "s4"
+      }
     },
     {
       "name": "an embedder failure on the document batch propagates",
@@ -5403,22 +5122,9 @@
         ],
         "skipped_binary_or_large": 0,
         "dirty": false,
-        "candidates": [
-          {
-            "display_path": "a.md",
-            "size": 3,
-            "modified_at_secs": 1000,
-            "content": "tea",
-            "skip_reason": null
-          },
-          {
-            "display_path": "gone.md",
-            "size": 4,
-            "modified_at_secs": 1001,
-            "content": null,
-            "skip_reason": "read failed"
-          }
-        ],
+        "candidates": {
+          "$ref": "s8"
+        },
         "index": {
           "entries": {}
         }
@@ -5487,22 +5193,9 @@
         ],
         "skipped_binary_or_large": 0,
         "dirty": true,
-        "candidates": [
-          {
-            "display_path": "a.md",
-            "size": 3,
-            "modified_at_secs": 1000,
-            "content": "tea",
-            "skip_reason": null
-          },
-          {
-            "display_path": "gone.md",
-            "size": 4,
-            "modified_at_secs": 1001,
-            "content": null,
-            "skip_reason": "read failed"
-          }
-        ],
+        "candidates": {
+          "$ref": "s8"
+        },
         "index": {
           "entries": {}
         }
