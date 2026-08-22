@@ -669,7 +669,7 @@
       "output": {
         "kind": "error",
         "code": "internal_error",
-        "message": "provider error: usage reports need a ledger on disk; this client has an in-memory one"
+        "message": "provider error: usage reports need a ledger on disk; this client has none configured"
       }
     },
     {

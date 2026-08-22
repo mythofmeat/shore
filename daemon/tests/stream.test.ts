@@ -265,7 +265,7 @@ function readNotificationsConfig(
   return "err" in parsed ? parsed : { ok: parsed.ok.notifications };
 }
 
-const DOCUMENT_PATH_ONLY = new Set([
+const REJECTED_ONLY_BY_A_STRICTER_PARSER = new Set([
   "unknown_order_desc",
   "unknown_after_known",
   "ntfy_unknown_field",
@@ -273,7 +273,7 @@ const DOCUMENT_PATH_ONLY = new Set([
   "backend_wrong_type",
 ]);
 
-const BUN_REFUSES_THE_DOCUMENT = new Set(["threshold_i64_max"]);
+const BUN_TOML_REFUSES = new Set(["threshold_i64_max"]);
 
 describe("[notifications] parsing", () => {
   const emptyCase = (f["config_parse"] as Row[]).find((c) => c["name"] === "empty")?.["ok"] as
@@ -282,8 +282,8 @@ describe("[notifications] parsing", () => {
   const recordedEventDefaults = emptyCase?.["events"];
 
   for (const c of f["config_parse"] as Row[]) {
-    if (DOCUMENT_PATH_ONLY.has(c["name"] as string)) continue;
-    if (BUN_REFUSES_THE_DOCUMENT.has(c["name"] as string)) continue;
+    if (REJECTED_ONLY_BY_A_STRICTER_PARSER.has(c["name"] as string)) continue;
+    if (BUN_TOML_REFUSES.has(c["name"] as string)) continue;
     test(c["name"] as string, () => {
       const table = Bun.TOML.parse(c["toml"] as string) as Record<string, unknown>;
       const parsed = readNotificationsConfig(table);
