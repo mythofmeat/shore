@@ -3,22 +3,22 @@
     {
       "name": "empty",
       "input": [],
-      "expect": []
+      "merged_ids": []
     },
     {
       "name": "plain_exchange_passes_through",
       "input": [
         {
-          "msg_id": "u1",
-          "role": "user",
           "content": "hello",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "hello"
+              "text": "hello",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
@@ -35,33 +35,9 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "hello",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "hello"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "hi"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1"
       ]
     },
     {
@@ -81,46 +57,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "u1",
-          "role": "user",
           "content": "hello",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "hello"
+              "text": "hello",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "s1",
-          "role": "system",
-          "content": "recap",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "recap"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        },
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "hello",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "hello"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        }
+      "merged_ids": [
+        "s1",
+        "u1"
       ]
     },
     {
@@ -143,23 +95,9 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "legacy",
-          "images": [],
-          "content_blocks": [],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "legacy reply",
-          "images": [],
-          "content_blocks": [],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1"
       ]
     },
     {
@@ -211,60 +149,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "grep it",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "grep it"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -320,64 +220,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "let me check\ndone",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "let me check"
-            },
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -397,28 +255,28 @@
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
-          "msg_id": "a1",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_use",
               "id": "t1",
-              "name": "grep",
               "input": {
                 "q": "grep"
-              }
+              },
+              "name": "grep",
+              "type": "tool_use"
             },
             {
-              "type": "tool_use",
               "id": "t2",
-              "name": "read",
               "input": {
                 "q": "read"
-              }
+              },
+              "name": "read",
+              "type": "tool_use"
             }
           ],
+          "images": [],
+          "msg_id": "a1",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
@@ -443,74 +301,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "first",
-              "is_error": false
-            },
-            {
-              "type": "tool_use",
-              "id": "t2",
-              "name": "read",
-              "input": {
-                "q": "read"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t2",
-              "content": "second",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -547,121 +353,69 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
+          "content": "",
+          "content_blocks": [
+            {
+              "content": "one",
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
+            }
+          ],
+          "images": [],
           "msg_id": "r1",
           "role": "user",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "one",
-              "is_error": false
-            }
-          ],
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_use",
               "id": "t2",
-              "name": "read",
               "input": {
                 "q": "read"
-              }
+              },
+              "name": "read",
+              "type": "tool_use"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
+          "content": "",
+          "content_blocks": [
+            {
+              "content": "two",
+              "is_error": false,
+              "tool_use_id": "t2",
+              "type": "tool_result"
+            }
+          ],
+          "images": [],
           "msg_id": "r2",
           "role": "user",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_result",
-              "tool_use_id": "t2",
-              "content": "two",
-              "is_error": false
-            }
-          ],
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a3",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a3",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a3",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "one",
-              "is_error": false
-            },
-            {
-              "type": "tool_use",
-              "id": "t2",
-              "name": "read",
-              "input": {
-                "q": "read"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t2",
-              "content": "two",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a3"
       ]
     },
     {
@@ -722,69 +476,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "thinking",
-              "thinking": "hmm",
-              "signature": "sig"
-            },
-            {
-              "type": "redacted_thinking",
-              "data": "zzz"
-            },
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -840,60 +547,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -962,51 +631,9 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "   "
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -1077,53 +704,9 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t9",
-              "content": "stray",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -1181,66 +764,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_result",
-              "tool_use_id": "t0",
-              "content": "odd",
-              "is_error": false
-            },
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -1292,54 +831,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -1397,60 +904,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "kept",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -1470,28 +939,28 @@
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
-          "msg_id": "a1",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_use",
               "id": "t1",
-              "name": "grep",
               "input": {
                 "q": "grep"
-              }
+              },
+              "name": "grep",
+              "type": "tool_use"
             },
             {
-              "type": "tool_use",
               "id": "t2",
-              "name": "read",
               "input": {
                 "q": "read"
-              }
+              },
+              "name": "read",
+              "type": "tool_use"
             }
           ],
+          "images": [],
+          "msg_id": "a1",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
@@ -1510,68 +979,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "only one",
-              "is_error": false
-            },
-            {
-              "type": "tool_use",
-              "id": "t2",
-              "name": "read",
-              "input": {
-                "q": "read"
-              }
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -1623,60 +1046,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "boom",
-              "is_error": true
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -1713,125 +1098,63 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1"
       ]
     },
     {
       "name": "incomplete_result_but_no_final_text",
       "input": [
         {
-          "msg_id": "u1",
-          "role": "user",
           "content": "go",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "go"
+              "text": "go",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
-          "msg_id": "a1",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_use",
               "id": "t1",
-              "name": "grep",
               "input": {
                 "q": "grep"
-              }
+              },
+              "name": "grep",
+              "type": "tool_use"
             }
           ],
+          "images": [],
+          "msg_id": "a1",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "r1",
-          "role": "user",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_result",
-              "tool_use_id": "t1",
               "content": "found",
-              "is_error": false
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
             }
           ],
+          "images": [],
+          "msg_id": "r1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1"
       ]
     },
     {
@@ -1883,95 +1206,37 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "u2",
-          "role": "user",
           "content": "actually stop",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "actually stop"
+              "text": "actually stop",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u2",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "ok"
+              "text": "ok",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        },
-        {
-          "msg_id": "u2",
-          "role": "user",
-          "content": "actually stop",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "actually stop"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "ok"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1",
+        "u2",
+        "a2"
       ]
     },
     {
@@ -2008,89 +1273,37 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "u2",
-          "role": "user",
           "content": "actually stop",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "actually stop"
+              "text": "actually stop",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u2",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "ok"
+              "text": "ok",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        },
-        {
-          "msg_id": "u2",
-          "role": "user",
-          "content": "actually stop",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "actually stop"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "ok"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1",
+        "u2",
+        "a2"
       ]
     },
     {
@@ -2127,20 +1340,20 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_use",
               "id": "t2",
-              "name": "read",
               "input": {
                 "q": "read"
-              }
+              },
+              "name": "read",
+              "type": "tool_use"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
@@ -2159,68 +1372,22 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a3",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a3",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a3",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_use",
-              "id": "t2",
-              "name": "read",
-              "input": {
-                "q": "read"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t2",
-              "content": "two",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a3"
       ]
     },
     {
@@ -2276,82 +1443,24 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        },
-        {
-          "msg_id": "u2",
-          "role": "user",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "and also"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1",
+        "u2",
+        "a2"
       ]
     },
     {
@@ -2373,49 +1482,37 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "u1",
-          "role": "user",
           "content": "hello",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "hello"
+              "text": "hello",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "hello",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "hello"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        }
+      "merged_ids": [
+        "u1"
       ]
     },
     {
       "name": "both_exchanges_have_tools",
       "input": [
         {
-          "msg_id": "u1",
-          "role": "user",
           "content": "first",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "first"
+              "text": "first",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
@@ -2436,18 +1533,18 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "r1",
-          "role": "user",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_result",
-              "tool_use_id": "t1",
               "content": "one",
-              "is_error": false
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
             }
           ],
+          "images": [],
+          "msg_id": "r1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
@@ -2464,16 +1561,16 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "u2",
-          "role": "user",
           "content": "second",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "second"
+              "text": "second",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u2",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
@@ -2494,18 +1591,18 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "r2",
-          "role": "user",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_result",
-              "tool_use_id": "t2",
               "content": "two",
-              "is_error": false
+              "is_error": false,
+              "tool_use_id": "t2",
+              "type": "tool_result"
             }
           ],
+          "images": [],
+          "msg_id": "r2",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
@@ -2522,103 +1619,27 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "first",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "first"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "first done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "one",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "first done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        },
-        {
-          "msg_id": "u2",
-          "role": "user",
-          "content": "second",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "second"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a4",
-          "role": "assistant",
-          "content": "second done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t2",
-              "name": "read",
-              "input": {
-                "q": "read"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t2",
-              "content": "two",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "second done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2",
+        "u2",
+        "a4"
       ]
     },
     {
       "name": "only_the_second_exchange_has_tools",
       "input": [
         {
-          "msg_id": "u1",
-          "role": "user",
           "content": "first",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "first"
+              "text": "first",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
@@ -2635,16 +1656,16 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "u2",
-          "role": "user",
           "content": "second",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "second"
+              "text": "second",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u2",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
@@ -2665,101 +1686,39 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "r1",
-          "role": "user",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_result",
-              "tool_use_id": "t1",
               "content": "one",
-              "is_error": false
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
             }
           ],
+          "images": [],
+          "msg_id": "r1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a3",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a3",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "first",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "first"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "plain"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        },
-        {
-          "msg_id": "u2",
-          "role": "user",
-          "content": "second",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "second"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a3",
-          "role": "assistant",
-          "content": "done",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "one",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1",
+        "u2",
+        "a3"
       ]
     },
     {
@@ -2840,57 +1799,9 @@
           "origin": "autonomous"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "done",
-          "images": [
-            {
-              "path": "/last.png",
-              "caption": "kept"
-            }
-          ],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "alt_index": 1,
-          "alt_count": 3,
-          "timestamp": "2026-04-04T12:00:02-04:00",
-          "provider_key": "openrouter-anthropic",
-          "model": "anthropic/claude-opus-4.6",
-          "origin": "autonomous"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
@@ -2929,39 +1840,9 @@
           "model": "claude-opus-4-6"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00",
-          "provider_key": "anthropic",
-          "model": "claude-opus-4-6"
-        }
+      "merged_ids": [
+        "u1",
+        "a1"
       ]
     },
     {
@@ -3017,152 +1898,76 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "a2",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "done"
+              "text": "done",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "a2",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "thinking aloud\ndone",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "thinking aloud"
-            },
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "THIS MUST NOT APPEAR",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     },
     {
       "name": "content_is_empty_when_no_text_blocks",
       "input": [
         {
-          "msg_id": "u1",
-          "role": "user",
           "content": "go",
-          "images": [],
           "content_blocks": [
             {
-              "type": "text",
-              "text": "go"
+              "text": "go",
+              "type": "text"
             }
           ],
+          "images": [],
+          "msg_id": "u1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:00-04:00"
         },
         {
-          "msg_id": "a1",
-          "role": "assistant",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_use",
               "id": "t1",
-              "name": "grep",
               "input": {
                 "q": "grep"
-              }
+              },
+              "name": "grep",
+              "type": "tool_use"
             }
           ],
+          "images": [],
+          "msg_id": "a1",
+          "role": "assistant",
           "timestamp": "2026-04-04T12:00:02-04:00"
         },
         {
-          "msg_id": "r1",
-          "role": "user",
           "content": "",
-          "images": [],
           "content_blocks": [
             {
-              "type": "tool_result",
-              "tool_use_id": "t1",
               "content": "found",
-              "is_error": false
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
             }
           ],
+          "images": [],
+          "msg_id": "r1",
+          "role": "user",
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a1",
-          "role": "assistant",
-          "content": "",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a1"
       ]
     },
     {
@@ -3231,51 +2036,9 @@
           "timestamp": "2026-04-04T12:00:02-04:00"
         }
       ],
-      "expect": [
-        {
-          "msg_id": "u1",
-          "role": "user",
-          "content": "go",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "go"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:00-04:00"
-        },
-        {
-          "msg_id": "a2",
-          "role": "assistant",
-          "content": "padded\ntabbed",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "  padded  "
-            },
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "grep",
-              "input": {
-                "q": "grep"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "found",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "\ttabbed\n"
-            }
-          ],
-          "timestamp": "2026-04-04T12:00:02-04:00"
-        }
+      "merged_ids": [
+        "u1",
+        "a2"
       ]
     }
   ]

@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { ConversationEngine, type History } from "../src/engine/conversation";
+import { ConversationEngine } from "../src/engine/conversation";
 import { MessageNotFound } from "../src/engine/message_store";
 import { SegmentReader } from "../src/engine/segments";
 import type { Message } from "../src/engine/types";
+import { existsSync } from "node:fs";
+import { mergeToolLoopMessages } from "../src/engine/merge.ts";
 import { testTmp } from "./support/tmp.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 
@@ -34,8 +36,7 @@ interface WalkStep {
   turn_count: number;
   segment_count: number;
   broadcasts: number;
-  display_history: { messages: Message[]; active_start: number };
-  snapshot: History;
+  display_history: { active_start: number };
 }
 
 interface WalkCase {
@@ -207,17 +208,46 @@ describe("driving the conversation engine", () => {
         expect(broadcasts, `${where} broadcasts`).toBe(expected.broadcasts);
 
         const display = await engine.displayHistory();
-        expect(display.messages, `${where} display_history.messages`).toEqual(
-          expected.display_history.messages,
-        );
         expect(display.activeStart, `${where} display_history.active_start`).toBe(
           expected.display_history.active_start,
         );
 
+        const archived: Message[] = [];
+        for (let i = 0; i < engine.segments().segmentCount(); i += 1) {
+          archived.push(...(await engine.segments().readSegment(i)));
+        }
         expect(
-          JSON.parse(JSON.stringify(engine.historySnapshot({ k: "v" }))),
-          `${where} snapshot`,
-        ).toEqual(expected.snapshot as unknown as Record<string, unknown>);
+          display.messages.slice(0, display.activeStart),
+          `${where}: the archived half is merged on its own`,
+        ).toEqual(mergeToolLoopMessages(archived));
+        expect(
+          display.messages.slice(display.activeStart),
+          `${where}: and the live half on its own, so a loop never spans the boundary`,
+        ).toEqual(mergeToolLoopMessages([...engine.messages()]));
+
+        const snapshot = JSON.parse(JSON.stringify(engine.historySnapshot({ k: "v" }))) as {
+          messages: Message[];
+          config: unknown;
+          selected_character: string;
+          revision: number;
+        };
+        expect(snapshot.revision, `${where}: the snapshot says which revision it is`).toBe(
+          engine.currentRevision(),
+        );
+        expect(snapshot.selected_character, `${where}: and whose conversation`).toBe(walk.character);
+        expect(snapshot.config, `${where}: and carries the config it was handed`).toEqual({ k: "v" });
+        expect(
+          snapshot.messages.map((m) => m.msg_id),
+          `${where}: a snapshot is the live half of the history, never the archive`,
+        ).toEqual(display.messages.slice(display.activeStart).map((m) => m.msg_id));
+        for (const message of snapshot.messages) {
+          for (const image of message.images) {
+            expect(
+              image.data !== undefined,
+              `${where}: ${image.path} carries its bytes exactly when they can be read`,
+            ).toBe(existsSync(image.path));
+          }
+        }
       }
     });
   }

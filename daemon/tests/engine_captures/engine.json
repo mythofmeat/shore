@@ -186,16 +186,7 @@
           "segment_count": 0,
           "broadcasts": 0,
           "display_history": {
-            "messages": [],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 0
           }
         },
         {
@@ -222,44 +213,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 1
           }
         },
         {
@@ -286,70 +240,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 2
           }
         },
         {
@@ -376,96 +267,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m0",
-                "role": "user",
-                "content": "earlier",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00.5Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m0",
-                "role": "user",
-                "content": "earlier",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00.5Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 3
           }
         },
         {
@@ -481,96 +283,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m0",
-                "role": "user",
-                "content": "earlier",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00.5Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m0",
-                "role": "user",
-                "content": "earlier",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00.5Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 4
           }
         },
         {
@@ -586,100 +299,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m0",
-                "role": "user",
-                "content": "earlier",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00.5Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "alt_index": 1,
-                "alt_count": 2,
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m0",
-                "role": "user",
-                "content": "earlier",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00.5Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "alt_index": 1,
-                "alt_count": 2,
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 5
           }
         },
         {
@@ -696,100 +316,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m0",
-                "role": "user",
-                "content": "earlier",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00.5Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 2,
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m0",
-                "role": "user",
-                "content": "earlier",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00.5Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 2,
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 6
           }
         },
         {
@@ -804,74 +331,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 2,
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 2,
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 7
           }
         },
         {
@@ -886,44 +346,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 8
           }
         },
         {
@@ -950,70 +373,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m3",
-                "role": "assistant",
-                "content": "trailing",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "trailing"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m3",
-                "role": "assistant",
-                "content": "trailing",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "trailing"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 9
           }
         },
         {
@@ -1028,44 +388,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 10
           }
         },
         {
@@ -1095,70 +418,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "r1",
-                "role": "assistant",
-                "content": "regenerated",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "regenerated"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:03Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "hello (edited)",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello (edited)"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "r1",
-                "role": "assistant",
-                "content": "regenerated",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "regenerated"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:03Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 11
           }
         },
         {
@@ -1172,16 +432,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 12
           }
         },
         {
@@ -1195,16 +446,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Nova",
-            "revision": 13
           }
         }
       ]
@@ -1252,60 +494,7 @@
           "segment_count": 1,
           "broadcasts": 0,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "s1",
-                "role": "user",
-                "content": "archived question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived question"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "$ref": "s1"
-              },
-              {
-                "msg_id": "a1",
-                "role": "user",
-                "content": "active question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active question"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "a1",
-                "role": "user",
-                "content": "active question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active question"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Ada",
-            "revision": 0
           }
         },
         {
@@ -1336,94 +525,7 @@
           "segment_count": 1,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "s1",
-                "role": "user",
-                "content": "archived question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived question"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "$ref": "s1"
-              },
-              {
-                "msg_id": "a1",
-                "role": "user",
-                "content": "active question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active question"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "a2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_2",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "a1",
-                "role": "user",
-                "content": "active question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active question"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "a2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_2",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Ada",
-            "revision": 1
           }
         },
         {
@@ -1452,106 +554,7 @@
           "segment_count": 1,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "s1",
-                "role": "user",
-                "content": "archived question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived question"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "$ref": "s1"
-              },
-              {
-                "msg_id": "a1",
-                "role": "user",
-                "content": "active question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active question"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "a2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_2",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  },
-                  {
-                    "type": "tool_result",
-                    "tool_use_id": "tu_2",
-                    "content": "file contents",
-                    "is_error": false
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "a1",
-                "role": "user",
-                "content": "active question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active question"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "a2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_2",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  },
-                  {
-                    "type": "tool_result",
-                    "tool_use_id": "tu_2",
-                    "content": "file contents",
-                    "is_error": false
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Ada",
-            "revision": 2
           }
         }
       ]
@@ -1594,53 +597,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "i1",
-                "role": "user",
-                "content": "look",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpOASX0f/Iris/pic.png"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "look"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "i1",
-                "role": "user",
-                "content": "look",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpOASX0f/Iris/pic.png",
-                    "data": "iVBORw0KGgoBAg=="
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "look"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Iris",
-            "revision": 1
           }
         },
         {
@@ -1671,87 +628,7 @@
           "segment_count": 0,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "i1",
-                "role": "user",
-                "content": "look",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpOASX0f/Iris/pic.png"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "look"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "i2",
-                "role": "user",
-                "content": "and this",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpOASX0f/Iris/gone.png"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "and this"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 0
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "i1",
-                "role": "user",
-                "content": "look",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpOASX0f/Iris/pic.png",
-                    "data": "iVBORw0KGgoBAg=="
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "look"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "i2",
-                "role": "user",
-                "content": "and this",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpOASX0f/Iris/gone.png"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "and this"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Iris",
-            "revision": 2
           }
         }
       ]
@@ -1805,47 +682,7 @@
           "segment_count": 1,
           "broadcasts": 0,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "w1",
-                "role": "user",
-                "content": "before",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "before"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "msg_id": "w2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_straddle",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Wren",
-            "revision": 0
           }
         },
         {
@@ -1872,74 +709,7 @@
           "segment_count": 1,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "w1",
-                "role": "user",
-                "content": "before",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "before"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "msg_id": "w2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_straddle",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Wren",
-            "revision": 1
           }
         },
         {
@@ -1954,74 +724,7 @@
           "segment_count": 1,
           "broadcasts": 0,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "w1",
-                "role": "user",
-                "content": "before",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "before"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "msg_id": "w2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_straddle",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Wren",
-            "revision": 1
           }
         },
         {
@@ -2053,117 +756,43 @@
           "segment_count": 1,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "w1",
-                "role": "user",
-                "content": "before",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "before"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "msg_id": "w2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_straddle",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w5",
-                "role": "assistant",
-                "content": "kept",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpVn3pTV/Wren/real.png",
-                    "data": "UFJFU0VU"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "kept"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w5",
-                "role": "assistant",
-                "content": "kept",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpVn3pTV/Wren/real.png",
-                    "data": "UFJFU0VU"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "kept"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Wren",
-            "revision": 2
           }
         },
         {
           "op": {
             "op": "append",
             "msg": {
-              "$ref": "s0"
+              "alt_count": 2,
+              "alt_index": 0,
+              "alternatives": [
+                {
+                  "content": "the other one",
+                  "content_blocks": [
+                    {
+                      "text": "the other one",
+                      "type": "text"
+                    }
+                  ],
+                  "images": [
+                    {
+                      "path": "/tmp/.tmpVn3pTV/Wren/alt.png"
+                    }
+                  ],
+                  "timestamp": "2026-01-01T00:00:03Z"
+                }
+              ],
+              "content": "variant",
+              "content_blocks": [
+                {
+                  "text": "variant",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "msg_id": "w6",
+              "role": "assistant",
+              "timestamp": "2026-01-01T00:00:03Z"
             }
           },
           "revision": 3,
@@ -2173,146 +802,7 @@
           "segment_count": 1,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "w1",
-                "role": "user",
-                "content": "before",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "before"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "msg_id": "w2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_straddle",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w5",
-                "role": "assistant",
-                "content": "kept",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpVn3pTV/Wren/real.png",
-                    "data": "UFJFU0VU"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "kept"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              },
-              {
-                "$ref": "s0"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w5",
-                "role": "assistant",
-                "content": "kept",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpVn3pTV/Wren/real.png",
-                    "data": "UFJFU0VU"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "kept"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              },
-              {
-                "msg_id": "w6",
-                "role": "assistant",
-                "content": "variant",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "variant"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 2,
-                "alternatives": [
-                  {
-                    "content": "the other one",
-                    "images": [
-                      {
-                        "path": "/tmp/.tmpVn3pTV/Wren/alt.png",
-                        "data": "R0lGOA=="
-                      }
-                    ],
-                    "content_blocks": [
-                      {
-                        "type": "text",
-                        "text": "the other one"
-                      }
-                    ],
-                    "timestamp": "2026-01-01T00:00:03Z"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:03Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Wren",
-            "revision": 3
           }
         },
         {
@@ -2344,146 +834,7 @@
           "segment_count": 1,
           "broadcasts": 0,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "w1",
-                "role": "user",
-                "content": "before",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "before"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "msg_id": "w2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_straddle",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w5",
-                "role": "assistant",
-                "content": "kept",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpVn3pTV/Wren/real.png",
-                    "data": "UFJFU0VU"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "kept"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              },
-              {
-                "$ref": "s0"
-              }
-            ],
             "active_start": 2
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w5",
-                "role": "assistant",
-                "content": "kept",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpVn3pTV/Wren/real.png",
-                    "data": "UFJFU0VU"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "kept"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              },
-              {
-                "msg_id": "w6",
-                "role": "assistant",
-                "content": "variant",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "variant"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 2,
-                "alternatives": [
-                  {
-                    "content": "the other one",
-                    "images": [
-                      {
-                        "path": "/tmp/.tmpVn3pTV/Wren/alt.png",
-                        "data": "R0lGOA=="
-                      }
-                    ],
-                    "content_blocks": [
-                      {
-                        "type": "text",
-                        "text": "the other one"
-                      }
-                    ],
-                    "timestamp": "2026-01-01T00:00:03Z"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:03Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Wren",
-            "revision": 3
           }
         },
         {
@@ -2497,247 +848,10 @@
           "segment_count": 2,
           "broadcasts": 1,
           "display_history": {
-            "messages": [
-              {
-                "msg_id": "w1",
-                "role": "user",
-                "content": "before",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "before"
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:00Z"
-              },
-              {
-                "msg_id": "w2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_straddle",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w7",
-                "role": "user",
-                "content": "newly archived",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "newly archived"
-                  }
-                ],
-                "timestamp": "2025-12-02T00:00:00Z"
-              },
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w5",
-                "role": "assistant",
-                "content": "kept",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpVn3pTV/Wren/real.png"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "kept"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              },
-              {
-                "msg_id": "w6",
-                "role": "assistant",
-                "content": "variant",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "variant"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 1,
-                "alternatives": [
-                  {
-                    "content": "the other one",
-                    "images": [
-                      {
-                        "path": "/tmp/.tmpVn3pTV/Wren/alt.png"
-                      }
-                    ],
-                    "content_blocks": [
-                      {
-                        "type": "text",
-                        "text": "the other one"
-                      }
-                    ],
-                    "timestamp": "2026-01-01T00:00:03Z"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:03Z"
-              }
-            ],
             "active_start": 3
-          },
-          "snapshot": {
-            "messages": [
-              {
-                "msg_id": "w4",
-                "role": "user",
-                "content": "ask",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "ask"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "msg_id": "w5",
-                "role": "assistant",
-                "content": "kept",
-                "images": [
-                  {
-                    "path": "/tmp/.tmpVn3pTV/Wren/real.png",
-                    "data": "iVBORw=="
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "kept"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:02Z"
-              },
-              {
-                "msg_id": "w6",
-                "role": "assistant",
-                "content": "variant",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "variant"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 1,
-                "alternatives": [
-                  {
-                    "content": "the other one",
-                    "images": [
-                      {
-                        "path": "/tmp/.tmpVn3pTV/Wren/alt.png",
-                        "data": "R0lGOA=="
-                      }
-                    ],
-                    "content_blocks": [
-                      {
-                        "type": "text",
-                        "text": "the other one"
-                      }
-                    ],
-                    "timestamp": "2026-01-01T00:00:03Z"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:03Z"
-              }
-            ],
-            "config": {
-              "k": "v"
-            },
-            "selected_character": "Wren",
-            "revision": 4
           }
         }
       ]
     }
-  ],
-  "$shared": {
-    "s0": {
-      "alt_count": 2,
-      "alt_index": 0,
-      "alternatives": [
-        {
-          "content": "the other one",
-          "content_blocks": [
-            {
-              "text": "the other one",
-              "type": "text"
-            }
-          ],
-          "images": [
-            {
-              "path": "/tmp/.tmpVn3pTV/Wren/alt.png"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:03Z"
-        }
-      ],
-      "content": "variant",
-      "content_blocks": [
-        {
-          "text": "variant",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "w6",
-      "role": "assistant",
-      "timestamp": "2026-01-01T00:00:03Z"
-    },
-    "s1": {
-      "content": "",
-      "content_blocks": [
-        {
-          "id": "tu_1",
-          "input": {
-            "path": "/tmp/x"
-          },
-          "name": "read_file",
-          "type": "tool_use"
-        },
-        {
-          "content": "file contents",
-          "is_error": false,
-          "tool_use_id": "tu_1",
-          "type": "tool_result"
-        }
-      ],
-      "images": [],
-      "msg_id": "s2",
-      "role": "assistant",
-      "timestamp": "2025-12-01T00:00:01Z"
-    }
-  }
+  ]
 }
