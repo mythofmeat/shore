@@ -1,0 +1,418 @@
+{
+  "timezone": "America/New_York",
+  "now": "2026-05-13T16:20:00+00:00",
+  "seed": [
+    {
+      "ts": "2026-03-02T11:00:00+00:00",
+      "character": "aria",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "message",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-04T13:00:00+00:00",
+      "character": "aria",
+      "provider": "openai",
+      "api_key_name": "default",
+      "model": "gpt-5.5",
+      "call_type": "message",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-12T09:00:00+00:00",
+      "character": "aria",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "keepalive",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "cold",
+      "cache_anomaly": "keepalive_miss",
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-13T02:00:00+00:00",
+      "character": "kai",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "heartbeat",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-13T14:00:00+00:00",
+      "character": "aria",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "message",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "tool_use",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-13T14:02:00+00:00",
+      "character": "aria",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "tool_loop",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-13T16:00:00+00:00",
+      "character": "leo",
+      "provider": "openrouter",
+      "api_key_name": "default",
+      "model": "anthropic/claude-opus-4.6",
+      "call_type": "message",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "cold",
+      "cache_anomaly": null,
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-13T13:40:00+00:00",
+      "character": "nina",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "message",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-13T15:00:00+00:00",
+      "character": "aria",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "message",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 40000,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": "unexpected_write",
+      "input_cost": 0.012,
+      "output_cost": 0.004,
+      "cache_read_cost": 0.00015,
+      "cache_write_cost": 2e-05,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.01617
+    },
+    {
+      "ts": "2026-05-13T15:30:00+00:00",
+      "character": "ren, \"the quiet one\"",
+      "provider": "anthropic",
+      "api_key_name": null,
+      "model": "claude-opus-4-6",
+      "call_type": "dreaming",
+      "input_tokens": 1200,
+      "output_tokens": 340,
+      "cache_read_tokens": 900,
+      "cache_write_tokens": 120,
+      "cache_ttl": "1h",
+      "reasoning_effort": null,
+      "total_ms": 4100,
+      "ttft_ms": 380,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": null,
+      "output_cost": null,
+      "cache_read_cost": null,
+      "cache_write_cost": null,
+      "cost_source": null,
+      "total_cost": 1.5e-07
+    }
+  ],
+  "periods": [
+    {
+      "timezone": "utc",
+      "last": "today",
+      "since": "2026-05-13T00:00:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "week",
+      "since": "2026-05-11T00:00:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "this_week",
+      "since": "2026-05-11T00:00:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "month",
+      "since": "2026-05-01T00:00:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "this_month",
+      "since": "2026-05-01T00:00:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "all",
+      "since": null
+    },
+    {
+      "timezone": "utc",
+      "last": "4h",
+      "since": "2026-05-13T12:20:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "7d",
+      "since": "2026-05-06T16:20:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "2w",
+      "since": "2026-04-29T16:20:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "0d",
+      "since": "2026-05-13T16:20:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "-1d",
+      "since": "2026-05-14T16:20:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "4hh",
+      "since": "2026-05-13T12:20:00+00:00"
+    },
+    {
+      "timezone": "utc",
+      "last": "banana",
+      "since": null
+    },
+    {
+      "timezone": "utc",
+      "last": "",
+      "since": null
+    },
+    {
+      "timezone": "utc",
+      "last": "d",
+      "since": null
+    },
+    {
+      "timezone": "local",
+      "last": "today",
+      "since": "2026-05-13T04:00:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "week",
+      "since": "2026-05-11T04:00:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "this_week",
+      "since": "2026-05-11T04:00:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "month",
+      "since": "2026-05-01T04:00:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "this_month",
+      "since": "2026-05-01T04:00:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "all",
+      "since": null
+    },
+    {
+      "timezone": "local",
+      "last": "4h",
+      "since": "2026-05-13T12:20:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "7d",
+      "since": "2026-05-06T16:20:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "2w",
+      "since": "2026-04-29T16:20:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "0d",
+      "since": "2026-05-13T16:20:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "-1d",
+      "since": "2026-05-14T16:20:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "4hh",
+      "since": "2026-05-13T12:20:00+00:00"
+    },
+    {
+      "timezone": "local",
+      "last": "banana",
+      "since": null
+    },
+    {
+      "timezone": "local",
+      "last": "",
+      "since": null
+    },
+    {
+      "timezone": "local",
+      "last": "d",
+      "since": null
+    }
+  ]
+}
