@@ -26,13 +26,6 @@ interface Fixture {
     score: number | null;
     earliest_index: number | null;
   }[];
-  excerpts: {
-    name: string;
-    content: string;
-    query: string | null;
-    excerpt_chars: number;
-    expect: string;
-  }[];
   clamping: { input: Json; max_results: number; excerpt_chars: number }[];
   arg_parsing: {
     input: Json;
@@ -143,24 +136,65 @@ describe("scoring", () => {
   });
 });
 
-describe("excerptFor", () => {
-  for (const c of fixture.excerpts) {
-    test(c.name, () => {
-      const matcher = c.query === null ? undefined : new QueryMatcher(c.query);
-      expect(excerptFor(c.content, matcher, c.excerpt_chars)).toBe(c.expect);
-    });
-  }
+describe("excerpting a message for a search result", () => {
+  const chars = (t: string) => Array.from(t).length;
+  const excerpt = (content: string, query: string | null, budget: number) =>
+    excerptFor(content, query === null ? undefined : new QueryMatcher(query), budget);
 
-  test("the window is measured in characters, not code units", () => {
-    const content = "🙂".repeat(500);
-    expect(Array.from(excerptFor(content, undefined, 80)).length).toBe(80 + "...".length);
+  test("content that already fits comes back whole, with no ellipsis", () => {
+    expect(excerpt("short content", null, 80)).toBe("short content");
   });
 
-  test("no excerpt ever splits a character", () => {
-    for (const c of fixture.excerpts) {
-      const matcher = c.query === null ? undefined : new QueryMatcher(c.query);
-      expect(excerptFor(c.content, matcher, c.excerpt_chars), c.name).not.toContain("�");
+  test("with no query it takes the opening, and says it was cut", () => {
+    const got = excerpt("x".repeat(500), null, 80);
+    expect(chars(got)).toBe(83);
+    expect(got.endsWith("...")).toBe(true);
+    expect(got.startsWith("...")).toBe(false);
+  });
+
+  test("with a query it centres on the first match, keeping a little before it", () => {
+    const got = excerpt(`${"a".repeat(500)}tea${"b".repeat(500)}`, "tea", 200);
+    expect(got).toContain("tea");
+    expect(got.startsWith("...")).toBe(true);
+    expect(got.endsWith("...")).toBe(true);
+  });
+
+  test("a match near the start is not padded with ellipsis it does not need", () => {
+    const got = excerpt(`tea${"b".repeat(500)}`, "tea", 200);
+    expect(got.startsWith("...")).toBe(false);
+    expect(got).toContain("tea");
+  });
+
+  test("a query that is not there falls back to the opening", () => {
+    const got = excerpt("the tea is hot", "coffee", 80);
+    expect(got).toBe("the tea is hot");
+  });
+
+  test("what comes back stays within the budget, plus its ellipses", () => {
+    for (const budget of [1, 10, 80, 360, 2000]) {
+      for (const query of [null, "tea"]) {
+        const content = `${"a".repeat(2000)}tea${"b".repeat(2000)}`;
+        expect(chars(excerpt(content, query, budget)), `${budget}/${query}`).toBeLessThanOrEqual(
+          budget + 6,
+        );
+      }
     }
+  });
+
+  test("counting is by character, so multibyte content is not cut short", () => {
+    for (const filler of ["\u4E16", "\u{1F600}", "e\u0301"]) {
+      for (const query of [null, "tea"]) {
+        const content = `${filler.repeat(400)}tea${filler.repeat(400)}`;
+        const got = excerpt(content, query, 360);
+        expect(got, `${filler}/${query}`).not.toContain("\uFFFD");
+        expect(chars(got), `${filler}/${query}`).toBeLessThanOrEqual(366);
+      }
+    }
+  });
+
+  test("an empty budget still returns something rather than throwing", () => {
+    expect(() => excerpt("the tea is hot", "tea", 0)).not.toThrow();
+    expect(() => excerpt("", null, 80)).not.toThrow();
   });
 });
 

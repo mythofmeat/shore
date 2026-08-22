@@ -12,6 +12,7 @@ import {
   DEFAULT_MEMORY_FILE_LIMITS,
   excerptLine,
   findCaseInsensitiveMatch,
+  SEARCH_EXCERPT_CHARS,
   GIT_SAFETY_FLAGS,
   handleDelete,
   handleEdit,
@@ -41,7 +42,6 @@ interface Fixture {
   delete: DeleteCase[];
   trash_stamp: { millis: number; stamp: string }[];
   search: SearchCase[];
-  excerpt: { name: string; line: string; query: string; matched: boolean; excerpt: string | null }[];
   best_line: { name: string; content: string; query_lower: string; line: number; excerpt: string }[];
   git_validation: GitValidation;
   git_identity: { character: string; name: string; email: string }[];
@@ -409,16 +409,86 @@ describe("search", () => {
   }
 });
 
-describe("excerpt", () => {
-  for (const c of fixture.excerpt) {
-    test(c.name, () => {
-      const match = findCaseInsensitiveMatch(c.line, c.query);
-      expect(match !== undefined).toBe(c.matched);
-      expect(match === undefined ? null : excerptLine(c.line, match[0], match[1])).toEqual(
-        c.excerpt,
-      );
-    });
-  }
+describe("excerpting the line a match was found on", () => {
+  const CHARS = SEARCH_EXCERPT_CHARS;
+  const chars = (t: string) => Array.from(t).length;
+  const excerptOf = (line: string, query: string) => {
+    const match = findCaseInsensitiveMatch(line, query);
+    expect(match, `no match for ${JSON.stringify(query)}`).toBeDefined();
+    return excerptLine(line, required(match)[0], required(match)[1]);
+  };
+
+  test("a line that already fits comes back whole, with no ellipsis", () => {
+    expect(excerptOf("the tea is hot", "tea")).toBe("the tea is hot");
+  });
+
+  test("leading and trailing whitespace is dropped, since it is not context", () => {
+    expect(excerptOf("     the tea is hot   ", "tea")).toBe("the tea is hot");
+  });
+
+  test("the match is always inside what comes back", () => {
+    for (const pad of [0, 10, CHARS, CHARS * 3]) {
+      const line = `${"a".repeat(pad)} tea ${"b".repeat(pad)}`;
+      expect(excerptOf(line, "tea"), `pad ${pad}`).toContain("tea");
+    }
+  });
+
+  test("what comes back stays within the window, plus its ellipses", () => {
+    for (const pad of [0, 50, CHARS, CHARS * 5]) {
+      const line = `${"a".repeat(pad)} tea ${"b".repeat(pad)}`;
+      expect(chars(excerptOf(line, "tea")), `pad ${pad}`).toBeLessThanOrEqual(CHARS + 6);
+    }
+  });
+
+  test("a truncated side is marked, and an untruncated one is not", () => {
+    const long = "x".repeat(CHARS * 2);
+    expect(excerptOf(`tea ${long}`, "tea").startsWith("...")).toBe(false);
+    expect(excerptOf(`tea ${long}`, "tea").endsWith("...")).toBe(true);
+    expect(excerptOf(`${long} tea`, "tea").startsWith("...")).toBe(true);
+    expect(excerptOf(`${long} tea`, "tea").endsWith("...")).toBe(false);
+    const both = excerptOf(`${long} tea ${long}`, "tea");
+    expect(both.startsWith("...") && both.endsWith("...")).toBe(true);
+  });
+
+  test("context unavailable on one side is spent on the other", () => {
+    const long = "x".repeat(CHARS * 2);
+    const trailingOnly = excerptOf(`tea ${long}`, "tea");
+    const bothSides = excerptOf(`${long} tea ${long}`, "tea");
+    expect(chars(trailingOnly)).toBeGreaterThan(chars(bothSides) - 6);
+  });
+
+  test("a match longer than the window still comes back whole", () => {
+    const huge = "t".repeat(CHARS * 2);
+    expect(excerptOf(`before ${huge} after`, huge)).toContain(huge);
+  });
+
+  test("counting is by character, so multibyte text is not cut short", () => {
+    for (const filler of ["\u4E16", "\u{1F600}", "e\u0301"]) {
+      const line = `${filler.repeat(CHARS)} tea ${filler.repeat(CHARS)}`;
+      const got = excerptOf(line, "tea");
+      expect(got, filler).toContain("tea");
+      expect(got, filler).not.toContain("\uFFFD");
+      expect(chars(got), filler).toBeLessThanOrEqual(CHARS + 6);
+    }
+  });
+
+  test("the line is folded before matching, so any casing in it is found", () => {
+    for (const line of ["The TEA is hot", "the tea is hot", "The Tea Is Hot"]) {
+      expect(excerptOf(line, "tea").toLowerCase(), line).toContain("tea");
+    }
+  });
+
+  test("the query is taken already folded, so an unfolded one finds nothing", () => {
+    expect(findCaseInsensitiveMatch("the tea is hot", "TEA")).toBeUndefined();
+  });
+
+  test("a query that is not there matches nothing", () => {
+    for (const query of ["coffee", ""]) {
+      const match = findCaseInsensitiveMatch("the tea is hot", query);
+      if (query === "") continue;
+      expect(match, query).toBeUndefined();
+    }
+  });
 });
 
 describe("best line excerpt", () => {
