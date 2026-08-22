@@ -46,6 +46,9 @@ import {
   normalizeWorkspacePath,
   resolvePath,
 } from "../src/tools/workspace_path";
+import { recordedValue } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/memory_captures/compaction.json";
 
 type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
@@ -249,9 +252,9 @@ describe("reporting an outcome", () => {
 });
 
 describe("compaction passes", () => {
-  for (const pass of section("passes")) {
+  for (const [passIdx, pass] of section("passes").entries()) {
     test(pass.name as string, async () => {
-      await runPass(pass);
+      await runPass(pass, passIdx);
     });
   }
 });
@@ -563,7 +566,7 @@ function expectFinalRequestShape(
   }
 }
 
-async function runPass(pass: Json): Promise<void> {
+async function runPass(pass: Json, passIdx: number): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "shore-compaction-"));
   try {
     const workspace = join(root, "workspace");
@@ -643,10 +646,13 @@ async function runPass(pass: Json): Promise<void> {
       error = (e as Error).message.replaceAll(await realpath(root), "<root>");
     }
 
+    const shapedOutcome = outcome === null ? null : snakeOutcome(outcome as Json);
+    recordedValue(CAPTURE, ["passes", passIdx, "outcome"], shapedOutcome);
+    recordedValue(CAPTURE, ["passes", passIdx, "git_calls"], tools.gitCalls);
+    recordedValue(CAPTURE, ["passes", passIdx, "archive_calls"], mgr.calls);
+
     expect(error).toBe(pass.error as string | null);
-    expect(outcome === null ? null : snakeOutcome(outcome as Json)).toEqual(
-      pass.outcome as Json | null,
-    );
+    expect(shapedOutcome).toEqual(pass.outcome as Json | null);
 
     expect(tools.dispatchCount).toBe((pass.dispatches as Json[]).length);
     expect(tools.gitCalls).toEqual(pass.git_calls as Json[]);

@@ -38,6 +38,9 @@ import {
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import type { TurnAutonomy } from "../src/handler/turn.ts";
 import { testTmp } from "./support/tmp.ts";
+import { recordedValue } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/handler_captures/generation.json";
 
 afterAll(restoreTestEnv);
 
@@ -557,11 +560,12 @@ async function readBack(dataDir: string): Promise<readonly Message[]> {
 }
 
 describe("runGeneration", () => {
-  for (const c of fixture.handle_generation) {
+  for (const [index, c] of fixture.handle_generation.entries()) {
     test(c.name, async () => {
       const run = await replayTurn(c as unknown as GenerationCase);
       const out = c.output as Record<string, unknown>;
 
+      recordedValue(CAPTURE, ["handle_generation", index, "output", "direct_frames"], shaped(run.direct));
       expect(shaped(run.direct)).toEqual(shaped(out["direct_frames"]));
 
       const expectedBroadcast = (out["broadcast_events"] as Record<string, unknown>[]).filter(
@@ -574,7 +578,10 @@ describe("runGeneration", () => {
       );
       expect(shaped(run.requests)).toEqual(shaped(expectedRequests));
 
-      expect(shaped(await readBack(run.dataDir))).toEqual(shaped(out["conversation"]));
+      const conversation = await readBack(run.dataDir);
+      recordedValue(CAPTURE, ["handle_generation", index, "output", "conversation"], shaped(conversation));
+      recordedValue(CAPTURE, ["handle_generation", index, "output", "turn_count"], run.turnCount);
+      expect(shaped(conversation)).toEqual(shaped(out["conversation"]));
       expect(run.turnCount).toBe(out["turn_count"] as number);
 
       expectCachedIsTheSentRequestPlusTheReply(run, out);

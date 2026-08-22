@@ -38,6 +38,9 @@ import {
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { cachePath } from "../src/llm/discovery.ts";
 import { testTmp } from "./support/tmp.ts";
+import { recordedValue, recording } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/command_captures/model_commands.json";
 
 interface WireError {
   code: string;
@@ -253,11 +256,11 @@ function runStep(ctx: ModelsContext, step: Step): unknown {
 }
 
 describe("model commands", () => {
-  for (const scenario of scenarios) {
+  for (const [scenarioIdx, scenario] of scenarios.entries()) {
     test(scenario.name, async () => {
       const ctx = await buildContext(scenario.setup);
 
-      for (const step of scenario.steps) {
+      for (const [stepIdx, step] of scenario.steps.entries()) {
         const label = `${step.op} ${JSON.stringify(step.args)}`;
         let result: unknown;
         let thrown: unknown;
@@ -272,8 +275,11 @@ describe("model commands", () => {
           expect((thrown as CommandError).code, label).toBe(step.err.code as never);
           expect((thrown as CommandError).message, label).toBe(step.err.message);
         } else {
+          if (step.ok !== undefined) {
+            recordedValue(CAPTURE, ["scenarios", scenarioIdx, "steps", stepIdx, "ok"], result);
+          }
           expect(thrown, label).toBeUndefined();
-          expect(result, label).toEqual(step.ok as never);
+          if (!recording) expect(result, label).toEqual(step.ok as never);
         }
 
         if (step.prefs_changed !== undefined) {

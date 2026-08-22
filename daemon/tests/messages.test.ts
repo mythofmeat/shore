@@ -12,6 +12,9 @@ import {
 import type { Message, MessageAlternative } from "../src/engine/types";
 
 import fixture from "./engine_captures/messages.json";
+import { recordedValue } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/engine_captures/messages.json";
 
 const wire = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
 
@@ -174,24 +177,30 @@ describe("operation traces", () => {
     throw new Error(`unhandled op: ${JSON.stringify(op)}`);
   }
 
-  for (const t of fixture.traces as unknown as Trace[]) {
+  for (const [traceIdx, t] of (fixture.traces as unknown as Trace[]).entries()) {
     test(t.name, async () => {
       await inTemp(async (path) => {
         const target = t.name.includes("tail_branch") ? "a2" : "a1";
         if (t.seed_file !== "") await Bun.write(path, t.seed_file);
         const store = await MessageStore.load(path);
 
-        for (const step of t.ops) {
+        for (const [stepIdx, step] of t.ops.entries()) {
           let result: Record<string, unknown>;
           try {
             result = await apply(store, step.op, target);
           } catch (e) {
             result = { error: (e as Error).message };
           }
+          const onDisk = await Bun.file(path).text();
+          const base = ["traces", traceIdx, "ops", stepIdx] as const;
+          recordedValue(CAPTURE, [...base, "result"], wire(result));
+          recordedValue(CAPTURE, [...base, "file"], onDisk);
+          recordedValue(CAPTURE, [...base, "messages"], wire(store.messages()));
+          recordedValue(CAPTURE, [...base, "turn_count"], store.turnCount());
+          recordedValue(CAPTURE, [...base, "message_count"], store.messageCount());
+
           expect(wire(result), `result of ${JSON.stringify(step.op)}`).toEqual(wire(step.result));
-          expect(await Bun.file(path).text(), `file after ${JSON.stringify(step.op)}`).toBe(
-            step.file,
-          );
+          expect(onDisk, `file after ${JSON.stringify(step.op)}`).toBe(step.file);
           expect(wire(store.messages())).toEqual(wire(step.messages));
           expect(store.turnCount()).toBe(step.turn_count);
           expect(store.messageCount()).toBe(step.message_count);

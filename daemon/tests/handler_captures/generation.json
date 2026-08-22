@@ -65,7 +65,6 @@
             "type": "stream_end",
             "rid": "r-1",
             "msg_id": "<minted_id>",
-            "revision": 2,
             "content": "hi there",
             "metadata": {
               "tokens": {
@@ -81,12 +80,13 @@
               "model": "claude-fixture"
             },
             "finish_reason": "end_turn",
-            "is_final": true
+            "is_final": true,
+            "revision": 2
           }
         ],
         "broadcast_events": [
           {
-            "$ref": "s3"
+            "$ref": "s2"
           },
           {
             "type": "new_message",
@@ -165,21 +165,19 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "content": "hello",
-            "images": [],
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "content": "hello"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "content": "hi there",
-            "images": [],
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
@@ -188,7 +186,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture"
+            "content": "hi there"
           }
         ],
         "turn_count": 1,
@@ -316,7 +314,6 @@
             "type": "stream_end",
             "rid": "r-2",
             "msg_id": "<minted_id>",
-            "revision": 1,
             "content": "second answer",
             "metadata": {
               "tokens": {
@@ -332,7 +329,8 @@
               "model": "claude-fixture"
             },
             "finish_reason": "end_turn",
-            "is_final": true
+            "is_final": true,
+            "revision": 1
           }
         ],
         "broadcast_events": [
@@ -365,9 +363,32 @@
                 ],
                 "alt_index": 1,
                 "alt_count": 2,
-                "alternatives": {
-                  "$ref": "s2"
-                },
+                "alternatives": [
+                  {
+                    "content": "first answer",
+                    "content_blocks": [
+                      {
+                        "text": "first answer",
+                        "type": "text"
+                      }
+                    ],
+                    "images": [],
+                    "timestamp": "2026-01-01T10:00:01-05:00"
+                  },
+                  {
+                    "content": "second answer",
+                    "content_blocks": [
+                      {
+                        "text": "second answer",
+                        "type": "text"
+                      }
+                    ],
+                    "images": [],
+                    "model": "claude-fixture",
+                    "provider_key": "anthropic",
+                    "timestamp": "<minted_timestamp>"
+                  }
+                ],
                 "timestamp": "<minted_timestamp>",
                 "provider_key": "anthropic",
                 "model": "claude-fixture"
@@ -393,9 +414,32 @@
             ],
             "alt_index": 1,
             "alt_count": 2,
-            "alternatives": {
-              "$ref": "s2"
-            },
+            "alternatives": [
+              {
+                "content": "first answer",
+                "content_blocks": [
+                  {
+                    "text": "first answer",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "timestamp": "2026-01-01T10:00:01-05:00"
+              },
+              {
+                "content": "second answer",
+                "content_blocks": [
+                  {
+                    "text": "second answer",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "model": "claude-fixture",
+                "provider_key": "anthropic",
+                "timestamp": "<minted_timestamp>"
+              }
+            ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
             "model": "claude-fixture",
@@ -406,21 +450,19 @@
           {
             "msg_id": "m_seed_q",
             "role": "user",
-            "content": "q",
-            "images": [],
+            "timestamp": "2026-01-01T10:00:00-05:00",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "q"
               }
             ],
-            "timestamp": "2026-01-01T10:00:00-05:00"
+            "content": "q"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "content": "second answer",
-            "images": [],
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
@@ -429,12 +471,33 @@
             ],
             "alt_index": 1,
             "alt_count": 2,
-            "alternatives": {
-              "$ref": "s2"
-            },
+            "alternatives": [
+              {
+                "content": "first answer",
+                "content_blocks": [
+                  {
+                    "type": "text",
+                    "text": "first answer"
+                  }
+                ],
+                "timestamp": "2026-01-01T10:00:01-05:00"
+              },
+              {
+                "content": "second answer",
+                "content_blocks": [
+                  {
+                    "type": "text",
+                    "text": "second answer"
+                  }
+                ],
+                "timestamp": "<minted_timestamp>",
+                "provider_key": "anthropic",
+                "model": "claude-fixture"
+              }
+            ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture"
+            "content": "second answer"
           }
         ],
         "turn_count": 1,
@@ -520,7 +583,7 @@
         ],
         "broadcast_events": [
           {
-            "$ref": "s3"
+            "$ref": "s2"
           },
           {
             "type": "new_message",
@@ -544,15 +607,14 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "content": "hello",
-            "images": [],
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "content": "hello"
           }
         ],
         "turn_count": 1,
@@ -652,7 +714,7 @@
         ],
         "broadcast_events": [
           {
-            "$ref": "s3"
+            "$ref": "s2"
           },
           {
             "type": "new_message",
@@ -676,15 +738,14 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "content": "hello",
-            "images": [],
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "content": "hello"
           }
         ],
         "turn_count": 1,
@@ -796,7 +857,6 @@
           {
             "type": "stream_end",
             "msg_id": "<minted_id>",
-            "revision": 1,
             "content": "answer",
             "metadata": {
               "tokens": {
@@ -812,7 +872,8 @@
               "model": "claude-fixture"
             },
             "finish_reason": "end_turn",
-            "is_final": true
+            "is_final": true,
+            "revision": 1
           }
         ],
         "broadcast_events": [
@@ -876,21 +937,19 @@
           {
             "msg_id": "m_seed_earlier question",
             "role": "user",
-            "content": "earlier question",
-            "images": [],
+            "timestamp": "2026-01-01T10:00:00-05:00",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "earlier question"
               }
             ],
-            "timestamp": "2026-01-01T10:00:00-05:00"
+            "content": "earlier question"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "content": "answer",
-            "images": [],
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
@@ -899,7 +958,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture"
+            "content": "answer"
           }
         ],
         "turn_count": 1,
@@ -1055,7 +1114,6 @@
             "type": "stream_end",
             "rid": "r-tool",
             "msg_id": "<minted_id>",
-            "revision": 4,
             "content": "it is late",
             "metadata": {
               "tokens": {
@@ -1071,7 +1129,8 @@
               "model": "claude-fixture"
             },
             "finish_reason": "end_turn",
-            "is_final": true
+            "is_final": true,
+            "revision": 4
           }
         ],
         "broadcast_events": [
@@ -1263,21 +1322,19 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "content": "what time is it",
-            "images": [],
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "what time is it"
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "content": "what time is it"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "content": "",
-            "images": [],
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "tool_use",
@@ -1288,13 +1345,12 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture"
+            "content": ""
           },
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "content": "<recorded>",
-            "images": [],
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "tool_result",
@@ -1303,13 +1359,12 @@
                 "is_error": false
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "content": "<recorded>"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "content": "it is late",
-            "images": [],
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
@@ -1318,7 +1373,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture"
+            "content": "it is late"
           }
         ],
         "turn_count": 1,
@@ -1732,7 +1787,6 @@
             "type": "stream_end",
             "rid": "r-4",
             "msg_id": "<minted_id>",
-            "revision": 2,
             "content": "no tools here",
             "metadata": {
               "tokens": {
@@ -1748,12 +1802,13 @@
               "model": "claude-fixture"
             },
             "finish_reason": "end_turn",
-            "is_final": true
+            "is_final": true,
+            "revision": 2
           }
         ],
         "broadcast_events": [
           {
-            "$ref": "s3"
+            "$ref": "s2"
           },
           {
             "type": "new_message",
@@ -1832,21 +1887,19 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "content": "hello",
-            "images": [],
+            "timestamp": "<minted_timestamp>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "content": "hello"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "content": "no tools here",
-            "images": [],
+            "model": "claude-fixture",
             "content_blocks": [
               {
                 "type": "text",
@@ -1855,7 +1908,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
-            "model": "claude-fixture"
+            "content": "no tools here"
           }
         ],
         "turn_count": 1,
@@ -2509,43 +2562,17 @@
     },
     "s1": [
       {
-        "$ref": "s4"
+        "$ref": "s3"
       },
       {
-        "$ref": "s5"
+        "$ref": "s4"
       },
       {
         "label": "character",
         "text": "<ada>\nada system prompt\n</ada>"
       }
     ],
-    "s2": [
-      {
-        "content": "first answer",
-        "content_blocks": [
-          {
-            "text": "first answer",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "timestamp": "2026-01-01T10:00:01-05:00"
-      },
-      {
-        "content": "second answer",
-        "content_blocks": [
-          {
-            "text": "second answer",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "model": "claude-fixture",
-        "provider_key": "anthropic",
-        "timestamp": "<minted_timestamp>"
-      }
-    ],
-    "s3": {
+    "s2": {
       "config": {},
       "messages": [
         {
@@ -2566,11 +2593,11 @@
       "selected_character": "ada",
       "type": "history"
     },
-    "s4": {
+    "s3": {
       "label": "system",
       "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
     },
-    "s5": {
+    "s4": {
       "label": "tools_guidance",
       "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
     }

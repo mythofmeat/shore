@@ -23,6 +23,9 @@ import { CommandError } from "../src/commands/errors.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import type { Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
+import { recordedValue, recording } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/command_captures/conversation.json";
 
 interface WireError {
   code: string;
@@ -138,6 +141,10 @@ function expand(value: unknown, root: string): unknown {
   return JSON.parse(JSON.stringify(value).replaceAll("<tmp>", root)) as unknown;
 }
 
+function contract(value: unknown, root: string): unknown {
+  return JSON.parse(JSON.stringify(value).replaceAll(root, "<tmp>")) as unknown;
+}
+
 function remask(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(remask);
   if (value === null || typeof value !== "object") return value;
@@ -216,7 +223,7 @@ describe("a message reference shore refuses to resolve", () => {
 });
 
 describe("conversation commands", () => {
-  for (const scenario of scenarios) {
+  for (const [scenarioIdx, scenario] of scenarios.entries()) {
     test(scenario.name, async () => {
       const { engine, pushes, root } = await buildScenario(scenario);
 
@@ -230,7 +237,7 @@ describe("conversation commands", () => {
 
       let seen = pushes();
       let lastEngineAfter: unknown;
-      for (const step of scenario.steps) {
+      for (const [stepIdx, step] of scenario.steps.entries()) {
         const label = `${step.op} ${JSON.stringify(step.args)}`;
         let result: unknown;
         let thrown: unknown;
@@ -246,9 +253,11 @@ describe("conversation commands", () => {
           expect((thrown as CommandError).message, label).toBe(step.err.message);
         } else {
           expect(thrown, label).toBeUndefined();
-          expect(remask(serdeShape(result)), label).toEqual(
-            remask(expand(step.ok, root)) as never,
-          );
+          const got = remask(serdeShape(result));
+          recordedValue(CAPTURE, ["scenarios", scenarioIdx, "steps", stepIdx, "ok"], contract(got, root));
+          if (!recording) {
+            expect(got, label).toEqual(remask(expand(step.ok, root)) as never);
+          }
         }
 
         expect(pushes() - seen, `${label} — history pushes`).toBe(step.history_pushes);
