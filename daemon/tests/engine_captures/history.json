@@ -1,48 +1,4 @@
 {
-  "constants": {
-    "DEFAULT_MAX_RESULTS": 20,
-    "MAX_RESULTS": 100,
-    "EXCERPT_CHARS": 360,
-    "MIN_EXCERPT_CHARS": 80,
-    "MAX_EXCERPT_CHARS": 2000,
-    "TERM_HIT": 10,
-    "FULL_COVERAGE_BONUS": 15,
-    "PHRASE_BONUS": 25,
-    "RECENCY_WEIGHT": 15.0
-  },
-  "tool_def": {
-    "name": "search_chat_logs",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only."
-        },
-        "start_time": {
-          "type": "string",
-          "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-        },
-        "end_time": {
-          "type": "string",
-          "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-        },
-        "max_results": {
-          "type": "number",
-          "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
-        },
-        "model": {
-          "type": "string",
-          "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
-        },
-        "excerpt_chars": {
-          "type": "number",
-          "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
-        }
-      },
-      "required": []
-    }
-  },
   "normalize_model": [
     {
       "input": "claude-opus-4-6",
@@ -69,8 +25,8 @@
       "expect": "a-b-c"
     },
     {
-      "input": "ÄÖÜ",
-      "expect": "äöü"
+      "input": "\u00c4\u00d6\u00dc",
+      "expect": "\u00e4\u00f6\u00fc"
     }
   ],
   "model_matches": [
@@ -189,54 +145,54 @@
       ]
     },
     {
-      "query": "茶",
-      "raw_lower": "茶",
+      "query": "\u8336",
+      "raw_lower": "\u8336",
       "terms": [
-        "茶"
+        "\u8336"
       ]
     },
     {
-      "query": "茶 tea",
-      "raw_lower": "茶 tea",
+      "query": "\u8336 tea",
+      "raw_lower": "\u8336 tea",
       "terms": [
-        "茶",
+        "\u8336",
         "tea"
       ]
     },
     {
-      "query": "茶, 世界",
-      "raw_lower": "茶, 世界",
+      "query": "\u8336, \u4e16\u754c",
+      "raw_lower": "\u8336, \u4e16\u754c",
       "terms": [
-        "茶",
-        "世界"
+        "\u8336",
+        "\u4e16\u754c"
       ]
     },
     {
-      "query": "茶茶 x 界",
-      "raw_lower": "茶茶 x 界",
+      "query": "\u8336\u8336 x \u754c",
+      "raw_lower": "\u8336\u8336 x \u754c",
       "terms": [
-        "茶茶",
-        "界"
+        "\u8336\u8336",
+        "\u754c"
       ]
     },
     {
-      "query": "世界",
-      "raw_lower": "世界",
+      "query": "\u4e16\u754c",
+      "raw_lower": "\u4e16\u754c",
       "terms": [
-        "世界"
+        "\u4e16\u754c"
       ]
     },
     {
-      "query": "🙂",
-      "raw_lower": "🙂",
+      "query": "\ud83d\ude42",
+      "raw_lower": "\ud83d\ude42",
       "terms": []
     },
     {
-      "query": "tea 茶",
-      "raw_lower": "tea 茶",
+      "query": "tea \u8336",
+      "raw_lower": "tea \u8336",
       "terms": [
         "tea",
-        "茶"
+        "\u8336"
       ]
     },
     {
@@ -249,1269 +205,849 @@
     {
       "query": "tea",
       "content": "We talked about tea last winter.",
-      "score": 25,
-      "earliest_index": 16
+      "score": 25
     },
     {
       "query": "tea",
       "content": "Green tea and black tea.",
-      "score": 25,
-      "earliest_index": 6
+      "score": 25
     },
     {
       "query": "tea",
       "content": "green tea",
-      "score": 25,
-      "earliest_index": 6
+      "score": 25
     },
     {
       "query": "tea",
       "content": "TEA",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "tea",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "tea",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "tea",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "tea",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "tea",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "tea",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "tea",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "Tea",
       "content": "We talked about tea last winter.",
-      "score": 25,
-      "earliest_index": 16
+      "score": 25
     },
     {
       "query": "Tea",
       "content": "Green tea and black tea.",
-      "score": 25,
-      "earliest_index": 6
+      "score": 25
     },
     {
       "query": "Tea",
       "content": "green tea",
-      "score": 25,
-      "earliest_index": 6
+      "score": 25
     },
     {
       "query": "Tea",
       "content": "TEA",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "Tea",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "Tea",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "Tea",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "Tea",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "Tea",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "Tea",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "Tea",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "green tea",
       "content": "We talked about tea last winter.",
-      "score": 10,
-      "earliest_index": 16
+      "score": 10
     },
     {
       "query": "green tea",
       "content": "Green tea and black tea.",
-      "score": 60,
-      "earliest_index": 0
+      "score": 60
     },
     {
       "query": "green tea",
       "content": "green tea",
-      "score": 60,
-      "earliest_index": 0
+      "score": 60
     },
     {
       "query": "green tea",
       "content": "TEA",
-      "score": 10,
-      "earliest_index": 0
+      "score": 10
     },
     {
       "query": "green tea",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "green tea",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "green tea",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "green tea",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "green tea",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "green tea",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "green tea",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "the kettle whistled",
-      "content": "We talked about tea last winter.",
-      "score": null,
-      "earliest_index": null
+      "content": "We talked about tea last winter."
     },
     {
       "query": "the kettle whistled",
-      "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
+      "content": "Green tea and black tea."
     },
     {
       "query": "the kettle whistled",
-      "content": "green tea",
-      "score": null,
-      "earliest_index": null
+      "content": "green tea"
     },
     {
       "query": "the kettle whistled",
-      "content": "TEA",
-      "score": null,
-      "earliest_index": null
+      "content": "TEA"
     },
     {
       "query": "the kettle whistled",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "the kettle whistled",
       "content": "the kettle whistled loudly",
-      "score": 70,
-      "earliest_index": 0
+      "score": 70
     },
     {
       "query": "the kettle whistled",
       "content": "kettle",
-      "score": 10,
-      "earliest_index": 0
+      "score": 10
     },
     {
       "query": "the kettle whistled",
       "content": "whistled kettle the",
-      "score": 45,
-      "earliest_index": 0
+      "score": 45
     },
     {
       "query": "the kettle whistled",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "the kettle whistled",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "the kettle whistled",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "a b c",
-      "content": "We talked about tea last winter.",
-      "score": null,
-      "earliest_index": null
+      "content": "We talked about tea last winter."
     },
     {
       "query": "a b c",
-      "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
+      "content": "Green tea and black tea."
     },
     {
       "query": "a b c",
-      "content": "green tea",
-      "score": null,
-      "earliest_index": null
+      "content": "green tea"
     },
     {
       "query": "a b c",
-      "content": "TEA",
-      "score": null,
-      "earliest_index": null
+      "content": "TEA"
     },
     {
       "query": "a b c",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "a b c",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "a b c",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "a b c",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "a b c",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "a b c",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "a b c",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "a",
       "content": "We talked about tea last winter.",
-      "score": 25,
-      "earliest_index": 4
+      "score": 25
     },
     {
       "query": "a",
       "content": "Green tea and black tea.",
-      "score": 25,
-      "earliest_index": 8
+      "score": 25
     },
     {
       "query": "a",
       "content": "green tea",
-      "score": 25,
-      "earliest_index": 8
+      "score": 25
     },
     {
       "query": "a",
       "content": "TEA",
-      "score": 25,
-      "earliest_index": 2
+      "score": 25
     },
     {
       "query": "a",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "a",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "a",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "a",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "a",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "a",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "a",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "tea!",
       "content": "We talked about tea last winter.",
-      "score": 25,
-      "earliest_index": 16
+      "score": 25
     },
     {
       "query": "tea!",
       "content": "Green tea and black tea.",
-      "score": 25,
-      "earliest_index": 6
+      "score": 25
     },
     {
       "query": "tea!",
       "content": "green tea",
-      "score": 25,
-      "earliest_index": 6
+      "score": 25
     },
     {
       "query": "tea!",
       "content": "TEA",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "tea!",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "tea!",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "tea!",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "tea!",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "tea!",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "tea!",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "tea!",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "tea, coffee; cocoa",
       "content": "We talked about tea last winter.",
-      "score": 10,
-      "earliest_index": 16
+      "score": 10
     },
     {
       "query": "tea, coffee; cocoa",
       "content": "Green tea and black tea.",
-      "score": 10,
-      "earliest_index": 6
+      "score": 10
     },
     {
       "query": "tea, coffee; cocoa",
       "content": "green tea",
-      "score": 10,
-      "earliest_index": 6
+      "score": 10
     },
     {
       "query": "tea, coffee; cocoa",
       "content": "TEA",
-      "score": 10,
-      "earliest_index": 0
+      "score": 10
     },
     {
       "query": "tea, coffee; cocoa",
       "content": "coffee only",
-      "score": 10,
-      "earliest_index": 0
+      "score": 10
     },
     {
       "query": "tea, coffee; cocoa",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "tea, coffee; cocoa",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "tea, coffee; cocoa",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "tea, coffee; cocoa",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "tea, coffee; cocoa",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "tea, coffee; cocoa",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "snake_case-name",
-      "content": "We talked about tea last winter.",
-      "score": null,
-      "earliest_index": null
+      "content": "We talked about tea last winter."
     },
     {
       "query": "snake_case-name",
-      "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
+      "content": "Green tea and black tea."
     },
     {
       "query": "snake_case-name",
-      "content": "green tea",
-      "score": null,
-      "earliest_index": null
+      "content": "green tea"
     },
     {
       "query": "snake_case-name",
-      "content": "TEA",
-      "score": null,
-      "earliest_index": null
+      "content": "TEA"
     },
     {
       "query": "snake_case-name",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "snake_case-name",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "snake_case-name",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "snake_case-name",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "snake_case-name",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "snake_case-name",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "snake_case-name",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
       "query": "  spaced   out  ",
       "content": "We talked about tea last winter.",
-      "score": 10,
-      "earliest_index": 12
+      "score": 10
     },
     {
       "query": "  spaced   out  ",
-      "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
+      "content": "Green tea and black tea."
     },
     {
       "query": "  spaced   out  ",
-      "content": "green tea",
-      "score": null,
-      "earliest_index": null
+      "content": "green tea"
     },
     {
       "query": "  spaced   out  ",
-      "content": "TEA",
-      "score": null,
-      "earliest_index": null
+      "content": "TEA"
     },
     {
       "query": "  spaced   out  ",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "content": "coffee only"
     },
     {
       "query": "  spaced   out  ",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "content": "the kettle whistled loudly"
     },
     {
       "query": "  spaced   out  ",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "content": "kettle"
     },
     {
       "query": "  spaced   out  ",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "content": "whistled kettle the"
     },
     {
       "query": "  spaced   out  ",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
+      "content": "\u8336\u3092\u98f2\u3080"
     },
     {
       "query": "  spaced   out  ",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "content": "\u4e16\u754c"
     },
     {
       "query": "  spaced   out  ",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "content": ""
     },
     {
-      "query": "茶",
+      "query": "\u8336",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\u8336",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\u8336",
+      "content": "green tea"
+    },
+    {
+      "query": "\u8336",
+      "content": "TEA"
+    },
+    {
+      "query": "\u8336",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u8336",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u8336",
+      "content": "kettle"
+    },
+    {
+      "query": "\u8336",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u8336",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 25
+    },
+    {
+      "query": "\u8336",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "\u8336",
+      "content": ""
+    },
+    {
+      "query": "\u8336 tea",
       "content": "We talked about tea last winter.",
-      "score": null,
-      "earliest_index": null
+      "score": 10
     },
     {
-      "query": "茶",
+      "query": "\u8336 tea",
       "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
+      "score": 10
     },
     {
-      "query": "茶",
+      "query": "\u8336 tea",
       "content": "green tea",
-      "score": null,
-      "earliest_index": null
+      "score": 10
     },
     {
-      "query": "茶",
+      "query": "\u8336 tea",
       "content": "TEA",
-      "score": null,
-      "earliest_index": null
+      "score": 10
     },
     {
-      "query": "茶",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "query": "\u8336 tea",
+      "content": "coffee only"
     },
     {
-      "query": "茶",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "query": "\u8336 tea",
+      "content": "the kettle whistled loudly"
     },
     {
-      "query": "茶",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "query": "\u8336 tea",
+      "content": "kettle"
     },
     {
-      "query": "茶",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "query": "\u8336 tea",
+      "content": "whistled kettle the"
     },
     {
-      "query": "茶",
-      "content": "茶を飲む",
-      "score": 25,
-      "earliest_index": 0
+      "query": "\u8336 tea",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 10
     },
     {
-      "query": "茶",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "query": "\u8336 tea",
+      "content": "\u4e16\u754c"
     },
     {
-      "query": "茶",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "query": "\u8336 tea",
+      "content": ""
     },
     {
-      "query": "茶 tea",
+      "query": "\u8336, \u4e16\u754c",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "green tea"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "TEA"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "kettle"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 10
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "\u4e16\u754c",
+      "score": 10
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": ""
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "green tea"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "TEA"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "kettle"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "\u4e16\u754c",
+      "score": 10
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": ""
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "green tea"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "TEA"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "kettle"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "\u4e16\u754c",
+      "score": 25
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": ""
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "green tea"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "TEA"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "coffee only"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "kettle"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": ""
+    },
+    {
+      "query": "tea \u8336",
       "content": "We talked about tea last winter.",
-      "score": 10,
-      "earliest_index": 16
+      "score": 10
     },
     {
-      "query": "茶 tea",
+      "query": "tea \u8336",
       "content": "Green tea and black tea.",
-      "score": 10,
-      "earliest_index": 6
+      "score": 10
     },
     {
-      "query": "茶 tea",
+      "query": "tea \u8336",
       "content": "green tea",
-      "score": 10,
-      "earliest_index": 6
+      "score": 10
     },
     {
-      "query": "茶 tea",
+      "query": "tea \u8336",
       "content": "TEA",
-      "score": 10,
-      "earliest_index": 0
+      "score": 10
     },
     {
-      "query": "茶 tea",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
+      "query": "tea \u8336",
+      "content": "coffee only"
     },
     {
-      "query": "茶 tea",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
+      "query": "tea \u8336",
+      "content": "the kettle whistled loudly"
     },
     {
-      "query": "茶 tea",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
+      "query": "tea \u8336",
+      "content": "kettle"
     },
     {
-      "query": "茶 tea",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
+      "query": "tea \u8336",
+      "content": "whistled kettle the"
     },
     {
-      "query": "茶 tea",
-      "content": "茶を飲む",
-      "score": 10,
-      "earliest_index": 0
+      "query": "tea \u8336",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 10
     },
     {
-      "query": "茶 tea",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
+      "query": "tea \u8336",
+      "content": "\u4e16\u754c"
     },
     {
-      "query": "茶 tea",
-      "content": "",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "We talked about tea last winter.",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "green tea",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "TEA",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶, 世界",
-      "content": "茶を飲む",
-      "score": 10,
-      "earliest_index": 0
-    },
-    {
-      "query": "茶, 世界",
-      "content": "世界",
-      "score": 10,
-      "earliest_index": 0
-    },
-    {
-      "query": "茶, 世界",
-      "content": "",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "We talked about tea last winter.",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "green tea",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "TEA",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "世界",
-      "score": 10,
-      "earliest_index": 3
-    },
-    {
-      "query": "茶茶 x 界",
-      "content": "",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "We talked about tea last winter.",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "green tea",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "TEA",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "世界",
-      "content": "世界",
-      "score": 25,
-      "earliest_index": 0
-    },
-    {
-      "query": "世界",
-      "content": "",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "We talked about tea last winter.",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "Green tea and black tea.",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "green tea",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "TEA",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "茶を飲む",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "🙂",
-      "content": "",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "tea 茶",
-      "content": "We talked about tea last winter.",
-      "score": 10,
-      "earliest_index": 16
-    },
-    {
-      "query": "tea 茶",
-      "content": "Green tea and black tea.",
-      "score": 10,
-      "earliest_index": 6
-    },
-    {
-      "query": "tea 茶",
-      "content": "green tea",
-      "score": 10,
-      "earliest_index": 6
-    },
-    {
-      "query": "tea 茶",
-      "content": "TEA",
-      "score": 10,
-      "earliest_index": 0
-    },
-    {
-      "query": "tea 茶",
-      "content": "coffee only",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "tea 茶",
-      "content": "the kettle whistled loudly",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "tea 茶",
-      "content": "kettle",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "tea 茶",
-      "content": "whistled kettle the",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "tea 茶",
-      "content": "茶を飲む",
-      "score": 10,
-      "earliest_index": 0
-    },
-    {
-      "query": "tea 茶",
-      "content": "世界",
-      "score": null,
-      "earliest_index": null
-    },
-    {
-      "query": "tea 茶",
-      "content": "",
-      "score": null,
-      "earliest_index": null
+      "query": "tea \u8336",
+      "content": ""
     },
     {
       "query": "",
       "content": "We talked about tea last winter.",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "",
       "content": "Green tea and black tea.",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "",
       "content": "green tea",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "",
       "content": "TEA",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "",
       "content": "coffee only",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "",
       "content": "the kettle whistled loudly",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "",
       "content": "kettle",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "",
       "content": "whistled kettle the",
-      "score": 25,
-      "earliest_index": 0
+      "score": 25
     },
     {
       "query": "",
-      "content": "茶を飲む",
-      "score": 25,
-      "earliest_index": 0
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 25
     },
     {
       "query": "",
-      "content": "世界",
-      "score": 25,
-      "earliest_index": 0
+      "content": "\u4e16\u754c",
+      "score": 25
     },
     {
       "query": "",
       "content": "",
-      "score": 25,
-      "earliest_index": 0
-    }
-  ],
-  "clamping": [
-    {
-      "input": {},
-      "max_results": 20,
-      "excerpt_chars": 360
-    },
-    {
-      "input": {
-        "max_results": 0,
-        "excerpt_chars": 0
-      },
-      "max_results": 1,
-      "excerpt_chars": 80
-    },
-    {
-      "input": {
-        "max_results": 1,
-        "excerpt_chars": 80
-      },
-      "max_results": 1,
-      "excerpt_chars": 80
-    },
-    {
-      "input": {
-        "max_results": 50,
-        "excerpt_chars": 500
-      },
-      "max_results": 50,
-      "excerpt_chars": 500
-    },
-    {
-      "input": {
-        "max_results": 100,
-        "excerpt_chars": 2000
-      },
-      "max_results": 100,
-      "excerpt_chars": 2000
-    },
-    {
-      "input": {
-        "max_results": 1000,
-        "excerpt_chars": 999999
-      },
-      "max_results": 100,
-      "excerpt_chars": 2000
-    },
-    {
-      "input": {
-        "max_results": 5.5,
-        "excerpt_chars": 100.5
-      },
-      "max_results": 20,
-      "excerpt_chars": 360
-    },
-    {
-      "input": {
-        "max_results": -1,
-        "excerpt_chars": -1
-      },
-      "max_results": 20,
-      "excerpt_chars": 360
-    },
-    {
-      "input": {
-        "max_results": "5",
-        "excerpt_chars": "100"
-      },
-      "max_results": 20,
-      "excerpt_chars": 360
-    },
-    {
-      "input": {
-        "max_results": null,
-        "excerpt_chars": null
-      },
-      "max_results": 20,
-      "excerpt_chars": 360
+      "score": 25
     }
   ],
   "arg_parsing": [
@@ -1930,7 +1466,7 @@
       },
       {
         "file": "0002.jsonl",
-        "body": "{\"msg_id\":\"s1-long\",\"role\":\"assistant\",\"model\":\"anthropic/claude-opus-4.6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards\"}],\"timestamp\":\"2026-01-02T09:00:00Z\"}\n{\"msg_id\":\"s1-unicode\",\"role\":\"user\",\"timestamp\":\"2026-01-02T10:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂\"}]}\n{\"msg_id\":\"s1-silent\",\"role\":\"assistant\",\"timestamp\":\"2026-01-02T11:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"thinking\",\"thinking\":\"tea tea tea\"},{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"q\":\"tea\"}}]}\n{\"msg_id\":\"s1-toolresult\",\"role\":\"user\",\"timestamp\":\"2026-01-02T12:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"brewing instructions\",\"is_error\":false}]}\n"
+        "body": "{\"msg_id\":\"s1-long\",\"role\":\"assistant\",\"model\":\"anthropic/claude-opus-4.6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards\"}],\"timestamp\":\"2026-01-02T09:00:00Z\"}\n{\"msg_id\":\"s1-unicode\",\"role\":\"user\",\"timestamp\":\"2026-01-02T10:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42 \u4e16\u754c\u306e\u8a71\u3092\u3057\u3088\u3046 tea \u4e16\u754c\u4e16\u754c\u4e16\u754c \ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\"}]}\n{\"msg_id\":\"s1-silent\",\"role\":\"assistant\",\"timestamp\":\"2026-01-02T11:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"thinking\",\"thinking\":\"tea tea tea\"},{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"q\":\"tea\"}}]}\n{\"msg_id\":\"s1-toolresult\",\"role\":\"user\",\"timestamp\":\"2026-01-02T12:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"brewing instructions\",\"is_error\":false}]}\n"
       }
     ],
     "compaction.json": "{\n  \"segments\": [\n    {\n      \"file\": \"0001.jsonl\",\n      \"message_count\": 2,\n      \"compacted_at\": \"2026-01-01T12:00:00Z\"\n    },\n    {\n      \"file\": \"0002.jsonl\",\n      \"message_count\": 4,\n      \"compacted_at\": \"2026-01-02T12:00:00Z\"\n    }\n  ],\n  \"total_compacted_messages\": 6\n}",
@@ -1943,37 +1479,13 @@
         "query": "tea"
       },
       "expect": {
-        "ok": {
-          "query": "tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "$ref": "s1"
-            },
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "model": null,
-              "text": "We talked about tea last winter, mostly oolong."
-            }
-          ],
-          "count": 3,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -1982,27 +1494,13 @@
         "query": "tea kettle"
       },
       "expect": {
-        "ok": {
-          "query": "tea kettle",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-long",
+          "s1-unicode",
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2011,19 +1509,9 @@
         "query": "zzzznothing"
       },
       "expect": {
-        "ok": {
-          "query": "zzzznothing",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [],
-          "count": 0,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2032,27 +1520,13 @@
         "query": "tea winter zzz"
       },
       "expect": {
-        "ok": {
-          "query": "tea winter zzz",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "model": null,
-              "text": "We talked about tea last winter, mostly oolong."
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s0-tea",
+          "s1-unicode",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2061,27 +1535,13 @@
         "query": "tea winter oolong"
       },
       "expect": {
-        "ok": {
-          "query": "tea winter oolong",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "model": null,
-              "text": "We talked about tea last winter, mostly oolong."
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s0-tea",
+          "s1-unicode",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2090,37 +1550,13 @@
         "query": "TEA"
       },
       "expect": {
-        "ok": {
-          "query": "TEA",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "$ref": "s1"
-            },
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "model": null,
-              "text": "We talked about tea last winter, mostly oolong."
-            }
-          ],
-          "count": 3,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2129,37 +1565,13 @@
         "query": "coffee tea"
       },
       "expect": {
-        "ok": {
-          "query": "coffee tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "$ref": "s1"
-            },
-            {
-              "msg_id": "s0-coffee",
-              "role": "assistant",
-              "timestamp": "2026-01-01T10:00:00Z",
-              "model": "claude-opus-4-6",
-              "text": "Coffee came up too, but only briefly."
-            }
-          ],
-          "count": 3,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s0-coffee",
+          "s1-unicode",
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2168,27 +1580,11 @@
         "query": "kettle whistled"
       },
       "expect": {
-        "ok": {
-          "query": "kettle whistled",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2197,19 +1593,9 @@
         "query": "brewing"
       },
       "expect": {
-        "ok": {
-          "query": "brewing",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [],
-          "count": 0,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2220,19 +1606,9 @@
         "end_time": "2026-01-02T11:30:00Z"
       },
       "expect": {
-        "ok": {
-          "query": "zzzz",
-          "time_range": {
-            "start_time": "2026-01-02T10:30:00+00:00",
-            "end_time": "2026-01-02T11:30:00+00:00",
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [],
-          "count": 0,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2242,37 +1618,13 @@
         "end_time": "2026-01-02T23:59:59Z"
       },
       "expect": {
-        "ok": {
-          "query": null,
-          "time_range": {
-            "start_time": "2026-01-01T00:00:00+00:00",
-            "end_time": "2026-01-02T23:59:59+00:00",
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "model": null,
-              "text": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "s0-coffee",
-              "role": "assistant",
-              "timestamp": "2026-01-01T10:00:00Z",
-              "model": "claude-opus-4-6",
-              "text": "Coffee came up too, but only briefly."
-            },
-            {
-              "$ref": "s0"
-            }
-          ],
-          "count": 3,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s0-tea",
+          "s0-coffee",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2282,37 +1634,13 @@
         "end_time": "2026-01-05T00:00:00Z"
       },
       "expect": {
-        "ok": {
-          "query": null,
-          "time_range": {
-            "start_time": "2026-01-01T00:00:00+00:00",
-            "end_time": "2026-01-05T00:00:00+00:00",
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "model": null,
-              "text": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "s0-coffee",
-              "role": "assistant",
-              "timestamp": "2026-01-01T10:00:00Z",
-              "model": "claude-opus-4-6",
-              "text": "Coffee came up too, but only briefly."
-            },
-            {
-              "$ref": "s0"
-            }
-          ],
-          "count": 3,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s0-tea",
+          "s0-coffee",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2322,30 +1650,12 @@
         "start_time": "2026-01-02T00:00:00Z"
       },
       "expect": {
-        "ok": {
-          "query": "tea",
-          "time_range": {
-            "start_time": "2026-01-02T00:00:00+00:00",
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "$ref": "s1"
-            }
-          ],
-          "count": 2,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2355,23 +1665,11 @@
         "model": "opus-4.6"
       },
       "expect": {
-        "ok": {
-          "query": "tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": "opus-4-6",
-          "results": [
-            {
-              "$ref": "s1"
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-long"
+        ],
+        "model_filter": "opus-4-6",
+        "searched_messages": 6
       }
     },
     {
@@ -2381,19 +1679,9 @@
         "model": "gpt"
       },
       "expect": {
-        "ok": {
-          "query": "tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": "gpt",
-          "results": [],
-          "count": 0,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [],
+        "model_filter": "gpt",
+        "searched_messages": 6
       }
     },
     {
@@ -2402,30 +1690,12 @@
         "model": "opus-4-6"
       },
       "expect": {
-        "ok": {
-          "query": null,
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": "opus-4-6",
-          "results": [
-            {
-              "msg_id": "s0-coffee",
-              "role": "assistant",
-              "timestamp": "2026-01-01T10:00:00Z",
-              "model": "claude-opus-4-6",
-              "text": "Coffee came up too, but only briefly."
-            },
-            {
-              "$ref": "s0"
-            }
-          ],
-          "count": 2,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s0-coffee",
+          "s1-long"
+        ],
+        "model_filter": "opus-4-6",
+        "searched_messages": 6
       }
     },
     {
@@ -2434,27 +1704,11 @@
         "query": "coffee"
       },
       "expect": {
-        "ok": {
-          "query": "coffee",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s0-coffee",
-              "role": "assistant",
-              "timestamp": "2026-01-01T10:00:00Z",
-              "model": "claude-opus-4-6",
-              "text": "Coffee came up too, but only briefly."
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s0-coffee"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2464,19 +1718,9 @@
         "model": "opus-4-6"
       },
       "expect": {
-        "ok": {
-          "query": "third take",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": "opus-4-6",
-          "results": [],
-          "count": 0,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [],
+        "model_filter": "opus-4-6",
+        "searched_messages": 6
       }
     },
     {
@@ -2486,30 +1730,12 @@
         "max_results": 2
       },
       "expect": {
-        "ok": {
-          "query": "tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "$ref": "s1"
-            }
-          ],
-          "count": 2,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2519,86 +1745,40 @@
         "max_results": 0
       },
       "expect": {
-        "ok": {
-          "query": "tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
       "name": "the best match is not the first one found",
       "input": {
-        "query": "世界 tea",
+        "query": "\u4e16\u754c tea",
         "max_results": 1
       },
       "expect": {
-        "ok": {
-          "query": "世界 tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
       "name": "the best match is not the first one found, untruncated",
       "input": {
-        "query": "世界 tea"
+        "query": "\u4e16\u754c tea"
       },
       "expect": {
-        "ok": {
-          "query": "世界 tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2608,41 +1788,13 @@
         "excerpt_chars": 2000
       },
       "expect": {
-        "ok": {
-          "query": "tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards"
-            },
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "model": null,
-              "text": "We talked about tea last winter, mostly oolong."
-            }
-          ],
-          "count": 3,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2652,70 +1804,26 @@
         "excerpt_chars": 1
       },
       "expect": {
-        "ok": {
-          "query": "tea",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… and we returned to tea. afterwards afterwards afterwards afterwards afterwards …"
-            },
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "model": null,
-              "text": "We talked about tea last winter, mostly oolong."
-            }
-          ],
-          "count": 3,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
       "name": "unicode query",
       "input": {
-        "query": "世界"
+        "query": "\u4e16\u754c"
       },
       "expect": {
-        "ok": {
-          "query": "世界",
-          "time_range": {
-            "start_time": null,
-            "end_time": null,
-            "inclusive": true
-          },
-          "model_filter": null,
-          "results": [
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "model": null,
-              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            }
-          ],
-          "count": 1,
-          "searched_messages": 6,
-          "skipped_invalid_timestamps": 0
-        }
+        "msg_ids": [
+          "s1-unicode"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
       }
     },
     {
@@ -2753,39 +1861,5 @@
         "error": "invalid args: start_time must be an RFC3339 timestamp: premature end of input"
       }
     }
-  ],
-  "empty_character_dir": {
-    "ok": {
-      "query": "tea",
-      "time_range": {
-        "start_time": null,
-        "end_time": null,
-        "inclusive": true
-      },
-      "model_filter": null,
-      "results": [],
-      "count": 0,
-      "searched_messages": 0,
-      "skipped_invalid_timestamps": 0
-    }
-  },
-  "unconfigured_character_dir": {
-    "error": "invalid args: conversation history is not configured"
-  },
-  "$shared": {
-    "s0": {
-      "model": "anthropic/claude-opus-4.6",
-      "msg_id": "s1-long",
-      "role": "assistant",
-      "text": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler …",
-      "timestamp": "2026-01-02T09:00:00Z"
-    },
-    "s1": {
-      "model": "anthropic/claude-opus-4.6",
-      "msg_id": "s1-long",
-      "role": "assistant",
-      "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …",
-      "timestamp": "2026-01-02T09:00:00Z"
-    }
-  }
+  ]
 }

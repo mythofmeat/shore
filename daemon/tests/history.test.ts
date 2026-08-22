@@ -1,5 +1,12 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { handleSearchHistory } from "../src/tools/history";
+import { testTmp } from "./support/tmp.ts";
 import {
   excerptFor,
   filtersFrom,
@@ -23,8 +30,7 @@ interface Fixture {
   scoring: {
     query: string;
     content: string;
-    score: number | null;
-    earliest_index: number | null;
+    score?: number;
   }[];
   clamping: { input: Json; max_results: number; excerpt_chars: number }[];
   arg_parsing: {
@@ -53,7 +59,16 @@ interface Fixture {
     "compaction.json": string;
     "active.jsonl": string;
   };
-  end_to_end: { name: string; input: Json; expect: { ok: Json } | { error: string } }[];
+  end_to_end: {
+    name: string;
+    input: Record<string, unknown>;
+    expect: {
+      error?: string;
+      msg_ids?: string[];
+      model_filter?: string | null;
+      searched_messages?: number;
+    };
+  }[];
   empty_character_dir: { ok: Json } | { error: string };
   unconfigured_character_dir: { ok: Json } | { error: string };
 }
@@ -64,11 +79,115 @@ const fixture = (await Bun.file(
 
 describe("the fixture is real", () => {
   test("the scoring table records both matches and non-matches", () => {
-    expect(fixture.scoring.some((c) => c.score !== null)).toBe(true);
-    expect(fixture.scoring.some((c) => c.score === null)).toBe(true);
-    const distinct = new Set(fixture.scoring.map((c) => c.score).filter((s) => s !== null));
+    expect(fixture.scoring.some((c) => c.score !== undefined)).toBe(true);
+    expect(fixture.scoring.some((c) => c.score === undefined)).toBe(true);
+    const distinct = new Set(fixture.scoring.map((c) => c.score).filter((s) => s !== undefined));
     expect(distinct.size).toBeGreaterThan(2);
   });
+});
+
+describe("searching a conversation's history", () => {
+  interface Stored {
+    msg_id: string;
+    role: string;
+    timestamp?: string;
+    model?: string;
+    content_blocks?: { type: string; text?: string }[];
+    alternatives?: { content?: string; content_blocks?: { type: string; text?: string }[] }[];
+  }
+
+  const corpus = fixture.corpus;
+
+  function storedMessages(): Map<string, Stored> {
+    const out = new Map<string, Stored>();
+    const lines = [
+      ...corpus.segments.flatMap((s) => s.body.split("\n")),
+      ...corpus["active.jsonl"].split("\n"),
+    ];
+    for (const line of lines) {
+      if (line.trim() === "") continue;
+      const message = JSON.parse(line) as Stored;
+      out.set(message.msg_id, message);
+    }
+    return out;
+  }
+
+  function visibleText(message: Stored): string {
+    return (message.content_blocks ?? [])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("\n");
+  }
+
+  async function characterDir(): Promise<string> {
+    const dir = await mkdtemp(testTmp("shore-history-"));
+    await mkdir(join(dir, "segments"), { recursive: true });
+    for (const segment of corpus.segments) {
+      await writeFile(join(dir, "segments", segment.file), segment.body);
+    }
+    await writeFile(join(dir, "compaction.json"), corpus["compaction.json"]);
+    await writeFile(join(dir, "active.jsonl"), corpus["active.jsonl"]);
+    return dir;
+  }
+
+  for (const c of fixture.end_to_end) {
+    test(c.name, async () => {
+      const dir = await characterDir();
+      let got: Awaited<ReturnType<typeof handleSearchHistory>> | undefined;
+      let thrown: unknown;
+      try {
+        got = await handleSearchHistory(c.input, dir, { defaultMode: "lexical" });
+      } catch (e) {
+        thrown = e;
+      }
+
+      if (c.expect.error !== undefined) {
+        expect((thrown as Error | undefined)?.message, c.name).toBe(c.expect.error);
+        return;
+      }
+      expect(thrown, c.name).toBeUndefined();
+      const result = required(got);
+
+      expect(result.query ?? null, `${c.name}: it echoes the query it searched for`).toBe(
+        (c.input.query as string | undefined) ?? null,
+      );
+      expect(result.model_filter ?? null, `${c.name}: and the model it was filtered to`).toBe(
+        c.expect.model_filter ?? null,
+      );
+      expect(
+        result.results.map((r) => r.msg_id),
+        `${c.name}: the messages it found, best first`,
+      ).toEqual(required(c.expect.msg_ids));
+      expect(result.count, `${c.name}: the count is how many came back`).toBe(
+        result.results.length,
+      );
+      expect(
+        result.searched_messages,
+        `${c.name}: and it says how much history it read`,
+      ).toBe(required(c.expect.searched_messages));
+
+      const stored = storedMessages();
+      for (const hit of result.results) {
+        const message = stored.get(String(hit.msg_id));
+        if (message === undefined) continue;
+        expect(hit.role, `${String(hit.msg_id)}: comes back as the role it was written in`).toBe(
+          message.role,
+        );
+        expect(hit.timestamp ?? null, `${String(hit.msg_id)}: and when it was written`).toBe(
+          message.timestamp ?? null,
+        );
+        expect(hit.model ?? null, `${String(hit.msg_id)}: and which model wrote it`).toBe(
+          message.model ?? null,
+        );
+
+        const core = String(hit.text).replace(/^…\s*/u, "").replace(/\s*…$/u, "");
+        expect(
+          visibleText(message).includes(core),
+          `${String(hit.msg_id)}: its excerpt is taken from what the message actually says`,
+        ).toBe(true);
+      }
+    });
+  }
 });
 
 describe("normalizeModel", () => {
@@ -118,20 +237,28 @@ describe("scoring", () => {
     });
   }
 
-  test("earliest match index resolves to the same character offset", () => {
+  test("the earliest match is where the match starts, with nothing matching before it", () => {
     for (const c of fixture.scoring) {
       const m = new QueryMatcher(c.query);
       const lower = c.content.toLowerCase();
       const got = m.earliestIndex(lower);
-      if (c.earliest_index === null) {
-        expect(got, JSON.stringify([c.query, c.content])).toBeUndefined();
+      const where = JSON.stringify([c.query, c.content]);
+
+      if (c.score === undefined) {
+        expect(got, `${where}: nothing matched, so there is no earliest match`).toBeUndefined();
         continue;
       }
-      const rustChars = Array.from(
-        Buffer.from(lower, "utf8").subarray(0, c.earliest_index).toString("utf8"),
-      ).length;
-      const tsChars = Array.from(lower.slice(0, got)).length;
-      expect(tsChars, JSON.stringify([c.query, c.content])).toBe(rustChars);
+      expect(got, `${where}: something matched, so it starts somewhere`).toBeDefined();
+      if (got !== 0) {
+        expect(
+          m.earliestIndex(lower.slice(0, got)),
+          `${where}: and nothing matches before that`,
+        ).toBeUndefined();
+      }
+      expect(
+        m.earliestIndex(lower.slice(got)),
+        `${where}: while the match itself begins right there`,
+      ).toBe(0);
     }
   });
 });
