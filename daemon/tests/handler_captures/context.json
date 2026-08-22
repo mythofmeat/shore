@@ -1,4 +1,129 @@
 {
+  "$shared": {
+    "s0": [
+      {
+        "source": {
+          "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC",
+          "media_type": "image/png",
+          "type": "base64"
+        },
+        "type": "image"
+      }
+    ],
+    "s1": {
+      "content": [
+        {
+          "source": {
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC",
+            "media_type": "image/png",
+            "type": "base64"
+          },
+          "type": "image"
+        },
+        {
+          "text": "one",
+          "type": "text"
+        }
+      ],
+      "tool_use_id": "toolu_gen_0_gen",
+      "type": "tool_result"
+    },
+    "s2": [
+      {
+        "signature": "sig-abc",
+        "thinking": "hmm",
+        "type": "thinking"
+      },
+      {
+        "thinking": "no carrier",
+        "type": "thinking"
+      },
+      {
+        "data": "opaque",
+        "type": "redacted_thinking"
+      },
+      {
+        "content": "done",
+        "is_error": true,
+        "tool_use_id": "t9",
+        "type": "tool_result"
+      }
+    ],
+    "s3": {
+      "label": "memory_index",
+      "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md \u2014 a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- canon\n\n</memory_index>"
+    },
+    "s4": [
+      {
+        "label": "system",
+        "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+      },
+      {
+        "label": "tools_guidance",
+        "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+      },
+      {
+        "label": "character",
+        "text": "<qifei>\nI am qifei.\n\n</qifei>"
+      }
+    ],
+    "s5": [
+      {
+        "content": "I am qifei.\n",
+        "name": "SOUL.md"
+      },
+      {
+        "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+        "name": "TOOLS.md"
+      }
+    ],
+    "s6": [
+      {
+        "content": "draw me something",
+        "content_blocks": [],
+        "images": [],
+        "msg_id": "m-draw me something",
+        "role": "user",
+        "timestamp": "2026-07-01T00:00:00Z"
+      },
+      {
+        "content": "here you go",
+        "content_blocks": [],
+        "images": [
+          {
+            "caption": "a sunset",
+            "path": "{images}/gen.png"
+          }
+        ],
+        "msg_id": "m-here you go",
+        "role": "assistant",
+        "timestamp": "2026-07-01T00:00:00Z"
+      }
+    ],
+    "s7": [
+      {
+        "content": "draw me something",
+        "content_blocks": [],
+        "images": [],
+        "model": null,
+        "provider_key": null,
+        "role": "user"
+      },
+      {
+        "content": "here you go",
+        "content_blocks": [],
+        "images": [
+          {
+            "caption": "a sunset",
+            "path": "{images}/gen.png"
+          }
+        ],
+        "model": null,
+        "provider_key": null,
+        "role": "assistant"
+      }
+    ]
+  },
   "timezone": "America/New_York",
   "build_llm_messages": [
     {
@@ -333,16 +458,9 @@
             {
               "type": "tool_result",
               "tool_use_id": "toolu_gen_0_gen",
-              "content": [
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC"
-                  }
-                }
-              ]
+              "content": {
+                "$ref": "s0"
+              }
             }
           ]
         }
@@ -403,22 +521,7 @@
           "role": "user",
           "content": [
             {
-              "type": "tool_result",
-              "tool_use_id": "toolu_gen_0_gen",
-              "content": [
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": "one"
-                }
-              ]
+              "$ref": "s1"
             }
           ]
         },
@@ -496,22 +599,7 @@
           "role": "user",
           "content": [
             {
-              "type": "tool_result",
-              "tool_use_id": "toolu_gen_0_gen",
-              "content": [
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": "one"
-                }
-              ]
+              "$ref": "s1"
             },
             {
               "type": "text",
@@ -615,16 +703,9 @@
             {
               "type": "tool_result",
               "tool_use_id": "toolu_gen_1_second",
-              "content": [
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC"
-                  }
-                }
-              ]
+              "content": {
+                "$ref": "s0"
+              }
             },
             {
               "type": "text",
@@ -704,7 +785,7 @@
     },
     {
       "name": "text standin does not encode a readable image",
-      "note": "the file is there and openable, and the stand-in still wins — the mode decides, not whether the encode would have succeeded",
+      "note": "the file is there and openable, and the stand-in still wins \u2014 the mode decides, not whether the encode would have succeeded",
       "mode": "text_standin",
       "max_image_size": 1024,
       "prompt": {
@@ -1142,44 +1223,23 @@
             {
               "type": "tool_result",
               "tool_use_id": "toolu_gen_0_a_b_c_d_1_",
-              "content": [
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC"
-                  }
-                }
-              ]
+              "content": {
+                "$ref": "s0"
+              }
             },
             {
               "type": "tool_result",
               "tool_use_id": "toolu_gen_1_aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeee",
-              "content": [
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC"
-                  }
-                }
-              ]
+              "content": {
+                "$ref": "s0"
+              }
             },
             {
               "type": "tool_result",
               "tool_use_id": "toolu_gen_2__png",
-              "content": [
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAP0lEQVR4AQE0AMv/AMh4KMh4KMh4KMh4KADIeCjIeCjIeCjIeCgAyHgoyHgoyHgoyHgoAMh4KMh4KMh4KMh4KFNSFoFcdVypAAAAAElFTkSuQmCC"
-                  }
-                }
-              ]
+              "content": {
+                "$ref": "s0"
+              }
             },
             {
               "type": "text",
@@ -1384,27 +1444,9 @@
             "role": "assistant",
             "content": "",
             "images": [],
-            "content_blocks": [
-              {
-                "type": "thinking",
-                "thinking": "hmm",
-                "signature": "sig-abc"
-              },
-              {
-                "type": "thinking",
-                "thinking": "no carrier"
-              },
-              {
-                "type": "redacted_thinking",
-                "data": "opaque"
-              },
-              {
-                "type": "tool_result",
-                "tool_use_id": "t9",
-                "content": "done",
-                "is_error": true
-              }
-            ],
+            "content_blocks": {
+              "$ref": "s2"
+            },
             "provider_key": null,
             "model": null
           }
@@ -1413,27 +1455,9 @@
       "messages": [
         {
           "role": "assistant",
-          "content": [
-            {
-              "type": "thinking",
-              "thinking": "hmm",
-              "signature": "sig-abc"
-            },
-            {
-              "type": "thinking",
-              "thinking": "no carrier"
-            },
-            {
-              "type": "redacted_thinking",
-              "data": "opaque"
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t9",
-              "content": "done",
-              "is_error": true
-            }
-          ]
+          "content": {
+            "$ref": "s2"
+          }
         }
       ],
       "system": []
@@ -1567,10 +1591,12 @@
       ],
       "system": [
         {
-          "$ref": "s5"
+          "label": "system",
+          "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
         },
         {
-          "$ref": "s6"
+          "label": "tools_guidance",
+          "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
         }
       ],
       "tool_defs": null,
@@ -1671,7 +1697,7 @@
           "label": "user"
         },
         {
-          "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- a memory\n\n</memory_index>",
+          "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md \u2014 a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- a memory\n\n</memory_index>",
           "label": "memory_index"
         }
       ],
@@ -1761,18 +1787,19 @@
       ],
       "system": [
         {
-          "$ref": "s5"
+          "label": "system",
+          "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
         },
         {
-          "$ref": "s6"
+          "label": "tools_guidance",
+          "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
         },
         {
           "text": "<qifei>\ncanonical soul\n\n</qifei>",
           "label": "character"
         },
         {
-          "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- canon\n\n</memory_index>",
-          "label": "memory_index"
+          "$ref": "s3"
         }
       ],
       "tool_defs": null,
@@ -1868,57 +1895,11 @@
         }
       ],
       "system": {
-        "$ref": "s1"
+        "$ref": "s4"
       },
       "tool_defs": [
-        {
-          "$ref": "s0"
-        },
-        {
-          "name": "edit",
-          "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace."
-              },
-              "content": {
-                "type": "string",
-                "description": "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`."
-              },
-              "edits": {
-                "type": "array",
-                "description": "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "old_string": {
-                      "type": "string",
-                      "description": "Exact text to find and replace. Must match whitespace and newlines precisely."
-                    },
-                    "new_string": {
-                      "type": "string",
-                      "description": "Text to replace old_string with."
-                    },
-                    "replace_all": {
-                      "type": "boolean",
-                      "description": "Replace every occurrence of old_string. Defaults to false, which requires old_string to match exactly once."
-                    }
-                  },
-                  "required": [
-                    "old_string",
-                    "new_string"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
-        }
+        "read",
+        "edit"
       ],
       "prompt_messages": [
         {
@@ -1939,7 +1920,7 @@
         }
       ],
       "active_after": {
-        "$ref": "s4"
+        "$ref": "s5"
       }
     },
     {
@@ -2016,44 +1997,13 @@
         }
       ],
       "system": {
-        "$ref": "s1"
+        "$ref": "s4"
       },
       "tool_defs": [
-        {
-          "$ref": "s0"
-        },
-        {
-          "name": "ask_librarian",
-          "description": "Ask the librarian on behalf of Ash",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Natural-language request for this sub-agent."
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
-        },
-        {
-          "name": "mcp__fs__list",
-          "description": "mcp tool mcp__fs__list",
-          "input_schema": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        {
-          "name": "mcp__fs__stat",
-          "description": "mcp tool mcp__fs__stat",
-          "input_schema": {
-            "type": "object",
-            "properties": {}
-          }
-        }
+        "read",
+        "ask_librarian",
+        "mcp__fs__list",
+        "mcp__fs__stat"
       ],
       "prompt_messages": [
         {
@@ -2066,7 +2016,7 @@
         }
       ],
       "active_after": {
-        "$ref": "s4"
+        "$ref": "s5"
       }
     },
     {
@@ -2125,17 +2075,10 @@
         }
       ],
       "system": {
-        "$ref": "s1"
+        "$ref": "s4"
       },
       "tool_defs": [
-        {
-          "name": "mcp__fs__list",
-          "description": "mcp tool mcp__fs__list",
-          "input_schema": {
-            "type": "object",
-            "properties": {}
-          }
-        }
+        "mcp__fs__list"
       ],
       "prompt_messages": [
         {
@@ -2148,7 +2091,7 @@
         }
       ],
       "active_after": {
-        "$ref": "s4"
+        "$ref": "s5"
       }
     },
     {
@@ -2200,12 +2143,10 @@
         }
       ],
       "system": {
-        "$ref": "s1"
+        "$ref": "s4"
       },
       "tool_defs": [
-        {
-          "$ref": "s0"
-        }
+        "read"
       ],
       "prompt_messages": [
         {
@@ -2218,12 +2159,12 @@
         }
       ],
       "active_after": {
-        "$ref": "s4"
+        "$ref": "s5"
       }
     },
     {
       "name": "a blocked active_prompt is warned about, not fatal",
-      "note": "`active_prompt` is a regular file, so the snapshot step fails. The prompt files then read as absent and the memory index falls through to its canonical copy — the one path where that fallback is reachable",
+      "note": "`active_prompt` is a regular file, so the snapshot step fails. The prompt files then read as absent and the memory index falls through to its canonical copy \u2014 the one path where that fallback is reachable",
       "input": {
         "character": "qifei",
         "display_name": "Ash",
@@ -2273,11 +2214,11 @@
       ],
       "system": [
         {
-          "$ref": "s5"
+          "label": "system",
+          "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
         },
         {
-          "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- canon\n\n</memory_index>",
-          "label": "memory_index"
+          "$ref": "s3"
         }
       ],
       "tool_defs": null,
@@ -2295,7 +2236,7 @@
     },
     {
       "name": "an assistant image with tools off takes the stand-in",
-      "note": "anthropic, so the sdk alone would say tool_pair — the absent tool surface is what makes it text, and this is the only case where the mode chosen here is observable at all",
+      "note": "anthropic, so the sdk alone would say tool_pair \u2014 the absent tool surface is what makes it text, and this is the only case where the mode chosen here is observable at all",
       "input": {
         "character": "qifei",
         "display_name": "Ash",
@@ -2317,29 +2258,9 @@
         "max_context_tokens": 100000,
         "max_output_tokens": 4096,
         "max_image_size": 1024,
-        "messages": [
-          {
-            "msg_id": "m-draw me something",
-            "role": "user",
-            "content": "draw me something",
-            "images": [],
-            "content_blocks": [],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-here you go",
-            "role": "assistant",
-            "content": "here you go",
-            "images": [
-              {
-                "path": "{images}/gen.png",
-                "caption": "a sunset"
-              }
-            ],
-            "content_blocks": [],
-            "timestamp": "2026-07-01T00:00:00Z"
-          }
-        ]
+        "messages": {
+          "$ref": "s6"
+        }
       },
       "llm_messages": [
         {
@@ -2366,34 +2287,14 @@
         }
       ],
       "system": {
-        "$ref": "s1"
+        "$ref": "s4"
       },
       "tool_defs": null,
-      "prompt_messages": [
-        {
-          "role": "user",
-          "content": "draw me something",
-          "images": [],
-          "content_blocks": [],
-          "provider_key": null,
-          "model": null
-        },
-        {
-          "role": "assistant",
-          "content": "here you go",
-          "images": [
-            {
-              "path": "{images}/gen.png",
-              "caption": "a sunset"
-            }
-          ],
-          "content_blocks": [],
-          "provider_key": null,
-          "model": null
-        }
-      ],
+      "prompt_messages": {
+        "$ref": "s7"
+      },
       "active_after": {
-        "$ref": "s4"
+        "$ref": "s5"
       }
     },
     {
@@ -2422,29 +2323,9 @@
         "max_context_tokens": 100000,
         "max_output_tokens": 4096,
         "max_image_size": 1024,
-        "messages": [
-          {
-            "msg_id": "m-draw me something",
-            "role": "user",
-            "content": "draw me something",
-            "images": [],
-            "content_blocks": [],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-here you go",
-            "role": "assistant",
-            "content": "here you go",
-            "images": [
-              {
-                "path": "{images}/gen.png",
-                "caption": "a sunset"
-              }
-            ],
-            "content_blocks": [],
-            "timestamp": "2026-07-01T00:00:00Z"
-          }
-        ]
+        "messages": {
+          "$ref": "s6"
+        }
       },
       "llm_messages": [
         {
@@ -2498,38 +2379,16 @@
         }
       ],
       "system": {
-        "$ref": "s1"
+        "$ref": "s4"
       },
       "tool_defs": [
-        {
-          "$ref": "s0"
-        }
+        "read"
       ],
-      "prompt_messages": [
-        {
-          "role": "user",
-          "content": "draw me something",
-          "images": [],
-          "content_blocks": [],
-          "provider_key": null,
-          "model": null
-        },
-        {
-          "role": "assistant",
-          "content": "here you go",
-          "images": [
-            {
-              "path": "{images}/gen.png",
-              "caption": "a sunset"
-            }
-          ],
-          "content_blocks": [],
-          "provider_key": null,
-          "model": null
-        }
-      ],
+      "prompt_messages": {
+        "$ref": "s7"
+      },
       "active_after": {
-        "$ref": "s4"
+        "$ref": "s5"
       }
     },
     {
@@ -2573,19 +2432,19 @@
           "content": [
             {
               "type": "text",
-              "text": "[Tuesday 2026-06-30 · 8:00 PM]\n\nhi"
+              "text": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nhi"
             }
           ]
         }
       ],
       "system": {
-        "$ref": "s1"
+        "$ref": "s4"
       },
       "tool_defs": null,
       "prompt_messages": [
         {
           "role": "user",
-          "content": "[Tuesday 2026-06-30 · 8:00 PM]\n\nhi",
+          "content": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nhi",
           "images": [],
           "content_blocks": [],
           "provider_key": null,
@@ -2593,7 +2452,7 @@
         }
       ],
       "active_after": {
-        "$ref": "s4"
+        "$ref": "s5"
       }
     },
     {
@@ -2643,7 +2502,7 @@
         }
       ],
       "system": {
-        "$ref": "s1"
+        "$ref": "s4"
       },
       "tool_defs": null,
       "prompt_messages": [
@@ -2657,68 +2516,8 @@
         }
       ],
       "active_after": {
-        "$ref": "s4"
-      }
-    }
-  ],
-  "$shared": {
-    "s0": {
-      "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
-      "input_schema": {
-        "$ref": "s2"
-      },
-      "name": "read"
-    },
-    "s1": [
-      {
         "$ref": "s5"
-      },
-      {
-        "$ref": "s6"
-      },
-      {
-        "label": "character",
-        "text": "<qifei>\nI am qifei.\n\n</qifei>"
       }
-    ],
-    "s2": {
-      "properties": {
-        "$ref": "s3"
-      },
-      "required": [],
-      "type": "object"
-    },
-    "s3": {
-      "limit": {
-        "description": "Maximum number of lines to read. Files only; ignored for directories. Optional.",
-        "type": "number"
-      },
-      "offset": {
-        "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional.",
-        "type": "number"
-      },
-      "path": {
-        "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root.",
-        "type": "string"
-      }
-    },
-    "s4": [
-      {
-        "content": "I am qifei.\n",
-        "name": "SOUL.md"
-      },
-      {
-        "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-        "name": "TOOLS.md"
-      }
-    ],
-    "s5": {
-      "label": "system",
-      "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-    },
-    "s6": {
-      "label": "tools_guidance",
-      "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
     }
-  }
+  ]
 }

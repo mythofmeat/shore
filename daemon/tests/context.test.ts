@@ -67,7 +67,7 @@ interface ContextCase {
   };
   llm_messages: unknown[];
   system: { text: string; label: string }[];
-  tool_defs: ToolDefinition[] | null;
+  tool_defs: string[] | null;
   prompt_messages: FixturePromptMessage[];
   active_after: { name: string; content: string }[] | null;
 }
@@ -310,7 +310,19 @@ describe("prepareChatContext", () => {
 
       expectJson(got.system, c.system);
       expectJson(got.llmMessages, c.llm_messages);
-      expectJson(got.toolDefs ?? null, c.tool_defs);
+      expect(
+        got.toolDefs?.map((t) => t.name) ?? null,
+        `${c.name}: the tools this context offers`,
+      ).toEqual(c.tool_defs);
+      for (const tool of got.toolDefs ?? []) {
+        expect(
+          typeof tool.description === "string" && tool.description !== "",
+          `${tool.name} tells the model what it is for`,
+        ).toBe(true);
+        expect((tool.input_schema as { type?: string }).type, `${tool.name} takes an object`).toBe(
+          "object",
+        );
+      }
 
       expectJson(got.prompt.messages, c.prompt_messages.map((m) => promptMessage(m, dir)));
 
