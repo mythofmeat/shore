@@ -1,3 +1,4 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -7,7 +8,8 @@ import {
   type KeyFallbackEntry,
 } from "../src/diagnostics.ts";
 
-import fixture from "./diagnostics_fixtures/diagnostics.json" with { type: "json" };
+import rawFixture from "./diagnostics_fixtures/diagnostics.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 interface RingCase {
   case: string;

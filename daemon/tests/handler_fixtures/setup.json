@@ -3,31 +3,10 @@
   "resolve_generation_model": [
     {
       "name": "the pre-resolved model passes straight through",
-      "note": "an empty overlay must not rebuild the model \u2014 the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
+      "note": "an empty overlay must not rebuild the model — the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
       "input": {
         "active_model": {
-          "name": "opus",
-          "qualified_name": "chat.anthropic.opus",
-          "category": "chat",
-          "provider_key": "anthropic",
-          "sdk": "anthropic",
-          "model_id": "opus-id",
-          "api_key_env": "TEST_KEY",
-          "base_url": null,
-          "max_context_tokens": null,
-          "max_output_tokens": 1024,
-          "temperature": 0.5,
-          "top_p": null,
-          "reasoning_effort": null,
-          "budget_tokens": null,
-          "cache_ttl": null,
-          "cache_keepalive": null,
-          "openrouter_provider": null,
-          "gemini_generation": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null,
-          "replay_prior_thinking": null,
-          "max_tool_iterations": null
+          "$ref": "s1"
         },
         "default_model": "alpha",
         "with_catalog": true,
@@ -51,28 +30,7 @@
       },
       "result": {
         "ok": {
-          "name": "opus",
-          "qualified_name": "chat.anthropic.opus",
-          "category": "chat",
-          "provider_key": "anthropic",
-          "sdk": "anthropic",
-          "model_id": "opus-id",
-          "api_key_env": "TEST_KEY",
-          "base_url": null,
-          "max_context_tokens": null,
-          "max_output_tokens": 1024,
-          "temperature": 0.5,
-          "top_p": null,
-          "reasoning_effort": null,
-          "budget_tokens": null,
-          "cache_ttl": null,
-          "cache_keepalive": null,
-          "openrouter_provider": null,
-          "gemini_generation": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null,
-          "replay_prior_thinking": null,
-          "max_tool_iterations": null
+          "$ref": "s1"
         }
       }
     },
@@ -81,28 +39,7 @@
       "note": "and only the fields the overlay sets",
       "input": {
         "active_model": {
-          "name": "opus",
-          "qualified_name": "chat.anthropic.opus",
-          "category": "chat",
-          "provider_key": "anthropic",
-          "sdk": "anthropic",
-          "model_id": "opus-id",
-          "api_key_env": "TEST_KEY",
-          "base_url": null,
-          "max_context_tokens": null,
-          "max_output_tokens": 1024,
-          "temperature": 0.5,
-          "top_p": null,
-          "reasoning_effort": null,
-          "budget_tokens": null,
-          "cache_ttl": null,
-          "cache_keepalive": null,
-          "openrouter_provider": null,
-          "gemini_generation": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null,
-          "replay_prior_thinking": null,
-          "max_tool_iterations": null
+          "$ref": "s1"
         },
         "default_model": null,
         "with_catalog": false,
@@ -257,7 +194,7 @@
     },
     {
       "name": "a misspelled default surfaces as an error",
-      "note": "not silently swapped for the first model \u2014 a typo in user config should say so",
+      "note": "not silently swapped for the first model — a typo in user config should say so",
       "input": {
         "active_model": null,
         "default_model": "nope",
@@ -286,7 +223,7 @@
     },
     {
       "name": "no default falls back to the first static chat model",
-      "note": "first, not any \u2014 catalog order is the tiebreak",
+      "note": "first, not any — catalog order is the tiebreak",
       "input": {
         "active_model": null,
         "default_model": null,
@@ -499,60 +436,9 @@
       "name": "a fresh turn sends the whole history",
       "note": "every message the engine holds, in order",
       "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
+        "history": {
+          "$ref": "s0"
+        },
         "with_segments": false,
         "regen": false,
         "enabled_tools": [],
@@ -630,60 +516,9 @@
       "name": "a regen sends history through the last user turn",
       "note": "the assistant turn being regenerated is dropped, so the model answers the same question again rather than continuing past it",
       "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
+        "history": {
+          "$ref": "s0"
+        },
         "with_segments": false,
         "regen": true,
         "enabled_tools": [],
@@ -752,60 +587,9 @@
       "name": "archived segments set has_prior_context",
       "note": "which earns the first user turn a date anchor across the cut. Under `never` this decision is invisible, so the pair below runs under `auto` and differs only in whether the segments are there",
       "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
+        "history": {
+          "$ref": "s0"
+        },
         "with_segments": true,
         "regen": false,
         "enabled_tools": [],
@@ -827,7 +611,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nfirst"
+                "text": "[Tuesday 2026-06-30 · 8:00 PM]\n\nfirst"
               }
             ]
           },
@@ -883,60 +667,9 @@
       "name": "no segments, no anchor",
       "note": "the control for the case above",
       "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
+        "history": {
+          "$ref": "s0"
+        },
         "with_segments": false,
         "regen": false,
         "enabled_tools": [],
@@ -1012,62 +745,11 @@
     },
     {
       "name": "the mcp surface is filtered by enabled_tools",
-      "note": "one server, two tools, one allowlisted \u2014 and the static tools come first, which is the cache prefix",
+      "note": "one server, two tools, one allowlisted — and the static tools come first, which is the cache prefix",
       "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
+        "history": {
+          "$ref": "s0"
+        },
         "with_segments": false,
         "regen": false,
         "enabled_tools": [
@@ -1150,7 +832,7 @@
         "tools": [
           {
             "name": "read",
-            "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders \u2014 `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
+            "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
             "input_schema": {
               "type": "object",
               "properties": {
@@ -1188,60 +870,9 @@
       "name": "a glob allowlists a whole mcp server",
       "note": "the same filter, the other spelling",
       "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
+        "history": {
+          "$ref": "s0"
+        },
         "with_segments": false,
         "regen": false,
         "enabled_tools": [
@@ -1452,60 +1083,9 @@
       "name": "a rich model's own settings travel to the request",
       "note": "the control for both cases above",
       "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
+        "history": {
+          "$ref": "s0"
+        },
         "with_segments": false,
         "regen": false,
         "enabled_tools": [],
@@ -1583,5 +1163,85 @@
         "replay_prior_thinking": "all"
       }
     }
-  ]
+  ],
+  "$shared": {
+    "s0": [
+      {
+        "content": "first",
+        "content_blocks": [
+          {
+            "text": "first",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m-first",
+        "role": "user",
+        "timestamp": "2026-07-01T00:00:00Z"
+      },
+      {
+        "content": "answer",
+        "content_blocks": [
+          {
+            "text": "answer",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m-answer",
+        "role": "assistant",
+        "timestamp": "2026-07-01T00:00:10Z"
+      },
+      {
+        "content": "second",
+        "content_blocks": [
+          {
+            "text": "second",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m-second",
+        "role": "user",
+        "timestamp": "2026-07-01T00:01:00Z"
+      },
+      {
+        "content": "later",
+        "content_blocks": [
+          {
+            "text": "later",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m-later",
+        "role": "assistant",
+        "timestamp": "2026-07-01T00:01:10Z"
+      }
+    ],
+    "s1": {
+      "api_key_env": "TEST_KEY",
+      "base_url": null,
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_ttl": null,
+      "category": "chat",
+      "gemini_generation": null,
+      "max_context_tokens": null,
+      "max_output_tokens": 1024,
+      "max_tool_iterations": null,
+      "model_id": "opus-id",
+      "name": "opus",
+      "openrouter_provider": null,
+      "provider_key": "anthropic",
+      "qualified_name": "chat.anthropic.opus",
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "sdk": "anthropic",
+      "temperature": 0.5,
+      "top_p": null,
+      "zai_clear_thinking": null,
+      "zai_subscription": null
+    }
+  }
 }

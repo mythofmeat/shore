@@ -1,10 +1,12 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import fixture from "./handler_fixtures/generation.json" with { type: "json" };
+import rawFixture from "./handler_fixtures/generation.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { characterActiveJsonl } from "../src/config/dirs.ts";
 import type { Message } from "../src/engine/types.ts";

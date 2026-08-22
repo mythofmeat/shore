@@ -2,7 +2,9 @@ import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./handler_fixtures/stream.json" with { type: "json" };
+import rawStreamFixture from "./handler_fixtures/stream.json" with { type: "json" };
+import { expandShared } from "./support/shared_subtrees.ts";
+const fixture = expandShared(rawStreamFixture);
 
 import { ConfigDuration } from "../src/config/duration.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
@@ -50,7 +52,7 @@ import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 
 type Row = Record<string, unknown>;
 
-const f = fixture as unknown as Record<string, Row[]> & { append_in_place: Row };
+const f = fixture as Record<string, Row[]> & { append_in_place: Row };
 
 describe("truncate_summary", () => {
   for (const c of f["truncate_summary"] as Row[]) {

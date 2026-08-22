@@ -1,8 +1,10 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import fixture from "./autonomy_fixtures/last_request.json" with { type: "json" };
+import rawFixture from "./autonomy_fixtures/last_request.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import { emptyCatalog } from "../src/config/models.ts";

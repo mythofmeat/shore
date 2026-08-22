@@ -900,31 +900,9 @@
           "tool_use_id": "tu_img",
           "is_error": false
         },
-        "frames": [
-          {
-            "type": "tool_call",
-            "rid": "r-img",
-            "tool_id": "tu_img",
-            "tool_name": "generate_image",
-            "input": {
-              "prompt": "a cat"
-            }
-          },
-          {
-            "type": "send_image",
-            "rid": "r-img",
-            "path": "<generated>.png",
-            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-          },
-          {
-            "type": "tool_result",
-            "rid": "r-img",
-            "tool_id": "tu_img",
-            "tool_name": "generate_image",
-            "output": "<handler_json>",
-            "is_error": false
-          }
-        ],
+        "frames": {
+          "$ref": "s0"
+        },
         "intermediate_messages": [
           {
             "msg_id": "seeded_assistant",
@@ -1062,31 +1040,9 @@
           "tool_use_id": "tu_img",
           "is_error": false
         },
-        "frames": [
-          {
-            "type": "tool_call",
-            "rid": "r-img",
-            "tool_id": "tu_img",
-            "tool_name": "generate_image",
-            "input": {
-              "prompt": "a cat"
-            }
-          },
-          {
-            "type": "send_image",
-            "rid": "r-img",
-            "path": "<generated>.png",
-            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-          },
-          {
-            "type": "tool_result",
-            "rid": "r-img",
-            "tool_id": "tu_img",
-            "tool_name": "generate_image",
-            "output": "<handler_json>",
-            "is_error": false
-          }
-        ],
+        "frames": {
+          "$ref": "s0"
+        },
         "intermediate_messages": [
           {
             "msg_id": "seeded_assistant",
@@ -1149,31 +1105,9 @@
           "tool_use_id": "tu_img",
           "is_error": false
         },
-        "frames": [
-          {
-            "type": "tool_call",
-            "rid": "r-img",
-            "tool_id": "tu_img",
-            "tool_name": "generate_image",
-            "input": {
-              "prompt": "a cat"
-            }
-          },
-          {
-            "type": "send_image",
-            "rid": "r-img",
-            "path": "<generated>.png",
-            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-          },
-          {
-            "type": "tool_result",
-            "rid": "r-img",
-            "tool_id": "tu_img",
-            "tool_name": "generate_image",
-            "output": "<handler_json>",
-            "is_error": false
-          }
-        ],
+        "frames": {
+          "$ref": "s0"
+        },
         "intermediate_messages": [
           {
             "msg_id": "seeded_user",
@@ -1826,5 +1760,32 @@
         }
       ]
     }
-  ]
+  ],
+  "$shared": {
+    "s0": [
+      {
+        "input": {
+          "prompt": "a cat"
+        },
+        "rid": "r-img",
+        "tool_id": "tu_img",
+        "tool_name": "generate_image",
+        "type": "tool_call"
+      },
+      {
+        "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "path": "<generated>.png",
+        "rid": "r-img",
+        "type": "send_image"
+      },
+      {
+        "is_error": false,
+        "output": "<handler_json>",
+        "rid": "r-img",
+        "tool_id": "tu_img",
+        "tool_name": "generate_image",
+        "type": "tool_result"
+      }
+    ]
+  }
 }

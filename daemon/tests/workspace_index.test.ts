@@ -45,6 +45,7 @@ import {
   type EmbeddingSettings,
 } from "../src/memory/retrieval";
 import { defaultBaseUrl, hardcodedProviderBaseUrl } from "../src/llm/request";
+import { expandShared } from "./support/shared_subtrees.ts";
 
 interface RawConfig {
   binary: string;
@@ -215,9 +216,11 @@ interface Fixture {
   };
 }
 
-const fixture = JSON.parse(
+const fixture = expandShared<Fixture>(
+  JSON.parse(
   readFileSync(new URL("./memory_fixtures/workspace_index.json", import.meta.url), "utf8"),
-) as Fixture;
+  ),
+);
 
 function f32(value: number | null): number | undefined {
   return value === null ? undefined : toF32(value);

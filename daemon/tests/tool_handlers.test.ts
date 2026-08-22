@@ -1,6 +1,8 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./tools_fixtures/tool_handlers.json" with { type: "json" };
+import rawFixture from "./tools_fixtures/tool_handlers.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 import {
   DiceParseError,
   executeDiceRoll,

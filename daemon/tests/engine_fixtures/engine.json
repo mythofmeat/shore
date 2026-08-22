@@ -2223,36 +2223,7 @@
           "op": {
             "op": "append",
             "msg": {
-              "msg_id": "w6",
-              "role": "assistant",
-              "content": "variant",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "variant"
-                }
-              ],
-              "alt_index": 0,
-              "alt_count": 2,
-              "alternatives": [
-                {
-                  "content": "the other one",
-                  "images": [
-                    {
-                      "path": "/tmp/.tmpVn3pTV/Wren/alt.png"
-                    }
-                  ],
-                  "content_blocks": [
-                    {
-                      "type": "text",
-                      "text": "the other one"
-                    }
-                  ],
-                  "timestamp": "2026-01-01T00:00:03Z"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:03Z"
+              "$ref": "s0"
             }
           },
           "revision": 3,
@@ -2325,36 +2296,7 @@
                 "timestamp": "2026-01-01T00:00:02Z"
               },
               {
-                "msg_id": "w6",
-                "role": "assistant",
-                "content": "variant",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "variant"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 2,
-                "alternatives": [
-                  {
-                    "content": "the other one",
-                    "images": [
-                      {
-                        "path": "/tmp/.tmpVn3pTV/Wren/alt.png"
-                      }
-                    ],
-                    "content_blocks": [
-                      {
-                        "type": "text",
-                        "text": "the other one"
-                      }
-                    ],
-                    "timestamp": "2026-01-01T00:00:03Z"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:03Z"
+                "$ref": "s0"
               }
             ],
             "active_start": 2
@@ -2525,36 +2467,7 @@
                 "timestamp": "2026-01-01T00:00:02Z"
               },
               {
-                "msg_id": "w6",
-                "role": "assistant",
-                "content": "variant",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "variant"
-                  }
-                ],
-                "alt_index": 0,
-                "alt_count": 2,
-                "alternatives": [
-                  {
-                    "content": "the other one",
-                    "images": [
-                      {
-                        "path": "/tmp/.tmpVn3pTV/Wren/alt.png"
-                      }
-                    ],
-                    "content_blocks": [
-                      {
-                        "type": "text",
-                        "text": "the other one"
-                      }
-                    ],
-                    "timestamp": "2026-01-01T00:00:03Z"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:03Z"
+                "$ref": "s0"
               }
             ],
             "active_start": 2
@@ -2829,5 +2742,39 @@
         }
       ]
     }
-  ]
+  ],
+  "$shared": {
+    "s0": {
+      "alt_count": 2,
+      "alt_index": 0,
+      "alternatives": [
+        {
+          "content": "the other one",
+          "content_blocks": [
+            {
+              "text": "the other one",
+              "type": "text"
+            }
+          ],
+          "images": [
+            {
+              "path": "/tmp/.tmpVn3pTV/Wren/alt.png"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:03Z"
+        }
+      ],
+      "content": "variant",
+      "content_blocks": [
+        {
+          "text": "variant",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "w6",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:03Z"
+    }
+  }
 }

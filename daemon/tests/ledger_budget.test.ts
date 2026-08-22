@@ -1,10 +1,12 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { required } from "../src/util/required.ts";
 
 import { Database } from "bun:sqlite";
 import { copyFileSync } from "node:fs";
 import { afterAll, expect, test } from "bun:test";
 
-import fixture from "./ledger_fixtures/ledger_budget.json";
+import rawFixture from "./ledger_fixtures/ledger_budget.json";
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 import {
   budgetStatuses,
   type BudgetStatus,

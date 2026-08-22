@@ -1,11 +1,13 @@
 import { required } from "../src/util/required.ts";
 
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import fixture from "./command_captures/model_commands.json" with { type: "json" };
+import rawFixture from "./command_captures/model_commands.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { CommandError } from "../src/commands/errors.ts";
 import {

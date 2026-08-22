@@ -639,31 +639,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "notes/tea.md",
-                "fs_path": "<tmp>/workspace/notes/tea.md",
-                "content": "# Tea\n\ntea",
-                "lexical_score": 146,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              },
-              {
-                "display_path": "other/tea.md",
-                "fs_path": "<tmp>/workspace/other/tea.md",
-                "content": "# Tea\n\ntea",
-                "lexical_score": 146,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s2"
           },
           "embed_calls": [
             [
@@ -675,34 +651,7 @@
             ]
           ],
           "index_after": {
-            "entries": {
-              "notes/tea.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "other/tea.md": {
-                "hash": "mtime:1001:10",
-                "size": 10,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
+            "$ref": "s3"
           }
         },
         {
@@ -740,34 +689,7 @@
             ]
           ],
           "index_after": {
-            "entries": {
-              "notes/tea.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "other/tea.md": {
-                "hash": "mtime:1001:10",
-                "size": 10,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
+            "$ref": "s3"
           }
         },
         {
@@ -805,34 +727,7 @@
             ]
           ],
           "index_after": {
-            "entries": {
-              "notes/tea.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "other/tea.md": {
-                "hash": "mtime:1001:10",
-                "size": 10,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
+            "$ref": "s3"
           }
         },
         {
@@ -848,31 +743,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "notes/tea.md",
-                "fs_path": "<tmp>/workspace/notes/tea.md",
-                "content": "# Tea\n\ntea",
-                "lexical_score": 146,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              },
-              {
-                "display_path": "other/tea.md",
-                "fs_path": "<tmp>/workspace/other/tea.md",
-                "content": "# Tea\n\ntea",
-                "lexical_score": 146,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s2"
           },
           "embed_calls": [
             [
@@ -880,34 +751,7 @@
             ]
           ],
           "index_after": {
-            "entries": {
-              "notes/tea.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "other/tea.md": {
-                "hash": "mtime:1001:10",
-                "size": 10,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
+            "$ref": "s3"
           }
         },
         {
@@ -923,31 +767,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "notes/tea.md",
-                "fs_path": "<tmp>/workspace/notes/tea.md",
-                "content": "# Tea\n\ntea",
-                "lexical_score": 146,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              },
-              {
-                "display_path": "other/tea.md",
-                "fs_path": "<tmp>/workspace/other/tea.md",
-                "content": "# Tea\n\ntea",
-                "lexical_score": 146,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s2"
           },
           "embed_calls": [
             [
@@ -955,34 +775,7 @@
             ]
           ],
           "index_after": {
-            "entries": {
-              "notes/tea.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "other/tea.md": {
-                "hash": "mtime:1001:10",
-                "size": 10,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
+            "$ref": "s3"
           }
         },
         {
@@ -1009,34 +802,7 @@
             ]
           ],
           "index_after": {
-            "entries": {
-              "notes/tea.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "other/tea.md": {
-                "hash": "mtime:1001:10",
-                "size": 10,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
+            "$ref": "s3"
           }
         }
       ]
@@ -1588,59 +1354,7 @@
       ],
       "runs": [
         {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "config": {
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea aaa",
-                "lexical_score": 34,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
-          },
-          "embed_calls": [
-            [
-              "path: a.md\n\ntea aaa"
-            ],
-            [
-              "tea"
-            ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:7",
-                "size": 7,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          "$ref": "s1"
         },
         {
           "query": "tea",
@@ -3349,63 +3063,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "config": {
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea time",
-                "lexical_score": 34,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
-          },
-          "embed_calls": [
-            [
-              "path: a.md\n\ntea time"
-            ],
-            [
-              "tea"
-            ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
-        }
-      ]
+      "runs": {
+        "$ref": "s0"
+      }
     },
     {
       "name": "an index with the wrong shape is discarded",
@@ -3435,63 +3095,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "config": {
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea time",
-                "lexical_score": 34,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
-          },
-          "embed_calls": [
-            [
-              "path: a.md\n\ntea time"
-            ],
-            [
-              "tea"
-            ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
-        }
-      ]
+      "runs": {
+        "$ref": "s0"
+      }
     },
     {
       "name": "a seeded fresh entry is reused without re-embedding",
@@ -3604,63 +3210,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "config": {
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea time",
-                "lexical_score": 34,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
-          },
-          "embed_calls": [
-            [
-              "path: a.md\n\ntea time"
-            ],
-            [
-              "tea"
-            ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
-        }
-      ]
+      "runs": {
+        "$ref": "s0"
+      }
     },
     {
       "name": "a legacy entry with no max_embed_chars_per_file is stale",
@@ -3690,63 +3242,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "config": {
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea time",
-                "lexical_score": 34,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
-          },
-          "embed_calls": [
-            [
-              "path: a.md\n\ntea time"
-            ],
-            [
-              "tea"
-            ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
-        }
-      ]
+      "runs": {
+        "$ref": "s0"
+      }
     },
     {
       "name": "a seeded entry for a file that no longer exists is pruned",
@@ -5620,59 +5118,7 @@
       ],
       "runs": [
         {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "config": {
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea aaa",
-                "lexical_score": 34,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
-          },
-          "embed_calls": [
-            [
-              "path: a.md\n\ntea aaa"
-            ],
-            [
-              "tea"
-            ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:7",
-                "size": 7,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          "$ref": "s1"
         },
         {
           "query": "tea",
@@ -5767,59 +5213,7 @@
       ],
       "runs": [
         {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "config": {
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea aaa",
-                "lexical_score": 34,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
-          },
-          "embed_calls": [
-            [
-              "path: a.md\n\ntea aaa"
-            ],
-            [
-              "tea"
-            ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:7",
-                "size": 7,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          "$ref": "s1"
         },
         {
           "query": "tea",
@@ -9236,5 +8630,176 @@
         }
       }
     }
-  ]
+  ],
+  "$shared": {
+    "s0": [
+      {
+        "config": {
+          "binary": "skip",
+          "max_embed_chars_per_file": 4000,
+          "max_file_bytes": 2097152,
+          "max_indexed_files": 50000,
+          "max_total_indexed_bytes": 1073741824
+        },
+        "counts_only": false,
+        "embed_calls": [
+          [
+            "path: a.md\n\ntea time"
+          ],
+          [
+            "tea"
+          ]
+        ],
+        "index_after": {
+          "entries": {
+            "a.md": {
+              "embedded": true,
+              "embedding": [
+                0.33333334,
+                0.0,
+                0.0
+              ],
+              "hash": "mtime:1000:8",
+              "max_embed_chars_per_file": 4000,
+              "model_id": "topic-v1",
+              "modified_at_secs": 1000,
+              "size": 8
+            }
+          }
+        },
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            {
+              "combined_score": 1.0,
+              "content": "tea time",
+              "display_path": "a.md",
+              "embedded": true,
+              "fs_path": "<tmp>/workspace/a.md",
+              "lexical_score": 34,
+              "semantic_score": 1.0,
+              "skip_reason": null
+            }
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s1": {
+      "config": {
+        "binary": "skip",
+        "max_embed_chars_per_file": 4000,
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824
+      },
+      "counts_only": false,
+      "embed_calls": [
+        [
+          "path: a.md\n\ntea aaa"
+        ],
+        [
+          "tea"
+        ]
+      ],
+      "index_after": {
+        "entries": {
+          "a.md": {
+            "embedded": true,
+            "embedding": [
+              0.33333334,
+              0.0,
+              0.0
+            ],
+            "hash": "mtime:1000:7",
+            "max_embed_chars_per_file": 4000,
+            "model_id": "topic-v1",
+            "modified_at_secs": 1000,
+            "size": 7
+          }
+        }
+      },
+      "mode": "hybrid",
+      "outcome": {
+        "embedded_files": 1,
+        "files": [
+          {
+            "combined_score": 1.0,
+            "content": "tea aaa",
+            "display_path": "a.md",
+            "embedded": true,
+            "fs_path": "<tmp>/workspace/a.md",
+            "lexical_score": 34,
+            "semantic_score": 1.0,
+            "skip_reason": null
+          }
+        ],
+        "searched_files": 1,
+        "skipped_binary_or_large": 0
+      },
+      "path_filter": null,
+      "query": "tea"
+    },
+    "s2": {
+      "embedded_files": 2,
+      "files": [
+        {
+          "combined_score": 1.0,
+          "content": "# Tea\n\ntea",
+          "display_path": "notes/tea.md",
+          "embedded": true,
+          "fs_path": "<tmp>/workspace/notes/tea.md",
+          "lexical_score": 146,
+          "semantic_score": 1.0,
+          "skip_reason": null
+        },
+        {
+          "combined_score": 1.0,
+          "content": "# Tea\n\ntea",
+          "display_path": "other/tea.md",
+          "embedded": true,
+          "fs_path": "<tmp>/workspace/other/tea.md",
+          "lexical_score": 146,
+          "semantic_score": 1.0,
+          "skip_reason": null
+        }
+      ],
+      "searched_files": 2,
+      "skipped_binary_or_large": 0
+    },
+    "s3": {
+      "entries": {
+        "notes/tea.md": {
+          "embedded": true,
+          "embedding": [
+            0.33333334,
+            0.0,
+            0.0
+          ],
+          "hash": "mtime:1000:10",
+          "max_embed_chars_per_file": 4000,
+          "model_id": "topic-v1",
+          "modified_at_secs": 1000,
+          "size": 10
+        },
+        "other/tea.md": {
+          "embedded": true,
+          "embedding": [
+            0.33333334,
+            0.0,
+            0.0
+          ],
+          "hash": "mtime:1001:10",
+          "max_embed_chars_per_file": 4000,
+          "model_id": "topic-v1",
+          "modified_at_secs": 1001,
+          "size": 10
+        }
+      }
+    }
+  }
 }

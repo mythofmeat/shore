@@ -1,3 +1,4 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterAll, describe, expect, test } from "bun:test";
@@ -5,7 +6,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import fixture from "./config_fixtures/preferences.json" with { type: "json" };
+import rawFixture from "./config_fixtures/preferences.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { catalogFromSections, defaultSdk, type ResolvedModel } from "../src/config/models.ts";
 import {

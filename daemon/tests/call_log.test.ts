@@ -1,3 +1,4 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +9,8 @@ import { callLog, transcript, type CallLogContext } from "../src/commands/call_l
 import { CommandError } from "../src/commands/errors.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
 
-import fixture from "./command_captures/call_log.json" with { type: "json" };
+import rawFixture from "./command_captures/call_log.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 const root = mkdtempSync(join(tmpdir(), "call-log-parity-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

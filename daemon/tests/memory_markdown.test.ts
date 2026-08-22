@@ -21,6 +21,7 @@ import {
   type MarkdownEntry,
 } from "../src/memory/markdown_store";
 import { truncateChars } from "../src/memory/markdown_query";
+import { expandShared } from "./support/shared_subtrees.ts";
 
 type Node =
   | { kind: "dir" }
@@ -49,8 +50,10 @@ interface PureCase {
   returns: string;
 }
 
-const fixture = JSON.parse(
-  readFileSync(join(import.meta.dir, "memory_fixtures/memory_markdown.json"), "utf8"),
+const fixture = expandShared(
+  JSON.parse(
+    readFileSync(join(import.meta.dir, "memory_fixtures/memory_markdown.json"), "utf8"),
+  ),
 ) as {
   constants: { max_direct_hits: number };
   modified_at_format: Array<{

@@ -118,66 +118,10 @@
         "fn": "list_all"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": [
         {
@@ -1241,66 +1185,10 @@
         "path": "deep/b.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": {
         "path": "deep/b.md",
@@ -1318,66 +1206,10 @@
         "path": "nope.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "not found: nope.md"
@@ -1456,66 +1288,10 @@
         "path": "notes.txt"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": {
         "path": "notes.txt",
@@ -1533,66 +1309,10 @@
         "path": "deep"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "io: Is a directory (os error 21)"
@@ -1605,66 +1325,10 @@
         "path": ""
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "path traversal: empty path"
@@ -1677,66 +1341,10 @@
         "path": "   \t "
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "path traversal: empty path"
@@ -1749,66 +1357,10 @@
         "path": "../secret.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "path traversal: path traversal (..) not allowed"
@@ -1821,66 +1373,10 @@
         "path": "deep/../a.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "path traversal: path traversal (..) not allowed"
@@ -1893,66 +1389,10 @@
         "path": "/etc/hostname"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "path traversal: absolute paths not allowed"
@@ -1965,66 +1405,10 @@
         "path": "./a.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": {
         "path": "./a.md",
@@ -2042,66 +1426,10 @@
         "path": "deep/./b.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": {
         "path": "deep/./b.md",
@@ -2119,66 +1447,10 @@
         "path": "  a.md  "
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": {
         "path": "  a.md  ",
@@ -2596,66 +1868,10 @@
         "path": "nope.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "not found: nope.md"
@@ -2798,66 +2014,10 @@
         "path": "../a.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "path traversal: path traversal (..) not allowed"
@@ -2870,66 +2030,10 @@
         "path": "deep"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/README.md": {
-          "kind": "file",
-          "content": "IyBJbmRleA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        },
-        "memories/deep/deeper": {
-          "kind": "dir"
-        },
-        "memories/deep/deeper/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "bm90IG1hcmtkb3du"
-        }
+        "$ref": "s0"
       },
       "returns": null,
       "err": "io: Is a directory (os error 21)"
@@ -2972,5 +2076,38 @@
       },
       "returns": "🌊🌊"
     }
-  ]
+  ],
+  "$shared": {
+    "s0": {
+      "memories": {
+        "kind": "dir"
+      },
+      "memories/README.md": {
+        "content": "IyBJbmRleA==",
+        "kind": "file"
+      },
+      "memories/a.md": {
+        "content": "QQ==",
+        "kind": "file"
+      },
+      "memories/deep": {
+        "kind": "dir"
+      },
+      "memories/deep/b.md": {
+        "content": "Qg==",
+        "kind": "file"
+      },
+      "memories/deep/deeper": {
+        "kind": "dir"
+      },
+      "memories/deep/deeper/c.md": {
+        "content": "Qw==",
+        "kind": "file"
+      },
+      "memories/notes.txt": {
+        "content": "bm90IG1hcmtkb3du",
+        "kind": "file"
+      }
+    }
+  }
 }

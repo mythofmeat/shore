@@ -2511,35 +2511,7 @@
           }
         },
         {
-          "name": "aria-tools",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 2.25,
-          "cost_limit": 5.0,
-          "percent_used": 0.45,
-          "status": "ok",
-          "action": "warn",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [],
-          "over_limit": false,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "aria",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": [
-              "message_with_tools"
-            ]
-          }
+          "$ref": "s4"
         },
         {
           "name": "month-31",
@@ -2851,35 +2823,7 @@
           }
         },
         {
-          "name": "aria-tools",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 2.25,
-          "cost_limit": 5.0,
-          "percent_used": 0.45,
-          "status": "ok",
-          "action": "warn",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [],
-          "over_limit": false,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "aria",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": [
-              "message_with_tools"
-            ]
-          }
+          "$ref": "s4"
         },
         {
           "name": "month-31",
@@ -3191,35 +3135,7 @@
           }
         },
         {
-          "name": "aria-tools",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 2.25,
-          "cost_limit": 5.0,
-          "percent_used": 0.45,
-          "status": "ok",
-          "action": "warn",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [],
-          "over_limit": false,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "aria",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": [
-              "message_with_tools"
-            ]
-          }
+          "$ref": "s4"
         },
         {
           "name": "month-31",
@@ -4766,35 +4682,7 @@
           }
         },
         {
-          "name": "aria-tools",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 2.25,
-          "cost_limit": 5.0,
-          "percent_used": 0.45,
-          "status": "ok",
-          "action": "warn",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [],
-          "over_limit": false,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "aria",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": [
-              "message_with_tools"
-            ]
-          }
+          "$ref": "s4"
         },
         {
           "name": "month-31",
@@ -5012,762 +4900,54 @@
       "config": "local_edges",
       "now_name": "before_spring_forward",
       "now": "2026-03-06T15:00:00+00:00",
-      "statuses": [
-        {
-          "name": "aria-background",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "status": "over_limit",
-          "action": "pause_background",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "aria",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        },
-        {
-          "name": "kai-exact",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "status": "over_limit",
-          "action": "block",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "kai",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        },
-        {
-          "name": "unknown-key",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "status": "over_limit",
-          "action": "block",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": null,
-            "provider": null,
-            "api_key": "unknown",
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        }
-      ],
+      "statuses": {
+        "$ref": "s0"
+      },
       "spike_warnings": [],
-      "warnings_first": [
-        {
-          "budget": "aria-background",
-          "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "kai-exact",
-          "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "unknown-key",
-          "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        }
-      ],
-      "warnings_second": [
-        {
-          "budget": "aria-background",
-          "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "kai-exact",
-          "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "unknown-key",
-          "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        }
-      ],
+      "warnings_first": {
+        "$ref": "s2"
+      },
+      "warnings_second": {
+        "$ref": "s3"
+      },
       "enforce": {
-        "foreground_aria": {
-          "allowed": true
-        },
-        "tool_loop_aria": {
-          "allowed": true
-        },
-        "heartbeat_kai": {
-          "allowed": false,
-          "budget_name": "kai-exact",
-          "action": "block",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"kai-exact\" is over limit ($0.40/$0.40 for Month); action Block; resets at 2026-04-01T04:00:00+00:00"
-        },
-        "keepalive_aria": {
-          "allowed": false,
-          "budget_name": "aria-background",
-          "action": "pause_background",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"aria-background\" is over limit ($12.10/$2.00 for Month); action PauseBackground; resets at 2026-04-01T04:00:00+00:00"
-        },
-        "compaction_aria": {
-          "allowed": true
-        },
-        "subscription_provider": {
-          "allowed": true
-        },
-        "no_key_name": {
-          "allowed": false,
-          "budget_name": "unknown-key",
-          "action": "block",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"unknown-key\" is over limit ($0.80/$0.50 for Month); action Block; resets at 2026-04-01T04:00:00+00:00"
-        }
+        "$ref": "s1"
       }
     },
     {
       "config": "local_edges",
       "now_name": "spring_forward_hour",
       "now": "2026-03-08T07:30:00+00:00",
-      "statuses": [
-        {
-          "name": "aria-background",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "status": "over_limit",
-          "action": "pause_background",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "aria",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        },
-        {
-          "name": "kai-exact",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "status": "over_limit",
-          "action": "block",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "kai",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        },
-        {
-          "name": "unknown-key",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "status": "over_limit",
-          "action": "block",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": null,
-            "provider": null,
-            "api_key": "unknown",
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        }
-      ],
+      "statuses": {
+        "$ref": "s0"
+      },
       "spike_warnings": [],
-      "warnings_first": [
-        {
-          "budget": "aria-background",
-          "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "kai-exact",
-          "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "unknown-key",
-          "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        }
-      ],
-      "warnings_second": [
-        {
-          "budget": "aria-background",
-          "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "kai-exact",
-          "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "unknown-key",
-          "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        }
-      ],
+      "warnings_first": {
+        "$ref": "s2"
+      },
+      "warnings_second": {
+        "$ref": "s3"
+      },
       "enforce": {
-        "foreground_aria": {
-          "allowed": true
-        },
-        "tool_loop_aria": {
-          "allowed": true
-        },
-        "heartbeat_kai": {
-          "allowed": false,
-          "budget_name": "kai-exact",
-          "action": "block",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"kai-exact\" is over limit ($0.40/$0.40 for Month); action Block; resets at 2026-04-01T04:00:00+00:00"
-        },
-        "keepalive_aria": {
-          "allowed": false,
-          "budget_name": "aria-background",
-          "action": "pause_background",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"aria-background\" is over limit ($12.10/$2.00 for Month); action PauseBackground; resets at 2026-04-01T04:00:00+00:00"
-        },
-        "compaction_aria": {
-          "allowed": true
-        },
-        "subscription_provider": {
-          "allowed": true
-        },
-        "no_key_name": {
-          "allowed": false,
-          "budget_name": "unknown-key",
-          "action": "block",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"unknown-key\" is over limit ($0.80/$0.50 for Month); action Block; resets at 2026-04-01T04:00:00+00:00"
-        }
+        "$ref": "s1"
       }
     },
     {
       "config": "local_edges",
       "now_name": "after_spring_forward",
       "now": "2026-03-09T16:00:00+00:00",
-      "statuses": [
-        {
-          "name": "aria-background",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "status": "over_limit",
-          "action": "pause_background",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "aria",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        },
-        {
-          "name": "kai-exact",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "status": "over_limit",
-          "action": "block",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "kai",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        },
-        {
-          "name": "unknown-key",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "status": "over_limit",
-          "action": "block",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": null,
-            "provider": null,
-            "api_key": "unknown",
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        }
-      ],
+      "statuses": {
+        "$ref": "s0"
+      },
       "spike_warnings": [],
-      "warnings_first": [
-        {
-          "budget": "aria-background",
-          "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "kai-exact",
-          "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "unknown-key",
-          "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        }
-      ],
-      "warnings_second": [
-        {
-          "budget": "aria-background",
-          "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "kai-exact",
-          "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "unknown-key",
-          "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        }
-      ],
+      "warnings_first": {
+        "$ref": "s2"
+      },
+      "warnings_second": {
+        "$ref": "s3"
+      },
       "enforce": {
-        "foreground_aria": {
-          "allowed": true
-        },
-        "tool_loop_aria": {
-          "allowed": true
-        },
-        "heartbeat_kai": {
-          "allowed": false,
-          "budget_name": "kai-exact",
-          "action": "block",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"kai-exact\" is over limit ($0.40/$0.40 for Month); action Block; resets at 2026-04-01T04:00:00+00:00"
-        },
-        "keepalive_aria": {
-          "allowed": false,
-          "budget_name": "aria-background",
-          "action": "pause_background",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"aria-background\" is over limit ($12.10/$2.00 for Month); action PauseBackground; resets at 2026-04-01T04:00:00+00:00"
-        },
-        "compaction_aria": {
-          "allowed": true
-        },
-        "subscription_provider": {
-          "allowed": true
-        },
-        "no_key_name": {
-          "allowed": false,
-          "budget_name": "unknown-key",
-          "action": "block",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"unknown-key\" is over limit ($0.80/$0.50 for Month); action Block; resets at 2026-04-01T04:00:00+00:00"
-        }
+        "$ref": "s1"
       }
     },
     {
@@ -6526,255 +5706,300 @@
       "config": "local_edges",
       "now_name": "trailing_partial_pace",
       "now": "2026-03-30T12:00:00+00:00",
-      "statuses": [
-        {
-          "name": "aria-background",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "status": "over_limit",
-          "action": "pause_background",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "aria",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        },
-        {
-          "name": "kai-exact",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "status": "over_limit",
-          "action": "block",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": "kai",
-            "provider": null,
-            "api_key": null,
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        },
-        {
-          "name": "unknown-key",
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "period_end": "2026-04-01T04:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "timezone": "local",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "status": "over_limit",
-          "action": "block",
-          "warning_thresholds": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "over_limit": true,
-          "compaction_allowed_over_budget": true,
-          "filters": {
-            "character": null,
-            "provider": null,
-            "api_key": "unknown",
-            "model": null,
-            "call_type": null,
-            "usage_kind": []
-          }
-        }
-      ],
+      "statuses": {
+        "$ref": "s0"
+      },
       "spike_warnings": [],
-      "warnings_first": [
-        {
-          "budget": "aria-background",
-          "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "kai-exact",
-          "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "unknown-key",
-          "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "crossed_warn_at": [
-            0.5,
-            0.805,
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        }
-      ],
-      "warnings_second": [
-        {
-          "budget": "aria-background",
-          "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "percent_used": 6.05,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "kai-exact",
-          "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "percent_used": 1.0,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        },
-        {
-          "budget": "unknown-key",
-          "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "percent_used": 1.6,
-          "crossed_warn_at": [
-            1.0
-          ],
-          "period": "month",
-          "period_start": "2026-03-01T05:00:00+00:00",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "reset_at_display": "2026-04-01 12:00 AM",
-          "scope": "budget"
-        }
-      ],
+      "warnings_first": {
+        "$ref": "s2"
+      },
+      "warnings_second": {
+        "$ref": "s3"
+      },
       "enforce": {
-        "foreground_aria": {
-          "allowed": true
-        },
-        "tool_loop_aria": {
-          "allowed": true
-        },
-        "heartbeat_kai": {
-          "allowed": false,
-          "budget_name": "kai-exact",
-          "action": "block",
-          "current_cost": 0.4,
-          "cost_limit": 0.4,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"kai-exact\" is over limit ($0.40/$0.40 for Month); action Block; resets at 2026-04-01T04:00:00+00:00"
-        },
-        "keepalive_aria": {
-          "allowed": false,
-          "budget_name": "aria-background",
-          "action": "pause_background",
-          "current_cost": 12.1,
-          "cost_limit": 2.0,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"aria-background\" is over limit ($12.10/$2.00 for Month); action PauseBackground; resets at 2026-04-01T04:00:00+00:00"
-        },
-        "compaction_aria": {
-          "allowed": true
-        },
-        "subscription_provider": {
-          "allowed": true
-        },
-        "no_key_name": {
-          "allowed": false,
-          "budget_name": "unknown-key",
-          "action": "block",
-          "current_cost": 0.8,
-          "cost_limit": 0.5,
-          "period": "month",
-          "reset_at": "2026-04-01T04:00:00+00:00",
-          "scope": "budget",
-          "message": "Shore usage budget \"unknown-key\" is over limit ($0.80/$0.50 for Month); action Block; resets at 2026-04-01T04:00:00+00:00"
-        }
+        "$ref": "s1"
       }
     }
-  ]
+  ],
+  "$shared": {
+    "s0": [
+      {
+        "action": "pause_background",
+        "compaction_allowed_over_budget": true,
+        "cost_limit": 2.0,
+        "crossed_warn_at": [
+          0.5,
+          0.805,
+          1.0
+        ],
+        "current_cost": 12.1,
+        "filters": {
+          "api_key": null,
+          "call_type": null,
+          "character": "aria",
+          "model": null,
+          "provider": null,
+          "usage_kind": []
+        },
+        "name": "aria-background",
+        "over_limit": true,
+        "percent_used": 6.05,
+        "period": "month",
+        "period_end": "2026-04-01T04:00:00+00:00",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "status": "over_limit",
+        "timezone": "local",
+        "warning_thresholds": [
+          0.5,
+          0.805,
+          1.0
+        ]
+      },
+      {
+        "action": "block",
+        "compaction_allowed_over_budget": true,
+        "cost_limit": 0.4,
+        "crossed_warn_at": [
+          0.5,
+          0.805,
+          1.0
+        ],
+        "current_cost": 0.4,
+        "filters": {
+          "api_key": null,
+          "call_type": null,
+          "character": "kai",
+          "model": null,
+          "provider": null,
+          "usage_kind": []
+        },
+        "name": "kai-exact",
+        "over_limit": true,
+        "percent_used": 1.0,
+        "period": "month",
+        "period_end": "2026-04-01T04:00:00+00:00",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "status": "over_limit",
+        "timezone": "local",
+        "warning_thresholds": [
+          0.5,
+          0.805,
+          1.0
+        ]
+      },
+      {
+        "action": "block",
+        "compaction_allowed_over_budget": true,
+        "cost_limit": 0.5,
+        "crossed_warn_at": [
+          0.5,
+          0.805,
+          1.0
+        ],
+        "current_cost": 0.8,
+        "filters": {
+          "api_key": "unknown",
+          "call_type": null,
+          "character": null,
+          "model": null,
+          "provider": null,
+          "usage_kind": []
+        },
+        "name": "unknown-key",
+        "over_limit": true,
+        "percent_used": 1.6,
+        "period": "month",
+        "period_end": "2026-04-01T04:00:00+00:00",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "status": "over_limit",
+        "timezone": "local",
+        "warning_thresholds": [
+          0.5,
+          0.805,
+          1.0
+        ]
+      }
+    ],
+    "s1": {
+      "compaction_aria": {
+        "allowed": true
+      },
+      "foreground_aria": {
+        "allowed": true
+      },
+      "heartbeat_kai": {
+        "action": "block",
+        "allowed": false,
+        "budget_name": "kai-exact",
+        "cost_limit": 0.4,
+        "current_cost": 0.4,
+        "message": "Shore usage budget \"kai-exact\" is over limit ($0.40/$0.40 for Month); action Block; resets at 2026-04-01T04:00:00+00:00",
+        "period": "month",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "scope": "budget"
+      },
+      "keepalive_aria": {
+        "action": "pause_background",
+        "allowed": false,
+        "budget_name": "aria-background",
+        "cost_limit": 2.0,
+        "current_cost": 12.1,
+        "message": "Shore usage budget \"aria-background\" is over limit ($12.10/$2.00 for Month); action PauseBackground; resets at 2026-04-01T04:00:00+00:00",
+        "period": "month",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "scope": "budget"
+      },
+      "no_key_name": {
+        "action": "block",
+        "allowed": false,
+        "budget_name": "unknown-key",
+        "cost_limit": 0.5,
+        "current_cost": 0.8,
+        "message": "Shore usage budget \"unknown-key\" is over limit ($0.80/$0.50 for Month); action Block; resets at 2026-04-01T04:00:00+00:00",
+        "period": "month",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "scope": "budget"
+      },
+      "subscription_provider": {
+        "allowed": true
+      },
+      "tool_loop_aria": {
+        "allowed": true
+      }
+    },
+    "s2": [
+      {
+        "budget": "aria-background",
+        "cost_limit": 2.0,
+        "crossed_warn_at": [
+          0.5,
+          0.805,
+          1.0
+        ],
+        "current_cost": 12.1,
+        "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
+        "percent_used": 6.05,
+        "period": "month",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "reset_at_display": "2026-04-01 12:00 AM",
+        "scope": "budget"
+      },
+      {
+        "budget": "kai-exact",
+        "cost_limit": 0.4,
+        "crossed_warn_at": [
+          0.5,
+          0.805,
+          1.0
+        ],
+        "current_cost": 0.4,
+        "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
+        "percent_used": 1.0,
+        "period": "month",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "reset_at_display": "2026-04-01 12:00 AM",
+        "scope": "budget"
+      },
+      {
+        "budget": "unknown-key",
+        "cost_limit": 0.5,
+        "crossed_warn_at": [
+          0.5,
+          0.805,
+          1.0
+        ],
+        "current_cost": 0.8,
+        "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
+        "percent_used": 1.6,
+        "period": "month",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "reset_at_display": "2026-04-01 12:00 AM",
+        "scope": "budget"
+      }
+    ],
+    "s3": [
+      {
+        "budget": "aria-background",
+        "cost_limit": 2.0,
+        "crossed_warn_at": [
+          1.0
+        ],
+        "current_cost": 12.1,
+        "message": "Usage budget \"aria-background\" reached 100% ($12.10/$2.00); resets at 2026-04-01 12:00 AM.",
+        "percent_used": 6.05,
+        "period": "month",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "reset_at_display": "2026-04-01 12:00 AM",
+        "scope": "budget"
+      },
+      {
+        "budget": "kai-exact",
+        "cost_limit": 0.4,
+        "crossed_warn_at": [
+          1.0
+        ],
+        "current_cost": 0.4,
+        "message": "Usage budget \"kai-exact\" reached 100% ($0.40/$0.40); resets at 2026-04-01 12:00 AM.",
+        "percent_used": 1.0,
+        "period": "month",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "reset_at_display": "2026-04-01 12:00 AM",
+        "scope": "budget"
+      },
+      {
+        "budget": "unknown-key",
+        "cost_limit": 0.5,
+        "crossed_warn_at": [
+          1.0
+        ],
+        "current_cost": 0.8,
+        "message": "Usage budget \"unknown-key\" reached 100% ($0.80/$0.50); resets at 2026-04-01 12:00 AM.",
+        "percent_used": 1.6,
+        "period": "month",
+        "period_start": "2026-03-01T05:00:00+00:00",
+        "reset_at": "2026-04-01T04:00:00+00:00",
+        "reset_at_display": "2026-04-01 12:00 AM",
+        "scope": "budget"
+      }
+    ],
+    "s4": {
+      "action": "warn",
+      "compaction_allowed_over_budget": true,
+      "cost_limit": 5.0,
+      "crossed_warn_at": [],
+      "current_cost": 2.25,
+      "filters": {
+        "api_key": null,
+        "call_type": null,
+        "character": "aria",
+        "model": null,
+        "provider": null,
+        "usage_kind": [
+          "message_with_tools"
+        ]
+      },
+      "name": "aria-tools",
+      "over_limit": false,
+      "percent_used": 0.45,
+      "period": "month",
+      "period_end": "2026-04-01T04:00:00+00:00",
+      "period_start": "2026-03-01T05:00:00+00:00",
+      "reset_at": "2026-04-01T04:00:00+00:00",
+      "status": "ok",
+      "timezone": "local",
+      "warning_thresholds": [
+        0.5,
+        0.805,
+        1.0
+      ]
+    }
+  }
 }

@@ -134,62 +134,7 @@
       "name": "discovered plus static, hidden split out",
       "note": "static entries are never filtered — a manual catalog entry is always intentional",
       "ok": {
-        "provider": "alpha",
-        "discovered": [
-          {
-            "source": "discovered",
-            "model_id": "vendor/one",
-            "display_name": null,
-            "sdk": "openai",
-            "owned_by": "v",
-            "context_length": 128000,
-            "max_output_tokens": 4096,
-            "supports_tools": true,
-            "supports_images": false,
-            "supports_reasoning": null,
-            "supports_prompt_cache": null,
-            "discovered_at": "1999-01-01T00:00:00Z"
-          }
-        ],
-        "hidden": [
-          {
-            "source": "discovered",
-            "model_id": "vendor/two",
-            "display_name": null,
-            "sdk": "openai",
-            "owned_by": "v",
-            "context_length": 128000,
-            "max_output_tokens": 4096,
-            "supports_tools": true,
-            "supports_images": false,
-            "supports_reasoning": null,
-            "supports_prompt_cache": null,
-            "discovered_at": "1999-01-01T00:00:00Z"
-          }
-        ],
-        "static": [
-          {
-            "source": "static",
-            "name": "one",
-            "qualified_name": "chat.alpha.one",
-            "model_id": "static-one",
-            "sdk": "anthropic",
-            "max_output_tokens": 1024
-          },
-          {
-            "source": "static",
-            "name": "shadowed",
-            "qualified_name": "chat.alpha.shadowed",
-            "model_id": "vendor/two",
-            "sdk": "anthropic",
-            "max_output_tokens": null
-          }
-        ],
-        "include_hidden": false,
-        "cache": {
-          "fetched_at": "1999-01-01T00:00:00Z",
-          "model_count": 2
-        }
+        "$ref": "s0"
       }
     },
     {
@@ -309,123 +254,13 @@
       "name": "a truthy-but-not-true include_hidden",
       "note": "serde reads anything that is not a bool as absent, so this is `false`",
       "ok": {
-        "provider": "alpha",
-        "discovered": [
-          {
-            "source": "discovered",
-            "model_id": "vendor/one",
-            "display_name": null,
-            "sdk": "openai",
-            "owned_by": "v",
-            "context_length": 128000,
-            "max_output_tokens": 4096,
-            "supports_tools": true,
-            "supports_images": false,
-            "supports_reasoning": null,
-            "supports_prompt_cache": null,
-            "discovered_at": "1999-01-01T00:00:00Z"
-          }
-        ],
-        "hidden": [
-          {
-            "source": "discovered",
-            "model_id": "vendor/two",
-            "display_name": null,
-            "sdk": "openai",
-            "owned_by": "v",
-            "context_length": 128000,
-            "max_output_tokens": 4096,
-            "supports_tools": true,
-            "supports_images": false,
-            "supports_reasoning": null,
-            "supports_prompt_cache": null,
-            "discovered_at": "1999-01-01T00:00:00Z"
-          }
-        ],
-        "static": [
-          {
-            "source": "static",
-            "name": "one",
-            "qualified_name": "chat.alpha.one",
-            "model_id": "static-one",
-            "sdk": "anthropic",
-            "max_output_tokens": 1024
-          },
-          {
-            "source": "static",
-            "name": "shadowed",
-            "qualified_name": "chat.alpha.shadowed",
-            "model_id": "vendor/two",
-            "sdk": "anthropic",
-            "max_output_tokens": null
-          }
-        ],
-        "include_hidden": false,
-        "cache": {
-          "fetched_at": "1999-01-01T00:00:00Z",
-          "model_count": 2
-        }
+        "$ref": "s0"
       }
     },
     {
       "name": "a stringly include_hidden",
       "ok": {
-        "provider": "alpha",
-        "discovered": [
-          {
-            "source": "discovered",
-            "model_id": "vendor/one",
-            "display_name": null,
-            "sdk": "openai",
-            "owned_by": "v",
-            "context_length": 128000,
-            "max_output_tokens": 4096,
-            "supports_tools": true,
-            "supports_images": false,
-            "supports_reasoning": null,
-            "supports_prompt_cache": null,
-            "discovered_at": "1999-01-01T00:00:00Z"
-          }
-        ],
-        "hidden": [
-          {
-            "source": "discovered",
-            "model_id": "vendor/two",
-            "display_name": null,
-            "sdk": "openai",
-            "owned_by": "v",
-            "context_length": 128000,
-            "max_output_tokens": 4096,
-            "supports_tools": true,
-            "supports_images": false,
-            "supports_reasoning": null,
-            "supports_prompt_cache": null,
-            "discovered_at": "1999-01-01T00:00:00Z"
-          }
-        ],
-        "static": [
-          {
-            "source": "static",
-            "name": "one",
-            "qualified_name": "chat.alpha.one",
-            "model_id": "static-one",
-            "sdk": "anthropic",
-            "max_output_tokens": 1024
-          },
-          {
-            "source": "static",
-            "name": "shadowed",
-            "qualified_name": "chat.alpha.shadowed",
-            "model_id": "vendor/two",
-            "sdk": "anthropic",
-            "max_output_tokens": null
-          }
-        ],
-        "include_hidden": false,
-        "cache": {
-          "fetched_at": "1999-01-01T00:00:00Z",
-          "model_count": 2
-        }
+        "$ref": "s0"
       }
     },
     {
@@ -798,5 +633,65 @@
         "nodisc": null
       }
     }
-  ]
+  ],
+  "$shared": {
+    "s0": {
+      "cache": {
+        "fetched_at": "1999-01-01T00:00:00Z",
+        "model_count": 2
+      },
+      "discovered": [
+        {
+          "context_length": 128000,
+          "discovered_at": "1999-01-01T00:00:00Z",
+          "display_name": null,
+          "max_output_tokens": 4096,
+          "model_id": "vendor/one",
+          "owned_by": "v",
+          "sdk": "openai",
+          "source": "discovered",
+          "supports_images": false,
+          "supports_prompt_cache": null,
+          "supports_reasoning": null,
+          "supports_tools": true
+        }
+      ],
+      "hidden": [
+        {
+          "context_length": 128000,
+          "discovered_at": "1999-01-01T00:00:00Z",
+          "display_name": null,
+          "max_output_tokens": 4096,
+          "model_id": "vendor/two",
+          "owned_by": "v",
+          "sdk": "openai",
+          "source": "discovered",
+          "supports_images": false,
+          "supports_prompt_cache": null,
+          "supports_reasoning": null,
+          "supports_tools": true
+        }
+      ],
+      "include_hidden": false,
+      "provider": "alpha",
+      "static": [
+        {
+          "max_output_tokens": 1024,
+          "model_id": "static-one",
+          "name": "one",
+          "qualified_name": "chat.alpha.one",
+          "sdk": "anthropic",
+          "source": "static"
+        },
+        {
+          "max_output_tokens": null,
+          "model_id": "vendor/two",
+          "name": "shadowed",
+          "qualified_name": "chat.alpha.shadowed",
+          "sdk": "anthropic",
+          "source": "static"
+        }
+      ]
+    }
+  }
 }

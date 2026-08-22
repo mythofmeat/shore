@@ -51,17 +51,7 @@
         "on_disk_differs": false
       },
       "output": {
-        "ok": true,
-        "error": null,
-        "returns_uuid": true,
-        "segments": [],
-        "manifest": null,
-        "retained": [
-          "m_1",
-          "m_2",
-          "m_3"
-        ],
-        "retained_raw": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"one\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"one\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"two\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"two\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_3\",\"role\":\"user\",\"content\":\"three\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"three\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
+        "$ref": "s0"
       }
     },
     {
@@ -75,17 +65,7 @@
         "on_disk_differs": false
       },
       "output": {
-        "ok": true,
-        "error": null,
-        "returns_uuid": true,
-        "segments": [],
-        "manifest": null,
-        "retained": [
-          "m_1",
-          "m_2",
-          "m_3"
-        ],
-        "retained_raw": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"one\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"one\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"two\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"two\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_3\",\"role\":\"user\",\"content\":\"three\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"three\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
+        "$ref": "s0"
       }
     },
     {
@@ -99,17 +79,7 @@
         "on_disk_differs": false
       },
       "output": {
-        "ok": true,
-        "error": null,
-        "returns_uuid": true,
-        "segments": [],
-        "manifest": null,
-        "retained": [
-          "m_1",
-          "m_2",
-          "m_3"
-        ],
-        "retained_raw": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"one\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"one\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"two\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"two\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_3\",\"role\":\"user\",\"content\":\"three\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"three\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
+        "$ref": "s0"
       }
     },
     {
@@ -458,5 +428,20 @@
       "output": "io: permission denied",
       "is_error": true
     }
-  ]
+  ],
+  "$shared": {
+    "s0": {
+      "error": null,
+      "manifest": null,
+      "ok": true,
+      "retained": [
+        "m_1",
+        "m_2",
+        "m_3"
+      ],
+      "retained_raw": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"one\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"one\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"two\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"two\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_3\",\"role\":\"user\",\"content\":\"three\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"three\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n",
+      "returns_uuid": true,
+      "segments": []
+    }
+  }
 }

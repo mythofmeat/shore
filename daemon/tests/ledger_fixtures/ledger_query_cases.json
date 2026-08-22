@@ -27,30 +27,7 @@
       "total_cost": 0.005745
     },
     {
-      "ts": "2026-04-05T10:01:00Z",
-      "character": "aria",
-      "provider": "anthropic",
-      "api_key_name": "overflow",
-      "model": "claude-opus-4-6",
-      "call_type": "tool_loop",
-      "input_tokens": 200,
-      "output_tokens": 50,
-      "cache_read_tokens": 80,
-      "cache_write_tokens": 20,
-      "cache_ttl": null,
-      "reasoning_effort": null,
-      "total_ms": 1500,
-      "ttft_ms": 200,
-      "finish_reason": "tool_use",
-      "thinking_enabled": 1,
-      "cache_state": "warm",
-      "cache_anomaly": null,
-      "input_cost": 0.0015,
-      "output_cost": 0.00375,
-      "cache_read_cost": 0.00012,
-      "cache_write_cost": 0.000375,
-      "cost_source": "pricing_catalog",
-      "total_cost": 0.01
+      "$ref": "s3"
     },
     {
       "ts": "2026-04-05T10:02:00Z",
@@ -209,30 +186,7 @@
       "total_cost": 0.0
     },
     {
-      "ts": "2026-04-05T10:08:00Z",
-      "character": "leo",
-      "provider": "anthropic",
-      "api_key_name": "default",
-      "model": "claude-opus-4-6",
-      "call_type": "message",
-      "input_tokens": 100,
-      "output_tokens": 50,
-      "cache_read_tokens": 80,
-      "cache_write_tokens": 20,
-      "cache_ttl": null,
-      "reasoning_effort": null,
-      "total_ms": 1500,
-      "ttft_ms": 200,
-      "finish_reason": "end_turn",
-      "thinking_enabled": 1,
-      "cache_state": "warm",
-      "cache_anomaly": null,
-      "input_cost": 0.0015,
-      "output_cost": 0.00375,
-      "cache_read_cost": 0.00012,
-      "cache_write_cost": 0.000375,
-      "cost_source": null,
-      "total_cost": null
+      "$ref": "s4"
     }
   ],
   "cases": [
@@ -546,90 +500,15 @@
         [
           "leo",
           {
-            "ts": "2026-04-05T10:08:00Z",
-            "character": "leo",
-            "provider": "anthropic",
-            "api_key_name": "default",
-            "model": "claude-opus-4-6",
-            "call_type": "message",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 80,
-            "cache_write_tokens": 20,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "warm",
-            "cache_anomaly": null,
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": null,
-            "total_cost": null
+            "$ref": "s4"
           }
         ],
-        [
-          "aria",
-          {
-            "ts": "2026-04-05T10:05:00Z",
-            "character": "aria",
-            "provider": "anthropic",
-            "api_key_name": "default",
-            "model": "claude-opus-4-6",
-            "call_type": "message",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 5,
-            "cache_write_tokens": 700,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "cold",
-            "cache_anomaly": "unexpected_write",
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.02
-          }
-        ],
-        [
-          "kai",
-          {
-            "ts": "2026-04-05T10:04:00Z",
-            "character": "kai",
-            "provider": "openrouter-anthropic",
-            "api_key_name": "default",
-            "model": "anthropic/claude-opus-4.6",
-            "call_type": "keepalive",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 0,
-            "cache_write_tokens": 900,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "cold",
-            "cache_anomaly": "cold_keepalive",
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.123456789
-          }
-        ]
+        {
+          "$ref": "s1"
+        },
+        {
+          "$ref": "s0"
+        }
       ],
       "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:00:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.005745\n2026-04-05T10:01:00Z\taria\tanthropic\toverflow\tclaude-opus-4-6\ttool_loop\t200\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.01\n2026-04-05T10:02:00Z\taria\topenai\tdefault\tgpt-4o\tmessage\t100\t50\t0\t0\t\t\t1500\t200\tend_turn\ttrue\t\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.002\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015\n2026-04-05T10:04:00Z\tkai\topenrouter-anthropic\tdefault\tanthropic/claude-opus-4.6\tkeepalive\t100\t50\t0\t900\t\t\t1500\t200\tend_turn\ttrue\tcold\tcold_keepalive\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.123456789\n2026-04-05T10:05:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t5\t700\t\t\t1500\t200\tend_turn\ttrue\tcold\tunexpected_write\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.02\n2026-04-05T10:06:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t\t\t\t\tprovider_reported\t0.1234\n2026-04-05T10:07:00Z\tleo\topencode-go\tdefault\tkimi-k3\tcompaction\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tsubscription\t0\n2026-04-05T10:08:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\t\t"
     },
@@ -772,35 +651,9 @@
         }
       ],
       "active_anthropic": [
-        [
-          "kai",
-          {
-            "ts": "2026-04-05T10:04:00Z",
-            "character": "kai",
-            "provider": "openrouter-anthropic",
-            "api_key_name": "default",
-            "model": "anthropic/claude-opus-4.6",
-            "call_type": "keepalive",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 0,
-            "cache_write_tokens": 900,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "cold",
-            "cache_anomaly": "cold_keepalive",
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.123456789
-          }
-        ]
+        {
+          "$ref": "s0"
+        }
       ],
       "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015\n2026-04-05T10:04:00Z\tkai\topenrouter-anthropic\tdefault\tanthropic/claude-opus-4.6\tkeepalive\t100\t50\t0\t900\t\t\t1500\t200\tend_turn\ttrue\tcold\tcold_keepalive\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.123456789"
     },
@@ -971,90 +824,15 @@
         [
           "leo",
           {
-            "ts": "2026-04-05T10:08:00Z",
-            "character": "leo",
-            "provider": "anthropic",
-            "api_key_name": "default",
-            "model": "claude-opus-4-6",
-            "call_type": "message",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 80,
-            "cache_write_tokens": 20,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "warm",
-            "cache_anomaly": null,
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": null,
-            "total_cost": null
+            "$ref": "s4"
           }
         ],
-        [
-          "aria",
-          {
-            "ts": "2026-04-05T10:05:00Z",
-            "character": "aria",
-            "provider": "anthropic",
-            "api_key_name": "default",
-            "model": "claude-opus-4-6",
-            "call_type": "message",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 5,
-            "cache_write_tokens": 700,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "cold",
-            "cache_anomaly": "unexpected_write",
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.02
-          }
-        ],
-        [
-          "kai",
-          {
-            "ts": "2026-04-05T10:03:00Z",
-            "character": "kai",
-            "provider": "anthropic",
-            "api_key_name": null,
-            "model": "claude-opus-4-6",
-            "call_type": "heartbeat_tool_loop",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 80,
-            "cache_write_tokens": 20,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "warm",
-            "cache_anomaly": null,
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 1.5e-07
-          }
-        ]
+        {
+          "$ref": "s1"
+        },
+        {
+          "$ref": "s2"
+        }
       ],
       "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:00:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.005745\n2026-04-05T10:01:00Z\taria\tanthropic\toverflow\tclaude-opus-4-6\ttool_loop\t200\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.01\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015\n2026-04-05T10:05:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t5\t700\t\t\t1500\t200\tend_turn\ttrue\tcold\tunexpected_write\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.02\n2026-04-05T10:06:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t\t\t\t\tprovider_reported\t0.1234\n2026-04-05T10:08:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\t\t"
     },
@@ -1125,35 +903,9 @@
       ],
       "anomalies": [],
       "active_anthropic": [
-        [
-          "kai",
-          {
-            "ts": "2026-04-05T10:03:00Z",
-            "character": "kai",
-            "provider": "anthropic",
-            "api_key_name": null,
-            "model": "claude-opus-4-6",
-            "call_type": "heartbeat_tool_loop",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 80,
-            "cache_write_tokens": 20,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "warm",
-            "cache_anomaly": null,
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 1.5e-07
-          }
-        ]
+        {
+          "$ref": "s2"
+        }
       ],
       "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015"
     },
@@ -1296,30 +1048,7 @@
         [
           "aria",
           {
-            "ts": "2026-04-05T10:01:00Z",
-            "character": "aria",
-            "provider": "anthropic",
-            "api_key_name": "overflow",
-            "model": "claude-opus-4-6",
-            "call_type": "tool_loop",
-            "input_tokens": 200,
-            "output_tokens": 50,
-            "cache_read_tokens": 80,
-            "cache_write_tokens": 20,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "tool_use",
-            "thinking_enabled": 1,
-            "cache_state": "warm",
-            "cache_anomaly": null,
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.01
+            "$ref": "s3"
           }
         ]
       ],
@@ -1453,62 +1182,13 @@
       ],
       "anomalies": [],
       "active_anthropic": [
-        [
-          "kai",
-          {
-            "ts": "2026-04-05T10:03:00Z",
-            "character": "kai",
-            "provider": "anthropic",
-            "api_key_name": null,
-            "model": "claude-opus-4-6",
-            "call_type": "heartbeat_tool_loop",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 80,
-            "cache_write_tokens": 20,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "warm",
-            "cache_anomaly": null,
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 1.5e-07
-          }
-        ],
+        {
+          "$ref": "s2"
+        },
         [
           "aria",
           {
-            "ts": "2026-04-05T10:01:00Z",
-            "character": "aria",
-            "provider": "anthropic",
-            "api_key_name": "overflow",
-            "model": "claude-opus-4-6",
-            "call_type": "tool_loop",
-            "input_tokens": 200,
-            "output_tokens": 50,
-            "cache_read_tokens": 80,
-            "cache_write_tokens": 20,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "tool_use",
-            "thinking_enabled": 1,
-            "cache_state": "warm",
-            "cache_anomaly": null,
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.01
+            "$ref": "s3"
           }
         ]
       ],
@@ -1770,64 +1450,12 @@
             "total_cost": 0.1234
           }
         ],
-        [
-          "aria",
-          {
-            "ts": "2026-04-05T10:05:00Z",
-            "character": "aria",
-            "provider": "anthropic",
-            "api_key_name": "default",
-            "model": "claude-opus-4-6",
-            "call_type": "message",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 5,
-            "cache_write_tokens": 700,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "cold",
-            "cache_anomaly": "unexpected_write",
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.02
-          }
-        ],
-        [
-          "kai",
-          {
-            "ts": "2026-04-05T10:04:00Z",
-            "character": "kai",
-            "provider": "openrouter-anthropic",
-            "api_key_name": "default",
-            "model": "anthropic/claude-opus-4.6",
-            "call_type": "keepalive",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 0,
-            "cache_write_tokens": 900,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "cold",
-            "cache_anomaly": "cold_keepalive",
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.123456789
-          }
-        ]
+        {
+          "$ref": "s1"
+        },
+        {
+          "$ref": "s0"
+        }
       ],
       "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:02:00Z\taria\topenai\tdefault\tgpt-4o\tmessage\t100\t50\t0\t0\t\t\t1500\t200\tend_turn\ttrue\t\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.002\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015\n2026-04-05T10:04:00Z\tkai\topenrouter-anthropic\tdefault\tanthropic/claude-opus-4.6\tkeepalive\t100\t50\t0\t900\t\t\t1500\t200\tend_turn\ttrue\tcold\tcold_keepalive\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.123456789\n2026-04-05T10:05:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t5\t700\t\t\t1500\t200\tend_turn\ttrue\tcold\tunexpected_write\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.02\n2026-04-05T10:06:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t\t\t\t\tprovider_reported\t0.1234"
     },
@@ -1960,35 +1588,9 @@
         }
       ],
       "active_anthropic": [
-        [
-          "aria",
-          {
-            "ts": "2026-04-05T10:05:00Z",
-            "character": "aria",
-            "provider": "anthropic",
-            "api_key_name": "default",
-            "model": "claude-opus-4-6",
-            "call_type": "message",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_tokens": 5,
-            "cache_write_tokens": 700,
-            "cache_ttl": null,
-            "reasoning_effort": null,
-            "total_ms": 1500,
-            "ttft_ms": 200,
-            "finish_reason": "end_turn",
-            "thinking_enabled": 1,
-            "cache_state": "cold",
-            "cache_anomaly": "unexpected_write",
-            "input_cost": 0.0015,
-            "output_cost": 0.00375,
-            "cache_read_cost": 0.00012,
-            "cache_write_cost": 0.000375,
-            "cost_source": "pricing_catalog",
-            "total_cost": 0.02
-          }
-        ]
+        {
+          "$ref": "s1"
+        }
       ],
       "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:01:00Z\taria\tanthropic\toverflow\tclaude-opus-4-6\ttool_loop\t200\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.01\n2026-04-05T10:05:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t5\t700\t\t\t1500\t200\tend_turn\ttrue\tcold\tunexpected_write\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.02"
     }
@@ -2082,5 +1684,146 @@
       "cache_write_tokens": 20,
       "cache_ttl": null
     }
-  ]
+  ],
+  "$shared": {
+    "s0": [
+      "kai",
+      {
+        "api_key_name": "default",
+        "cache_anomaly": "cold_keepalive",
+        "cache_read_cost": 0.00012,
+        "cache_read_tokens": 0,
+        "cache_state": "cold",
+        "cache_ttl": null,
+        "cache_write_cost": 0.000375,
+        "cache_write_tokens": 900,
+        "call_type": "keepalive",
+        "character": "kai",
+        "cost_source": "pricing_catalog",
+        "finish_reason": "end_turn",
+        "input_cost": 0.0015,
+        "input_tokens": 100,
+        "model": "anthropic/claude-opus-4.6",
+        "output_cost": 0.00375,
+        "output_tokens": 50,
+        "provider": "openrouter-anthropic",
+        "reasoning_effort": null,
+        "thinking_enabled": 1,
+        "total_cost": 0.123456789,
+        "total_ms": 1500,
+        "ts": "2026-04-05T10:04:00Z",
+        "ttft_ms": 200
+      }
+    ],
+    "s1": [
+      "aria",
+      {
+        "api_key_name": "default",
+        "cache_anomaly": "unexpected_write",
+        "cache_read_cost": 0.00012,
+        "cache_read_tokens": 5,
+        "cache_state": "cold",
+        "cache_ttl": null,
+        "cache_write_cost": 0.000375,
+        "cache_write_tokens": 700,
+        "call_type": "message",
+        "character": "aria",
+        "cost_source": "pricing_catalog",
+        "finish_reason": "end_turn",
+        "input_cost": 0.0015,
+        "input_tokens": 100,
+        "model": "claude-opus-4-6",
+        "output_cost": 0.00375,
+        "output_tokens": 50,
+        "provider": "anthropic",
+        "reasoning_effort": null,
+        "thinking_enabled": 1,
+        "total_cost": 0.02,
+        "total_ms": 1500,
+        "ts": "2026-04-05T10:05:00Z",
+        "ttft_ms": 200
+      }
+    ],
+    "s2": [
+      "kai",
+      {
+        "api_key_name": null,
+        "cache_anomaly": null,
+        "cache_read_cost": 0.00012,
+        "cache_read_tokens": 80,
+        "cache_state": "warm",
+        "cache_ttl": null,
+        "cache_write_cost": 0.000375,
+        "cache_write_tokens": 20,
+        "call_type": "heartbeat_tool_loop",
+        "character": "kai",
+        "cost_source": "pricing_catalog",
+        "finish_reason": "end_turn",
+        "input_cost": 0.0015,
+        "input_tokens": 100,
+        "model": "claude-opus-4-6",
+        "output_cost": 0.00375,
+        "output_tokens": 50,
+        "provider": "anthropic",
+        "reasoning_effort": null,
+        "thinking_enabled": 1,
+        "total_cost": 1.5e-07,
+        "total_ms": 1500,
+        "ts": "2026-04-05T10:03:00Z",
+        "ttft_ms": 200
+      }
+    ],
+    "s3": {
+      "api_key_name": "overflow",
+      "cache_anomaly": null,
+      "cache_read_cost": 0.00012,
+      "cache_read_tokens": 80,
+      "cache_state": "warm",
+      "cache_ttl": null,
+      "cache_write_cost": 0.000375,
+      "cache_write_tokens": 20,
+      "call_type": "tool_loop",
+      "character": "aria",
+      "cost_source": "pricing_catalog",
+      "finish_reason": "tool_use",
+      "input_cost": 0.0015,
+      "input_tokens": 200,
+      "model": "claude-opus-4-6",
+      "output_cost": 0.00375,
+      "output_tokens": 50,
+      "provider": "anthropic",
+      "reasoning_effort": null,
+      "thinking_enabled": 1,
+      "total_cost": 0.01,
+      "total_ms": 1500,
+      "ts": "2026-04-05T10:01:00Z",
+      "ttft_ms": 200
+    },
+    "s4": {
+      "api_key_name": "default",
+      "cache_anomaly": null,
+      "cache_read_cost": 0.00012,
+      "cache_read_tokens": 80,
+      "cache_state": "warm",
+      "cache_ttl": null,
+      "cache_write_cost": 0.000375,
+      "cache_write_tokens": 20,
+      "call_type": "message",
+      "character": "leo",
+      "cost_source": null,
+      "finish_reason": "end_turn",
+      "input_cost": 0.0015,
+      "input_tokens": 100,
+      "model": "claude-opus-4-6",
+      "output_cost": 0.00375,
+      "output_tokens": 50,
+      "provider": "anthropic",
+      "reasoning_effort": null,
+      "thinking_enabled": 1,
+      "total_cost": null,
+      "total_ms": 1500,
+      "ts": "2026-04-05T10:08:00Z",
+      "ttft_ms": 200
+    }
+  }
 }

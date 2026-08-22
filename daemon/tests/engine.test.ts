@@ -7,6 +7,7 @@ import { MessageNotFound } from "../src/engine/message_store";
 import { SegmentReader } from "../src/engine/segments";
 import type { Message } from "../src/engine/types";
 import { testTmp } from "./support/tmp.ts";
+import { expandShared } from "./support/shared_subtrees.ts";
 
 interface SegmentRead {
   index: number;
@@ -52,9 +53,9 @@ interface Fixture {
   engine_walk: WalkCase[];
 }
 
-const fixture = (await Bun.file(
-  new URL("./engine_fixtures/engine.json", import.meta.url),
-).json()) as Fixture;
+const fixture = expandShared<Fixture>(
+  await Bun.file(new URL("./engine_fixtures/engine.json", import.meta.url)).json(),
+);
 
 async function scratch(): Promise<string> {
   return await mkdtemp(testTmp("shore-engine-"));

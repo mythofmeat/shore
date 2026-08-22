@@ -1,8 +1,10 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 import { lstat, mkdtemp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import fixture from "./handler_fixtures/context.json" with { type: "json" };
+import rawFixture from "./handler_fixtures/context.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";

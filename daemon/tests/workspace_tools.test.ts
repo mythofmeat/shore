@@ -27,10 +27,13 @@ import {
   type ToolInput,
 } from "../src/tools/workspace";
 import { testTmp } from "./support/tmp.ts";
+import { expandShared } from "./support/shared_subtrees.ts";
 
-const fixture = JSON.parse(
+const fixture = expandShared<Fixture>(
+  JSON.parse(
   readFileSync(new URL("./tools_fixtures/workspace_tools.json", import.meta.url), "utf8"),
-) as Fixture;
+  ),
+);
 
 interface Fixture {
   read: ReadCase[];

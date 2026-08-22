@@ -226,20 +226,9 @@
                 ]
               }
             ],
-            "system": [
-              {
-                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-                "label": "system"
-              },
-              {
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-                "label": "tools_guidance"
-              },
-              {
-                "text": "<ada>\nada system prompt\n</ada>",
-                "label": "character"
-              }
-            ],
+            "system": {
+              "$ref": "s1"
+            },
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -279,20 +268,9 @@
               "model": "claude-fixture"
             }
           ],
-          "system": [
-            {
-              "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-              "label": "system"
-            },
-            {
-              "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-              "label": "tools_guidance"
-            },
-            {
-              "text": "<ada>\nada system prompt\n</ada>",
-              "label": "character"
-            }
-          ],
+          "system": {
+            "$ref": "s1"
+          },
           "max_tokens": 4096,
           "provider_key": "anthropic",
           "replay_prior_thinking": "all"
@@ -596,20 +574,9 @@
                 ]
               }
             ],
-            "system": [
-              {
-                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-                "label": "system"
-              },
-              {
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-                "label": "tools_guidance"
-              },
-              {
-                "text": "<ada>\nada system prompt\n</ada>",
-                "label": "character"
-              }
-            ],
+            "system": {
+              "$ref": "s1"
+            },
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -649,20 +616,9 @@
               "model": "claude-fixture"
             }
           ],
-          "system": [
-            {
-              "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-              "label": "system"
-            },
-            {
-              "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-              "label": "tools_guidance"
-            },
-            {
-              "text": "<ada>\nada system prompt\n</ada>",
-              "label": "character"
-            }
-          ],
+          "system": {
+            "$ref": "s1"
+          },
           "max_tokens": 4096,
           "provider_key": "anthropic",
           "replay_prior_thinking": "all"
@@ -787,20 +743,9 @@
                 ]
               }
             ],
-            "system": [
-              {
-                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-                "label": "system"
-              },
-              {
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-                "label": "tools_guidance"
-              },
-              {
-                "text": "<ada>\nada system prompt\n</ada>",
-                "label": "character"
-              }
-            ],
+            "system": {
+              "$ref": "s1"
+            },
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -949,20 +894,9 @@
                 ]
               }
             ],
-            "system": [
-              {
-                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-                "label": "system"
-              },
-              {
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-                "label": "tools_guidance"
-              },
-              {
-                "text": "<ada>\nada system prompt\n</ada>",
-                "label": "character"
-              }
-            ],
+            "system": {
+              "$ref": "s1"
+            },
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -1176,20 +1110,9 @@
                 ]
               }
             ],
-            "system": [
-              {
-                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-                "label": "system"
-              },
-              {
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-                "label": "tools_guidance"
-              },
-              {
-                "text": "<ada>\nada system prompt\n</ada>",
-                "label": "character"
-              }
-            ],
+            "system": {
+              "$ref": "s1"
+            },
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -1228,20 +1151,9 @@
               "model": "claude-fixture"
             }
           ],
-          "system": [
-            {
-              "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-              "label": "system"
-            },
-            {
-              "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-              "label": "tools_guidance"
-            },
-            {
-              "text": "<ada>\nada system prompt\n</ada>",
-              "label": "character"
-            }
-          ],
+          "system": {
+            "$ref": "s1"
+          },
           "max_tokens": 4096,
           "provider_key": "anthropic",
           "replay_prior_thinking": "all"
@@ -1650,20 +1562,9 @@
                 ]
               }
             ],
-            "system": [
-              {
-                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-                "label": "system"
-              },
-              {
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-                "label": "tools_guidance"
-              },
-              {
-                "text": "<ada>\nada system prompt\n</ada>",
-                "label": "character"
-              }
-            ],
+            "system": {
+              "$ref": "s1"
+            },
             "tools": [
               {
                 "name": "generate_image",
@@ -2041,20 +1942,9 @@
               "model": "claude-fixture"
             }
           ],
-          "system": [
-            {
-              "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-              "label": "system"
-            },
-            {
-              "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-              "label": "tools_guidance"
-            },
-            {
-              "text": "<ada>\nada system prompt\n</ada>",
-              "label": "character"
-            }
-          ],
+          "system": {
+            "$ref": "s1"
+          },
           "tools": [
             {
               "name": "generate_image",
@@ -2585,20 +2475,9 @@
                 ]
               }
             ],
-            "system": [
-              {
-                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-                "label": "system"
-              },
-              {
-                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-                "label": "tools_guidance"
-              },
-              {
-                "text": "<ada>\nada system prompt\n</ada>",
-                "label": "character"
-              }
-            ],
+            "system": {
+              "$ref": "s1"
+            },
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -2638,20 +2517,9 @@
               "model": "claude-fixture"
             }
           ],
-          "system": [
-            {
-              "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-              "label": "system"
-            },
-            {
-              "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-              "label": "tools_guidance"
-            },
-            {
-              "text": "<ada>\nada system prompt\n</ada>",
-              "label": "character"
-            }
-          ],
+          "system": {
+            "$ref": "s1"
+          },
           "max_tokens": 4096,
           "provider_key": "anthropic",
           "replay_prior_thinking": "all"
@@ -2674,36 +2542,7 @@
         "conversation_len": 0
       },
       "output": {
-        "image_dir": "<root>/data/ada/images",
-        "workspace_dir": "<root>/config/characters/ada/workspace",
-        "character_data_dir": "<root>/data/ada",
-        "config_dir": "<root>/config",
-        "character_name": "ada",
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-        "markdown_store": true,
-        "embedder": false,
-        "mcp_registry": true,
-        "subagent_runtime": false,
-        "subagent_conversation_len": null,
-        "image_gen_config": null,
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "result_limit": 5,
-          "search_depth": "basic",
-          "include_answer": true
-        },
-        "memory_retrieval_config": {
-          "mode": "auto",
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "max_embed_chars_per_file": 4000,
-          "binary": "skip"
-        },
-        "autonomy_manager_present": true,
-        "active_prompt_snapshot": [
-          "TOOLS.md"
-        ]
+        "$ref": "s0"
       }
     },
     {
@@ -2720,36 +2559,7 @@
         "conversation_len": 1
       },
       "output": {
-        "image_dir": "<root>/data/ada/images",
-        "workspace_dir": "<root>/config/characters/ada/workspace",
-        "character_data_dir": "<root>/data/ada",
-        "config_dir": "<root>/config",
-        "character_name": "ada",
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-        "markdown_store": true,
-        "embedder": false,
-        "mcp_registry": true,
-        "subagent_runtime": false,
-        "subagent_conversation_len": null,
-        "image_gen_config": null,
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "result_limit": 5,
-          "search_depth": "basic",
-          "include_answer": true
-        },
-        "memory_retrieval_config": {
-          "mode": "auto",
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "max_embed_chars_per_file": 4000,
-          "binary": "skip"
-        },
-        "autonomy_manager_present": true,
-        "active_prompt_snapshot": [
-          "TOOLS.md"
-        ]
+        "$ref": "s0"
       }
     },
     {
@@ -2812,36 +2622,7 @@
         "conversation_len": 0
       },
       "output": {
-        "image_dir": "<root>/data/ada/images",
-        "workspace_dir": "<root>/config/characters/ada/workspace",
-        "character_data_dir": "<root>/data/ada",
-        "config_dir": "<root>/config",
-        "character_name": "ada",
-        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-        "markdown_store": true,
-        "embedder": false,
-        "mcp_registry": true,
-        "subagent_runtime": false,
-        "subagent_conversation_len": null,
-        "image_gen_config": null,
-        "search_config": {
-          "api_key_env": "TAVILY_API_KEY",
-          "result_limit": 5,
-          "search_depth": "basic",
-          "include_answer": true
-        },
-        "memory_retrieval_config": {
-          "mode": "auto",
-          "max_file_bytes": 2097152,
-          "max_indexed_files": 50000,
-          "max_total_indexed_bytes": 1073741824,
-          "max_embed_chars_per_file": 4000,
-          "binary": "skip"
-        },
-        "autonomy_manager_present": true,
-        "active_prompt_snapshot": [
-          "TOOLS.md"
-        ]
+        "$ref": "s0"
       }
     },
     {
@@ -3325,5 +3106,53 @@
         ]
       }
     }
-  ]
+  ],
+  "$shared": {
+    "s0": {
+      "active_prompt_snapshot": [
+        "TOOLS.md"
+      ],
+      "autonomy_manager_present": true,
+      "character_data_dir": "<root>/data/ada",
+      "character_name": "ada",
+      "config_dir": "<root>/config",
+      "embedder": false,
+      "image_dir": "<root>/data/ada/images",
+      "image_gen_config": null,
+      "markdown_store": true,
+      "mcp_registry": true,
+      "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
+      "memory_retrieval_config": {
+        "binary": "skip",
+        "max_embed_chars_per_file": 4000,
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "mode": "auto"
+      },
+      "search_config": {
+        "api_key_env": "TAVILY_API_KEY",
+        "include_answer": true,
+        "result_limit": 5,
+        "search_depth": "basic"
+      },
+      "subagent_conversation_len": null,
+      "subagent_runtime": false,
+      "workspace_dir": "<root>/config/characters/ada/workspace"
+    },
+    "s1": [
+      {
+        "label": "system",
+        "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+      },
+      {
+        "label": "tools_guidance",
+        "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+      },
+      {
+        "label": "character",
+        "text": "<ada>\nada system prompt\n</ada>"
+      }
+    ]
+  }
 }

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { expandShared } from "./support/shared_subtrees.ts";
 
 import {
   ActivityTracker,
@@ -46,9 +47,9 @@ interface Fixture {
   cases: Case[];
 }
 
-const fixture = (await Bun.file(
-  new URL("./autonomy_fixtures/activity_walks.json", import.meta.url),
-).json()) as Fixture;
+const fixture = expandShared<Fixture>(
+  await Bun.file(new URL("./autonomy_fixtures/activity_walks.json", import.meta.url)).json(),
+);
 
 const WEEKDAYS: readonly Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 

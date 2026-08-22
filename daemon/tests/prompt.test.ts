@@ -1,5 +1,6 @@
 import { required } from "../src/util/required.ts";
 
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -11,7 +12,8 @@ import {
 } from "../src/engine/prompt";
 import type { Message, Role } from "../src/engine/types";
 
-import fixture from "./engine_fixtures/prompt.json";
+import rawFixture from "./engine_fixtures/prompt.json";
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 const ZONE: string = fixture.timezone;
 

@@ -444,171 +444,7 @@
     "default_days": {
       "input": {},
       "output": {
-        "days": 30,
-        "hours": [
-          {
-            "hour": 0,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 1,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 2,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 3,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 4,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 5,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 6,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 7,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 8,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 9,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 10,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 11,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 12,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 13,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 14,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 15,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 16,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 17,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 18,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 19,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 20,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 21,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 22,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 23,
-            "density": 0.0,
-            "classification": "normal"
-          }
-        ],
-        "weekdays": [
-          {
-            "weekday": "Mon",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Tue",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Wed",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Thu",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Fri",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sat",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sun",
-            "message_count": 0,
-            "density": 0.0
-          }
-        ],
-        "total_messages": 0,
-        "messages_in_window": 0,
-        "has_sufficient_data": false,
-        "engagement_score": 0.0,
-        "sessions_per_day": 0.0
+        "$ref": "s0"
       }
     },
     "explicit_days": {
@@ -788,171 +624,7 @@
         "days": 0
       },
       "output": {
-        "days": 30,
-        "hours": [
-          {
-            "hour": 0,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 1,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 2,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 3,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 4,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 5,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 6,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 7,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 8,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 9,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 10,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 11,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 12,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 13,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 14,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 15,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 16,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 17,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 18,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 19,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 20,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 21,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 22,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 23,
-            "density": 0.0,
-            "classification": "normal"
-          }
-        ],
-        "weekdays": [
-          {
-            "weekday": "Mon",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Tue",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Wed",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Thu",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Fri",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sat",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sun",
-            "message_count": 0,
-            "density": 0.0
-          }
-        ],
-        "total_messages": 0,
-        "messages_in_window": 0,
-        "has_sufficient_data": false,
-        "engagement_score": 0.0,
-        "sessions_per_day": 0.0
+        "$ref": "s0"
       }
     },
     "non_integer_days_falls_back": {
@@ -960,171 +632,7 @@
         "days": "7"
       },
       "output": {
-        "days": 30,
-        "hours": [
-          {
-            "hour": 0,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 1,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 2,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 3,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 4,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 5,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 6,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 7,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 8,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 9,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 10,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 11,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 12,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 13,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 14,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 15,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 16,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 17,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 18,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 19,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 20,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 21,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 22,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 23,
-            "density": 0.0,
-            "classification": "normal"
-          }
-        ],
-        "weekdays": [
-          {
-            "weekday": "Mon",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Tue",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Wed",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Thu",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Fri",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sat",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sun",
-            "message_count": 0,
-            "density": 0.0
-          }
-        ],
-        "total_messages": 0,
-        "messages_in_window": 0,
-        "has_sufficient_data": false,
-        "engagement_score": 0.0,
-        "sessions_per_day": 0.0
+        "$ref": "s0"
       }
     },
     "negative_days_falls_back": {
@@ -1132,171 +640,7 @@
         "days": -7
       },
       "output": {
-        "days": 30,
-        "hours": [
-          {
-            "hour": 0,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 1,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 2,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 3,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 4,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 5,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 6,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 7,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 8,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 9,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 10,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 11,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 12,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 13,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 14,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 15,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 16,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 17,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 18,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 19,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 20,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 21,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 22,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 23,
-            "density": 0.0,
-            "classification": "normal"
-          }
-        ],
-        "weekdays": [
-          {
-            "weekday": "Mon",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Tue",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Wed",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Thu",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Fri",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sat",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sun",
-            "message_count": 0,
-            "density": 0.0
-          }
-        ],
-        "total_messages": 0,
-        "messages_in_window": 0,
-        "has_sufficient_data": false,
-        "engagement_score": 0.0,
-        "sessions_per_day": 0.0
+        "$ref": "s0"
       }
     },
     "float_days_falls_back": {
@@ -1304,172 +648,177 @@
         "days": 7.5
       },
       "output": {
-        "days": 30,
-        "hours": [
-          {
-            "hour": 0,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 1,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 2,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 3,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 4,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 5,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 6,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 7,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 8,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 9,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 10,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 11,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 12,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 13,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 14,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 15,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 16,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 17,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 18,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 19,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 20,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 21,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 22,
-            "density": 0.0,
-            "classification": "normal"
-          },
-          {
-            "hour": 23,
-            "density": 0.0,
-            "classification": "normal"
-          }
-        ],
-        "weekdays": [
-          {
-            "weekday": "Mon",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Tue",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Wed",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Thu",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Fri",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sat",
-            "message_count": 0,
-            "density": 0.0
-          },
-          {
-            "weekday": "Sun",
-            "message_count": 0,
-            "density": 0.0
-          }
-        ],
-        "total_messages": 0,
-        "messages_in_window": 0,
-        "has_sufficient_data": false,
-        "engagement_score": 0.0,
-        "sessions_per_day": 0.0
+        "$ref": "s0"
       }
+    }
+  },
+  "$shared": {
+    "s0": {
+      "days": 30,
+      "engagement_score": 0.0,
+      "has_sufficient_data": false,
+      "hours": [
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 0
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 1
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 2
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 3
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 4
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 5
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 6
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 7
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 8
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 9
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 10
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 11
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 12
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 13
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 14
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 15
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 16
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 17
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 18
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 19
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 20
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 21
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 22
+        },
+        {
+          "classification": "normal",
+          "density": 0.0,
+          "hour": 23
+        }
+      ],
+      "messages_in_window": 0,
+      "sessions_per_day": 0.0,
+      "total_messages": 0,
+      "weekdays": [
+        {
+          "density": 0.0,
+          "message_count": 0,
+          "weekday": "Mon"
+        },
+        {
+          "density": 0.0,
+          "message_count": 0,
+          "weekday": "Tue"
+        },
+        {
+          "density": 0.0,
+          "message_count": 0,
+          "weekday": "Wed"
+        },
+        {
+          "density": 0.0,
+          "message_count": 0,
+          "weekday": "Thu"
+        },
+        {
+          "density": 0.0,
+          "message_count": 0,
+          "weekday": "Fri"
+        },
+        {
+          "density": 0.0,
+          "message_count": 0,
+          "weekday": "Sat"
+        },
+        {
+          "density": 0.0,
+          "message_count": 0,
+          "weekday": "Sun"
+        }
+      ]
     }
   }
 }

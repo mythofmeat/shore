@@ -517,28 +517,7 @@
       "sdk_fallback": "anthropic",
       "model_id": "anthropic/claude-opus-4-6",
       "resolved": {
-        "name": "m",
-        "qualified_name": "chat.p.m",
-        "category": "chat",
-        "provider_key": "p",
-        "sdk": "anthropic",
-        "model_id": "anthropic/claude-opus-4-6",
-        "api_key_env": null,
-        "base_url": null,
-        "max_context_tokens": null,
-        "max_output_tokens": 8192,
-        "temperature": 1.0,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null
+        "$ref": "s0"
       }
     },
     {
@@ -629,28 +608,7 @@
       "sdk_fallback": "openai",
       "model_id": "anthropic/claude-opus-4-6",
       "resolved": {
-        "name": "m",
-        "qualified_name": "chat.p.m",
-        "category": "chat",
-        "provider_key": "p",
-        "sdk": "anthropic",
-        "model_id": "anthropic/claude-opus-4-6",
-        "api_key_env": null,
-        "base_url": null,
-        "max_context_tokens": null,
-        "max_output_tokens": 8192,
-        "temperature": 1.0,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null
+        "$ref": "s0"
       }
     },
     {
@@ -741,28 +699,7 @@
       "sdk_fallback": "openrouter",
       "model_id": "anthropic/claude-opus-4-6",
       "resolved": {
-        "name": "m",
-        "qualified_name": "chat.p.m",
-        "category": "chat",
-        "provider_key": "p",
-        "sdk": "anthropic",
-        "model_id": "anthropic/claude-opus-4-6",
-        "api_key_env": null,
-        "base_url": null,
-        "max_context_tokens": null,
-        "max_output_tokens": 8192,
-        "temperature": 1.0,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null
+        "$ref": "s0"
       }
     },
     {
@@ -853,28 +790,7 @@
       "sdk_fallback": "gemini",
       "model_id": "anthropic/claude-opus-4-6",
       "resolved": {
-        "name": "m",
-        "qualified_name": "chat.p.m",
-        "category": "chat",
-        "provider_key": "p",
-        "sdk": "anthropic",
-        "model_id": "anthropic/claude-opus-4-6",
-        "api_key_env": null,
-        "base_url": null,
-        "max_context_tokens": null,
-        "max_output_tokens": 8192,
-        "temperature": 1.0,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null
+        "$ref": "s0"
       }
     },
     {
@@ -965,28 +881,7 @@
       "sdk_fallback": "zai",
       "model_id": "anthropic/claude-opus-4-6",
       "resolved": {
-        "name": "m",
-        "qualified_name": "chat.p.m",
-        "category": "chat",
-        "provider_key": "p",
-        "sdk": "anthropic",
-        "model_id": "anthropic/claude-opus-4-6",
-        "api_key_env": null,
-        "base_url": null,
-        "max_context_tokens": null,
-        "max_output_tokens": 8192,
-        "temperature": 1.0,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null
+        "$ref": "s0"
       }
     },
     {
@@ -1077,28 +972,7 @@
       "sdk_fallback": "deepseek",
       "model_id": "anthropic/claude-opus-4-6",
       "resolved": {
-        "name": "m",
-        "qualified_name": "chat.p.m",
-        "category": "chat",
-        "provider_key": "p",
-        "sdk": "anthropic",
-        "model_id": "anthropic/claude-opus-4-6",
-        "api_key_env": null,
-        "base_url": null,
-        "max_context_tokens": null,
-        "max_output_tokens": 8192,
-        "temperature": 1.0,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null
+        "$ref": "s0"
       }
     },
     {
@@ -1189,28 +1063,7 @@
       "sdk_fallback": "moonshot",
       "model_id": "anthropic/claude-opus-4-6",
       "resolved": {
-        "name": "m",
-        "qualified_name": "chat.p.m",
-        "category": "chat",
-        "provider_key": "p",
-        "sdk": "anthropic",
-        "model_id": "anthropic/claude-opus-4-6",
-        "api_key_env": null,
-        "base_url": null,
-        "max_context_tokens": null,
-        "max_output_tokens": 8192,
-        "temperature": 1.0,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null
+        "$ref": "s0"
       }
     },
     {
@@ -1809,7 +1662,7 @@
     },
     {
       "name": "btreemap_order_is_code_point_order",
-      "chat_toml": "\n        [\"\ud83c\udfb5drum\".m]\n        model_id = \"a\"\n\n        [\"\ufb00ute\".m]\n        model_id = \"b\"\n\n        [zzz.m]\n        model_id = \"c\"\n        ",
+      "chat_toml": "\n        [\"🎵drum\".m]\n        model_id = \"a\"\n\n        [\"ﬀute\".m]\n        model_id = \"b\"\n\n        [zzz.m]\n        model_id = \"c\"\n        ",
       "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
@@ -1839,11 +1692,11 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null
           },
-          "chat.\ufb00ute.m": {
+          "chat.ﬀute.m": {
             "name": "m",
-            "qualified_name": "chat.\ufb00ute.m",
+            "qualified_name": "chat.ﬀute.m",
             "category": "chat",
-            "provider_key": "\ufb00ute",
+            "provider_key": "ﬀute",
             "sdk": "openai",
             "model_id": "b",
             "api_key_env": null,
@@ -1863,11 +1716,11 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null
           },
-          "chat.\ud83c\udfb5drum.m": {
+          "chat.🎵drum.m": {
             "name": "m",
-            "qualified_name": "chat.\ud83c\udfb5drum.m",
+            "qualified_name": "chat.🎵drum.m",
             "category": "chat",
-            "provider_key": "\ud83c\udfb5drum",
+            "provider_key": "🎵drum",
             "sdk": "openai",
             "model_id": "a",
             "api_key_env": null,
@@ -1890,8 +1743,8 @@
         },
         "chat_order": [
           "chat.zzz.m",
-          "chat.\ufb00ute.m",
-          "chat.\ud83c\udfb5drum.m"
+          "chat.ﬀute.m",
+          "chat.🎵drum.m"
         ],
         "embedding": {},
         "embedding_order": [],
@@ -1946,7 +1799,7 @@
       "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
-      "err": "[chat.claude_code] is no longer supported \u2014 the Claude Code transport was removed; drop this section from your config"
+      "err": "[chat.claude_code] is no longer supported — the Claude Code transport was removed; drop this section from your config"
     },
     {
       "name": "provider_scalar_retired_transport",
@@ -2093,7 +1946,7 @@
       "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
-      "err": "failed to parse model entry [chat.anthropic.opus]: `sdk = \"zhipuai\"` was removed \u2014 use `sdk = \"openai\"`"
+      "err": "failed to parse model entry [chat.anthropic.opus]: `sdk = \"zhipuai\"` was removed — use `sdk = \"openai\"`"
     },
     {
       "name": "parse_entry_bad_keepalive",
@@ -2180,7 +2033,7 @@
     "cases": [
       {
         "name": "opus",
-        "err": "ambiguous model name \"opus\" \u2014 found in: chat.anthropic.opus, chat.openrouter.opus"
+        "err": "ambiguous model name \"opus\" — found in: chat.anthropic.opus, chat.openrouter.opus"
       },
       {
         "name": "sonnet",
@@ -2218,5 +2071,31 @@
       "chat.openrouter.opus",
       "chat.openrouter.unique"
     ]
+  },
+  "$shared": {
+    "s0": {
+      "api_key_env": null,
+      "base_url": null,
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_ttl": "1h",
+      "category": "chat",
+      "gemini_generation": null,
+      "max_context_tokens": null,
+      "max_output_tokens": 8192,
+      "max_tool_iterations": null,
+      "model_id": "anthropic/claude-opus-4-6",
+      "name": "m",
+      "openrouter_provider": null,
+      "provider_key": "p",
+      "qualified_name": "chat.p.m",
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "sdk": "anthropic",
+      "temperature": 1.0,
+      "top_p": null,
+      "zai_clear_thinking": null,
+      "zai_subscription": null
+    }
   }
 }

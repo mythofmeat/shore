@@ -271,24 +271,9 @@
             ]
           }
         ],
-        "system": [
-          {
-            "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<ada>\n# ada\n\nA fixture character.\n\n</ada>",
-            "label": "character"
-          },
-          {
-            "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- nothing yet\n\n</memory_index>",
-            "label": "memory_index"
-          }
-        ],
+        "system": {
+          "$ref": "s0"
+        },
         "max_tokens": 4096,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
@@ -338,24 +323,9 @@
             ]
           }
         ],
-        "system": [
-          {
-            "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<ada>\n# ada\n\nA fixture character.\n\n</ada>",
-            "label": "character"
-          },
-          {
-            "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- nothing yet\n\n</memory_index>",
-            "label": "memory_index"
-          }
-        ],
+        "system": {
+          "$ref": "s0"
+        },
         "max_tokens": 4096,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
@@ -398,24 +368,9 @@
             ]
           }
         ],
-        "system": [
-          {
-            "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<ada>\n# ada\n\nA fixture character.\n\n</ada>",
-            "label": "character"
-          },
-          {
-            "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- nothing yet\n\n</memory_index>",
-            "label": "memory_index"
-          }
-        ],
+        "system": {
+          "$ref": "s0"
+        },
         "max_tokens": 4096,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
@@ -480,24 +435,9 @@
             ]
           }
         ],
-        "system": [
-          {
-            "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<ada>\n# ada\n\nA fixture character.\n\n</ada>",
-            "label": "character"
-          },
-          {
-            "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- nothing yet\n\n</memory_index>",
-            "label": "memory_index"
-          }
-        ],
+        "system": {
+          "$ref": "s0"
+        },
         "max_tokens": 4096,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
@@ -547,24 +487,9 @@
             ]
           }
         ],
-        "system": [
-          {
-            "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<ada>\n# ada\n\nA fixture character.\n\n</ada>",
-            "label": "character"
-          },
-          {
-            "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- nothing yet\n\n</memory_index>",
-            "label": "memory_index"
-          }
-        ],
+        "system": {
+          "$ref": "s0"
+        },
         "max_tokens": 4096,
         "provider_key": "anthropic",
         "replay_prior_thinking": "all"
@@ -830,5 +755,25 @@
         }
       }
     }
-  ]
+  ],
+  "$shared": {
+    "s0": [
+      {
+        "label": "system",
+        "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+      },
+      {
+        "label": "tools_guidance",
+        "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+      },
+      {
+        "label": "character",
+        "text": "<ada>\n# ada\n\nA fixture character.\n\n</ada>"
+      },
+      {
+        "label": "memory_index",
+        "text": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- nothing yet\n\n</memory_index>"
+      }
+    ]
+  }
 }

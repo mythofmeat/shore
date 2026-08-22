@@ -1,6 +1,8 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./config_fixtures/model_resolution.json" with { type: "json" };
+import rawFixture from "./config_fixtures/model_resolution.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { ConfigDuration } from "../src/config/duration.ts";
 import {

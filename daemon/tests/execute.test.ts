@@ -1,9 +1,11 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import fixture from "./tools_fixtures/execute.json" with { type: "json" };
+import rawFixture from "./tools_fixtures/execute.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 import {
   attachGeneratedImage,
   executeToolUse,

@@ -461,25 +461,7 @@
           }
         },
         {
-          "name": "web_search",
-          "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up — searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "The search query."
-              },
-              "max_results": {
-                "type": "integer",
-                "description": "Maximum number of results to return.",
-                "default": 5
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+          "$ref": "s6"
         },
         {
           "name": "fetch_url",
@@ -512,221 +494,28 @@
           }
         },
         {
-          "name": "roll_dice",
-          "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome — decisions, games, random prompts, divination-as-play — not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "notation": {
-                "type": "string",
-                "description": "Dice notation: NdS[+/-M]. Examples: '2d6', '1d20+5', '4d6-1'."
-              }
-            },
-            "required": [
-              "notation"
-            ]
-          }
+          "$ref": "s7"
         },
         {
-          "name": "read",
-          "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root."
-              },
-              "offset": {
-                "type": "number",
-                "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional."
-              },
-              "limit": {
-                "type": "number",
-                "description": "Maximum number of lines to read. Files only; ignored for directories. Optional."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s5"
         },
         {
-          "name": "edit",
-          "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace."
-              },
-              "content": {
-                "type": "string",
-                "description": "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`."
-              },
-              "edits": {
-                "type": "array",
-                "description": "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "old_string": {
-                      "type": "string",
-                      "description": "Exact text to find and replace. Must match whitespace and newlines precisely."
-                    },
-                    "new_string": {
-                      "type": "string",
-                      "description": "Text to replace old_string with."
-                    },
-                    "replace_all": {
-                      "type": "boolean",
-                      "description": "Replace every occurrence of old_string. Defaults to false, which requires old_string to match exactly once."
-                    }
-                  },
-                  "required": [
-                    "old_string",
-                    "new_string"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
+          "$ref": "s1"
         },
         {
-          "name": "search",
-          "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename — use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Keyword, phrase, or natural-language description to search for."
-              },
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "hybrid",
-                  "lexical",
-                  "vector"
-                ],
-                "description": "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring only, ordered by file recency. `vector` is pure semantic similarity."
-              },
-              "path": {
-                "type": "string",
-                "description": "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
-              },
-              "max_results": {
-                "type": "number",
-                "description": "Maximum matches to return. Defaults to 20, maximum 100."
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+          "$ref": "s4"
         },
         {
-          "name": "delete",
-          "description": "Move a file to a trash folder. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path to the file to remove, within your workspace."
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
+          "$ref": "s8"
         },
         {
-          "name": "git",
-          "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) — the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. `args` holds only what comes after the subcommand, so `git log --oneline -8` is `subcommand: \"log\"` with `args: [\"--oneline\", \"-8\"]`; repeating the subcommand there is refused. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused — `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote — `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "subcommand": {
-                "type": "string",
-                "description": "The git subcommand to run, e.g. \"status\", \"add\", \"commit\", \"log\", \"diff\"."
-              },
-              "args": {
-                "type": "array",
-                "description": "Arguments for the subcommand, one array element per argument. For example [\"-m\", \"note why this matters\"]. Optional.",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "workdir": {
-                "type": "string",
-                "description": "Directory to run in, relative to your workspace root. Optional; defaults to the workspace root."
-              }
-            },
-            "required": [
-              "subcommand"
-            ]
-          }
+          "$ref": "s3"
         },
         {
-          "name": "search_chat_logs",
-          "description": "Search your archived conversation history — everything that compaction has already swept out of your active context. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nThe active conversation is not searched, and there is no way to ask for it. Everything you can still see in this context window is excluded by construction, so a search only ever tells you something you had forgotten. When you want a message that is still in front of you, read it rather than searching for it. A message becomes searchable when compaction archives it, which is also the moment it leaves your context.\n\nOnly the answer you actually gave is stored. Regenerated alternatives you did not end up sending are never indexed and cannot be returned, so every hit is something that really was said in the conversation.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across segment boundaries. Three matching messages are returned by default.\n\nEach result's `model` field is the model that generated that message. It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only."
-              },
-              "start_time": {
-                "type": "string",
-                "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-              },
-              "end_time": {
-                "type": "string",
-                "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-              },
-              "max_results": {
-                "type": "number",
-                "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
-              },
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "auto",
-                  "lexical",
-                  "hybrid",
-                  "vector"
-                ],
-                "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
-              },
-              "model": {
-                "type": "string",
-                "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s0"
         },
         {
-          "name": "model_history",
-          "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running — for example when auditing personality drift across model switches — or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "start_time": {
-                "type": "string",
-                "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-              },
-              "end_time": {
-                "type": "string",
-                "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s2"
         }
       ]
     },
@@ -760,25 +549,7 @@
           }
         },
         {
-          "name": "web_search",
-          "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up — searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "The search query."
-              },
-              "max_results": {
-                "type": "integer",
-                "description": "Maximum number of results to return.",
-                "default": 5
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+          "$ref": "s6"
         },
         {
           "name": "fetch_url",
@@ -811,221 +582,28 @@
           }
         },
         {
-          "name": "roll_dice",
-          "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome — decisions, games, random prompts, divination-as-play — not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "notation": {
-                "type": "string",
-                "description": "Dice notation: NdS[+/-M]. Examples: '2d6', '1d20+5', '4d6-1'."
-              }
-            },
-            "required": [
-              "notation"
-            ]
-          }
+          "$ref": "s7"
         },
         {
-          "name": "read",
-          "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root."
-              },
-              "offset": {
-                "type": "number",
-                "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional."
-              },
-              "limit": {
-                "type": "number",
-                "description": "Maximum number of lines to read. Files only; ignored for directories. Optional."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s5"
         },
         {
-          "name": "edit",
-          "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace."
-              },
-              "content": {
-                "type": "string",
-                "description": "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`."
-              },
-              "edits": {
-                "type": "array",
-                "description": "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "old_string": {
-                      "type": "string",
-                      "description": "Exact text to find and replace. Must match whitespace and newlines precisely."
-                    },
-                    "new_string": {
-                      "type": "string",
-                      "description": "Text to replace old_string with."
-                    },
-                    "replace_all": {
-                      "type": "boolean",
-                      "description": "Replace every occurrence of old_string. Defaults to false, which requires old_string to match exactly once."
-                    }
-                  },
-                  "required": [
-                    "old_string",
-                    "new_string"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
+          "$ref": "s1"
         },
         {
-          "name": "search",
-          "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename — use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Keyword, phrase, or natural-language description to search for."
-              },
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "hybrid",
-                  "lexical",
-                  "vector"
-                ],
-                "description": "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring only, ordered by file recency. `vector` is pure semantic similarity."
-              },
-              "path": {
-                "type": "string",
-                "description": "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
-              },
-              "max_results": {
-                "type": "number",
-                "description": "Maximum matches to return. Defaults to 20, maximum 100."
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+          "$ref": "s4"
         },
         {
-          "name": "delete",
-          "description": "Move a file to a trash folder. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path to the file to remove, within your workspace."
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
+          "$ref": "s8"
         },
         {
-          "name": "git",
-          "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) — the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. `args` holds only what comes after the subcommand, so `git log --oneline -8` is `subcommand: \"log\"` with `args: [\"--oneline\", \"-8\"]`; repeating the subcommand there is refused. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused — `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote — `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "subcommand": {
-                "type": "string",
-                "description": "The git subcommand to run, e.g. \"status\", \"add\", \"commit\", \"log\", \"diff\"."
-              },
-              "args": {
-                "type": "array",
-                "description": "Arguments for the subcommand, one array element per argument. For example [\"-m\", \"note why this matters\"]. Optional.",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "workdir": {
-                "type": "string",
-                "description": "Directory to run in, relative to your workspace root. Optional; defaults to the workspace root."
-              }
-            },
-            "required": [
-              "subcommand"
-            ]
-          }
+          "$ref": "s3"
         },
         {
-          "name": "search_chat_logs",
-          "description": "Search your archived conversation history — everything that compaction has already swept out of your active context. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nThe active conversation is not searched, and there is no way to ask for it. Everything you can still see in this context window is excluded by construction, so a search only ever tells you something you had forgotten. When you want a message that is still in front of you, read it rather than searching for it. A message becomes searchable when compaction archives it, which is also the moment it leaves your context.\n\nOnly the answer you actually gave is stored. Regenerated alternatives you did not end up sending are never indexed and cannot be returned, so every hit is something that really was said in the conversation.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across segment boundaries. Three matching messages are returned by default.\n\nEach result's `model` field is the model that generated that message. It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only."
-              },
-              "start_time": {
-                "type": "string",
-                "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-              },
-              "end_time": {
-                "type": "string",
-                "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-              },
-              "max_results": {
-                "type": "number",
-                "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
-              },
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "auto",
-                  "lexical",
-                  "hybrid",
-                  "vector"
-                ],
-                "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
-              },
-              "model": {
-                "type": "string",
-                "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s0"
         },
         {
-          "name": "model_history",
-          "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running — for example when auditing personality drift across model switches — or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "start_time": {
-                "type": "string",
-                "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-              },
-              "end_time": {
-                "type": "string",
-                "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s2"
         }
       ]
     },
@@ -1059,25 +637,7 @@
           }
         },
         {
-          "name": "web_search",
-          "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up — searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "The search query."
-              },
-              "max_results": {
-                "type": "integer",
-                "description": "Maximum number of results to return.",
-                "default": 5
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+          "$ref": "s6"
         },
         {
           "name": "fetch_url",
@@ -1110,221 +670,28 @@
           }
         },
         {
-          "name": "roll_dice",
-          "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome — decisions, games, random prompts, divination-as-play — not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "notation": {
-                "type": "string",
-                "description": "Dice notation: NdS[+/-M]. Examples: '2d6', '1d20+5', '4d6-1'."
-              }
-            },
-            "required": [
-              "notation"
-            ]
-          }
+          "$ref": "s7"
         },
         {
-          "name": "read",
-          "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root."
-              },
-              "offset": {
-                "type": "number",
-                "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional."
-              },
-              "limit": {
-                "type": "number",
-                "description": "Maximum number of lines to read. Files only; ignored for directories. Optional."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s5"
         },
         {
-          "name": "edit",
-          "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace."
-              },
-              "content": {
-                "type": "string",
-                "description": "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`."
-              },
-              "edits": {
-                "type": "array",
-                "description": "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "old_string": {
-                      "type": "string",
-                      "description": "Exact text to find and replace. Must match whitespace and newlines precisely."
-                    },
-                    "new_string": {
-                      "type": "string",
-                      "description": "Text to replace old_string with."
-                    },
-                    "replace_all": {
-                      "type": "boolean",
-                      "description": "Replace every occurrence of old_string. Defaults to false, which requires old_string to match exactly once."
-                    }
-                  },
-                  "required": [
-                    "old_string",
-                    "new_string"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
+          "$ref": "s1"
         },
         {
-          "name": "search",
-          "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename — use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Keyword, phrase, or natural-language description to search for."
-              },
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "hybrid",
-                  "lexical",
-                  "vector"
-                ],
-                "description": "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring only, ordered by file recency. `vector` is pure semantic similarity."
-              },
-              "path": {
-                "type": "string",
-                "description": "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
-              },
-              "max_results": {
-                "type": "number",
-                "description": "Maximum matches to return. Defaults to 20, maximum 100."
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+          "$ref": "s4"
         },
         {
-          "name": "delete",
-          "description": "Move a file to a trash folder. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path to the file to remove, within your workspace."
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
+          "$ref": "s8"
         },
         {
-          "name": "git",
-          "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) — the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. `args` holds only what comes after the subcommand, so `git log --oneline -8` is `subcommand: \"log\"` with `args: [\"--oneline\", \"-8\"]`; repeating the subcommand there is refused. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused — `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote — `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "subcommand": {
-                "type": "string",
-                "description": "The git subcommand to run, e.g. \"status\", \"add\", \"commit\", \"log\", \"diff\"."
-              },
-              "args": {
-                "type": "array",
-                "description": "Arguments for the subcommand, one array element per argument. For example [\"-m\", \"note why this matters\"]. Optional.",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "workdir": {
-                "type": "string",
-                "description": "Directory to run in, relative to your workspace root. Optional; defaults to the workspace root."
-              }
-            },
-            "required": [
-              "subcommand"
-            ]
-          }
+          "$ref": "s3"
         },
         {
-          "name": "search_chat_logs",
-          "description": "Search your archived conversation history — everything that compaction has already swept out of your active context. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nThe active conversation is not searched, and there is no way to ask for it. Everything you can still see in this context window is excluded by construction, so a search only ever tells you something you had forgotten. When you want a message that is still in front of you, read it rather than searching for it. A message becomes searchable when compaction archives it, which is also the moment it leaves your context.\n\nOnly the answer you actually gave is stored. Regenerated alternatives you did not end up sending are never indexed and cannot be returned, so every hit is something that really was said in the conversation.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across segment boundaries. Three matching messages are returned by default.\n\nEach result's `model` field is the model that generated that message. It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only."
-              },
-              "start_time": {
-                "type": "string",
-                "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-              },
-              "end_time": {
-                "type": "string",
-                "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-              },
-              "max_results": {
-                "type": "number",
-                "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
-              },
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "auto",
-                  "lexical",
-                  "hybrid",
-                  "vector"
-                ],
-                "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
-              },
-              "model": {
-                "type": "string",
-                "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s0"
         },
         {
-          "name": "model_history",
-          "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running — for example when auditing personality drift across model switches — or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "start_time": {
-                "type": "string",
-                "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-              },
-              "end_time": {
-                "type": "string",
-                "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s2"
         }
       ]
     },
@@ -1358,25 +725,7 @@
           }
         },
         {
-          "name": "web_search",
-          "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up — searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "The search query."
-              },
-              "max_results": {
-                "type": "integer",
-                "description": "Maximum number of results to return.",
-                "default": 5
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+          "$ref": "s6"
         },
         {
           "name": "fetch_url",
@@ -1409,221 +758,28 @@
           }
         },
         {
-          "name": "roll_dice",
-          "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome — decisions, games, random prompts, divination-as-play — not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "notation": {
-                "type": "string",
-                "description": "Dice notation: NdS[+/-M]. Examples: '2d6', '1d20+5', '4d6-1'."
-              }
-            },
-            "required": [
-              "notation"
-            ]
-          }
+          "$ref": "s7"
         },
         {
-          "name": "read",
-          "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root."
-              },
-              "offset": {
-                "type": "number",
-                "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional."
-              },
-              "limit": {
-                "type": "number",
-                "description": "Maximum number of lines to read. Files only; ignored for directories. Optional."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s5"
         },
         {
-          "name": "edit",
-          "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path within your workspace."
-              },
-              "content": {
-                "type": "string",
-                "description": "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`."
-              },
-              "edits": {
-                "type": "array",
-                "description": "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "old_string": {
-                      "type": "string",
-                      "description": "Exact text to find and replace. Must match whitespace and newlines precisely."
-                    },
-                    "new_string": {
-                      "type": "string",
-                      "description": "Text to replace old_string with."
-                    },
-                    "replace_all": {
-                      "type": "boolean",
-                      "description": "Replace every occurrence of old_string. Defaults to false, which requires old_string to match exactly once."
-                    }
-                  },
-                  "required": [
-                    "old_string",
-                    "new_string"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
+          "$ref": "s1"
         },
         {
-          "name": "search",
-          "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename — use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Keyword, phrase, or natural-language description to search for."
-              },
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "hybrid",
-                  "lexical",
-                  "vector"
-                ],
-                "description": "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring only, ordered by file recency. `vector` is pure semantic similarity."
-              },
-              "path": {
-                "type": "string",
-                "description": "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
-              },
-              "max_results": {
-                "type": "number",
-                "description": "Maximum matches to return. Defaults to 20, maximum 100."
-              }
-            },
-            "required": [
-              "query"
-            ]
-          }
+          "$ref": "s4"
         },
         {
-          "name": "delete",
-          "description": "Move a file to a trash folder. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Relative path to the file to remove, within your workspace."
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
+          "$ref": "s8"
         },
         {
-          "name": "git",
-          "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) — the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. `args` holds only what comes after the subcommand, so `git log --oneline -8` is `subcommand: \"log\"` with `args: [\"--oneline\", \"-8\"]`; repeating the subcommand there is refused. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused — `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote — `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "subcommand": {
-                "type": "string",
-                "description": "The git subcommand to run, e.g. \"status\", \"add\", \"commit\", \"log\", \"diff\"."
-              },
-              "args": {
-                "type": "array",
-                "description": "Arguments for the subcommand, one array element per argument. For example [\"-m\", \"note why this matters\"]. Optional.",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "workdir": {
-                "type": "string",
-                "description": "Directory to run in, relative to your workspace root. Optional; defaults to the workspace root."
-              }
-            },
-            "required": [
-              "subcommand"
-            ]
-          }
+          "$ref": "s3"
         },
         {
-          "name": "search_chat_logs",
-          "description": "Search your archived conversation history — everything that compaction has already swept out of your active context. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nThe active conversation is not searched, and there is no way to ask for it. Everything you can still see in this context window is excluded by construction, so a search only ever tells you something you had forgotten. When you want a message that is still in front of you, read it rather than searching for it. A message becomes searchable when compaction archives it, which is also the moment it leaves your context.\n\nOnly the answer you actually gave is stored. Regenerated alternatives you did not end up sending are never indexed and cannot be returned, so every hit is something that really was said in the conversation.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across segment boundaries. Three matching messages are returned by default.\n\nEach result's `model` field is the model that generated that message. It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "query": {
-                "type": "string",
-                "description": "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only."
-              },
-              "start_time": {
-                "type": "string",
-                "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-              },
-              "end_time": {
-                "type": "string",
-                "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-              },
-              "max_results": {
-                "type": "number",
-                "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
-              },
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "auto",
-                  "lexical",
-                  "hybrid",
-                  "vector"
-                ],
-                "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
-              },
-              "model": {
-                "type": "string",
-                "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s0"
         },
         {
-          "name": "model_history",
-          "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running — for example when auditing personality drift across model switches — or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "start_time": {
-                "type": "string",
-                "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-              },
-              "end_time": {
-                "type": "string",
-                "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-              }
-            },
-            "required": []
-          }
+          "$ref": "s2"
         }
       ]
     },
@@ -2190,6 +1346,246 @@
         "b_mcp",
         "a_mcp"
       ]
+    }
+  },
+  "$shared": {
+    "s0": {
+      "description": "Search your archived conversation history — everything that compaction has already swept out of your active context. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nThe active conversation is not searched, and there is no way to ask for it. Everything you can still see in this context window is excluded by construction, so a search only ever tells you something you had forgotten. When you want a message that is still in front of you, read it rather than searching for it. A message becomes searchable when compaction archives it, which is also the moment it leaves your context.\n\nOnly the answer you actually gave is stored. Regenerated alternatives you did not end up sending are never indexed and cannot be returned, so every hit is something that really was said in the conversation.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across segment boundaries. Three matching messages are returned by default.\n\nEach result's `model` field is the model that generated that message. It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
+      "input_schema": {
+        "properties": {
+          "end_time": {
+            "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00.",
+            "type": "string"
+          },
+          "max_results": {
+            "description": "Maximum matching messages to return. Defaults to 3, maximum 50.",
+            "type": "number"
+          },
+          "mode": {
+            "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks.",
+            "enum": [
+              "auto",
+              "lexical",
+              "hybrid",
+              "vector"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only.",
+            "type": "string"
+          },
+          "start_time": {
+            "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "search_chat_logs"
+    },
+    "s1": {
+      "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
+      "input_schema": {
+        "properties": {
+          "content": {
+            "description": "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`.",
+            "type": "string"
+          },
+          "edits": {
+            "description": "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
+            "items": {
+              "properties": {
+                "new_string": {
+                  "description": "Text to replace old_string with.",
+                  "type": "string"
+                },
+                "old_string": {
+                  "description": "Exact text to find and replace. Must match whitespace and newlines precisely.",
+                  "type": "string"
+                },
+                "replace_all": {
+                  "description": "Replace every occurrence of old_string. Defaults to false, which requires old_string to match exactly once.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "old_string",
+                "new_string"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "path": {
+            "description": "Relative path within your workspace.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "edit"
+    },
+    "s2": {
+      "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running — for example when auditing personality drift across model switches — or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
+      "input_schema": {
+        "properties": {
+          "end_time": {
+            "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00.",
+            "type": "string"
+          },
+          "start_time": {
+            "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "model_history"
+    },
+    "s3": {
+      "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) — the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. `args` holds only what comes after the subcommand, so `git log --oneline -8` is `subcommand: \"log\"` with `args: [\"--oneline\", \"-8\"]`; repeating the subcommand there is refused. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused — `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote — `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
+      "input_schema": {
+        "properties": {
+          "args": {
+            "description": "Arguments for the subcommand, one array element per argument. For example [\"-m\", \"note why this matters\"]. Optional.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "subcommand": {
+            "description": "The git subcommand to run, e.g. \"status\", \"add\", \"commit\", \"log\", \"diff\".",
+            "type": "string"
+          },
+          "workdir": {
+            "description": "Directory to run in, relative to your workspace root. Optional; defaults to the workspace root.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subcommand"
+        ],
+        "type": "object"
+      },
+      "name": "git"
+    },
+    "s4": {
+      "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename — use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
+      "input_schema": {
+        "properties": {
+          "max_results": {
+            "description": "Maximum matches to return. Defaults to 20, maximum 100.",
+            "type": "number"
+          },
+          "mode": {
+            "description": "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring only, ordered by file recency. `vector` is pure semantic similarity.",
+            "enum": [
+              "hybrid",
+              "lexical",
+              "vector"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "description": "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Keyword, phrase, or natural-language description to search for.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "search"
+    },
+    "s5": {
+      "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
+      "input_schema": {
+        "properties": {
+          "limit": {
+            "description": "Maximum number of lines to read. Files only; ignored for directories. Optional.",
+            "type": "number"
+          },
+          "offset": {
+            "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional.",
+            "type": "number"
+          },
+          "path": {
+            "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "read"
+    },
+    "s6": {
+      "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up — searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
+      "input_schema": {
+        "properties": {
+          "max_results": {
+            "default": 5,
+            "description": "Maximum number of results to return.",
+            "type": "integer"
+          },
+          "query": {
+            "description": "The search query.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "web_search"
+    },
+    "s7": {
+      "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome — decisions, games, random prompts, divination-as-play — not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
+      "input_schema": {
+        "properties": {
+          "notation": {
+            "description": "Dice notation: NdS[+/-M]. Examples: '2d6', '1d20+5', '4d6-1'.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notation"
+        ],
+        "type": "object"
+      },
+      "name": "roll_dice"
+    },
+    "s8": {
+      "description": "Move a file to a trash folder. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories.",
+      "input_schema": {
+        "properties": {
+          "path": {
+            "description": "Relative path to the file to remove, within your workspace.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "delete"
     }
   }
 }
