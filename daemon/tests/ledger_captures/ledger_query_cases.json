@@ -1,0 +1,1608 @@
+{
+  "seed": [
+    {
+      "ts": "2026-04-05T10:00:00Z",
+      "character": "aria",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "message",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 80,
+      "cache_write_tokens": 20,
+      "cache_ttl": null,
+      "reasoning_effort": null,
+      "total_ms": 1500,
+      "ttft_ms": 200,
+      "finish_reason": "tool_use",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": 0.0015,
+      "output_cost": 0.00375,
+      "cache_read_cost": 0.00012,
+      "cache_write_cost": 0.000375,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.005745
+    },
+    {
+      "$ref": "s6"
+    },
+    {
+      "ts": "2026-04-05T10:02:00Z",
+      "character": "aria",
+      "provider": "openai",
+      "api_key_name": "default",
+      "model": "gpt-4o",
+      "call_type": "message",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cache_ttl": null,
+      "reasoning_effort": null,
+      "total_ms": 1500,
+      "ttft_ms": 200,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": null,
+      "cache_anomaly": null,
+      "input_cost": 0.0015,
+      "output_cost": 0.00375,
+      "cache_read_cost": 0.00012,
+      "cache_write_cost": 0.000375,
+      "cost_source": "pricing_catalog",
+      "total_cost": 0.002
+    },
+    {
+      "$ref": "s5"
+    },
+    {
+      "$ref": "s1"
+    },
+    {
+      "$ref": "s4"
+    },
+    {
+      "ts": "2026-04-05T10:06:00Z",
+      "character": "leo",
+      "provider": "anthropic",
+      "api_key_name": "default",
+      "model": "claude-opus-4-6",
+      "call_type": "message",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 80,
+      "cache_write_tokens": 20,
+      "cache_ttl": null,
+      "reasoning_effort": null,
+      "total_ms": 1500,
+      "ttft_ms": 200,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": null,
+      "output_cost": null,
+      "cache_read_cost": null,
+      "cache_write_cost": null,
+      "cost_source": "provider_reported",
+      "total_cost": 0.1234
+    },
+    {
+      "ts": "2026-04-05T10:07:00Z",
+      "character": "leo",
+      "provider": "opencode-go",
+      "api_key_name": "default",
+      "model": "kimi-k3",
+      "call_type": "compaction",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 80,
+      "cache_write_tokens": 20,
+      "cache_ttl": null,
+      "reasoning_effort": null,
+      "total_ms": 1500,
+      "ttft_ms": 200,
+      "finish_reason": "end_turn",
+      "thinking_enabled": 1,
+      "cache_state": "warm",
+      "cache_anomaly": null,
+      "input_cost": 0.0015,
+      "output_cost": 0.00375,
+      "cache_read_cost": 0.00012,
+      "cache_write_cost": 0.000375,
+      "cost_source": "subscription",
+      "total_cost": 0.0
+    },
+    {
+      "$ref": "s7"
+    }
+  ],
+  "cases": [
+    {
+      "filter": "none",
+      "usage_totals": {
+        "call_count": 9,
+        "total_input": 1000,
+        "total_output": 450,
+        "total_cache_read": 485,
+        "total_cache_write": 1720,
+        "total_cost": 0.28460193899999997
+      },
+      "usage_summary": [
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "call_count": 6,
+          "total_input": 700,
+          "total_output": 300,
+          "total_cache_read": 405,
+          "total_cache_write": 800,
+          "total_cost": 0.15914514999999999
+        },
+        {
+          "provider": "openrouter-anthropic",
+          "model": "anthropic/claude-opus-4.6",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "provider": "openai",
+          "model": "gpt-4o",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 0,
+          "total_cost": 0.002
+        },
+        {
+          "provider": "opencode-go",
+          "model": "kimi-k3",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.0
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "message",
+          "call_count": 5,
+          "total_input": 500,
+          "total_output": 250,
+          "total_cache_read": 245,
+          "total_cache_write": 760,
+          "total_cost": 0.151145
+        },
+        {
+          "group": "keepalive",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "tool_loop",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        },
+        {
+          "group": "heartbeat_tool_loop",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        },
+        {
+          "group": "compaction",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.0
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "message_no_tools",
+          "call_count": 4,
+          "total_input": 400,
+          "total_output": 200,
+          "total_cache_read": 165,
+          "total_cache_write": 740,
+          "total_cost": 0.1454
+        },
+        {
+          "group": "keepalive",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "message_with_tools",
+          "call_count": 2,
+          "total_input": 300,
+          "total_output": 100,
+          "total_cache_read": 160,
+          "total_cache_write": 40,
+          "total_cost": 0.015745000000000002
+        },
+        {
+          "group": "heartbeat",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        },
+        {
+          "group": "compaction",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.0
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "anthropic default",
+          "call_count": 4,
+          "total_input": 400,
+          "total_output": 200,
+          "total_cache_read": 245,
+          "total_cache_write": 760,
+          "total_cost": 0.149145
+        },
+        {
+          "group": "openrouter-anthropic default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "anthropic overflow",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        },
+        {
+          "group": "openai default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 0,
+          "total_cost": 0.002
+        },
+        {
+          "group": "anthropic unknown",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        },
+        {
+          "group": "opencode-go default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.0
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "message",
+          "first_ts": "2026-04-05T10:00:00Z",
+          "last_ts": "2026-04-05T10:08:00Z",
+          "call_count": 4
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "tool_loop",
+          "first_ts": "2026-04-05T10:01:00Z",
+          "last_ts": "2026-04-05T10:01:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "gpt-4o",
+          "provider": "openai",
+          "call_type": "message",
+          "first_ts": "2026-04-05T10:02:00Z",
+          "last_ts": "2026-04-05T10:02:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "heartbeat_tool_loop",
+          "first_ts": "2026-04-05T10:03:00Z",
+          "last_ts": "2026-04-05T10:03:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "anthropic/claude-opus-4.6",
+          "provider": "openrouter-anthropic",
+          "call_type": "keepalive",
+          "first_ts": "2026-04-05T10:04:00Z",
+          "last_ts": "2026-04-05T10:04:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "kimi-k3",
+          "provider": "opencode-go",
+          "call_type": "compaction",
+          "first_ts": "2026-04-05T10:07:00Z",
+          "last_ts": "2026-04-05T10:07:00Z",
+          "call_count": 1
+        }
+      ],
+      "anomalies": [
+        {
+          "$ref": "s4"
+        },
+        {
+          "$ref": "s1"
+        }
+      ],
+      "active_anthropic": [
+        [
+          "leo",
+          {
+            "$ref": "s7"
+          }
+        ],
+        {
+          "$ref": "s2"
+        },
+        {
+          "$ref": "s0"
+        }
+      ],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:00:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.005745\n2026-04-05T10:01:00Z\taria\tanthropic\toverflow\tclaude-opus-4-6\ttool_loop\t200\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.01\n2026-04-05T10:02:00Z\taria\topenai\tdefault\tgpt-4o\tmessage\t100\t50\t0\t0\t\t\t1500\t200\tend_turn\ttrue\t\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.002\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015\n2026-04-05T10:04:00Z\tkai\topenrouter-anthropic\tdefault\tanthropic/claude-opus-4.6\tkeepalive\t100\t50\t0\t900\t\t\t1500\t200\tend_turn\ttrue\tcold\tcold_keepalive\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.123456789\n2026-04-05T10:05:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t5\t700\t\t\t1500\t200\tend_turn\ttrue\tcold\tunexpected_write\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.02\n2026-04-05T10:06:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t\t\t\t\tprovider_reported\t0.1234\n2026-04-05T10:07:00Z\tleo\topencode-go\tdefault\tkimi-k3\tcompaction\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tsubscription\t0\n2026-04-05T10:08:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\t\t"
+    },
+    {
+      "filter": "character",
+      "usage_totals": {
+        "call_count": 2,
+        "total_input": 200,
+        "total_output": 100,
+        "total_cache_read": 80,
+        "total_cache_write": 920,
+        "total_cost": 0.123456939
+      },
+      "usage_summary": [
+        {
+          "provider": "openrouter-anthropic",
+          "model": "anthropic/claude-opus-4.6",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "keepalive",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "heartbeat_tool_loop",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "keepalive",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "heartbeat",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "openrouter-anthropic default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "anthropic unknown",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "heartbeat_tool_loop",
+          "first_ts": "2026-04-05T10:03:00Z",
+          "last_ts": "2026-04-05T10:03:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "anthropic/claude-opus-4.6",
+          "provider": "openrouter-anthropic",
+          "call_type": "keepalive",
+          "first_ts": "2026-04-05T10:04:00Z",
+          "last_ts": "2026-04-05T10:04:00Z",
+          "call_count": 1
+        }
+      ],
+      "anomalies": [
+        {
+          "$ref": "s1"
+        }
+      ],
+      "active_anthropic": [
+        {
+          "$ref": "s0"
+        }
+      ],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015\n2026-04-05T10:04:00Z\tkai\topenrouter-anthropic\tdefault\tanthropic/claude-opus-4.6\tkeepalive\t100\t50\t0\t900\t\t\t1500\t200\tend_turn\ttrue\tcold\tcold_keepalive\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.123456789"
+    },
+    {
+      "filter": "provider",
+      "usage_totals": {
+        "call_count": 6,
+        "total_input": 700,
+        "total_output": 300,
+        "total_cache_read": 405,
+        "total_cache_write": 800,
+        "total_cost": 0.15914514999999999
+      },
+      "usage_summary": [
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "call_count": 6,
+          "total_input": 700,
+          "total_output": 300,
+          "total_cache_read": 405,
+          "total_cache_write": 800,
+          "total_cost": 0.15914514999999999
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "message",
+          "call_count": 4,
+          "total_input": 400,
+          "total_output": 200,
+          "total_cache_read": 245,
+          "total_cache_write": 760,
+          "total_cost": 0.149145
+        },
+        {
+          "group": "tool_loop",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        },
+        {
+          "group": "heartbeat_tool_loop",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "message_no_tools",
+          "call_count": 3,
+          "total_input": 300,
+          "total_output": 150,
+          "total_cache_read": 165,
+          "total_cache_write": 740,
+          "total_cost": 0.1434
+        },
+        {
+          "group": "message_with_tools",
+          "call_count": 2,
+          "total_input": 300,
+          "total_output": 100,
+          "total_cache_read": 160,
+          "total_cache_write": 40,
+          "total_cost": 0.015745000000000002
+        },
+        {
+          "group": "heartbeat",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "anthropic default",
+          "call_count": 4,
+          "total_input": 400,
+          "total_output": 200,
+          "total_cache_read": 245,
+          "total_cache_write": 760,
+          "total_cost": 0.149145
+        },
+        {
+          "group": "anthropic overflow",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        },
+        {
+          "group": "anthropic unknown",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "message",
+          "first_ts": "2026-04-05T10:00:00Z",
+          "last_ts": "2026-04-05T10:08:00Z",
+          "call_count": 4
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "tool_loop",
+          "first_ts": "2026-04-05T10:01:00Z",
+          "last_ts": "2026-04-05T10:01:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "heartbeat_tool_loop",
+          "first_ts": "2026-04-05T10:03:00Z",
+          "last_ts": "2026-04-05T10:03:00Z",
+          "call_count": 1
+        }
+      ],
+      "anomalies": [
+        {
+          "$ref": "s4"
+        }
+      ],
+      "active_anthropic": [
+        [
+          "leo",
+          {
+            "$ref": "s7"
+          }
+        ],
+        {
+          "$ref": "s2"
+        },
+        {
+          "$ref": "s3"
+        }
+      ],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:00:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.005745\n2026-04-05T10:01:00Z\taria\tanthropic\toverflow\tclaude-opus-4-6\ttool_loop\t200\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.01\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015\n2026-04-05T10:05:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t5\t700\t\t\t1500\t200\tend_turn\ttrue\tcold\tunexpected_write\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.02\n2026-04-05T10:06:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t\t\t\t\tprovider_reported\t0.1234\n2026-04-05T10:08:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\t\t"
+    },
+    {
+      "filter": "api_key_unknown",
+      "usage_totals": {
+        "call_count": 1,
+        "total_input": 100,
+        "total_output": 50,
+        "total_cache_read": 80,
+        "total_cache_write": 20,
+        "total_cost": 1.5e-07
+      },
+      "usage_summary": [
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "heartbeat_tool_loop",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "heartbeat",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "anthropic unknown",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "heartbeat_tool_loop",
+          "first_ts": "2026-04-05T10:03:00Z",
+          "last_ts": "2026-04-05T10:03:00Z",
+          "call_count": 1
+        }
+      ],
+      "anomalies": [],
+      "active_anthropic": [
+        {
+          "$ref": "s3"
+        }
+      ],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015"
+    },
+    {
+      "filter": "model",
+      "usage_totals": {
+        "call_count": 1,
+        "total_input": 100,
+        "total_output": 50,
+        "total_cache_read": 0,
+        "total_cache_write": 0,
+        "total_cost": 0.002
+      },
+      "usage_summary": [
+        {
+          "provider": "openai",
+          "model": "gpt-4o",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 0,
+          "total_cost": 0.002
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "message",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 0,
+          "total_cost": 0.002
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "message_no_tools",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 0,
+          "total_cost": 0.002
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "openai default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 0,
+          "total_cost": 0.002
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "gpt-4o",
+          "provider": "openai",
+          "call_type": "message",
+          "first_ts": "2026-04-05T10:02:00Z",
+          "last_ts": "2026-04-05T10:02:00Z",
+          "call_count": 1
+        }
+      ],
+      "anomalies": [],
+      "active_anthropic": [],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:02:00Z\taria\topenai\tdefault\tgpt-4o\tmessage\t100\t50\t0\t0\t\t\t1500\t200\tend_turn\ttrue\t\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.002"
+    },
+    {
+      "filter": "call_type",
+      "usage_totals": {
+        "call_count": 1,
+        "total_input": 200,
+        "total_output": 50,
+        "total_cache_read": 80,
+        "total_cache_write": 20,
+        "total_cost": 0.01
+      },
+      "usage_summary": [
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "tool_loop",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "message_with_tools",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "anthropic overflow",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "tool_loop",
+          "first_ts": "2026-04-05T10:01:00Z",
+          "last_ts": "2026-04-05T10:01:00Z",
+          "call_count": 1
+        }
+      ],
+      "anomalies": [],
+      "active_anthropic": [
+        [
+          "aria",
+          {
+            "$ref": "s6"
+          }
+        ]
+      ],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:01:00Z\taria\tanthropic\toverflow\tclaude-opus-4-6\ttool_loop\t200\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.01"
+    },
+    {
+      "filter": "usage_kinds",
+      "usage_totals": {
+        "call_count": 3,
+        "total_input": 400,
+        "total_output": 150,
+        "total_cache_read": 240,
+        "total_cache_write": 60,
+        "total_cost": 0.01574515
+      },
+      "usage_summary": [
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "call_count": 3,
+          "total_input": 400,
+          "total_output": 150,
+          "total_cache_read": 240,
+          "total_cache_write": 60,
+          "total_cost": 0.01574515
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "tool_loop",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        },
+        {
+          "group": "message",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.005745
+        },
+        {
+          "group": "heartbeat_tool_loop",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "message_with_tools",
+          "call_count": 2,
+          "total_input": 300,
+          "total_output": 100,
+          "total_cache_read": 160,
+          "total_cache_write": 40,
+          "total_cost": 0.015745000000000002
+        },
+        {
+          "group": "heartbeat",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "anthropic overflow",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        },
+        {
+          "group": "anthropic default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.005745
+        },
+        {
+          "group": "anthropic unknown",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "message",
+          "first_ts": "2026-04-05T10:00:00Z",
+          "last_ts": "2026-04-05T10:00:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "tool_loop",
+          "first_ts": "2026-04-05T10:01:00Z",
+          "last_ts": "2026-04-05T10:01:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "heartbeat_tool_loop",
+          "first_ts": "2026-04-05T10:03:00Z",
+          "last_ts": "2026-04-05T10:03:00Z",
+          "call_count": 1
+        }
+      ],
+      "anomalies": [],
+      "active_anthropic": [
+        {
+          "$ref": "s3"
+        },
+        [
+          "aria",
+          {
+            "$ref": "s6"
+          }
+        ]
+      ],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:00:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.005745\n2026-04-05T10:01:00Z\taria\tanthropic\toverflow\tclaude-opus-4-6\ttool_loop\t200\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.01\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015"
+    },
+    {
+      "filter": "window",
+      "usage_totals": {
+        "call_count": 5,
+        "total_input": 500,
+        "total_output": 250,
+        "total_cache_read": 165,
+        "total_cache_write": 1640,
+        "total_cost": 0.268856939
+      },
+      "usage_summary": [
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "call_count": 3,
+          "total_input": 300,
+          "total_output": 150,
+          "total_cache_read": 165,
+          "total_cache_write": 740,
+          "total_cost": 0.14340015
+        },
+        {
+          "provider": "openrouter-anthropic",
+          "model": "anthropic/claude-opus-4.6",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "provider": "openai",
+          "model": "gpt-4o",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 0,
+          "total_cost": 0.002
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "message",
+          "call_count": 3,
+          "total_input": 300,
+          "total_output": 150,
+          "total_cache_read": 85,
+          "total_cache_write": 720,
+          "total_cost": 0.1454
+        },
+        {
+          "group": "keepalive",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "heartbeat_tool_loop",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "message_no_tools",
+          "call_count": 3,
+          "total_input": 300,
+          "total_output": 150,
+          "total_cache_read": 85,
+          "total_cache_write": 720,
+          "total_cost": 0.1454
+        },
+        {
+          "group": "keepalive",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "heartbeat",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "anthropic default",
+          "call_count": 2,
+          "total_input": 200,
+          "total_output": 100,
+          "total_cache_read": 85,
+          "total_cache_write": 720,
+          "total_cost": 0.1434
+        },
+        {
+          "group": "openrouter-anthropic default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 900,
+          "total_cost": 0.123456789
+        },
+        {
+          "group": "openai default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 0,
+          "total_cache_write": 0,
+          "total_cost": 0.002
+        },
+        {
+          "group": "anthropic unknown",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 1.5e-07
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "gpt-4o",
+          "provider": "openai",
+          "call_type": "message",
+          "first_ts": "2026-04-05T10:02:00Z",
+          "last_ts": "2026-04-05T10:02:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "heartbeat_tool_loop",
+          "first_ts": "2026-04-05T10:03:00Z",
+          "last_ts": "2026-04-05T10:03:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "anthropic/claude-opus-4.6",
+          "provider": "openrouter-anthropic",
+          "call_type": "keepalive",
+          "first_ts": "2026-04-05T10:04:00Z",
+          "last_ts": "2026-04-05T10:04:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "message",
+          "first_ts": "2026-04-05T10:05:00Z",
+          "last_ts": "2026-04-05T10:06:00Z",
+          "call_count": 2
+        }
+      ],
+      "anomalies": [
+        {
+          "$ref": "s4"
+        },
+        {
+          "$ref": "s1"
+        }
+      ],
+      "active_anthropic": [
+        [
+          "leo",
+          {
+            "ts": "2026-04-05T10:06:00Z",
+            "character": "leo",
+            "provider": "anthropic",
+            "api_key_name": "default",
+            "model": "claude-opus-4-6",
+            "call_type": "message",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_tokens": 80,
+            "cache_write_tokens": 20,
+            "cache_ttl": null,
+            "reasoning_effort": null,
+            "total_ms": 1500,
+            "ttft_ms": 200,
+            "finish_reason": "end_turn",
+            "thinking_enabled": 1,
+            "cache_state": "warm",
+            "cache_anomaly": null,
+            "input_cost": null,
+            "output_cost": null,
+            "cache_read_cost": null,
+            "cache_write_cost": null,
+            "cost_source": "provider_reported",
+            "total_cost": 0.1234
+          }
+        ],
+        {
+          "$ref": "s2"
+        },
+        {
+          "$ref": "s0"
+        }
+      ],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:02:00Z\taria\topenai\tdefault\tgpt-4o\tmessage\t100\t50\t0\t0\t\t\t1500\t200\tend_turn\ttrue\t\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.002\n2026-04-05T10:03:00Z\tkai\tanthropic\t\tclaude-opus-4-6\theartbeat_tool_loop\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.00000015\n2026-04-05T10:04:00Z\tkai\topenrouter-anthropic\tdefault\tanthropic/claude-opus-4.6\tkeepalive\t100\t50\t0\t900\t\t\t1500\t200\tend_turn\ttrue\tcold\tcold_keepalive\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.123456789\n2026-04-05T10:05:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t5\t700\t\t\t1500\t200\tend_turn\ttrue\tcold\tunexpected_write\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.02\n2026-04-05T10:06:00Z\tleo\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t80\t20\t\t\t1500\t200\tend_turn\ttrue\twarm\t\t\t\t\t\tprovider_reported\t0.1234"
+    },
+    {
+      "filter": "compound",
+      "usage_totals": {
+        "call_count": 2,
+        "total_input": 300,
+        "total_output": 100,
+        "total_cache_read": 85,
+        "total_cache_write": 720,
+        "total_cost": 0.03
+      },
+      "usage_summary": [
+        {
+          "provider": "anthropic",
+          "model": "claude-opus-4-6",
+          "call_count": 2,
+          "total_input": 300,
+          "total_output": 100,
+          "total_cache_read": 85,
+          "total_cache_write": 720,
+          "total_cost": 0.03
+        }
+      ],
+      "by_call_type": [
+        {
+          "group": "message",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 5,
+          "total_cache_write": 700,
+          "total_cost": 0.02
+        },
+        {
+          "group": "tool_loop",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        }
+      ],
+      "by_usage_kind": [
+        {
+          "group": "message_no_tools",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 5,
+          "total_cache_write": 700,
+          "total_cost": 0.02
+        },
+        {
+          "group": "message_with_tools",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        }
+      ],
+      "by_api_key": [
+        {
+          "group": "anthropic default",
+          "call_count": 1,
+          "total_input": 100,
+          "total_output": 50,
+          "total_cache_read": 5,
+          "total_cache_write": 700,
+          "total_cost": 0.02
+        },
+        {
+          "group": "anthropic overflow",
+          "call_count": 1,
+          "total_input": 200,
+          "total_output": 50,
+          "total_cache_read": 80,
+          "total_cache_write": 20,
+          "total_cost": 0.01
+        }
+      ],
+      "model_usage": [
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "tool_loop",
+          "first_ts": "2026-04-05T10:01:00Z",
+          "last_ts": "2026-04-05T10:01:00Z",
+          "call_count": 1
+        },
+        {
+          "model": "claude-opus-4-6",
+          "provider": "anthropic",
+          "call_type": "message",
+          "first_ts": "2026-04-05T10:05:00Z",
+          "last_ts": "2026-04-05T10:05:00Z",
+          "call_count": 1
+        }
+      ],
+      "anomalies": [
+        {
+          "$ref": "s4"
+        }
+      ],
+      "active_anthropic": [
+        {
+          "$ref": "s2"
+        }
+      ],
+      "export_tsv": "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\tinput_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\ttotal_ms\tttft_ms\tfinish_reason\tthinking_enabled\tcache_state\tcache_anomaly\tinput_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost\n2026-04-05T10:01:00Z\taria\tanthropic\toverflow\tclaude-opus-4-6\ttool_loop\t200\t50\t80\t20\t\t\t1500\t200\ttool_use\ttrue\twarm\t\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.01\n2026-04-05T10:05:00Z\taria\tanthropic\tdefault\tclaude-opus-4-6\tmessage\t100\t50\t5\t700\t\t\t1500\t200\tend_turn\ttrue\tcold\tunexpected_write\t0.0015\t0.00375\t0.00012\t0.000375\tpricing_catalog\t0.02"
+    }
+  ],
+  "warm_streak": {
+    "aria": 0,
+    "kai": 0,
+    "leo": 3,
+    "nobody": 0
+  },
+  "null_cost_rows": [
+    {
+      "id": 9,
+      "provider": "anthropic",
+      "model": "claude-opus-4-6",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 80,
+      "cache_write_tokens": 20,
+      "cache_ttl": null
+    }
+  ],
+  "all_cost_rows": [
+    {
+      "id": 1,
+      "provider": "anthropic",
+      "model": "claude-opus-4-6",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 80,
+      "cache_write_tokens": 20,
+      "cache_ttl": null
+    },
+    {
+      "id": 2,
+      "provider": "anthropic",
+      "model": "claude-opus-4-6",
+      "input_tokens": 200,
+      "output_tokens": 50,
+      "cache_read_tokens": 80,
+      "cache_write_tokens": 20,
+      "cache_ttl": null
+    },
+    {
+      "id": 3,
+      "provider": "openai",
+      "model": "gpt-4o",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cache_ttl": null
+    },
+    {
+      "id": 4,
+      "provider": "anthropic",
+      "model": "claude-opus-4-6",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 80,
+      "cache_write_tokens": 20,
+      "cache_ttl": null
+    },
+    {
+      "id": 5,
+      "provider": "openrouter-anthropic",
+      "model": "anthropic/claude-opus-4.6",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 900,
+      "cache_ttl": null
+    },
+    {
+      "id": 6,
+      "provider": "anthropic",
+      "model": "claude-opus-4-6",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 5,
+      "cache_write_tokens": 700,
+      "cache_ttl": null
+    },
+    {
+      "id": 9,
+      "provider": "anthropic",
+      "model": "claude-opus-4-6",
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cache_read_tokens": 80,
+      "cache_write_tokens": 20,
+      "cache_ttl": null
+    }
+  ],
+  "$shared": {
+    "s0": [
+      "kai",
+      {
+        "$ref": "s1"
+      }
+    ],
+    "s1": {
+      "api_key_name": "default",
+      "cache_anomaly": "cold_keepalive",
+      "cache_read_cost": 0.00012,
+      "cache_read_tokens": 0,
+      "cache_state": "cold",
+      "cache_ttl": null,
+      "cache_write_cost": 0.000375,
+      "cache_write_tokens": 900,
+      "call_type": "keepalive",
+      "character": "kai",
+      "cost_source": "pricing_catalog",
+      "finish_reason": "end_turn",
+      "input_cost": 0.0015,
+      "input_tokens": 100,
+      "model": "anthropic/claude-opus-4.6",
+      "output_cost": 0.00375,
+      "output_tokens": 50,
+      "provider": "openrouter-anthropic",
+      "reasoning_effort": null,
+      "thinking_enabled": 1,
+      "total_cost": 0.123456789,
+      "total_ms": 1500,
+      "ts": "2026-04-05T10:04:00Z",
+      "ttft_ms": 200
+    },
+    "s2": [
+      "aria",
+      {
+        "$ref": "s4"
+      }
+    ],
+    "s3": [
+      "kai",
+      {
+        "$ref": "s5"
+      }
+    ],
+    "s4": {
+      "api_key_name": "default",
+      "cache_anomaly": "unexpected_write",
+      "cache_read_cost": 0.00012,
+      "cache_read_tokens": 5,
+      "cache_state": "cold",
+      "cache_ttl": null,
+      "cache_write_cost": 0.000375,
+      "cache_write_tokens": 700,
+      "call_type": "message",
+      "character": "aria",
+      "cost_source": "pricing_catalog",
+      "finish_reason": "end_turn",
+      "input_cost": 0.0015,
+      "input_tokens": 100,
+      "model": "claude-opus-4-6",
+      "output_cost": 0.00375,
+      "output_tokens": 50,
+      "provider": "anthropic",
+      "reasoning_effort": null,
+      "thinking_enabled": 1,
+      "total_cost": 0.02,
+      "total_ms": 1500,
+      "ts": "2026-04-05T10:05:00Z",
+      "ttft_ms": 200
+    },
+    "s5": {
+      "api_key_name": null,
+      "cache_anomaly": null,
+      "cache_read_cost": 0.00012,
+      "cache_read_tokens": 80,
+      "cache_state": "warm",
+      "cache_ttl": null,
+      "cache_write_cost": 0.000375,
+      "cache_write_tokens": 20,
+      "call_type": "heartbeat_tool_loop",
+      "character": "kai",
+      "cost_source": "pricing_catalog",
+      "finish_reason": "end_turn",
+      "input_cost": 0.0015,
+      "input_tokens": 100,
+      "model": "claude-opus-4-6",
+      "output_cost": 0.00375,
+      "output_tokens": 50,
+      "provider": "anthropic",
+      "reasoning_effort": null,
+      "thinking_enabled": 1,
+      "total_cost": 1.5e-07,
+      "total_ms": 1500,
+      "ts": "2026-04-05T10:03:00Z",
+      "ttft_ms": 200
+    },
+    "s6": {
+      "api_key_name": "overflow",
+      "cache_anomaly": null,
+      "cache_read_cost": 0.00012,
+      "cache_read_tokens": 80,
+      "cache_state": "warm",
+      "cache_ttl": null,
+      "cache_write_cost": 0.000375,
+      "cache_write_tokens": 20,
+      "call_type": "tool_loop",
+      "character": "aria",
+      "cost_source": "pricing_catalog",
+      "finish_reason": "tool_use",
+      "input_cost": 0.0015,
+      "input_tokens": 200,
+      "model": "claude-opus-4-6",
+      "output_cost": 0.00375,
+      "output_tokens": 50,
+      "provider": "anthropic",
+      "reasoning_effort": null,
+      "thinking_enabled": 1,
+      "total_cost": 0.01,
+      "total_ms": 1500,
+      "ts": "2026-04-05T10:01:00Z",
+      "ttft_ms": 200
+    },
+    "s7": {
+      "api_key_name": "default",
+      "cache_anomaly": null,
+      "cache_read_cost": 0.00012,
+      "cache_read_tokens": 80,
+      "cache_state": "warm",
+      "cache_ttl": null,
+      "cache_write_cost": 0.000375,
+      "cache_write_tokens": 20,
+      "call_type": "message",
+      "character": "leo",
+      "cost_source": null,
+      "finish_reason": "end_turn",
+      "input_cost": 0.0015,
+      "input_tokens": 100,
+      "model": "claude-opus-4-6",
+      "output_cost": 0.00375,
+      "output_tokens": 50,
+      "provider": "anthropic",
+      "reasoning_effort": null,
+      "thinking_enabled": 1,
+      "total_cost": null,
+      "total_ms": 1500,
+      "ts": "2026-04-05T10:08:00Z",
+      "ttft_ms": 200
+    }
+  }
+}

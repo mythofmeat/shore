@@ -14,6 +14,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider } from "../src/llm/types.ts";
 import { testTmp } from "./support/tmp.ts";
+import { eventsForResponse } from "./support/stream.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -87,11 +88,7 @@ async function world(): Promise<{ config: LoadedConfig; characterDir: string }> 
 
 function writingProvider(): SidecarProvider {
   let round = 0;
-  return {
-    stream: () => {
-      throw new Error("compaction does not stream");
-    },
-    generate: async (): Promise<GenerateResponse> => {
+  const nextTurn = (): GenerateResponse => {
       round += 1;
       const blocks =
         round === 1
@@ -112,7 +109,10 @@ function writingProvider(): SidecarProvider {
         timing: {},
         model: "claude-fixture",
       } as never;
-    },
+  };
+  return {
+    stream: () => eventsForResponse(nextTurn()) as never,
+    generate: () => Promise.resolve(nextTurn()),
   };
 }
 

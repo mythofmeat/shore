@@ -300,18 +300,20 @@ MUTANTS = [
     ("migrate: the migration runs on every open",
      '  if (!columnExists(db, "transcripts", "character")) {',
      "  if (true) {"),
-    ("migrate: the covering index is left at its old shape",
-     "      `ALTER TABLE transcripts ADD COLUMN character TEXT;\n"
-     "       DROP INDEX IF EXISTS idx_transcripts_source;\n"
-     "       CREATE INDEX idx_transcripts_source\n"
-     "           ON transcripts (source, character, ts_unix);`,",
+    ("migrate: the stale index is left in place, so adding the column fails",
+     "      `DROP INDEX IF EXISTS idx_transcripts_source;\n"
+     "       ALTER TABLE transcripts ADD COLUMN character TEXT;`,",
      "      `ALTER TABLE transcripts ADD COLUMN character TEXT;`,"),
     ("migrate: the column check reads the wrong table",
      '  if (!columnExists(db, "transcripts", "character")) {',
      '  if (!columnExists(db, "calls", "character")) {'),
-    ("schema: the transcript index omits the character",
-     "CREATE INDEX IF NOT EXISTS idx_transcripts_source ON transcripts (source, character, ts_unix);",
-     "CREATE INDEX IF NOT EXISTS idx_transcripts_source ON transcripts (source, ts_unix);"),
+    ("schema: the covering index is built before the migration that adds its column",
+     "    db.run(SCHEMA);\n    migrate(db);\n    db.run(\n"
+     "      `CREATE INDEX IF NOT EXISTS idx_transcripts_source\n"
+     "           ON transcripts (source, character, ts_unix);`,\n    );",
+     "    db.run(SCHEMA);\n    db.run(\n"
+     "      `CREATE INDEX IF NOT EXISTS idx_transcripts_source\n"
+     "           ON transcripts (source, character, ts_unix);`,\n    );\n    migrate(db);"),
     ("schema: a fresh DB has no character column",
      "    source            TEXT NOT NULL,\n    character         TEXT,\n    call_type         TEXT,",
      "    source            TEXT NOT NULL,\n    call_type         TEXT,"),

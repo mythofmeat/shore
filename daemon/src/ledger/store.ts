@@ -199,6 +199,18 @@ export interface RecordCall {
   tool_surface?: string | undefined;
   output_tokens_estimated?: boolean | undefined;
   thinking_dropped?: number | undefined;
+  error?: string | undefined;
+}
+
+export const MAX_ATTEMPT_ERROR_CHARS = 500;
+
+export function attemptErrorText(record: Pick<RecordCall, "finish_reason" | "error">): string | null {
+  if (record.finish_reason !== "error") return null;
+  const text = record.error?.trim();
+  if (text === undefined || text === "") return "provider call failed";
+  return text.length <= MAX_ATTEMPT_ERROR_CHARS
+    ? text
+    : `${text.slice(0, MAX_ATTEMPT_ERROR_CHARS)}…`;
 }
 
 export type CacheStateReason =
@@ -415,7 +427,7 @@ export class Ledger {
           record.finish_reason === "cancelled" ? "cancelled" : "completed",
         $finished_at: row.ts,
         $call_id: row.id,
-        $error: record.finish_reason === "error" ? "provider call failed" : null,
+        $error: attemptErrorText(record),
         $id: attemptId,
       });
     })();

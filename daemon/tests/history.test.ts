@@ -1,5 +1,12 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { handleSearchHistory } from "../src/tools/history";
+import { testTmp } from "./support/tmp.ts";
 import {
   excerptFor,
   filtersFrom,
@@ -23,15 +30,7 @@ interface Fixture {
   scoring: {
     query: string;
     content: string;
-    score: number | null;
-    earliest_index: number | null;
-  }[];
-  excerpts: {
-    name: string;
-    content: string;
-    query: string | null;
-    excerpt_chars: number;
-    expect: string;
+    score?: number;
   }[];
   clamping: { input: Json; max_results: number; excerpt_chars: number }[];
   arg_parsing: {
@@ -60,22 +59,135 @@ interface Fixture {
     "compaction.json": string;
     "active.jsonl": string;
   };
-  end_to_end: { name: string; input: Json; expect: { ok: Json } | { error: string } }[];
+  end_to_end: {
+    name: string;
+    input: Record<string, unknown>;
+    expect: {
+      error?: string;
+      msg_ids?: string[];
+      model_filter?: string | null;
+      searched_messages?: number;
+    };
+  }[];
   empty_character_dir: { ok: Json } | { error: string };
   unconfigured_character_dir: { ok: Json } | { error: string };
 }
 
 const fixture = (await Bun.file(
-  new URL("./engine_fixtures/history.json", import.meta.url),
+  new URL("./engine_captures/history.json", import.meta.url),
 ).json()) as Fixture;
 
 describe("the fixture is real", () => {
   test("the scoring table records both matches and non-matches", () => {
-    expect(fixture.scoring.some((c) => c.score !== null)).toBe(true);
-    expect(fixture.scoring.some((c) => c.score === null)).toBe(true);
-    const distinct = new Set(fixture.scoring.map((c) => c.score).filter((s) => s !== null));
+    expect(fixture.scoring.some((c) => c.score !== undefined)).toBe(true);
+    expect(fixture.scoring.some((c) => c.score === undefined)).toBe(true);
+    const distinct = new Set(fixture.scoring.map((c) => c.score).filter((s) => s !== undefined));
     expect(distinct.size).toBeGreaterThan(2);
   });
+});
+
+describe("searching a conversation's history", () => {
+  interface Stored {
+    msg_id: string;
+    role: string;
+    timestamp?: string;
+    model?: string;
+    content_blocks?: { type: string; text?: string }[];
+    alternatives?: { content?: string; content_blocks?: { type: string; text?: string }[] }[];
+  }
+
+  const corpus = fixture.corpus;
+
+  function storedMessages(): Map<string, Stored> {
+    const out = new Map<string, Stored>();
+    const lines = [
+      ...corpus.segments.flatMap((s) => s.body.split("\n")),
+      ...corpus["active.jsonl"].split("\n"),
+    ];
+    for (const line of lines) {
+      if (line.trim() === "") continue;
+      const message = JSON.parse(line) as Stored;
+      out.set(message.msg_id, message);
+    }
+    return out;
+  }
+
+  function visibleText(message: Stored): string {
+    return (message.content_blocks ?? [])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("\n");
+  }
+
+  async function characterDir(): Promise<string> {
+    const dir = await mkdtemp(testTmp("shore-history-"));
+    await mkdir(join(dir, "segments"), { recursive: true });
+    for (const segment of corpus.segments) {
+      await writeFile(join(dir, "segments", segment.file), segment.body);
+    }
+    await writeFile(join(dir, "compaction.json"), corpus["compaction.json"]);
+    await writeFile(join(dir, "active.jsonl"), corpus["active.jsonl"]);
+    return dir;
+  }
+
+  for (const c of fixture.end_to_end) {
+    test(c.name, async () => {
+      const dir = await characterDir();
+      let got: Awaited<ReturnType<typeof handleSearchHistory>> | undefined;
+      let thrown: unknown;
+      try {
+        got = await handleSearchHistory(c.input, dir, { defaultMode: "lexical" });
+      } catch (e) {
+        thrown = e;
+      }
+
+      if (c.expect.error !== undefined) {
+        expect((thrown as Error | undefined)?.message, c.name).toBe(c.expect.error);
+        return;
+      }
+      expect(thrown, c.name).toBeUndefined();
+      const result = required(got);
+
+      expect(result.query ?? null, `${c.name}: it echoes the query it searched for`).toBe(
+        (c.input.query as string | undefined) ?? null,
+      );
+      expect(result.model_filter ?? null, `${c.name}: and the model it was filtered to`).toBe(
+        c.expect.model_filter ?? null,
+      );
+      expect(
+        result.results.map((r) => r.msg_id),
+        `${c.name}: the messages it found, best first`,
+      ).toEqual(required(c.expect.msg_ids));
+      expect(result.count, `${c.name}: the count is how many came back`).toBe(
+        result.results.length,
+      );
+      expect(
+        result.searched_messages,
+        `${c.name}: and it says how much history it read`,
+      ).toBe(required(c.expect.searched_messages));
+
+      const stored = storedMessages();
+      for (const hit of result.results) {
+        const message = stored.get(String(hit.msg_id));
+        if (message === undefined) continue;
+        expect(hit.role, `${String(hit.msg_id)}: comes back as the role it was written in`).toBe(
+          message.role,
+        );
+        expect(hit.timestamp ?? null, `${String(hit.msg_id)}: and when it was written`).toBe(
+          message.timestamp ?? null,
+        );
+        expect(hit.model ?? null, `${String(hit.msg_id)}: and which model wrote it`).toBe(
+          message.model ?? null,
+        );
+
+        const core = String(hit.text).replace(/^…\s*/u, "").replace(/\s*…$/u, "");
+        expect(
+          visibleText(message).includes(core),
+          `${String(hit.msg_id)}: its excerpt is taken from what the message actually says`,
+        ).toBe(true);
+      }
+    });
+  }
 });
 
 describe("normalizeModel", () => {
@@ -125,42 +237,91 @@ describe("scoring", () => {
     });
   }
 
-  test("earliest match index resolves to the same character offset", () => {
+  test("the earliest match is where the match starts, with nothing matching before it", () => {
     for (const c of fixture.scoring) {
       const m = new QueryMatcher(c.query);
       const lower = c.content.toLowerCase();
       const got = m.earliestIndex(lower);
-      if (c.earliest_index === null) {
-        expect(got, JSON.stringify([c.query, c.content])).toBeUndefined();
+      const where = JSON.stringify([c.query, c.content]);
+
+      if (c.score === undefined) {
+        expect(got, `${where}: nothing matched, so there is no earliest match`).toBeUndefined();
         continue;
       }
-      const rustChars = Array.from(
-        Buffer.from(lower, "utf8").subarray(0, c.earliest_index).toString("utf8"),
-      ).length;
-      const tsChars = Array.from(lower.slice(0, got)).length;
-      expect(tsChars, JSON.stringify([c.query, c.content])).toBe(rustChars);
+      expect(got, `${where}: something matched, so it starts somewhere`).toBeDefined();
+      if (got !== 0) {
+        expect(
+          m.earliestIndex(lower.slice(0, got)),
+          `${where}: and nothing matches before that`,
+        ).toBeUndefined();
+      }
+      expect(
+        m.earliestIndex(lower.slice(got)),
+        `${where}: while the match itself begins right there`,
+      ).toBe(0);
     }
   });
 });
 
-describe("excerptFor", () => {
-  for (const c of fixture.excerpts) {
-    test(c.name, () => {
-      const matcher = c.query === null ? undefined : new QueryMatcher(c.query);
-      expect(excerptFor(c.content, matcher, c.excerpt_chars)).toBe(c.expect);
-    });
-  }
+describe("excerpting a message for a search result", () => {
+  const chars = (t: string) => Array.from(t).length;
+  const excerpt = (content: string, query: string | null, budget: number) =>
+    excerptFor(content, query === null ? undefined : new QueryMatcher(query), budget);
 
-  test("the window is measured in characters, not code units", () => {
-    const content = "🙂".repeat(500);
-    expect(Array.from(excerptFor(content, undefined, 80)).length).toBe(80 + "...".length);
+  test("content that already fits comes back whole, with no ellipsis", () => {
+    expect(excerpt("short content", null, 80)).toBe("short content");
   });
 
-  test("no excerpt ever splits a character", () => {
-    for (const c of fixture.excerpts) {
-      const matcher = c.query === null ? undefined : new QueryMatcher(c.query);
-      expect(excerptFor(c.content, matcher, c.excerpt_chars), c.name).not.toContain("�");
+  test("with no query it takes the opening, and says it was cut", () => {
+    const got = excerpt("x".repeat(500), null, 80);
+    expect(chars(got)).toBe(83);
+    expect(got.endsWith("...")).toBe(true);
+    expect(got.startsWith("...")).toBe(false);
+  });
+
+  test("with a query it centres on the first match, keeping a little before it", () => {
+    const got = excerpt(`${"a".repeat(500)}tea${"b".repeat(500)}`, "tea", 200);
+    expect(got).toContain("tea");
+    expect(got.startsWith("...")).toBe(true);
+    expect(got.endsWith("...")).toBe(true);
+  });
+
+  test("a match near the start is not padded with ellipsis it does not need", () => {
+    const got = excerpt(`tea${"b".repeat(500)}`, "tea", 200);
+    expect(got.startsWith("...")).toBe(false);
+    expect(got).toContain("tea");
+  });
+
+  test("a query that is not there falls back to the opening", () => {
+    const got = excerpt("the tea is hot", "coffee", 80);
+    expect(got).toBe("the tea is hot");
+  });
+
+  test("what comes back stays within the budget, plus its ellipses", () => {
+    for (const budget of [1, 10, 80, 360, 2000]) {
+      for (const query of [null, "tea"]) {
+        const content = `${"a".repeat(2000)}tea${"b".repeat(2000)}`;
+        expect(chars(excerpt(content, query, budget)), `${budget}/${query}`).toBeLessThanOrEqual(
+          budget + 6,
+        );
+      }
     }
+  });
+
+  test("counting is by character, so multibyte content is not cut short", () => {
+    for (const filler of ["\u4E16", "\u{1F600}", "e\u0301"]) {
+      for (const query of [null, "tea"]) {
+        const content = `${filler.repeat(400)}tea${filler.repeat(400)}`;
+        const got = excerpt(content, query, 360);
+        expect(got, `${filler}/${query}`).not.toContain("\uFFFD");
+        expect(chars(got), `${filler}/${query}`).toBeLessThanOrEqual(366);
+      }
+    }
+  });
+
+  test("an empty budget still returns something rather than throwing", () => {
+    expect(() => excerpt("the tea is hot", "tea", 0)).not.toThrow();
+    expect(() => excerpt("", null, 80)).not.toThrow();
   });
 });
 

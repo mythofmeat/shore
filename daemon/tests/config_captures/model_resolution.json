@@ -1,0 +1,1384 @@
+{
+  "$shared": {
+    "s0": {
+      "cache_ttl": "1h",
+      "category": "chat",
+      "max_output_tokens": 8192,
+      "model_id": "anthropic/claude-opus-4-6",
+      "name": "m",
+      "provider_key": "p",
+      "qualified_name": "chat.p.m",
+      "sdk": "anthropic",
+      "temperature": 1.0
+    },
+    "s1": {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "base_url": "https://openrouter.ai/api/v1",
+      "category": "chat",
+      "max_context_tokens": 200000,
+      "max_output_tokens": 32768,
+      "model_id": "anthropic/claude-opus-4-6",
+      "name": "claude",
+      "provider_key": "openrouter",
+      "qualified_name": "chat.openrouter.claude",
+      "sdk": "openrouter"
+    }
+  },
+  "sdk_parse_wire": [
+    {
+      "raw": "anthropic",
+      "sdk": "anthropic"
+    },
+    {
+      "raw": "openai",
+      "sdk": "openai"
+    },
+    {
+      "raw": "openrouter",
+      "sdk": "openrouter"
+    },
+    {
+      "raw": "gemini",
+      "sdk": "gemini"
+    },
+    {
+      "raw": "zai",
+      "sdk": "zai"
+    },
+    {
+      "raw": "deepseek",
+      "sdk": "deepseek"
+    },
+    {
+      "raw": "moonshot",
+      "sdk": "moonshot"
+    },
+    {
+      "raw": "moonshotai",
+      "sdk": "moonshot"
+    },
+    {
+      "raw": "zhipuai",
+      "sdk": null
+    },
+    {
+      "raw": "Anthropic",
+      "sdk": null
+    },
+    {
+      "raw": "",
+      "sdk": null
+    },
+    {
+      "raw": "nope",
+      "sdk": null
+    }
+  ],
+  "sdk_flags": [
+    {
+      "sdk": "anthropic",
+      "as_str": "anthropic",
+      "echoes_unsigned_thinking": false,
+      "uses_anthropic_prompt_cache": true
+    },
+    {
+      "sdk": "openai",
+      "as_str": "openai",
+      "echoes_unsigned_thinking": true,
+      "uses_anthropic_prompt_cache": false
+    },
+    {
+      "sdk": "openrouter",
+      "as_str": "openrouter",
+      "echoes_unsigned_thinking": false,
+      "uses_anthropic_prompt_cache": false
+    },
+    {
+      "sdk": "gemini",
+      "as_str": "gemini",
+      "echoes_unsigned_thinking": false,
+      "uses_anthropic_prompt_cache": false
+    },
+    {
+      "sdk": "zai",
+      "as_str": "zai",
+      "echoes_unsigned_thinking": true,
+      "uses_anthropic_prompt_cache": false
+    },
+    {
+      "sdk": "deepseek",
+      "as_str": "deepseek",
+      "echoes_unsigned_thinking": true,
+      "uses_anthropic_prompt_cache": false
+    },
+    {
+      "sdk": "moonshot",
+      "as_str": "moonshot",
+      "echoes_unsigned_thinking": true,
+      "uses_anthropic_prompt_cache": false
+    }
+  ],
+  "field_keys": [
+    {
+      "field": "max_context_tokens",
+      "key": "max_context_tokens"
+    },
+    {
+      "field": "max_output_tokens",
+      "key": "max_output_tokens"
+    },
+    {
+      "field": "temperature",
+      "key": "temperature"
+    },
+    {
+      "field": "top_p",
+      "key": "top_p"
+    },
+    {
+      "field": "reasoning_effort",
+      "key": "reasoning_effort"
+    },
+    {
+      "field": "budget_tokens",
+      "key": "budget_tokens"
+    },
+    {
+      "field": "cache_ttl",
+      "key": "cache_ttl"
+    },
+    {
+      "field": "cache_keepalive",
+      "key": "cache_keepalive"
+    },
+    {
+      "field": "openrouter_provider",
+      "key": "openrouter_provider"
+    },
+    {
+      "field": "gemini_generation",
+      "key": "gemini_generation"
+    },
+    {
+      "field": "zai_clear_thinking",
+      "key": "zai_clear_thinking"
+    },
+    {
+      "field": "zai_subscription",
+      "key": "zai_subscription"
+    },
+    {
+      "field": "replay_prior_thinking",
+      "key": "replay_prior_thinking"
+    }
+  ],
+  "field_from_key": [
+    {
+      "key": "max_context_tokens",
+      "field": "max_context_tokens"
+    },
+    {
+      "key": "temperature",
+      "field": "temperature"
+    },
+    {
+      "key": "replay_prior_thinking",
+      "field": "replay_prior_thinking"
+    },
+    {
+      "key": "max_tool_iterations",
+      "field": null
+    },
+    {
+      "key": "sdk",
+      "field": null
+    },
+    {
+      "key": "api_key_env",
+      "field": null
+    },
+    {
+      "key": "",
+      "field": null
+    },
+    {
+      "key": "Temperature",
+      "field": null
+    }
+  ],
+  "provider_defaults": [
+    {
+      "provider": "anthropic",
+      "fields": {
+        "sdk": "anthropic",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "anthropic"
+    },
+    {
+      "provider": "openrouter",
+      "fields": {
+        "sdk": "openrouter",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "base_url": "https://openrouter.ai/api/v1",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "openrouter"
+    },
+    {
+      "provider": "deepseek",
+      "fields": {
+        "sdk": "deepseek",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "deepseek"
+    },
+    {
+      "provider": "moonshot",
+      "fields": {
+        "sdk": "moonshot",
+        "api_key_env": "MOONSHOT_API_KEY",
+        "base_url": "https://api.moonshot.ai/v1",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "moonshot"
+    },
+    {
+      "provider": "moonshotai",
+      "fields": {
+        "sdk": "moonshot",
+        "api_key_env": "MOONSHOT_API_KEY",
+        "base_url": "https://api.moonshot.ai/v1",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "moonshot"
+    },
+    {
+      "provider": "gemini",
+      "fields": {
+        "sdk": "gemini",
+        "api_key_env": "GEMINI_API_KEY",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "gemini"
+    },
+    {
+      "provider": "xai",
+      "fields": {
+        "sdk": "openai",
+        "api_key_env": "XAI_API_KEY",
+        "base_url": "https://api.x.ai/v1",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "openai"
+    },
+    {
+      "provider": "zhipuai",
+      "fields": {
+        "sdk": "openai",
+        "api_key_env": "ZAI_API_KEY",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "openai"
+    },
+    {
+      "provider": "zai",
+      "fields": {
+        "sdk": "zai",
+        "api_key_env": "ZAI_API_KEY",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768,
+        "zai_clear_thinking": false
+      },
+      "default_sdk": "zai"
+    },
+    {
+      "provider": "nanogpt",
+      "fields": {
+        "sdk": "openai",
+        "api_key_env": "NANOGPT_API_KEY",
+        "base_url": "https://nano-gpt.com/api/v1",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "openai"
+    },
+    {
+      "provider": "opencode-go",
+      "fields": {
+        "api_key_env": "OPENCODE_API_KEY",
+        "base_url": "https://opencode.ai/zen/go/v1",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768
+      },
+      "default_sdk": "openai"
+    },
+    {
+      "provider": "unknown-provider",
+      "fields": {},
+      "default_sdk": "openai"
+    },
+    {
+      "provider": "",
+      "fields": {},
+      "default_sdk": "openai"
+    }
+  ],
+  "from_parts": [
+    {
+      "sdk_fallback": "anthropic",
+      "model_id": "claude-opus-4-6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "anthropic",
+        "model_id": "claude-opus-4-6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0,
+        "cache_ttl": "1h"
+      }
+    },
+    {
+      "sdk_fallback": "anthropic",
+      "model_id": "claude-opus-4-7",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "anthropic",
+        "model_id": "claude-opus-4-7",
+        "max_output_tokens": 8192,
+        "temperature": 1.0,
+        "cache_ttl": "1h"
+      }
+    },
+    {
+      "sdk_fallback": "anthropic",
+      "model_id": "anthropic/claude-opus-4-6",
+      "resolved": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "sdk_fallback": "anthropic",
+      "model_id": "gpt-5.6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "anthropic",
+        "model_id": "gpt-5.6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0,
+        "cache_ttl": "1h"
+      }
+    },
+    {
+      "sdk_fallback": "openai",
+      "model_id": "claude-opus-4-6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "openai",
+        "model_id": "claude-opus-4-6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "openai",
+      "model_id": "claude-opus-4-7",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "openai",
+        "model_id": "claude-opus-4-7",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "openai",
+      "model_id": "anthropic/claude-opus-4-6",
+      "resolved": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "sdk_fallback": "openai",
+      "model_id": "gpt-5.6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "openai",
+        "model_id": "gpt-5.6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "openrouter",
+      "model_id": "claude-opus-4-6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "openrouter",
+        "model_id": "claude-opus-4-6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "openrouter",
+      "model_id": "claude-opus-4-7",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "openrouter",
+        "model_id": "claude-opus-4-7",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "openrouter",
+      "model_id": "anthropic/claude-opus-4-6",
+      "resolved": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "sdk_fallback": "openrouter",
+      "model_id": "gpt-5.6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "openrouter",
+        "model_id": "gpt-5.6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "gemini",
+      "model_id": "claude-opus-4-6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "gemini",
+        "model_id": "claude-opus-4-6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "gemini",
+      "model_id": "claude-opus-4-7",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "gemini",
+        "model_id": "claude-opus-4-7",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "gemini",
+      "model_id": "anthropic/claude-opus-4-6",
+      "resolved": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "sdk_fallback": "gemini",
+      "model_id": "gpt-5.6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "gemini",
+        "model_id": "gpt-5.6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "zai",
+      "model_id": "claude-opus-4-6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "zai",
+        "model_id": "claude-opus-4-6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "zai",
+      "model_id": "claude-opus-4-7",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "zai",
+        "model_id": "claude-opus-4-7",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "zai",
+      "model_id": "anthropic/claude-opus-4-6",
+      "resolved": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "sdk_fallback": "zai",
+      "model_id": "gpt-5.6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "zai",
+        "model_id": "gpt-5.6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "deepseek",
+      "model_id": "claude-opus-4-6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "deepseek",
+        "model_id": "claude-opus-4-6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "deepseek",
+      "model_id": "claude-opus-4-7",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "deepseek",
+        "model_id": "claude-opus-4-7",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "deepseek",
+      "model_id": "anthropic/claude-opus-4-6",
+      "resolved": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "sdk_fallback": "deepseek",
+      "model_id": "gpt-5.6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "deepseek",
+        "model_id": "gpt-5.6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "moonshot",
+      "model_id": "claude-opus-4-6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "moonshot",
+        "model_id": "claude-opus-4-6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "moonshot",
+      "model_id": "claude-opus-4-7",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "moonshot",
+        "model_id": "claude-opus-4-7",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "moonshot",
+      "model_id": "anthropic/claude-opus-4-6",
+      "resolved": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "sdk_fallback": "moonshot",
+      "model_id": "gpt-5.6",
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "moonshot",
+        "model_id": "gpt-5.6",
+        "max_output_tokens": 8192,
+        "temperature": 1.0
+      }
+    },
+    {
+      "sdk_fallback": "anthropic",
+      "model_id": "claude-opus-4-7",
+      "explicit_samplers": true,
+      "resolved": {
+        "name": "m",
+        "qualified_name": "chat.p.m",
+        "category": "chat",
+        "provider_key": "p",
+        "sdk": "anthropic",
+        "model_id": "claude-opus-4-7",
+        "temperature": 0.3,
+        "top_p": 0.9,
+        "budget_tokens": 4096,
+        "cache_ttl": "1h"
+      }
+    }
+  ],
+  "catalogs": [
+    {
+      "name": "empty",
+      "chat_toml": "",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {},
+        "chat_order": [],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "single_anthropic_model",
+      "chat_toml": "\n        [anthropic.opus]\n        model_id = \"claude-opus-4-6\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.anthropic.opus": {
+            "name": "opus",
+            "qualified_name": "chat.anthropic.opus",
+            "category": "chat",
+            "provider_key": "anthropic",
+            "sdk": "anthropic",
+            "model_id": "claude-opus-4-6",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "cache_ttl": "1h"
+          }
+        },
+        "chat_order": [
+          "chat.anthropic.opus"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "provider_defaults_cascade_from_registry",
+      "chat_toml": "\n        [custom.fast]\n        model_id = \"some-model\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "\n        [custom]\n        sdk = \"openai\"\n        base_url = \"https://custom.example/v1\"\n        [custom.defaults]\n        max_output_tokens = 4096\n        temperature = 0.7\n        ",
+      "catalog": {
+        "chat": {
+          "chat.custom.fast": {
+            "name": "fast",
+            "qualified_name": "chat.custom.fast",
+            "category": "chat",
+            "provider_key": "custom",
+            "sdk": "openai",
+            "model_id": "some-model",
+            "base_url": "https://custom.example/v1",
+            "max_output_tokens": 4096,
+            "temperature": 0.7
+          }
+        },
+        "chat_order": [
+          "chat.custom.fast"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "per_model_overrides_registry_defaults",
+      "chat_toml": "\n        [custom.fast]\n        model_id = \"some-model\"\n        max_output_tokens = 111\n        temperature = 0.1\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "\n        [custom]\n        sdk = \"openai\"\n        [custom.defaults]\n        max_output_tokens = 4096\n        temperature = 0.7\n        ",
+      "catalog": {
+        "chat": {
+          "chat.custom.fast": {
+            "name": "fast",
+            "qualified_name": "chat.custom.fast",
+            "category": "chat",
+            "provider_key": "custom",
+            "sdk": "openai",
+            "model_id": "some-model",
+            "max_output_tokens": 111,
+            "temperature": 0.1
+          }
+        },
+        "chat_order": [
+          "chat.custom.fast"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "anthropic_slug_autopromotion",
+      "chat_toml": "\n        [openrouter.claude]\n        model_id = \"anthropic/claude-opus-4-6\"\n\n        [openrouter.kimi]\n        model_id = \"moonshotai/kimi-k2\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.openrouter.claude": {
+            "$ref": "s1"
+          },
+          "chat.openrouter.kimi": {
+            "name": "kimi",
+            "qualified_name": "chat.openrouter.kimi",
+            "category": "chat",
+            "provider_key": "openrouter",
+            "sdk": "openrouter",
+            "model_id": "moonshotai/kimi-k2",
+            "api_key_env": "OPENROUTER_API_KEY",
+            "base_url": "https://openrouter.ai/api/v1",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768
+          }
+        },
+        "chat_order": [
+          "chat.openrouter.claude",
+          "chat.openrouter.kimi"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "explicit_sdk_beats_slug_autopromotion",
+      "chat_toml": "\n        [openrouter.claude]\n        model_id = \"anthropic/claude-opus-4-6\"\n        sdk = \"openrouter\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.openrouter.claude": {
+            "$ref": "s1"
+          }
+        },
+        "chat_order": [
+          "chat.openrouter.claude"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "sampler_stripped_on_claude_47",
+      "chat_toml": "\n        [anthropic.new]\n        model_id = \"claude-opus-4-7\"\n\n        [anthropic.old]\n        model_id = \"claude-opus-4-6\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.anthropic.new": {
+            "name": "new",
+            "qualified_name": "chat.anthropic.new",
+            "category": "chat",
+            "provider_key": "anthropic",
+            "sdk": "anthropic",
+            "model_id": "claude-opus-4-7",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "cache_ttl": "1h"
+          },
+          "chat.anthropic.old": {
+            "name": "old",
+            "qualified_name": "chat.anthropic.old",
+            "category": "chat",
+            "provider_key": "anthropic",
+            "sdk": "anthropic",
+            "model_id": "claude-opus-4-6",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "cache_ttl": "1h"
+          }
+        },
+        "chat_order": [
+          "chat.anthropic.new",
+          "chat.anthropic.old"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "explicit_samplers_survive_when_nothing_reports_a_rejection",
+      "chat_toml": "\n        [anthropic.new]\n        model_id = \"claude-sonnet-4-7\"\n        temperature = 0.3\n        top_p = 0.9\n        budget_tokens = 4096\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.anthropic.new": {
+            "name": "new",
+            "qualified_name": "chat.anthropic.new",
+            "category": "chat",
+            "provider_key": "anthropic",
+            "sdk": "anthropic",
+            "model_id": "claude-sonnet-4-7",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "temperature": 0.3,
+            "top_p": 0.9,
+            "budget_tokens": 4096,
+            "cache_ttl": "1h"
+          }
+        },
+        "chat_order": [
+          "chat.anthropic.new"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "cache_keepalive_explicit_off_wins",
+      "chat_toml": "\n        [anthropic.a]\n        model_id = \"claude-opus-4-6\"\n        cache_keepalive = \"off\"\n\n        [anthropic.b]\n        model_id = \"claude-opus-4-6\"\n        cache_keepalive = \"10m\"\n\n        [anthropic.c]\n        model_id = \"claude-opus-4-6\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.anthropic.a": {
+            "name": "a",
+            "qualified_name": "chat.anthropic.a",
+            "category": "chat",
+            "provider_key": "anthropic",
+            "sdk": "anthropic",
+            "model_id": "claude-opus-4-6",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "cache_ttl": "1h",
+            "cache_keepalive": "off"
+          },
+          "chat.anthropic.b": {
+            "name": "b",
+            "qualified_name": "chat.anthropic.b",
+            "category": "chat",
+            "provider_key": "anthropic",
+            "sdk": "anthropic",
+            "model_id": "claude-opus-4-6",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "cache_ttl": "1h",
+            "cache_keepalive": "10m"
+          },
+          "chat.anthropic.c": {
+            "name": "c",
+            "qualified_name": "chat.anthropic.c",
+            "category": "chat",
+            "provider_key": "anthropic",
+            "sdk": "anthropic",
+            "model_id": "claude-opus-4-6",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "cache_ttl": "1h"
+          }
+        },
+        "chat_order": [
+          "chat.anthropic.a",
+          "chat.anthropic.b",
+          "chat.anthropic.c"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "cache_ttl_empty_string_disables",
+      "chat_toml": "\n        [anthropic.a]\n        model_id = \"claude-opus-4-6\"\n        cache_ttl = \"\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.anthropic.a": {
+            "name": "a",
+            "qualified_name": "chat.anthropic.a",
+            "category": "chat",
+            "provider_key": "anthropic",
+            "sdk": "anthropic",
+            "model_id": "claude-opus-4-6",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "cache_ttl": ""
+          }
+        },
+        "chat_order": [
+          "chat.anthropic.a"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "unknown_provider_gets_no_base_defaults",
+      "chat_toml": "\n        [whoknows.m]\n        model_id = \"x\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.whoknows.m": {
+            "name": "m",
+            "qualified_name": "chat.whoknows.m",
+            "category": "chat",
+            "provider_key": "whoknows",
+            "sdk": "openai",
+            "model_id": "x"
+          }
+        },
+        "chat_order": [
+          "chat.whoknows.m"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "btreemap_order_is_code_point_order",
+      "chat_toml": "\n        [\"\ud83c\udfb5drum\".m]\n        model_id = \"a\"\n\n        [\"\ufb00ute\".m]\n        model_id = \"b\"\n\n        [zzz.m]\n        model_id = \"c\"\n        ",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.zzz.m": {
+            "name": "m",
+            "qualified_name": "chat.zzz.m",
+            "category": "chat",
+            "provider_key": "zzz",
+            "sdk": "openai",
+            "model_id": "c"
+          },
+          "chat.\ufb00ute.m": {
+            "name": "m",
+            "qualified_name": "chat.\ufb00ute.m",
+            "category": "chat",
+            "provider_key": "\ufb00ute",
+            "sdk": "openai",
+            "model_id": "b"
+          },
+          "chat.\ud83c\udfb5drum.m": {
+            "name": "m",
+            "qualified_name": "chat.\ud83c\udfb5drum.m",
+            "category": "chat",
+            "provider_key": "\ud83c\udfb5drum",
+            "sdk": "openai",
+            "model_id": "a"
+          }
+        },
+        "chat_order": [
+          "chat.zzz.m",
+          "chat.\ufb00ute.m",
+          "chat.\ud83c\udfb5drum.m"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "aux_sections",
+      "chat_toml": "",
+      "embedding_toml": "\n        [\"openai:text-embedding-3-large\"]\n        dimensions = 3072\n\n        [\"gemini:gemini-embedding-001\"]\n        ",
+      "image_generation_toml": "\n        [\"openai:dall-e-3\"]\n        size = \"1024x1024\"\n        quality = \"hd\"\n\n        [\"openrouter:some-image-model\"]\n        aspect_ratio = \"16:9\"\n        image_size = \"2K\"\n        ",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {},
+        "chat_order": [],
+        "embedding": {
+          "gemini:gemini-embedding-001": {
+            "dimensions": null
+          },
+          "openai:text-embedding-3-large": {
+            "dimensions": 3072
+          }
+        },
+        "embedding_order": [
+          "gemini:gemini-embedding-001",
+          "openai:text-embedding-3-large"
+        ],
+        "image_generation": {
+          "openai:dall-e-3": {
+            "size": "1024x1024",
+            "quality": "hd",
+            "aspect_ratio": null,
+            "image_size": null
+          },
+          "openrouter:some-image-model": {
+            "size": null,
+            "quality": null,
+            "aspect_ratio": "16:9",
+            "image_size": "2K"
+          }
+        },
+        "image_generation_order": [
+          "openai:dall-e-3",
+          "openrouter:some-image-model"
+        ]
+      }
+    },
+    {
+      "name": "removed_provider",
+      "chat_toml": "[claude_code.x]\nmodel_id = \"y\"\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[chat.claude_code] is no longer supported \u2014 the Claude Code transport was removed; drop this section from your config"
+    },
+    {
+      "name": "provider_scalar_retired_transport",
+      "chat_toml": "[anthropic]\nsdk = \"anthropic\"\n[anthropic.opus]\nmodel_id = \"x\"\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[chat.anthropic] no longer accepts provider-level scalar `sdk`; move it to the matching [providers.<name>] entry"
+    },
+    {
+      "name": "provider_scalar_retired_behavioral",
+      "chat_toml": "[anthropic]\nmax_output_tokens = 100\n[anthropic.opus]\nmodel_id = \"x\"\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[chat.anthropic] no longer accepts provider-level scalar `max_output_tokens`; move it to [providers.<name>.defaults]"
+    },
+    {
+      "name": "provider_scalar_retired_reserved_dict",
+      "chat_toml": "[anthropic.openrouter_provider]\norder = [\"a\"]\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[chat.anthropic] no longer accepts provider-level scalar `openrouter_provider`; move it to [providers.<name>.defaults]"
+    },
+    {
+      "name": "provider_scalar_retired_picks_first_key_in_btreemap_order",
+      "chat_toml": "[anthropic]\nzzz = 1\naaa = 2\n[anthropic.opus]\nmodel_id = \"x\"\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[chat.anthropic] no longer accepts provider-level scalar `aaa`; move it to [providers.<name>.defaults]"
+    },
+    {
+      "name": "provider_scalar_retired_picks_first_provider_in_btreemap_order",
+      "chat_toml": "[zzz]\nbad = 1\n[aaa]\nalso_bad = 1\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[chat.aaa] no longer accepts provider-level scalar `also_bad`; move it to [providers.<name>.defaults]"
+    },
+    {
+      "name": "qualified_name_order_differs_from_provider_order",
+      "chat_toml": "[a.m]\nmodel_id = \"x\"\n[\"a-b\".m]\nmodel_id = \"y\"\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {
+          "chat.a-b.m": {
+            "name": "m",
+            "qualified_name": "chat.a-b.m",
+            "category": "chat",
+            "provider_key": "a-b",
+            "sdk": "openai",
+            "model_id": "y"
+          },
+          "chat.a.m": {
+            "name": "m",
+            "qualified_name": "chat.a.m",
+            "category": "chat",
+            "provider_key": "a",
+            "sdk": "openai",
+            "model_id": "x"
+          }
+        },
+        "chat_order": [
+          "chat.a-b.m",
+          "chat.a.m"
+        ],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    },
+    {
+      "name": "missing_model_id",
+      "chat_toml": "[anthropic.opus]\ntemperature = 0.5\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "model \"opus\" in [chat.anthropic] is missing required field `model_id`"
+    },
+    {
+      "name": "parse_entry_wrong_type",
+      "chat_toml": "[anthropic.opus]\nmodel_id = 5\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "failed to parse model entry [chat.anthropic.opus]: invalid type: integer `5`, expected a string\nin `model_id`\n"
+    },
+    {
+      "name": "parse_entry_u32_out_of_range",
+      "chat_toml": "[anthropic.opus]\nmodel_id = \"x\"\nmax_output_tokens = -1\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "failed to parse model entry [chat.anthropic.opus]: invalid value: integer `-1`, expected u32\n"
+    },
+    {
+      "name": "parse_entry_unknown_sdk",
+      "chat_toml": "[anthropic.opus]\nmodel_id = \"x\"\nsdk = \"nope\"\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "failed to parse model entry [chat.anthropic.opus]: unknown variant `nope`, expected one of `anthropic`, `openai`, `openrouter`, `gemini`, `zai`, `deepseek`, `moonshot`\n"
+    },
+    {
+      "name": "parse_entry_removed_zhipuai_sdk",
+      "chat_toml": "[anthropic.opus]\nmodel_id = \"x\"\nsdk = \"zhipuai\"\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "failed to parse model entry [chat.anthropic.opus]: `sdk = \"zhipuai\"` was removed \u2014 use `sdk = \"openai\"`"
+    },
+    {
+      "name": "parse_entry_bad_keepalive",
+      "chat_toml": "[anthropic.opus]\nmodel_id = \"x\"\ncache_keepalive = \"0s\"\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "failed to parse model entry [chat.anthropic.opus]: cache_keepalive interval must be > 0; use \"off\" to disable\n"
+    },
+    {
+      "name": "aux_bare_alias_key",
+      "chat_toml": "",
+      "embedding_toml": "[small]\ndimensions = 1\n",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[embedding.\"small\"] is not a valid `provider:model_id` settings table: the key must be a `provider:model_id` identity, not a bare alias. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+    },
+    {
+      "name": "aux_empty_provider_half",
+      "chat_toml": "",
+      "embedding_toml": "[\":m\"]\n",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[embedding.\":m\"] is not a valid `provider:model_id` settings table: both the provider and model_id halves of the `provider:model_id` key must be non-empty. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+    },
+    {
+      "name": "aux_empty_model_half",
+      "chat_toml": "",
+      "embedding_toml": "[\"p:\"]\n",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[embedding.\"p:\"] is not a valid `provider:model_id` settings table: both the provider and model_id halves of the `provider:model_id` key must be non-empty. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+    },
+    {
+      "name": "aux_value_not_table",
+      "chat_toml": "",
+      "embedding_toml": "small = 1\n",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[embedding.\"small\"] is not a valid `provider:model_id` settings table: the key must be a `provider:model_id` identity, not a bare alias. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+    },
+    {
+      "name": "aux_valid_key_non_table_value",
+      "chat_toml": "",
+      "embedding_toml": "\"openai:m\" = 1\n",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[embedding.\"openai:m\"] is not a valid `provider:model_id` settings table: the value must be a settings table. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+    },
+    {
+      "name": "aux_unknown_field",
+      "chat_toml": "",
+      "embedding_toml": "[\"openai:m\"]\nmodel_id = \"m\"\n",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "err": "[embedding.\"openai:m\"] is not a valid `provider:model_id` settings table: unknown field `model_id`, expected `dimensions`. Identity is the key (e.g. `[embedding.\"openai:text-embedding-3-large\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+    },
+    {
+      "name": "aux_image_unknown_field",
+      "chat_toml": "",
+      "embedding_toml": "",
+      "image_generation_toml": "[\"openai:m\"]\nsdk = \"openai\"\n",
+      "providers_toml": "",
+      "err": "[image_generation.\"openai:m\"] is not a valid `provider:model_id` settings table: unknown field `sdk`, expected one of `size`, `quality`, `aspect_ratio`, `image_size`. Identity is the key (e.g. `[image_generation.\"openai:dall-e-3\"]`); put transport (sdk/base_url/api_key_env) on [providers.<provider>] and keep only category settings in the table"
+    },
+    {
+      "name": "non_table_provider_skipped",
+      "chat_toml": "anthropic = 1\n",
+      "embedding_toml": "",
+      "image_generation_toml": "",
+      "providers_toml": "",
+      "catalog": {
+        "chat": {},
+        "chat_order": [],
+        "embedding": {},
+        "embedding_order": [],
+        "image_generation": {},
+        "image_generation_order": []
+      }
+    }
+  ],
+  "lookup": {
+    "toml": "\n[anthropic.opus]\nmodel_id = \"claude-opus-4-6\"\n\n[anthropic.sonnet]\nmodel_id = \"claude-sonnet-4-6\"\n\n[openrouter.opus]\nmodel_id = \"anthropic/claude-opus-4-6\"\n\n[openrouter.unique]\nmodel_id = \"some/model\"\n",
+    "cases": [
+      {
+        "name": "opus",
+        "err": "ambiguous model name \"opus\" \u2014 found in: chat.anthropic.opus, chat.openrouter.opus"
+      },
+      {
+        "name": "sonnet",
+        "qualified_name": "chat.anthropic.sonnet"
+      },
+      {
+        "name": "unique",
+        "qualified_name": "chat.openrouter.unique"
+      },
+      {
+        "name": "chat.anthropic.opus",
+        "qualified_name": "chat.anthropic.opus"
+      },
+      {
+        "name": "chat.openrouter.opus",
+        "qualified_name": "chat.openrouter.opus"
+      },
+      {
+        "name": "chat.anthropic.missing",
+        "err": "model \"chat.anthropic.missing\" not found"
+      },
+      {
+        "name": "nope",
+        "err": "model \"nope\" not found"
+      },
+      {
+        "name": "",
+        "err": "model \"\" not found"
+      }
+    ],
+    "first_chat_model": "chat.anthropic.opus",
+    "chat_model_names": [
+      "chat.anthropic.opus",
+      "chat.anthropic.sonnet",
+      "chat.openrouter.opus",
+      "chat.openrouter.unique"
+    ]
+  }
+}

@@ -1,0 +1,2745 @@
+{
+  "build_system": [
+    {
+      "template": "Hello {{char}} and {{user}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "Hello Aria and Tom"
+    },
+    {
+      "template": "Hello {{char}} and {{user}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "Hello {{char}} and {{char}}"
+    },
+    {
+      "template": "Hello {{char}} and {{user}}",
+      "char": "",
+      "user": "",
+      "out": "Hello  and "
+    },
+    {
+      "template": "{{char}}{{char}}{{user}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "AriaAriaTom"
+    },
+    {
+      "template": "{{char}}{{char}}{{user}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{char}}{{char}}{{char}}"
+    },
+    {
+      "template": "{{char}}{{char}}{{user}}",
+      "char": "",
+      "user": "",
+      "out": ""
+    },
+    {
+      "template": "no placeholders",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "no placeholders"
+    },
+    {
+      "template": "no placeholders",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "no placeholders"
+    },
+    {
+      "template": "no placeholders",
+      "char": "",
+      "user": "",
+      "out": "no placeholders"
+    },
+    {
+      "template": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter"
+    },
+    {
+      "template": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter"
+    },
+    {
+      "template": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter",
+      "char": "",
+      "user": "",
+      "out": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter"
+    },
+    {
+      "template": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}"
+    },
+    {
+      "template": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}"
+    },
+    {
+      "template": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}",
+      "char": "",
+      "user": "",
+      "out": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}"
+    },
+    {
+      "template": "{{#if recap}}{{/if}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "{{#if recap}}{{/if}}"
+    },
+    {
+      "template": "{{#if recap}}{{/if}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{#if recap}}{{/if}}"
+    },
+    {
+      "template": "{{#if recap}}{{/if}}",
+      "char": "",
+      "user": "",
+      "out": "{{#if recap}}{{/if}}"
+    },
+    {
+      "template": "{{#if recap}}unclosed",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "{{#if recap}}unclosed"
+    },
+    {
+      "template": "{{#if recap}}unclosed",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{#if recap}}unclosed"
+    },
+    {
+      "template": "{{#if recap}}unclosed",
+      "char": "",
+      "user": "",
+      "out": "{{#if recap}}unclosed"
+    },
+    {
+      "template": "{{/if}} stray closer only",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "{{/if}} stray closer only"
+    },
+    {
+      "template": "{{/if}} stray closer only",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{/if}} stray closer only"
+    },
+    {
+      "template": "{{/if}} stray closer only",
+      "char": "",
+      "user": "",
+      "out": "{{/if}} stray closer only"
+    },
+    {
+      "template": "{{recap}} bare",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "{{recap}} bare"
+    },
+    {
+      "template": "{{recap}} bare",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{recap}} bare"
+    },
+    {
+      "template": "{{recap}} bare",
+      "char": "",
+      "user": "",
+      "out": "{{recap}} bare"
+    },
+    {
+      "template": "{{#if recap}}A{{#if recap}}B{{/if}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "{{#if recap}}A{{#if recap}}B{{/if}}"
+    },
+    {
+      "template": "{{#if recap}}A{{#if recap}}B{{/if}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{#if recap}}A{{#if recap}}B{{/if}}"
+    },
+    {
+      "template": "{{#if recap}}A{{#if recap}}B{{/if}}",
+      "char": "",
+      "user": "",
+      "out": "{{#if recap}}A{{#if recap}}B{{/if}}"
+    },
+    {
+      "template": "{{char}} {{#if recap}}{{recap}}{{/if}} {{user}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "Aria {{#if recap}}{{recap}}{{/if}} Tom"
+    },
+    {
+      "template": "{{char}} {{#if recap}}{{recap}}{{/if}} {{user}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{char}} {{#if recap}}{{recap}}{{/if}} {{char}}"
+    },
+    {
+      "template": "{{char}} {{#if recap}}{{recap}}{{/if}} {{user}}",
+      "char": "",
+      "user": "",
+      "out": " {{#if recap}}{{recap}}{{/if}} "
+    },
+    {
+      "template": "",
+      "char": "Aria",
+      "user": "Tom",
+      "out": ""
+    },
+    {
+      "template": "",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": ""
+    },
+    {
+      "template": "",
+      "char": "",
+      "user": "",
+      "out": ""
+    }
+  ],
+  "build_final_message": [
+    {
+      "template": "Hello {{char}} and {{user}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "Hello Aria and Tom"
+    },
+    {
+      "template": "Hello {{char}} and {{user}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "Hello {{char}} and {{char}}"
+    },
+    {
+      "template": "Hello {{char}} and {{user}}",
+      "char": "",
+      "user": "",
+      "out": "Hello  and "
+    },
+    {
+      "template": "{{char}}{{char}}{{user}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "AriaAriaTom"
+    },
+    {
+      "template": "{{char}}{{char}}{{user}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{char}}{{char}}{{char}}"
+    },
+    {
+      "template": "{{char}}{{char}}{{user}}",
+      "char": "",
+      "user": "",
+      "out": ""
+    },
+    {
+      "template": "no placeholders",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "no placeholders"
+    },
+    {
+      "template": "no placeholders",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "no placeholders"
+    },
+    {
+      "template": "no placeholders",
+      "char": "",
+      "user": "",
+      "out": "no placeholders"
+    },
+    {
+      "template": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "Before\n\nAfter"
+    },
+    {
+      "template": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "Before\n\nAfter"
+    },
+    {
+      "template": "Before\n{{#if recap}}RECAP: {{recap}}{{/if}}\nAfter",
+      "char": "",
+      "user": "",
+      "out": "Before\n\nAfter"
+    },
+    {
+      "template": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "B"
+    },
+    {
+      "template": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "B"
+    },
+    {
+      "template": "{{#if recap}}A{{/if}}B{{#if recap}}C{{/if}}",
+      "char": "",
+      "user": "",
+      "out": "B"
+    },
+    {
+      "template": "{{#if recap}}{{/if}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": ""
+    },
+    {
+      "template": "{{#if recap}}{{/if}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": ""
+    },
+    {
+      "template": "{{#if recap}}{{/if}}",
+      "char": "",
+      "user": "",
+      "out": ""
+    },
+    {
+      "template": "{{#if recap}}unclosed",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "{{#if recap}}unclosed"
+    },
+    {
+      "template": "{{#if recap}}unclosed",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{#if recap}}unclosed"
+    },
+    {
+      "template": "{{#if recap}}unclosed",
+      "char": "",
+      "user": "",
+      "out": "{{#if recap}}unclosed"
+    },
+    {
+      "template": "{{recap}} bare",
+      "char": "Aria",
+      "user": "Tom",
+      "out": " bare"
+    },
+    {
+      "template": "{{recap}} bare",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": " bare"
+    },
+    {
+      "template": "{{recap}} bare",
+      "char": "",
+      "user": "",
+      "out": " bare"
+    },
+    {
+      "template": "{{#if recap}}A{{#if recap}}B{{/if}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": ""
+    },
+    {
+      "template": "{{#if recap}}A{{#if recap}}B{{/if}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": ""
+    },
+    {
+      "template": "{{#if recap}}A{{#if recap}}B{{/if}}",
+      "char": "",
+      "user": "",
+      "out": ""
+    },
+    {
+      "template": "{{char}} {{#if recap}}{{recap}}{{/if}} {{user}}",
+      "char": "Aria",
+      "user": "Tom",
+      "out": "Aria  Tom"
+    },
+    {
+      "template": "{{char}} {{#if recap}}{{recap}}{{/if}} {{user}}",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": "{{char}}  {{char}}"
+    },
+    {
+      "template": "{{char}} {{#if recap}}{{recap}}{{/if}} {{user}}",
+      "char": "",
+      "user": "",
+      "out": "  "
+    },
+    {
+      "template": "",
+      "char": "Aria",
+      "user": "Tom",
+      "out": ""
+    },
+    {
+      "template": "",
+      "char": "{{user}}",
+      "user": "{{char}}",
+      "out": ""
+    },
+    {
+      "template": "",
+      "char": "",
+      "user": "",
+      "out": ""
+    }
+  ],
+  "push_turns": [
+    {
+      "name": "blocks",
+      "provider_key": "prov",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "call_0",
+              "name": "edit",
+              "input": {
+                "path": "memory/a.md",
+                "content": "x"
+              }
+            }
+          ],
+          "provider_key": "prov",
+          "model": "mock-chat-model"
+        }
+      ]
+    },
+    {
+      "name": "blocks",
+      "provider_key": null,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "call_0",
+              "name": "edit",
+              "input": {
+                "path": "memory/a.md",
+                "content": "x"
+              }
+            }
+          ],
+          "model": "mock-chat-model"
+        }
+      ]
+    },
+    {
+      "name": "text_only",
+      "provider_key": "prov",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "hello"
+            }
+          ],
+          "provider_key": "prov",
+          "model": "mock-chat-model"
+        }
+      ]
+    },
+    {
+      "name": "text_only",
+      "provider_key": null,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "hello"
+            }
+          ],
+          "model": "mock-chat-model"
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "provider_key": "prov",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "provider_key": null,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "whitespace_text",
+      "provider_key": "prov",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "whitespace_text",
+      "provider_key": null,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unicode_space_text",
+      "provider_key": "prov",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unicode_space_text",
+      "provider_key": null,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bom_text",
+      "provider_key": "prov",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "\ufeff"
+            }
+          ],
+          "provider_key": "prov",
+          "model": "mock-chat-model"
+        }
+      ]
+    },
+    {
+      "name": "bom_text",
+      "provider_key": null,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "\ufeff"
+            }
+          ],
+          "model": "mock-chat-model"
+        }
+      ]
+    },
+    {
+      "name": "push_inline_system",
+      "provider_key": "mockprov",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 0"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message 1"
+            }
+          ]
+        },
+        {
+          "role": "system",
+          "content": [
+            {
+              "type": "text",
+              "text": "be brief"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "load_messages": {
+    "active_jsonl": "{\"msg_id\":\"1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-03-25T10:00:00Z\"}\n{\"msg_id\":\"2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-03-25T10:00:01Z\"}\n{\"msg_id\":\"3\",\"role\":\"user\",\"content\":\"\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"out\",\"is_error\":false}],\"timestamp\":\"2026-03-25T10:00:02Z\"}\n{\"msg_id\":\"4\",\"role\":\"assistant\",\"content\":\"nudge\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"nudge\"}],\"timestamp\":\"2026-03-25T10:00:03Z\",\"origin\":\"autonomous\"}\n{\"msg_id\":\"5\",\"role\":\"user\",\"content\":\"mixed\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t2\",\"content\":\"out\",\"is_error\":false},{\"type\":\"text\",\"text\":\"mixed\"}],\"timestamp\":\"2026-03-25T10:00:04Z\"}\n{\"msg_id\":\"6\",\"role\":\"system\",\"content\":\"sys\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"sys\"}],\"timestamp\":\"2026-03-25T10:00:05Z\"}\n",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hello",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "hi",
+        "timestamp": "2026-03-25T10:00:01Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "user",
+        "content": "out",
+        "timestamp": "2026-03-25T10:00:02Z",
+        "is_tool_result_only": true,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "nudge",
+        "timestamp": "2026-03-25T10:00:03Z",
+        "is_tool_result_only": false,
+        "is_autonomous": true
+      },
+      {
+        "role": "user",
+        "content": "out\nmixed",
+        "timestamp": "2026-03-25T10:00:04Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "system",
+        "content": "sys",
+        "timestamp": "2026-03-25T10:00:05Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      }
+    ],
+    "raw_content": "{\"msg_id\":\"1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-03-25T10:00:00Z\"}\n{\"msg_id\":\"2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-03-25T10:00:01Z\"}\n{\"msg_id\":\"3\",\"role\":\"user\",\"content\":\"\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"out\",\"is_error\":false}],\"timestamp\":\"2026-03-25T10:00:02Z\"}\n{\"msg_id\":\"4\",\"role\":\"assistant\",\"content\":\"nudge\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"nudge\"}],\"timestamp\":\"2026-03-25T10:00:03Z\",\"origin\":\"autonomous\"}\n{\"msg_id\":\"5\",\"role\":\"user\",\"content\":\"mixed\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t2\",\"content\":\"out\",\"is_error\":false},{\"type\":\"text\",\"text\":\"mixed\"}],\"timestamp\":\"2026-03-25T10:00:04Z\"}\n{\"msg_id\":\"6\",\"role\":\"system\",\"content\":\"sys\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"sys\"}],\"timestamp\":\"2026-03-25T10:00:05Z\"}\n"
+  },
+  "outcome_mapping": [
+    {
+      "name": "compacted",
+      "outcome": {
+        "kind": "compacted",
+        "memory_files_written": [
+          "memory/a.md",
+          "MEMORY.md"
+        ],
+        "conversation_id": "conv-1",
+        "new_conversation_id": "conv-2",
+        "message_count": 6,
+        "compacted_turns": 3,
+        "retained_count": 4,
+        "retained_turns": 2,
+        "markdown_paths": [
+          "memory/a.md",
+          "MEMORY.md"
+        ],
+        "tool_rounds": 2,
+        "tools_called": [
+          "edit",
+          "edit"
+        ]
+      },
+      "retained": 2,
+      "notifications": [
+        {
+          "title": "Shore \u2014 Aria",
+          "body": "Compaction complete: 2 entries from 3 turns",
+          "retained": 2
+        }
+      ]
+    },
+    {
+      "name": "compacted_zero_entries",
+      "outcome": {
+        "kind": "compacted",
+        "memory_files_written": [],
+        "conversation_id": "conv-1",
+        "new_conversation_id": "conv-2",
+        "message_count": 6,
+        "compacted_turns": 3,
+        "retained_count": 4,
+        "retained_turns": 2,
+        "markdown_paths": [],
+        "tool_rounds": 1,
+        "tools_called": [
+          "read"
+        ]
+      },
+      "retained": 2,
+      "notifications": [
+        {
+          "title": "Shore \u2014 Aria",
+          "body": "Compaction complete: 0 entries from 3 turns",
+          "retained": 0
+        }
+      ]
+    },
+    {
+      "name": "dry_run",
+      "outcome": {
+        "kind": "dry_run",
+        "would_write_files": 1,
+        "file_ops_preview": [],
+        "message_count": 6,
+        "compacted_turns": 3,
+        "retained_count": 4,
+        "retained_turns": 2,
+        "markdown_preview": [
+          "memory/a.md"
+        ],
+        "tool_rounds": 1,
+        "tools_called": [
+          "edit"
+        ]
+      },
+      "retained": 0,
+      "notifications": []
+    }
+  ],
+  "passes": [
+    {
+      "name": "writes_and_archives",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/daily/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/daily/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/daily/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "two_writes_one_round",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/daily/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/daily/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/daily/a.md": "# A\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/people/b.md",
+            "content": "# B\n"
+          },
+          "output": "{\"path\":\"memory/people/b.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/people/b.md": "# B\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "writes_memory_index",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "MEMORY.md",
+            "content": "# Index\n- thread\n"
+          },
+          "output": "{\"path\":\"MEMORY.md\",\"bytes_written\":17,\"prompt_visible_file\":true,\"deferred_until_compaction\":true,\"deferred_path\":\"MEMORY.md\",\"prompt_reload_required\":true}",
+          "is_error": false,
+          "writes": {
+            "MEMORY.md": "# Index\n- thread\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [
+        "MEMORY.md"
+      ],
+      "deferred_queued_paths": [
+        "MEMORY.md"
+      ],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "writes_memory_index_with_config_dir",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": true,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "MEMORY.md",
+            "content": "# Index\n"
+          },
+          "output": "{\"path\":\"MEMORY.md\",\"bytes_written\":8,\"prompt_visible_file\":true,\"deferred_until_compaction\":true,\"deferred_path\":\"MEMORY.md\",\"prompt_reload_required\":true}",
+          "is_error": false,
+          "writes": {
+            "MEMORY.md": "# Index\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [
+        "MEMORY.md"
+      ],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "writes_memory_index_without_data_dir",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": false,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "MEMORY.md",
+            "content": "# Index\n"
+          },
+          "output": "{\"path\":\"MEMORY.md\",\"bytes_written\":8,\"prompt_visible_file\":true,\"deferred_until_compaction\":true,\"deferred_path\":\"MEMORY.md\",\"prompt_reload_required\":true}",
+          "is_error": false,
+          "writes": {
+            "MEMORY.md": "# Index\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [
+        "MEMORY.md"
+      ],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "no_writes_read_only",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "read",
+          "input": {},
+          "output": "{\"entries\":[{\"name\":\".git\",\"type\":\"directory\",\"size\":4096},{\"name\":\"memory\",\"type\":\"directory\",\"size\":4096}]}",
+          "is_error": false,
+          "writes": {},
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "no_writes_at_all",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "disallowed_paths_only",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "mixed_allowed_and_disallowed",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/ok.md",
+            "content": "# ok\n"
+          },
+          "output": "{\"path\":\"memory/ok.md\",\"bytes_written\":5}",
+          "is_error": false,
+          "writes": {
+            "memory/ok.md": "# ok\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "SOUL.md",
+            "content": "# soul\n"
+          },
+          "output": "{\"path\":\"SOUL.md\",\"bytes_written\":7,\"prompt_visible_file\":true,\"protected_file\":true,\"deferred_until_compaction\":true,\"deferred_path\":\"SOUL.md\",\"prompt_reload_required\":true}",
+          "is_error": false,
+          "writes": {
+            "SOUL.md": "# soul\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [
+        "SOUL.md"
+      ],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "delete_is_blocked",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "edit_missing_path",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "edit_in_place_over_seed",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [
+        {
+          "path": "memory/a.md",
+          "content": "# A\nold line\n"
+        }
+      ],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "edits": [
+              {
+                "old_string": "old line",
+                "new_string": "new line"
+              }
+            ]
+          },
+          "output": "{\"path\":\"memory/a.md\",\"replacements_made\":1}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\nnew line\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "edit_in_place_missing_file",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/missing.md",
+            "edits": [
+              {
+                "old_string": "a",
+                "new_string": "b"
+              }
+            ]
+          },
+          "output": "io: file not found: memory/missing.md (pass 'content' instead of 'edits' to create it)",
+          "is_error": true,
+          "writes": {},
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "overwrite_existing_then_archive",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [
+        {
+          "path": "memory/a.md",
+          "content": "# original\n"
+        }
+      ],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# replaced\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":11}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# replaced\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "rollback_restores_on_archive_failure",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": true,
+      "seed": [
+        {
+          "path": "memory/a.md",
+          "content": "# original\n"
+        }
+      ],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# replaced\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":11}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# replaced\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/b.md",
+            "content": "# new\n"
+          },
+          "output": "{\"path\":\"memory/b.md\",\"bytes_written\":6}",
+          "is_error": false,
+          "writes": {
+            "memory/b.md": "# new\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": "conversation: simulated archive failure",
+      "messages_ref": "set1"
+    },
+    {
+      "name": "dry_run_records_preview",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": true,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "dry_run_in_place_edit_has_no_preview_body",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": true,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "dry_run_blocks_git",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": true,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "dry_run_without_store",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": true,
+      "with_store": false,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "live_without_store_fails",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": false,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": "markdown store: markdown memory store not available",
+      "messages_ref": "set1"
+    },
+    {
+      "name": "empty_messages",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": "insufficient messages",
+      "messages_ref": "set2"
+    },
+    {
+      "name": "fewer_than_keep_recent_turns",
+      "keep_recent_turns": 5,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": "insufficient messages",
+      "messages_ref": "set3"
+    },
+    {
+      "name": "keep_zero_archives_everything",
+      "keep_recent_turns": 0,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/daily/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/daily/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/daily/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "keep_turns_override_beats_config",
+      "keep_recent_turns": 2,
+      "keep_turns_override": 4,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/daily/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/daily/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/daily/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set4"
+    },
+    {
+      "name": "keep_zero_retains_autonomous_tail",
+      "keep_recent_turns": 0,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": true,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/daily/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/daily/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/daily/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set5"
+    },
+    {
+      "name": "keep_zero_without_retain_archives_autonomous_tail",
+      "keep_recent_turns": 0,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/daily/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/daily/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/daily/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set6"
+    },
+    {
+      "name": "only_autonomous_tail_is_insufficient",
+      "keep_recent_turns": 0,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": true,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": "insufficient messages",
+      "messages_ref": "set7"
+    },
+    {
+      "name": "cap_zero_rounds",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": 0,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "cap_one_round",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": 1,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "cap_two_rounds_model_stops_first",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": 2,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "two_rounds_uncapped",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/b.md",
+            "content": "# B\n"
+          },
+          "output": "{\"path\":\"memory/b.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/b.md": "# B\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "llm_exhausted",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": "llm: scripted LLM exhausted",
+      "messages_ref": "set1"
+    },
+    {
+      "name": "git_commit_allowed_live",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "git",
+          "input": {
+            "subcommand": "add",
+            "args": [
+              "memory/a.md"
+            ]
+          },
+          "output": "{\"subcommand\":\"add\",\"args\":[\"memory/a.md\"],\"exit_code\":0,\"stdout\":\"\",\"stderr\":\"\"}",
+          "is_error": false,
+          "writes": {},
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "unknown_tool_passes_through",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "roll_dice",
+          "input": {
+            "notation": "1d1"
+          },
+          "output": "{\"notation\":\"1d1\",\"rolls\":[1],\"total\":1}",
+          "is_error": false,
+          "writes": {},
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "write_tool_is_not_write_like",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "write",
+          "input": {
+            "path": "DREAMS.md",
+            "content": "x"
+          },
+          "output": "write: not yet implemented",
+          "is_error": true,
+          "writes": {},
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "edit_with_non_string_path",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "edit_with_non_string_content",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": 42
+          },
+          "output": "invalid args: missing required field: pass 'content' to write a whole file, or 'edits' to replace text within one",
+          "is_error": true,
+          "writes": {},
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "dry_run_edit_with_non_string_content",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": true,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "symlink_escape_is_rejected",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [
+        {
+          "link": "memory/link",
+          "target": "<outside>"
+        }
+      ],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "edit_over_a_directory",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [
+        {
+          "path": "memory/sub/keep.md",
+          "content": "kept\n"
+        }
+      ],
+      "seed_dirs": [
+        "memory/sub"
+      ],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "workspace_root_mismatch",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": true,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": "markdown store: workspace root mismatch: store=<root>/other tool_ctx=<root>/workspace",
+      "messages_ref": "set1"
+    },
+    {
+      "name": "index_plus_other_file",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "MEMORY.md",
+            "content": "# Index\n"
+          },
+          "output": "{\"path\":\"MEMORY.md\",\"bytes_written\":8,\"prompt_visible_file\":true,\"deferred_until_compaction\":true,\"deferred_path\":\"MEMORY.md\",\"prompt_reload_required\":true}",
+          "is_error": false,
+          "writes": {
+            "MEMORY.md": "# Index\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [
+        "MEMORY.md"
+      ],
+      "deferred_queued_paths": [
+        "MEMORY.md"
+      ],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "other_file_only_queues_nothing",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# A\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":4}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# A\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "SOUL.md",
+            "content": "# soul\n"
+          },
+          "output": "{\"path\":\"SOUL.md\",\"bytes_written\":7,\"prompt_visible_file\":true,\"protected_file\":true,\"deferred_until_compaction\":true,\"deferred_path\":\"SOUL.md\",\"prompt_reload_required\":true}",
+          "is_error": false,
+          "writes": {
+            "SOUL.md": "# soul\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [
+        "SOUL.md"
+      ],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "rollback_two_rounds_same_path",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": true,
+      "seed": [
+        {
+          "path": "memory/a.md",
+          "content": "# original\n"
+        }
+      ],
+      "seed_dirs": [],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# first\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":8}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# first\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "memory/a.md",
+            "content": "# second\n"
+          },
+          "output": "{\"path\":\"memory/a.md\",\"bytes_written\":9}",
+          "is_error": false,
+          "writes": {
+            "memory/a.md": "# second\n"
+          },
+          "deletes": []
+        }
+      ],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": "conversation: simulated archive failure",
+      "messages_ref": "set1"
+    },
+    {
+      "name": "symlink_escape_only",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [],
+      "seed_dirs": [],
+      "seed_links": [
+        {
+          "link": "memory/link",
+          "target": "<outside>"
+        }
+      ],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    },
+    {
+      "name": "edit_over_a_directory_only",
+      "keep_recent_turns": 2,
+      "keep_turns_override": null,
+      "retain_trailing_autonomous": false,
+      "dry_run": false,
+      "with_store": true,
+      "max_tool_iterations": null,
+      "archive_fails": false,
+      "seed": [
+        {
+          "path": "memory/sub/keep.md",
+          "content": "kept\n"
+        }
+      ],
+      "seed_dirs": [
+        "memory/sub"
+      ],
+      "seed_links": [],
+      "store_elsewhere": false,
+      "config_dir_set": false,
+      "with_data_dir": true,
+      "dispatches": [],
+      "deferred_via_ctx": [],
+      "deferred_queued_paths": [],
+      "error": null,
+      "messages_ref": "set1"
+    }
+  ],
+  "pass_message_sets": {
+    "set1": [
+      {
+        "role": "user",
+        "content": "Message 0",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 1",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "user",
+        "content": "Message 2",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 3",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "user",
+        "content": "Message 4",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 5",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      }
+    ],
+    "set2": [],
+    "set3": [
+      {
+        "role": "user",
+        "content": "Message 0",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 1",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      }
+    ],
+    "set4": [
+      {
+        "role": "user",
+        "content": "Message 0",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 1",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "user",
+        "content": "Message 2",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 3",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "user",
+        "content": "Message 4",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 5",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "user",
+        "content": "Message 6",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 7",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "user",
+        "content": "Message 8",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "Message 9",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      }
+    ],
+    "set5": [
+      {
+        "role": "user",
+        "content": "hi",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "hello",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "user",
+        "content": "more",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "sure",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "still there?",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": true
+      }
+    ],
+    "set6": [
+      {
+        "role": "user",
+        "content": "hi",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "hello",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": false
+      },
+      {
+        "role": "assistant",
+        "content": "still there?",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": true
+      }
+    ],
+    "set7": [
+      {
+        "role": "assistant",
+        "content": "a",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": true
+      },
+      {
+        "role": "assistant",
+        "content": "b",
+        "timestamp": "2026-03-25T10:00:00Z",
+        "is_tool_result_only": false,
+        "is_autonomous": true
+      }
+    ]
+  }
+}

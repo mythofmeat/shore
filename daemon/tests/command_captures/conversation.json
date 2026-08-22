@@ -1,0 +1,2401 @@
+{
+  "$shared": {
+    "s0": [
+      {
+        "content": "A",
+        "content_blocks": [
+          {
+            "text": "A",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m1",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "B",
+        "content_blocks": [
+          {
+            "text": "B",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m2",
+        "role": "assistant",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "C",
+        "content_blocks": [
+          {
+            "text": "C",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m3",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "D",
+        "content_blocks": [
+          {
+            "text": "D",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m4",
+        "role": "assistant",
+        "timestamp": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "s1": {
+      "content": "checking",
+      "content_blocks": [
+        {
+          "text": "checking",
+          "type": "text"
+        },
+        {
+          "id": "t1",
+          "input": {
+            "path": "notes.md"
+          },
+          "name": "read_file",
+          "type": "tool_use"
+        }
+      ],
+      "images": [],
+      "msg_id": "m2",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s2": {
+      "content": "file contents",
+      "content_blocks": [
+        {
+          "content": "file contents",
+          "is_error": false,
+          "tool_use_id": "t1",
+          "type": "tool_result"
+        }
+      ],
+      "images": [],
+      "msg_id": "m3",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s3": {
+      "content": "checking\ndone",
+      "content_blocks": [
+        {
+          "text": "checking",
+          "type": "text"
+        },
+        {
+          "id": "t1",
+          "input": {
+            "path": "notes.md"
+          },
+          "name": "read_file",
+          "type": "tool_use"
+        },
+        {
+          "content": "file contents",
+          "is_error": false,
+          "tool_use_id": "t1",
+          "type": "tool_result"
+        },
+        {
+          "text": "done",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m4",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s4": {
+      "content": "archived image",
+      "content_blocks": [
+        {
+          "text": "archived image",
+          "type": "text"
+        }
+      ],
+      "images": [
+        {
+          "caption": "old",
+          "path": "<tmp>/pic.bin"
+        }
+      ],
+      "msg_id": "m1",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s5": {
+      "content": "active image",
+      "content_blocks": [
+        {
+          "text": "active image",
+          "type": "text"
+        }
+      ],
+      "images": [
+        {
+          "caption": "new",
+          "path": "<tmp>/pic.bin"
+        }
+      ],
+      "msg_id": "m2",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s6": [
+      {
+        "content": "Prompt",
+        "content_blocks": [
+          {
+            "text": "Prompt",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "u1",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "alt_count": 3,
+        "alt_index": 2,
+        "alternatives": [
+          {
+            "content": "one",
+            "content_blocks": [
+              {
+                "text": "one",
+                "type": "text"
+              }
+            ],
+            "images": [],
+            "timestamp": "2026-01-01T00:00:00Z"
+          },
+          {
+            "content": "two",
+            "content_blocks": [
+              {
+                "text": "two",
+                "type": "text"
+              }
+            ],
+            "images": [],
+            "timestamp": "2026-01-01T00:00:01Z"
+          },
+          {
+            "content": "three",
+            "content_blocks": [
+              {
+                "text": "three",
+                "type": "text"
+              }
+            ],
+            "images": [],
+            "timestamp": "2026-01-01T00:00:02Z"
+          }
+        ],
+        "content": "Third",
+        "content_blocks": [
+          {
+            "text": "Third",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "a2",
+        "role": "assistant",
+        "timestamp": "2026-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "log paging over a flat conversation",
+      "archived": [],
+      "active": {
+        "$ref": "s0"
+      },
+      "files": [],
+      "steps": [
+        {
+          "op": "log",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 2
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 0
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 99
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": 0
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": 99
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 3,
+            "turns": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "role": "user"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "role": "assistant"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "role": "system"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "role": "character"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "role must be one of user, assistant, or system"
+          }
+        },
+        {
+          "op": "log",
+          "args": {
+            "role": null
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "role must be one of user, assistant, or system"
+          }
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 2,
+            "role": "user"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 1.5
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": -1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": 2.5
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": -1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 2,
+            "turns": 1.5
+          },
+          "history_pushes": 0
+        }
+      ],
+      "note": "no segments: active_start is 0 and every message is active tail"
+    },
+    {
+      "name": "log over an empty conversation",
+      "archived": [],
+      "active": [],
+      "files": [],
+      "steps": [
+        {
+          "op": "log",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": "active"
+          },
+          "history_pushes": 0
+        }
+      ]
+    },
+    {
+      "name": "log and history_page across a segment boundary",
+      "archived": [
+        {
+          "msg_id": "m1",
+          "role": "user",
+          "content": "archived one",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "archived one"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "m2",
+          "role": "assistant",
+          "content": "archived two",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "archived two"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "active": [
+        {
+          "msg_id": "m3",
+          "role": "user",
+          "content": "active three",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "active three"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "m4",
+          "role": "assistant",
+          "content": "active four",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "active four"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "initial_display_history": [
+        {
+          "content": "archived one",
+          "content_blocks": [
+            {
+              "text": "archived one",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "archived two",
+          "content_blocks": [
+            {
+              "text": "archived two",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "active three",
+          "content_blocks": [
+            {
+              "text": "active three",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "active four",
+          "content_blocks": [
+            {
+              "text": "active four",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m4",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "steps": [
+        {
+          "op": "log",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 3
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 3,
+            "role": "assistant"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": "active"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": "active",
+            "turns": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": 3
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": 0
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": 99
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": "somewhere"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "before must be \"active\" or a message cursor"
+          }
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": -1
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "before must be \"active\" or a message cursor"
+          }
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": "active",
+            "count": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "turns": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "count": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": 1.5
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "before must be \"active\" or a message cursor"
+          }
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 4,
+            "role": "assistant"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 4,
+            "role": "user"
+          },
+          "history_pushes": 0
+        }
+      ],
+      "note": "two archived, two active: active_start and global_active_start diverge from 0"
+    },
+    {
+      "name": "tool-loop messages are merged before paging",
+      "archived": [],
+      "active": [
+        {
+          "content": "do the thing",
+          "content_blocks": [
+            {
+              "text": "do the thing",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "$ref": "s1"
+        },
+        {
+          "$ref": "s2"
+        },
+        {
+          "msg_id": "m4",
+          "role": "assistant",
+          "content": "done",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "done"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "thanks",
+          "content_blocks": [
+            {
+              "text": "thanks",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m5",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "any time",
+          "content_blocks": [
+            {
+              "text": "any time",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m6",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "initial_display_history": [
+        {
+          "content": "do the thing",
+          "content_blocks": [
+            {
+              "text": "do the thing",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "$ref": "s3"
+        },
+        {
+          "content": "thanks",
+          "content_blocks": [
+            {
+              "text": "thanks",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m5",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "any time",
+          "content_blocks": [
+            {
+              "text": "any time",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m6",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "steps": [
+        {
+          "op": "log",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": 2
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "count": 2
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "last"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "2"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "last",
+            "role": "user"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "1",
+            "role": "assistant"
+          },
+          "history_pushes": 0
+        }
+      ],
+      "note": "the merge consumes the tool_result user turn before either counter sees it, so neither `turns` nor `total_turns` counts it \u2014 and the merged assistant carries the CLOSING message's msg_id (m4), not the head's (m2)"
+    },
+    {
+      "name": "an orphan tool_result at the head of a trimmed history",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "m1",
+          "role": "user",
+          "content": "left over from a trimmed loop",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t0",
+              "content": "left over from a trimmed loop",
+              "is_error": false
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "carrying on",
+          "content_blocks": [
+            {
+              "text": "carrying on",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "next",
+          "content_blocks": [
+            {
+              "text": "next",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "initial_display_history": [
+        {
+          "content": "carrying on",
+          "content_blocks": [
+            {
+              "text": "carrying on",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "next",
+          "content_blocks": [
+            {
+              "text": "next",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "steps": [
+        {
+          "op": "log",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "1"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "m1"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "Message not found: m1"
+          }
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "1",
+            "content": "edited"
+          },
+          "history_pushes": 1
+        }
+      ],
+      "note": "the merge drops a tool_result whose tool_use was archived away, so the display list is shorter than the store and every index shifts"
+    },
+    {
+      "name": "a tool_use assistant with no results at all",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "m1",
+          "role": "user",
+          "content": "go",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "go"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "m2",
+          "role": "assistant",
+          "content": "calling",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "calling"
+            },
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "read_file",
+              "input": {
+                "path": "notes.md"
+              }
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "log",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "last"
+          },
+          "history_pushes": 0
+        }
+      ],
+      "note": "the loop opens and immediately ends; the closing branch never runs"
+    },
+    {
+      "name": "image data is embedded for the active tail only",
+      "archived": [
+        {
+          "$ref": "s4"
+        }
+      ],
+      "active": [
+        {
+          "$ref": "s5"
+        }
+      ],
+      "files": [
+        {
+          "name": "pic.bin",
+          "bytes_utf8": "image bytes"
+        }
+      ],
+      "initial_display_history": [
+        {
+          "$ref": "s4"
+        },
+        {
+          "$ref": "s5"
+        }
+      ],
+      "steps": [
+        {
+          "op": "log",
+          "args": {
+            "count": 2
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "history_page",
+          "args": {
+            "before": "active"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "last"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "last",
+            "content": "still clean"
+          },
+          "history_pushes": 1
+        }
+      ],
+      "note": "archived scrollback keeps image refs as labels; the active tail carries bytes"
+    },
+    {
+      "name": "get resolves against the merged, role-filtered list",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "m1",
+          "role": "user",
+          "content": "first user",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "first user"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "m2",
+          "role": "assistant",
+          "content": "first assistant",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "first assistant"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "last user",
+          "content_blocks": [
+            {
+              "text": "last user",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "m4",
+          "role": "assistant",
+          "content": "last assistant",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "last assistant"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "get",
+          "args": {
+            "ref": "last"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "last",
+            "role": "user"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "-1",
+            "role": "user"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "1",
+            "role": "assistant"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "m3"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "m3",
+            "role": "assistant"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "Message not found: m3"
+          }
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "nope"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "Message not found: nope"
+          }
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "last",
+            "role": "system"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "No messages in conversation"
+          }
+        },
+        {
+          "op": "get",
+          "args": {},
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: ref"
+          }
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": 3
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: ref"
+          }
+        }
+      ]
+    },
+    {
+      "name": "edit by every ref form",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "m1",
+          "role": "user",
+          "content": "First",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "First"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "m2",
+          "role": "assistant",
+          "content": "Second",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Second"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "edit",
+          "args": {
+            "ref": "m1",
+            "content": "Edited by id"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "last",
+            "content": "Edited by last"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "-1",
+            "content": "Edited by -1"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "1",
+            "content": "Edited by 1"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "1",
+            "content": ""
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "edit",
+          "args": {},
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: ref"
+          }
+        },
+        {
+          "op": "edit",
+          "args": {
+            "content": "no ref"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: ref"
+          }
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "m1"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: content"
+          }
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "nope",
+            "content": "x"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "message not found: nope"
+          }
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "99",
+            "content": "x"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "Message index 99 out of range (conversation has 2 messages)"
+          }
+        }
+      ],
+      "note": "each step's engine snapshot shows the edit landed on the raw store by msg_id"
+    },
+    {
+      "name": "edit resolves against the merged list, not the raw one",
+      "archived": [],
+      "active": [
+        {
+          "content": "do the thing",
+          "content_blocks": [
+            {
+              "text": "do the thing",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "$ref": "s1"
+        },
+        {
+          "$ref": "s2"
+        },
+        {
+          "msg_id": "m4",
+          "role": "assistant",
+          "content": "done",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "done"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "initial_display_history": [
+        {
+          "content": "do the thing",
+          "content_blocks": [
+            {
+              "text": "do the thing",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "$ref": "s3"
+        }
+      ],
+      "steps": [
+        {
+          "op": "edit",
+          "args": {
+            "ref": "2",
+            "content": "merged edit"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "edit",
+          "args": {
+            "ref": "last",
+            "content": "merged last"
+          },
+          "history_pushes": 1
+        }
+      ],
+      "note": "the merge folds the tool loop into one assistant turn, so `2` is the merged assistant \u2014 and the edit lands on the CLOSING message m4, because that is the msg_id the merged message carries. m2, the message that opened the loop, is unreachable by relative ref"
+    },
+    {
+      "name": "delete",
+      "archived": [],
+      "active": {
+        "$ref": "s0"
+      },
+      "files": [],
+      "steps": [
+        {
+          "op": "delete",
+          "args": {
+            "refs": [
+              "m1"
+            ]
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "delete",
+          "args": {
+            "refs": "last"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "delete",
+          "args": {
+            "refs": [
+              "m2",
+              "nope"
+            ]
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "message not found: nope"
+          }
+        },
+        {
+          "op": "delete",
+          "args": {},
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: refs"
+          }
+        },
+        {
+          "op": "delete",
+          "args": {
+            "refs": [
+              1
+            ]
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "refs must be an array of strings"
+          }
+        },
+        {
+          "op": "delete",
+          "args": {
+            "refs": []
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "delete",
+          "args": {
+            "refs": 3
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: refs"
+          }
+        },
+        {
+          "op": "delete",
+          "args": {
+            "refs": [
+              "99"
+            ]
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "Message index 99 out of range (conversation has 2 messages)"
+          }
+        }
+      ],
+      "note": "refs resolve first, then delete runs in order \u2014 a failure mid-list keeps the deletions that already happened"
+    },
+    {
+      "name": "delete resolves every ref before deleting any",
+      "archived": [],
+      "active": [
+        {
+          "content": "A",
+          "content_blocks": [
+            {
+              "text": "A",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "B",
+          "content_blocks": [
+            {
+              "text": "B",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "C",
+          "content_blocks": [
+            {
+              "text": "C",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "delete",
+          "args": {
+            "refs": [
+              "last",
+              "-2"
+            ]
+          },
+          "history_pushes": 2
+        }
+      ],
+      "note": "both refs are relative; the second resolves against the pre-delete list, so `last` and `-2` name two different messages rather than shifting"
+    },
+    {
+      "name": "alternatives",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "u1",
+          "role": "user",
+          "content": "Prompt",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Prompt"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "a2",
+          "role": "assistant",
+          "content": "Second answer",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Second answer"
+            }
+          ],
+          "alt_index": 1,
+          "alt_count": 2,
+          "alternatives": [
+            {
+              "content": "First answer",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "text",
+                  "text": "First answer"
+                }
+              ],
+              "timestamp": "2026-01-01T00:00:00Z"
+            },
+            {
+              "content": "Second answer",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "text",
+                  "text": "Second answer"
+                }
+              ],
+              "timestamp": "2026-01-01T00:00:01Z"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "list_alternatives",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "list_alternatives",
+          "args": {
+            "ref": "a2"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "list_alternatives",
+          "args": {
+            "ref": "last"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "list_alternatives",
+          "args": {
+            "ref": "u1"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Alternate response selection only applies to assistant messages"
+          }
+        },
+        {
+          "op": "list_alternatives",
+          "args": {
+            "ref": "1"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Alternate response selection only applies to assistant messages"
+          }
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "prev"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "prev"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "next"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "next"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "first"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "last"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "previous"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "sideways"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "unknown alt direction: sideways"
+          }
+        },
+        {
+          "op": "alt",
+          "args": {},
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "index": 0
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "index": 1
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "index": 2
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "alternate index 3 out of range (message has 2 alternate response(s))"
+          }
+        },
+        {
+          "op": "alt",
+          "args": {
+            "position": 1
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "position": 2
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "position": 0
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "alternate position 0 out of range (message has 2 alternate response(s))"
+          }
+        },
+        {
+          "op": "alt",
+          "args": {
+            "position": 3
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "alternate position 3 out of range (message has 2 alternate response(s))"
+          }
+        },
+        {
+          "op": "alt",
+          "args": {
+            "index": 0,
+            "position": 2,
+            "direction": "last"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "position": 1,
+            "direction": "last"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "index": 0.5
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "index": -1
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "position": 1.5
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "alt",
+          "args": {
+            "ref": "u1",
+            "direction": "next"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Alternate response selection only applies to assistant messages"
+          }
+        },
+        {
+          "op": "list_alternatives",
+          "args": {},
+          "history_pushes": 0
+        }
+      ]
+    },
+    {
+      "name": "two assistant messages, only the older one has alternatives",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "u1",
+          "role": "user",
+          "content": "first",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "first"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "a1",
+          "role": "assistant",
+          "content": "old B",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "old B"
+            }
+          ],
+          "alt_index": 1,
+          "alt_count": 2,
+          "alternatives": [
+            {
+              "content": "old A",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "text",
+                  "text": "old A"
+                }
+              ],
+              "timestamp": "2026-01-01T00:00:00Z"
+            },
+            {
+              "content": "old B",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "text",
+                  "text": "old B"
+                }
+              ],
+              "timestamp": "2026-01-01T00:00:01Z"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "u2",
+          "role": "user",
+          "content": "second",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "second"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "a2",
+          "role": "assistant",
+          "content": "newest, no alternates",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "newest, no alternates"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "list_alternatives",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "list_alternatives",
+          "args": {
+            "ref": "last"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "list_alternatives",
+          "args": {
+            "ref": "a1"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "prev"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "message a2 has no alternate responses"
+          }
+        },
+        {
+          "op": "alt",
+          "args": {
+            "ref": "a1",
+            "direction": "prev"
+          },
+          "history_pushes": 1
+        }
+      ],
+      "note": "the newest assistant is what an absent ref means, and it is not the one with alternates \u2014 so a scan that ran forwards would land on the wrong message and succeed"
+    },
+    {
+      "name": "alternatives with an out-of-range stored alt_index",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "u1",
+          "role": "user",
+          "content": "Prompt",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Prompt"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "a2",
+          "role": "assistant",
+          "content": "Third",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Third"
+            }
+          ],
+          "alt_index": 7,
+          "alt_count": 3,
+          "alternatives": [
+            {
+              "content": "one",
+              "content_blocks": [
+                {
+                  "text": "one",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:00Z"
+            },
+            {
+              "content": "two",
+              "content_blocks": [
+                {
+                  "text": "two",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:01Z"
+            },
+            {
+              "content": "three",
+              "content_blocks": [
+                {
+                  "text": "three",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:02Z"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "initial_messages": {
+        "$ref": "s6"
+      },
+      "initial_display_history": {
+        "$ref": "s6"
+      },
+      "steps": [
+        {
+          "op": "list_alternatives",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "prev"
+          },
+          "history_pushes": 1
+        }
+      ],
+      "note": "alt_index is clamped to count-1 before `prev`/`next` move from it"
+    },
+    {
+      "name": "alternatives on a message that has none",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "u1",
+          "role": "user",
+          "content": "Prompt",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Prompt"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "a2",
+          "role": "assistant",
+          "content": "Only answer",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Only answer"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "list_alternatives",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "next"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "message a2 has no alternate responses"
+          }
+        },
+        {
+          "op": "alt",
+          "args": {
+            "index": 0
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "message a2 has no alternate responses"
+          }
+        }
+      ]
+    },
+    {
+      "name": "alternatives when no assistant message exists",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "u1",
+          "role": "user",
+          "content": "Prompt",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Prompt"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "list_alternatives",
+          "args": {},
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "No assistant messages in conversation"
+          }
+        },
+        {
+          "op": "alt",
+          "args": {
+            "direction": "next"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "No assistant messages in conversation"
+          }
+        },
+        {
+          "op": "list_alternatives",
+          "args": {
+            "ref": "last"
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "not_found",
+            "message": "No assistant messages in conversation"
+          }
+        }
+      ]
+    },
+    {
+      "name": "alternatives carry image bytes",
+      "archived": [],
+      "active": [
+        {
+          "msg_id": "u1",
+          "role": "user",
+          "content": "Prompt",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Prompt"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "msg_id": "a2",
+          "role": "assistant",
+          "content": "Second",
+          "images": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Second"
+            }
+          ],
+          "alt_index": 1,
+          "alt_count": 2,
+          "alternatives": [
+            {
+              "content": "First",
+              "images": [
+                {
+                  "path": "<tmp>/pic.bin",
+                  "caption": "alt one"
+                }
+              ],
+              "content_blocks": [
+                {
+                  "type": "text",
+                  "text": "First"
+                }
+              ],
+              "timestamp": "2026-01-01T00:00:00Z"
+            },
+            {
+              "content": "Second",
+              "images": [],
+              "content_blocks": [
+                {
+                  "type": "text",
+                  "text": "Second"
+                }
+              ],
+              "timestamp": "2026-01-01T00:00:01Z"
+            }
+          ],
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [
+        {
+          "name": "pic.bin",
+          "bytes_utf8": "image bytes"
+        }
+      ],
+      "steps": [
+        {
+          "op": "list_alternatives",
+          "args": {},
+          "history_pushes": 0
+        }
+      ],
+      "note": "list_alternatives embeds data into each alternative's images, unlike archived scrollback"
+    },
+    {
+      "name": "inject_system",
+      "archived": [],
+      "active": [
+        {
+          "content": "A",
+          "content_blocks": [
+            {
+              "text": "A",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "inject_system",
+          "args": {
+            "text": "Stop using actions"
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "inject_system",
+          "args": {},
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: text"
+          }
+        },
+        {
+          "op": "inject_system",
+          "args": {
+            "text": ""
+          },
+          "history_pushes": 1
+        },
+        {
+          "op": "inject_system",
+          "args": {
+            "text": 3
+          },
+          "history_pushes": 0,
+          "err": {
+            "code": "invalid_request",
+            "message": "Missing required argument: text"
+          }
+        },
+        {
+          "op": "log",
+          "args": {},
+          "history_pushes": 0
+        }
+      ],
+      "note": "msg_id and timestamp are generated; the fixture records them as markers"
+    },
+    {
+      "name": "a system message already in history",
+      "archived": [],
+      "active": [
+        {
+          "content": "A",
+          "content_blocks": [
+            {
+              "text": "A",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "be brief",
+          "content_blocks": [
+            {
+              "text": "be brief",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "system",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "ok",
+          "content_blocks": [
+            {
+              "text": "ok",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "files": [],
+      "steps": [
+        {
+          "op": "log",
+          "args": {},
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "role": "system"
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "log",
+          "args": {
+            "turns": 1
+          },
+          "history_pushes": 0
+        },
+        {
+          "op": "get",
+          "args": {
+            "ref": "last",
+            "role": "system"
+          },
+          "history_pushes": 0
+        }
+      ],
+      "note": "role filtering and turn counting both have to see it"
+    }
+  ]
+}

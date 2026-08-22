@@ -1,4 +1,23 @@
+import type { FrameSink } from "../../llm/stream";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
+
+export const COMPACTION_SUBAGENT = "compaction";
+
+export function tagCompactionFrames(sink: FrameSink): FrameSink {
+  return (message) => {
+    switch (message.type) {
+      case "stream_start":
+      case "stream_chunk":
+      case "stream_end":
+      case "tool_call":
+      case "tool_result":
+        sink({ ...message, subagent: COMPACTION_SUBAGENT });
+        return;
+      default:
+        sink(message);
+    }
+  };
+}
 
 export interface ConversationMessage {
   role: string;

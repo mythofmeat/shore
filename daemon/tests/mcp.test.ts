@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./tools_fixtures/mcp.json" with { type: "json" };
+import fixture from "./tools_captures/mcp.json" with { type: "json" };
 import {
   McpRegistry,
   resolveCommand,
@@ -171,7 +171,7 @@ describe("toSpec", () => {
 });
 
 describe("the pinned sort", () => {
-  test("matches the Rust's order exactly", () => {
+  test("lists every tool it knows, in byte order", () => {
     expect(registry.allTools().map((t) => t.full_name)).toEqual(fx.sorted_full_names);
   });
 

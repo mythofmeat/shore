@@ -635,6 +635,8 @@ pub(crate) enum ViewKey {
     Tools,
     /// Nested sub-agent tool activity
     Subagent,
+    /// The compaction pass's own reasoning and tool calls
+    Compaction,
     /// Inline images
     Images,
     /// Per-message metadata line
@@ -652,6 +654,7 @@ impl ViewKey {
             ViewKey::Thinking => "thinking",
             ViewKey::Tools => "tools",
             ViewKey::Subagent => "subagent",
+            ViewKey::Compaction => "compaction",
             ViewKey::Images => "images",
             ViewKey::Metadata => "metadata",
             ViewKey::Usage => "usage",
@@ -670,6 +673,7 @@ impl ViewKey {
             | ViewKey::Thinking
             | ViewKey::Tools
             | ViewKey::Subagent
+            | ViewKey::Compaction
             | ViewKey::Images
             | ViewKey::Metadata => &["on", "off", "toggle"],
         }

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Mutation pass over the conversation command surface (#18 / #12).
 
-#12 requires every parity fixture be mutation-checked. This module's risk is
-concentrated in two places, and neither errors when it is wrong:
+This module's risk is concentrated in two places, and neither errors when it is
+wrong:
 
 - **Reference resolution.** `resolveRef` turns "-1" or "3" into a msg_id. An
   off-by-one resolves to a real, adjacent message, and `edit` then rewrites the
@@ -13,38 +13,36 @@ concentrated in two places, and neither errors when it is wrong:
   is one off makes the client re-request a page it already has, or skip one.
 
 A mutant is KILLED if `bun test tests/conversation.test.ts` fails with it
-applied; a survivor means either the fixture cannot see that decision, or the
+applied; a survivor means either the tests cannot see that decision, or the
 code is equivalent under it.
 
-The first pass was 70/87, the second 79/88, and the fourth is 81/90. Six of the nine first-pass survivors
-were real gaps, and the shape was the usual one — the case was present and
-nothing in it was load-bearing:
+The first pass was 70/87, the second 79/88, and the fifth is 82/91. Six of the
+nine first-pass survivors were real gaps, and the shape was the usual one — the
+case was present and nothing in it was load-bearing:
 
 - **Nothing read history without bounding it.** `history_page` was always called
   with a `before`, so "an absent cursor means the start of the conversation
   rather than the end" changed nothing. Three unbounded calls now cover it.
 - **No conversation was long enough for the default to bound anything.** Every
-  scenario had fewer than 64 user turns, so `pageStartByTurns(…, 64)` and
-  `return 0` agreed. A 66-turn scenario now separates them; that is the shape of
-  every plain `shore log`, and it had no coverage at all.
+  case had fewer than 64 user turns, so `pageStartByTurns(…, 64)` and `return 0`
+  agreed. A generated 66-turn conversation now separates them; that is the shape
+  of every plain `shore log`, and it had no coverage at all.
 - **Nothing passed a non-integer.** `count`, `turns`, `index` and `position` all
-  read through serde's `as_u64`, where `1.5` and `-1` are *absent* rather than
-  errors — so they silently fall through to the next branch. Every argument had
-  been an integer, so the difference between "reject" and "ignore" could not
-  show. Both forms are now passed to each of the four.
+  read through `asU64`, where `1.5` and `-1` are *absent* rather than errors — so
+  they silently fall through to the next branch. Every argument had been an
+  integer, so the difference between "reject" and "ignore" could not show. Both
+  forms are now passed to each of the four.
 - **Two assistant messages, so the backwards scan means something.** Every
-  alternatives scenario had exactly one assistant message, and a scan that ran
+  alternatives case had exactly one assistant message, and a scan that ran
   forwards found the same one.
 - **A filtered page that starts inside the archive.** The local active boundary
   is counted *after* role filtering; with only pages whose archived half was
   entirely one role, filtering it changed no count.
 - **Reading history must not write bytes back into the store.** `log` embeds
-  image data into the page it returns, and the Rust cannot corrupt anything
-  doing it — `display_history` hands out owned clones. TypeScript's merge passes
-  message objects through by reference, so without a copy the base64 lands in
-  the live store and `MessageStore` rewrites `active.jsonl` from those objects.
-  Nothing looked at the engine after a read. A `get` and an `edit` now follow
-  the `log` in the image scenario.
+  image data into the page it returns. The merge passes message objects through
+  by reference, so without a copy the base64 lands in the live store and
+  `MessageStore` rewrites `active.jsonl` from those objects. Nothing looked at
+  the engine after a read; every read now asserts the conversation is unchanged.
 
 The nine remaining survivors are all true equivalents, in three groups:
 
@@ -52,13 +50,13 @@ The nine remaining survivors are all true equivalents, in three groups:
    cursor to the message count and `pageStartByTurns` clamps its end bound to
    the same thing, as do the two in `historyPagePayload`. Removing any one is
    invisible because another catches it; removing the pair *is* caught, which is
-   what the "BOTH redundant clamps" mutant is for. Kept as written — this is the
-   Rust's own `.min()`/`.max()` and each one states a bound that holds.
-2. **Guards on a value the store cannot produce.** `Message::normalize` clamps
-   `alt_index` to `alternatives.len() - 1` on every deserialization, so no
-   conversation on disk can carry an out-of-range one — the fixture writes
-   `alt_index: 7` against three alternatives and the engine loads it as `2`.
-   The clamps in `listAlternatives` and `alt` therefore cannot fire. Likewise
+   what the "BOTH redundant clamps" mutant is for. Kept as written — each one
+   states a bound that holds.
+2. **Guards on a value the store cannot produce.** `Message.normalize` clamps
+   `alt_index` to `alternatives.length - 1` on every load, so no conversation on
+   disk can carry an out-of-range one — a case writes `alt_index: 7` against
+   three alternatives and the engine loads it as `2`. The clamps in
+   `listAlternatives` and `alt` therefore cannot fire. Likewise
    `MessageStore.selectAlt` re-checks `index >= altCount` and raises the
    identical message, so `resolveAltTarget`'s bound is redundant with it.
 3. **`"role" in args` versus `args.role === undefined`.** These differ only for a
@@ -340,6 +338,12 @@ MUTANTS = [
      "    rawRefs = [];"),
     ("delete: refs are resolved lazily, one at a time",
      "  const turns = rawRefs.map((r) => turnMsgIds(raw, resolveRef(merged, r)));\n\n"
+     "  const known = new Set(raw.map((m) => m.msg_id));\n"
+     "  for (const turn of turns) {\n"
+     "    for (const msgId of turn) {\n"
+     "      if (!known.has(msgId)) throw notFound(`message not found: ${msgId}`);\n"
+     "    }\n"
+     "  }\n\n"
      "  const deleted: string[] = [];\n"
      "  const gone = new Set<string>();\n"
      "  for (const turn of turns) {",
@@ -352,6 +356,14 @@ MUTANTS = [
      "    );\n"
      "    void raw;\n"
      "    void merged;"),
+    ("delete: an unknown ref is not noticed until earlier refs are already gone",
+     "  const known = new Set(raw.map((m) => m.msg_id));\n"
+     "  for (const turn of turns) {\n"
+     "    for (const msgId of turn) {\n"
+     "      if (!known.has(msgId)) throw notFound(`message not found: ${msgId}`);\n"
+     "    }\n"
+     "  }\n\n",
+     ""),
     ("delete: a ref names one message rather than the whole turn it sits in",
      "  const turns = rawRefs.map((r) => turnMsgIds(raw, resolveRef(merged, r)));",
      "  const turns = rawRefs.map((r) => [resolveRef(merged, r)]);"),

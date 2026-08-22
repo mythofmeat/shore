@@ -1,0 +1,1251 @@
+{
+  "scenarios": [
+    {
+      "name": "a static catalog, and switching within it",
+      "note": "the config default is deliberately NOT the first catalog entry, so `defaults.model` and the first-entry fallback are distinguishable; the active model then moves as the session does, and each switch is persisted as (provider, model_id) rather than as the name typed",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"beta\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "args": {},
+          "op": "list_models"
+        },
+        {
+          "op": "list_models",
+          "args": {
+            "include_hidden": true
+          }
+        },
+        {
+          "args": {},
+          "op": "model_info"
+        },
+        {
+          "op": "model_info",
+          "args": {
+            "name": "beta"
+          }
+        },
+        {
+          "op": "model_info",
+          "args": {
+            "name": "nope"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"nope\" not found in static catalog or discovered models"
+          }
+        },
+        {
+          "op": "model_info",
+          "args": {
+            "name": ""
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "name": ""
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        },
+        {
+          "op": "switch_model",
+          "args": {}
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "beta"
+          },
+          "prefs_changed": {
+            "character_exists": true,
+            "character.selected.provider": "anthropic",
+            "character.selected.model_id": "beta-id"
+          }
+        },
+        {
+          "args": {},
+          "op": "list_models"
+        },
+        {
+          "args": {},
+          "op": "model_info"
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "nope"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"nope\" not found in static catalog or discovered models"
+          }
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "openai:gamma-id"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"openai:gamma-id\" not found in static catalog or discovered models"
+          }
+        },
+        {
+          "args": {},
+          "op": "list_models"
+        },
+        {
+          "op": "reset_model",
+          "args": {},
+          "prefs_changed": {
+            "character.selected.provider": null,
+            "character.selected.model_id": null
+          }
+        },
+        {
+          "args": {},
+          "op": "list_models"
+        },
+        {
+          "args": {},
+          "op": "model_info"
+        },
+        {
+          "op": "reset_model",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "name": "delta"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "name": "epsilon"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "zai_clear_thinking",
+            "value": true,
+            "name": "delta"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "`zai_clear_thinking` is not applicable to the `anthropic` sdk for this model"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "gemini_generation",
+            "value": 2,
+            "name": "epsilon"
+          },
+          "prefs_changed": {
+            "character.models.gemini:gemini-3.1-pro.gemini_generation": 2
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "reasoning_effort",
+            "value": "max",
+            "name": "epsilon"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "`reasoning_effort` value \"max\" is out of domain; allowed: minimal, low, medium, high"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a model id that two providers both discovered",
+      "note": "the only route to the catalog's Ambiguous error, which is the one kind it reports as a bad request rather than a miss — a bare id has to be unique across every enabled provider's cache",
+      "setup": {
+        "catalog": "\n[chat.anthropic.shared]\nmodel_id = \"a-id\"\nsdk = \"anthropic\"\n\n[chat.openai.shared]\nmodel_id = \"o-id\"\nsdk = \"openai\"\n",
+        "defaults": "[defaults]\n",
+        "discovery": [
+          {
+            "provider": "openrouter",
+            "models": [
+              {
+                "model_id": "shared/id",
+                "visible": true
+              }
+            ]
+          },
+          {
+            "provider": "groq",
+            "models": [
+              {
+                "model_id": "shared/id",
+                "visible": true
+              }
+            ]
+          }
+        ],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "model_info",
+          "args": {
+            "name": "shared/id"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "model name \"shared/id\" is ambiguous across providers: groq:shared/id, openrouter:shared/id"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "name": "shared/id"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "model name \"shared/id\" is ambiguous across providers: groq:shared/id, openrouter:shared/id"
+          }
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "shared/id"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "model name \"shared/id\" is ambiguous across providers: groq:shared/id, openrouter:shared/id"
+          }
+        },
+        {
+          "op": "model_info",
+          "args": {
+            "name": "openrouter:shared/id"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.5,
+            "name": "shared/id"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "model name \"shared/id\" is ambiguous across providers: groq:shared/id, openrouter:shared/id"
+          }
+        },
+        {
+          "op": "model_info",
+          "args": {
+            "name": "shared"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"shared\" not found in static catalog or discovered models"
+          }
+        }
+      ]
+    },
+    {
+      "name": "two catalog names for one model id",
+      "note": "`all` collapses on (provider, model_id) identity, not on qualified_name — these two differ by name and are the same model",
+      "setup": {
+        "catalog": "\n[chat.anthropic.one]\nmodel_id = \"same-id\"\nsdk = \"anthropic\"\n\n[chat.anthropic.two]\nmodel_id = \"same-id\"\nsdk = \"anthropic\"\n",
+        "defaults": "[defaults]\nmodel = \"one\"\n\n[defaults.background]\nheartbeat = \"one\"\ncompaction = \"two\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "all"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.6,
+            "background_task": "all"
+          },
+          "prefs_changed": {
+            "character_exists": true,
+            "character.models.anthropic:same-id.temperature": 0.6
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "compaction"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a background pin that does not resolve",
+      "note": "a diagnostic, so the row echoes the name the user wrote rather than failing — but a settings command targeting that task still errors",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n\n[defaults.background]\nheartbeat = \"ghost\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "heartbeat"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"ghost\" not found in static catalog or discovered models"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "all"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"ghost\" not found in static catalog or discovered models"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a session active_model that resolves nowhere",
+      "note": "list_models still reports it as the active name rather than swallowing it, and every command that must actually resolve it fails",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": "ghost"
+      },
+      "steps": [
+        {
+          "op": "list_models",
+          "args": {}
+        },
+        {
+          "op": "model_info",
+          "args": {}
+        },
+        {
+          "args": {},
+          "op": "model_settings"
+        },
+        {
+          "op": "model_roles",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "name": "a hidden model selected on the session, without a pre-resolved copy",
+      "note": "the fallback resolve passes include_hidden, because the user has already chosen this selection and refusing to describe it would be absurd",
+      "setup": {
+        "catalog": "",
+        "defaults": "[defaults]\n",
+        "discovery": [
+          {
+            "provider": "openrouter",
+            "models": [
+              {
+                "model_id": "vendor/visible",
+                "visible": true
+              },
+              {
+                "model_id": "vendor/hidden",
+                "visible": false
+              }
+            ]
+          }
+        ],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": "openrouter:vendor/hidden"
+      },
+      "steps": [
+        {
+          "op": "list_models",
+          "args": {}
+        },
+        {
+          "op": "model_info",
+          "args": {},
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {},
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "max_output_tokens",
+            "value": 256
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an empty catalog",
+      "note": "nothing resolves, and each command says so in its own words",
+      "setup": {
+        "catalog": "",
+        "defaults": "[defaults]\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "list_models",
+          "args": {}
+        },
+        {
+          "op": "model_info",
+          "args": {},
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {},
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        },
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "alpha"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"alpha\" not found in static catalog or discovered models"
+          }
+        },
+        {
+          "op": "reset_model",
+          "args": {},
+          "prefs_changed": {
+            "character_exists": true
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.5
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        }
+      ]
+    },
+    {
+      "name": "discovered models, some hidden",
+      "note": "`discovery.ignore` hides a model from the list and from selection, and include_hidden is the per-call opt-in past both",
+      "setup": {
+        "catalog": "",
+        "defaults": "[defaults]\n",
+        "discovery": [
+          {
+            "provider": "openrouter",
+            "models": [
+              {
+                "model_id": "vendor/visible",
+                "visible": true
+              },
+              {
+                "model_id": "vendor/hidden",
+                "visible": false
+              }
+            ]
+          }
+        ],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "list_models",
+          "args": {}
+        },
+        {
+          "op": "list_models",
+          "args": {
+            "include_hidden": true
+          }
+        },
+        {
+          "op": "model_info",
+          "args": {
+            "name": "openrouter:vendor/visible"
+          }
+        },
+        {
+          "op": "model_info",
+          "args": {
+            "name": "openrouter:vendor/hidden"
+          }
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "openrouter:vendor/hidden"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"openrouter:vendor/hidden\" is hidden by [providers.openrouter.discovery.ignore]; pass include_hidden=true or update the ignore rules to allow it"
+          }
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "openrouter:vendor/hidden",
+            "include_hidden": true
+          },
+          "prefs_changed": {
+            "character_exists": true,
+            "character.selected.provider": "openrouter",
+            "character.selected.model_id": "vendor/hidden"
+          }
+        },
+        {
+          "op": "list_models",
+          "args": {}
+        },
+        {
+          "op": "model_info",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "reasoning_effort",
+            "value": "high"
+          },
+          "prefs_changed": {
+            "character.models.openrouter:vendor/hidden.reasoning_effort": "high"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "name": "a pre-resolved discovered model on the session",
+      "note": "the dispatcher hands over a ResolvedModel because a discovered model's synthetic qualified_name is display-only and the resolver rejects it as input; every command must read the resolved value rather than re-resolving",
+      "setup": {
+        "catalog": "",
+        "defaults": "[defaults]\n",
+        "discovery": [
+          {
+            "provider": "openrouter",
+            "models": [
+              {
+                "model_id": "vendor/visible",
+                "visible": true
+              }
+            ]
+          }
+        ],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": "chat.openrouter.vendor/visible"
+      },
+      "steps": [
+        {
+          "op": "list_models",
+          "args": {}
+        },
+        {
+          "op": "model_info",
+          "args": {},
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {},
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        },
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "max_output_tokens",
+            "value": 1024
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "No model specified and no active model set"
+          }
+        }
+      ]
+    },
+    {
+      "name": "background pins, per-task and blanket",
+      "note": "heartbeat is pinned per task and compaction falls back to the blanket pin, so `all` cannot collapse and says which task to target instead",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n\n[defaults.background]\nmodel = \"beta\"\nheartbeat = \"gamma\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "heartbeat"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "compaction"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "all"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "background tasks use different models (heartbeat → chat.openai.gamma, compaction → chat.anthropic.beta); target a specific task instead of `all`"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "dreaming"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "unknown background task: dreaming; expected all, heartbeat, or compaction"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "bogus"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "unknown background task: bogus; expected all, heartbeat, or compaction"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.1,
+            "background_task": "heartbeat"
+          },
+          "prefs_changed": {
+            "character_exists": true,
+            "character.models.openai:gamma-id.temperature": 0.1
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.2,
+            "background_task": "all"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "background tasks use different models (heartbeat → chat.openai.gamma, compaction → chat.anthropic.beta); target a specific task instead of `all`"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "heartbeat"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "top_p",
+            "value": 0.3,
+            "background_task": "compaction",
+            "name": "alpha"
+          },
+          "prefs_changed": {
+            "character.models.anthropic:beta-id.top_p": 0.3
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "name": "beta"
+          }
+        }
+      ]
+    },
+    {
+      "name": "background tasks that collapse to one model",
+      "note": "with a single blanket pin and no per-task override, `all` resolves",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n\n[defaults.background]\nmodel = \"beta\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "all"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "budget_tokens",
+            "value": 4096,
+            "background_task": "all"
+          },
+          "prefs_changed": {
+            "character_exists": true,
+            "character.models.anthropic:beta-id.budget_tokens": 4096
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "heartbeat"
+          }
+        }
+      ]
+    },
+    {
+      "name": "no background pins at all",
+      "note": "both tasks inherit the character's active chat model, and the source says so",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "all"
+          }
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "beta"
+          },
+          "prefs_changed": {
+            "character_exists": true,
+            "character.selected.provider": "anthropic",
+            "character.selected.model_id": "beta-id"
+          }
+        },
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "heartbeat"
+          }
+        }
+      ]
+    },
+    {
+      "name": "setting and clearing, in both scopes",
+      "note": "an entry whose sampler is emptied is dropped from the file rather than left behind as an empty table",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "args": {},
+          "op": "model_settings"
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.9
+          },
+          "prefs_changed": {
+            "character_exists": true,
+            "character.models.anthropic:alpha-id.temperature": 0.9
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "budget_tokens",
+            "value": 2048,
+            "name": "beta"
+          },
+          "prefs_changed": {
+            "character.models.anthropic:beta-id.budget_tokens": 2048
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "top_p",
+            "value": 0.8,
+            "scope": "global"
+          },
+          "prefs_changed": {
+            "global_exists": true,
+            "global.models.anthropic:alpha-id.top_p": 0.8
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": null
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "top_p",
+            "value": null,
+            "scope": "global"
+          }
+        },
+        {
+          "args": {},
+          "op": "model_settings"
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "max_output_tokens",
+            "value": 512,
+            "name": "beta"
+          },
+          "prefs_changed": {
+            "character.models.anthropic:beta-id.max_output_tokens": 512
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "name": "beta"
+          }
+        },
+        {
+          "args": {},
+          "op": "model_settings"
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "value": 1
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "missing key"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "max_output_tokens"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "frobnicate",
+            "value": 1
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "unknown setting key: frobnicate; supported: temperature, top_p, reasoning_effort, budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_max, sdk, replay_prior_thinking, max_tool_iterations, openrouter_provider, gemini_generation, zai_clear_thinking, zai_subscription, supports_images"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "  temperature  ",
+            "value": 0.4
+          },
+          "prefs_changed": {
+            "character.models.anthropic:alpha-id.temperature": 0.4
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.4,
+            "scope": "session"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "scope must be \"character\" or \"global\", got \"session\""
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "gemini_generation",
+            "value": 2
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "`gemini_generation` is not applicable to the `anthropic` sdk for this model"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "reasoning_effort",
+            "value": "banana"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "`reasoning_effort` value \"banana\" is out of domain; allowed: adaptive, low, medium, high, xhigh, max"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": "hot"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "temperature must be a number, got \"hot\""
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.4,
+            "name": "nope"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"nope\" not found in static catalog or discovered models"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "name": "settings layered across scopes",
+      "note": "seeded global and character files, so `scopes` reports a different layer per field and `saved_global` / `saved_character` differ from the effective value",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": "[defaults.sampler]\ntemperature = 0.11\ntop_p = 0.22\n\n[models.\"anthropic:alpha-id\"]\ntemperature = 0.33\nbudget_tokens = 1024\n",
+        "character_prefs": "[defaults.sampler]\ntemperature = 0.44\nreasoning_effort = \"low\"\n\n[models.\"anthropic:alpha-id\"]\nmax_output_tokens = 2048\n",
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "model_settings",
+          "args": {}
+        },
+        {
+          "op": "model_info",
+          "args": {}
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "name": "beta"
+          }
+        },
+        {
+          "op": "model_info",
+          "args": {
+            "name": "beta"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": null
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "name": "no character attached",
+      "note": "the characterless commands still answer; the ones that write preferences do not, and `model_settings` reports no saved layers at all",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n",
+        "discovery": [],
+        "character": null,
+        "global_prefs": "[models.\"anthropic:alpha-id\"]\ntemperature = 0.33\n",
+        "character_prefs": null,
+        "active_model": null
+      },
+      "steps": [
+        {
+          "op": "list_models",
+          "args": {}
+        },
+        {
+          "op": "model_roles",
+          "args": {}
+        },
+        {
+          "op": "model_info",
+          "args": {}
+        },
+        {
+          "args": {},
+          "op": "model_settings"
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "beta"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "this command requires an attached character"
+          }
+        },
+        {
+          "op": "switch_model",
+          "args": {
+            "name": "ghost"
+          },
+          "err": {
+            "code": "not_found",
+            "message": "model \"ghost\" not found in static catalog or discovered models"
+          }
+        },
+        {
+          "op": "switch_model",
+          "args": {}
+        },
+        {
+          "op": "reset_model",
+          "args": {},
+          "err": {
+            "code": "invalid_request",
+            "message": "this command requires an attached character"
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.7,
+            "scope": "global"
+          },
+          "prefs_changed": {
+            "global.models.anthropic:alpha-id.temperature": 0.7
+          }
+        },
+        {
+          "op": "set_model_setting",
+          "args": {
+            "key": "temperature",
+            "value": 0.7
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "this command requires an attached character"
+          }
+        },
+        {
+          "op": "model_settings",
+          "args": {
+            "background_task": "all"
+          },
+          "err": {
+            "code": "invalid_request",
+            "message": "this command requires an attached character"
+          }
+        },
+        {
+          "args": {},
+          "op": "model_settings"
+        }
+      ]
+    },
+    {
+      "name": "a session active_model that is not the config default",
+      "note": "the string on the session wins over `defaults.model`, and an unresolvable one is still reported as the active name rather than swallowed",
+      "setup": {
+        "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
+        "defaults": "[defaults]\nmodel = \"alpha\"\n",
+        "discovery": [],
+        "character": "Tester",
+        "global_prefs": null,
+        "character_prefs": null,
+        "active_model": "beta"
+      },
+      "steps": [
+        {
+          "op": "list_models",
+          "args": {}
+        },
+        {
+          "op": "model_info",
+          "args": {}
+        },
+        {
+          "args": {},
+          "op": "model_settings"
+        },
+        {
+          "op": "switch_model",
+          "args": {}
+        }
+      ]
+    }
+  ]
+}

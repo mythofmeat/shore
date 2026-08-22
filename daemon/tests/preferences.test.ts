@@ -1,3 +1,4 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterAll, describe, expect, test } from "bun:test";
@@ -5,7 +6,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import fixture from "./config_fixtures/preferences.json" with { type: "json" };
+import rawFixture from "./config_captures/preferences.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { catalogFromSections, defaultSdk, type ResolvedModel } from "../src/config/models.ts";
 import {
@@ -88,7 +90,7 @@ interface ResolveRow {
   model_id: string;
   use_static: boolean;
   settings: Record<string, unknown>;
-  scopes: string;
+  scopes: Record<string, string>;
   selected: [string, string] | null;
   patched: Record<string, unknown> | null;
 }
@@ -136,7 +138,7 @@ const fx = fixture as unknown as {
 
 const roots: string[] = [];
 function tempRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), "prefs-parity-"));
+  const dir = mkdtempSync(join(tmpdir(), "prefs-"));
   roots.push(dir);
   return dir;
 }
@@ -214,14 +216,36 @@ function semanticTail(message: string): string {
   return last.replace(/^failed to parse .*?: /, "");
 }
 
-function parseScopes(debug: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [, field, scope] of debug.matchAll(/(\w+): Some\((\w+)\)/g)) {
-    out[field as string] = (scope as string)
-      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-      .toLowerCase();
+function expectOnlyWhatIsSet(
+  actual: Record<string, unknown>,
+  recorded: Record<string, unknown>,
+  where: string,
+): void {
+  expect(
+    Object.fromEntries(Object.entries(actual).filter(([, v]) => v !== null)),
+    where,
+  ).toEqual(recorded);
+  for (const [field, value] of Object.entries(actual)) {
+    if (field in recorded) continue;
+    expect(value, `${where}: ${field} is unset, because nothing set it`).toBeNull();
   }
-  return out;
+}
+
+function expectOnlyWhatIsSetDeep(
+  actual: Record<string, unknown>,
+  recorded: Record<string, unknown>,
+  where: string,
+): void {
+  const prune = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(prune);
+    if (typeof value !== "object" || value === null) return value;
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, v]) => v !== null)
+        .map(([k, v]) => [k, prune(v)]),
+    );
+  };
+  expect(prune(actual), where).toEqual(recorded);
 }
 
 const SCOPE_TOML_KEYS: Record<string, string> = {
@@ -394,7 +418,11 @@ describe("loadPreferences", () => {
       }
 
       const prefs = loadPreferences(path);
-      expect(prefsToWire(prefs)).toEqual(row.parsed as Record<string, unknown>);
+      expectOnlyWhatIsSetDeep(
+        prefsToWire(prefs),
+        row.parsed as Record<string, unknown>,
+        `${row.name}: what the preference file says`,
+      );
       expect([...prefs.models.keys()]).toEqual(row.model_keys as string[]);
       expect(preferencesAreEmpty(prefs)).toBe(row.is_empty as boolean);
       expect(selectionKey(prefs.selected) ?? null).toBe(row.selected_key ?? null);
@@ -455,7 +483,11 @@ describe("resolveSamplerSettings", () => {
         row.model_id,
         staticModel,
       );
-      expect(samplerToWire(settings)).toEqual(row.settings);
+      expectOnlyWhatIsSet(
+        samplerToWire(settings),
+        row.settings,
+        `${row.name}: the sampler settings that survive the layers`,
+      );
 
       const scopes = resolveSamplerScopes(
         global,
@@ -468,13 +500,15 @@ describe("resolveSamplerSettings", () => {
       for (const [field, scope] of Object.entries(scopes)) {
         if (scope !== undefined) wireScopes[SCOPE_TOML_KEYS[field] as string] = scope;
       }
-      expect(wireScopes).toEqual(parseScopes(row.scopes));
+      expect(wireScopes, `${row.name}: which layer each setting came from`).toEqual(row.scopes);
 
       expect(resolveSelectedModel(global, character) ?? null).toEqual(row.selected);
 
       if (staticModel !== undefined) {
-        expect(modelToWire(applySamplerOverlay(staticModel, settings))).toEqual(
+        expectOnlyWhatIsSet(
+          modelToWire(applySamplerOverlay(staticModel, settings)),
           row.patched as Record<string, unknown>,
+          `${row.name}: the model the overlay produces`,
         );
       }
     });
@@ -574,9 +608,19 @@ describe("findEffectiveModel", () => {
           const error = catchError(EffectiveCatalogError, run);
           expect(error.message).toBe(lookup.err);
         } else {
-          expect(modelToWire(run())).toEqual(
-            lookup.resolved as Record<string, unknown>,
-          );
+          const wire = modelToWire(run());
+          const recorded = lookup.resolved as Record<string, unknown>;
+          expect(
+            Object.fromEntries(Object.entries(wire).filter(([, v]) => v !== null)),
+            `${lookup.name}: what the catalog resolved it to`,
+          ).toEqual(recorded);
+          for (const [field, value] of Object.entries(wire)) {
+            if (field in recorded) continue;
+            expect(
+              value,
+              `${lookup.name}: ${field} is unset, because nothing in the config set it`,
+            ).toBeNull();
+          }
         }
       }
 

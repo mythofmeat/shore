@@ -21,7 +21,9 @@ import {
   PathError,
   resolvePath,
 } from "../../tools/workspace_path";
+import type { FrameSink } from "../../llm/stream.ts";
 import {
+  COMPACTION_SUBAGENT,
   CompactionError,
   type AppliedCompactionWrite,
   type CompactionLlm,
@@ -166,9 +168,8 @@ export function archiveSplitIndex(
 }
 
 export function writeAllowedPath(path: string): boolean {
-  let normalized = rustTrim(path);
+  let normalized = rustTrim(path).replaceAll("\\", "/");
   while (normalized.startsWith("./")) normalized = normalized.slice(2);
-  normalized = normalized.replaceAll("\\", "/");
 
   for (const component of pathComponents(normalized)) {
     if (component === ".." || component === "/") return false;
@@ -319,6 +320,7 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
     dryRun: boolean,
     restored: ToolLoopState | undefined,
     private readonly persist: (state: ToolLoopState, request: SidecarRequest) => Promise<void>,
+    private readonly emit: FrameSink = () => {},
   ) {
     this.state = restored ?? {
       writesApplied: [],
@@ -343,6 +345,12 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
   }
 
   async callModel(): Promise<GenerateResponse> {
+    this.emit({
+      type: "phase",
+      rid: null,
+      phase: `compacting round ${String(this.state.toolRounds + 1)}`,
+      model: null,
+    });
     const resp = await this.llm.generate(this.request);
     if (hitTokenCeiling(resp.finish_reason)) {
       this.state.truncatedTurns = (this.state.truncatedTurns ?? 0) + 1;
@@ -365,6 +373,15 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
     for (let i = this.state.pendingUseCount; i < uses.length; i += 1) {
       const use = required(uses[i]);
       this.state.toolsCalled.push(use.name);
+      this.emit({
+        type: "tool_call",
+        rid: null,
+        tool_id: use.id,
+        tool_name: use.name,
+        input: use.input,
+        subagent: COMPACTION_SUBAGENT,
+        task_id: null,
+      });
       const result = await dispatchCompactionTool(
         use.name,
         use.input,
@@ -373,6 +390,16 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
         this.state,
       );
       const { output, isError } = result;
+      this.emit({
+        type: "tool_result",
+        rid: null,
+        tool_id: use.id,
+        tool_name: use.name,
+        output,
+        is_error: isError,
+        subagent: COMPACTION_SUBAGENT,
+        task_id: null,
+      });
       this.state.pendingResults.push(result);
       this.state.pendingUseCount = i + 1;
       this.#pending.push({
@@ -404,8 +431,18 @@ async function runCompactionToolLoop(
   dryRun: boolean,
   restored: ToolLoopState | undefined,
   persist: (state: ToolLoopState, request: SidecarRequest) => Promise<void>,
+  emit?: FrameSink,
 ): Promise<ToolLoopState> {
-  const driver = new CompactionDriver(llm, request, tools, workspaceDir, dryRun, restored, persist);
+  const driver = new CompactionDriver(
+    llm,
+    request,
+    tools,
+    workspaceDir,
+    dryRun,
+    restored,
+    persist,
+    emit,
+  );
   const outcome = await runToolLoop(
     driver,
     driver.state.pendingTurn,
@@ -476,6 +513,7 @@ export interface CompactOptions {
   tools: CompactionTools;
   maxToolIterations?: number;
   resumable?: boolean;
+  emit?: FrameSink;
 }
 
 async function preparePassWorkspace(
@@ -635,6 +673,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
         checkpoint.request = nextRequest;
         await persistCheckpoint(opts, checkpoint);
       },
+      opts.emit,
     );
   } catch (e) {
     if (opts.resumable !== true) throw e;

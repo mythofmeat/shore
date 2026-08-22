@@ -18,6 +18,7 @@ import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { testTmp } from "./support/tmp.ts";
+import { eventsForResponse } from "./support/stream.ts";
 
 afterAll(restoreTestEnv);
 
@@ -100,16 +101,15 @@ function registryFor(config: LoadedConfig, appended: Message[] = []) {
 
 function scriptedProvider(rounds: GenerateResponse[], seen: SidecarRequest[] = []): SidecarProvider {
   let round = 0;
+  const nextTurn = (req: SidecarRequest): GenerateResponse => {
+    seen.push(JSON.parse(JSON.stringify(req)) as SidecarRequest);
+    const next = rounds[round++];
+    if (next === undefined) throw { kind: "provider", message: "out of scripted rounds" };
+    return next;
+  };
   return {
-    generate: async (req: SidecarRequest) => {
-      seen.push(JSON.parse(JSON.stringify(req)) as SidecarRequest);
-      const next = rounds[round++];
-      if (next === undefined) throw { kind: "provider", message: "out of scripted rounds" };
-      return next;
-    },
-    stream: () => {
-      throw new Error("not used");
-    },
+    generate: (req: SidecarRequest) => Promise.resolve(nextTurn(req)),
+    stream: (req: SidecarRequest) => eventsForResponse(nextTurn(req)),
   };
 }
 

@@ -6,7 +6,7 @@ import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
-import fixture from "./memory_fixtures/compaction.json";
+import fixture from "./memory_captures/compaction.json";
 
 import { pushAssistantTurn, pushInlineSystem } from "../src/llm/request";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../src/llm/types";
@@ -44,52 +44,187 @@ import {
   normalizeProtectedPath,
   normalizePromptVisiblePath,
   normalizeWorkspacePath,
+  pathComponents,
   resolvePath,
+  resolveRoots,
 } from "../src/tools/workspace_path";
+import { rustTrim } from "../src/memory/lines";
 
 type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
 const section = (name: string): Json[] => fx[name] as Json[];
 
-describe("writeAllowedPath", () => {
-  for (const rec of section("write_allowed_path")) {
-    const path = rec.path as string;
-    test(`${JSON.stringify(path)} -> ${String(rec.allowed)}`, () => {
-      expect(writeAllowedPath(path)).toBe(rec.allowed as boolean);
+const WORKSPACE_PATHS: string[] = [
+    "MEMORY.md",
+    "./MEMORY.md",
+    "././MEMORY.md",
+    "././memory/a.md",
+    ".\\memory\\a.md",
+    "./memory\\a.md",
+    "memory.md",
+    "MeMoRy.Md",
+    "workspace/MEMORY.md",
+    "/MEMORY.md",
+    "memory/daily/2026-03-25.md",
+    "memory/preferences/tea.md",
+    "memory/a.md",
+    "memory/",
+    "memory",
+    "memory/.dreams/x.md",
+    "memory/.DREAMS/x.md",
+    "memory/dreaming/x.md",
+    "memory/DREAMING/x.md",
+    "memory/dreams.md",
+    "memory/DREAMS.md",
+    "memory/dreams",
+    "memory/dreams/",
+    "memory/dreams/x.md",
+    "memory/dreamsx.md",
+    "SOUL.md",
+    "USER.md",
+    "AGENTS.md",
+    "TOOLS.md",
+    "soul.md",
+    "workspace/SOUL.md",
+    "workspace/./SOUL.md",
+    "./workspace/SOUL.md",
+    "./USER.md",
+    "HEARTBEAT.md",
+    "RECENT_MEMORY.md",
+    "DREAMS.md",
+    "notes.md",
+    "topics/foo.md",
+    "memory/../../SOUL.md",
+    "memory/../USER.md",
+    "../SOUL.md",
+    "memory/sub/../../escape.md",
+    "memory\\..\\..\\SOUL.md",
+    "memory\\daily\\a.md",
+    ".\\SOUL.md",
+    "/etc/passwd",
+    "/SOUL.md",
+    "",
+    "   ",
+    "  MEMORY.md  ",
+    "\tmemory/a.md\n",
+    "\uFEFFMEMORY.md",
+    "\u0085MEMORY.md",
+    "\u00A0MEMORY.md",
+    "MEMORY.md\u0085",
+    "memory//a.md",
+    "memory/./a.md",
+    "memory/a/../b.md",
+    "./memory/a.md",
+    "memory/日記/a.md",
+  ];
+
+const PROTECTED_FILES = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"];
+const PROMPT_VISIBLE_FILES = [...PROTECTED_FILES, "MEMORY.md"];
+
+function isDreamJournal(rest: string): boolean {
+  const lower = rest.toLowerCase();
+  return (
+    lower === "dreams.md" ||
+    lower === "dreams" ||
+    lower === "dreams/" ||
+    lower.startsWith(".dreams/") ||
+    lower.startsWith("dreaming/")
+  );
+}
+
+describe("what counts as a path inside the workspace", () => {
+  for (const path of WORKSPACE_PATHS) {
+    test(JSON.stringify(path), () => {
+      const normalized = normalizeWorkspacePath(path);
+      expect(normalized.includes("\\"), "a normalized path uses one separator").toBe(false);
+      expect(normalized.startsWith("/"), "and does not start at the filesystem root").toBe(false);
+      expect(normalized.startsWith("./"), "and does not start with a needless dot").toBe(false);
+      expect(normalized.startsWith("workspace/"), "and is relative to the workspace, not inside it").toBe(
+        false,
+      );
+      expect(normalizeWorkspacePath(normalized), "normalizing twice changes nothing").toBe(normalized);
+
+      expect(normalizeProtectedPath(path), "the protected files are named, and only those").toBe(
+        PROTECTED_FILES.includes(normalized) ? normalized : undefined,
+      );
+      expect(
+        normalizePromptVisiblePath(path),
+        "the prompt shows the protected files and the memory index",
+      ).toBe(PROMPT_VISIBLE_FILES.includes(normalized) ? normalized : undefined);
     });
   }
 });
 
-describe("workspace path normalization", () => {
-  for (const rec of section("workspace_paths")) {
-    const path = rec.path as string;
+describe("resolving a path against the workspace root", () => {
+  for (const path of WORKSPACE_PATHS) {
     test(JSON.stringify(path), () => {
-      expect(normalizeWorkspacePath(path)).toBe(rec.normalize_workspace_path as string);
-      expect(normalizeProtectedPath(path) ?? null).toBe(
-        (rec.normalize_protected_path as string | null) ?? null,
-      );
-      expect(normalizePromptVisiblePath(path) ?? null).toBe(
-        (rec.normalize_prompt_visible_path as string | null) ?? null,
-      );
-      expect(normalizePromptVisiblePath(path) !== undefined).toBe(
-        rec.is_prompt_visible_path as boolean,
-      );
+      let resolved: string | undefined;
+      let refusal: string | undefined;
+      try {
+        resolved = resolvePath("/ws", path);
+      } catch (e) {
+        refusal = (e as Error).message;
+      }
 
-      const backslashTraversal = path.includes("\\") && path.split(/[/\\]/).includes("..");
-      if (backslashTraversal) {
-        expect(rec.resolve_path).toHaveProperty("ok");
-        expect(() => resolvePath("/ws", path)).toThrow("path traversal (..) is not allowed");
+      const [, stripped] = (() => {
+        try {
+          return resolveRoots("/ws", path);
+        } catch {
+          return ["", ""];
+        }
+      })();
+      const components = pathComponents(stripped);
+      const traversal = components.includes("..");
+      const absolute = components.includes("/");
+      const empty = stripped === "";
+
+      if (refusal !== undefined) {
+        expect(
+          [
+            "invalid args: path is empty",
+            "invalid args: path traversal (..) is not allowed",
+            "invalid args: absolute paths are not allowed",
+          ],
+          `${JSON.stringify(path)}: a refusal says which rule it broke`,
+        ).toContain(refusal);
+        if (refusal.includes("traversal")) expect(traversal, "and .. really is in it").toBe(true);
+        if (refusal.includes("absolute")) expect(absolute, "and it really is absolute").toBe(true);
+        if (refusal.includes("empty")) expect(empty, "and it really names nothing").toBe(true);
         return;
       }
 
-      const expected = rec.resolve_path as { ok?: string; err?: string };
-      let actual: { ok?: string; err?: string };
-      try {
-        actual = { ok: resolvePath("/ws", path) };
-      } catch (e) {
-        actual = { err: (e as Error).message };
-      }
-      expect(actual).toEqual(expected);
+      expect(
+        [traversal, absolute, empty],
+        "a path that resolves has no .., is not absolute, and names something",
+      ).toEqual([false, false, false]);
+      expect(
+        pathComponents(required(resolved)),
+        "and names exactly the normalized path, under the workspace root",
+      ).toEqual(["/", "ws", ...pathComponents(normalizeWorkspacePath(path))]);
+    });
+  }
+});
+
+describe("what compaction is allowed to write", () => {
+  for (const path of WORKSPACE_PATHS) {
+    test(JSON.stringify(path), () => {
+      const normalized = normalizeWorkspacePath(path);
+      const components = pathComponents(rustTrim(path).replaceAll("\\", "/"));
+      const outside = components.includes("..") || components.includes("/");
+      const underMemory = normalized.startsWith("memory/") && normalized !== "memory/";
+
+      const allowed =
+        !outside &&
+        (normalized.toLowerCase() === "memory.md" ||
+          PROMPT_VISIBLE_FILES.includes(normalized) ||
+          (underMemory && !isDreamJournal(normalized.slice("memory/".length))));
+
+      expect(
+        writeAllowedPath(path),
+        allowed
+          ? "compaction writes the memory index, the prompt files, and memory/**"
+          : "and nothing outside the workspace, and never the dream journal",
+      ).toBe(allowed);
     });
   }
 });
@@ -119,25 +254,120 @@ describe("prompt rendering", () => {
   });
 });
 
-describe("conversation splitting", () => {
-  for (const [i, rec] of section("splits").entries()) {
-    const messages = (rec.messages as Json[]).map(toConversationMessage);
-    const keep = rec.keep_turns as number;
-    const retain = rec.retain_trailing_autonomous as boolean;
-    test(`${rec.name as string} keep=${keep} retain=${retain} [${i}]`, () => {
-      expect(findTurnSplit(messages, keep)).toBe(rec.find_turn_split as number);
-      expect(archiveSplitIndex(messages, keep, retain)).toBe(
-        rec.archive_split_index as number,
-      );
-      expect(countTurns(messages)).toBe(rec.count_turns as number);
-      expect(trailingAutonomousLen(messages)).toBe(rec.trailing_autonomous_len as number);
-    });
+describe("where a conversation is cut in two", () => {
+  const at = (role: string, content: string): ConversationMessage => ({
+    role,
+    content,
+    timestamp: "2026-03-25T10:00:00Z",
+    isToolResultOnly: false,
+    isAutonomous: false,
+  });
+  const u = (content: string) => at("user", content);
+  const a = (content: string) => at("assistant", content);
+  const toolResult = (content: string) => ({ ...u(content), isToolResultOnly: true });
+  const auto = (msg: ConversationMessage) => ({ ...msg, isAutonomous: true });
+
+  const SHAPES: Record<string, ConversationMessage[]> = {
+    empty: [],
+    alternating_6: [
+      u("Message 0"),
+      a("Message 1"),
+      u("Message 2"),
+      a("Message 3"),
+      u("Message 4"),
+      a("Message 5"),
+    ],
+    alternating_1: [u("Message 0")],
+    tool_loop: [
+      u("real one"),
+      a("reply"),
+      u("real two"),
+      a(""),
+      toolResult("tool output"),
+      a("final"),
+      u("real three"),
+      a("reply"),
+    ],
+    all_tool_results: [toolResult("a"), toolResult("b"), toolResult("c")],
+    autonomous_tail: [
+      u("hi"),
+      a("hello"),
+      u("more"),
+      a("sure"),
+      auto(a("still there?")),
+      auto(a("checking in")),
+    ],
+    autonomous_user_tail: [u("hi"), a("hello"), auto(u("autonomous but a user"))],
+    only_autonomous: [auto(a("a")), auto(a("b"))],
+    autonomous_then_user: [u("hi"), auto(a("nudge")), u("back"), a("hey")],
+    assistant_whitespace_content: [u("a"), a(" "), u("b")],
+    system_role: [at("system", "sys"), u("a"), a("b")],
+  };
+
+  const typed = (messages: ConversationMessage[]): number =>
+    messages.filter((m) => m.role === "user" && !m.isToolResultOnly).length;
+
+  for (const [name, messages] of Object.entries(SHAPES)) {
+    for (const keep of [0, 1, 2, 3, 5, 10]) {
+      for (const retain of [false, true]) {
+        test(`${name} keep=${keep} retain=${retain}`, () => {
+          expect(countTurns(messages), "a turn is a message the user typed").toBe(typed(messages));
+
+          const tail = trailingAutonomousLen(messages);
+          expect(
+            messages.slice(messages.length - tail).every((m) => m.role === "assistant" && m.isAutonomous),
+            "the tail is all messages the character sent unprompted",
+          ).toBe(true);
+          const beforeTail = messages[messages.length - tail - 1];
+          if (beforeTail !== undefined) {
+            expect(
+              beforeTail.role === "assistant" && beforeTail.isAutonomous,
+              "and reaches back as far as it can",
+            ).toBe(false);
+          }
+
+          const split = findTurnSplit(messages, keep);
+          expect(split >= 0 && split <= messages.length, "the split is inside the conversation").toBe(
+            true,
+          );
+          if (keep === 0) {
+            expect(split, "keeping no turns keeps nothing").toBe(messages.length);
+          } else {
+            expect(
+              typed(messages.slice(split)),
+              "what is kept is that many turns, or the whole conversation",
+            ).toBe(Math.min(keep, typed(messages)));
+            if (split > 0) {
+              expect(
+                required(messages[split]).role === "user" &&
+                  !required(messages[split]).isToolResultOnly,
+                "and starts at a turn rather than mid-exchange",
+              ).toBe(true);
+            }
+          }
+
+          const archived = archiveSplitIndex(messages, keep, retain);
+          if (!retain) {
+            expect(archived, "with nothing retained the split stands").toBe(split);
+            return;
+          }
+          expect(archived <= split, "retaining never archives more than the split would").toBe(true);
+          expect(
+            archived + tail <= messages.length,
+            "and never archives something the character said unprompted",
+          ).toBe(true);
+          expect(
+            archived === split || archived === messages.length - tail,
+            "and gives up only as much as it must",
+          ).toBe(true);
+        });
+      }
+    }
   }
 });
 
 describe("the single-flight guard", () => {
-  test("one pass per character data root", () => {
-    const steps = section("run_guard");
+  test("one pass per character per data root", () => {
     const held: Array<{ release(): void } | undefined> = [];
     const acquire = (dir: string, char: string) => {
       const g = tryBeginCompaction(dir, char);
@@ -145,12 +375,12 @@ describe("the single-flight guard", () => {
       return g !== undefined;
     };
 
-    expect(acquire("/guard-data-a", "Aria")).toBe(required(steps[0]).acquired as boolean);
-    expect(acquire("/guard-data-a", "Aria")).toBe(required(steps[1]).acquired as boolean);
-    expect(acquire("/guard-data-a", "Other")).toBe(required(steps[2]).acquired as boolean);
-    expect(acquire("/guard-data-b", "Aria")).toBe(required(steps[3]).acquired as boolean);
+    expect(acquire("/guard-data-a", "Aria"), "the first pass gets the lock").toBe(true);
+    expect(acquire("/guard-data-a", "Aria"), "a second pass for the same character does not").toBe(false);
+    expect(acquire("/guard-data-a", "Other"), "another character is unaffected").toBe(true);
+    expect(acquire("/guard-data-b", "Aria"), "and so is the same character elsewhere").toBe(true);
     held[0]?.release();
-    expect(acquire("/guard-data-a", "Aria")).toBe(required(steps[4]).acquired as boolean);
+    expect(acquire("/guard-data-a", "Aria"), "releasing lets the next pass in").toBe(true);
 
     for (const g of held) g?.release();
   });
@@ -245,6 +475,8 @@ describe("reporting an outcome", () => {
   });
 });
 
+const coverage = { dispatched: 0, rolledBack: 0, blocked: 0, dryRun: 0 };
+
 describe("compaction passes", () => {
   for (const pass of section("passes")) {
     test(pass.name as string, async () => {
@@ -253,36 +485,11 @@ describe("compaction passes", () => {
   }
 });
 
-test("the fixture exercises dispatch, blocked tools, rejections and rollback", () => {
-  const passes = section("passes");
-  const dispatched = passes.filter((p) => (p.dispatches as Json[]).length > 0);
-  expect(dispatched.length).toBeGreaterThan(10);
-
-  const withRejections = passes.filter((p) =>
-    ((p.final_request_messages as Json[] | null) ?? []).some(
-      (m) =>
-        m.role === "user" &&
-        Array.isArray(m.content) &&
-        (m.content as Json[]).some(
-          (block) =>
-            block.type === "tool_result" &&
-            typeof block.content === "string" &&
-            block.content.includes("blocked: compaction may only write"),
-        ),
-    ),
-  );
-  expect(withRejections.length).toBeGreaterThan(0);
-
-  const rolledBack = passes.filter((p) => p.archive_fails === true);
-  expect(rolledBack.length).toBeGreaterThan(0);
-  for (const p of rolledBack) expect((p.dispatches as Json[]).length).toBeGreaterThan(0);
-
-  const blocked = passes.filter((p) => {
-    const outcome = p.outcome as Json | null;
-    const called = (outcome?.tools_called as string[] | undefined) ?? [];
-    return called.length > (p.dispatches as Json[]).length;
-  });
-  expect(blocked.length).toBeGreaterThan(2);
+test("the passes cover dispatch, blocked tools, rejections and rollback", () => {
+  expect(coverage.dispatched, "passes that ran at least one tool").toBeGreaterThan(10);
+  expect(coverage.rolledBack, "passes whose archive failed after tools had run").toBeGreaterThan(0);
+  expect(coverage.blocked, "passes where a tool the model asked for never ran").toBeGreaterThan(2);
+  expect(coverage.dryRun, "passes that previewed instead of writing").toBeGreaterThan(0);
 });
 
 function toConversationMessage(m: Json): ConversationMessage {
@@ -389,6 +596,7 @@ async function snapshotTree(root: string): Promise<Record<string, string>> {
 class ScriptedLlm implements CompactionLlm {
   built: Json | undefined;
   request: SidecarRequest | undefined;
+  readonly served: GenerateResponse[] = [];
   readonly #responses: GenerateResponse[];
 
   constructor(responses: GenerateResponse[]) {
@@ -419,6 +627,7 @@ class ScriptedLlm implements CompactionLlm {
   async generate(): Promise<GenerateResponse> {
     const next = this.#responses.shift();
     if (next === undefined) throw new Error("llm: scripted LLM exhausted");
+    this.served.push(next);
     return next;
   }
 }
@@ -500,6 +709,187 @@ class ReplayTools implements CompactionTools {
   }
 }
 
+const REJECTS_A_WRITE = new Set(["disallowed_paths_only", "mixed_allowed_and_disallowed"]);
+
+function expectFinalRequestShape(
+  request: SidecarRequest | undefined,
+  built: Json | null,
+  outcome: Json | null,
+  pass: Json,
+): void {
+  const builtCount = (built?.["built_message_count"] as number | undefined) ?? 0;
+  const where = pass.name as string;
+
+  if (request === undefined) {
+    expect(builtCount, `${where}: a pass that never called the model built nothing`).toBe(0);
+    return;
+  }
+
+  const messages = request.messages;
+  const rounds = (outcome?.["tool_rounds"] as number | undefined) ?? 0;
+
+  const last = messages[messages.length - 1];
+  const closed = last?.role === "assistant";
+
+  if (outcome !== null) {
+    expect(
+      messages.length,
+      `${where}: the built request, one inline system, then two messages per round`,
+    ).toBe(builtCount + 1 + 2 * rounds + (closed ? 1 : 0));
+  } else {
+    expect(
+      messages.length,
+      `${where}: a pass that failed still left whole rounds behind it`,
+    ).toBeGreaterThanOrEqual(builtCount + 1);
+  }
+
+  expect(
+    messages[builtCount]?.role,
+    `${where}: the compaction system prompt sits right after what was built`,
+  ).toBe("system");
+
+  const tail = messages.slice(builtCount + 1);
+  for (const [i, m] of tail.entries()) {
+    expect(m.role, `${where}: round ${Math.floor(i / 2)} alternates model then tool results`).toBe(
+      i % 2 === 0 ? "assistant" : "user",
+    );
+  }
+
+  if (!closed && tail.length > 0) {
+    expect(
+      last?.role,
+      `${where}: a pass stopped at its cap ends on the tool results, with no closing turn`,
+    ).toBe("user");
+  }
+  if (REJECTS_A_WRITE.has(where)) {
+    const rejected = tail.some(
+      (m) =>
+        m.role === "user" &&
+        Array.isArray(m.content) &&
+        (m.content as { type?: string; content?: unknown }[]).some(
+          (b) =>
+            b.type === "tool_result" &&
+            typeof b.content === "string" &&
+            b.content.includes("blocked: compaction may only write"),
+        ),
+    );
+    expect(rejected, `${where}: the model is told its write was refused, and why`).toBe(true);
+  }
+
+  if (tail.length === 0) {
+    expect(
+      last?.role,
+      `${where}: a pass that never reached the model ends at its system prompt`,
+    ).toBe("system");
+  }
+}
+
+function typedTurns(messages: ConversationMessage[]): number {
+  return messages.filter((m) => m.role === "user" && !m.isToolResultOnly).length;
+}
+
+function treeAfter(
+  before: Record<string, string>,
+  dispatches: Json[],
+): Record<string, string> {
+  const tree = { ...before };
+  for (const d of dispatches) {
+    for (const [rel, body] of Object.entries(d.writes as Record<string, string>)) tree[rel] = body;
+    for (const rel of d.deletes as string[]) delete tree[rel];
+  }
+  return tree;
+}
+
+function toolsAskedFor(served: readonly GenerateResponse[]): string[] {
+  return served.flatMap((r) =>
+    r.content_blocks.filter((b) => b.type === "tool_use").map((b) => b.name),
+  );
+}
+
+function expectOutcomeShape(
+  pass: Json,
+  outcome: Json | null,
+  error: string | null,
+  served: readonly GenerateResponse[],
+  changed: string[],
+  messages: ConversationMessage[],
+  split: number,
+  where: string,
+): void {
+  if (outcome === null) {
+    expect(error, `${where}: a pass with no outcome says why`).not.toBeNull();
+    return;
+  }
+  expect(error, `${where}: a pass that produced an outcome did not fail`).toBeNull();
+
+  const dry = pass.dry_run === true;
+  expect(outcome.kind, `${where}: a dry run says so, and a real one says compacted`).toBe(
+    dry ? "dry_run" : "compacted",
+  );
+
+  expect(outcome.message_count, `${where}: it reports how many messages it archived`).toBe(split);
+  expect(outcome.compacted_turns, `${where}: and how many turns those were`).toBe(
+    typedTurns(messages.slice(0, split)),
+  );
+  expect(outcome.retained_count, `${where}: and how many messages stayed behind`).toBe(
+    messages.length - split,
+  );
+  expect(outcome.retained_turns, `${where}: and how many turns those were`).toBe(
+    typedTurns(messages.slice(split)),
+  );
+
+  const askedRounds = served.filter((r) => r.content_blocks.some((b) => b.type === "tool_use")).length;
+  const cap = pass.max_tool_iterations as number | null;
+  expect(outcome.tool_rounds, `${where}: it runs every round the model asked for, up to its cap`).toBe(
+    cap === null ? askedRounds : Math.min(askedRounds, cap),
+  );
+  expect(
+    outcome.tools_called ?? [],
+    `${where}: and lists every tool asked for in the rounds it ran`,
+  ).toEqual(toolsAskedFor(served.slice(0, outcome.tool_rounds as number)));
+
+  if (dry) {
+    const preview = (outcome.file_ops_preview ?? []) as { path: string }[];
+    expect(outcome.would_write_files, `${where}: the count is the length of the preview`).toBe(
+      preview.length,
+    );
+    expect(outcome.markdown_preview, `${where}: which lists the same paths`).toEqual(
+      preview.map((f) => f.path),
+    );
+    expect(changed, `${where}: a dry run changes nothing on disk`).toEqual([]);
+    expect(
+      preview,
+      `${where}: it previews every whole-file write it was allowed to make, and no other call`,
+    ).toEqual(
+      served
+        .flatMap((r) => r.content_blocks)
+        .filter((b) => b.type === "tool_use" && b.name === "edit")
+        .map((b) => (b as { input: Record<string, unknown> }).input)
+        .filter(
+          (input) => typeof input["path"] === "string" && writeAllowedPath(input["path"]),
+        )
+        .map((input) => ({
+          path: input["path"] as string,
+          content:
+            typeof input["content"] === "string"
+              ? input["content"]
+              : "<edit: in-place edits, no preview available>",
+        })),
+    );
+    return;
+  }
+
+  expect(outcome.conversation_id, `${where}: it names the conversation it compacted`).toBe("conv-1");
+  expect(outcome.new_conversation_id, `${where}: and the one that replaced it`).toBe("new-conv-id");
+  expect(outcome.markdown_paths, `${where}: the files written are the memory it wrote`).toEqual(
+    outcome.memory_files_written,
+  );
+  expect(
+    [...(outcome.memory_files_written as string[])].sort(),
+    `${where}: and are exactly the files that changed on disk`,
+  ).toEqual(changed);
+}
+
 async function runPass(pass: Json): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "shore-compaction-"));
   try {
@@ -538,10 +928,24 @@ async function runPass(pass: Json): Promise<void> {
     );
     const llm = new ScriptedLlm(scriptFor(pass.name as string));
     const mgr = new RecordingMgr("new-conv-id", pass.archive_fails === true);
-    const messages = (pass.messages as Json[]).map(toConversationMessage);
+    const messageSets = fx["pass_message_sets"] as unknown as Record<string, Json[]>;
+    const set = messageSets[pass.messages_ref as string];
+    if (set === undefined) throw new Error(`no message set named ${String(pass.messages_ref)}`);
+    const messages = set.map(toConversationMessage);
 
-    expect(await snapshotTree(workspace)).toEqual(
-      pass.workspace_before as Record<string, string>,
+    const seeded = Object.fromEntries(
+      (pass.seed as Json[]).map((f) => [f.path as string, f.content as string]),
+    );
+    expect(await snapshotTree(workspace), "the seed is what the pass starts from").toEqual(seeded);
+
+    const keepTurns =
+      pass.keep_turns_override === null
+        ? (pass.keep_recent_turns as number)
+        : (pass.keep_turns_override as number);
+    const split = archiveSplitIndex(
+      messages,
+      keepTurns,
+      pass.retain_trailing_autonomous as boolean,
     );
 
     let outcome: unknown = null;
@@ -577,30 +981,75 @@ async function runPass(pass: Json): Promise<void> {
       error = (e as Error).message.replaceAll(await realpath(root), "<root>");
     }
 
+    const shapedOutcome = outcome === null ? null : snakeOutcome(outcome as Json);
+    const where = pass.name as string;
     expect(error).toBe(pass.error as string | null);
-    expect(outcome === null ? null : snakeOutcome(outcome as Json)).toEqual(
-      pass.outcome as Json | null,
-    );
-
     expect(tools.dispatchCount).toBe((pass.dispatches as Json[]).length);
-    expect(tools.gitCalls).toEqual(pass.git_calls as Json[]);
-    expect(mgr.calls).toEqual(pass.archive_calls as Json[]);
-    expect(await snapshotTree(workspace)).toEqual(
-      pass.workspace_after as Record<string, string>,
-    );
 
-    const built = pass.built_request as Json | null;
-    expect(llm.built ?? null).toEqual(built);
+    const rolledBack = pass.archive_fails === true && mgr.calls.length > 0;
+    const tree = await snapshotTree(workspace);
+    expect(
+      tree,
+      rolledBack
+        ? `${where}: a failed archive puts every file back as it was`
+        : `${where}: the workspace changed only where a tool changed it`,
+    ).toEqual(rolledBack ? seeded : treeAfter(seeded, pass.dispatches as Json[]));
 
-    const finalMessages = pass.final_request_messages as WireMessage[] | null;
-    if (finalMessages === null) {
-      const expectedLength = ((built?.built_message_count as number | undefined) ?? 0) + 1;
-      expect(llm.request?.messages.length ?? expectedLength).toBe(expectedLength);
-    } else {
-      expect(normalizeMessages(required(llm.request).messages)).toEqual(
-        normalizeMessages(finalMessages),
+    const changed = Object.keys({ ...seeded, ...tree })
+      .filter((rel) => seeded[rel] !== tree[rel])
+      .sort();
+
+    const ensured = tools.gitCalls.filter((c) => c.call === "ensure_workspace_git_repo");
+    const committed = tools.gitCalls.filter((c) => c.call === "git_commit_all");
+    expect(ensured.length, `${where}: the workspace is made a git repo once, at most`).toBeLessThanOrEqual(1);
+    if (pass.dry_run === true) {
+      expect(tools.gitCalls, `${where}: a dry run touches git at all`).toEqual([]);
+    }
+    for (const call of tools.gitCalls) {
+      expect(call.char, `${where}: git is told which character it is for`).toBe("Aria");
+    }
+    expect(
+      committed.length > 0,
+      `${where}: the only commit compaction makes is the one recording a rollback`,
+    ).toBe(rolledBack);
+
+    expect(mgr.calls.length, `${where}: the conversation is archived at most once`).toBeLessThanOrEqual(1);
+    for (const call of mgr.calls) {
+      expect(call.conversation_id, `${where}: the archive names the conversation`).toBe("conv-1");
+      expect(call.active_content, `${where}: and carries the text still live`).toBe(
+        "line1\nline2\nline3\n",
+      );
+      expect(call.keep_last_n, `${where}: and keeps everything after the split`).toBe(
+        messages.length - split,
       );
     }
+    expect(
+      mgr.calls.length > 0,
+      `${where}: the conversation is archived once the tool loop is done, unless this is a dry run`,
+    ).toBe(pass.dry_run !== true && (shapedOutcome !== null || pass.archive_fails === true));
+
+    if (tools.dispatchCount > 0) coverage.dispatched += 1;
+    if (rolledBack) coverage.rolledBack += 1;
+    if (pass.dry_run === true) coverage.dryRun += 1;
+    if (toolsAskedFor(llm.served).length > tools.dispatchCount) coverage.blocked += 1;
+
+    expectOutcomeShape(pass, shapedOutcome, error, llm.served, changed, messages, split, where);
+
+    const built =
+      llm.built === undefined
+        ? null
+        : {
+            system: "System for Aria and Tom.",
+            chat_prefix_len: messages.length,
+            built_message_count: messages.length + 1,
+            compact_now_text: "Compact now, Aria.",
+          };
+    expect(
+      llm.built ?? null,
+      `${where}: the request is the chat so far, plus a rendered compact-now turn`,
+    ).toEqual(built);
+
+    expectFinalRequestShape(llm.request, built, shapedOutcome, pass);
 
     const queued = await queuedDeferredPaths(join(dataDir, "Aria"));
     expect(queued).toEqual(pass.deferred_queued_paths as string[]);

@@ -1,0 +1,2009 @@
+{
+  "cases": [
+    {
+      "case": "default",
+      "command": "call_log",
+      "args": {},
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "count_1",
+      "command": "call_log",
+      "args": {
+        "count": 1
+      },
+      "ok": {
+        "enabled": true,
+        "entries": [
+          {
+            "$ref": "s47"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_3",
+      "command": "call_log",
+      "args": {
+        "count": 3
+      },
+      "ok": {
+        "enabled": true,
+        "entries": [
+          {
+            "$ref": "s48"
+          },
+          {
+            "$ref": "s46"
+          },
+          {
+            "$ref": "s47"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_10",
+      "command": "call_log",
+      "args": {
+        "count": 10
+      },
+      "ok": {
+        "enabled": true,
+        "entries": [
+          {
+            "$ref": "s35"
+          },
+          {
+            "$ref": "s36"
+          },
+          {
+            "$ref": "s37"
+          },
+          {
+            "$ref": "s38"
+          },
+          {
+            "$ref": "s39"
+          },
+          {
+            "$ref": "s40"
+          },
+          {
+            "$ref": "s41"
+          },
+          {
+            "$ref": "s48"
+          },
+          {
+            "$ref": "s46"
+          },
+          {
+            "$ref": "s47"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_25",
+      "command": "call_log",
+      "args": {
+        "count": 25
+      },
+      "ok": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "case": "count_0",
+      "command": "call_log",
+      "args": {
+        "count": 0
+      },
+      "ok": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "case": "count_huge",
+      "command": "call_log",
+      "args": {
+        "count": 10000
+      },
+      "ok": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "case": "count_negative",
+      "command": "call_log",
+      "args": {
+        "count": -1
+      },
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "count_string",
+      "command": "call_log",
+      "args": {
+        "count": "3"
+      },
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "count_float",
+      "command": "call_log",
+      "args": {
+        "count": 1.5
+      },
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "count_null",
+      "command": "call_log",
+      "args": {
+        "count": null
+      },
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "type_heartbeat",
+      "command": "call_log",
+      "args": {
+        "call_type": "heartbeat"
+      },
+      "ok": {
+        "enabled": true,
+        "entries": [
+          {
+            "$ref": "s46"
+          },
+          {
+            "$ref": "s47"
+          }
+        ]
+      }
+    },
+    {
+      "case": "type_message",
+      "command": "call_log",
+      "args": {
+        "call_type": "message"
+      },
+      "ok": {
+        "enabled": true,
+        "entries": [
+          {
+            "$ref": "s44"
+          },
+          {
+            "$ref": "s45"
+          },
+          {
+            "$ref": "s42"
+          },
+          {
+            "$ref": "s26"
+          },
+          {
+            "$ref": "s27"
+          },
+          {
+            "$ref": "s28"
+          },
+          {
+            "$ref": "s29"
+          },
+          {
+            "$ref": "s30"
+          },
+          {
+            "$ref": "s31"
+          },
+          {
+            "$ref": "s32"
+          },
+          {
+            "$ref": "s33"
+          },
+          {
+            "$ref": "s34"
+          },
+          {
+            "$ref": "s35"
+          },
+          {
+            "$ref": "s36"
+          },
+          {
+            "$ref": "s37"
+          },
+          {
+            "$ref": "s38"
+          },
+          {
+            "$ref": "s39"
+          },
+          {
+            "$ref": "s40"
+          },
+          {
+            "$ref": "s41"
+          },
+          {
+            "$ref": "s48"
+          }
+        ]
+      }
+    },
+    {
+      "case": "type_missing",
+      "command": "call_log",
+      "args": {
+        "call_type": "nope"
+      },
+      "ok": {
+        "enabled": true,
+        "entries": []
+      }
+    },
+    {
+      "case": "type_number",
+      "command": "call_log",
+      "args": {
+        "call_type": 7
+      },
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "character_wren",
+      "command": "call_log",
+      "args": {
+        "character": "wren"
+      },
+      "ok": {
+        "enabled": true,
+        "entries": [
+          {
+            "id": 3,
+            "call_id": "call_c",
+            "ts": "2026-01-15T12:00:02+00:00",
+            "call_type": "message",
+            "character": "wren",
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cache_read_tokens": 5,
+              "cache_write_tokens": 0
+            },
+            "duration_ms": 42,
+            "error": null
+          },
+          {
+            "id": 5,
+            "call_id": "call_e",
+            "ts": "2026-01-15T12:00:03+00:00",
+            "call_type": "heartbeat",
+            "character": "wren",
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cache_read_tokens": 5,
+              "cache_write_tokens": 0
+            },
+            "duration_ms": 42,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "case": "character_missing",
+      "command": "call_log",
+      "args": {
+        "character": "nobody"
+      },
+      "ok": {
+        "enabled": true,
+        "entries": []
+      }
+    },
+    {
+      "case": "character_and_type",
+      "command": "call_log",
+      "args": {
+        "character": "wren",
+        "call_type": "heartbeat"
+      },
+      "ok": {
+        "enabled": true,
+        "entries": [
+          {
+            "id": 5,
+            "call_id": "call_e",
+            "ts": "2026-01-15T12:00:03+00:00",
+            "call_type": "heartbeat",
+            "character": "wren",
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cache_read_tokens": 5,
+              "cache_write_tokens": 0
+            },
+            "duration_ms": 42,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "case": "character_number",
+      "command": "call_log",
+      "args": {
+        "character": 7
+      },
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "id_1",
+      "command": "call_log",
+      "args": {
+        "id": 1
+      },
+      "ok": {
+        "enabled": true,
+        "call": {
+          "id": 1,
+          "call_id": "call_a",
+          "ts": "2026-01-15T12:00:00+00:00",
+          "call_type": "message",
+          "character": "poppy",
+          "model": "claude-x",
+          "provider": "anthropic",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 2,
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0
+          },
+          "duration_ms": 42,
+          "error": null,
+          "request": "request a",
+          "response": "response a"
+        }
+      }
+    },
+    {
+      "case": "id_5",
+      "command": "call_log",
+      "args": {
+        "id": 5
+      },
+      "ok": {
+        "enabled": true,
+        "call": {
+          "id": 5,
+          "call_id": "call_e",
+          "ts": "2026-01-15T12:00:03+00:00",
+          "call_type": "heartbeat",
+          "character": "wren",
+          "model": "claude-x",
+          "provider": "anthropic",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 2,
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0
+          },
+          "duration_ms": 42,
+          "error": null,
+          "request": "request e",
+          "response": "response e"
+        }
+      }
+    },
+    {
+      "case": "id_missing",
+      "command": "call_log",
+      "args": {
+        "id": 999
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "no call with id 999"
+      }
+    },
+    {
+      "case": "id_zero",
+      "command": "call_log",
+      "args": {
+        "id": 0
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "no call with id 0"
+      }
+    },
+    {
+      "case": "id_negative",
+      "command": "call_log",
+      "args": {
+        "id": -1
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "no call with id -1"
+      }
+    },
+    {
+      "case": "id_string",
+      "command": "call_log",
+      "args": {
+        "id": "1"
+      },
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "id_float",
+      "command": "call_log",
+      "args": {
+        "id": 1.5
+      },
+      "ok": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "case": "id_beats_filters",
+      "command": "call_log",
+      "args": {
+        "id": 3,
+        "character": "nobody",
+        "call_type": "nope"
+      },
+      "ok": {
+        "enabled": true,
+        "call": {
+          "id": 3,
+          "call_id": "call_c",
+          "ts": "2026-01-15T12:00:02+00:00",
+          "call_type": "message",
+          "character": "wren",
+          "model": "claude-x",
+          "provider": "anthropic",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 2,
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0
+          },
+          "duration_ms": 42,
+          "error": null,
+          "request": "request c",
+          "response": "response c"
+        }
+      }
+    },
+    {
+      "case": "disabled",
+      "command": "call_log",
+      "args": {},
+      "ok": {
+        "enabled": false,
+        "entries": []
+      }
+    },
+    {
+      "case": "disabled_with_id",
+      "command": "call_log",
+      "args": {
+        "id": 1
+      },
+      "ok": {
+        "enabled": false,
+        "entries": []
+      }
+    },
+    {
+      "case": "default_source",
+      "command": "transcript",
+      "args": {},
+      "ok": {
+        "$ref": "s2"
+      }
+    },
+    {
+      "case": "explicit_heartbeat",
+      "command": "transcript",
+      "args": {
+        "source": "heartbeat"
+      },
+      "ok": {
+        "$ref": "s2"
+      }
+    },
+    {
+      "case": "count_2",
+      "command": "transcript",
+      "args": {
+        "source": "heartbeat",
+        "count": 2
+      },
+      "ok": {
+        "enabled": true,
+        "source": "heartbeat",
+        "character": "poppy",
+        "entries": [
+          {
+            "$ref": "s24"
+          },
+          {
+            "$ref": "s25"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_8",
+      "command": "transcript",
+      "args": {
+        "source": "heartbeat",
+        "count": 8
+      },
+      "ok": {
+        "enabled": true,
+        "source": "heartbeat",
+        "character": "poppy",
+        "entries": [
+          {
+            "$ref": "s18"
+          },
+          {
+            "$ref": "s19"
+          },
+          {
+            "$ref": "s20"
+          },
+          {
+            "$ref": "s21"
+          },
+          {
+            "$ref": "s22"
+          },
+          {
+            "$ref": "s23"
+          },
+          {
+            "$ref": "s24"
+          },
+          {
+            "$ref": "s25"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_10",
+      "command": "transcript",
+      "args": {
+        "source": "heartbeat",
+        "count": 10
+      },
+      "ok": {
+        "enabled": true,
+        "source": "heartbeat",
+        "character": "poppy",
+        "entries": [
+          {
+            "$ref": "s16"
+          },
+          {
+            "$ref": "s17"
+          },
+          {
+            "$ref": "s18"
+          },
+          {
+            "$ref": "s19"
+          },
+          {
+            "$ref": "s20"
+          },
+          {
+            "$ref": "s21"
+          },
+          {
+            "$ref": "s22"
+          },
+          {
+            "$ref": "s23"
+          },
+          {
+            "$ref": "s24"
+          },
+          {
+            "$ref": "s25"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_0",
+      "command": "transcript",
+      "args": {
+        "source": "heartbeat",
+        "count": 0
+      },
+      "ok": {
+        "enabled": true,
+        "source": "heartbeat",
+        "character": "poppy",
+        "entries": [
+          {
+            "id": 10,
+            "ts": "2026-01-15T11:43:20+00:00",
+            "source": "heartbeat",
+            "character": "poppy",
+            "call_type": "heartbeat",
+            "iteration": 0,
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "entry": {
+              "marker": "filler-00"
+            }
+          },
+          {
+            "id": 11,
+            "ts": "2026-01-15T11:43:21+00:00",
+            "source": "heartbeat",
+            "character": "poppy",
+            "call_type": "heartbeat",
+            "iteration": 0,
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "entry": {
+              "marker": "filler-01"
+            }
+          },
+          {
+            "id": 12,
+            "ts": "2026-01-15T11:43:22+00:00",
+            "source": "heartbeat",
+            "character": "poppy",
+            "call_type": "heartbeat",
+            "iteration": 0,
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "entry": {
+              "marker": "filler-02"
+            }
+          },
+          {
+            "id": 13,
+            "ts": "2026-01-15T11:43:23+00:00",
+            "source": "heartbeat",
+            "character": "poppy",
+            "call_type": "heartbeat",
+            "iteration": 0,
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "entry": {
+              "marker": "filler-03"
+            }
+          },
+          {
+            "id": 14,
+            "ts": "2026-01-15T11:43:24+00:00",
+            "source": "heartbeat",
+            "character": "poppy",
+            "call_type": "heartbeat",
+            "iteration": 0,
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "entry": {
+              "marker": "filler-04"
+            }
+          },
+          {
+            "id": 15,
+            "ts": "2026-01-15T11:43:25+00:00",
+            "source": "heartbeat",
+            "character": "poppy",
+            "call_type": "heartbeat",
+            "iteration": 0,
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "entry": {
+              "marker": "filler-05"
+            }
+          },
+          {
+            "id": 16,
+            "ts": "2026-01-15T11:43:26+00:00",
+            "source": "heartbeat",
+            "character": "poppy",
+            "call_type": "heartbeat",
+            "iteration": 0,
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "entry": {
+              "marker": "filler-06"
+            }
+          },
+          {
+            "id": 17,
+            "ts": "2026-01-15T11:43:27+00:00",
+            "source": "heartbeat",
+            "character": "poppy",
+            "call_type": "heartbeat",
+            "iteration": 0,
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "entry": {
+              "marker": "filler-07"
+            }
+          },
+          {
+            "$ref": "s6"
+          },
+          {
+            "$ref": "s7"
+          },
+          {
+            "$ref": "s8"
+          },
+          {
+            "$ref": "s9"
+          },
+          {
+            "$ref": "s10"
+          },
+          {
+            "$ref": "s11"
+          },
+          {
+            "$ref": "s12"
+          },
+          {
+            "$ref": "s13"
+          },
+          {
+            "$ref": "s14"
+          },
+          {
+            "$ref": "s15"
+          },
+          {
+            "$ref": "s16"
+          },
+          {
+            "$ref": "s17"
+          },
+          {
+            "$ref": "s18"
+          },
+          {
+            "$ref": "s19"
+          },
+          {
+            "$ref": "s20"
+          },
+          {
+            "$ref": "s21"
+          },
+          {
+            "$ref": "s22"
+          },
+          {
+            "$ref": "s23"
+          },
+          {
+            "$ref": "s24"
+          },
+          {
+            "$ref": "s25"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_string",
+      "command": "transcript",
+      "args": {
+        "source": "heartbeat",
+        "count": "2"
+      },
+      "ok": {
+        "$ref": "s2"
+      }
+    },
+    {
+      "case": "unknown_source",
+      "command": "transcript",
+      "args": {
+        "source": "dreaming"
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "unknown transcript source 'dreaming' (expected 'heartbeat')"
+      }
+    },
+    {
+      "case": "empty_source",
+      "command": "transcript",
+      "args": {
+        "source": ""
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "unknown transcript source '' (expected 'heartbeat')"
+      }
+    },
+    {
+      "case": "source_number",
+      "command": "transcript",
+      "args": {
+        "source": 7
+      },
+      "ok": {
+        "$ref": "s2"
+      }
+    },
+    {
+      "case": "disabled",
+      "command": "transcript",
+      "args": {},
+      "ok": {
+        "enabled": false,
+        "source": "heartbeat",
+        "entries": []
+      }
+    },
+    {
+      "case": "disabled_unknown_source",
+      "command": "transcript",
+      "args": {
+        "source": "nope"
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "unknown transcript source 'nope' (expected 'heartbeat')"
+      }
+    },
+    {
+      "case": "no_rows_for_character",
+      "command": "call_log",
+      "args": {},
+      "ok": {
+        "enabled": true,
+        "entries": []
+      }
+    },
+    {
+      "case": "no_rows_for_character",
+      "command": "transcript",
+      "args": {},
+      "ok": {
+        "enabled": true,
+        "source": "heartbeat",
+        "character": "nobody",
+        "entries": []
+      }
+    }
+  ],
+  "$shared": {
+    "s0": {
+      "enabled": true,
+      "entries": {
+        "$ref": "s1"
+      }
+    },
+    "s1": [
+      {
+        "$ref": "s43"
+      },
+      {
+        "$ref": "s44"
+      },
+      {
+        "$ref": "s45"
+      },
+      {
+        "$ref": "s42"
+      },
+      {
+        "$ref": "s26"
+      },
+      {
+        "$ref": "s27"
+      },
+      {
+        "$ref": "s28"
+      },
+      {
+        "$ref": "s29"
+      },
+      {
+        "$ref": "s30"
+      },
+      {
+        "$ref": "s31"
+      },
+      {
+        "$ref": "s32"
+      },
+      {
+        "$ref": "s33"
+      },
+      {
+        "$ref": "s34"
+      },
+      {
+        "$ref": "s35"
+      },
+      {
+        "$ref": "s36"
+      },
+      {
+        "$ref": "s37"
+      },
+      {
+        "$ref": "s38"
+      },
+      {
+        "$ref": "s39"
+      },
+      {
+        "$ref": "s40"
+      },
+      {
+        "$ref": "s41"
+      },
+      {
+        "$ref": "s48"
+      },
+      {
+        "$ref": "s46"
+      },
+      {
+        "$ref": "s47"
+      }
+    ],
+    "s2": {
+      "character": "poppy",
+      "enabled": true,
+      "entries": {
+        "$ref": "s3"
+      },
+      "source": "heartbeat"
+    },
+    "s3": [
+      {
+        "$ref": "s6"
+      },
+      {
+        "$ref": "s7"
+      },
+      {
+        "$ref": "s8"
+      },
+      {
+        "$ref": "s9"
+      },
+      {
+        "$ref": "s10"
+      },
+      {
+        "$ref": "s11"
+      },
+      {
+        "$ref": "s12"
+      },
+      {
+        "$ref": "s13"
+      },
+      {
+        "$ref": "s14"
+      },
+      {
+        "$ref": "s15"
+      },
+      {
+        "$ref": "s16"
+      },
+      {
+        "$ref": "s17"
+      },
+      {
+        "$ref": "s18"
+      },
+      {
+        "$ref": "s19"
+      },
+      {
+        "$ref": "s20"
+      },
+      {
+        "$ref": "s21"
+      },
+      {
+        "$ref": "s22"
+      },
+      {
+        "$ref": "s23"
+      },
+      {
+        "$ref": "s24"
+      },
+      {
+        "$ref": "s25"
+      }
+    ],
+    "s4": {
+      "enabled": true,
+      "entries": {
+        "$ref": "s5"
+      }
+    },
+    "s5": [
+      {
+        "$ref": "s42"
+      },
+      {
+        "$ref": "s26"
+      },
+      {
+        "$ref": "s27"
+      },
+      {
+        "$ref": "s28"
+      },
+      {
+        "$ref": "s29"
+      },
+      {
+        "$ref": "s30"
+      },
+      {
+        "$ref": "s31"
+      },
+      {
+        "$ref": "s32"
+      },
+      {
+        "$ref": "s33"
+      },
+      {
+        "$ref": "s34"
+      },
+      {
+        "$ref": "s35"
+      },
+      {
+        "$ref": "s36"
+      },
+      {
+        "$ref": "s37"
+      },
+      {
+        "$ref": "s38"
+      },
+      {
+        "$ref": "s39"
+      },
+      {
+        "$ref": "s40"
+      },
+      {
+        "$ref": "s41"
+      },
+      {
+        "$ref": "s48"
+      },
+      {
+        "$ref": "s46"
+      },
+      {
+        "$ref": "s47"
+      }
+    ],
+    "s6": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-08"
+      },
+      "finish_reason": "end_turn",
+      "id": 18,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:28+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s7": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-09"
+      },
+      "finish_reason": "end_turn",
+      "id": 19,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:29+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s8": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-10"
+      },
+      "finish_reason": "end_turn",
+      "id": 20,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:30+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s9": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-11"
+      },
+      "finish_reason": "end_turn",
+      "id": 21,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:31+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s10": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-12"
+      },
+      "finish_reason": "end_turn",
+      "id": 22,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:32+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s11": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-13"
+      },
+      "finish_reason": "end_turn",
+      "id": 23,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:33+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s12": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-14"
+      },
+      "finish_reason": "end_turn",
+      "id": 24,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:34+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s13": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-15"
+      },
+      "finish_reason": "end_turn",
+      "id": 25,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:35+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s14": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-16"
+      },
+      "finish_reason": "end_turn",
+      "id": 26,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:36+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s15": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-17"
+      },
+      "finish_reason": "end_turn",
+      "id": 27,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:37+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s16": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-18"
+      },
+      "finish_reason": "end_turn",
+      "id": 28,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:38+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s17": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "filler-19"
+      },
+      "finish_reason": "end_turn",
+      "id": 29,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T11:43:39+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s18": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "t1-i0"
+      },
+      "finish_reason": "end_turn",
+      "id": 1,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T12:00:00+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s19": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "t1-i1"
+      },
+      "finish_reason": "end_turn",
+      "id": 2,
+      "iteration": 1,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T12:00:01+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s20": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "t1-i2"
+      },
+      "finish_reason": "end_turn",
+      "id": 3,
+      "iteration": 2,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T12:00:02+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s21": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "t2-i0"
+      },
+      "finish_reason": "end_turn",
+      "id": 4,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T12:00:03+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s22": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "t3-i0"
+      },
+      "finish_reason": "end_turn",
+      "id": 5,
+      "iteration": 0,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T12:00:04+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s23": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "t3-i1"
+      },
+      "finish_reason": "end_turn",
+      "id": 6,
+      "iteration": 1,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T12:00:05+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s24": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "t4-i1"
+      },
+      "finish_reason": "end_turn",
+      "id": 8,
+      "iteration": 1,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T12:00:07+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s25": {
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "entry": {
+        "marker": "t5-i1"
+      },
+      "finish_reason": "end_turn",
+      "id": 9,
+      "iteration": 1,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "source": "heartbeat",
+      "ts": "2026-01-15T12:00:08+00:00",
+      "usage": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    },
+    "s26": {
+      "call_id": "filler_04",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 10,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:24+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s27": {
+      "call_id": "filler_05",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 11,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:25+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s28": {
+      "call_id": "filler_06",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 12,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:26+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s29": {
+      "call_id": "filler_07",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 13,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:27+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s30": {
+      "call_id": "filler_08",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 14,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:28+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s31": {
+      "call_id": "filler_09",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 15,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:29+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s32": {
+      "call_id": "filler_10",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 16,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:30+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s33": {
+      "call_id": "filler_11",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 17,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:31+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s34": {
+      "call_id": "filler_12",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 18,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:32+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s35": {
+      "call_id": "filler_13",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 19,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:33+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s36": {
+      "call_id": "filler_14",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 20,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:34+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s37": {
+      "call_id": "filler_15",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 21,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:35+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s38": {
+      "call_id": "filler_16",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 22,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:36+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s39": {
+      "call_id": "filler_17",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 23,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:37+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s40": {
+      "call_id": "filler_18",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 24,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:38+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s41": {
+      "call_id": "filler_19",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 25,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:39+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s42": {
+      "call_id": "filler_03",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 9,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:23+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s43": {
+      "call_id": "filler_00",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 6,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:20+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s44": {
+      "call_id": "filler_01",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 7,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:21+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s45": {
+      "call_id": "filler_02",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 8,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T11:43:22+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s46": {
+      "call_id": "call_b",
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 2,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T12:00:01+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s47": {
+      "call_id": "call_d",
+      "call_type": "heartbeat",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 4,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T12:00:03+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    },
+    "s48": {
+      "call_id": "call_a",
+      "call_type": "message",
+      "character": "poppy",
+      "duration_ms": 42,
+      "error": null,
+      "finish_reason": "end_turn",
+      "id": 1,
+      "model": "claude-x",
+      "provider": "anthropic",
+      "ts": "2026-01-15T12:00:00+00:00",
+      "usage": {
+        "cache_read_tokens": 5,
+        "cache_write_tokens": 0,
+        "input_tokens": 10,
+        "output_tokens": 2
+      }
+    }
+  }
+}

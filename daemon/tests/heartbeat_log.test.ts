@@ -19,7 +19,7 @@ interface Fixture {
 }
 
 const fixture = (await Bun.file(
-  new URL("./autonomy_fixtures/heartbeat_log.json", import.meta.url),
+  new URL("./autonomy_captures/heartbeat_log.json", import.meta.url),
 ).json()) as Fixture;
 
 function stamp(i: number): string {
@@ -40,7 +40,7 @@ describe("the wire format", () => {
     expect(HEARTBEAT_LOG_CAPACITY).toBe(fixture.capacity);
   });
 
-  test("every kind the Rust writes round-trips byte for byte", () => {
+  test("every kind of entry round-trips byte for byte", () => {
     expect(fixture.lines.length).toBe(fixture.display_names.length);
     expect(fixture.lines.length).toBeGreaterThan(9);
 

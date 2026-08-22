@@ -1,0 +1,1399 @@
+{
+  "ring": [
+    {
+      "case": "empty",
+      "capacity": 5,
+      "pushes": 0,
+      "len": 0,
+      "is_empty": true,
+      "items": [],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": []
+        },
+        {
+          "n": 2,
+          "items": []
+        },
+        {
+          "n": 3,
+          "items": []
+        },
+        {
+          "n": 100,
+          "items": []
+        }
+      ]
+    },
+    {
+      "case": "within_capacity",
+      "capacity": 5,
+      "pushes": 3,
+      "len": 3,
+      "is_empty": false,
+      "items": [
+        0,
+        1,
+        2
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            1,
+            2
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            0,
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "case": "exactly_full",
+      "capacity": 3,
+      "pushes": 3,
+      "len": 3,
+      "is_empty": false,
+      "items": [
+        0,
+        1,
+        2
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            1,
+            2
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            0,
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "case": "evicts_oldest",
+      "capacity": 3,
+      "pushes": 5,
+      "len": 3,
+      "is_empty": false,
+      "items": [
+        2,
+        3,
+        4
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            4
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            3,
+            4
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            2,
+            3,
+            4
+          ]
+        }
+      ]
+    },
+    {
+      "case": "capacity_one",
+      "capacity": 1,
+      "pushes": 4,
+      "len": 1,
+      "is_empty": false,
+      "items": [
+        3
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            3
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            3
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            3
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "case": "capacity_zero",
+      "capacity": 0,
+      "pushes": 3,
+      "len": 1,
+      "is_empty": false,
+      "items": [
+        2
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            2
+          ]
+        }
+      ]
+    }
+  ],
+  "to_json": [
+    {
+      "case": "empty/last_n=0",
+      "seed": "empty",
+      "last_n": 0,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty/last_n=1",
+      "seed": "empty",
+      "last_n": 1,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty/last_n=2",
+      "seed": "empty",
+      "last_n": 2,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty/last_n=10",
+      "seed": "empty",
+      "last_n": 10,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty/last_n=1000",
+      "seed": "empty",
+      "last_n": 1000,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "full/last_n=0",
+      "seed": "full",
+      "last_n": 0,
+      "ok": {
+        "errors": {
+          "count": 1,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "full/last_n=1",
+      "seed": "full",
+      "last_n": 1,
+      "ok": {
+        "$ref": "s1"
+      }
+    },
+    {
+      "case": "full/last_n=2",
+      "seed": "full",
+      "last_n": 2,
+      "ok": {
+        "$ref": "s1"
+      }
+    },
+    {
+      "case": "full/last_n=10",
+      "seed": "full",
+      "last_n": 10,
+      "ok": {
+        "$ref": "s1"
+      }
+    },
+    {
+      "case": "full/last_n=1000",
+      "seed": "full",
+      "last_n": 1000,
+      "ok": {
+        "$ref": "s1"
+      }
+    },
+    {
+      "case": "sparse/last_n=0",
+      "seed": "sparse",
+      "last_n": 0,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=1",
+      "seed": "sparse",
+      "last_n": 1,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=2",
+      "seed": "sparse",
+      "last_n": 2,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=10",
+      "seed": "sparse",
+      "last_n": 10,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=1000",
+      "seed": "sparse",
+      "last_n": 1000,
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "mixed/last_n=0",
+      "seed": "mixed",
+      "last_n": 0,
+      "ok": {
+        "errors": {
+          "count": 1,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "mixed/last_n=1",
+      "seed": "mixed",
+      "last_n": 1,
+      "ok": {
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "mixed/last_n=2",
+      "seed": "mixed",
+      "last_n": 2,
+      "ok": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "case": "mixed/last_n=10",
+      "seed": "mixed",
+      "last_n": 10,
+      "ok": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "case": "mixed/last_n=1000",
+      "seed": "mixed",
+      "last_n": 1000,
+      "ok": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "case": "overflowing/last_n=0",
+      "seed": "overflowing",
+      "last_n": 0,
+      "ok": {
+        "errors": {
+          "count": 100,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=1",
+      "seed": "overflowing",
+      "last_n": 1,
+      "ok": {
+        "errors": {
+          "count": 100,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:104Z",
+              "error_type": "llm",
+              "message": "failure 104",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=2",
+      "seed": "overflowing",
+      "last_n": 2,
+      "ok": {
+        "errors": {
+          "count": 100,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:103Z",
+              "error_type": "llm",
+              "message": "failure 103",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:104Z",
+              "error_type": "llm",
+              "message": "failure 104",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=10",
+      "seed": "overflowing",
+      "last_n": 10,
+      "ok": {
+        "errors": {
+          "count": 100,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:95Z",
+              "error_type": "llm",
+              "message": "failure 95",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:96Z",
+              "error_type": "llm",
+              "message": "failure 96",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:97Z",
+              "error_type": "llm",
+              "message": "failure 97",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:98Z",
+              "error_type": "llm",
+              "message": "failure 98",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:99Z",
+              "error_type": "llm",
+              "message": "failure 99",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:100Z",
+              "error_type": "llm",
+              "message": "failure 100",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:101Z",
+              "error_type": "llm",
+              "message": "failure 101",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:102Z",
+              "error_type": "llm",
+              "message": "failure 102",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:103Z",
+              "error_type": "llm",
+              "message": "failure 103",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:104Z",
+              "error_type": "llm",
+              "message": "failure 104",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=1000",
+      "seed": "overflowing",
+      "last_n": 1000,
+      "ok": {
+        "errors": {
+          "count": 100,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:05Z",
+              "error_type": "llm",
+              "message": "failure 5",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:06Z",
+              "error_type": "llm",
+              "message": "failure 6",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:07Z",
+              "error_type": "llm",
+              "message": "failure 7",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:08Z",
+              "error_type": "llm",
+              "message": "failure 8",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:09Z",
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:10Z",
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:11Z",
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:12Z",
+              "error_type": "llm",
+              "message": "failure 12",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:13Z",
+              "error_type": "llm",
+              "message": "failure 13",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:14Z",
+              "error_type": "llm",
+              "message": "failure 14",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:15Z",
+              "error_type": "llm",
+              "message": "failure 15",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:16Z",
+              "error_type": "llm",
+              "message": "failure 16",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:17Z",
+              "error_type": "llm",
+              "message": "failure 17",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:18Z",
+              "error_type": "llm",
+              "message": "failure 18",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:19Z",
+              "error_type": "llm",
+              "message": "failure 19",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:20Z",
+              "error_type": "llm",
+              "message": "failure 20",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:21Z",
+              "error_type": "llm",
+              "message": "failure 21",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:22Z",
+              "error_type": "llm",
+              "message": "failure 22",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:23Z",
+              "error_type": "llm",
+              "message": "failure 23",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:24Z",
+              "error_type": "llm",
+              "message": "failure 24",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:25Z",
+              "error_type": "llm",
+              "message": "failure 25",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:26Z",
+              "error_type": "llm",
+              "message": "failure 26",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:27Z",
+              "error_type": "llm",
+              "message": "failure 27",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:28Z",
+              "error_type": "llm",
+              "message": "failure 28",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:29Z",
+              "error_type": "llm",
+              "message": "failure 29",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:30Z",
+              "error_type": "llm",
+              "message": "failure 30",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:31Z",
+              "error_type": "llm",
+              "message": "failure 31",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:32Z",
+              "error_type": "llm",
+              "message": "failure 32",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:33Z",
+              "error_type": "llm",
+              "message": "failure 33",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:34Z",
+              "error_type": "llm",
+              "message": "failure 34",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:35Z",
+              "error_type": "llm",
+              "message": "failure 35",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:36Z",
+              "error_type": "llm",
+              "message": "failure 36",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:37Z",
+              "error_type": "llm",
+              "message": "failure 37",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:38Z",
+              "error_type": "llm",
+              "message": "failure 38",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:39Z",
+              "error_type": "llm",
+              "message": "failure 39",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:40Z",
+              "error_type": "llm",
+              "message": "failure 40",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:41Z",
+              "error_type": "llm",
+              "message": "failure 41",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:42Z",
+              "error_type": "llm",
+              "message": "failure 42",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:43Z",
+              "error_type": "llm",
+              "message": "failure 43",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:44Z",
+              "error_type": "llm",
+              "message": "failure 44",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:45Z",
+              "error_type": "llm",
+              "message": "failure 45",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:46Z",
+              "error_type": "llm",
+              "message": "failure 46",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:47Z",
+              "error_type": "llm",
+              "message": "failure 47",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:48Z",
+              "error_type": "llm",
+              "message": "failure 48",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:49Z",
+              "error_type": "llm",
+              "message": "failure 49",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:50Z",
+              "error_type": "llm",
+              "message": "failure 50",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:51Z",
+              "error_type": "llm",
+              "message": "failure 51",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:52Z",
+              "error_type": "llm",
+              "message": "failure 52",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:53Z",
+              "error_type": "llm",
+              "message": "failure 53",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:54Z",
+              "error_type": "llm",
+              "message": "failure 54",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:55Z",
+              "error_type": "llm",
+              "message": "failure 55",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:56Z",
+              "error_type": "llm",
+              "message": "failure 56",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:57Z",
+              "error_type": "llm",
+              "message": "failure 57",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:58Z",
+              "error_type": "llm",
+              "message": "failure 58",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:59Z",
+              "error_type": "llm",
+              "message": "failure 59",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:60Z",
+              "error_type": "llm",
+              "message": "failure 60",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:61Z",
+              "error_type": "llm",
+              "message": "failure 61",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:62Z",
+              "error_type": "llm",
+              "message": "failure 62",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:63Z",
+              "error_type": "llm",
+              "message": "failure 63",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:64Z",
+              "error_type": "llm",
+              "message": "failure 64",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:65Z",
+              "error_type": "llm",
+              "message": "failure 65",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:66Z",
+              "error_type": "llm",
+              "message": "failure 66",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:67Z",
+              "error_type": "llm",
+              "message": "failure 67",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:68Z",
+              "error_type": "llm",
+              "message": "failure 68",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:69Z",
+              "error_type": "llm",
+              "message": "failure 69",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:70Z",
+              "error_type": "llm",
+              "message": "failure 70",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:71Z",
+              "error_type": "llm",
+              "message": "failure 71",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:72Z",
+              "error_type": "llm",
+              "message": "failure 72",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:73Z",
+              "error_type": "llm",
+              "message": "failure 73",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:74Z",
+              "error_type": "llm",
+              "message": "failure 74",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:75Z",
+              "error_type": "llm",
+              "message": "failure 75",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:76Z",
+              "error_type": "llm",
+              "message": "failure 76",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:77Z",
+              "error_type": "llm",
+              "message": "failure 77",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:78Z",
+              "error_type": "llm",
+              "message": "failure 78",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:79Z",
+              "error_type": "llm",
+              "message": "failure 79",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:80Z",
+              "error_type": "llm",
+              "message": "failure 80",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:81Z",
+              "error_type": "llm",
+              "message": "failure 81",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:82Z",
+              "error_type": "llm",
+              "message": "failure 82",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:83Z",
+              "error_type": "llm",
+              "message": "failure 83",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:84Z",
+              "error_type": "llm",
+              "message": "failure 84",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:85Z",
+              "error_type": "llm",
+              "message": "failure 85",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:86Z",
+              "error_type": "llm",
+              "message": "failure 86",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:87Z",
+              "error_type": "llm",
+              "message": "failure 87",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:88Z",
+              "error_type": "llm",
+              "message": "failure 88",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:89Z",
+              "error_type": "llm",
+              "message": "failure 89",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:90Z",
+              "error_type": "llm",
+              "message": "failure 90",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:91Z",
+              "error_type": "llm",
+              "message": "failure 91",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:92Z",
+              "error_type": "llm",
+              "message": "failure 92",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:93Z",
+              "error_type": "llm",
+              "message": "failure 93",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:94Z",
+              "error_type": "llm",
+              "message": "failure 94",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:95Z",
+              "error_type": "llm",
+              "message": "failure 95",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:96Z",
+              "error_type": "llm",
+              "message": "failure 96",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:97Z",
+              "error_type": "llm",
+              "message": "failure 97",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:98Z",
+              "error_type": "llm",
+              "message": "failure 98",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:99Z",
+              "error_type": "llm",
+              "message": "failure 99",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:100Z",
+              "error_type": "llm",
+              "message": "failure 100",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:101Z",
+              "error_type": "llm",
+              "message": "failure 101",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:102Z",
+              "error_type": "llm",
+              "message": "failure 102",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:103Z",
+              "error_type": "llm",
+              "message": "failure 103",
+              "context": "character=test"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:104Z",
+              "error_type": "llm",
+              "message": "failure 104",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    }
+  ],
+  "$shared": {
+    "s0": {
+      "errors": {
+        "count": 1,
+        "recent": [
+          {
+            "context": "character=test",
+            "error_type": "llm",
+            "message": "connection refused",
+            "timestamp": "2026-01-01T00:00:02Z"
+          }
+        ]
+      },
+      "key_fallbacks": {
+        "$ref": "s2"
+      }
+    },
+    "s1": {
+      "errors": {
+        "count": 1,
+        "recent": [
+          {
+            "context": "character=test",
+            "error_type": "llm",
+            "message": "connection refused",
+            "timestamp": "2026-01-01T00:00:02Z"
+          }
+        ]
+      },
+      "key_fallbacks": {
+        "count": 1,
+        "recent": [
+          {
+            "character": "poppy",
+            "from_key": "primary",
+            "kind": "quota",
+            "model": "claude-x",
+            "provider": "anthropic",
+            "reason": "rate limited",
+            "rid": "rid_1",
+            "status": 429,
+            "timestamp": "2026-01-01T00:00:03Z",
+            "to_key": "backup"
+          }
+        ]
+      }
+    },
+    "s2": {
+      "count": 2,
+      "recent": {
+        "$ref": "s3"
+      }
+    },
+    "s3": [
+      {
+        "character": "poppy",
+        "from_key": "primary",
+        "kind": "quota",
+        "model": "claude-x",
+        "provider": "anthropic",
+        "reason": "rate limited",
+        "rid": "rid_1",
+        "status": 429,
+        "timestamp": "2026-01-01T00:00:03Z",
+        "to_key": "backup"
+      },
+      {
+        "character": "wren",
+        "from_key": "only",
+        "kind": "missing",
+        "model": "gpt",
+        "provider": "openai",
+        "reason": "no key configured",
+        "timestamp": "2026-01-01T00:01:01Z"
+      }
+    ]
+  }
+}

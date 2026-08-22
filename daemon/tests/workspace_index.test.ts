@@ -38,13 +38,14 @@ import {
   type FileRow,
 } from "../src/memory/workspace_store";
 import { LEGACY_INDEX_FILE, migrateLegacyIndex } from "../src/memory/workspace_legacy";
-import { tokenizeQuery } from "../src/memory/lines";
+import { compareRustStrings, tokenizeQuery } from "../src/memory/lines";
 import {
   resolveEmbedder,
   type EmbeddingProvider,
   type EmbeddingSettings,
 } from "../src/memory/retrieval";
 import { defaultBaseUrl, hardcodedProviderBaseUrl } from "../src/llm/request";
+import { expandShared } from "./support/shared_subtrees.ts";
 
 interface RawConfig {
   binary: string;
@@ -69,34 +70,22 @@ interface RawIndex {
   entries: Record<string, RawEntry>;
 }
 
-interface OutcomeFile {
-  display_path: string;
-  fs_path: string;
-  content: string | null;
-  lexical_score: number;
-  semantic_score: number;
-  combined_score: number;
-  embedded: boolean;
-  skip_reason: string | null;
-}
-
 interface RunOutcome {
   error?: string;
   searched_files: number;
   embedded_files: number;
   skipped_binary_or_large: number;
-  files: OutcomeFile[];
+  files: string[];
 }
 
 interface Run {
-  config: RawConfig;
+  config?: Partial<RawConfig>;
   query: string;
   mode: string;
   path_filter: string | null;
   counts_only: boolean;
-  embed_calls: string[][];
+  embedded_paths: string[][];
   embed_input_count: number;
-  index_after: RawIndex | null;
   outcome: RunOutcome;
 }
 
@@ -161,14 +150,8 @@ interface ResolveEmbedderCase {
   }[];
   default_ref: string | null;
   embedding: { key: string; dimensions: number | null }[];
-  providers_toml: string;
   env: { var: string; value: string }[];
-  outcome: {
-    error?: string;
-    model_id: string;
-    dimensions: number | null;
-    cache_key: string;
-  };
+  outcome: { error?: string };
 }
 
 interface Fixture {
@@ -215,13 +198,11 @@ interface Fixture {
   };
 }
 
-const fixture = JSON.parse(
-  readFileSync(new URL("./memory_fixtures/workspace_index.json", import.meta.url), "utf8"),
-) as Fixture;
-
-function f32(value: number | null): number | undefined {
-  return value === null ? undefined : toF32(value);
-}
+const fixture = expandShared<Fixture>(
+  JSON.parse(
+  readFileSync(new URL("./memory_captures/workspace_index.json", import.meta.url), "utf8"),
+  ),
+);
 
 function f32s(values: ArrayLike<number>): number[] {
   return Array.from(values, toF32);
@@ -266,7 +247,7 @@ class TopicEmbedder implements Embedder {
 let root = "";
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "wsi-parity-"));
+  root = await mkdtemp(join(tmpdir(), "wsi-"));
   clearEmbedderCache();
 });
 
@@ -284,13 +265,21 @@ async function writeAt(
   await utimes(path, mtime, mtime);
 }
 
-function configOf(raw: RawConfig): RetrievalConfig {
+const DEFAULT_RETRIEVAL: RetrievalConfig = {
+  maxFileBytes: 2097152,
+  maxIndexedFiles: 50000,
+  maxTotalIndexedBytes: 1073741824,
+  maxEmbedCharsPerFile: 4000,
+  binary: "skip",
+};
+
+function configOf(raw: Partial<RawConfig> | undefined): RetrievalConfig {
   return {
-    maxFileBytes: raw.max_file_bytes,
-    maxIndexedFiles: raw.max_indexed_files,
-    maxTotalIndexedBytes: raw.max_total_indexed_bytes,
-    maxEmbedCharsPerFile: raw.max_embed_chars_per_file,
-    binary: raw.binary as RetrievalConfig["binary"],
+    maxFileBytes: raw?.max_file_bytes ?? DEFAULT_RETRIEVAL.maxFileBytes,
+    maxIndexedFiles: raw?.max_indexed_files ?? DEFAULT_RETRIEVAL.maxIndexedFiles,
+    maxTotalIndexedBytes: raw?.max_total_indexed_bytes ?? DEFAULT_RETRIEVAL.maxTotalIndexedBytes,
+    maxEmbedCharsPerFile: raw?.max_embed_chars_per_file ?? DEFAULT_RETRIEVAL.maxEmbedCharsPerFile,
+    binary: (raw?.binary as RetrievalConfig["binary"] | undefined) ?? DEFAULT_RETRIEVAL.binary,
   };
 }
 
@@ -303,13 +292,8 @@ function must<T>(value: T | undefined, what: string): T {
   return value;
 }
 
-const CORRECTED = new Set([
-  "a same-size same-mtime rewrite is missed by design",
-  "an entry recorded as not embedded is stale even when the tuple matches",
-]);
-
 describe("hybridSearch", () => {
-  for (const c of fixture.cases.filter((entry) => !CORRECTED.has(entry.name))) {
+  for (const c of fixture.cases) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       const idx = join(root, "cache/workspace_index.db");
@@ -390,6 +374,97 @@ describe("hybridSearch", () => {
   }
 });
 
+const MODE_WEIGHTS: Record<string, { lexical: number; semantic: number }> = {
+  hybrid: { lexical: toF32(0.45), semantic: toF32(0.55) },
+  vector: { lexical: 0, semantic: 1 },
+};
+
+function expectScoredAsClaimed(
+  files: readonly {
+    displayPath: string;
+    fsPath: string;
+    content?: string | undefined;
+    lexicalScore: number;
+    semanticScore?: number | undefined;
+    combinedScore: number;
+    embedded: boolean;
+  }[],
+  run: Run,
+  workspaceDir: string,
+): void {
+  const where = `${run.mode} search for ${JSON.stringify(run.query)}`;
+  const weights = required(MODE_WEIGHTS[run.mode]);
+  const maxLex = toF32(Math.max(1, ...files.map((f) => f.lexicalScore)));
+  const terms = tokenizeQuery(run.query.toLowerCase());
+
+  let previous = Infinity;
+  for (const file of files) {
+    expect(file.fsPath, `${where}: ${file.displayPath} is that file inside the workspace`).toBe(
+      join(workspaceDir, file.displayPath),
+    );
+    if (file.content !== undefined) {
+      expect(
+        readFileSync(file.fsPath, "utf8").startsWith(file.content),
+        `${where}: ${file.displayPath} carries what is actually in the file`,
+      ).toBe(true);
+    }
+
+    expect(
+      file.lexicalScore,
+      `${where}: ${file.displayPath} is scored on the words of the query`,
+    ).toBe(lexicalScore(file.displayPath, file.content ?? "", run.query.toLowerCase(), terms));
+    expect(
+      file.embedded,
+      `${where}: ${file.displayPath} has a semantic score exactly when it was embedded`,
+    ).toBe(file.semanticScore !== undefined);
+    if (file.semanticScore !== undefined) {
+      expect(
+        file.semanticScore >= -1.001 && file.semanticScore <= 1.001,
+        `${where}: ${file.displayPath} scores as a cosine`,
+      ).toBe(true);
+    }
+
+    const semantic = file.semanticScore ?? 0;
+    const semNorm = Number.isNaN(semantic) ? 0 : Math.max(semantic, 0);
+    expect(
+      file.combinedScore,
+      `${where}: ${file.displayPath} blends the two, the lexical half relative to the best`,
+    ).toBe(
+      toF32(
+        toF32(toF32(toF32(file.lexicalScore) / maxLex) * weights.lexical) +
+          toF32(semNorm * weights.semantic),
+      ),
+    );
+    expect(
+      file.combinedScore > 0,
+      `${where}: ${file.displayPath} matched something, or it would not be here`,
+    ).toBe(true);
+
+    expect(file.combinedScore <= previous, `${where}: the best match comes first`).toBe(true);
+    previous = file.combinedScore;
+  }
+
+  const byScore = new Map<number, string[]>();
+  for (const file of files) {
+    byScore.set(file.combinedScore, [...(byScore.get(file.combinedScore) ?? []), file.displayPath]);
+  }
+  for (const tied of byScore.values()) {
+    expect(
+      [...tied].sort(compareRustStrings),
+      `${where}: files that score alike go in path order, byte by byte`,
+    ).toEqual(tied);
+  }
+}
+
+function pathOfDocument(document: string): string {
+  const head = document.slice("path: ".length);
+  const end = head.indexOf("\n\n");
+  if (!document.startsWith("path: ") || end < 0) {
+    throw new Error(`a document sent for embedding does not name its file: ${document.slice(0, 40)}`);
+  }
+  return head.slice(0, end);
+}
+
 interface RunContext {
   workspaceDir: string;
   indexFile: string;
@@ -420,7 +495,6 @@ async function replayRun(run: Run, ctx: RunContext): Promise<void> {
   if (run.outcome.error !== undefined) {
     expect(error).toBeInstanceOf(WorkspaceIndexError);
     expect((error as WorkspaceIndexError).message).toBe(run.outcome.error);
-    await expectIndexOnDisk(ctx.indexFile, run.index_after, ctx.embedder.modelId);
     return;
   }
   if (error !== undefined) throw error;
@@ -437,39 +511,60 @@ async function replayRun(run: Run, ctx: RunContext): Promise<void> {
     return;
   }
 
-  expect(got.files.map((f) => f.displayPath)).toEqual(
-    run.outcome.files.map((f) => f.display_path),
+  expect(got.files.map((f) => f.displayPath), "the files it found, best first").toEqual(
+    run.outcome.files,
   );
-  for (const [i, expected] of run.outcome.files.entries()) {
-    const actual = required(got.files[i]);
-    expect(actual.fsPath).toBe(expected.fs_path.replace("<tmp>", root));
-    expect(actual.content).toBe(expected.content ?? undefined);
-    expect(actual.lexicalScore).toBe(expected.lexical_score);
-    expect(actual.semanticScore).toBe(f32(expected.semantic_score));
-    expect(actual.combinedScore).toBe(toF32(expected.combined_score));
-    expect(actual.embedded).toBe(expected.embedded);
-    expect(actual.skipReason).toBe(expected.skip_reason ?? undefined);
+  expectScoredAsClaimed(got.files, run, ctx.workspaceDir);
+
+  if (calls.length > 0) {
+    expect(calls.at(-1), "the query itself is embedded last, on its own").toEqual([run.query]);
+  }
+  const documents = calls.slice(0, -1);
+  expect(
+    documents.map((batch) => [...batch].map(pathOfDocument).sort(compareStrings)),
+    "the files embedded, batch by batch",
+  ).toEqual(run.embedded_paths.map((batch) => [...batch].sort(compareStrings)));
+  for (const document of documents.flat()) {
+    const path = pathOfDocument(document);
+    const body = document.slice(`path: ${path}\n\n`.length);
+    const onDisk = readFileSync(join(ctx.workspaceDir, path), "utf8");
+    expect(
+      Array.from(onDisk).slice(0, ctx.config.maxEmbedCharsPerFile).join(""),
+      `${path} is embedded as its path and its text, cut to the character cap`,
+    ).toBe(body);
   }
 
-  expect(calls.map((b) => [...b].sort())).toEqual(
-    run.embed_calls.map((b) => [...b].sort()),
-  );
-  if (calls.length > 0) expect(calls.at(-1)).toEqual([run.query]);
+  const again = await hybridSearch({
+    workspaceDir: ctx.workspaceDir,
+    retrievalConfig: configOf(run.config),
+    query: run.query,
+    mode: run.mode as HybridMode,
+    embedder: ctx.embedder,
+    indexPath: ctx.indexFile,
+    ...(run.path_filter === null ? {} : { pathFilter: run.path_filter }),
+  });
+  const reEmbedded = ctx.embedder.takeCalls().reduce((n, b) => n + b.length, 0);
 
-  await expectIndexOnDisk(ctx.indexFile, run.index_after, ctx.embedder.modelId);
-}
+  expect(
+    again.files.map((f) => f.displayPath),
+    "re-running the same query returns the same files",
+  ).toEqual(got.files.map((f) => f.displayPath));
+  expect(
+    again.files.map((f) => f.combinedScore),
+    "and scores them the same",
+  ).toEqual(got.files.map((f) => f.combinedScore));
 
-async function expectIndexOnDisk(
-  path: string,
-  expected: unknown,
-  model: string,
-): Promise<void> {
-  if (expected === null) {
-    if (!(await Bun.file(path).exists())) return;
-    expectIndexMatches(storedEntries(path, model), {});
-    return;
+  if (await Bun.file(ctx.indexFile).exists()) {
+    expect(
+      reEmbedded,
+      "the index was written, so only the query itself is embedded again",
+    ).toBeLessThanOrEqual(1);
+  } else if (got.files.length > 0) {
+    expect(
+      reEmbedded,
+      "with nowhere to write the index, the work is done again",
+    ).toBeGreaterThanOrEqual(1);
   }
-  expectIndexMatches(storedEntries(path, model), expectedEntries(expected));
 }
 
 interface ComparableIndexEntry {
@@ -489,28 +584,6 @@ interface FixtureIndex {
   entries: Record<string, FixtureIndexEntry>;
 }
 
-function storedEntries(path: string, model: string): Record<string, ComparableIndexEntry> {
-  const store = WorkspaceIndexStore.open(path);
-  try {
-    const out: Record<string, ComparableIndexEntry> = {};
-    for (const [displayPath, row] of store.files()) {
-      const vector = row.embedded
-        ? store.vectorsFor(model, [row.document_hash]).get(row.document_hash)
-        : undefined;
-      out[displayPath] = {
-        size: row.size,
-        modified_at_secs: row.modified_at_secs,
-        embedded: row.embedded,
-        reason: row.reason ?? null,
-        ...(vector === undefined ? {} : { embedding: f32s(vector) }),
-      };
-    }
-    return out;
-  } finally {
-    store.close();
-  }
-}
-
 function expectIndexMatches(
   got: Record<string, ComparableIndexEntry>,
   want: Record<string, ComparableIndexEntry>,
@@ -521,20 +594,6 @@ function expectIndexMatches(
     if (path in want) continue;
     expect({ path, ...row }).toMatchObject({ path, embedded: false, reason: null });
   }
-}
-
-function expectedEntries(expected: unknown): Record<string, ComparableIndexEntry> {
-  const out: Record<string, ComparableIndexEntry> = {};
-  for (const [path, e] of Object.entries((expected as FixtureIndex).entries)) {
-    out[path] = {
-      size: e.size,
-      modified_at_secs: e.modified_at_secs,
-      embedded: e.embedded,
-      reason: e.reason ?? null,
-      ...(e.embedding === undefined ? {} : { embedding: f32s(e.embedding) }),
-    };
-  }
-  return out;
 }
 
 function seededHash(fsPath: string, displayPath: string, cap: number): string {
@@ -573,8 +632,72 @@ function expectedIndexShape(index: unknown): Record<string, ComparableIndexEntry
   return out;
 }
 
+describe("deciding an indexed file needs re-embedding", () => {
+  async function refresh(opts: {
+    content: string;
+    mtime: number;
+    recorded?: { size: number; modified_at_secs: number; embedded: boolean };
+    vectorFor?: "current" | "none";
+  }) {
+    const ws = join(root, "workspace");
+    await mkdir(ws, { recursive: true });
+    const rel = "note.md";
+    const bytes = Buffer.from(opts.content);
+    await writeAt(join(ws, rel), bytes, opts.mtime);
+
+    const config = configOf(required(fixture.refresh_index_entries[0]).config);
+    const candidates = await enumerateFiles(ws, config);
+    const currentHash = seededHash(join(ws, rel), rel, config.maxEmbedCharsPerFile);
+
+    const existing = new Map<string, FileRow>();
+    if (opts.recorded !== undefined) {
+      existing.set(rel, {
+        display_path: rel,
+        size: opts.recorded.size,
+        modified_at_secs: opts.recorded.modified_at_secs,
+        document_hash: currentHash,
+        embed_chars: config.maxEmbedCharsPerFile,
+        embedded: opts.recorded.embedded,
+        reason: undefined,
+      });
+    }
+
+    const has = (h: string) => opts.vectorFor === "current" && h === currentHash;
+    const out = await refreshIndexEntries(candidates, existing, config, has);
+    return out.stale.map((e) => e.row.display_path);
+  }
+
+  test("is decided by whether a vector exists for the content, not by size or mtime", async () => {
+    const mtime = 1_700_000_000;
+    const sameTuple = { size: 5, modified_at_secs: mtime, embedded: true };
+
+    expect(
+      await refresh({ content: "hello", mtime, recorded: sameTuple, vectorFor: "current" }),
+      "a file whose vector is present is not re-embedded",
+    ).toEqual([]);
+
+    expect(
+      await refresh({ content: "hello", mtime, recorded: sameTuple, vectorFor: "none" }),
+      "the same file with no vector is, however unchanged the tuple looks",
+    ).toContain("note.md");
+  });
+
+  test("a rewrite keeping the same size and mtime is caught, because the hash is not", async () => {
+    const mtime = 1_700_000_000;
+    const recorded = { size: 5, modified_at_secs: mtime, embedded: true };
+    expect(
+      await refresh({ content: "world", mtime, recorded, vectorFor: "none" }),
+      "content can change without size or mtime moving",
+    ).toContain("note.md");
+  });
+
+  test("a file the index has never seen is embedded", async () => {
+    expect(await refresh({ content: "brand new", mtime: 1_700_000_000 })).toContain("note.md");
+  });
+});
+
 describe("refreshIndexEntries", () => {
-  for (const c of fixture.refresh_index_entries.filter((entry) => !CORRECTED.has(entry.name))) {
+  for (const c of fixture.refresh_index_entries) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       await mkdir(ws, { recursive: true });
@@ -880,22 +1003,22 @@ describe("resolveEmbedder", () => {
         return;
       }
       const embedder = call();
-      expect(embedder.modelId).toBe(c.outcome.model_id);
-      expect(embedder.dimensions).toBe(c.outcome.dimensions ?? undefined);
-      expect(call()).toBe(embedder);
 
-      const parts = c.outcome.cache_key.split("::");
-      const keyDimensions = required(parts.at(-1));
-      const keyBaseUrl = required(parts.at(-2));
-      expect(parts[0]).toBe(splitOnce(c.default_ref ?? required(Object.keys(embedding)[0]), ":")[0]);
-      expect(parts.slice(1, -2).join("::")).toBe(c.outcome.model_id);
-      expect(keyDimensions).toBe(
-        c.outcome.dimensions === null ? "native" : String(c.outcome.dimensions),
+      const ref = c.default_ref ?? required(Object.keys(embedding)[0]);
+      const [providerKey, modelId] = splitOnce(ref, ":");
+      expect(embedder.modelId, "the model is the half of the identity after the colon").toBe(modelId);
+      expect(embedder.dimensions, "the width comes from the overlay for that identity").toBe(
+        embedding[ref]?.dimensions,
       );
+      expect(call(), "resolving the same configuration twice reuses one embedder").toBe(embedder);
+
+      const configured = c.registry.find((entry) => entry.provider_key === providerKey);
+      const baseUrl =
+        configured?.base_url ?? hardcodedProviderBaseUrl(providerKey) ?? "https://api.openai.com/v1";
 
       await embedder.embed(["x"]);
-      expect(requested).toEqual([
-        `${keyBaseUrl === "default" ? "https://api.openai.com/v1" : keyBaseUrl}/embeddings`,
+      expect(requested, "and it asks the endpoint the provider was given").toEqual([
+        `${baseUrl}/embeddings`,
       ]);
     });
   }

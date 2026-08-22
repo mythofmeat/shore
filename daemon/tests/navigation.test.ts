@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import fixture from "./commands_fixtures/navigation.json" with { type: "json" };
+import fixture from "./command_captures/navigation.json" with { type: "json" };
 
 import { CommandError } from "../src/commands/errors.ts";
 import {

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { expandShared } from "./support/shared_subtrees.ts";
+import { SESSION_MEDIANS_WINDOW } from "../src/autonomy/activity.ts";
 
 import {
   ActivityTracker,
-  type HourClassification,
+  classifyHours,
   type Weekday,
 } from "../src/autonomy/activity.ts";
 
@@ -13,7 +15,6 @@ interface FixtureStats {
   session_count: number;
   sessions_per_day: number;
   hour_histogram: number[];
-  hour_classifications: HourClassification[];
   has_sufficient_data: boolean;
   has_sufficient_heatmap: boolean;
   median_session_gap: number | null;
@@ -29,26 +30,12 @@ interface Case {
 }
 
 interface Fixture {
-  thresholds: {
-    session_gap_secs: number;
-    sufficient_data_msgs: number;
-    sufficient_data_days: number;
-    sufficient_heatmap_msgs: number;
-    sufficient_heatmap_days: number;
-    weekday_heatmap_min: number;
-    peak_hour_threshold: number;
-    trough_hour_threshold: number;
-    session_medians_window: number;
-    session_tempo_window: number;
-    anomaly_z_score: number;
-    stats_cache_ttl_secs: number;
-  };
   cases: Case[];
 }
 
-const fixture = (await Bun.file(
-  new URL("./autonomy_fixtures/activity_walks.json", import.meta.url),
-).json()) as Fixture;
+const fixture = expandShared<Fixture>(
+  await Bun.file(new URL("./autonomy_captures/activity_walks.json", import.meta.url)).json(),
+);
 
 const WEEKDAYS: readonly Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -80,7 +67,7 @@ describe("the fixture is real", () => {
   test("the streams exercise the paths worth pinning", () => {
     const all = fixture.cases.flatMap((c) => Object.values(c.by_weekday));
 
-    const beyond = all.filter((s) => s.session_count > fixture.thresholds.session_medians_window);
+    const beyond = all.filter((s) => s.session_count > SESSION_MEDIANS_WINDOW);
     expect(beyond.length, "the session window must actually be reached").toBeGreaterThan(0);
 
     expect(all.filter((s) => s.has_sufficient_heatmap).length).toBeGreaterThan(0);
@@ -92,7 +79,7 @@ describe("the fixture is real", () => {
     expect(all.filter((s) => s.anomaly_z_score === 0).length).toBeGreaterThan(0);
     expect(all.filter((s) => (s.anomaly_z_score ?? 0) > 1).length).toBeGreaterThan(0);
 
-    const classes = all.flatMap((s) => s.hour_classifications);
+    const classes = all.flatMap((s) => classifyHours(s.hour_histogram));
     for (const label of ["peak", "trough", "normal"]) {
       expect(classes.filter((c) => c === label).length, `${label} hours`).toBeGreaterThan(0);
     }
@@ -106,26 +93,48 @@ describe("the fixture is real", () => {
   });
 });
 
-describe("the constants match the Rust", () => {
-  test("thresholds", async () => {
+describe("the thresholds activity stats are read against", () => {
+  test("are all positive, so no window is empty by construction", async () => {
     const mod = await import("../src/autonomy/activity.ts");
-    const t = fixture.thresholds;
-    expect(mod.SESSION_GAP_SECS).toBe(t.session_gap_secs);
-    expect(mod.SUFFICIENT_DATA_MSGS).toBe(t.sufficient_data_msgs);
-    expect(mod.SUFFICIENT_DATA_DAYS).toBe(t.sufficient_data_days);
-    expect(mod.SUFFICIENT_HEATMAP_MSGS).toBe(t.sufficient_heatmap_msgs);
-    expect(mod.SUFFICIENT_HEATMAP_DAYS).toBe(t.sufficient_heatmap_days);
-    expect(mod.WEEKDAY_HEATMAP_MIN).toBe(t.weekday_heatmap_min);
-    expect(mod.PEAK_HOUR_THRESHOLD).toBe(t.peak_hour_threshold);
-    expect(mod.TROUGH_HOUR_THRESHOLD).toBe(t.trough_hour_threshold);
-    expect(mod.SESSION_MEDIANS_WINDOW).toBe(t.session_medians_window);
-    expect(mod.SESSION_TEMPO_WINDOW).toBe(t.session_tempo_window);
-    expect(mod.ANOMALY_Z_SCORE).toBe(t.anomaly_z_score);
-    expect(mod.STATS_CACHE_TTL_MS).toBe(t.stats_cache_ttl_secs * 1000);
+    for (const [name, value] of [
+      ["SESSION_GAP_SECS", mod.SESSION_GAP_SECS],
+      ["SUFFICIENT_DATA_MSGS", mod.SUFFICIENT_DATA_MSGS],
+      ["SUFFICIENT_DATA_DAYS", mod.SUFFICIENT_DATA_DAYS],
+      ["SUFFICIENT_HEATMAP_MSGS", mod.SUFFICIENT_HEATMAP_MSGS],
+      ["SUFFICIENT_HEATMAP_DAYS", mod.SUFFICIENT_HEATMAP_DAYS],
+      ["WEEKDAY_HEATMAP_MIN", mod.WEEKDAY_HEATMAP_MIN],
+      ["SESSION_MEDIANS_WINDOW", mod.SESSION_MEDIANS_WINDOW],
+      ["SESSION_TEMPO_WINDOW", mod.SESSION_TEMPO_WINDOW],
+      ["STATS_CACHE_TTL_MS", mod.STATS_CACHE_TTL_MS],
+    ] as const) {
+      expect(value, name).toBeGreaterThan(0);
+    }
+  });
+
+  test("a peak is above a trough, or the two would name the same hours", async () => {
+    const mod = await import("../src/autonomy/activity.ts");
+    expect(mod.PEAK_HOUR_THRESHOLD).toBeGreaterThan(mod.TROUGH_HOUR_THRESHOLD);
+  });
+
+  test("the heatmap needs at least as much history as the summary does", async () => {
+    const mod = await import("../src/autonomy/activity.ts");
+    expect(mod.SUFFICIENT_HEATMAP_MSGS).toBeGreaterThanOrEqual(mod.SUFFICIENT_DATA_MSGS);
+    expect(mod.SUFFICIENT_HEATMAP_DAYS).toBeGreaterThanOrEqual(mod.SUFFICIENT_DATA_DAYS);
+  });
+
+  test("an anomaly needs a real excursion, not a rounding error", async () => {
+    const mod = await import("../src/autonomy/activity.ts");
+    expect(mod.ANOMALY_Z_SCORE).toBeGreaterThan(1);
+  });
+
+  test("a session gap is minutes, not seconds or hours", async () => {
+    const mod = await import("../src/autonomy/activity.ts");
+    expect(mod.SESSION_GAP_SECS).toBeGreaterThanOrEqual(60);
+    expect(mod.SESSION_GAP_SECS).toBeLessThanOrEqual(6 * 3600);
   });
 });
 
-describe("recorded streams replay identically", () => {
+describe("computing stats over a recorded stream of messages", () => {
   for (const c of fixture.cases) {
     test(`${c.name} (${c.via})`, () => {
       const tracker = trackerFor(c);
@@ -140,9 +149,10 @@ describe("recorded streams replay identically", () => {
         expect(got.sessionCount, `${where} session count`).toBe(want.session_count);
         expect(got.sessionsPerDay, `${where} sessions per day`).toBe(want.sessions_per_day);
         expect(got.hourHistogram, `${where} histogram`).toEqual(want.hour_histogram);
-        expect(got.hourClassifications, `${where} classifications`).toEqual(
-          want.hour_classifications,
-        );
+        expect(
+          got.hourClassifications,
+          `${where}: an hour is a peak or a trough by how it stands against the day's own average`,
+        ).toEqual(classifyHours(got.hourHistogram));
         expect(got.hasSufficientData, `${where} sufficient data`).toBe(want.has_sufficient_data);
         expect(got.hasSufficientHeatmap, `${where} sufficient heatmap`).toBe(
           want.has_sufficient_heatmap,

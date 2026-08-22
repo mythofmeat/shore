@@ -3,7 +3,7 @@ import { classifyCredentialFailure, shouldRotate, type CredentialFailureKind } f
 import { shouldRetryError } from "./retry";
 import { retryAfterMsFromError } from "./retry_after";
 import type { KeyCandidate } from "./credentials";
-import type { LlmError } from "./errors";
+import { describeError, toLlmError, type LlmError } from "./errors";
 
 export const DEFAULT_MAX_RETRIES = 2;
 export const DEFAULT_BACKOFF_BASE_MS = 500;
@@ -14,11 +14,13 @@ const MAX_REASON_BYTES = 200;
 
 const U64_MAX = 2n ** 64n - 1n;
 
-export function llmHttpStatus(error: LlmError): number | undefined {
+export function llmHttpStatus(raw: unknown): number | undefined {
+  const error = toLlmError(raw);
   return error.kind === "http_status" ? error.status : undefined;
 }
 
-export function sanitizeReason(error: LlmError): string {
+export function sanitizeReason(raw: unknown): string {
+  const error = toLlmError(raw);
   switch (error.kind) {
     case "http_status":
       return `HTTP ${error.status}`;
@@ -31,15 +33,17 @@ export function sanitizeReason(error: LlmError): string {
     case "stream_errored":
       return `stream errored: ${error.message}`;
     case "transport":
-      return "transport error";
+      return `transport error: ${truncateBytes(error.message, MAX_REASON_BYTES)}`;
     case "serialize":
-      return "request serialization failed";
+      return `request serialization failed: ${truncateBytes(error.message, MAX_REASON_BYTES)}`;
     case "deserialize":
-      return "response deserialization failed";
+      return `response deserialization failed: ${truncateBytes(error.message, MAX_REASON_BYTES)}`;
     case "budget_blocked":
       return truncateBytes(error.message, MAX_REASON_BYTES);
     case "aborted":
       return "request cancelled";
+    default:
+      return truncateBytes(describeError(error), MAX_REASON_BYTES);
   }
 }
 
@@ -219,7 +223,7 @@ export async function streamWithCredentialFallback<T>(
     throw missingApiKey(`provider '${providerKey}' has no enabled keys`);
   }
 
-  let lastError: LlmError | undefined;
+  let lastError: unknown;
 
   for (const [index, candidate] of candidates.entries()) {
     const next = candidates[index + 1];
@@ -235,13 +239,13 @@ export async function streamWithCredentialFallback<T>(
     try {
       return await attempt(apiKey, candidate);
     } catch (raw) {
-      const error = raw as LlmError;
+      const error = toLlmError(raw);
       const kind = classifyCredentialFailure(providerKey, error);
       if (!shouldRotate(kind)) {
-        throw error;
+        throw raw;
       }
       record(hooks, providerKey, candidate, next, kind, llmHttpStatus(error), sanitizeReason(error));
-      lastError = error;
+      lastError = raw;
     }
   }
 

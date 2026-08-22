@@ -1,3 +1,5 @@
+import { isAbortError, isTimeoutError } from "./abort.ts";
+import { retryAfterMsFromError } from "./retry_after.ts";
 import type { Timing, Usage } from "./types.ts";
 
 export type LlmError =
@@ -66,4 +68,77 @@ export function describeLlmError(error: LlmError): string {
     case "aborted":
       return `request was cancelled: ${error.message}`;
   }
+}
+
+function messageOf(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  if (typeof err === "object" && err !== null) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+    try {
+      return JSON.stringify(err) ?? "unknown error";
+    } catch {
+      return "unknown error";
+    }
+  }
+  return String(err);
+}
+
+function statusOf(err: object): number | undefined {
+  for (const field of ["statusCode", "status"] as const) {
+    const raw = (err as Record<string, unknown>)[field];
+    if (typeof raw === "number" && Number.isInteger(raw) && raw >= 100 && raw <= 599) return raw;
+  }
+  return undefined;
+}
+
+function bodyOf(err: object): string {
+  for (const field of ["responseBody", "body"] as const) {
+    const raw = (err as Record<string, unknown>)[field];
+    if (typeof raw === "string" && raw.length > 0) return raw;
+    if (raw !== undefined && raw !== null) {
+      try {
+        return JSON.stringify(raw) ?? "";
+      } catch {
+        break;
+      }
+    }
+  }
+  const err2 = (err as { error?: unknown }).error;
+  if (err2 !== undefined && err2 !== null) {
+    try {
+      return JSON.stringify(err2) ?? "";
+    } catch {
+      return messageOf(err);
+    }
+  }
+  return messageOf(err);
+}
+
+export function toLlmError(err: unknown): LlmError {
+  if (isLlmError(err)) return err;
+  if (isAbortError(err)) {
+    return { kind: "aborted", message: messageOf(err) };
+  }
+  if (typeof err !== "object" || err === null) {
+    return { kind: "transport", message: messageOf(err) };
+  }
+
+  const status = statusOf(err);
+  if (status !== undefined) {
+    const retryAfter = retryAfterMsFromError(err);
+    return {
+      kind: "http_status",
+      status,
+      body: bodyOf(err),
+      ...(retryAfter === undefined ? {} : { retry_after_ms: retryAfter }),
+    };
+  }
+
+  const message = messageOf(err);
+  if (isTimeoutError(err)) {
+    return { kind: "transport", message: `the request timed out: ${message}` };
+  }
+  return { kind: "transport", message };
 }

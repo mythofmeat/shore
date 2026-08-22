@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import fixture from "./engine_fixtures/characters.json" with { type: "json" };
+import fixture from "./engine_captures/characters.json" with { type: "json" };
 
 import {
   CharacterConfigError,
@@ -19,7 +19,7 @@ import { compareByCodePoint } from "../src/util/sort.ts";
 
 interface Step {
   op: string;
-  state: { available: string[]; snapshots: string[] };
+  state?: { available: string[]; snapshots: string[] };
   name?: string;
   soul?: boolean;
   toml?: string;
@@ -159,6 +159,7 @@ describe("CharacterRegistry", () => {
 
       let registry: CharacterRegistry | undefined;
 
+      let expected: { available: string[]; snapshots: string[] } | undefined;
       for (const [index, step] of scenario.steps.entries()) {
         const where = `${scenario.name} step ${String(index)} (${step.op})`;
 
@@ -324,13 +325,15 @@ describe("CharacterRegistry", () => {
         }
 
         const reg = required(registry, where);
+        if (step.state !== undefined) expected = step.state;
+        if (expected === undefined) throw new Error(`${where}: nothing has said what the state is`);
         expect(
           {
             available: [...reg.availableCharacters()],
             snapshots: snapshotsOnDisk(dataDir),
           },
-          `${where}: state`,
-        ).toEqual(step.state);
+          step.state === undefined ? `${where}: leaves the registry as it was` : `${where}: state`,
+        ).toEqual(expected);
       }
     });
   }

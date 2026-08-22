@@ -19,6 +19,7 @@ import { switchCharacter, type Args } from "../commands/navigation.ts";
 import { afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
 import type { HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
+import type { FrameSink } from "../llm/stream.ts";
 import type { RequestMeta } from "../swp/session.ts";
 
 export interface CommandRegistry {
@@ -82,7 +83,7 @@ export async function dispatchCommand(
     return frameWithRid(commandFrame(cmd.name, { err: internalError(message) }), rid);
   }
 
-  const session = characterSession(deps, character, config);
+  const session = characterSession(deps, character, config, sessionId, rid);
 
   let frame: ServerMessage;
   try {
@@ -188,6 +189,8 @@ function characterSession(
   deps: CommandPathDeps,
   character: string,
   config: LoadedConfig,
+  sessionId: number,
+  rid: string | undefined,
 ): CommandSession {
   const saved = savedModelForCharacter(
     configView(config),
@@ -204,13 +207,35 @@ function characterSession(
     activeModel: saved?.qualifiedName,
     runtime: deps.runtime,
     ...(deps.env === undefined ? {} : { env: deps.env }),
+    emit: sessionEmitter(deps.router, sessionId, rid),
+  };
+}
+
+export function sessionEmitter(
+  router: Pick<SessionRouter, "sendToSession">,
+  sessionId: number,
+  rid: string | undefined,
+): FrameSink {
+  return (msg) => {
+    void router.sendToSession(sessionId, frameWithRid(msg, rid));
   };
 }
 
 function frameWithRid(frame: ServerMessage, rid: string | undefined): ServerMessage {
   if (rid === undefined) return frame;
-  if (frame.type === "command_output" || frame.type === "error") return { ...frame, rid };
-  return frame;
+  switch (frame.type) {
+    case "command_output":
+    case "error":
+    case "stream_start":
+    case "stream_chunk":
+    case "stream_end":
+    case "phase":
+    case "tool_call":
+    case "tool_result":
+      return { ...frame, rid };
+    default:
+      return frame;
+  }
 }
 
 export type { ReloadSummary };

@@ -1,0 +1,1509 @@
+{
+  "scenarios": [
+    {
+      "name": "empty config dir",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": []
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [],
+            "snapshots": []
+          }
+        },
+        {
+          "op": "has_character",
+          "name": "Alice",
+          "result": false
+        },
+        {
+          "op": "resolve_character",
+          "requested": null,
+          "result": {
+            "err": "no characters available \u2014 create one at characters/<name>/workspace/SOUL.md",
+            "variant": "none_available"
+          }
+        },
+        {
+          "op": "resolve_character",
+          "requested": "Alice",
+          "result": {
+            "err": "character \"Alice\" not found (available: [])",
+            "variant": "not_found"
+          }
+        }
+      ]
+    },
+    {
+      "name": "discovery is sorted and takes both definition files",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Zulu",
+            "soul": true
+          },
+          {
+            "name": "Alice",
+            "soul": false
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice",
+              "Zulu"
+            ],
+            "snapshots": [
+              "Alice",
+              "Zulu"
+            ]
+          }
+        },
+        {
+          "op": "has_character",
+          "name": "Alice",
+          "result": true
+        },
+        {
+          "op": "has_character",
+          "name": "alice",
+          "result": false
+        },
+        {
+          "op": "character_definition",
+          "name": "Alice",
+          "result": "Alice legacy"
+        },
+        {
+          "op": "character_definition",
+          "name": "Zulu",
+          "result": "Zulu soul"
+        },
+        {
+          "op": "character_definition",
+          "name": "Nobody",
+          "result": null
+        }
+      ]
+    },
+    {
+      "name": "a directory without a definition file is not a character",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:write",
+          "path": "characters/Empty/notes.md",
+          "body": "not a definition"
+        },
+        {
+          "op": "refresh"
+        },
+        {
+          "op": "fs:write",
+          "path": "characters/Empty/character.md",
+          "body": "now it is"
+        },
+        {
+          "op": "refresh",
+          "state": {
+            "available": [
+              "Alice",
+              "Empty"
+            ],
+            "snapshots": [
+              "Alice",
+              "Empty"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refresh re-scans; nothing else does",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:add_character",
+          "name": "Bob",
+          "soul": true
+        },
+        {
+          "op": "has_character",
+          "name": "Bob",
+          "result": false
+        },
+        {
+          "op": "refresh",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          }
+        },
+        {
+          "op": "has_character",
+          "name": "Bob",
+          "result": true
+        },
+        {
+          "op": "fs:remove_character",
+          "name": "Alice"
+        },
+        {
+          "op": "has_character",
+          "name": "Alice",
+          "result": true
+        },
+        {
+          "op": "refresh",
+          "state": {
+            "available": [
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          }
+        },
+        {
+          "op": "has_character",
+          "name": "Alice",
+          "result": false
+        }
+      ]
+    },
+    {
+      "name": "one character auto-selects",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "resolve_character",
+          "requested": null,
+          "result": {
+            "ok": "Alice"
+          }
+        },
+        {
+          "op": "resolve_character",
+          "requested": "Alice",
+          "result": {
+            "ok": "Alice"
+          }
+        },
+        {
+          "op": "resolve_character",
+          "requested": "Bob",
+          "result": {
+            "err": "character \"Bob\" not found (available: [\"Alice\"])",
+            "variant": "not_found"
+          }
+        },
+        {
+          "op": "resolve_character",
+          "requested": "",
+          "result": {
+            "err": "character \"\" not found (available: [\"Alice\"])",
+            "variant": "not_found"
+          }
+        }
+      ]
+    },
+    {
+      "name": "two characters are ambiguous without a request",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          },
+          {
+            "name": "Bob",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          }
+        },
+        {
+          "op": "resolve_character",
+          "requested": null,
+          "result": {
+            "err": "multiple characters available ([\"Alice\", \"Bob\"]) \u2014 specify one with --character or SHORE_CHARACTER",
+            "variant": "ambiguous"
+          }
+        },
+        {
+          "op": "resolve_character",
+          "requested": "Bob",
+          "result": {
+            "ok": "Bob"
+          }
+        }
+      ]
+    },
+    {
+      "name": "engines are cached per character",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          },
+          {
+            "name": "Bob",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "ok": true,
+            "engine": 0,
+            "root": "data",
+            "leaf": "Alice"
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "ok": true,
+            "engine": 0,
+            "root": "data",
+            "leaf": "Alice"
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Bob",
+          "result": {
+            "ok": true,
+            "engine": 1,
+            "root": "data",
+            "leaf": "Bob"
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Nobody",
+          "result": {
+            "err": "character not found: Nobody"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reload drops engines for removed characters only",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          },
+          {
+            "name": "Bob",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "ok": true,
+            "engine": 0,
+            "root": "data",
+            "leaf": "Alice"
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Bob",
+          "result": {
+            "ok": true,
+            "engine": 1,
+            "root": "data",
+            "leaf": "Bob"
+          }
+        },
+        {
+          "op": "refresh"
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "ok": true,
+            "engine": 0,
+            "root": "data",
+            "leaf": "Alice"
+          }
+        },
+        {
+          "op": "fs:remove_character",
+          "name": "Bob"
+        },
+        {
+          "op": "reload_runtime_state",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          },
+          "summary": {
+            "available_before": 2,
+            "available_after": 1,
+            "character_discovery_changed": true,
+            "dropped_engines": 1
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "ok": true,
+            "engine": 0,
+            "root": "data",
+            "leaf": "Alice"
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Bob",
+          "result": {
+            "err": "character not found: Bob"
+          }
+        }
+      ]
+    },
+    {
+      "name": "refresh keeps a removed character's engine",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "ok": true,
+            "engine": 0,
+            "root": "data",
+            "leaf": "Alice"
+          }
+        },
+        {
+          "op": "fs:remove_character",
+          "name": "Alice"
+        },
+        {
+          "op": "refresh",
+          "state": {
+            "available": [],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "err": "character not found: Alice"
+          }
+        },
+        {
+          "op": "fs:add_character",
+          "name": "Alice",
+          "soul": true
+        },
+        {
+          "op": "refresh",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "ok": true,
+            "engine": 0,
+            "root": "data",
+            "leaf": "Alice"
+          }
+        }
+      ]
+    },
+    {
+      "name": "per-character config is cached, including its absence",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          },
+          {
+            "name": "Bob",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          }
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": true,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nstream = false\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": true,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "invalidate_configs"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "effective_config",
+          "name": "Bob",
+          "result": {
+            "stream": true,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an unloadable character config fails closed",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[completely_unknown]\nkey = 1\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "error": "unknown field `completely_unknown`"
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nembedding = \"bare-alias\"\n"
+        },
+        {
+          "op": "invalidate_configs"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "error": "must be a `provider:model_id` id"
+        }
+      ]
+    },
+    {
+      "name": "effective_config does not check membership",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "effective_config",
+          "name": "Nobody",
+          "result": {
+            "stream": true,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a runtime override outranks the file until invalidated",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nstream = false\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "set_runtime_effective_config",
+          "name": "Alice",
+          "toml": "[defaults]\ndisplay_name = \"RUNTIME\"\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": true,
+            "display_name": "RUNTIME",
+            "addr": "127.0.0.1:7320"
+          }
+        },
+        {
+          "op": "invalidate_configs"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_global_config clears the per-character cache",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nstream = false\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "set_global_config",
+          "toml": "[defaults]\ndisplay_name = \"REPLACED\"\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "REPLACED",
+            "addr": "127.0.0.1:7320"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reload clears the per-character cache too",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nstream = false\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nstream = true\nsubagent_model = \"x\"\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "reload_runtime_state",
+          "summary": {
+            "available_before": 1,
+            "available_after": 1,
+            "character_discovery_changed": false,
+            "dropped_engines": 0
+          }
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": true,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "overrides follow the global config's dirs, discovery does not",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nstream = false\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "set_global_config_elsewhere",
+          "toml": "[defaults]\ndisplay_name = \"ELSEWHERE\"\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": true,
+            "display_name": "ELSEWHERE",
+            "addr": "127.0.0.1:7320"
+          }
+        },
+        {
+          "op": "has_character",
+          "name": "Alice",
+          "result": true
+        },
+        {
+          "op": "refresh"
+        },
+        {
+          "op": "has_character",
+          "name": "Alice",
+          "result": true
+        }
+      ]
+    },
+    {
+      "name": "no raw table: the override merges over nothing",
+      "seed": {
+        "global_toml": null,
+        "raw_table": false,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new_for_test",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": true,
+            "display_name": null,
+            "addr": "127.0.0.1:7320"
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nstream = false\n"
+        },
+        {
+          "op": "invalidate_configs"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": null,
+            "addr": "127.0.0.1:7320"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reload summary counts before, after and drops",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "reload_runtime_state",
+          "summary": {
+            "available_before": 1,
+            "available_after": 1,
+            "character_discovery_changed": false,
+            "dropped_engines": 0
+          }
+        },
+        {
+          "op": "fs:add_character",
+          "name": "Bob",
+          "soul": true
+        },
+        {
+          "op": "reload_runtime_state",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          },
+          "summary": {
+            "available_before": 1,
+            "available_after": 2,
+            "character_discovery_changed": true,
+            "dropped_engines": 0
+          }
+        },
+        {
+          "op": "fs:remove_character",
+          "name": "Alice"
+        },
+        {
+          "op": "fs:remove_character",
+          "name": "Bob"
+        },
+        {
+          "op": "reload_runtime_state",
+          "state": {
+            "available": [],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          },
+          "summary": {
+            "available_before": 2,
+            "available_after": 0,
+            "character_discovery_changed": true,
+            "dropped_engines": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "discovery_changed compares names, not counts",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:add_character",
+          "name": "Bob",
+          "soul": true
+        },
+        {
+          "op": "fs:remove_character",
+          "name": "Alice"
+        },
+        {
+          "op": "reload_runtime_state",
+          "state": {
+            "available": [
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          },
+          "summary": {
+            "available_before": 1,
+            "available_after": 1,
+            "character_discovery_changed": true,
+            "dropped_engines": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "only characters with a live engine count as dropped",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          },
+          {
+            "name": "Bob",
+            "soul": true
+          },
+          {
+            "name": "Cara",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob",
+              "Cara"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob",
+              "Cara"
+            ]
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Alice",
+          "result": {
+            "ok": true,
+            "engine": 0,
+            "root": "data",
+            "leaf": "Alice"
+          }
+        },
+        {
+          "op": "get_or_create",
+          "name": "Bob",
+          "result": {
+            "ok": true,
+            "engine": 1,
+            "root": "data",
+            "leaf": "Bob"
+          }
+        },
+        {
+          "op": "fs:remove_character",
+          "name": "Alice"
+        },
+        {
+          "op": "fs:remove_character",
+          "name": "Cara"
+        },
+        {
+          "op": "reload_runtime_state",
+          "state": {
+            "available": [
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob",
+              "Cara"
+            ]
+          },
+          "summary": {
+            "available_before": 3,
+            "available_after": 1,
+            "character_discovery_changed": true,
+            "dropped_engines": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "a character whose workspace cannot be prepared is still available",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          },
+          {
+            "name": "Bob",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          }
+        },
+        {
+          "op": "fs:block_data_dir",
+          "name": "Cara"
+        },
+        {
+          "op": "fs:add_character",
+          "name": "Cara",
+          "soul": true
+        },
+        {
+          "op": "refresh",
+          "state": {
+            "available": [
+              "Alice",
+              "Bob",
+              "Cara"
+            ],
+            "snapshots": [
+              "Alice",
+              "Bob"
+            ]
+          }
+        },
+        {
+          "op": "has_character",
+          "name": "Cara",
+          "result": true
+        },
+        {
+          "op": "resolve_character",
+          "requested": "Cara",
+          "result": {
+            "ok": "Cara"
+          }
+        },
+        {
+          "op": "reload_runtime_state",
+          "summary": {
+            "available_before": 3,
+            "available_after": 3,
+            "character_discovery_changed": false,
+            "dropped_engines": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "a fixed character config takes effect without an invalidation",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[completely_unknown]\nkey = 1\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "error": "unknown field `completely_unknown`"
+        },
+        {
+          "op": "fs:write_character_config",
+          "name": "Alice",
+          "toml": "[defaults]\nstream = false\n"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        },
+        {
+          "op": "invalidate_configs"
+        },
+        {
+          "op": "effective_config",
+          "name": "Alice",
+          "result": {
+            "stream": false,
+            "display_name": "GLOBAL",
+            "addr": "127.0.0.1:9999"
+          }
+        }
+      ]
+    },
+    {
+      "name": "user definition prefers workspace over legacy",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": true
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "user_definition",
+          "name": "Alice",
+          "result": null
+        },
+        {
+          "op": "fs:write",
+          "path": "characters/Alice/user.md",
+          "body": "legacy user"
+        },
+        {
+          "op": "user_definition",
+          "name": "Alice",
+          "result": "legacy user"
+        },
+        {
+          "op": "fs:write",
+          "path": "characters/Alice/workspace/USER.md",
+          "body": "workspace user"
+        },
+        {
+          "op": "user_definition",
+          "name": "Alice",
+          "result": "workspace user"
+        }
+      ]
+    },
+    {
+      "name": "SOUL.md outranks the legacy character.md",
+      "seed": {
+        "global_toml": "\n[daemon]\naddr = \"127.0.0.1:9999\"\n\n[defaults]\ndisplay_name = \"GLOBAL\"\n",
+        "raw_table": true,
+        "characters": [
+          {
+            "name": "Alice",
+            "soul": false
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "new",
+          "state": {
+            "available": [
+              "Alice"
+            ],
+            "snapshots": [
+              "Alice"
+            ]
+          }
+        },
+        {
+          "op": "character_definition",
+          "name": "Alice",
+          "result": "Alice legacy"
+        },
+        {
+          "op": "fs:write",
+          "path": "characters/Alice/workspace/SOUL.md",
+          "body": "soul wins"
+        },
+        {
+          "op": "character_definition",
+          "name": "Alice",
+          "result": "soul wins"
+        }
+      ]
+    }
+  ]
+}

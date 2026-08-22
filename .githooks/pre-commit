@@ -30,6 +30,8 @@ run "bun-test" \
     bun test
 run "bun-mutate-stale" \
     bun run mutate --stale
+run "bun-rerecord-check" \
+    bun run rerecord:check
 run "bun-build" \
     bun run build
 

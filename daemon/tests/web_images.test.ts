@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./tools_fixtures/web_images.json" with { type: "json" };
+import fixture from "./tools_captures/web_images.json" with { type: "json" };
 import {
   handleFetchUrl,
   handleWebSearch,
@@ -71,7 +71,7 @@ describe("stripHtml", () => {
     expect(stripHtml("<\u{FF53}cript>x</\u{FF53}cript>y")).toBe("x y");
   });
 
-  test("whitespace collapse uses Rust's set, not JavaScript's", () => {
+  test("whitespace collapse uses the ascii set, not JavaScript's unicode one", () => {
     expect(stripHtml("a\u{A0}b")).toBe("a b");
     expect(stripHtml("a\u{3000}b")).toBe("a b");
     expect(stripHtml("a\u{85}b")).toBe("a b");

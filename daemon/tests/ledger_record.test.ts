@@ -365,7 +365,7 @@ describe("what a non-streaming call records", () => {
   });
 });
 
-describe("continuation types match the Rust copy", () => {
+describe("what call type a continuation is recorded under", () => {
   test.each([
     ["message", "tool_loop"],
     ["tool_loop", "tool_loop"],

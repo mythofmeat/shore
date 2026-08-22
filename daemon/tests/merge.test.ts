@@ -5,12 +5,12 @@ import { describe, expect, test } from "bun:test";
 import { mergeToolLoopMessages } from "../src/engine/merge";
 import type { Message } from "../src/engine/types";
 
-import fixture from "./engine_fixtures/merge.json";
+import fixture from "./engine_captures/merge.json";
 
 interface MergeCase {
   name: string;
   input: Message[];
-  expect: Message[];
+  merged_ids: string[];
 }
 
 function hydrate(m: Message): Message {
@@ -21,20 +21,82 @@ function wire(m: Message): unknown {
   return JSON.parse(JSON.stringify(m));
 }
 
-describe("merge parity", () => {
+describe("merging a streamed turn into the conversation", () => {
   const cases = fixture.cases as unknown as MergeCase[];
 
-  test("the fixture is the one that was generated", () => {
-    expect(cases.length).toBe(31);
+  test("every case is a distinct claim, named for what it checks", () => {
+    expect(new Set(cases.map((c) => c.name)).size).toBe(cases.length);
+    expect(cases.length).toBeGreaterThan(20);
   });
+
+  const blocksOf = (messages: readonly Message[]): string[] =>
+    messages.flatMap((m) => m.content_blocks.map((b) => JSON.stringify(b)));
 
   for (const c of cases) {
     test(c.name, () => {
-      const got = mergeToolLoopMessages(c.input.map(hydrate));
-      expect(got.length).toBe(c.expect.length);
-      got.forEach((have, i) => {
-        expect(wire(have)).toEqual(wire(hydrate(required(c.expect[i]))));
-      });
+      const input = c.input.map(hydrate);
+      const got = mergeToolLoopMessages(input);
+      const byId = new Map(input.map((m) => [m.msg_id, m]));
+
+      expect(
+        got.map((m) => m.msg_id),
+        "the messages that survive the merge, each named for the turn it ends",
+      ).toEqual(c.merged_ids);
+
+      for (const message of got) {
+        const source = required(byId.get(message.msg_id));
+        expect(
+          wire({ ...message, content: "", content_blocks: [] }),
+          `${message.msg_id}: a merged turn keeps everything about the message it ends`,
+        ).toEqual(wire({ ...source, content: "", content_blocks: [] }));
+
+        const untouched =
+          JSON.stringify(message.content_blocks) === JSON.stringify(source.content_blocks);
+        if (untouched) {
+          expect(
+            wire(message),
+            `${message.msg_id}: a message with nothing to merge comes through as it was`,
+          ).toEqual(wire(source));
+          continue;
+        }
+
+        const text = message.content_blocks
+          .filter((b) => b.type === "text")
+          .map((b) => b.text.trim())
+          .filter((t) => t !== "");
+        expect(
+          message.content,
+          `${message.msg_id}: its text is its text blocks, trimmed, blank ones left out`,
+        ).toBe(text.join("\n"));
+
+        message.content_blocks.forEach((block, i) => {
+          if (block.type !== "tool_use") return;
+          const answered = message.content_blocks.some(
+            (b) => b.type === "tool_result" && b.tool_use_id === block.id,
+          );
+          if (!answered) return;
+          const next = message.content_blocks[i + 1];
+          expect(
+            next?.type === "tool_result" && next.tool_use_id === block.id,
+            `${message.msg_id}: ${block.id} is followed by what it returned`,
+          ).toBe(true);
+        });
+      }
+
+      const offered = blocksOf(input);
+      const spare = [...offered];
+      for (const block of blocksOf(got)) {
+        const at = spare.indexOf(block);
+        expect(at, `every block that comes out went in: ${block.slice(0, 60)}`).toBeGreaterThan(-1);
+        spare.splice(at, 1);
+      }
+      for (const block of spare) {
+        const parsed = JSON.parse(block) as { type: string; text?: string };
+        expect(
+          parsed.type === "tool_result" || (parsed.type === "text" && parsed.text?.trim() === ""),
+          `a block is dropped only when it is a spare tool result or empty text: ${block.slice(0, 60)}`,
+        ).toBe(true);
+      }
     });
   }
 });

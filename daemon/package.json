@@ -11,16 +11,18 @@
     "test": "bun test",
     "lint:citations": "bun run scripts/check_live_citations.ts",
     "mutate": "bun run scripts/mutate.ts",
+    "rerecord": "bun run scripts/rerecord.ts",
+    "rerecord:check": "bun run scripts/rerecord.ts --check",
     "postinstall": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^3.0.30",
-    "@ai-sdk/moonshotai": "^3.0.36",
+    "@ai-sdk/deepseek": "^3.0.31",
+    "@ai-sdk/moonshotai": "^3.0.37",
     "@anthropic-ai/sdk": "^0.120.0",
     "@google/genai": "^2.18.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openrouter/sdk": "^1.2.53",
-    "ai": "^7.0.76",
+    "@openrouter/sdk": "^1.2.54",
+    "ai": "^7.0.77",
     "matrix-js-sdk": "^42.2.0",
     "openai": "^7.5.0",
     "zhipu-ai-provider": "^0.4.0"

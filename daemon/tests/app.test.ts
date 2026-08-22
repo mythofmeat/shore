@@ -1,10 +1,4 @@
-import { required } from "../src/util/required.ts";
-
 import { describe, expect, test } from "bun:test";
-
-import fixture from "./config_fixtures/app.json" with { type: "json" };
-
-import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 
 import {
   anyToolEnabled,
@@ -25,7 +19,6 @@ import {
   toolEnabled,
   toolPatternMatches,
   validateCompaction,
-  type AppConfig,
   type BackgroundTask,
   type BudgetWeekday,
   type DefaultsConfig,
@@ -34,13 +27,16 @@ import {
 } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 
+function parseToml(src: string): unknown {
+  return Bun.TOML.parse(src);
+}
+
 function canonical(value: unknown): unknown {
   if (value === undefined) return null;
   if (value instanceof ConfigDuration) return value.toString();
   if (value instanceof Map) {
-    const map = value as ReadonlyMap<string, unknown>;
     const out: Record<string, unknown> = {};
-    for (const [k, v] of map) out[k] = canonical(v);
+    for (const [k, v] of value as ReadonlyMap<string, unknown>) out[k] = canonical(v);
     return out;
   }
   if (Array.isArray(value)) return value.map(canonical);
@@ -52,752 +48,1427 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-function mapOrderOf(config: AppConfig): [string, string[]][] {
-  const out: [string, string[]][] = [
-    ["subagents", [...config.subagents.keys()]],
-    ["mcp", [...config.mcp.keys()]],
-    ["tools.config", [...config.tools.config.keys()]],
-  ];
-  for (const [name, server] of config.mcp) {
-    out.push([`mcp.${name}.env`, [...server.env.keys()]]);
+function parsed(toml: string): unknown {
+  const result = parseAppConfig(parseToml(toml));
+  if ("err" in result) throw new Error(`expected a config, got: ${result.err}`);
+  return canonical(result.ok);
+}
+
+function rejected(toml: string): string {
+  const result = parseAppConfig(parseToml(toml));
+  if ("ok" in result) throw new Error("expected a parse error, got a config");
+  return result.err;
+}
+
+function at(config: unknown, path: string): unknown {
+  let node: unknown = config;
+  for (const key of path.split(".")) {
+    if (node === null || typeof node !== "object") return undefined;
+    node = (node as Record<string, unknown>)[key];
   }
-  return out;
+  return node;
 }
 
-function parseToml(src: string): unknown {
-  return Bun.TOML.parse(src);
-}
-
-const DAEMON_FIELDS_REMOVED_SINCE = ["unsafe_allow_remote_access", "allowed_hosts"] as const;
-
-function withoutRemovedDaemonFields(value: unknown): unknown {
-  const daemon = (value as { daemon?: unknown } | null)?.daemon;
-  if (typeof daemon !== "object" || daemon === null) return value;
-  const copy = { ...(daemon as Record<string, unknown>) };
-  for (const key of DAEMON_FIELDS_REMOVED_SINCE) delete copy[key];
-  return { ...(value as object), daemon: copy };
-}
-
-function withoutRemovedUsageFields(value: unknown): unknown {
-  const usage = (value as { usage?: unknown } | null)?.usage;
-  if (typeof usage !== "object" || usage === null) return value;
-  const { spike_warnings: _removed, ...current } = usage as Record<string, unknown>;
-  return { ...(value as object), usage: current };
-}
-
-const withoutRemovedFields = (value: unknown): unknown =>
-  withoutRemovedUsageFields(withoutRemovedDaemonFields(value));
-
-const BUDGET_FIELDS_ADDED_SINCE = ["warn_action", "pace_warn_action"] as const;
-
-function withoutAddedBudgetFields(value: unknown): unknown {
-  const budgets = (value as { usage?: { budgets?: unknown } } | null)?.usage?.budgets;
-  if (!Array.isArray(budgets)) return value;
-  return {
-    ...(value as object),
-    usage: {
-      ...(value as { usage: object }).usage,
-      budgets: budgets.map((b) => {
-        const copy = { ...(b as Record<string, unknown>) };
-        for (const key of BUDGET_FIELDS_ADDED_SINCE) delete copy[key];
-        return copy;
-      }),
-    },
-  };
-}
-
-const RUST_BUDGET_FIELD_COUNT = 18;
-
-function withRustBudgetFieldCount(err: string): string {
-  return err.replace(
-    `UsageBudgetConfig with ${RUST_BUDGET_FIELD_COUNT + BUDGET_FIELDS_ADDED_SINCE.length} elements`,
-    `UsageBudgetConfig with ${RUST_BUDGET_FIELD_COUNT} elements`,
-  );
-}
-
-const MCP_FIELDS_ADDED_SINCE = ["headers"] as const;
-
-function withoutAddedMcpFields(value: unknown): unknown {
-  const mcp = (value as { mcp?: unknown } | null)?.mcp;
-  if (mcp === null || typeof mcp !== "object") return value;
-  const servers: Record<string, unknown> = {};
-  for (const [name, server] of Object.entries(mcp as Record<string, unknown>)) {
-    const copy = { ...(server as Record<string, unknown>) };
-    for (const key of MCP_FIELDS_ADDED_SINCE) delete copy[key];
-    servers[name] = copy;
-  }
-  return { ...(value as object), mcp: servers };
-}
-
-const RUST_MCP_FIELD_COUNT = 5;
-
-function withRustMcpFields(err: string): string {
-  return err.replace("`cwd`, `url`, `headers`", "`cwd`, `url`");
-}
-
-function withRustMcpFieldCount(err: string): string {
-  return withRustMcpFields(
-    err.replace(
-      `McpServerConfig with ${RUST_MCP_FIELD_COUNT + MCP_FIELDS_ADDED_SINCE.length} elements`,
-      `McpServerConfig with ${RUST_MCP_FIELD_COUNT} elements`,
-    ),
-  );
-}
-
-const SUBAGENT_FIELDS_ADDED_SINCE = ["timeout"] as const;
-
-function withoutAddedSubagentFields(value: unknown): unknown {
-  const subagents = (value as { subagents?: unknown } | null)?.subagents;
-  if (subagents === null || typeof subagents !== "object") return value;
-  const specs: Record<string, unknown> = {};
-  for (const [name, spec] of Object.entries(subagents as Record<string, unknown>)) {
-    const copy = { ...(spec as Record<string, unknown>) };
-    for (const key of SUBAGENT_FIELDS_ADDED_SINCE) delete copy[key];
-    specs[name] = copy;
-  }
-  return { ...(value as object), subagents: specs };
-}
-
-const RUST_SUBAGENT_FIELD_COUNT = 5;
-
-function withRustSubagentFields(err: string): string {
-  return err
-    .replace("`model`, `max_iterations`, `timeout`", "`model`, `max_iterations`")
-    .replace(
-      `SubagentConfig with ${RUST_SUBAGENT_FIELD_COUNT + SUBAGENT_FIELDS_ADDED_SINCE.length} elements`,
-      `SubagentConfig with ${RUST_SUBAGENT_FIELD_COUNT} elements`,
-    );
-}
-
-const CACHE_KEYS_MOVED_SINCE = {
-  keepalive_max: ["behavior", "autonomy", "cache_keepalive_max"],
-  forensics: ["advanced", "cache_forensics"],
-} as const;
-
-function withCacheSectionMoved(value: unknown): unknown {
-  const v = value as Record<string, Record<string, Record<string, unknown>>> | null;
-  const autonomy = v?.behavior?.autonomy;
-  const advanced = v?.advanced;
-  if (autonomy === undefined || advanced === undefined) return value;
-  if (!("cache_keepalive_max" in autonomy) || !("cache_forensics" in advanced)) return value;
-
-  const trimmedAutonomy = { ...autonomy };
-  delete trimmedAutonomy.cache_keepalive_max;
-  const trimmedAdvanced = { ...advanced };
-  delete trimmedAdvanced.cache_forensics;
-
-  return {
-    ...(value as object),
-    behavior: { ...required(v).behavior, autonomy: trimmedAutonomy },
-    advanced: trimmedAdvanced,
-    cache: {
-      keepalive_max: autonomy.cache_keepalive_max,
-      forensics: advanced.cache_forensics,
-    },
-  };
-}
-
-function tomlWithCacheSectionMoved(src: string): string {
-  const assignment = /^cache_keepalive_max = (.+)$/m;
-  const match = assignment.exec(src);
-  if (match === null) return src;
-  const without = src.replace(assignment, "").replace(/\n{3,}/g, "\n\n");
-  return `${without}\n[cache]\nkeepalive_max = ${match[1]}\n`;
-}
-
-const CONNECTIONS_FIELDS_REINTRODUCED_SINCE = ["matrix"] as const;
-
-function withoutReintroducedConnectionsFields(value: unknown): unknown {
-  const connections = (value as { connections?: unknown } | null)?.connections;
-  if (typeof connections !== "object" || connections === null) return value;
-  const copy = { ...(connections as Record<string, unknown>) };
-  for (const key of CONNECTIONS_FIELDS_REINTRODUCED_SINCE) delete copy[key];
-  return { ...(value as object), connections: copy };
-}
-
-const withoutAddedFields = (value: unknown): unknown =>
-  withoutReintroducedConnectionsFields(
-    withoutAddedSubagentFields(withoutAddedMcpFields(withoutAddedBudgetFields(value))),
-  );
-
-function withRustCacheFields(err: string): string {
-  return err
-    .replace("`memory`, `cache`, `connections`", "`memory`, `connections`")
-    .replace(
-      "expected `enabled` or `heartbeat`",
-      "expected one of `enabled`, `heartbeat`, `cache_keepalive_max`",
-    );
-}
-
-const withRustFieldCounts = (err: string): string =>
-  withRustSubagentFields(
-    withRustCacheFields(withRustMcpFieldCount(withRustBudgetFieldCount(err))),
-  );
-
-const DELIBERATELY_DIVERGENT = new Set([
-  "the daemon section",
-  "the removed matrix connection is rejected",
-  "the removed embedded matrix connection is rejected",
-  "the advanced section",
-  "max_image_size = 0 disables resizing",
-  "negative u64",
-  "seq: AdvancedConfig",
-  "seq: AdvancedConfig, at its minimum",
-  "seq: LlmSidecarConfig",
-  "seq: LlmSidecarConfig, at its minimum",
-  "integer where a path is expected",
-  "a full positional sequence",
-  "usage budgets and spike warnings",
-]);
-
-const BUN_CANNOT_SEE = new Set([
-  "datetime where a string is expected",
-  "a float that happens to be whole is still a float",
-  "exponent notation is a float too",
-  "u64 fields hold values a double cannot",
-]);
-
-describe("the fixture is real", () => {
-  test("the trimmed daemon fields really are ones it had", () => {
-    const daemon = (fixture.defaults as { daemon: Record<string, unknown> }).daemon;
-    for (const key of DAEMON_FIELDS_REMOVED_SINCE) {
-      expect(Object.keys(daemon)).toContain(key);
-    }
-  });
-
-  test("the trimmed usage field really is one it had", () => {
-    const usage = (fixture.defaults as { usage: Record<string, unknown> }).usage;
-    expect(Object.keys(usage)).toContain("spike_warnings");
-  });
-
-  test("the exempted budget fields really are ones it never had", () => {
-    const text = JSON.stringify(fixture);
-    for (const key of BUDGET_FIELDS_ADDED_SINCE) {
-      expect(text).not.toContain(`"${key}"`);
-    }
-    expect(text).toContain(`UsageBudgetConfig with ${RUST_BUDGET_FIELD_COUNT} elements`);
-  });
-
-  test("the exempted mcp fields really are ones it never had", () => {
-    const text = JSON.stringify(fixture);
-    for (const key of MCP_FIELDS_ADDED_SINCE) {
-      expect(text).not.toContain(`"${key}"`);
-    }
-    expect(text).toContain(`McpServerConfig with ${RUST_MCP_FIELD_COUNT} elements`);
-  });
-
-  test("the exempted subagent fields really are ones it never had", () => {
-    const subagents = (fixture.defaults as { subagents: Record<string, object> }).subagents;
-    for (const spec of Object.values(subagents)) {
-      for (const key of SUBAGENT_FIELDS_ADDED_SINCE) {
-        expect(Object.keys(spec)).not.toContain(key);
+const TOOLS_QUERIES = [
+  {
+    "name": "the empty default offers nothing but still caps and deadlines",
+    "toml": "[tools]\n",
+    "any_enabled": false,
+    "tools": [
+      {
+        "name": "read",
+        "enabled": false
+      },
+      {
+        "name": "search_chat_logs",
+        "enabled": false
+      },
+      {
+        "name": "anything",
+        "enabled": false
       }
-    }
-  });
-
-  test("the moved cache keys really are ones it had, where it had them", () => {
-    const defaults = fixture.defaults as object;
-    for (const path of Object.values(CACHE_KEYS_MOVED_SINCE)) {
-      let here: unknown = defaults;
-      for (const key of path) {
-        expect(Object.keys(here as object)).toContain(key);
-        here = (here as Record<string, unknown>)[key];
+    ],
+    "subagents": [
+      {
+        "name": "memory",
+        "enabled": false
       }
-    }
-    expect(Object.keys(defaults)).not.toContain("cache");
+    ]
+  },
+  {
+    "name": "exact allowlist entries",
+    "toml": "[tools]\nenabled_tools = [\"read\", \"search_chat_logs\"]\n",
+    "any_enabled": true,
+    "tools": [
+      {
+        "name": "read",
+        "enabled": true
+      },
+      {
+        "name": "ready",
+        "enabled": false
+      },
+      {
+        "name": "search_chat_logs",
+        "enabled": true
+      },
+      {
+        "name": "roll_dice",
+        "enabled": false
+      },
+      {
+        "name": "web_search",
+        "enabled": false
+      }
+    ],
+    "subagents": [
+      {
+        "name": "memory",
+        "enabled": false
+      }
+    ]
+  },
+  {
+    "name": "a trailing star is a prefix glob, scoped to one server",
+    "toml": "[tools]\nenabled_tools = [\"read\", \"mcp__hue__*\"]\n",
+    "any_enabled": true,
+    "tools": [
+      {
+        "name": "mcp__hue__set_light",
+        "enabled": true
+      },
+      {
+        "name": "mcp__hue__list_lights",
+        "enabled": true
+      },
+      {
+        "name": "mcp__hue__",
+        "enabled": true
+      },
+      {
+        "name": "mcp__nanoleaf__on",
+        "enabled": false
+      }
+    ],
+    "subagents": []
+  },
+  {
+    "name": "per-tool caps and deadlines, and what inherits",
+    "toml": "[tools]\nenabled_tools = [\"search\", \"read\"]\nmax_result_chars = 20000\ntimeout = \"30s\"\n\n[tools.config.search]\nmax_result_chars = 10000\n\n[tools.config.ask_researcher]\ntimeout = \"20m\"\n",
+    "any_enabled": true,
+    "tools": [
+      {
+        "name": "search",
+        "enabled": true
+      },
+      {
+        "name": "read",
+        "enabled": true
+      },
+      {
+        "name": "ask_researcher",
+        "enabled": false
+      },
+      {
+        "name": "never_configured",
+        "enabled": false
+      }
+    ],
+    "subagents": [
+      {
+        "name": "researcher",
+        "enabled": false
+      }
+    ]
+  },
+  {
+    "name": "a zero global deadline is overridable per tool",
+    "toml": "[tools]\nenabled_tools = [\"read\", \"git\"]\ntimeout = 0\n\n[tools.config.git]\ntimeout = \"45s\"\n",
+    "any_enabled": true,
+    "tools": [
+      {
+        "name": "read",
+        "enabled": true
+      },
+      {
+        "name": "git",
+        "enabled": true
+      }
+    ],
+    "subagents": []
+  },
+  {
+    "name": "a zero per-tool deadline opts one tool out of a global one",
+    "toml": "[tools]\nenabled_tools = [\"read\", \"slow\"]\ntimeout = \"30s\"\n\n[tools.config.slow]\ntimeout = 0\n",
+    "any_enabled": true,
+    "tools": [
+      {
+        "name": "read",
+        "enabled": true
+      },
+      {
+        "name": "slow",
+        "enabled": true
+      }
+    ],
+    "subagents": []
+  },
+  {
+    "name": "a zero cap disables truncation for that tool only",
+    "toml": "[tools]\nmax_result_chars = 20000\n\n[tools.config.dump]\nmax_result_chars = 0\n",
+    "any_enabled": false,
+    "tools": [
+      {
+        "name": "dump",
+        "enabled": false
+      },
+      {
+        "name": "read",
+        "enabled": false
+      }
+    ],
+    "subagents": []
+  },
+  {
+    "name": "subagents alone make the tool surface active",
+    "toml": "[tools]\nenabled_subagents = [\"memory\"]\n",
+    "any_enabled": true,
+    "tools": [
+      {
+        "name": "read",
+        "enabled": false
+      }
+    ],
+    "subagents": [
+      {
+        "name": "memory",
+        "enabled": true
+      },
+      {
+        "name": "research",
+        "enabled": false
+      }
+    ]
+  },
+  {
+    "name": "the subagent allowlist takes no globs",
+    "toml": "[tools]\nenabled_subagents = [\"mem*\"]\n",
+    "any_enabled": true,
+    "tools": [],
+    "subagents": [
+      {
+        "name": "mem",
+        "enabled": false
+      },
+      {
+        "name": "memory",
+        "enabled": false
+      },
+      {
+        "name": "mem*",
+        "enabled": true
+      }
+    ]
+  }
+];
+
+const TOOL_PATTERNS = [
+  {
+    "pattern": "read",
+    "name": "read",
+    "matches": true
+  },
+  {
+    "pattern": "read",
+    "name": "ready",
+    "matches": false
+  },
+  {
+    "pattern": "read",
+    "name": "rea",
+    "matches": false
+  },
+  {
+    "pattern": "read",
+    "name": "",
+    "matches": false
+  },
+  {
+    "pattern": "mcp__hue__*",
+    "name": "mcp__hue__set_light",
+    "matches": true
+  },
+  {
+    "pattern": "mcp__hue__*",
+    "name": "mcp__hue__",
+    "matches": true
+  },
+  {
+    "pattern": "mcp__hue__*",
+    "name": "mcp__hue_",
+    "matches": false
+  },
+  {
+    "pattern": "mcp__hue__*",
+    "name": "mcp__nanoleaf__on",
+    "matches": false
+  },
+  {
+    "pattern": "mcp__*",
+    "name": "mcp__hue__set_light",
+    "matches": true
+  },
+  {
+    "pattern": "*",
+    "name": "anything",
+    "matches": true
+  },
+  {
+    "pattern": "*",
+    "name": "",
+    "matches": true
+  },
+  {
+    "pattern": "",
+    "name": "",
+    "matches": true
+  },
+  {
+    "pattern": "",
+    "name": "x",
+    "matches": false
+  },
+  {
+    "pattern": "mcp__*__on",
+    "name": "mcp__hue__on",
+    "matches": false
+  },
+  {
+    "pattern": "mcp__*__on",
+    "name": "mcp__*__on",
+    "matches": true
+  },
+  {
+    "pattern": "mcp__*__on",
+    "name": "mcp__*__onx",
+    "matches": false
+  },
+  {
+    "pattern": "**",
+    "name": "*",
+    "matches": true
+  },
+  {
+    "pattern": "**",
+    "name": "",
+    "matches": false
+  }
+];
+
+const BACKGROUND = [
+  {
+    "name": "nothing set",
+    "defaults": {
+      "model": null,
+      "background": {
+        "model": null,
+        "heartbeat": null,
+        "compaction": null
+      },
+      "embedding": null,
+      "image_generation": null,
+      "subagent_model": null,
+      "display_name": null,
+      "stream": true
+    },
+    "heartbeat": null,
+    "compaction": null
+  },
+  {
+    "name": "defaults.model is not a background fallback",
+    "defaults": {
+      "model": "chat",
+      "background": {
+        "model": null,
+        "heartbeat": null,
+        "compaction": null
+      },
+      "embedding": null,
+      "image_generation": null,
+      "subagent_model": null,
+      "display_name": null,
+      "stream": true
+    },
+    "heartbeat": null,
+    "compaction": null
+  },
+  {
+    "name": "background.model covers every task",
+    "defaults": {
+      "model": "chat",
+      "background": {
+        "model": "bg",
+        "heartbeat": null,
+        "compaction": null
+      },
+      "embedding": null,
+      "image_generation": null,
+      "subagent_model": null,
+      "display_name": null,
+      "stream": true
+    },
+    "heartbeat": "bg",
+    "compaction": "bg"
+  },
+  {
+    "name": "a per-task override wins over background.model",
+    "defaults": {
+      "model": "chat",
+      "background": {
+        "model": "bg",
+        "heartbeat": "hb",
+        "compaction": null
+      },
+      "embedding": null,
+      "image_generation": null,
+      "subagent_model": null,
+      "display_name": null,
+      "stream": true
+    },
+    "heartbeat": "hb",
+    "compaction": "bg"
+  },
+  {
+    "name": "a per-task override with no blanket model",
+    "defaults": {
+      "model": null,
+      "background": {
+        "model": null,
+        "heartbeat": null,
+        "compaction": "c"
+      },
+      "embedding": null,
+      "image_generation": null,
+      "subagent_model": null,
+      "display_name": null,
+      "stream": true
+    },
+    "heartbeat": null,
+    "compaction": "c"
+  },
+  {
+    "name": "the deprecated top-level key is not consulted before normalizing",
+    "defaults": {
+      "model": null,
+      "background": {
+        "model": null,
+        "heartbeat": null,
+        "compaction": null
+      },
+      "embedding": null,
+      "image_generation": null,
+      "subagent_model": null,
+      "display_name": null,
+      "stream": true
+    },
+    "heartbeat": null,
+    "compaction": null
+  }
+];
+
+const DISPLAY_NAME = [
+  {
+    "name": "configured wins",
+    "display_name": "Alice",
+    "user_env": "bob",
+    "resolved": "Alice"
+  },
+  {
+    "name": "falls back to $USER",
+    "display_name": null,
+    "user_env": "bob",
+    "resolved": "bob"
+  },
+  {
+    "name": "falls back to User when both are absent",
+    "display_name": null,
+    "user_env": null,
+    "resolved": "User"
+  },
+  {
+    "name": "an empty $USER is still a value",
+    "display_name": null,
+    "user_env": "",
+    "resolved": ""
+  },
+  {
+    "name": "an empty configured name is still a value",
+    "display_name": "",
+    "user_env": "bob",
+    "resolved": ""
+  }
+];
+
+const COMPACTION_VALIDATE = [
+  {
+    "name": "the default is valid",
+    "compaction": {
+      "enabled": true,
+      "idle_trigger": "30m",
+      "archive_after": "0s",
+      "min_turns": 8,
+      "max_turns": 16,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 2
+    },
+    "err": null
+  },
+  {
+    "name": "min_turns equal to keep_recent_turns is rejected",
+    "compaction": {
+      "enabled": true,
+      "idle_trigger": "30m",
+      "archive_after": "0s",
+      "min_turns": 4,
+      "max_turns": 16,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 4
+    },
+    "err": "memory.compaction.min_turns (4) and max_turns (16) must both be greater than keep_recent_turns (4); raise the turn thresholds or lower keep_recent_turns"
+  },
+  {
+    "name": "max_turns below min_turns is rejected",
+    "compaction": {
+      "enabled": true,
+      "idle_trigger": "30m",
+      "archive_after": "0s",
+      "min_turns": 10,
+      "max_turns": 5,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 2
+    },
+    "err": "memory.compaction.max_turns (5) must be >= min_turns (10)"
+  },
+  {
+    "name": "a disabled config is always valid",
+    "compaction": {
+      "enabled": false,
+      "idle_trigger": "1500ms",
+      "archive_after": "0s",
+      "min_turns": 4,
+      "max_turns": 16,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 4
+    },
+    "err": null
+  },
+  {
+    "name": "a fractional idle_trigger names the two values that would work",
+    "compaction": {
+      "enabled": true,
+      "idle_trigger": "90500ms",
+      "archive_after": "0s",
+      "min_turns": 8,
+      "max_turns": 16,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 2
+    },
+    "err": "memory.compaction.idle_trigger is 90500ms. Idle thresholds must be a whole number of seconds: the compaction triggers truncate to seconds before comparing, so a value like `1.5s` would fire early. Use `90s` or `91s`."
+  },
+  {
+    "name": "a fractional archive_after is rejected too",
+    "compaction": {
+      "enabled": true,
+      "idle_trigger": "30m",
+      "archive_after": "1ms",
+      "min_turns": 8,
+      "max_turns": 16,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 2
+    },
+    "err": "memory.compaction.archive_after is 1ms. Idle thresholds must be a whole number of seconds: the compaction triggers truncate to seconds before comparing, so a value like `1.5s` would fire early. Use `0s` or `1s`."
+  },
+  {
+    "name": "zero is a whole number of seconds",
+    "compaction": {
+      "enabled": true,
+      "idle_trigger": "0s",
+      "archive_after": "0s",
+      "min_turns": 8,
+      "max_turns": 16,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 2
+    },
+    "err": null
+  },
+  {
+    "name": "the idle check runs before the turn check",
+    "compaction": {
+      "enabled": true,
+      "idle_trigger": "1ms",
+      "archive_after": "0s",
+      "min_turns": 1,
+      "max_turns": 16,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 4
+    },
+    "err": "memory.compaction.idle_trigger is 1ms. Idle thresholds must be a whole number of seconds: the compaction triggers truncate to seconds before comparing, so a value like `1.5s` would fire early. Use `0s` or `1s`."
+  },
+  {
+    "name": "max_turns equal to keep_recent_turns is rejected by the first check",
+    "compaction": {
+      "enabled": true,
+      "idle_trigger": "30m",
+      "archive_after": "0s",
+      "min_turns": 9,
+      "max_turns": 2,
+      "max_context_tokens": 200000,
+      "keep_recent_turns": 2
+    },
+    "err": "memory.compaction.min_turns (9) and max_turns (2) must both be greater than keep_recent_turns (2); raise the turn thresholds or lower keep_recent_turns"
+  }
+];
+
+const BUDGET_PACE = [
+  {
+    "name": "pace fields default to warn and to the budget's own warn_at",
+    "toml": "[[usage.budgets]]\ncost_usd = 5.0\nwarn_at = [0.3, 0.9]\n",
+    "budgets": [
+      {
+        "pace_action": "warn",
+        "pace_warn_at": [
+          0.3,
+          0.9
+        ]
+      }
+    ]
+  },
+  {
+    "name": "explicit pace overrides",
+    "toml": "[[usage.budgets]]\ncost_usd = 5.0\nwarn_at = [0.3]\npace_action = \"block\"\npace_warn_at = [0.1, 0.2]\n",
+    "budgets": [
+      {
+        "pace_action": "block",
+        "pace_warn_at": [
+          0.1,
+          0.2
+        ]
+      }
+    ]
+  },
+  {
+    "name": "an empty pace_warn_at is an override, not an absence",
+    "toml": "[[usage.budgets]]\ncost_usd = 5.0\nwarn_at = [0.3]\npace_warn_at = []\n",
+    "budgets": [
+      {
+        "pace_action": "warn",
+        "pace_warn_at": []
+      }
+    ]
+  },
+  {
+    "name": "the default warn_at flows into pace_warn_at",
+    "toml": "[[usage.budgets]]\ncost_usd = 5.0\n",
+    "budgets": [
+      {
+        "pace_action": "warn",
+        "pace_warn_at": [
+          0.8,
+          1.0
+        ]
+      }
+    ]
+  }
+];
+
+const BUDGET_PERIODS = [
+  {
+    "period": "hour",
+    "rank": 0
+  },
+  {
+    "period": "day",
+    "rank": 1
+  },
+  {
+    "period": "week",
+    "rank": 2
+  },
+  {
+    "period": "month",
+    "rank": 3
+  }
+];
+
+const BUDGET_WEEKDAYS = [
+  {
+    "weekday": "monday",
+    "num_days_from_monday": 0
+  },
+  {
+    "weekday": "tuesday",
+    "num_days_from_monday": 1
+  },
+  {
+    "weekday": "wednesday",
+    "num_days_from_monday": 2
+  },
+  {
+    "weekday": "thursday",
+    "num_days_from_monday": 3
+  },
+  {
+    "weekday": "friday",
+    "num_days_from_monday": 4
+  },
+  {
+    "weekday": "saturday",
+    "num_days_from_monday": 5
+  },
+  {
+    "weekday": "sunday",
+    "num_days_from_monday": 6
+  }
+];
+
+const BUDGET_ACTIONS = [
+  "warn",
+  "block",
+  "pause_background"
+];
+
+const THINKING_REPLAY = [
+  {
+    "input": "all",
+    "parsed": "all"
+  },
+  {
+    "input": "none",
+    "parsed": "none"
+  },
+  {
+    "input": "true",
+    "parsed": "all"
+  },
+  {
+    "input": "false",
+    "parsed": "none"
+  },
+  {
+    "input": "last_turn",
+    "parsed": "all"
+  },
+  {
+    "input": "All",
+    "parsed": null
+  },
+  {
+    "input": "",
+    "parsed": null
+  },
+  {
+    "input": "recent",
+    "parsed": null
+  },
+  {
+    "input": "1",
+    "parsed": null
+  },
+  {
+    "input": "0",
+    "parsed": null
+  }
+];
+
+const REMOVED_KEYS = [
+  {
+    "name": "the retired alias is refused, not forwarded",
+    "toml": "[defaults]\nmodel = \"primary\"\nheartbeat = \"hb-old\"\n",
+    "err": "`heartbeat` was removed — set it under `[defaults.background]` as `heartbeat`"
+  },
+  {
+    "name": "setting both spellings is still refused",
+    "toml": "[defaults]\nheartbeat = \"hb-old\"\n\n[defaults.background]\nheartbeat = \"hb-new\"\n",
+    "err": "`heartbeat` was removed — set it under `[defaults.background]` as `heartbeat`"
+  },
+  {
+    "name": "an empty string is a value, not an absence",
+    "toml": "[defaults]\nheartbeat = \"\"\n",
+    "err": "`heartbeat` was removed — set it under `[defaults.background]` as `heartbeat`"
+  },
+  {
+    "name": "the key that replaced it still parses",
+    "toml": "[defaults.background]\nheartbeat = \"hb\"\n",
+    "err": null
+  }
+];
+
+describe("the shipped defaults", () => {
+  test("parse out of an empty document, so a config file is optional", () => {
+    expect(parsed("")).toEqual(canonical(defaultAppConfig()));
   });
 
-  test("the moved keys kept the values the Rust defaulted them to", () => {
-    const recorded = fixture.defaults as {
-      behavior: { autonomy: { cache_keepalive_max: string } };
-      advanced: { cache_forensics: boolean };
+  test("leave every model unset, so nothing is silently chosen for you", () => {
+    const d = defaultAppConfig().defaults;
+    expect(d.model).toBeUndefined();
+    expect(d.embedding).toBeUndefined();
+    expect(d.subagent_model).toBeUndefined();
+    expect(d.background.model).toBeUndefined();
+  });
+
+  test("give every duration a sane value, never negative", () => {
+    const walk = (node: unknown, path: string): void => {
+      if (node instanceof ConfigDuration) {
+        expect(node.asMillis(), path).toBeGreaterThanOrEqual(0);
+        return;
+      }
+      if (node instanceof Map) {
+        for (const [k, v] of node) walk(v, `${path}.${k}`);
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const [i, v] of node.entries()) walk(v, `${path}[${i}]`);
+        return;
+      }
+      if (typeof node === "object" && node !== null) {
+        for (const [k, v] of Object.entries(node)) walk(v, `${path}.${k}`);
+      }
     };
-    const cache = defaultAppConfig().cache;
-    expect(cache.keepalive_max.toString()).toBe(recorded.behavior.autonomy.cache_keepalive_max);
-    expect(cache.forensics).toBe(recorded.advanced.cache_forensics);
+    walk(defaultAppConfig(), "app");
   });
 
-  test("the reintroduced connections fields really are ones it never had", () => {
-    const connections = (fixture.defaults as { connections: Record<string, unknown> }).connections;
-    for (const key of CONNECTIONS_FIELDS_REINTRODUCED_SINCE) {
-      expect(Object.keys(connections)).not.toContain(key);
-    }
+  test("leave compaction's archive step off, since zero means disabled", () => {
+    expect(defaultAppConfig().memory.compaction.archive_after.asMillis()).toBe(0);
   });
 
-  test("it records both parse paths, and they genuinely differ somewhere", () => {
-    const disagreements = fixture.parse.filter(
-      (c) => "doc_err" in c && c.doc_err !== c.table_err,
-    );
-    expect(disagreements.length).toBeGreaterThan(0);
+  test("enable no tools, so a fresh install cannot touch the filesystem", () => {
+    expect(anyToolEnabled(defaultToolsConfig())).toBe(false);
+  });
+
+  test("round-trip: re-parsing a serialized default config gives the same config", () => {
+    expect(parsed("")).toEqual(parsed("\n\n# a comment\n\n"));
   });
 });
 
-describe("AppConfig::default", () => {
-  test("an empty document parses to exactly the defaults", () => {
-    const parsed = parseAppConfig(parseToml(""));
-    if ("err" in parsed) throw new Error(parsed.err);
-    expect(canonical(parsed.ok)).toEqual(canonical(defaultAppConfig()));
+describe("when a document has more than one thing wrong", () => {
+  test("the code-point-smallest unknown key is reported, not the first written", () => {
+    const err = rejected("zzz_unknown = 1\naaa_unknown = 2\n");
+    expect(err).toContain("aaa_unknown");
+    expect(err).not.toContain("zzz_unknown");
   });
 
-  test("the values an unconfigured shore runs on", () => {
-    const app = defaultAppConfig();
-
-    expect(app.defaults.stream).toBe(true);
-    expect(app.memory.compaction.archive_after.asSecs()).toBe(0n);
-    expect(app.memory.file_limits).toEqual({
-      max_note_bytes: 8 * 1024,
-      max_index_bytes: 16 * 1024,
-      max_prompt_bytes: 64 * 1024,
-    });
-    expect(app.notifications.events.message_complete).toBe(true);
-    expect(app.usage.allow_compaction_over_budget).toBe(false);
-  });
-
-  test("memory file limits are configurable independently", () => {
-    const parsed = parseAppConfig(
-      parseToml(
-        "[memory.file_limits]\n" +
-          "max_note_bytes = 4096\n" +
-          "max_index_bytes = 12288\n" +
-          "max_prompt_bytes = 131072\n",
-      ),
+  test("a bad type is reported with the value that was wrong", () => {
+    expect(rejected('[defaults]\nstream = "yes"\n')).toBe(
+      'invalid type: string "yes", expected a boolean',
     );
-    if ("err" in parsed) throw new Error(parsed.err);
-    expect(parsed.ok.memory.file_limits).toEqual({
-      max_note_bytes: 4096,
-      max_index_bytes: 12288,
-      max_prompt_bytes: 131072,
-    });
   });
 });
 
-function expectationFor(want: unknown, toml: string): unknown {
-  return replayOntoCurrentDefaults(
-    withCacheSectionMoved(withoutRemovedFields(want)),
-    withCacheSectionMoved(withoutRemovedFields(fixture.defaults)),
-    withoutAddedFields(canonical(defaultAppConfig())),
-    pathsSetBy(parseToml(toml)),
-  );
-}
-
-describe("parsing config.toml", () => {
-  for (const c of fixture.parse) {
-    if (BUN_CANNOT_SEE.has(c.name) || DELIBERATELY_DIVERGENT.has(c.name)) continue;
-
-    test(c.name, () => {
-      const toml = tomlWithCacheSectionMoved(c.toml);
-      const parsed = parseAppConfig(parseToml(toml));
-
-      const want: { ok: unknown } | { err: string } =
-        "ok" in c
-          ? { ok: c.ok }
-          : "table" in c
-            ? (c.table)
-            : { err: c.table_err };
-
-      if ("err" in want) {
-        if ("ok" in parsed) throw new Error("expected a parse error, got a config");
-        expect(withRustFieldCounts(parsed.err)).toBe(want.err);
-      } else {
-        if ("err" in parsed) throw new Error(`expected a parse, got: ${parsed.err}`);
-        expect(withoutAddedFields(canonical(parsed.ok))).toEqual(
-          expectationFor(want.ok, toml),
-        );
-      }
-    });
-  }
-
-  test("a config still setting the deleted [daemon] keys is now rejected", () => {
-    const c = fixture.parse.find((x) => x.name === "the daemon section");
-    expect(c).toBeDefined();
-
-    const parsed = parseAppConfig(parseToml(required(c).toml));
-    expect("err" in parsed).toBe(true);
-    expect((parsed as { err: string }).err).toBe(
-      "unknown field `allowed_hosts`, expected `addr`",
-    );
-
-    const ok = parseAppConfig(parseToml(`[daemon]\naddr = "0.0.0.0:9999"\n`));
-    if ("err" in ok) throw new Error(ok.err);
-    expect(ok.ok.daemon).toEqual({ addr: "0.0.0.0:9999" });
+describe("a config.toml sets what it says and nothing else", () => {
+  test("the subagents table", () => {
+    const cfg = parsed("[defaults]\nsubagent_model = \"anthropic:claude-haiku-4-5\"\n\n[subagents.music]\ndescription = \"Ask about the music library.\"\nprompt = \"You are a music assistant for {{char}}.\"\ntools = [\"search\", \"read\"]\nmax_iterations = 6\n");
+    expect(at(cfg, "defaults.subagent_model"), "defaults.subagent_model").toEqual("anthropic:claude-haiku-4-5");
+    expect(at(cfg, "subagents"), "subagents").toMatchObject({"music":{"description":"Ask about the music library.","prompt":"You are a music assistant for {{char}}.","tools":["search","read"],"model":null,"max_iterations":6}});
   });
 
-  test("a config still setting usage spike warnings is now rejected", () => {
-    const c = fixture.parse.find((x) => x.name === "usage budgets and spike warnings");
-    expect(c).toBeDefined();
-
-    const parsed = parseAppConfig(parseToml(required(c).toml));
-    expect("err" in parsed).toBe(true);
-    expect((parsed as { err: string }).err).toBe(
-      "unknown field `spike_warnings`, expected one of `timezone`, " +
-        "`allow_compaction_over_budget`, `budgets`",
-    );
+  test("subagent keys sort by code point, not UTF-16 order", () => {
+    const cfg = parsed("[subagents.\"🎵drum\"]\ndescription = \"d\"\nprompt = \"p\"\n\n[subagents.\"ﬀute\"]\ndescription = \"f\"\nprompt = \"p\"\n\n[subagents.zed]\ndescription = \"z\"\nprompt = \"p\"\n");
+    expect(at(cfg, "subagents"), "subagents").toMatchObject({"zed":{"description":"z","prompt":"p","tools":[],"model":null,"max_iterations":null},"ﬀute":{"description":"f","prompt":"p","tools":[],"model":null,"max_iterations":null},"🎵drum":{"description":"d","prompt":"p","tools":[],"model":null,"max_iterations":null}});
   });
 
-  test("a config still setting the deleted [advanced] keys is now rejected", () => {
-    const c = fixture.parse.find((x) => x.name === "the advanced section");
-    expect(c).toBeDefined();
-
-    const parsed = parseAppConfig(parseToml(required(c).toml));
-    expect("err" in parsed).toBe(true);
-    expect((parsed as { err: string }).err).toBe(
-      "unknown field `api_payload_logging`, expected `max_retries` or `retry_backoff`",
-    );
+  test("memory.retrieval", () => {
+    const cfg = parsed("[memory.retrieval]\nmode = \"hybrid\"\nmax_file_bytes = 12345\nmax_indexed_files = 999\nmax_total_indexed_bytes = 777777\nmax_embed_chars_per_file = 222\nbinary = \"metadata\"\n");
+    expect(at(cfg, "memory.retrieval.mode"), "memory.retrieval.mode").toEqual("hybrid");
+    expect(at(cfg, "memory.retrieval.max_file_bytes"), "memory.retrieval.max_file_bytes").toEqual(12345);
+    expect(at(cfg, "memory.retrieval.max_indexed_files"), "memory.retrieval.max_indexed_files").toEqual(999);
+    expect(at(cfg, "memory.retrieval.max_total_indexed_bytes"), "memory.retrieval.max_total_indexed_bytes").toEqual(777777);
+    expect(at(cfg, "memory.retrieval.max_embed_chars_per_file"), "memory.retrieval.max_embed_chars_per_file").toEqual(222);
+    expect(at(cfg, "memory.retrieval.binary"), "memory.retrieval.binary").toEqual("metadata");
   });
 
-  test("`max_image_size` is rejected by name now that nothing resizes", () => {
-    for (const name of ["max_image_size = 0 disables resizing", "negative u64"]) {
-      const c = fixture.parse.find((x) => x.name === name);
-      if (c === undefined) throw new Error(`fixture case missing: ${name}`);
-
-      const parsed = parseAppConfig(parseToml(c.toml));
-      expect("err" in parsed).toBe(true);
-      expect((parsed as { err: string }).err).toBe(
-        "unknown field `max_image_size`, expected `max_retries` or `retry_backoff`",
-      );
-    }
+  test("memory.git_push", () => {
+    const cfg = parsed("[memory]\ngit_push = true\n");
+    expect(at(cfg, "memory.git_push"), "memory.git_push").toEqual(true);
   });
 
-  test("a config still setting the moved cache keys at the old paths is rejected", () => {
-    const stale = parseAppConfig(parseToml(`[behavior.autonomy]\ncache_keepalive_max = "6h"\n`));
-    expect("err" in stale).toBe(true);
-    expect((stale as { err: string }).err).toBe(
-      "unknown field `cache_keepalive_max`, expected `enabled` or `heartbeat`",
-    );
 
-    const staleForensics = parseAppConfig(parseToml(`[advanced]\ncache_forensics = true\n`));
-    expect("err" in staleForensics).toBe(true);
-    expect((staleForensics as { err: string }).err).toContain("unknown field `cache_forensics`");
-
-    const moved = parseAppConfig(parseToml(`[cache]\nkeepalive_max = "6h"\nforensics = true\n`));
-    if ("err" in moved) throw new Error(moved.err);
-    expect(moved.ok.cache.keepalive_max.asSecs()).toBe(21_600n);
-    expect(moved.ok.cache.forensics).toBe(true);
+  test("budget anchors and the pace sub-window", () => {
+    const cfg = parsed("[[usage.budgets]]\ncost_usd = 5.0\nperiod = \"week\"\nreset_hour = 4\nreset_day_of_week = \"thursday\"\npace_period = \"day\"\npace_action = \"pause_background\"\npace_warn_at = [0.25]\n\n[[usage.budgets]]\ncost_usd = 9.0\nperiod = \"month\"\nreset_day_of_month = 31\nallow_compaction_over_budget = true\n");
+    expect(at(cfg, "usage.budgets"), "usage.budgets").toMatchObject([{"name":"","period":"week","cost_usd":5,"warn_at":[0.8,1],"limit":"warn","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":null,"reset_hour":4,"reset_day_of_week":"thursday","reset_day_of_month":null,"pace_period":"day","pace_action":"pause_background","pace_warn_at":[0.25]},{"name":"","period":"month","cost_usd":9,"warn_at":[0.8,1],"limit":"warn","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":true,"reset_hour":null,"reset_day_of_week":null,"reset_day_of_month":31,"pace_period":null,"pace_action":null,"pace_warn_at":null}]);
   });
 
-  test("[behavior.autonomy] lost a positional slot when the ceiling moved out", () => {
-    const tooLong = parseAppConfig(
-      parseToml(`[behavior]\nautonomy = [true, { enabled = false }, "6h"]\n`),
-    );
-    expect("err" in tooLong).toBe(true);
-    expect((tooLong as { err: string }).err).toBe(
-      "invalid length 3, expected fewer elements in array",
-    );
-
-    const nowFull = parseAppConfig(parseToml(`[behavior]\nautonomy = [true, { enabled = false }]\n`));
-    if ("err" in nowFull) throw new Error(nowFull.err);
-    expect(nowFull.ok.behavior.autonomy.enabled).toBe(true);
-    expect(nowFull.ok.behavior.autonomy.heartbeat.enabled).toBe(false);
+  test("every budget period and action variant", () => {
+    const cfg = parsed("[[usage.budgets]]\ncost_usd = 1.0\nperiod = \"hour\"\nlimit = \"warn\"\n\n[[usage.budgets]]\ncost_usd = 1.0\nperiod = \"day\"\nlimit = \"block\"\n\n[[usage.budgets]]\ncost_usd = 1.0\nperiod = \"week\"\nlimit = \"pause_background\"\n\n[[usage.budgets]]\ncost_usd = 1.0\nperiod = \"month\"\n");
+    expect(at(cfg, "usage.budgets"), "usage.budgets").toMatchObject([{"name":"","period":"hour","cost_usd":1,"warn_at":[0.8,1],"limit":"warn","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":null,"reset_hour":null,"reset_day_of_week":null,"reset_day_of_month":null,"pace_period":null,"pace_action":null,"pace_warn_at":null},{"name":"","period":"day","cost_usd":1,"warn_at":[0.8,1],"limit":"block","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":null,"reset_hour":null,"reset_day_of_week":null,"reset_day_of_month":null,"pace_period":null,"pace_action":null,"pace_warn_at":null},{"name":"","period":"week","cost_usd":1,"warn_at":[0.8,1],"limit":"pause_background","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":null,"reset_hour":null,"reset_day_of_week":null,"reset_day_of_month":null,"pace_period":null,"pace_action":null,"pace_warn_at":null},{"name":"","period":"month","cost_usd":1,"warn_at":[0.8,1],"limit":"warn","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":null,"reset_hour":null,"reset_day_of_week":null,"reset_day_of_month":null,"pace_period":null,"pace_action":null,"pace_warn_at":null}]);
   });
 
-  test("[advanced.llm_sidecar] is rejected as a section, not just as a key", () => {
-    const parsed = parseAppConfig(
-      parseToml(`[advanced.llm_sidecar]\nenabled = false\nsocket_path = "/tmp/s.sock"\n`),
-    );
-    expect("err" in parsed).toBe(true);
-    expect((parsed as { err: string }).err).toContain("unknown field `llm_sidecar`");
+  test("the tools allowlist", () => {
+    const cfg = parsed("[tools]\nenabled_tools = [\"read\", \"search_chat_logs\"]\n");
+    expect(at(cfg, "tools.enabled_tools"), "tools.enabled_tools").toEqual(["read","search_chat_logs"]);
   });
 
-  test("the surviving [advanced] keys still parse, positionally and by name", () => {
-    const byName = parseAppConfig(
-      parseToml(`[advanced]\nmax_retries = 5\nretry_backoff = "250ms"\n`),
-    );
-    if ("err" in byName) throw new Error(byName.err);
-    expect(byName.ok.advanced.max_retries).toBe(5);
-    expect(byName.ok.advanced.retry_backoff?.asMillisExact()).toBe(250n);
-
-    const positional = parseAppConfig(parseToml(`advanced = [3, "1s"]\n`));
-    if ("err" in positional) throw new Error(positional.err);
-    expect(positional.ok.advanced.max_retries).toBe(3);
-
-    const tooLong = parseAppConfig(parseToml(`advanced = [3, "1s", 1, 2]\n`));
-    expect("err" in tooLong).toBe(true);
-    expect((tooLong as { err: string }).err).toBe(
-      "invalid length 4, expected fewer elements in array",
-    );
-
-    const tooShort = parseAppConfig(parseToml(`advanced = []\n`));
-    expect("err" in tooShort).toBe(true);
-    expect((tooShort as { err: string }).err).toBe(
-      "invalid length 0, expected struct AdvancedConfig with 2 elements",
-    );
+  test("mcp globs in the allowlist", () => {
+    const cfg = parsed("[tools]\nenabled_tools = [\"read\", \"mcp__hue__*\"]\n");
+    expect(at(cfg, "tools.enabled_tools"), "tools.enabled_tools").toEqual(["read","mcp__hue__*"]);
   });
 
-  test("a connection shore cannot open is not offered as config", () => {
-    for (const name of ["telegram", "discord"]) {
-      const reserved = parseAppConfig(parseToml(`[connections.${name}]\n`));
-      expect("err" in reserved, `[connections.${name}] still parses`).toBe(true);
-    }
+  test("the subagent allowlist", () => {
+    const cfg = parsed("[tools]\nenabled_subagents = [\"memory\"]\n");
+    expect(at(cfg, "tools.enabled_subagents"), "tools.enabled_subagents").toEqual(["memory"]);
   });
 
-  test("the matrix connection the fixture rejects now parses, in its external-only shape", () => {
-    const c = fixture.parse.find((x) => x.name === "the removed matrix connection is rejected");
-    expect(c).toBeDefined();
-    expect(required(c).table_err).toBe("unknown field `matrix`, expected `telegram` or `discord`");
-
-    const parsed = parseAppConfig(parseToml(required(c).toml));
-    if ("err" in parsed) throw new Error(`expected a parse, got: ${parsed.err}`);
-    expect(parsed.ok.connections.matrix).toEqual({
-      enabled: true,
-      homeserver: "",
-      user_id: "",
-      room_id: "",
-      mirror_all: true,
-    });
-
-    const full = parseAppConfig(
-      parseToml(
-        "[connections.matrix]\nenabled = true\n" +
-          'homeserver = "https://matrix.example.com"\n' +
-          'user_id = "@shore:example.com"\n' +
-          'room_id = "!abc:example.com"\n' +
-          "mirror_all = false\n",
-      ),
-    );
-    if ("err" in full) throw new Error(full.err);
-    expect(full.ok.connections.matrix).toEqual({
-      enabled: true,
-      homeserver: "https://matrix.example.com",
-      user_id: "@shore:example.com",
-      room_id: "!abc:example.com",
-      mirror_all: false,
-    });
+  test("per-tool overrides", () => {
+    const cfg = parsed("[tools]\nenabled_tools = [\"search\", \"read\"]\nmax_result_chars = 20000\ntimeout = \"30s\"\n\n[tools.config.search]\nmax_result_chars = 10000\n\n[tools.config.ask_researcher]\ntimeout = \"20m\"\n");
+    expect(at(cfg, "tools.enabled_tools"), "tools.enabled_tools").toEqual(["search","read"]);
+    expect(at(cfg, "tools.timeout"), "tools.timeout").toEqual("30s");
+    expect(at(cfg, "tools.config"), "tools.config").toMatchObject({"ask_researcher":{"max_result_chars":null,"timeout":"20m"},"search":{"max_result_chars":10000,"timeout":null}});
   });
 
-  test("the embedded homeserver table stays rejected, now as an unknown matrix field", () => {
-    const c = fixture.parse.find(
-      (x) => x.name === "the removed embedded matrix connection is rejected",
-    );
-    expect(c).toBeDefined();
-
-    const parsed = parseAppConfig(parseToml(required(c).toml));
-    expect("err" in parsed).toBe(true);
-    expect((parsed as { err: string }).err).toBe(
-      "unknown field `embedded`, expected one of `enabled`, `homeserver`, " +
-        "`user_id`, `room_id`, `mirror_all`",
-    );
-
-    for (const key of ["trusted_user", "embedded"]) {
-      const rejected = parseAppConfig(parseToml(`[connections.matrix]\n${key} = "x"\n`));
-      expect("err" in rejected, key).toBe(true);
-    }
+  test("a zero timeout means no deadline", () => {
+    const cfg = parsed("[tools]\nenabled_tools = [\"read\", \"git\"]\ntimeout = 0\n\n[tools.config.git]\ntimeout = \"45s\"\n");
+    expect(at(cfg, "tools.enabled_tools"), "tools.enabled_tools").toEqual(["read","git"]);
+    expect(at(cfg, "tools.timeout"), "tools.timeout").toEqual("0s");
+    expect(at(cfg, "tools.config"), "tools.config").toMatchObject({"git":{"max_result_chars":null,"timeout":"45s"}});
   });
 
-  test("map-valued sections are built in code point order, not document order", () => {
-    const src =
-      '[subagents.zed]\ndescription = "z"\nprompt = "p"\n\n' +
-      '[subagents."\u{1F3B5}drum"]\ndescription = "d"\nprompt = "p"\n\n' +
-      '[subagents."\u{FB00}ute"]\ndescription = "f"\nprompt = "p"\n\n' +
-      '[mcp.zebra]\ncommand = "z"\nenv = { ZED = "1", ABLE = "2" }\n\n' +
-      '[mcp.alpha]\ncommand = "a"\n\n' +
-      "[tools.config.zoom]\nmax_result_chars = 1\n\n" +
-      "[tools.config.abacus]\nmax_result_chars = 2\n";
-    const parsed = parseAppConfig(parseToml(src));
-    if ("err" in parsed) throw new Error(parsed.err);
-
-    expect(Object.fromEntries(mapOrderOf(parsed.ok))).toEqual({
-      subagents: ["zed", "\u{FB00}ute", "\u{1F3B5}drum"],
-      mcp: ["alpha", "zebra"],
-      "tools.config": ["abacus", "zoom"],
-      "mcp.alpha.env": [],
-      "mcp.zebra.env": ["ABLE", "ZED"],
-    });
+  test("web search", () => {
+    const cfg = parsed("[tools.web_search]\napi_key_env = \"MY_TAVILY_KEY\"\nresult_limit = 10\nsearch_depth = \"advanced\"\ninclude_answer = false\n");
+    expect(at(cfg, "tools.web_search.api_key_env"), "tools.web_search.api_key_env").toEqual("MY_TAVILY_KEY");
+    expect(at(cfg, "tools.web_search.result_limit"), "tools.web_search.result_limit").toEqual(10);
+    expect(at(cfg, "tools.web_search.search_depth"), "tools.web_search.search_depth").toEqual("advanced");
+    expect(at(cfg, "tools.web_search.include_answer"), "tools.web_search.include_answer").toEqual(false);
   });
+
+  test("the mcp table, both transports", () => {
+    const cfg = parsed("[mcp.hue]\ncommand = \"node\"\nargs = [\"index.js\"]\nenv = { HUE_API_KEY = \"abc\" }\ncwd = \"/srv/hue-mcp\"\n\n[mcp.remote]\nurl = \"http://localhost:9123/sse\"\n");
+    expect(at(cfg, "mcp"), "mcp").toMatchObject({"hue":{"command":"node","args":["index.js"],"env":{"HUE_API_KEY":"abc"},"cwd":"/srv/hue-mcp","url":null},"remote":{"command":null,"args":[],"env":{},"cwd":null,"url":"http://localhost:9123/sse"}});
+  });
+
+  test("mcp env keys sort by code point", () => {
+    const cfg = parsed("[mcp.s]\ncommand = \"x\"\nenv = { ZED = \"1\", \"ﬀ\" = \"2\", ABLE = \"3\" }\n");
+    expect(at(cfg, "mcp"), "mcp").toMatchObject({"s":{"command":"x","args":[],"env":{"ABLE":"3","ZED":"1","ﬀ":"2"},"cwd":null,"url":null}});
+  });
+
+
+  test("autonomy and heartbeat durations", () => {
+    const cfg = parsed("[behavior.autonomy]\nenabled = true\n\n[behavior.autonomy.heartbeat]\nenabled = false\nfallback_heartbeat_interval = \"90m\"\ndormant_after_heartbeat_turns = 7\ndormant_after_idle_time = \"1d\"\nminimum_heartbeat_latency = \"500ms\"\nwrap_up_grace_rounds = 1\n\n[cache]\nkeepalive_max = \"6h\"\n");
+    expect(at(cfg, "behavior.autonomy.enabled"), "behavior.autonomy.enabled").toEqual(true);
+    expect(at(cfg, "behavior.autonomy.heartbeat.enabled"), "behavior.autonomy.heartbeat.enabled").toEqual(false);
+    expect(at(cfg, "behavior.autonomy.heartbeat.fallback_heartbeat_interval"), "behavior.autonomy.heartbeat.fallback_heartbeat_interval").toEqual("90m");
+    expect(at(cfg, "behavior.autonomy.heartbeat.dormant_after_heartbeat_turns"), "behavior.autonomy.heartbeat.dormant_after_heartbeat_turns").toEqual(7);
+    expect(at(cfg, "behavior.autonomy.heartbeat.dormant_after_idle_time"), "behavior.autonomy.heartbeat.dormant_after_idle_time").toEqual("1d");
+    expect(at(cfg, "behavior.autonomy.heartbeat.minimum_heartbeat_latency"), "behavior.autonomy.heartbeat.minimum_heartbeat_latency").toEqual("500ms");
+    expect(at(cfg, "behavior.autonomy.heartbeat.wrap_up_grace_rounds"), "behavior.autonomy.heartbeat.wrap_up_grace_rounds").toEqual(1);
+    expect(at(cfg, "cache.keepalive_max"), "cache.keepalive_max").toEqual("6h");
+  });
+
+  test("a bare integer duration means seconds", () => {
+    const cfg = parsed("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = 90\n");
+    expect(at(cfg, "cache.keepalive_max"), "cache.keepalive_max").toEqual("90s");
+  });
+
+  test("a fractional duration is accepted at parse time", () => {
+    const cfg = parsed("[memory.compaction]\nidle_trigger = \"1.5s\"\n");
+    expect(at(cfg, "memory.compaction.idle_trigger"), "memory.compaction.idle_trigger").toEqual("1500ms");
+  });
+
+  test("every user_message_timestamps variant", () => {
+    const cfg = parsed("[behavior]\nuser_message_timestamps = \"always\"\n");
+    expect(at(cfg, "behavior.user_message_timestamps"), "behavior.user_message_timestamps").toEqual("always");
+  });
+
+  test("user_message_timestamps never", () => {
+    const cfg = parsed("[behavior]\nuser_message_timestamps = \"never\"\n");
+    expect(at(cfg, "behavior.user_message_timestamps"), "behavior.user_message_timestamps").toEqual("never");
+  });
+
+  test("the compaction section", () => {
+    const cfg = parsed("[memory.compaction]\nenabled = true\nidle_trigger = \"45m\"\narchive_after = \"3d\"\nmin_turns = 4\nmax_turns = 20\nmax_context_tokens = 150000\nkeep_recent_turns = 3\n");
+    expect(at(cfg, "memory.compaction.idle_trigger"), "memory.compaction.idle_trigger").toEqual("45m");
+    expect(at(cfg, "memory.compaction.archive_after"), "memory.compaction.archive_after").toEqual("3d");
+    expect(at(cfg, "memory.compaction.min_turns"), "memory.compaction.min_turns").toEqual(4);
+    expect(at(cfg, "memory.compaction.max_turns"), "memory.compaction.max_turns").toEqual(20);
+    expect(at(cfg, "memory.compaction.max_context_tokens"), "memory.compaction.max_context_tokens").toEqual(150000);
+    expect(at(cfg, "memory.compaction.keep_recent_turns"), "memory.compaction.keep_recent_turns").toEqual(3);
+  });
+
+  test("replay_prior_thinking accepts the new string form", () => {
+    const cfg = parsed("[memory.thinking]\nreplay_prior_thinking = \"none\"\n");
+    expect(at(cfg, "memory.thinking.replay_prior_thinking"), "memory.thinking.replay_prior_thinking").toEqual("none");
+  });
+
+  test("replay_prior_thinking accepts the legacy bool false", () => {
+    const cfg = parsed("[memory.thinking]\nreplay_prior_thinking = false\n");
+    expect(at(cfg, "memory.thinking.replay_prior_thinking"), "memory.thinking.replay_prior_thinking").toEqual("none");
+  });
+
+  test("notifications", () => {
+    const cfg = parsed("[notifications]\nenabled = true\nbackend = \"ntfy\"\ngeneration_threshold = \"20s\"\n\n[notifications.ntfy]\nurl = \"https://ntfy.example.com\"\ntopic = \"shore-test\"\ntoken = \"tk_secret\"\n\n[notifications.events]\ncache_warning = false\nmessage_complete = true\n");
+    expect(at(cfg, "notifications.enabled"), "notifications.enabled").toEqual(true);
+    expect(at(cfg, "notifications.backend"), "notifications.backend").toEqual("ntfy");
+    expect(at(cfg, "notifications.ntfy.url"), "notifications.ntfy.url").toEqual("https://ntfy.example.com");
+    expect(at(cfg, "notifications.ntfy.topic"), "notifications.ntfy.topic").toEqual("shore-test");
+    expect(at(cfg, "notifications.ntfy.token"), "notifications.ntfy.token").toEqual("tk_secret");
+    expect(at(cfg, "notifications.generation_threshold"), "notifications.generation_threshold").toEqual("20s");
+    expect(at(cfg, "notifications.events.cache_warning"), "notifications.events.cache_warning").toEqual(false);
+    expect(at(cfg, "notifications.events.message_complete"), "notifications.events.message_complete").toEqual(true);
+  });
+
+  test("the notifications command backend", () => {
+    const cfg = parsed("[notifications]\nenabled = true\nbackend = \"command\"\n\n[notifications.command]\ntemplate = \"echo '{title}: {body}'\"\n");
+    expect(at(cfg, "notifications.enabled"), "notifications.enabled").toEqual(true);
+    expect(at(cfg, "notifications.backend"), "notifications.backend").toEqual("command");
+    expect(at(cfg, "notifications.command.template"), "notifications.command.template").toEqual("echo '{title}: {body}'");
+  });
+
+
+
+  test("the background section", () => {
+    const cfg = parsed("[defaults.background]\nmodel = \"bg\"\nheartbeat = \"bg-h\"\ncompaction = \"bg-c\"\n");
+    expect(at(cfg, "defaults.background.model"), "defaults.background.model").toEqual("bg");
+    expect(at(cfg, "defaults.background.heartbeat"), "defaults.background.heartbeat").toEqual("bg-h");
+    expect(at(cfg, "defaults.background.compaction"), "defaults.background.compaction").toEqual("bg-c");
+  });
+
+  test("defaults.stream can be turned off", () => {
+    const cfg = parsed("[defaults]\nstream = false\ndisplay_name = \"Alice\"\nembedding = \"e\"\nimage_generation = \"i\"\n");
+    expect(at(cfg, "defaults.embedding"), "defaults.embedding").toEqual("e");
+    expect(at(cfg, "defaults.image_generation"), "defaults.image_generation").toEqual("i");
+    expect(at(cfg, "defaults.display_name"), "defaults.display_name").toEqual("Alice");
+    expect(at(cfg, "defaults.stream"), "defaults.stream").toEqual(false);
+  });
+
+  test("a sequence fills a struct positionally", () => {
+    const cfg = parsed("[behavior]\nautonomy = [true]\n");
+    expect(at(cfg, "behavior.autonomy.enabled"), "behavior.autonomy.enabled").toEqual(true);
+  });
+
+
+  test("seq: DefaultsConfig, at its minimum", () => {
+    const cfg = parsed("defaults = [\"m\", [\"bm\", \"bh\", \"bc\"], \"e\", \"i\", \"s\", \"d\"]\n");
+    expect(at(cfg, "defaults.model"), "defaults.model").toEqual("m");
+    expect(at(cfg, "defaults.background.model"), "defaults.background.model").toEqual("bm");
+    expect(at(cfg, "defaults.background.heartbeat"), "defaults.background.heartbeat").toEqual("bh");
+    expect(at(cfg, "defaults.background.compaction"), "defaults.background.compaction").toEqual("bc");
+    expect(at(cfg, "defaults.embedding"), "defaults.embedding").toEqual("e");
+    expect(at(cfg, "defaults.image_generation"), "defaults.image_generation").toEqual("i");
+    expect(at(cfg, "defaults.subagent_model"), "defaults.subagent_model").toEqual("s");
+    expect(at(cfg, "defaults.display_name"), "defaults.display_name").toEqual("d");
+  });
+
+  test("seq: BackgroundDefaultsConfig, at its minimum", () => {
+    const cfg = parsed("[defaults]\nbackground = [\"m\", \"h\", \"c\"]\n");
+    expect(at(cfg, "defaults.background.model"), "defaults.background.model").toEqual("m");
+    expect(at(cfg, "defaults.background.heartbeat"), "defaults.background.heartbeat").toEqual("h");
+    expect(at(cfg, "defaults.background.compaction"), "defaults.background.compaction").toEqual("c");
+  });
+
+
+
+  test("seq: McpServerConfig, at its minimum", () => {
+    const cfg = parsed("[mcp]\ns = [\"node\", [], {}, \"/srv\", \"http://x\"]\n");
+    expect(at(cfg, "mcp"), "mcp").toMatchObject({"s":{"command":"node","args":[],"env":{},"cwd":"/srv","url":"http://x"}});
+  });
+
+  test("seq: UsageBudgetConfig, at its minimum", () => {
+    const cfg = parsed("[usage]\nbudgets = [[\"n\", \"week\", 5.0]]\n");
+    expect(at(cfg, "usage.budgets"), "usage.budgets").toMatchObject([{"name":"n","period":"week","cost_usd":5,"warn_at":[0.8,1],"limit":"warn","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":null,"reset_hour":null,"reset_day_of_week":null,"reset_day_of_month":null,"pace_period":null,"pace_action":null,"pace_warn_at":null}]);
+  });
+
+  test("seq: ToolOverride needs nothing", () => {
+    const cfg = parsed("[tools.config]\nread = []\n");
+    expect(at(cfg, "tools.config"), "tools.config").toMatchObject({"read":{"max_result_chars":null,"timeout":null}});
+  });
+
+  test("an empty per-tool table is not an error", () => {
+    const cfg = parsed("[tools.config.read]\n");
+    expect(at(cfg, "tools.config"), "tools.config").toMatchObject({"read":{"max_result_chars":null,"timeout":null}});
+  });
+
+  test("a zero deadline written as a duration string", () => {
+    const cfg = parsed("[tools]\ntimeout = \"0s\"\n");
+    expect(at(cfg, "tools.timeout"), "tools.timeout").toEqual("0s");
+  });
+
+  test("a bare float duration", () => {
+    const cfg = parsed("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = 1.5\n");
+    expect(at(cfg, "cache.keepalive_max"), "cache.keepalive_max").toEqual("1500ms");
+  });
+
+  test("integer where a float is expected is widened", () => {
+    const cfg = parsed("[[usage.budgets]]\ncost_usd = 10\n");
+    expect(at(cfg, "usage.budgets"), "usage.budgets").toMatchObject([{"name":"","period":"day","cost_usd":10,"warn_at":[0.8,1],"limit":"warn","character":null,"provider":null,"api_key":null,"model":null,"call_type":null,"usage_kind":[],"allow_compaction_over_budget":null,"reset_hour":null,"reset_day_of_week":null,"reset_day_of_month":null,"pace_period":null,"pace_action":null,"pace_warn_at":null}]);
+  });
+
 });
 
-describe("the two parse paths, where they disagree", () => {
-  const caseNamed = (name: string): { toml: string; doc_err: string; table_err: string } => {
-    const found = fixture.parse.find((c) => c.name === name);
-    if (found === undefined) throw new Error(`fixture case missing: ${name}`);
-    if (!("doc_err" in found) || !("table_err" in found)) {
-      throw new Error(`fixture case is not a two-column error: ${name}`);
-    }
-    return found as { toml: string; doc_err: string; table_err: string };
+describe("a config.toml that cannot be honoured is refused, and says what is wrong", () => {
+  test("a subagent without a description does not parse", () => {
+    expect(rejected("[subagents.music]\nprompt = \"p\"\n")).toContain("description");
+  });
+
+  test("a subagent without a prompt does not parse", () => {
+    expect(rejected("[subagents.music]\ndescription = \"d\"\n")).toContain("prompt");
+  });
+
+  test("an unknown subagent key does not parse", () => {
+    expect(rejected("[subagents.music]\ndescription = \"d\"\nprompt = \"p\"\nmodel_name = \"x\"\n")).toContain("model_name");
+  });
+
+  test("two missing fields report the one declared first, not the one sorted first", () => {
+    expect(rejected("[subagents.music]\ntools = []\n")).toContain("description");
+  });
+
+  test("an unknown key is reported before a missing one", () => {
+    expect(rejected("[subagents.music]\nzzz = 1\n")).toContain("zzz");
+  });
+
+  test("an unknown retrieval mode does not parse", () => {
+    expect(rejected("[memory.retrieval]\nmode = \"semantic\"\n")).toContain("semantic");
+  });
+
+  test("an unknown binary mode does not parse", () => {
+    expect(rejected("[memory.retrieval]\nbinary = \"embed\"\n")).toContain("embed");
+  });
+
+  test("a budget without cost_usd does not parse", () => {
+    expect(rejected("[[usage.budgets]]\nname = \"daily\"\n")).toContain("cost_usd");
+  });
+
+  test("an unknown budget weekday does not parse", () => {
+    expect(rejected("[[usage.budgets]]\ncost_usd = 1.0\nreset_day_of_week = \"Monday\"\n")).toContain("Monday");
+  });
+
+  test("an unknown per-tool override key does not parse", () => {
+    expect(rejected("[tools.config.search]\nmax_chars = 10\n")).toContain("max_chars");
+  });
+
+  test("an unknown mcp key does not parse", () => {
+    expect(rejected("[mcp.hue]\ncommand = \"node\"\ntransport = \"stdio\"\n")).toContain("transport");
+  });
+
+  test("an unparseable duration is rejected", () => {
+    expect(rejected("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = \"6 hours\"\n")).not.toBe("");
+  });
+
+  test("a negative duration is rejected", () => {
+    expect(rejected("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = -5\n")).not.toBe("");
+  });
+
+  test("an unknown user_message_timestamps variant does not parse", () => {
+    expect(rejected("[behavior]\nuser_message_timestamps = \"sometimes\"\n")).toContain("sometimes");
+  });
+
+  test("an unknown replay_prior_thinking is rejected", () => {
+    expect(rejected("[memory.thinking]\nreplay_prior_thinking = \"recent\"\n")).not.toBe("");
+  });
+
+  test("an unknown notifications backend does not parse", () => {
+    expect(rejected("[notifications]\nbackend = \"dbus\"\n")).toContain("dbus");
+  });
+
+  test("a telegram or discord table is refused, keys and all", () => {
+    expect(rejected("[connections.telegram]\nbot_token = \"t\"\nchat_id = 42\n\n[connections.discord]\nwebhook = \"https://example.invalid/hook\"\n")).toContain("discord");
+  });
+
+
+
+  test("the removed tools.exec sandbox is rejected", () => {
+    expect(rejected("[tools.exec]\nsandbox = \"off\"\n")).toContain("exec");
+  });
+
+  test("the removed tools.sandbox section is rejected", () => {
+    expect(rejected("[tools.sandbox]\nmode = \"on\"\n")).toContain("sandbox");
+  });
+
+  test("an unknown top-level section is rejected", () => {
+    expect(rejected("[bogus_section]\nkey = \"value\"\n")).toContain("bogus_section");
+  });
+
+  test("an unknown notifications key is rejected", () => {
+    expect(rejected("[notifications]\nenabled = true\nbogus_key = \"value\"\n")).toContain("bogus_key");
+  });
+
+  test("an unknown nested key is rejected", () => {
+    expect(rejected("[behavior.autonomy]\nenabled = true\nbogus_key = 42\n")).toContain("bogus_key");
+  });
+
+  test("an unknown background key is rejected", () => {
+    expect(rejected("[defaults.background]\ntypo_field = \"x\"\n")).toContain("typo_field");
+  });
+
+  test("two unknown top-level keys: the document reports the first written, the table reports the code-point-smallest", () => {
+    expect(rejected("[zzz_unknown]\nk = 1\n\n[aaa_unknown]\nk = 2\n")).toContain("aaa_unknown");
+  });
+
+  test("an unknown key and a bad type: which is reported depends on the path", () => {
+    expect(rejected("[behavior]\nzzz_unknown = 1\n\n[behavior.autonomy]\nenabled = \"yes\"\n")).not.toBe("");
+  });
+
+  test("two unknown non-ASCII keys sort by code point, not UTF-16 order", () => {
+    expect(rejected("[\"🎵\"]\nk = 1\n\n[\"ﬀ\"]\nk = 2\n")).toContain("ﬀ");
+  });
+
+  test("a bad type at a sequence position", () => {
+    expect(rejected("[behavior]\nautonomy = [1]\n")).toContain("1");
+  });
+
+  test("a retired connection is refused in its positional form too", () => {
+    expect(rejected("[connections]\ntelegram = [1]\n")).toContain("telegram");
+  });
+
+  test("trailing elements past the field count", () => {
+    expect(rejected("[behavior]\nautonomy = [true, {}, \"6h\", 1]\n")).not.toBe("");
+  });
+
+  test("seq: DefaultsConfig", () => {
+    expect(rejected("defaults = []\n")).not.toBe("");
+  });
+
+  test("seq: BackgroundDefaultsConfig", () => {
+    expect(rejected("[defaults]\nbackground = []\n")).not.toBe("");
+  });
+
+  test("seq: AdvancedConfig", () => {
+    expect(rejected("advanced = []\n")).not.toBe("");
+  });
+
+  test("seq: LlmSidecarConfig", () => {
+    expect(rejected("[advanced]\nllm_sidecar = []\n")).not.toBe("");
+  });
+
+  test("seq: McpServerConfig", () => {
+    expect(rejected("[mcp]\ns = []\n")).not.toBe("");
+  });
+
+  test("seq: UsageBudgetConfig", () => {
+    expect(rejected("[usage]\nbudgets = [[]]\n")).not.toBe("");
+  });
+
+  test("a required field missing from a positional sequence", () => {
+    expect(rejected("[subagents]\nmusic = [\"d\"]\n")).not.toBe("");
+  });
+
+  test("a required field supplied positionally", () => {
+    expect(rejected("[subagents]\nmusic = [\"d\", \"p\", [\"read\"]]\n")).not.toBe("");
+  });
+
+  test("a sequence where a map is expected", () => {
+    expect(rejected("[mcp.s]\nenv = []\n")).not.toBe("");
+  });
+
+  test("an unknown key in a one-field struct", () => {
+    expect(rejected("[memory.thinking]\nbogus = 1\n")).toContain("bogus");
+  });
+
+  test("an unknown key in the other one-field struct", () => {
+    expect(rejected("[notifications.command]\nbogus = 1\n")).toContain("bogus");
+  });
+
+  test("an unknown key sorting before a bad type is reported on both paths", () => {
+    expect(rejected("[aaa_unknown]\nk = 1\n\n[behavior.autonomy]\nenabled = \"yes\"\n")).toContain("aaa_unknown");
+  });
+
+  test("a bad type where a bool is expected", () => {
+    expect(rejected("[defaults]\nstream = \"yes\"\n")).not.toBe("");
+  });
+
+  test("a bad type where a string is expected", () => {
+    expect(rejected("[daemon]\naddr = 7320\n")).toContain("7320");
+  });
+
+  test("a bad type where an integer is expected", () => {
+    expect(rejected("[tools]\nmax_result_chars = \"lots\"\n")).not.toBe("");
+  });
+
+  test("a negative integer where a usize is expected", () => {
+    expect(rejected("[tools]\nmax_result_chars = -1\n")).toContain("-1");
+  });
+
+  test("a table where a section is expected to be one", () => {
+    expect(rejected("[defaults]\nbackground = \"bg\"\n")).not.toBe("");
+  });
+
+  test("integer where a string is expected", () => {
+    expect(rejected("[defaults]\nmodel = 1\n")).toContain("1");
+  });
+
+  test("boolean where a string is expected", () => {
+    expect(rejected("[defaults]\nmodel = true\n")).toContain("true");
+  });
+
+  test("float where a string is expected", () => {
+    expect(rejected("[defaults]\nmodel = 1.5\n")).toContain("1.5");
+  });
+
+  test("array where a string is expected", () => {
+    expect(rejected("[defaults]\nmodel = []\n")).not.toBe("");
+  });
+
+  test("table where a string is expected", () => {
+    expect(rejected("[defaults]\nmodel = {}\n")).not.toBe("");
+  });
+
+  test("datetime where a string is expected", () => {
+    expect(rejected("[defaults]\nmodel = 1979-05-27T07:32:00Z\n")).not.toBe("");
+  });
+
+  test("float where an integer is expected", () => {
+    expect(rejected("[tools]\nmax_result_chars = 1.5\n")).toContain("1.5");
+  });
+
+  test("string where a sequence is expected", () => {
+    expect(rejected("[tools]\nenabled_tools = \"read\"\n")).not.toBe("");
+  });
+
+  test("wrong element type inside a sequence", () => {
+    expect(rejected("[tools]\nenabled_tools = [1]\n")).toContain("1");
+  });
+
+  test("wrong element type inside a float sequence", () => {
+    expect(rejected("[[usage.budgets]]\ncost_usd = 1.0\nwarn_at = [\"half\"]\n")).not.toBe("");
+  });
+
+  test("string where a float is expected", () => {
+    expect(rejected("[[usage.budgets]]\ncost_usd = \"ten\"\n")).not.toBe("");
+  });
+
+  test("negative u32", () => {
+    expect(rejected("[advanced]\nmax_retries = -1\n")).toContain("-1");
+  });
+
+
+
+  test("string where a string map is expected", () => {
+    expect(rejected("[mcp.s]\nenv = \"x\"\n")).not.toBe("");
+  });
+
+  test("wrong value type inside a string map", () => {
+    expect(rejected("[mcp.s]\nenv = { A = 1 }\n")).toContain("1");
+  });
+
+  test("integer where a nested struct is expected", () => {
+    expect(rejected("[behavior.autonomy]\nheartbeat = 1\n")).toContain("1");
+  });
+
+  test("string where an array of tables is expected", () => {
+    expect(rejected("[usage]\nbudgets = \"none\"\n")).not.toBe("");
+  });
+
+  test("not even an empty telegram table parses", () => {
+    expect(rejected("[connections.telegram]\n")).toContain("telegram");
+  });
+
+  test("an integer past u32", () => {
+    expect(rejected("[advanced]\nmax_retries = 5000000000\n")).toContain("5000000000");
+  });
+
+  test("a non-string where an enum is expected", () => {
+    expect(rejected("[memory.retrieval]\nmode = 1\n")).not.toBe("");
+  });
+
+  test("a non-string where the notification backend is expected", () => {
+    expect(rejected("[notifications]\nbackend = 1\n")).not.toBe("");
+  });
+
+  test("a boolean where a duration is expected", () => {
+    expect(rejected("[behavior.autonomy]\n\n\n[cache]\nkeepalive_max = true\n")).toContain("true");
+  });
+
+  test("an integer where replay_prior_thinking is expected", () => {
+    expect(rejected("[memory.thinking]\nreplay_prior_thinking = 1\n")).not.toBe("");
+  });
+
+
+});
+
+describe("the tool allowlist", () => {
+  const toolsOf = (toml: string): ToolsConfig => {
+    const result = parseAppConfig(parseToml(toml));
+    if ("err" in result) throw new Error(result.err);
+    return result.ok.tools;
   };
 
-  test("two unknown keys: the code-point-smallest is reported, not the first written", () => {
-    const c = caseNamed(
-      "two unknown top-level keys: the document reports the first written, " +
-        "the table reports the code-point-smallest",
-    );
-    const parsed = parseAppConfig(parseToml(c.toml));
-    if ("ok" in parsed) throw new Error("expected a parse error");
-    expect(parsed.err).toContain("`aaa_unknown`");
-    expect(parsed.err).not.toContain("`zzz_unknown`");
-    expect(withRustFieldCounts(parsed.err)).toBe(c.table_err);
-    expect(withRustFieldCounts(parsed.err)).not.toBe(c.doc_err);
-  });
-
-  test("a bad type sorting before an unknown key wins the race", () => {
-    const c = caseNamed("an unknown key and a bad type: which is reported depends on the path");
-    const parsed = parseAppConfig(parseToml(c.toml));
-    if ("ok" in parsed) throw new Error("expected a parse error");
-    expect(parsed.err).toBe('invalid type: string "yes", expected a boolean');
-    expect(parsed.err).toBe(c.table_err);
-    expect(parsed.err).not.toBe(c.doc_err);
-  });
-});
-
-describe("where Bun's TOML parser and Rust's toml still differ", () => {
-  test("a datetime parses, and lands on the error Rust's document path gives", () => {
-    const c = fixture.parse.find((x) => x.name === "datetime where a string is expected");
-    if (c === undefined) throw new Error("fixture case missing");
-    const table = parseToml(c.toml) as { defaults: { model: unknown } };
-    expect(Object.prototype.toString.call(table.defaults.model)).toBe("[object Temporal.Instant]");
-
-    const docErr = c.doc?.err;
-    if (docErr === undefined) throw new Error("expected a recorded document-path error");
-    const parsed = parseAppConfig(parseToml(c.toml));
-    expect("err" in parsed ? parsed.err : "").toBe(docErr);
-
-    const recorded = c.table?.ok as { defaults: { model: string } } | undefined;
-    if (recorded === undefined) throw new Error("expected a table-path success");
-    expect(recorded.defaults.model).toBe("1979-05-27T07:32:00Z");
-  });
-
-  for (const name of ["a float that happens to be whole is still a float", "exponent notation is a float too"]) {
-    test(`${name} — accepted here, rejected in Rust`, () => {
-      const c = fixture.parse.find((x) => x.name === name);
-      if (c === undefined) throw new Error("fixture case missing");
-      expect(c.table_err).toContain("expected usize");
-
-      const parsed = parseAppConfig(parseToml(c.toml));
-      if ("err" in parsed) throw new Error(`expected the looser parse, got: ${parsed.err}`);
-      expect(parsed.ok.tools.max_result_chars).toBe(name.startsWith("exponent") ? 1000 : 20000);
-    });
-  }
-
-  test("a nested array literal parses, so the seq cases replay against the recording", () => {
-    expect(parseToml("a = [[1]]")).toEqual({ a: [[1]] });
-    for (const name of ["seq: UsageBudgetConfig, at its minimum", "a required field supplied positionally"]) {
-      expect(BUN_CANNOT_SEE.has(name)).toBe(false);
-    }
-  });
-
-  test("the recorded u64 case is refused outright, where Rust took the value", () => {
-    const c = fixture.parse.find((x) => x.name === "u64 fields hold values a double cannot");
-    if (c === undefined) throw new Error("fixture case missing");
-    const rust = c.ok as { advanced: Record<string, unknown> } | undefined;
-    if (rust === undefined) throw new Error("expected a recorded success");
-    expect(rust.advanced.max_image_size).toBe(9007199254740992);
-
-    expect(() => parseToml(c.toml)).toThrow("losslessly");
-
-    const parsed = parseAppConfig(parseToml("[advanced]\nmax_image_size = 1\n"));
-    expect("err" in parsed ? parsed.err : "").toBe(
-      "unknown field `max_image_size`, expected `max_retries` or `retry_backoff`",
-    );
-  });
-
-  test("a u64 past 2^53 fails the whole document instead of losing its last digit", () => {
-    expect(() => parseToml(`[memory.retrieval]\nmax_file_bytes = 9007199254740993\n`)).toThrow(
-      "losslessly",
-    );
-
-    const parsed = parseAppConfig(
-      parseToml(`[memory.retrieval]\nmax_file_bytes = 9007199254740991\n`),
-    );
-    if ("err" in parsed) throw new Error(parsed.err);
-    expect(parsed.ok.memory.retrieval.max_file_bytes).toBe(9007199254740991);
-  });
-});
-
-describe("the tool allowlist and per-tool resolution", () => {
-  const recorded = fixture.defaults.tools as { max_result_chars: number; timeout: string };
-  const recordedTimeoutMs = Number(
-    (ConfigDuration.deserialize(recorded.timeout) as { ok: ConfigDuration }).ok.asMillisExact(),
-  );
-
-  const current = defaultToolsConfig();
-  const currentTimeoutMs = Number(current.timeout?.asMillisExact() ?? Number.NaN);
-
-  const inherited = (
-    set: ReadonlySet<string>,
-    tool: string,
-    field: string,
-    recordedValue: number,
-    recordedDefault: number,
-    currentDefault: number,
-  ) => {
-    const pinned =
-      set.has(`tools.${field}`) || set.has(`tools.config.${tool}.${field}`);
-    return !pinned && recordedValue === recordedDefault ? currentDefault : recordedValue;
-  };
-
-  for (const c of fixture.tools_queries) {
+  for (const c of TOOLS_QUERIES) {
     test(c.name, () => {
-      const set = pathsSetBy(parseToml(c.toml));
-      const parsed = parseAppConfig(parseToml(c.toml));
-      if ("err" in parsed) throw new Error(parsed.err);
-      const tools: ToolsConfig = parsed.ok.tools;
-
+      const tools = toolsOf(c.toml);
       expect(anyToolEnabled(tools)).toBe(c.any_enabled);
-
       for (const t of c.tools) {
-        expect({
-          name: t.name,
-          enabled: toolEnabled(tools, t.name),
-          result_chars: resultCharsFor(tools, t.name),
-          timeout_ms: Number(timeoutFor(tools, t.name)?.asMillisExact() ?? Number.NaN),
-        }).toEqual({
-          name: t.name,
-          enabled: t.enabled,
-          result_chars: inherited(
-            set,
-            t.name,
-            "max_result_chars",
-            t.result_chars,
-            recorded.max_result_chars,
-            current.max_result_chars,
-          ),
-          timeout_ms:
-            t.timeout_ms === undefined || t.timeout_ms === null
-              ? Number.NaN
-              : inherited(set, t.name, "timeout", t.timeout_ms, recordedTimeoutMs, currentTimeoutMs),
-        });
+        expect(toolEnabled(tools, t.name), t.name).toBe(t.enabled);
       }
-
-      for (const s of c.subagents) {
-        expect(subagentEnabled(tools, s.name)).toBe(s.enabled);
+      for (const sub of c.subagents) {
+        expect(subagentEnabled(tools, sub.name), sub.name).toBe(sub.enabled);
       }
     });
   }
+});
 
-  test("no deadline is `undefined`, not a zero duration", () => {
-    const parsed = parseAppConfig(parseToml("[tools]\ntimeout = 0\n"));
-    if ("err" in parsed) throw new Error(parsed.err);
-    expect(timeoutFor(parsed.ok.tools, "read")).toBeUndefined();
+describe("a per-tool limit", () => {
+  const toolsOf = (toml: string): ToolsConfig => {
+    const result = parseAppConfig(parseToml(toml));
+    if ("err" in result) throw new Error(result.err);
+    return result.ok.tools;
+  };
+
+  test("falls back to the global cap when the tool sets none", () => {
+    const tools = toolsOf("[tools]\nmax_result_chars = 4096\n");
+    expect(resultCharsFor(tools, "read")).toBe(4096);
+    expect(resultCharsFor(tools, "anything-at-all")).toBe(4096);
+  });
+
+  test("overrides the global cap when the tool sets its own", () => {
+    const tools = toolsOf(
+      "[tools]\nmax_result_chars = 4096\n\n[tools.config.read]\nmax_result_chars = 10\n",
+    );
+    expect(resultCharsFor(tools, "read")).toBe(10);
+    expect(resultCharsFor(tools, "search")).toBe(4096);
+  });
+
+  test("falls back to the shipped default when nothing sets it", () => {
+    expect(resultCharsFor(toolsOf(""), "read")).toBe(defaultToolsConfig().max_result_chars);
+  });
+
+  test("the same inheritance governs deadlines", () => {
+    const tools = toolsOf(
+      '[tools]\ntimeout = "30s"\n\n[tools.config.git]\ntimeout = "5m"\n',
+    );
+    expect(timeoutFor(tools, "git")?.asMillis()).toBe(300_000);
+    expect(timeoutFor(tools, "read")?.asMillis()).toBe(30_000);
+  });
+
+  test("a zero deadline means no deadline, not an instant one", () => {
+    expect(timeoutFor(toolsOf("[tools]\ntimeout = 0\n"), "read")).toBeUndefined();
   });
 });
 
 describe("sub-agent timeouts", () => {
   test("a sub-agent timeout parses as a duration", () => {
-    const parsed = parseAppConfig(
+    const outcome = parseAppConfig(
       parseToml('[subagents.research]\ndescription = "d"\nprompt = "p"\ntimeout = "20m"\n'),
     );
-    if ("err" in parsed) throw new Error(parsed.err);
-    expect(parsed.ok.subagents.get("research")?.timeout?.asMillis()).toBe(1_200_000);
+    if ("err" in outcome) throw new Error(outcome.err);
+    expect(outcome.ok.subagents.get("research")?.timeout?.asMillis()).toBe(1_200_000);
   });
 
   test("a sub-agent without a timeout leaves it unset", () => {
-    const parsed = parseAppConfig(
+    const outcome = parseAppConfig(
       parseToml('[subagents.research]\ndescription = "d"\nprompt = "p"\n'),
     );
-    if ("err" in parsed) throw new Error(parsed.err);
-    expect(parsed.ok.subagents.get("research")?.timeout).toBeUndefined();
+    if ("err" in outcome) throw new Error(outcome.err);
+    expect(outcome.ok.subagents.get("research")?.timeout).toBeUndefined();
   });
 });
 
 describe("tool_pattern_matches", () => {
-  for (const c of fixture.tool_patterns) {
+  for (const c of TOOL_PATTERNS) {
     test(`${JSON.stringify(c.pattern)} vs ${JSON.stringify(c.name)}`, () => {
       expect(toolPatternMatches(c.pattern, c.name)).toBe(c.matches);
     });
   }
 
   test("the cases cover both branches and both answers", () => {
-    const globs = fixture.tool_patterns.filter((c) => c.pattern.endsWith("*"));
-    const exact = fixture.tool_patterns.filter((c) => !c.pattern.endsWith("*"));
+    const globs = TOOL_PATTERNS.filter((c) => c.pattern.endsWith("*"));
+    const exact = TOOL_PATTERNS.filter((c) => !c.pattern.endsWith("*"));
     expect(globs.some((c) => c.matches)).toBe(true);
     expect(globs.some((c) => !c.matches)).toBe(true);
     expect(exact.some((c) => c.matches)).toBe(true);
@@ -831,7 +1502,7 @@ function defaultsFromJson(json: {
 }
 
 describe("background model resolution", () => {
-  for (const c of fixture.background) {
+  for (const c of BACKGROUND) {
     test(c.name, () => {
       const defaults = defaultsFromJson(c.defaults);
       for (const [task, want] of [
@@ -845,15 +1516,15 @@ describe("background model resolution", () => {
 });
 
 describe("removed config keys", () => {
-  for (const c of fixture.removed_keys) {
+  for (const c of REMOVED_KEYS) {
     test(c.name, () => {
-      const parsed = parseAppConfig(parseToml(c.toml));
-      expect("err" in parsed ? parsed.err : null).toBe(c.err);
+      const outcome = parseAppConfig(parseToml(c.toml));
+      expect("err" in outcome ? outcome.err : null).toBe(c.err);
     });
   }
 
   test("the message names the key that replaced it, not just the valid fields", () => {
-    const refused = fixture.removed_keys.filter((c) => c.err !== null);
+    const refused = REMOVED_KEYS.filter((c) => c.err !== null);
     expect(refused.length).toBeGreaterThan(0);
     for (const c of refused) {
       expect(c.err).toContain("was removed");
@@ -864,7 +1535,7 @@ describe("removed config keys", () => {
 });
 
 describe("resolve_display_name", () => {
-  for (const c of fixture.display_name) {
+  for (const c of DISPLAY_NAME) {
     test(c.name, () => {
       const defaults = {
         ...defaultAppConfig().defaults,
@@ -877,7 +1548,7 @@ describe("resolve_display_name", () => {
 });
 
 describe("compaction validation", () => {
-  for (const c of fixture.compaction_validate) {
+  for (const c of COMPACTION_VALIDATE) {
     test(c.name, () => {
       const compaction = {
         enabled: c.compaction.enabled,
@@ -893,7 +1564,7 @@ describe("compaction validation", () => {
   }
 
   test("the rejection names the two values that would work", () => {
-    const c = fixture.compaction_validate.find((x) =>
+    const c = COMPACTION_VALIDATE.find((x) =>
       x.name.includes("names the two values"),
     );
     if (c === undefined || c.err === null) throw new Error("fixture case missing");
@@ -903,19 +1574,19 @@ describe("compaction validation", () => {
 });
 
 function durationFrom(display: string): ConfigDuration {
-  const parsed = ConfigDuration.parse(display);
-  if ("err" in parsed) throw new Error(`${display}: ${parsed.err}`);
-  return parsed.ok;
+  const result = ConfigDuration.parse(display);
+  if ("err" in result) throw new Error(`${display}: ${result.err}`);
+  return result.ok;
 }
 
 describe("budget pace fallbacks", () => {
-  for (const c of fixture.budget_pace) {
+  for (const c of BUDGET_PACE) {
     test(c.name, () => {
-      const parsed = parseAppConfig(parseToml(c.toml));
-      if ("err" in parsed) throw new Error(parsed.err);
+      const outcome = parseAppConfig(parseToml(c.toml));
+      if ("err" in outcome) throw new Error(outcome.err);
 
       expect(
-        parsed.ok.usage.budgets.map((b) => ({
+        outcome.ok.usage.budgets.map((b) => ({
           pace_action: budgetPaceAction(b) as string,
           pace_warn_at: [...budgetPaceWarnAt(b)],
         })),
@@ -927,35 +1598,35 @@ describe("budget pace fallbacks", () => {
 describe("budget enum tables", () => {
   test("period ranks", () => {
     expect(
-      fixture.budget_periods.map((p) => ({
+      BUDGET_PERIODS.map((p) => ({
         period: p.period,
         rank: budgetPeriodRank(p.period as UsageBudgetPeriod),
       })),
-    ).toEqual(fixture.budget_periods);
+    ).toEqual(BUDGET_PERIODS);
   });
 
   test("weekday offsets", () => {
     expect(
-      fixture.budget_weekdays.map((d) => ({
+      BUDGET_WEEKDAYS.map((d) => ({
         weekday: d.weekday,
         num_days_from_monday: numDaysFromMonday(d.weekday as BudgetWeekday),
       })),
-    ).toEqual(fixture.budget_weekdays);
+    ).toEqual(BUDGET_WEEKDAYS);
   });
 
   test("every action variant round-trips through the schema", () => {
-    for (const action of fixture.budget_actions) {
-      const parsed = parseAppConfig(
+    for (const action of BUDGET_ACTIONS) {
+      const outcome = parseAppConfig(
         parseToml(`[[usage.budgets]]\ncost_usd = 1.0\nlimit = ${JSON.stringify(action)}\n`),
       );
-      if ("err" in parsed) throw new Error(parsed.err);
-      expect(parsed.ok.usage.budgets[0]?.limit as string | undefined).toBe(action);
+      if ("err" in outcome) throw new Error(outcome.err);
+      expect(outcome.ok.usage.budgets[0]?.limit as string | undefined).toBe(action);
     }
   });
 });
 
 describe("parse_wire for replay_prior_thinking", () => {
-  for (const c of fixture.thinking_replay) {
+  for (const c of THINKING_REPLAY) {
     test(JSON.stringify(c.input), () => {
       expect((parseThinkingReplay(c.input) ?? null) as string | null).toBe(c.parsed);
     });

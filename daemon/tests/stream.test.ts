@@ -2,7 +2,9 @@ import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./handler_fixtures/stream.json" with { type: "json" };
+import rawStreamFixture from "./handler_captures/stream.json" with { type: "json" };
+import { expandShared } from "./support/shared_subtrees.ts";
+const fixture = expandShared(rawStreamFixture);
 
 import { ConfigDuration } from "../src/config/duration.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
@@ -46,11 +48,10 @@ import {
   type NotificationSink,
 } from "../src/notifications.ts";
 
-import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 
 type Row = Record<string, unknown>;
 
-const f = fixture as unknown as Record<string, Row[]> & { append_in_place: Row };
+const f = fixture as Record<string, Row[]> & { append_in_place: Row };
 
 describe("truncate_summary", () => {
   for (const c of f["truncate_summary"] as Row[]) {
@@ -263,7 +264,7 @@ function readNotificationsConfig(
   return "err" in parsed ? parsed : { ok: parsed.ok.notifications };
 }
 
-const DOCUMENT_PATH_ONLY = new Set([
+const REJECTED_ONLY_BY_A_STRICTER_PARSER = new Set([
   "unknown_order_desc",
   "unknown_after_known",
   "ntfy_unknown_field",
@@ -271,17 +272,48 @@ const DOCUMENT_PATH_ONLY = new Set([
   "backend_wrong_type",
 ]);
 
-const BUN_REFUSES_THE_DOCUMENT = new Set(["threshold_i64_max"]);
+const BUN_TOML_REFUSES = new Set(["threshold_i64_max"]);
 
 describe("[notifications] parsing", () => {
-  const emptyCase = (f["config_parse"] as Row[]).find((c) => c["name"] === "empty")?.["ok"] as
-    | Row
-    | undefined;
-  const recordedEventDefaults = emptyCase?.["events"];
+  const defaults = (): Row => {
+    const parsed = readNotificationsConfig({});
+    if ("err" in parsed) throw new Error(`the defaults do not parse: ${parsed.err}`);
+    return configToFixtureShape(parsed.ok);
+  };
+
+  function withOverrides(base: Row, overrides: Row | undefined): Row {
+    const out: Row = { ...base };
+    for (const [key, value] of Object.entries(overrides ?? {})) {
+      const under = out[key];
+      out[key] =
+        typeof value === "object" && value !== null && !Array.isArray(value)
+          ? withOverrides(under as Row, value as Row)
+          : value;
+    }
+    return out;
+  }
+
+  test("with nothing configured, notifications are off and ntfy points at ntfy.sh", () => {
+    expect(defaults()).toEqual({
+      enabled: false,
+      backend: "notify_send",
+      ntfy: { url: "https://ntfy.sh", topic: "", token: "" },
+      command: { template: "" },
+      generation_threshold_ms: "0",
+      events: {
+        autonomous_message: true,
+        cache_warning: false,
+        compaction_complete: false,
+        error: false,
+        message_complete: true,
+        usage_warning: false,
+      },
+    });
+  });
 
   for (const c of f["config_parse"] as Row[]) {
-    if (DOCUMENT_PATH_ONLY.has(c["name"] as string)) continue;
-    if (BUN_REFUSES_THE_DOCUMENT.has(c["name"] as string)) continue;
+    if (REJECTED_ONLY_BY_A_STRICTER_PARSER.has(c["name"] as string)) continue;
+    if (BUN_TOML_REFUSES.has(c["name"] as string)) continue;
     test(c["name"] as string, () => {
       const table = Bun.TOML.parse(c["toml"] as string) as Record<string, unknown>;
       const parsed = readNotificationsConfig(table);
@@ -292,15 +324,10 @@ describe("[notifications] parsing", () => {
         return;
       }
       expect("err" in parsed ? parsed.err : "").toBe("");
-      const expected = { ...(c["ok"] as Row) };
-      expected["generation_threshold_ms"] = String(expected["generation_threshold_ms"]);
-      expected["events"] = replayOntoCurrentDefaults(
-        expected["events"],
-        recordedEventDefaults,
-        { ...defaultNotificationEvents() },
-        pathsSetBy((table["events"] ?? {})),
-      );
-      expect(configToFixtureShape((parsed as { ok: NotificationsConfig }).ok)).toEqual(expected);
+      expect(
+        configToFixtureShape((parsed as { ok: NotificationsConfig }).ok),
+        "what is configured changes, and nothing else does",
+      ).toEqual(withOverrides(defaults(), c["ok"] as Row | undefined));
     });
   }
 
@@ -457,6 +484,58 @@ function fillEventDefaults(event: Row): Row {
   };
 }
 
+function eventsUpToDone(lines: readonly string[]): Row[] {
+  const events: Row[] = [];
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    let event: Row;
+    try {
+      event = JSON.parse(line) as Row;
+    } catch {
+      return events;
+    }
+    events.push(event);
+    if (event["type"] === "done" || event["type"] === "error") return events;
+  }
+  return events;
+}
+
+function expectedFrames(c: Row): Row[] {
+  const events = eventsUpToDone(c["lines"] as string[]);
+  const rid = c["rid"] as string | null;
+  const frames: Row[] = [];
+  for (const event of events) {
+    if (event["type"] === "start") {
+      frames.push({ type: "stream_start", rid, regen: c["regen"], subagent: null });
+      continue;
+    }
+    if (event["type"] !== "text" && event["type"] !== "thinking") continue;
+    frames.push({
+      type: "stream_chunk",
+      rid,
+      text: event["text"],
+      content_type: event["type"],
+      subagent: null,
+    });
+  }
+  return frames;
+}
+
+function expectedEchoes(c: Row): Row | undefined {
+  const events = eventsUpToDone(c["lines"] as string[]);
+  const done = events.find((e) => e["type"] === "done");
+  if (done === undefined) return undefined;
+  const start = events.find((e) => e["type"] === "start");
+  const usage = (done["usage"] ?? {}) as Row;
+  return {
+    model: start?.["model"] ?? "",
+    content: done["content"],
+    finish_reason: done["finish_reason"],
+    usage: { ...usage, total_cost_usd: usage["total_cost_usd"] ?? null },
+    timing: done["timing"],
+  };
+}
+
 describe("stream accumulation", () => {
   for (const c of f["streams"] as Row[]) {
     test(c["name"] as string, async () => {
@@ -507,8 +586,22 @@ describe("stream accumulation", () => {
         expected["err"] = { kind: "deserialize" };
       }
 
+      const shaped = frames.map(frameToFixtureShape);
+      expect(shaped, "a frame for the start, then one for every delta up to the last event").toEqual(
+        expectedFrames(c),
+      );
+
+      const echoes = expectedEchoes(c);
+      const ok = outcome["ok"] as Row | undefined;
+      if (echoes !== undefined && ok !== undefined) {
+        for (const [field, value] of Object.entries(echoes)) {
+          expect(ok[field], `${c["name"] as string}: ${field} is what the stream said it was`).toEqual(
+            value,
+          );
+          delete ok[field];
+        }
+      }
       expect(outcome).toEqual(expected);
-      expect(frames.map(frameToFixtureShape)).toEqual(c["frames"] as Row[]);
     });
   }
 

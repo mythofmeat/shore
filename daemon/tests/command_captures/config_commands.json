@@ -1,0 +1,922 @@
+{
+  "$shared": {
+    "s0": {
+      "overrides": {
+        "behavior.autonomy.enabled": true,
+        "chat.anthropic.primary.api_key_env": "SHORE_FIXTURE_KEY_SET",
+        "chat.anthropic.primary.model_id": "claude-primary",
+        "chat.anthropic.secondary.api_key_env": "SHORE_FIXTURE_KEY_MISSING",
+        "chat.anthropic.secondary.model_id": "claude-secondary",
+        "defaults.model": "primary",
+        "defaults.stream": false,
+        "subagents.idle.description": "Never enabled",
+        "subagents.idle.max_iterations": null,
+        "subagents.idle.model": null,
+        "subagents.idle.prompt": "You are idle.",
+        "subagents.idle.timeout": null,
+        "subagents.idle.tools": [
+          "fetch_url",
+          "idle_not_real"
+        ],
+        "subagents.researcher.description": "Looks things up",
+        "subagents.researcher.max_iterations": null,
+        "subagents.researcher.model": "primary",
+        "subagents.researcher.prompt": "You look things up.",
+        "subagents.researcher.timeout": null,
+        "subagents.researcher.tools": [
+          "web_search",
+          "also_not_real"
+        ],
+        "tools.enabled_subagents": [
+          "researcher",
+          "ghost"
+        ],
+        "tools.enabled_tools": [
+          "web_search",
+          "not_a_real_tool"
+        ]
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "the furnished surface, with every warning kind",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "Three warning kinds: an unknown tool in enabled_tools, an undefined subagent in enabled_subagents, and a subagent referencing a tool that does not exist.",
+      "ok": {
+        "tools": [
+          {
+            "tool": "generate_image",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "web_search",
+            "main": true,
+            "subagents": [
+              "researcher"
+            ]
+          },
+          {
+            "tool": "fetch_url",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "activity_heatmap",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "roll_dice",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "read",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "edit",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "search",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "delete",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "git",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "search_chat_logs",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "model_history",
+            "main": false,
+            "subagents": []
+          }
+        ],
+        "subagents": [
+          {
+            "name": "idle",
+            "enabled": false,
+            "tools": [
+              "fetch_url",
+              "idle_not_real"
+            ],
+            "model": null
+          },
+          {
+            "name": "researcher",
+            "enabled": true,
+            "tools": [
+              "web_search",
+              "also_not_real"
+            ],
+            "model": "primary"
+          }
+        ],
+        "mcp": [],
+        "warnings": [
+          "enabled_tools references unknown tool 'not_a_real_tool'",
+          "enabled_subagents references undefined subagent 'ghost'",
+          "subagent 'idle' references unknown tool 'idle_not_real'",
+          "subagent 'researcher' references unknown tool 'also_not_real'"
+        ]
+      }
+    },
+    {
+      "name": "an empty config still lists every registered tool",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": false,
+        "defaults_model": null,
+        "chat_models": 0
+      },
+      "note": "The roster is the registry's, not the config's \u2014 only `main` changes.",
+      "ok": {
+        "tools": [
+          {
+            "tool": "generate_image",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "web_search",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "fetch_url",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "activity_heatmap",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "roll_dice",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "read",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "edit",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "search",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "delete",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "git",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "search_chat_logs",
+            "main": false,
+            "subagents": []
+          },
+          {
+            "tool": "model_history",
+            "main": false,
+            "subagents": []
+          }
+        ],
+        "subagents": [],
+        "mcp": [],
+        "warnings": []
+      }
+    }
+  ],
+  "config_check": [
+    {
+      "name": "a config with a missing api key env var",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`SHORE_FIXTURE_KEY_SET` is set and `SHORE_FIXTURE_KEY_MISSING` is not, so exactly one model warns.",
+      "ok": {
+        "valid": false,
+        "warnings": [
+          "API key env var $SHORE_FIXTURE_KEY_MISSING not set (needed by model chat.anthropic.secondary)"
+        ],
+        "info": [
+          "2 chat model(s) configured",
+          "Default model: primary"
+        ],
+        "config_dir": "<root>/config",
+        "data_dir": "<root>/data-home/shore",
+        "cache_dir": "<root>/cache-home/shore",
+        "chat_models": 2,
+        "providers": 0
+      }
+    },
+    {
+      "name": "no models at all",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": false,
+        "defaults_model": null,
+        "chat_models": 0
+      },
+      "note": "The no-models warning fires and the no-default-model warning does not \u2014 it is gated on the catalog being non-empty.",
+      "ok": {
+        "valid": false,
+        "warnings": [
+          "No chat models configured. Add a [providers.*] entry and set [defaults].model to a provider:model_id."
+        ],
+        "info": [],
+        "config_dir": "<root>/config",
+        "data_dir": "<root>/data-home/shore",
+        "cache_dir": "<root>/cache-home/shore",
+        "chat_models": 0,
+        "providers": 0
+      }
+    },
+    {
+      "name": "an api key env var that is set but empty",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": false,
+        "defaults_model": null,
+        "chat_models": 1
+      },
+      "note": "`std::env::var` gives `Ok(\"\")`, so a blank value counts as set and the only warning is the missing default model.",
+      "ok": {
+        "valid": false,
+        "warnings": [
+          "No default model set. First chat model will be used."
+        ],
+        "info": [
+          "1 chat model(s) configured"
+        ],
+        "config_dir": "<root>/config",
+        "data_dir": "<root>/data-home/shore",
+        "cache_dir": "<root>/cache-home/shore",
+        "chat_models": 1,
+        "providers": 0
+      }
+    },
+    {
+      "name": "a default model that is not in the catalog",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": false,
+        "defaults_model": "nonexistent",
+        "chat_models": 1
+      },
+      "ok": {
+        "valid": false,
+        "warnings": [
+          "Default model \"nonexistent\" not found in catalog",
+          "API key env var $ANTHROPIC_API_KEY not set (needed by model chat.anthropic.primary)"
+        ],
+        "info": [
+          "1 chat model(s) configured"
+        ],
+        "config_dir": "<root>/config",
+        "data_dir": "<root>/data-home/shore",
+        "cache_dir": "<root>/cache-home/shore",
+        "chat_models": 1,
+        "providers": 0
+      }
+    },
+    {
+      "name": "models but no default set",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": false,
+        "defaults_model": null,
+        "chat_models": 1
+      },
+      "note": "`valid` is false: this is a warning, not info.",
+      "ok": {
+        "valid": false,
+        "warnings": [
+          "No default model set. First chat model will be used.",
+          "API key env var $ANTHROPIC_API_KEY not set (needed by model chat.anthropic.primary)"
+        ],
+        "info": [
+          "1 chat model(s) configured"
+        ],
+        "config_dir": "<root>/config",
+        "data_dir": "<root>/data-home/shore",
+        "cache_dir": "<root>/cache-home/shore",
+        "chat_models": 1,
+        "providers": 0
+      }
+    }
+  ],
+  "config_read": [
+    {
+      "name": "the whole config and the whole default baseline",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "The entire serde shape of AppConfig, twice. This is what the TypeScript serializer has to reproduce field for field.",
+      "ok": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "name": "one section by key",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`defaults` is that section of the built-in defaults, not the whole baseline.",
+      "ok": {
+        "key": "tools",
+        "overrides": {
+          "enabled_subagents": [
+            "researcher",
+            "ghost"
+          ],
+          "enabled_tools": [
+            "web_search",
+            "not_a_real_tool"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a map-valued section",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "The default for `subagents` is an empty map, not null.",
+      "ok": {
+        "key": "subagents",
+        "overrides": {
+          "idle.description": "Never enabled",
+          "idle.max_iterations": null,
+          "idle.model": null,
+          "idle.prompt": "You are idle.",
+          "idle.timeout": null,
+          "idle.tools": [
+            "fetch_url",
+            "idle_not_real"
+          ],
+          "researcher.description": "Looks things up",
+          "researcher.max_iterations": null,
+          "researcher.model": "primary",
+          "researcher.prompt": "You look things up.",
+          "researcher.timeout": null,
+          "researcher.tools": [
+            "web_search",
+            "also_not_real"
+          ]
+        }
+      }
+    },
+    {
+      "name": "an unknown section",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "err": {
+        "code": "not_found",
+        "message": "Config section not found: nosuchsection"
+      }
+    },
+    {
+      "name": "a non-string key is no key at all",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`as_str` is `None`, so this is the whole-config read.",
+      "ok": {
+        "$ref": "s0"
+      }
+    },
+    {
+      "name": "a value without a key is still a read",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "ok": {
+        "$ref": "s0"
+      }
+    }
+  ],
+  "config_set": [
+    {
+      "name": "defaults.model is written to the config file",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "secondary",
+        "chat_models": 2
+      },
+      "note": "The character's saved model is untouched; `set` moves the persistent default.",
+      "ok": {
+        "set": "defaults.model",
+        "value": "secondary",
+        "previous": "primary",
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    },
+    {
+      "name": "a saved model preference still masks the new default",
+      "state_after": {
+        "active_model": "primary",
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "secondary",
+        "chat_models": 2
+      },
+      "note": "`shore model use` wins over the file until it is reset; `masked_by_character's saved preference` says so.",
+      "ok": {
+        "set": "defaults.model",
+        "value": "secondary",
+        "previous": "primary",
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_preference": "primary"
+      }
+    },
+    {
+      "name": "model is an alias for defaults.model",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "secondary",
+        "chat_models": 2
+      },
+      "note": "`set` echoes the canonical key, not the alias that was sent.",
+      "ok": {
+        "set": "defaults.model",
+        "value": "secondary",
+        "previous": "primary",
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    },
+    {
+      "name": "a model that is not in the catalog",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "The file is left alone.",
+      "err": {
+        "code": "not_found",
+        "message": "model \"ghost\" not found"
+      }
+    },
+    {
+      "name": "defaults.stream parses the value as a bool",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`value` comes back from the reloaded file as a JSON boolean, not the string that was sent.",
+      "ok": {
+        "set": "defaults.stream",
+        "value": true,
+        "previous": false,
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    },
+    {
+      "name": "yes is accepted as a bool",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "true/false/yes/no/on/off/1/0 all reach the file as a TOML boolean.",
+      "ok": {
+        "set": "defaults.stream",
+        "value": true,
+        "previous": false,
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    },
+    {
+      "name": "a value that is not a bool",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "defaults.stream: expected true or false, got \"maybe\""
+      }
+    },
+    {
+      "name": "autonomy.enabled echoes the canonical key",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": false,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "The alias resolves to behavior.autonomy.enabled, which is what lands in the file.",
+      "ok": {
+        "set": "behavior.autonomy.enabled",
+        "value": false,
+        "previous": true,
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    },
+    {
+      "name": "the long spelling of autonomy.enabled",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": false,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "ok": {
+        "set": "behavior.autonomy.enabled",
+        "value": false,
+        "previous": true,
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    },
+    {
+      "name": "a key that is not in the schema",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "err": {
+        "code": "not_found",
+        "message": "Config section not found: memory.mode"
+      }
+    },
+    {
+      "name": "a table is not settable as a whole",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "Tables and maps route you to their leaves rather than accepting a blob.",
+      "err": {
+        "code": "invalid_request",
+        "message": "memory.compaction: `memory.compaction` is a table; set its individual fields instead"
+      }
+    },
+    {
+      "name": "an enum rejects a value outside its variants",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "behavior.user_message_timestamps: \"sometimes\" is not one of: auto, always, never"
+      }
+    },
+    {
+      "name": "a duration is normalised before it is written",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`90m` lands in the file as `1h30m`-equivalent milliseconds rendered by ConfigDuration.",
+      "ok": {
+        "set": "cache.keepalive_max",
+        "value": "90m",
+        "previous": "12h",
+        "file": "<root>/config/config.toml",
+        "action": "added-section",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    },
+    {
+      "name": "a new key is added to an existing section",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "ok": {
+        "set": "defaults.display_name",
+        "value": "Ellie",
+        "previous": null,
+        "file": "<root>/config/config.toml",
+        "action": "added-to-section",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    },
+    {
+      "name": "a list is set from a comma separated value",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "ok": {
+        "set": "tools.enabled_subagents",
+        "value": [
+          "researcher"
+        ],
+        "previous": [
+          "researcher",
+          "ghost"
+        ],
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_preference": null
+      }
+    }
+  ],
+  "config_reload": [
+    {
+      "name": "check mode reports without applying",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "No `prompts_refreshed` field at all in check mode \u2014 not `false`.",
+      "ok": {
+        "applied": false,
+        "config_path": "<root>/config/config.toml",
+        "character": "mid",
+        "changed_prompt_files": []
+      }
+    },
+    {
+      "name": "a truthy non-boolean apply is not an apply",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`as_bool` on a number is `None`, so both flags fall back to false and this is check mode.",
+      "ok": {
+        "applied": false,
+        "config_path": "<root>/config/config.toml",
+        "character": "mid",
+        "changed_prompt_files": []
+      }
+    },
+    {
+      "name": "apply adopts the config on disk",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": false,
+        "defaults_model": "third",
+        "chat_models": 2
+      },
+      "note": "`state_after` is the whole point: three chat models now, and `defaults_model` moved.",
+      "ok": {
+        "applied": true,
+        "config_path": "<root>/config/config.toml",
+        "character": "mid",
+        "changed_prompt_files": [],
+        "prompts_refreshed": false
+      }
+    },
+    {
+      "name": "a broken config aborts before adopting anything",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`state_after` still shows the original config \u2014 the failure is before any mutation.",
+      "err": {
+        "code": "invalid_request",
+        "message": "Config error: failed to parse config.toml: TOML parse error at line 1, column 6\n  |\n1 | this is not toml [[[\n  |      ^\nexpected `.`, `=`\n"
+      }
+    },
+    {
+      "name": "a broken character overlay aborts the reload",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "The overlay is validated against the *fresh* global config, so a typo in one character's config.toml stops the whole reload rather than silently falling back at merge time.",
+      "err": {
+        "code": "invalid_request",
+        "message": "Config error in character overlay 'broken': failed to parse include file <root>/config/characters/broken/config.toml: TOML parse error at line 1, column 11\n  |\n1 | nope = [[[\n  |           ^\ninvalid array\nexpected `]`\n"
+      }
+    },
+    {
+      "name": "reload with no character context",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "config_reload requires a character context"
+      }
+    },
+    {
+      "name": "check mode lists the prompt files that differ",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "SOUL.md differs from its snapshot and USER.md matches, so exactly one file is reported. Nothing is applied.",
+      "ok": {
+        "applied": false,
+        "config_path": "<root>/config/config.toml",
+        "character": "mid",
+        "changed_prompt_files": [
+          "SOUL.md"
+        ]
+      }
+    },
+    {
+      "name": "a prompt file with no snapshot at all is changed",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "ok": {
+        "applied": false,
+        "config_path": "<root>/config/config.toml",
+        "character": "mid",
+        "changed_prompt_files": [
+          "SOUL.md"
+        ]
+      }
+    },
+    {
+      "name": "apply with refresh_prompts activates the pending edits",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`prompts_refreshed` is true only on this path. `changed_after` is what says the snapshot was actually rewritten: the same call in check mode leaves it non-empty.",
+      "ok": {
+        "applied": true,
+        "config_path": "<root>/config/config.toml",
+        "character": "mid",
+        "changed_prompt_files": [
+          "SOUL.md"
+        ],
+        "prompts_refreshed": true
+      },
+      "changed_after": []
+    },
+    {
+      "name": "apply without refresh_prompts leaves the snapshot alone",
+      "state_after": {
+        "active_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "The mirror of the case above: same tree, same adopt, but `changed_after` still lists SOUL.md.",
+      "ok": {
+        "applied": true,
+        "config_path": "<root>/config/config.toml",
+        "character": "mid",
+        "changed_prompt_files": [
+          "SOUL.md"
+        ],
+        "prompts_refreshed": false
+      },
+      "changed_after": [
+        "SOUL.md"
+      ]
+    }
+  ]
+}

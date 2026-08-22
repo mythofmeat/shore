@@ -21,6 +21,7 @@ import {
   type MarkdownEntry,
 } from "../src/memory/markdown_store";
 import { truncateChars } from "../src/memory/markdown_query";
+import { expandShared } from "./support/shared_subtrees.ts";
 
 type Node =
   | { kind: "dir" }
@@ -49,8 +50,10 @@ interface PureCase {
   returns: string;
 }
 
-const fixture = JSON.parse(
-  readFileSync(join(import.meta.dir, "memory_fixtures/memory_markdown.json"), "utf8"),
+const fixture = expandShared(
+  JSON.parse(
+    readFileSync(join(import.meta.dir, "memory_captures/memory_markdown.json"), "utf8"),
+  ),
 ) as {
   constants: { max_direct_hits: number };
   modified_at_format: Array<{
@@ -132,7 +135,7 @@ function expectSameError(actual: unknown, recorded: string, root: string, oldRoo
   expect(message).toBe(recorded.split(oldRoot).join(root));
 }
 
-describe("markdown store parity", () => {
+describe("reading and writing the markdown store", () => {
   test("the modified-at format matches chrono's AutoSi, truncated to milliseconds", () => {
     const originalTz = process.env.TZ;
     try {
@@ -195,7 +198,39 @@ describe("markdown store parity", () => {
           expectReturnsMatch(returned, c);
         }
 
-        expect(await snapshot(root)).toEqual(expectedTree(c.after, root, c.root));
+        const after = await snapshot(root);
+        const before = expectedTree(c.before, root, c.root);
+        const touched = Object.keys({ ...before, ...after }).filter(
+          (rel) => JSON.stringify(before[rel]) !== JSON.stringify(after[rel]),
+        );
+        const target = c.op.path === undefined ? undefined : join("memories", c.op.path);
+
+        if (c.op.fn === "read" || c.op.fn === "list_all") {
+          expect(
+            touched.filter((rel) => after[rel]?.kind !== "dir"),
+            `${c.name}: reading the store writes no file`,
+          ).toEqual([]);
+        } else if (c.err !== null) {
+          expect(
+            touched.filter((rel) => (before[rel] ?? after[rel])?.kind !== "dir"),
+            `${c.name}: a refused ${c.op.fn} writes no file`,
+          ).toEqual([]);
+        } else if (c.op.fn === "write") {
+          expect(
+            touched.filter((rel) => after[rel]?.kind === "file"),
+            `${c.name}: a write touches the file it names, and no other`,
+          ).toEqual([required(target)]);
+          expect(
+            after[required(target)],
+            `${c.name}: which now holds what was written`,
+          ).toEqual({ kind: "file", content: b64(required(c.op.content)) });
+        } else {
+          expect(
+            touched.filter((rel) => (before[rel] ?? after[rel])?.kind === "file"),
+            `${c.name}: a delete removes the file it names, and no other`,
+          ).toEqual([required(target)]);
+          expect(after[required(target)], `${c.name}: which is gone`).toBeUndefined();
+        }
       } finally {
         await rm(root, { recursive: true, force: true });
       }
@@ -203,7 +238,7 @@ describe("markdown store parity", () => {
   }
 });
 
-describe("markdown query parity", () => {
+describe("querying the markdown store", () => {
   for (const c of fixture.pure_cases) {
     test(c.name, () => {
       switch (c.op.fn) {

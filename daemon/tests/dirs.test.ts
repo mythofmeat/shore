@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import fixture from "./config_fixtures/dirs.json" with { type: "json" };
+import fixture from "./config_captures/dirs.json" with { type: "json" };
 
 import {
   characterActiveJsonl,
@@ -36,7 +36,7 @@ import {
 const roots: string[] = [];
 
 function scratch(): string {
-  const dir = mkdtempSync(join(tmpdir(), "dirs-parity-"));
+  const dir = mkdtempSync(join(tmpdir(), "dirs-"));
   roots.push(dir);
   return dir;
 }
@@ -221,7 +221,7 @@ describe("load_raw_config_table", () => {
     expect(oks.length).toBeGreaterThanOrEqual(8);
   });
 
-  test("an unterminated table header is rejected, the way Rust rejects it", () => {
+  test("an unterminated table header is rejected", () => {
     expect(() => Bun.TOML.parse("[unclosed")).toThrow();
     expect(() => Bun.TOML.parse("[[a]\nx=1")).toThrow();
     expect(() => Bun.TOML.parse("this is not toml")).toThrow();

@@ -1,8 +1,10 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import fixture from "./handler_fixtures/setup.json" with { type: "json" };
+import rawFixture from "./handler_captures/setup.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import { characterDataDir, characterWorkspaceDir } from "../src/config/dirs.ts";

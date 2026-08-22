@@ -29,10 +29,11 @@ case "${1:-all}" in
   models) filter=render_preview_models ;;
   status) filter=render_preview_status ;;
   errors) filter=render_preview_errors ;;
-  compact) filter=render_preview_compaction ;;
+  compact) filter=render_preview_compaction_result ;;
+  compaction-lane) filter=render_preview_compaction_lane ;;
   roles)  filter=render_preview_model_roles ;;
   all|"") filter=render_preview ;;
-  *) echo "usage: preview.sh [log|stream|models|status|errors|compact|roles|all]" >&2; exit 2 ;;
+  *) echo "usage: preview.sh [log|stream|models|status|errors|compact|compaction-lane|roles|all]" >&2; exit 2 ;;
 esac
 
 # --test-threads=1 is REQUIRED: COLOR_ENABLED and the streaming chunk state are

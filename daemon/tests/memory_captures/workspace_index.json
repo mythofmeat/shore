@@ -1,0 +1,5543 @@
+{
+  "$shared": {
+    "s0": [
+      {
+        "mtime": 1000,
+        "op": "write",
+        "path": "a.md",
+        "text": "# Notes\n\nThe garden is full of tea plants."
+      },
+      {
+        "mtime": 1001,
+        "op": "write",
+        "path": "b.md",
+        "text": "# Other\n\nThe accountant filed taxes."
+      },
+      {
+        "op": "search",
+        "run": 0
+      }
+    ],
+    "s1": {
+      "counts_only": false,
+      "embedded_paths": [
+        [
+          "a.md",
+          "b.md"
+        ]
+      ],
+      "mode": "hybrid",
+      "outcome": {
+        "embedded_files": 2,
+        "files": [
+          "a.md"
+        ],
+        "searched_files": 2,
+        "skipped_binary_or_large": 0
+      },
+      "path_filter": null,
+      "query": "tea"
+    },
+    "s2": [
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "in.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "in.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s3": [
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "note.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "note.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s4": [
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "a.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "a.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s5": [
+      {
+        "counts_only": false,
+        "embedded_paths": [],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "a.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s6": {
+      "op": "seed_index",
+      "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:3\",\"size\":3,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[-1.0,0.0,0.0]}}}"
+    },
+    "s7": [
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "a.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "a.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      },
+      {
+        "counts_only": false,
+        "embedded_paths": [
+          [
+            "a.md"
+          ]
+        ],
+        "mode": "hybrid",
+        "outcome": {
+          "embedded_files": 1,
+          "files": [
+            "a.md"
+          ],
+          "searched_files": 1,
+          "skipped_binary_or_large": 0
+        },
+        "path_filter": null,
+        "query": "tea"
+      }
+    ],
+    "s8": [
+      {
+        "content": "tea",
+        "display_path": "a.md",
+        "modified_at_secs": 1000,
+        "size": 3,
+        "skip_reason": null
+      },
+      {
+        "content": null,
+        "display_path": "gone.md",
+        "modified_at_secs": 1001,
+        "size": 4,
+        "skip_reason": "read failed"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "an empty workspace path is unconfigured",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": true,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "error": "workspace not configured"
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "a missing root returns an empty result without touching the index",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": true,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 0,
+            "embedded_files": 0,
+            "skipped_binary_or_large": 0,
+            "files": []
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "an empty workspace directory",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 0,
+            "embedded_files": 0,
+            "skipped_binary_or_large": 0,
+            "files": []
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "a lexical-only hit ranks above an unrelated file",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "# A\n\nLook for needle in this haystack",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "# B\n\nUnrelated content",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "needle",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "a.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md",
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a semantic-only hit wins in vector mode",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": {
+        "$ref": "s0"
+      },
+      "runs": [
+        {
+          "query": "growing tea in the garden",
+          "mode": "vector",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "a.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md",
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the same query in hybrid mode blends both signals",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": {
+        "$ref": "s0"
+      },
+      "runs": [
+        {
+          "query": "growing tea in the garden",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "a.md",
+              "b.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md",
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a nested tree with a path-name hit",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "notes/tea/brewing.md",
+          "text": "# Brewing\n\nsteep it",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "notes/garden/soil.md",
+          "text": "# Soil\n\nloam",
+          "mtime": 1001
+        },
+        {
+          "op": "write",
+          "path": "readme.md",
+          "text": "# Readme\n\nrust and tea",
+          "mtime": 1002
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 3,
+            "embedded_files": 3,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "notes/tea/brewing.md",
+              "readme.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "notes/tea/brewing.md",
+              "notes/garden/soil.md",
+              "readme.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a path filter scopes scoring but not the index",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "notes/tea.md",
+          "text": "# Tea\n\ntea",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "other/tea.md",
+          "text": "# Tea\n\ntea",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "search",
+          "run": 1
+        },
+        {
+          "op": "search",
+          "run": 2
+        },
+        {
+          "op": "search",
+          "run": 3
+        },
+        {
+          "op": "search",
+          "run": 4
+        },
+        {
+          "op": "search",
+          "run": 5
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "embedded_files": 2,
+            "files": [
+              "notes/tea.md",
+              "other/tea.md"
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
+          },
+          "embedded_paths": [
+            [
+              "other/tea.md",
+              "notes/tea.md"
+            ]
+          ]
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": "notes",
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "notes/tea.md"
+            ]
+          },
+          "embedded_paths": []
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": "notes/",
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "notes/tea.md"
+            ]
+          },
+          "embedded_paths": []
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": "",
+          "counts_only": false,
+          "outcome": {
+            "embedded_files": 2,
+            "files": [
+              "notes/tea.md",
+              "other/tea.md"
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
+          },
+          "embedded_paths": []
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": "/",
+          "counts_only": false,
+          "outcome": {
+            "embedded_files": 2,
+            "files": [
+              "notes/tea.md",
+              "other/tea.md"
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
+          },
+          "embedded_paths": []
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": "not-a-dir",
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 0,
+            "embedded_files": 0,
+            "skipped_binary_or_large": 0,
+            "files": []
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "a path filter matching a file exactly",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "notes.md",
+          "text": "# Tea\n\ntea",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "notes/inner.md",
+          "text": "# Tea\n\ntea",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": "notes.md",
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "notes.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "notes.md"
+            ]
+          ]
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": "notes",
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "notes/inner.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "notes/inner.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an unchanged file is not re-embedded",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea in the garden",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "rust is fun",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": [
+        {
+          "$ref": "s1"
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "embedded_files": 2,
+            "files": [
+              "a.md"
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "only the changed file is re-embedded",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea in the garden",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "rust is fun",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "rust and tokio are fun",
+          "mtime": 1002
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": [
+        {
+          "$ref": "s1"
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "embedded_files": 2,
+            "files": [
+              "a.md"
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
+          },
+          "embedded_paths": [
+            [
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "changing the embed char cap re-embeds everything",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea appears early, while rust appears after the short cap",
+          "mtime": 1000
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_embed_chars_per_file": 5
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_embed_chars_per_file": 100
+          }
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "config": {
+            "max_embed_chars_per_file": 5
+          },
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "a.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md"
+            ]
+          ]
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "config": {
+            "max_embed_chars_per_file": 100
+          },
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "a.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a deleted file is pruned from the persisted index",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "rust is fun",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "delete",
+          "path": "b.md"
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": [
+        {
+          "$ref": "s1"
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "embedded_files": 1,
+            "files": [
+              "a.md"
+            ],
+            "searched_files": 1,
+            "skipped_binary_or_large": 0
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "non-utf8 bytes are recorded as skipped and do not churn",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "good.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "write_bytes",
+          "path": "blob.bin",
+          "bytes": [
+            255,
+            254,
+            0,
+            128
+          ],
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 1,
+            "files": [
+              "good.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "good.md"
+            ]
+          ]
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 1,
+            "files": [
+              "good.md"
+            ]
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "the binary mode chooses the recorded skip reason",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write_bytes",
+          "path": "blob.bin",
+          "bytes": [
+            255,
+            254
+          ],
+          "mtime": 1000
+        },
+        {
+          "op": "config",
+          "config": {
+            "binary": "metadata"
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "config",
+          "config": {
+            "binary": "try_embed"
+          }
+        },
+        {
+          "op": "search",
+          "run": 1
+        },
+        {
+          "op": "config",
+          "config": {}
+        },
+        {
+          "op": "search",
+          "run": 2
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "config": {
+            "binary": "metadata"
+          },
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 0,
+            "skipped_binary_or_large": 1,
+            "files": []
+          },
+          "embedded_paths": []
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "config": {
+            "binary": "try_embed"
+          },
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 0,
+            "skipped_binary_or_large": 1,
+            "files": []
+          },
+          "embedded_paths": []
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 0,
+            "skipped_binary_or_large": 1,
+            "files": []
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "an oversize file is recorded, never read, and does not churn",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "small.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "huge.md",
+          "text": "tea aaaaaaaaaaaaaaaaaaaaaaaaa",
+          "mtime": 1001
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_file_bytes": 10
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "config": {
+            "max_file_bytes": 10
+          },
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 1,
+            "files": [
+              "small.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "small.md"
+            ]
+          ]
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "config": {
+            "max_file_bytes": 10
+          },
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 1,
+            "files": [
+              "small.md"
+            ]
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "a file exactly at the size cap is not oversize",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "exact.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "over.md",
+          "text": "01234567890",
+          "mtime": 1001
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_file_bytes": 10
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "config": {
+            "max_file_bytes": 10
+          },
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 1,
+            "files": []
+          },
+          "embedded_paths": [
+            [
+              "exact.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a symlink inside the workspace is skipped entirely",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "in.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "write_outside",
+          "path": "outside/secret.md",
+          "text": "secret tea xyzzy",
+          "mtime": 1001
+        },
+        {
+          "op": "symlink",
+          "path": "link_to_secret.md",
+          "target": "outside/secret.md"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s2"
+      }
+    },
+    {
+      "name": "a symlinked directory is skipped, so its contents never appear",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "in.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "write_outside",
+          "path": "outside/deep/secret.md",
+          "text": "tea xyzzy",
+          "mtime": 1001
+        },
+        {
+          "op": "symlink",
+          "path": "linked_dir",
+          "target": "outside/deep"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s2"
+      }
+    },
+    {
+      "name": "a .git directory is skipped whole",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "note.md",
+          "text": "tea preferences",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": ".git/objects/blob",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "write",
+          "path": ".git/config",
+          "text": "[core]",
+          "mtime": 1002
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s3"
+      }
+    },
+    {
+      "name": "a .git *file* from a linked worktree is skipped too",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "note.md",
+          "text": "tea preferences",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": ".git",
+          "text": "gitdir: /abs/secret/path\n",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s3"
+      }
+    },
+    {
+      "name": "a nested .git is skipped at any depth",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "note.md",
+          "text": "tea preferences",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "vendor/dep/.git/config",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "write",
+          "path": "vendor/dep/src.md",
+          "text": "tea vendor",
+          "mtime": 1002
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "note.md",
+              "vendor/dep/src.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "vendor/dep/src.md",
+              "note.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a file merely *named* like git is kept",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": ".gitignore",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "git",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              ".gitignore",
+              "git"
+            ]
+          },
+          "embedded_paths": [
+            [
+              ".gitignore",
+              "git"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty directories contribute nothing",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "mkdir",
+          "path": "empty"
+        },
+        {
+          "op": "mkdir",
+          "path": "also/empty/deep"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "a corrupt index is discarded and rewritten",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "not json at all { [ }"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "an index with the wrong shape is discarded",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "[1, 2, 3]"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "a seeded fresh entry is reused without re-embedding",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:8\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[0.1,0.2,0.3]}}}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s5"
+      }
+    },
+    {
+      "name": "a seeded entry from another model is stale",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:8\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"some-other-model\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[0.1,0.2,0.3]}}}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "a legacy entry with no max_embed_chars_per_file is stale",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"sha256:deadbeef\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"embedded\":true,\"embedding\":[0.1,0.2,0.3]}}}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "a seeded entry for a file that no longer exists is pruned",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":{\"gone.md\":{\"hash\":\"h\",\"size\":1,\"modified_at_secs\":1,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0,0.0,0.0]}}}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "zzz-no-match",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": []
+          },
+          "embedded_paths": [
+            [
+              "a.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a scoped search does not prune entries outside its scope",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "in/a.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "out/b.md",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "in/a.md",
+              "out/b.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "in/a.md",
+              "out/b.md"
+            ]
+          ]
+        },
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": "in",
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "in/a.md"
+            ]
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "a seeded entry marked embedded with a mismatched vector length",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:8\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0]}}}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s5"
+      }
+    },
+    {
+      "name": "an all-zero seeded vector scores no semantic signal",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:8\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[0.0,0.0,0.0]}}}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s5"
+      }
+    },
+    {
+      "name": "a negative cosine is clamped away before blending",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "zzz",
+          "mtime": 1000
+        },
+        {
+          "$ref": "s6"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "vector",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": []
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "ties break on display path, byte-wise",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "write",
+          "path": "C.md",
+          "text": "tea",
+          "mtime": 1002
+        },
+        {
+          "op": "write",
+          "path": "\ue000.md",
+          "text": "tea",
+          "mtime": 1003
+        },
+        {
+          "op": "write",
+          "path": "\ud83c\udf0a.md",
+          "text": "tea",
+          "mtime": 1004
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 5,
+            "embedded_files": 5,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "C.md",
+              "a.md",
+              "b.md",
+              "\ue000.md",
+              "\ud83c\udf0a.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "C.md",
+              "a.md",
+              "\ue000.md",
+              "b.md",
+              "\ud83c\udf0a.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "every file scoring zero yields no files but still counts them",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "nothing here",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "nor here",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "zzz-no-match",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": []
+          },
+          "embedded_paths": [
+            [
+              "a.md",
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an empty query matches every file as a substring",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "alpha",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "beta",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "a.md",
+              "b.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md",
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an empty file still gets an embedding entry",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "empty.md",
+          "text": "",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "a.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md",
+              "empty.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lexical normalization is by the max score in the result set",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "tea.md",
+          "text": "# tea\n\ntea garden tea",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "a passing mention of tea",
+          "mtime": 1001
+        },
+        {
+          "op": "write",
+          "path": "c.md",
+          "text": "nothing",
+          "mtime": 1002
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea garden",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 3,
+            "embedded_files": 3,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "tea.md",
+              "b.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "c.md",
+              "tea.md",
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the lexical normalizer rounds in f32",
+      "topics": [
+        "no-topic-matches-anything"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea only",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "garden.md",
+          "text": "zzz",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea garden",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "garden.md",
+              "a.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md",
+              "garden.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a negative similarity is clamped, not subtracted",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "$ref": "s6"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s5"
+      }
+    },
+    {
+      "name": "a file with no lexical signal at all still ranks on its vector",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "zzz",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"mtime:1000:3\",\"size\":3,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0,0.0,0.0]}}}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s5"
+      }
+    },
+    {
+      "name": "the query is folded before scoring",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "Tea.md",
+          "text": "# TEA\n\nTEA leaves",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "nothing",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "TEA",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "Tea.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "Tea.md",
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an oversize file scores nothing even when its path matches",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "tea-huge.md",
+          "text": "aaaaaaaaaaaaaaaaaaaa",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "other.md",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_file_bytes": 10
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "config": {
+            "max_file_bytes": 10
+          },
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 1,
+            "files": [
+              "other.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "other.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ties break on path even when the walk found them in another order",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "a/b.md",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "write",
+          "path": "Z.md",
+          "text": "tea",
+          "mtime": 1002
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 3,
+            "embedded_files": 3,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "Z.md",
+              "a.md",
+              "a/b.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a/b.md",
+              "a.md",
+              "Z.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a sub-second mtime truncates toward the epoch",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write_millis",
+          "path": "a.md",
+          "text": "tea",
+          "mtime_ms": 1500
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "a size change under an unchanged mtime is stale",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea aaa",
+          "mtime": 1000
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea aaaaaa",
+          "mtime": 1000
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": {
+        "$ref": "s7"
+      }
+    },
+    {
+      "name": "an mtime change under an unchanged size is stale",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea aaa",
+          "mtime": 1000
+        },
+        {
+          "op": "search",
+          "run": 0
+        },
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea bbb",
+          "mtime": 2000
+        },
+        {
+          "op": "search",
+          "run": 1
+        }
+      ],
+      "runs": {
+        "$ref": "s7"
+      }
+    },
+    {
+      "name": "a byte-order mark is content, not decoration",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "\ufeff# tea\n\nbody",
+          "mtime": 1000
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "a socket is neither a file nor a directory",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "socket",
+          "path": "sock"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "one bad entry discards the whole index file",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "tea again",
+          "mtime": 1001
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":{\"a.md\":{\"hash\":\"h\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0,0.0,0.0]},\"b.md\":{\"hash\":\"h\"}}}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "a.md",
+              "b.md"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "a.md",
+              "b.md"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an index whose entries are a list is discarded",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "0",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "seed_index",
+          "raw": "{\"entries\":[{\"hash\":\"h\",\"size\":8,\"modified_at_secs\":1000,\"model_id\":\"topic-v1\",\"max_embed_chars_per_file\":4000,\"embedded\":true,\"embedding\":[1.0,0.0,0.0]}]}"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "searched_files": 1,
+            "embedded_files": 1,
+            "skipped_binary_or_large": 0,
+            "files": [
+              "0"
+            ]
+          },
+          "embedded_paths": [
+            [
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an index that cannot be written does not fail the search",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea time",
+          "mtime": 1000
+        },
+        {
+          "op": "block_index_parent"
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "an embedder failure on the document batch propagates",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": "upstream is down",
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "error": "embedder failed: provider error: upstream is down"
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "skip records survive an embedder failure",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": "upstream is down",
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write_bytes",
+          "path": "blob.bin",
+          "bytes": [
+            255,
+            254
+          ],
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "error": "embedder failed: provider error: upstream is down"
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "an embedder returning too few vectors is a count mismatch",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": true,
+      "script": [
+        {
+          "op": "write",
+          "path": "a.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "b.md",
+          "text": "rust",
+          "mtime": 1001
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": false,
+          "outcome": {
+            "error": "embedding count mismatch: got 1, expected 2"
+          },
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "the file-count cap stops the walk",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "f1.md",
+          "text": "aaaa",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f2.md",
+          "text": "aaaa",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f3.md",
+          "text": "aaaa",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f4.md",
+          "text": "aaaa",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f5.md",
+          "text": "aaaa",
+          "mtime": 1000
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_indexed_files": 3
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "zzz-no-match",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": true,
+          "config": {
+            "max_indexed_files": 3
+          },
+          "outcome": {
+            "searched_files": 3,
+            "embedded_files": 3,
+            "skipped_binary_or_large": 0
+          },
+          "embed_input_count": 4,
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "the byte-total cap stops the walk",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "f1.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f2.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f3.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f4.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f5.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_total_indexed_bytes": 20
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "zzz-no-match",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": true,
+          "config": {
+            "max_total_indexed_bytes": 20
+          },
+          "outcome": {
+            "searched_files": 2,
+            "embedded_files": 2,
+            "skipped_binary_or_large": 0
+          },
+          "embed_input_count": 3,
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "oversize files do not count toward the byte cap",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "f1.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f2.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "write",
+          "path": "f3.md",
+          "text": "0123456789",
+          "mtime": 1000
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_file_bytes": 5
+          }
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_file_bytes": 5,
+            "max_total_indexed_bytes": 1
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "zzz-no-match",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": true,
+          "config": {
+            "max_file_bytes": 5,
+            "max_total_indexed_bytes": 1
+          },
+          "outcome": {
+            "searched_files": 3,
+            "embedded_files": 0,
+            "skipped_binary_or_large": 3
+          },
+          "embed_input_count": 1,
+          "embedded_paths": []
+        }
+      ]
+    },
+    {
+      "name": "a zero file cap indexes nothing",
+      "topics": [
+        "tea",
+        "garden",
+        "rust"
+      ],
+      "model": "topic-v1",
+      "unconfigured": false,
+      "missing_root": false,
+      "fail_embed": null,
+      "miscount_embed": false,
+      "script": [
+        {
+          "op": "write",
+          "path": "f1.md",
+          "text": "tea",
+          "mtime": 1000
+        },
+        {
+          "op": "config",
+          "config": {
+            "max_indexed_files": 0
+          }
+        },
+        {
+          "op": "search",
+          "run": 0
+        }
+      ],
+      "runs": [
+        {
+          "query": "tea",
+          "mode": "hybrid",
+          "path_filter": null,
+          "counts_only": true,
+          "config": {
+            "max_indexed_files": 0
+          },
+          "outcome": {
+            "searched_files": 0,
+            "embedded_files": 0,
+            "skipped_binary_or_large": 0
+          },
+          "embed_input_count": 1,
+          "embedded_paths": []
+        }
+      ]
+    }
+  ],
+  "display_path_for": [
+    {
+      "name": "plain child",
+      "workspace_dir": "/ws",
+      "path": "/ws/a.md",
+      "out": "a.md"
+    },
+    {
+      "name": "nested",
+      "workspace_dir": "/ws",
+      "path": "/ws/notes/deep/a.md",
+      "out": "notes/deep/a.md"
+    },
+    {
+      "name": "the root itself",
+      "workspace_dir": "/ws",
+      "path": "/ws",
+      "out": ""
+    },
+    {
+      "name": "outside the root",
+      "workspace_dir": "/ws",
+      "path": "/other/a.md",
+      "out": "/other/a.md"
+    },
+    {
+      "name": "prefix-sharing sibling",
+      "workspace_dir": "/ws",
+      "path": "/wsx/a.md",
+      "out": "/wsx/a.md"
+    },
+    {
+      "name": "trailing slash on the root",
+      "workspace_dir": "/ws/",
+      "path": "/ws/a.md",
+      "out": "a.md"
+    },
+    {
+      "name": "relative root",
+      "workspace_dir": "ws",
+      "path": "ws/a.md",
+      "out": "a.md"
+    },
+    {
+      "name": "non-ascii",
+      "workspace_dir": "/ws",
+      "path": "/ws/caf\u00e9/na\u00efve.md",
+      "out": "caf\u00e9/na\u00efve.md"
+    },
+    {
+      "name": "a literal backslash in a name",
+      "workspace_dir": "/ws",
+      "path": "/ws/back\\slash.md",
+      "out": "back/slash.md"
+    },
+    {
+      "name": "a backslash in the root itself",
+      "workspace_dir": "/w\\s",
+      "path": "/w\\s/a.md",
+      "out": "a.md"
+    }
+  ],
+  "tokenize_query": [
+    {
+      "query": "tea garden",
+      "out": [
+        "tea",
+        "garden"
+      ]
+    },
+    {
+      "query": "a",
+      "out": []
+    },
+    {
+      "query": "ab",
+      "out": [
+        "ab"
+      ]
+    },
+    {
+      "query": "\u00e9",
+      "out": [
+        "\u00e9"
+      ]
+    },
+    {
+      "query": "\u00e9\u00e9",
+      "out": [
+        "\u00e9\u00e9"
+      ]
+    },
+    {
+      "query": "snake_case-and-dash",
+      "out": [
+        "snake_case-and-dash"
+      ]
+    },
+    {
+      "query": "  spaced  out  ",
+      "out": [
+        "spaced",
+        "out"
+      ]
+    },
+    {
+      "query": "",
+      "out": []
+    },
+    {
+      "query": "x1 2y",
+      "out": [
+        "x1",
+        "2y"
+      ]
+    },
+    {
+      "query": "path/to/file.md",
+      "out": [
+        "path",
+        "to",
+        "file",
+        "md"
+      ]
+    },
+    {
+      "query": "CAPS lower",
+      "out": [
+        "CAPS",
+        "lower"
+      ]
+    },
+    {
+      "query": "\ud83c\udf0a wave",
+      "out": [
+        "wave"
+      ]
+    },
+    {
+      "query": "one",
+      "out": [
+        "one"
+      ]
+    }
+  ],
+  "lexical_score": [
+    {
+      "name": "nothing matches",
+      "path": "a.md",
+      "content": "# A\n\nbody",
+      "query": "zzz",
+      "q_lower": "zzz",
+      "terms": [
+        "zzz"
+      ],
+      "out": 0
+    },
+    {
+      "name": "path whole-query only",
+      "path": "tea.md",
+      "content": "# A\n\nbody",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 62
+    },
+    {
+      "name": "title whole-query only",
+      "path": "a.md",
+      "content": "# tea\n\nbody",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 84
+    },
+    {
+      "name": "content whole-query only",
+      "path": "a.md",
+      "content": "plain tea body",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 34
+    },
+    {
+      "name": "all three whole-query",
+      "path": "tea.md",
+      "content": "# tea\n\ntea body",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 146
+    },
+    {
+      "name": "terms only, no whole-query",
+      "path": "tea-notes.md",
+      "content": "# garden notes\n\ntea and garden",
+      "query": "tea garden",
+      "q_lower": "tea garden",
+      "terms": [
+        "tea",
+        "garden"
+      ],
+      "out": 30
+    },
+    {
+      "name": "the heading is the first hash line after trim_start",
+      "path": "a.md",
+      "content": "intro\n   # indented heading with tea\nbody",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 84
+    },
+    {
+      "name": "no heading at all",
+      "path": "a.md",
+      "content": "no hashes here, tea though",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 34
+    },
+    {
+      "name": "a hash mid-line is not a heading",
+      "path": "a.md",
+      "content": "not a # heading with tea\n# real heading",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 34
+    },
+    {
+      "name": "case folding on both sides",
+      "path": "TEA.md",
+      "content": "# TEA\n\nTEA",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 146
+    },
+    {
+      "name": "one-byte terms are dropped by the tokenizer",
+      "path": "a.md",
+      "content": "# a\n\na b c",
+      "query": "a b c",
+      "q_lower": "a b c",
+      "terms": [],
+      "out": 30
+    },
+    {
+      "name": "a repeated term scores once per term occurrence in the query",
+      "path": "tea.md",
+      "content": "# tea\n\ntea",
+      "query": "tea tea",
+      "q_lower": "tea tea",
+      "terms": [
+        "tea",
+        "tea"
+      ],
+      "out": 52
+    },
+    {
+      "name": "empty content",
+      "path": "tea.md",
+      "content": "",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 62
+    },
+    {
+      "name": "empty query matches everything as a substring",
+      "path": "a.md",
+      "content": "# A\n\nbody",
+      "query": "",
+      "q_lower": "",
+      "terms": [],
+      "out": 120
+    },
+    {
+      "name": "multibyte term passes the two-byte floor at one char",
+      "path": "caf\u00e9.md",
+      "content": "# caf\u00e9\n\ncaf\u00e9",
+      "query": "\u00e9",
+      "q_lower": "\u00e9",
+      "terms": [
+        "\u00e9"
+      ],
+      "out": 146
+    },
+    {
+      "name": "a byte-order mark before the hash is not stripped, so no heading",
+      "path": "a.md",
+      "content": "\ufeff# tea\n\nbody",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 34
+    },
+    {
+      "name": "a NEL before the hash is stripped, so it is a heading",
+      "path": "a.md",
+      "content": "\u0085# tea\n\nbody",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 84
+    },
+    {
+      "name": "a heading found after a BOM line falls through to the next hash",
+      "path": "a.md",
+      "content": "\ufeff# not it\n# tea heading\nbody",
+      "query": "tea",
+      "q_lower": "tea",
+      "terms": [
+        "tea"
+      ],
+      "out": 84
+    }
+  ],
+  "cosine_similarity": [
+    {
+      "name": "identical unit vectors",
+      "a": [
+        1.0,
+        0.0
+      ],
+      "b": [
+        1.0,
+        0.0
+      ],
+      "out": 1.0
+    },
+    {
+      "name": "orthogonal",
+      "a": [
+        1.0,
+        0.0
+      ],
+      "b": [
+        0.0,
+        1.0
+      ],
+      "out": 0.0
+    },
+    {
+      "name": "opposite",
+      "a": [
+        1.0,
+        0.0
+      ],
+      "b": [
+        -1.0,
+        0.0
+      ],
+      "out": -1.0
+    },
+    {
+      "name": "zero left",
+      "a": [
+        0.0,
+        0.0
+      ],
+      "b": [
+        1.0,
+        0.0
+      ],
+      "out": 0.0
+    },
+    {
+      "name": "zero right",
+      "a": [
+        1.0,
+        0.0
+      ],
+      "b": [
+        0.0,
+        0.0
+      ],
+      "out": 0.0
+    },
+    {
+      "name": "both zero",
+      "a": [
+        0.0,
+        0.0
+      ],
+      "b": [
+        0.0,
+        0.0
+      ],
+      "out": 0.0
+    },
+    {
+      "name": "mismatched lengths",
+      "a": [
+        1.0,
+        0.0
+      ],
+      "b": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "out": 0.0
+    },
+    {
+      "name": "empty pair",
+      "a": [],
+      "b": [],
+      "out": 0.0
+    },
+    {
+      "name": "thirds and fifths round in f32",
+      "a": [
+        0.3333333432674408,
+        0.20000000298023224,
+        0.0
+      ],
+      "b": [
+        0.3333333432674408,
+        0.0,
+        0.1428571492433548
+      ],
+      "out": 0.7881603837013245
+    },
+    {
+      "name": "long accumulation order matters",
+      "a": [
+        1.0,
+        0.5,
+        0.3333333432674408,
+        0.25,
+        0.20000000298023224,
+        0.1666666716337204,
+        0.1428571492433548,
+        0.125,
+        0.1111111119389534,
+        0.10000000149011612,
+        0.09090909361839294,
+        0.0833333358168602,
+        0.07692307978868484,
+        0.0714285746216774,
+        0.06666667014360428,
+        0.0625,
+        0.05882352963089943,
+        0.0555555559694767,
+        0.05263157933950424,
+        0.05000000074505806,
+        0.0476190485060215,
+        0.04545454680919647,
+        0.043478261679410934,
+        0.0416666679084301,
+        0.03999999910593033,
+        0.03846153989434242,
+        0.03703703731298447,
+        0.0357142873108387,
+        0.03448275849223137,
+        0.03333333507180214,
+        0.032258063554763794,
+        0.03125,
+        0.03030303120613098,
+        0.029411764815449715,
+        0.02857142873108387,
+        0.02777777798473835,
+        0.027027027681469917,
+        0.02631578966975212,
+        0.025641025975346565,
+        0.02500000037252903,
+        0.024390242993831635,
+        0.02380952425301075,
+        0.023255813866853714,
+        0.022727273404598236,
+        0.02222222276031971,
+        0.021739130839705467,
+        0.021276595070958138,
+        0.02083333395421505,
+        0.020408162847161293,
+        0.019999999552965164,
+        0.019607843831181526,
+        0.01923076994717121,
+        0.01886792480945587,
+        0.018518518656492233,
+        0.0181818176060915,
+        0.01785714365541935,
+        0.017543859779834747,
+        0.017241379246115685,
+        0.016949152573943138,
+        0.01666666753590107,
+        0.016393441706895828,
+        0.016129031777381897,
+        0.01587301678955555,
+        0.015625
+      ],
+      "b": [
+        0.5,
+        0.3333333432674408,
+        0.25,
+        0.20000000298023224,
+        0.1666666716337204,
+        0.1428571492433548,
+        0.125,
+        0.1111111119389534,
+        0.10000000149011612,
+        0.09090909361839294,
+        0.0833333358168602,
+        0.07692307978868484,
+        0.0714285746216774,
+        0.06666667014360428,
+        0.0625,
+        0.05882352963089943,
+        0.0555555559694767,
+        0.05263157933950424,
+        0.05000000074505806,
+        0.0476190485060215,
+        0.04545454680919647,
+        0.043478261679410934,
+        0.0416666679084301,
+        0.03999999910593033,
+        0.03846153989434242,
+        0.03703703731298447,
+        0.0357142873108387,
+        0.03448275849223137,
+        0.03333333507180214,
+        0.032258063554763794,
+        0.03125,
+        0.03030303120613098,
+        0.029411764815449715,
+        0.02857142873108387,
+        0.02777777798473835,
+        0.027027027681469917,
+        0.02631578966975212,
+        0.025641025975346565,
+        0.02500000037252903,
+        0.024390242993831635,
+        0.02380952425301075,
+        0.023255813866853714,
+        0.022727273404598236,
+        0.02222222276031971,
+        0.021739130839705467,
+        0.021276595070958138,
+        0.02083333395421505,
+        0.020408162847161293,
+        0.019999999552965164,
+        0.019607843831181526,
+        0.01923076994717121,
+        0.01886792480945587,
+        0.018518518656492233,
+        0.0181818176060915,
+        0.01785714365541935,
+        0.017543859779834747,
+        0.017241379246115685,
+        0.016949152573943138,
+        0.01666666753590107,
+        0.016393441706895828,
+        0.016129031777381897,
+        0.01587301678955555,
+        0.015625,
+        0.015384615398943424
+      ],
+      "out": 0.9720603823661804
+    },
+    {
+      "name": "tiny magnitudes",
+      "a": [
+        9.999999682655225e-21,
+        1.999999936531045e-20
+      ],
+      "b": [
+        2.9999999047965676e-20,
+        3.99999987306209e-20
+      ],
+      "out": 0.9838692545890808
+    },
+    {
+      "name": "large magnitudes",
+      "a": [
+        9.999999843067494e+17,
+        1.999999968613499e+18
+      ],
+      "b": [
+        2.9999998842007716e+18,
+        3.999999937226998e+18
+      ],
+      "out": 0.9838699102401733
+    },
+    {
+      "name": "negative components",
+      "a": [
+        -0.5,
+        0.25,
+        -0.125
+      ],
+      "b": [
+        0.5,
+        -0.25,
+        0.125
+      ],
+      "out": -1.0
+    }
+  ],
+  "document_for_embedding": [
+    {
+      "name": "under the cap",
+      "path": "a.md",
+      "content": "short body",
+      "max_embed_chars_per_file": 100,
+      "out": "path: a.md\n\nshort body"
+    },
+    {
+      "name": "exactly at the cap",
+      "path": "a.md",
+      "content": "12345",
+      "max_embed_chars_per_file": 5,
+      "out": "path: a.md\n\n12345"
+    },
+    {
+      "name": "cut mid-text",
+      "path": "a.md",
+      "content": "0123456789",
+      "max_embed_chars_per_file": 4,
+      "out": "path: a.md\n\n0123"
+    },
+    {
+      "name": "zero cap",
+      "path": "a.md",
+      "content": "anything",
+      "max_embed_chars_per_file": 0,
+      "out": "path: a.md\n\n"
+    },
+    {
+      "name": "the cap counts chars, not utf-16 units",
+      "path": "a.md",
+      "content": "\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a tail",
+      "max_embed_chars_per_file": 2,
+      "out": "path: a.md\n\n\ud83c\udf0a\ud83c\udf0a"
+    },
+    {
+      "name": "multibyte under the cap",
+      "path": "a.md",
+      "content": "caf\u00e9",
+      "max_embed_chars_per_file": 10,
+      "out": "path: a.md\n\ncaf\u00e9"
+    },
+    {
+      "name": "empty content",
+      "path": "a.md",
+      "content": "",
+      "max_embed_chars_per_file": 10,
+      "out": "path: a.md\n\n"
+    },
+    {
+      "name": "newlines survive",
+      "path": "a.md",
+      "content": "one\ntwo\r\nthree",
+      "max_embed_chars_per_file": 100,
+      "out": "path: a.md\n\none\ntwo\r\nthree"
+    }
+  ],
+  "skip_tag": [
+    {
+      "size": 0,
+      "mtime": 0,
+      "out": "mtime:0:0"
+    },
+    {
+      "size": 12,
+      "mtime": 1700000000,
+      "out": "mtime:1700000000:12"
+    },
+    {
+      "size": 9007199254740991,
+      "mtime": -1,
+      "out": "mtime:-1:9007199254740991"
+    }
+  ],
+  "index_path": [
+    {
+      "cache_dir": "/cache",
+      "character": "ren",
+      "out": "/cache/characters/ren/workspace_index.json"
+    },
+    {
+      "cache_dir": "/cache/",
+      "character": "ren",
+      "out": "/cache/characters/ren/workspace_index.json"
+    },
+    {
+      "cache_dir": "relative",
+      "character": "ren",
+      "out": "relative/characters/ren/workspace_index.json"
+    },
+    {
+      "cache_dir": "/cache",
+      "character": "name with spaces",
+      "out": "/cache/characters/name with spaces/workspace_index.json"
+    }
+  ],
+  "embed_batching": [
+    {
+      "name": "empty input makes no calls",
+      "doc_char_counts": [],
+      "batches": []
+    },
+    {
+      "name": "a single doc",
+      "doc_char_counts": [
+        1
+      ],
+      "batches": [
+        {
+          "items": 1,
+          "chars": 1
+        }
+      ]
+    },
+    {
+      "name": "exactly the item cap",
+      "doc_char_counts": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "batches": [
+        {
+          "items": 32,
+          "chars": 86
+        }
+      ]
+    },
+    {
+      "name": "one over the item cap",
+      "doc_char_counts": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "batches": [
+        {
+          "items": 32,
+          "chars": 86
+        },
+        {
+          "items": 1,
+          "chars": 3
+        }
+      ]
+    },
+    {
+      "name": "twice the item cap plus one",
+      "doc_char_counts": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "batches": [
+        {
+          "items": 32,
+          "chars": 86
+        },
+        {
+          "items": 32,
+          "chars": 96
+        },
+        {
+          "items": 1,
+          "chars": 3
+        }
+      ]
+    },
+    {
+      "name": "the char cap splits before the item cap",
+      "doc_char_counts": [
+        20000,
+        20000,
+        20000,
+        20000,
+        20000,
+        20000,
+        20000,
+        20000
+      ],
+      "batches": [
+        {
+          "items": 4,
+          "chars": 80000
+        },
+        {
+          "items": 4,
+          "chars": 80000
+        }
+      ]
+    },
+    {
+      "name": "a single oversized doc goes alone",
+      "doc_char_counts": [
+        200000,
+        5
+      ],
+      "batches": [
+        {
+          "items": 1,
+          "chars": 200000
+        },
+        {
+          "items": 1,
+          "chars": 5
+        }
+      ]
+    },
+    {
+      "name": "two oversized docs each go alone",
+      "doc_char_counts": [
+        200000,
+        200000
+      ],
+      "batches": [
+        {
+          "items": 1,
+          "chars": 200000
+        },
+        {
+          "items": 1,
+          "chars": 200000
+        }
+      ]
+    },
+    {
+      "name": "the char cap counts chars, not bytes",
+      "doc_char_counts": [
+        20000,
+        20000,
+        20000,
+        20000,
+        20000,
+        20000
+      ],
+      "batches": [
+        {
+          "items": 4,
+          "chars": 80000
+        },
+        {
+          "items": 2,
+          "chars": 40000
+        }
+      ]
+    },
+    {
+      "name": "exactly the char cap in one batch",
+      "doc_char_counts": [
+        48000,
+        48000,
+        1
+      ],
+      "batches": [
+        {
+          "items": 2,
+          "chars": 96000
+        },
+        {
+          "items": 1,
+          "chars": 1
+        }
+      ]
+    }
+  ],
+  "build_embed_body": [
+    {
+      "name": "no dimensions",
+      "model": "m1",
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "dimensions": null,
+      "out": {
+        "model": "m1",
+        "input": [
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "name": "with dimensions",
+      "model": "m1",
+      "inputs": [
+        "a"
+      ],
+      "dimensions": 512,
+      "out": {
+        "model": "m1",
+        "input": [
+          "a"
+        ],
+        "dimensions": 512
+      }
+    },
+    {
+      "name": "zero dimensions is still emitted",
+      "model": "m1",
+      "inputs": [
+        "a"
+      ],
+      "dimensions": 0,
+      "out": {
+        "model": "m1",
+        "input": [
+          "a"
+        ],
+        "dimensions": 0
+      }
+    },
+    {
+      "name": "empty input array",
+      "model": "m1",
+      "inputs": [],
+      "dimensions": null,
+      "out": {
+        "model": "m1",
+        "input": []
+      }
+    }
+  ],
+  "parse_embedding_response": [
+    {
+      "name": "one vector",
+      "response": {
+        "data": [
+          {
+            "embedding": [
+              0.5,
+              0.25
+            ]
+          }
+        ]
+      },
+      "expected_count": 1,
+      "out": {
+        "ok": [
+          [
+            0.5,
+            0.25
+          ]
+        ]
+      }
+    },
+    {
+      "name": "two vectors, ints and floats mixed",
+      "response": {
+        "data": [
+          {
+            "embedding": [
+              1,
+              0.5
+            ]
+          },
+          {
+            "embedding": [
+              0.1,
+              2
+            ]
+          }
+        ]
+      },
+      "expected_count": 2,
+      "out": {
+        "ok": [
+          [
+            1.0,
+            0.5
+          ],
+          [
+            0.10000000149011612,
+            2.0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "empty data for zero inputs",
+      "response": {
+        "data": []
+      },
+      "expected_count": 0,
+      "out": {
+        "ok": []
+      }
+    },
+    {
+      "name": "missing data array",
+      "response": {
+        "object": "list"
+      },
+      "expected_count": 1,
+      "out": {
+        "error": "provider error: embedding response missing data array"
+      }
+    },
+    {
+      "name": "data is not an array",
+      "response": {
+        "data": 3
+      },
+      "expected_count": 1,
+      "out": {
+        "error": "provider error: embedding response missing data array"
+      }
+    },
+    {
+      "name": "too few vectors",
+      "response": {
+        "data": [
+          {
+            "embedding": [
+              1.0
+            ]
+          }
+        ]
+      },
+      "expected_count": 2,
+      "out": {
+        "error": "provider error: embedding response returned 1 vectors for 2 inputs"
+      }
+    },
+    {
+      "name": "too many vectors",
+      "response": {
+        "data": [
+          {
+            "embedding": [
+              1.0
+            ]
+          },
+          {
+            "embedding": [
+              1.0
+            ]
+          }
+        ]
+      },
+      "expected_count": 1,
+      "out": {
+        "error": "provider error: embedding response returned 2 vectors for 1 inputs"
+      }
+    },
+    {
+      "name": "item missing embedding",
+      "response": {
+        "data": [
+          {
+            "index": 0
+          }
+        ]
+      },
+      "expected_count": 1,
+      "out": {
+        "error": "provider error: embedding response item 0 missing embedding array"
+      }
+    },
+    {
+      "name": "embedding is not an array",
+      "response": {
+        "data": [
+          {
+            "embedding": "nope"
+          }
+        ]
+      },
+      "expected_count": 1,
+      "out": {
+        "error": "provider error: embedding response item 0 missing embedding array"
+      }
+    },
+    {
+      "name": "non-numeric component",
+      "response": {
+        "data": [
+          {
+            "embedding": [
+              1.0,
+              "x"
+            ]
+          }
+        ]
+      },
+      "expected_count": 1,
+      "out": {
+        "error": "provider error: embedding response item 0 has non-numeric value at position 1"
+      }
+    },
+    {
+      "name": "null component",
+      "response": {
+        "data": [
+          {
+            "embedding": [
+              null
+            ]
+          }
+        ]
+      },
+      "expected_count": 1,
+      "out": {
+        "error": "provider error: embedding response item 0 has non-numeric value at position 0"
+      }
+    },
+    {
+      "name": "the second item is the bad one",
+      "response": {
+        "data": [
+          {
+            "embedding": [
+              1.0
+            ]
+          },
+          {
+            "embedding": [
+              1.0,
+              false
+            ]
+          }
+        ]
+      },
+      "expected_count": 2,
+      "out": {
+        "error": "provider error: embedding response item 1 has non-numeric value at position 1"
+      }
+    },
+    {
+      "name": "f64 precision is truncated to f32",
+      "response": {
+        "data": [
+          {
+            "embedding": [
+              0.12345678901234568
+            ]
+          }
+        ]
+      },
+      "expected_count": 1,
+      "out": {
+        "ok": [
+          [
+            0.12345679104328156
+          ]
+        ]
+      }
+    },
+    {
+      "name": "an empty vector is allowed",
+      "response": {
+        "data": [
+          {
+            "embedding": []
+          }
+        ]
+      },
+      "expected_count": 1,
+      "out": {
+        "ok": [
+          []
+        ]
+      }
+    }
+  ],
+  "retrieval": {
+    "hardcoded_base_url": [
+      {
+        "provider_key": "anthropic",
+        "base_url": null
+      },
+      {
+        "provider_key": "openai",
+        "base_url": null
+      },
+      {
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1"
+      },
+      {
+        "provider_key": "deepseek",
+        "base_url": "https://api.deepseek.com/v1"
+      },
+      {
+        "provider_key": "moonshot",
+        "base_url": "https://api.moonshot.ai/v1"
+      },
+      {
+        "provider_key": "moonshotai",
+        "base_url": "https://api.moonshot.ai/v1"
+      },
+      {
+        "provider_key": "gemini",
+        "base_url": null
+      },
+      {
+        "provider_key": "xai",
+        "base_url": "https://api.x.ai/v1"
+      },
+      {
+        "provider_key": "zhipuai",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4"
+      },
+      {
+        "provider_key": "zai",
+        "base_url": null
+      },
+      {
+        "provider_key": "nanogpt",
+        "base_url": "https://nano-gpt.com/api/v1"
+      },
+      {
+        "provider_key": "opencode-go",
+        "base_url": "https://opencode.ai/zen/go/v1"
+      },
+      {
+        "provider_key": "vllm",
+        "base_url": null
+      },
+      {
+        "provider_key": "",
+        "base_url": null
+      }
+    ],
+    "resolve_embedder": [
+      {
+        "name": "nothing configured",
+        "registry": [],
+        "default_ref": null,
+        "embedding": [],
+        "env": [],
+        "outcome": {
+          "error": "no embedding model configured; semantic search disabled. Set defaults.embedding = \"provider:model_id\" pointing at an OpenAI-compatible embeddings endpoint and configure [providers.<provider>] (see CONFIGURATION.md)."
+        }
+      },
+      {
+        "name": "a sole overlay entry is used without a default",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_ACME_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": null,
+        "embedding": [
+          {
+            "key": "acme:only",
+            "dimensions": 256
+          }
+        ],
+        "env": [
+          {
+            "var": "SHORE_GEN_ACME_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "two overlay entries with no default is ambiguous",
+        "registry": [],
+        "default_ref": null,
+        "embedding": [
+          {
+            "key": "acme:one",
+            "dimensions": null
+          },
+          {
+            "key": "acme:two",
+            "dimensions": null
+          }
+        ],
+        "env": [],
+        "outcome": {
+          "error": "multiple [embedding.\"provider:model_id\"] entries are configured but defaults.embedding is unset; set defaults.embedding to choose one"
+        }
+      },
+      {
+        "name": "a bare alias is not an identity",
+        "registry": [],
+        "default_ref": "not-a-provider-model",
+        "embedding": [],
+        "env": [],
+        "outcome": {
+          "error": "embedding model 'not-a-provider-model' is not a `provider:model_id` identity. Hosted semantic search needs an OpenAI-compatible embeddings endpoint (e.g. \"openai:text-embedding-3-large\") with transport under [providers.<provider>]; bundled local ids are not served at runtime."
+        }
+      },
+      {
+        "name": "an empty provider half",
+        "registry": [],
+        "default_ref": ":model",
+        "embedding": [],
+        "env": [],
+        "outcome": {
+          "error": "embedding model ':model' is not a valid `provider:model_id` identity"
+        }
+      },
+      {
+        "name": "an empty model half",
+        "registry": [],
+        "default_ref": "acme:",
+        "embedding": [],
+        "env": [],
+        "outcome": {
+          "error": "embedding model 'acme:' is not a valid `provider:model_id` identity"
+        }
+      },
+      {
+        "name": "the identity splits on the first colon",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_ACME_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:some:model:id",
+        "embedding": [],
+        "env": [
+          {
+            "var": "SHORE_GEN_ACME_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "no api key set",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_DEFINITELY_UNSET",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:m",
+        "embedding": [],
+        "env": [],
+        "outcome": {
+          "error": "embedding API key not set for provider 'acme'; set one of these env vars: SHORE_GEN_DEFINITELY_UNSET"
+        }
+      },
+      {
+        "name": "a disabled provider resolves to no candidates",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": null,
+            "entry": {
+              "enabled": false,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_ACME_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:m",
+        "embedding": [],
+        "env": [
+          {
+            "var": "SHORE_GEN_ACME_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {
+          "error": "embedding provider 'acme' is disabled in [providers.acme]"
+        }
+      },
+      {
+        "name": "dimensions come from the overlay",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_ACME_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:dims",
+        "embedding": [
+          {
+            "key": "acme:dims",
+            "dimensions": 512
+          }
+        ],
+        "env": [
+          {
+            "var": "SHORE_GEN_ACME_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "unset dimensions stay native",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_ACME_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:native",
+        "embedding": [],
+        "env": [
+          {
+            "var": "SHORE_GEN_ACME_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "zero dimensions is a real value, not unset",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_ACME_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:zero",
+        "embedding": [
+          {
+            "key": "acme:zero",
+            "dimensions": 0
+          }
+        ],
+        "env": [
+          {
+            "var": "SHORE_GEN_ACME_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "u32::MAX dimensions convert cleanly on a 64-bit usize",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_ACME_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:big",
+        "embedding": [
+          {
+            "key": "acme:big",
+            "dimensions": 4294967295
+          }
+        ],
+        "env": [
+          {
+            "var": "SHORE_GEN_ACME_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "the overlay for a different identity is ignored",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_ACME_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:wanted",
+        "embedding": [
+          {
+            "key": "acme:other",
+            "dimensions": 64
+          }
+        ],
+        "env": [
+          {
+            "var": "SHORE_GEN_ACME_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "a hardcoded base url fills in for an entry without one",
+        "registry": [
+          {
+            "provider_key": "openrouter",
+            "base_url": null,
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_OR_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "openrouter:embed-1",
+        "embedding": [],
+        "env": [
+          {
+            "var": "SHORE_GEN_OR_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "an explicit base url overrides the hardcoded one",
+        "registry": [
+          {
+            "provider_key": "openrouter",
+            "base_url": "https://proxy.internal/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "default",
+                  "env": "SHORE_GEN_OR_KEY",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "openrouter:embed-1",
+        "embedding": [],
+        "env": [
+          {
+            "var": "SHORE_GEN_OR_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "no entry at all still resolves through the default env",
+        "registry": [],
+        "default_ref": "openai:text-embedding-3-small",
+        "embedding": [],
+        "env": [
+          {
+            "var": "OPENAI_API_KEY",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      },
+      {
+        "name": "the first env-set key in the chain wins",
+        "registry": [
+          {
+            "provider_key": "acme",
+            "base_url": "https://acme.test/v1",
+            "entry": {
+              "enabled": true,
+              "keys": [
+                {
+                  "name": "first",
+                  "env": "SHORE_GEN_UNSET_A",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                },
+                {
+                  "name": "second",
+                  "env": "SHORE_GEN_SET_B",
+                  "enabled": true,
+                  "warn_on_fallback": false
+                }
+              ]
+            }
+          }
+        ],
+        "default_ref": "acme:m",
+        "embedding": [],
+        "env": [
+          {
+            "var": "SHORE_GEN_SET_B",
+            "value": "k"
+          }
+        ],
+        "outcome": {}
+      }
+    ]
+  },
+  "refresh_index_entries": [
+    {
+      "name": "a candidate that vanished between the walk and the read",
+      "files": [
+        {
+          "path": "a.md",
+          "bytes": [
+            116,
+            101,
+            97
+          ],
+          "mtime": 1000
+        },
+        {
+          "path": "gone.md",
+          "bytes": [
+            114,
+            117,
+            115,
+            116
+          ],
+          "mtime": 1001
+        }
+      ],
+      "delete_after_walk": [
+        "gone.md"
+      ],
+      "pre_index": {
+        "entries": {}
+      },
+      "config": {
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "max_embed_chars_per_file": 4000,
+        "binary": "skip"
+      },
+      "out": {
+        "stale": [
+          [
+            "a.md",
+            3,
+            1000
+          ]
+        ],
+        "stale_docs": [
+          "path: a.md\n\ntea"
+        ],
+        "skipped_binary_or_large": 0,
+        "dirty": false,
+        "candidates": {
+          "$ref": "s8"
+        },
+        "index": {
+          "entries": {}
+        }
+      }
+    },
+    {
+      "name": "a vanished candidate that had an index entry marks the index dirty",
+      "files": [
+        {
+          "path": "a.md",
+          "bytes": [
+            116,
+            101,
+            97
+          ],
+          "mtime": 1000
+        },
+        {
+          "path": "gone.md",
+          "bytes": [
+            114,
+            117,
+            115,
+            116
+          ],
+          "mtime": 1001
+        }
+      ],
+      "delete_after_walk": [
+        "gone.md"
+      ],
+      "pre_index": {
+        "entries": {
+          "gone.md": {
+            "hash": "h",
+            "size": 4,
+            "modified_at_secs": 1001,
+            "model_id": "topic-v1",
+            "max_embed_chars_per_file": 4000,
+            "embedded": true,
+            "embedding": [
+              1.0,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      "config": {
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "max_embed_chars_per_file": 4000,
+        "binary": "skip"
+      },
+      "out": {
+        "stale": [
+          [
+            "a.md",
+            3,
+            1000
+          ]
+        ],
+        "stale_docs": [
+          "path: a.md\n\ntea"
+        ],
+        "skipped_binary_or_large": 0,
+        "dirty": true,
+        "candidates": {
+          "$ref": "s8"
+        },
+        "index": {
+          "entries": {}
+        }
+      }
+    },
+    {
+      "name": "nothing stale when every entry is fresh",
+      "files": [
+        {
+          "path": "a.md",
+          "bytes": [
+            116,
+            101,
+            97
+          ],
+          "mtime": 1000
+        }
+      ],
+      "delete_after_walk": [],
+      "pre_index": {
+        "entries": {
+          "a.md": {
+            "hash": "h",
+            "size": 3,
+            "modified_at_secs": 1000,
+            "model_id": "topic-v1",
+            "max_embed_chars_per_file": 4000,
+            "embedded": true,
+            "embedding": [
+              0.5,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      "config": {
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "max_embed_chars_per_file": 4000,
+        "binary": "skip"
+      },
+      "out": {
+        "stale": [],
+        "stale_docs": [],
+        "skipped_binary_or_large": 0,
+        "dirty": false,
+        "candidates": [
+          {
+            "display_path": "a.md",
+            "size": 3,
+            "modified_at_secs": 1000,
+            "content": "tea",
+            "skip_reason": null
+          }
+        ],
+        "index": {
+          "entries": {
+            "a.md": {
+              "hash": "h",
+              "size": 3,
+              "modified_at_secs": 1000,
+              "model_id": "topic-v1",
+              "max_embed_chars_per_file": 4000,
+              "embedded": true,
+              "embedding": [
+                0.5,
+                0.0,
+                0.0
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "an oversize candidate is recorded without being read",
+      "files": [
+        {
+          "path": "big.md",
+          "bytes": [
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57
+          ],
+          "mtime": 1000
+        },
+        {
+          "path": "a.md",
+          "bytes": [
+            116,
+            101,
+            97
+          ],
+          "mtime": 1001
+        }
+      ],
+      "delete_after_walk": [],
+      "pre_index": {
+        "entries": {}
+      },
+      "config": {
+        "max_file_bytes": 5,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "max_embed_chars_per_file": 4000,
+        "binary": "skip"
+      },
+      "out": {
+        "stale": [
+          [
+            "a.md",
+            3,
+            1001
+          ]
+        ],
+        "stale_docs": [
+          "path: a.md\n\ntea"
+        ],
+        "skipped_binary_or_large": 1,
+        "dirty": true,
+        "candidates": [
+          {
+            "display_path": "a.md",
+            "size": 3,
+            "modified_at_secs": 1001,
+            "content": "tea",
+            "skip_reason": null
+          },
+          {
+            "display_path": "big.md",
+            "size": 10,
+            "modified_at_secs": 1000,
+            "content": null,
+            "skip_reason": "oversize"
+          }
+        ],
+        "index": {
+          "entries": {
+            "big.md": {
+              "hash": "mtime:1000:10",
+              "size": 10,
+              "modified_at_secs": 1000,
+              "model_id": "topic-v1",
+              "max_embed_chars_per_file": 4000,
+              "embedded": false,
+              "reason": "oversize"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "an oversize candidate that also vanished is still recorded",
+      "files": [
+        {
+          "path": "big.md",
+          "bytes": [
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57
+          ],
+          "mtime": 1000
+        }
+      ],
+      "delete_after_walk": [
+        "big.md"
+      ],
+      "pre_index": {
+        "entries": {}
+      },
+      "config": {
+        "max_file_bytes": 5,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "max_embed_chars_per_file": 4000,
+        "binary": "skip"
+      },
+      "out": {
+        "stale": [],
+        "stale_docs": [],
+        "skipped_binary_or_large": 1,
+        "dirty": true,
+        "candidates": [
+          {
+            "display_path": "big.md",
+            "size": 10,
+            "modified_at_secs": 1000,
+            "content": null,
+            "skip_reason": "oversize"
+          }
+        ],
+        "index": {
+          "entries": {
+            "big.md": {
+              "hash": "mtime:1000:10",
+              "size": 10,
+              "modified_at_secs": 1000,
+              "model_id": "topic-v1",
+              "max_embed_chars_per_file": 4000,
+              "embedded": false,
+              "reason": "oversize"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "non-utf8 under each binary mode",
+      "files": [
+        {
+          "path": "blob.bin",
+          "bytes": [
+            255,
+            254
+          ],
+          "mtime": 1000
+        }
+      ],
+      "delete_after_walk": [],
+      "pre_index": {
+        "entries": {}
+      },
+      "config": {
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "max_embed_chars_per_file": 4000,
+        "binary": "metadata"
+      },
+      "out": {
+        "stale": [],
+        "stale_docs": [],
+        "skipped_binary_or_large": 1,
+        "dirty": true,
+        "candidates": [
+          {
+            "display_path": "blob.bin",
+            "size": 2,
+            "modified_at_secs": 1000,
+            "content": null,
+            "skip_reason": "binary-metadata-only"
+          }
+        ],
+        "index": {
+          "entries": {
+            "blob.bin": {
+              "hash": "mtime:1000:2",
+              "size": 2,
+              "modified_at_secs": 1000,
+              "model_id": "topic-v1",
+              "max_embed_chars_per_file": 4000,
+              "embedded": false,
+              "reason": "binary-metadata-only"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the embed char cap trims the document",
+      "files": [
+        {
+          "path": "a.md",
+          "bytes": [
+            116,
+            101,
+            97,
+            32,
+            240,
+            159,
+            140,
+            138,
+            240,
+            159,
+            140,
+            138,
+            240,
+            159,
+            140,
+            138,
+            32,
+            116,
+            97,
+            105,
+            108
+          ],
+          "mtime": 1000
+        }
+      ],
+      "delete_after_walk": [],
+      "pre_index": {
+        "entries": {}
+      },
+      "config": {
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "max_embed_chars_per_file": 6,
+        "binary": "skip"
+      },
+      "out": {
+        "stale": [
+          [
+            "a.md",
+            21,
+            1000
+          ]
+        ],
+        "stale_docs": [
+          "path: a.md\n\ntea \ud83c\udf0a\ud83c\udf0a"
+        ],
+        "skipped_binary_or_large": 0,
+        "dirty": false,
+        "candidates": [
+          {
+            "display_path": "a.md",
+            "size": 21,
+            "modified_at_secs": 1000,
+            "content": "tea \ud83c\udf0a\ud83c\udf0a\ud83c\udf0a tail",
+            "skip_reason": null
+          }
+        ],
+        "index": {
+          "entries": {}
+        }
+      }
+    }
+  ]
+}

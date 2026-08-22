@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import fixture from "./commands_fixtures/dispatch.json" with { type: "json" };
+import fixture from "./command_captures/dispatch.json" with { type: "json" };
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -22,10 +22,6 @@ import { testTmp } from "./support/tmp.ts";
 
 const UNWIRED: Record<string, string> = {
   keepalive_ping_now: "keepalive_ping_now is not available in this build",
-};
-
-const DIVERGENT: Record<string, string> = {
-  usage: "the missing-ledger refusal moved in front of the call",
 };
 
 const NOW_RESOLVES: Record<string, { was: string; value: unknown }> = {
@@ -266,9 +262,7 @@ describe("runCommand", () => {
       expect(got["kind"]).toBe(want["kind"] as string);
       if (want["kind"] === "error") {
         expect(got["code"]).toBe(want["code"] as never);
-        if (DIVERGENT[c.name] === undefined) {
-          expect(got["message"]).toBe(want["message"] as string);
-        }
+        expect(got["message"]).toBe(want["message"] as string);
       } else {
         expect(got["name"]).toBe(want["name"] as string);
         expect(got["data_keys"]).toEqual(want["data_keys"] as string[]);

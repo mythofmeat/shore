@@ -1,5 +1,16 @@
 use super::Line;
 
+#[derive(Default, PartialEq, Eq, Clone)]
+pub(crate) struct CompactionFingerprint {
+    pub round: u64,
+    pub blocks: u32,
+    pub last_block: u64,
+    pub tool_name_len: i32,
+    pub text_len: u32,
+    pub thinking_len: u32,
+    pub elapsed_secs: u64,
+}
+
 #[derive(Default)]
 pub(crate) struct ConvCache {
     pub fingerprint: ConvFingerprint,
@@ -21,6 +32,8 @@ pub(crate) struct ConvFingerprint {
     pub show_thinking: bool,
     pub show_tools: bool,
     pub show_subagent: bool,
+    pub show_compaction: bool,
+    pub compaction: Option<CompactionFingerprint>,
     pub show_images: bool,
     pub show_timestamps: bool,
     pub show_metadata: bool,

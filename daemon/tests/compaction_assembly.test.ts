@@ -1,10 +1,12 @@
 import { required } from "../src/util/required.ts";
 
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import fixture from "./memory_fixtures/compaction_assembly.json" with { type: "json" };
+import rawFixture from "./memory_captures/compaction_assembly.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { renderToolOutcome } from "../src/memory/compaction/run.ts";
 import { resolvePromptTemplate } from "../src/config/dirs.ts";

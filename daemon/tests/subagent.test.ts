@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import fixture from "./engine_fixtures/subagent.json";
+import fixture from "./engine_captures/subagent.json";
 import { renderTemplate } from "../src/engine/prompt";
 import {
   MAX_HISTORY_MESSAGES,
@@ -32,7 +32,7 @@ interface Layout {
 const layouts: Layout[] = [];
 
 function buildLayout(withSnapshot: boolean): Layout {
-  const root = mkdtempSync(join(tmpdir(), "subagent-parity-"));
+  const root = mkdtempSync(join(tmpdir(), "subagent-"));
   const data = join(root, "data");
   const ws = join(root, "ws");
   const outside = join(root, "outside");

@@ -1,6 +1,7 @@
 import { shoreLog } from "../log.ts";
 
 import { describeError } from "../llm/errors.ts";
+import type { FrameSink } from "../llm/stream.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -80,6 +81,7 @@ export interface CommandSession {
   activeModel: string | undefined;
   runtime: ConfigRuntime;
   env?: NodeJS.ProcessEnv;
+  emit?: FrameSink;
 }
 
 export interface CommandDeps {
@@ -165,7 +167,15 @@ export async function runCommand(
       if (deps.compaction === undefined) throw unwired("compact");
       return await compact(
         engine,
-        { ...deps.compaction, config: session.config, autonomy: deps.autonomy },
+        {
+          ...deps.compaction,
+          config: session.config,
+          autonomy: deps.autonomy,
+          run: {
+            ...deps.compaction.run,
+            ...(session.emit === undefined ? {} : { emit: session.emit }),
+          },
+        },
         args,
       );
     case "segments":

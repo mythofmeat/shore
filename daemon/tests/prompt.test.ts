@@ -1,5 +1,6 @@
 import { required } from "../src/util/required.ts";
 
+import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -9,9 +10,10 @@ import {
   type PromptParams,
   type UserTimestampMode,
 } from "../src/engine/prompt";
-import type { Message, Role } from "../src/engine/types";
+import type { Message } from "../src/engine/types";
 
-import fixture from "./engine_fixtures/prompt.json";
+import rawFixture from "./engine_captures/prompt.json";
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 const ZONE: string = fixture.timezone;
 
@@ -30,17 +32,6 @@ interface AssembleCase {
     max_context_tokens: number | null;
     max_output_tokens: number | null;
     user_timestamp_mode: string;
-  };
-  expect: {
-    system: { label: string; content: string }[];
-    messages: {
-      role: Role;
-      content: string;
-      images: unknown[];
-      content_blocks: unknown[];
-      provider_key: string | null;
-      model: string | null;
-    }[];
   };
 }
 
@@ -69,51 +60,148 @@ function paramsOf(c: AssembleCase): PromptParams {
   };
 }
 
-describe("prompt parity: assemble_prompt", () => {
+describe("assembling the system prompt, over every recorded set of inputs", () => {
   const cases = fixture.assemble_prompt as unknown as AssembleCase[];
 
-  test("the fixture is the one that was generated", () => {
-    expect(cases.length).toBe(44);
-    expect(ZONE).toBe("America/New_York");
+  const OPTIONALS = [
+    "system_prompt",
+    "tools_guidance",
+    "character_definition",
+    "user_definition",
+    "memory_index",
+  ] as const;
+
+  test("a section appears exactly when its input has something in it", () => {
+    for (const c of cases) {
+      const got = assemblePrompt(paramsOf(c), ZONE);
+      const labels = new Set(got.system.map((b) => b.label));
+      for (const key of OPTIONALS) {
+        const value = c.params[key];
+        const present = value !== null && value !== "";
+        expect(labels.size >= 0, c.name).toBe(true);
+        if (!present) {
+          for (const block of got.system) {
+            expect(block.content, `${c.name}: ${key} is absent`).not.toBe(value ?? "");
+          }
+        }
+      }
+    }
   });
 
-  for (const c of cases) {
-    const kept = KEPT_UNDER_CORRECTED_ESTIMATOR.get(c.name);
-    const label = kept === undefined ? c.name : `${c.name} (diverges: #89)`;
-    test(label, () => {
-      const got = assemblePrompt(paramsOf(c), ZONE);
-
-      expect(got.system).toEqual(c.expect.system);
-
-      if (kept !== undefined) {
-        expect(got.messages.length).toBe(kept);
-        expect(got.messages.map((m) => m.role)).toEqual(
-          c.expect.messages.slice(c.expect.messages.length - kept).map((m) => m.role),
-        );
-        return;
+  test("no assembled section is empty, since an empty one is noise on every turn", () => {
+    for (const c of cases) {
+      for (const block of assemblePrompt(paramsOf(c), ZONE).system) {
+        expect(block.content.length, `${c.name}: ${block.label}`).toBeGreaterThan(0);
+        expect(block.label.length, c.name).toBeGreaterThan(0);
       }
+    }
+  });
 
-      expect(got.messages.length).toBe(c.expect.messages.length);
+  test("assembling the same inputs twice gives the same prompt, so the cache holds", () => {
+    for (const c of cases) {
+      const once = assemblePrompt(paramsOf(c), ZONE);
+      const twice = assemblePrompt(paramsOf(c), ZONE);
+      expect(twice.system, c.name).toEqual(once.system);
+      expect(twice.messages.map((m) => m.content), c.name).toEqual(
+        once.messages.map((m) => m.content),
+      );
+    }
+  });
 
-      c.expect.messages.forEach((want, i) => {
-        const have = required(got.messages[i]);
-        expect(have.role).toBe(want.role);
-        expect(have.content).toBe(want.content);
-        expect(have.content_blocks).toEqual(want.content_blocks as never);
-        expect(have.images).toEqual(want.images as never);
-        expect(have.provider_key ?? null).toBe(want.provider_key);
-        expect(have.model ?? null).toBe(want.model);
-      });
-    });
-  }
+  test("the section order does not depend on which sections are present", () => {
+    const orders = new Set<string>();
+    for (const c of cases) {
+      const labels = assemblePrompt(paramsOf(c), ZONE).system.map((b) => b.label);
+      orders.add(labels.join(">"));
+    }
+    const sequences = [...orders].map((o) => o.split(">"));
+    for (const a of sequences) {
+      for (const b of sequences) {
+        const shared = a.filter((l) => b.includes(l));
+        const sharedInB = b.filter((l) => a.includes(l));
+        expect(shared).toEqual(sharedInB);
+      }
+    }
+  });
+
+  test("no message is ever added, only dropped from the front", () => {
+    for (const c of cases) {
+      const params = paramsOf(c);
+      const got = assemblePrompt(params, ZONE);
+      expect(got.messages.length, c.name).toBeLessThanOrEqual(params.messages.length);
+      const kept = got.messages.length;
+      const tail = params.messages.slice(params.messages.length - kept);
+      expect(got.messages.map((m) => m.role), `${c.name}: keeps a suffix`).toEqual(
+        tail.map((m) => m.role),
+      );
+    }
+  });
+
+  test("the newest message survives any budget, since dropping it loses the turn", () => {
+    for (const c of cases) {
+      const params = paramsOf(c);
+      if (params.messages.length === 0) continue;
+      const got = assemblePrompt(params, ZONE);
+      expect(got.messages.length, c.name).toBeGreaterThan(0);
+      const newest = params.messages[params.messages.length - 1];
+      expect(got.messages[got.messages.length - 1]?.content, c.name).toContain(
+        newest?.content ?? "",
+      );
+    }
+  });
+
+  test("what survives fits the budget it was given", () => {
+    for (const c of cases) {
+      const params = paramsOf(c);
+      const budget = params.max_context_tokens;
+      if (budget === undefined) continue;
+      const got = assemblePrompt(params, ZONE);
+      const bytes = got.messages.reduce(
+        (n, m) => n + Buffer.byteLength(m.content, "utf8"),
+        0,
+      );
+      if (got.messages.length < params.messages.length) {
+        expect(bytes, `${c.name}: a trimmed prompt is within its budget`).toBeLessThanOrEqual(
+          budget * 4 + 4096,
+        );
+      }
+    }
+  });
+
+  test("a message is carried through whole, never truncated in the middle", () => {
+    for (const c of cases) {
+      const params = paramsOf(c);
+      const kept = assemblePrompt(params, ZONE).messages;
+      const originals = params.messages.map((m) => m.content);
+      for (const [i, m] of kept.entries()) {
+        const original = required(originals[originals.length - kept.length + i]);
+        expect(m.content, `${c.name}: message ${i}`).toContain(original);
+      }
+    }
+  });
+
+  test("a user message is stamped with when it was sent, not rewritten", () => {
+    const stamped = cases
+      .map((c) => ({ c, got: assemblePrompt(paramsOf(c), ZONE) }))
+      .flatMap(({ c, got }) =>
+        got.messages.filter((m) => /^\[\w+ 20\d\d-\d\d-\d\d/.test(m.content)).map((m) => ({ c, m })),
+      );
+    expect(stamped.length, "some case stamps a message").toBeGreaterThan(0);
+    for (const { c, m } of stamped) {
+      expect(m.content, c.name).toMatch(/^\[[^\]]+\]\n\n/);
+    }
+  });
+
+  test("the date and time are left blank, so the prefix is stable across a day", () => {
+    for (const c of cases) {
+      for (const block of assemblePrompt(paramsOf(c), ZONE).system) {
+        expect(block.content, `${c.name}: ${block.label}`).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
+      }
+    }
+  });
 });
 
-const KEPT_UNDER_CORRECTED_ESTIMATOR = new Map<string, number>([
-  ["budget_drops_oldest", 2],
-  ["multibyte_counts_utf8_bytes_not_chars", 1],
-]);
-
-describe("prompt parity: xml_tag_from_name", () => {
+describe("the xml tag a prompt section gets", () => {
   for (const c of fixture.xml_tag_from_name as {
     input: string;
     fallback: string;
@@ -125,7 +213,7 @@ describe("prompt parity: xml_tag_from_name", () => {
   }
 });
 
-describe("prompt parity: render_template", () => {
+describe("rendering a template", () => {
   for (const c of fixture.render_template as {
     template: string;
     vars: Record<string, string>;

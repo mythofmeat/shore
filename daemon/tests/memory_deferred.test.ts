@@ -2,6 +2,7 @@ import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { expandShared } from "./support/shared_subtrees.ts";
 import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -29,10 +30,12 @@ interface Case {
   err: string | null;
 }
 
-const fixture = JSON.parse(
-  readFileSync(
-    join(import.meta.dir, "memory_fixtures/deferred_edits.json"),
-    "utf8",
+const fixture = expandShared(
+  JSON.parse(
+    readFileSync(
+      join(import.meta.dir, "memory_captures/deferred_edits.json"),
+      "utf8",
+    ),
   ),
 ) as { constants: Record<string, unknown>; cases: Case[] };
 
@@ -69,7 +72,7 @@ function normalizeQueue(raw: string): string {
     .join("\n");
 }
 
-describe("deferred edits parity", () => {
+describe("applying a deferred edit", () => {
   test("the fixture pins the constants this module hardcodes", () => {
     expect(fixture.constants.protected_paths).toEqual([
       "SOUL.md",

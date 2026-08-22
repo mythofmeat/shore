@@ -1,10 +1,12 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import fixture from "./handler_fixtures/generation.json" with { type: "json" };
+import rawFixture from "./handler_captures/generation.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { characterActiveJsonl } from "../src/config/dirs.ts";
 import type { Message } from "../src/engine/types.ts";
@@ -23,6 +25,7 @@ import type {
   SidecarProvider,
   SidecarRequest,
   StreamEvent,
+  ToolDefinition,
   WireMessage,
 } from "../src/llm/types.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
@@ -36,6 +39,9 @@ import {
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import type { TurnAutonomy } from "../src/handler/turn.ts";
 import { testTmp } from "./support/tmp.ts";
+import { recordedValue } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/handler_captures/generation.json";
 
 afterAll(restoreTestEnv);
 
@@ -494,23 +500,55 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   };
 }
 
-function stripHopFields(cached: unknown): unknown {
-  if (cached === null || typeof cached !== "object") return cached;
-  const { tool_rpc: _hop, max_tool_iterations: _cap, ...rest } = cached as Record<string, unknown>;
-  return rest;
-}
+function expectCachedIsTheSentRequestPlusTheReply(
+  run: { lastRequest?: unknown; requests: unknown[] },
+  out: Record<string, unknown>,
+): void {
+  const sent = run.requests.at(-1) as Record<string, unknown> | undefined;
 
-function dropFalseIsError(v: unknown): unknown {
-  if (Array.isArray(v)) return v.map(dropFalseIsError);
-  if (v !== null && typeof v === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, val] of Object.entries(v)) {
-      if (k === "is_error" && val === false) continue;
-      out[k] = dropFalseIsError(val);
-    }
-    return out;
+  if (run.lastRequest === undefined) {
+    expect(
+      out["result"],
+      "a turn caches nothing for the next one only when it did not finish",
+    ).not.toEqual({ ok: true });
+    return;
   }
-  return v;
+
+  const cached = { ...(run.lastRequest as Record<string, unknown>) };
+  delete cached["rid"];
+  expect(sent, "something was cached, so something was sent").toBeDefined();
+
+  const {
+    context: _context,
+    max_tool_iterations: _iterations,
+    ...withoutContext
+  } = (sent ?? {}) as Record<string, unknown> & {
+    context?: unknown;
+    max_tool_iterations?: unknown;
+  };
+
+  const sentMessages = (withoutContext["messages"] ?? []) as unknown[];
+  const cachedMessages = (cached["messages"] ?? []) as unknown[];
+
+  expect(
+    shaped({ ...cached, messages: undefined }),
+    "the cached request is the one that was sent, minus its call context",
+  ).toEqual(shaped({ ...withoutContext, messages: undefined }));
+
+  expect(
+    shaped(cachedMessages.slice(0, sentMessages.length)),
+    "with everything that was sent still in front",
+  ).toEqual(shaped(sentMessages));
+
+  expect(
+    cachedMessages.length,
+    "and the turn's own replies appended, so the next turn extends the same prefix",
+  ).toBeGreaterThan(sentMessages.length);
+
+  expect(
+    Object.hasOwn(cached, "max_tool_iterations"),
+    "a keepalive ping replays this prefix, and must not drive a tool loop doing it",
+  ).toBe(false);
 }
 
 function input(c: unknown): GenerationInput {
@@ -523,11 +561,12 @@ async function readBack(dataDir: string): Promise<readonly Message[]> {
 }
 
 describe("runGeneration", () => {
-  for (const c of fixture.handle_generation) {
+  for (const [index, c] of fixture.handle_generation.entries()) {
     test(c.name, async () => {
       const run = await replayTurn(c as unknown as GenerationCase);
       const out = c.output as Record<string, unknown>;
 
+      recordedValue(CAPTURE, ["handle_generation", index, "output", "direct_frames"], shaped(run.direct));
       expect(shaped(run.direct)).toEqual(shaped(out["direct_frames"]));
 
       const expectedBroadcast = (out["broadcast_events"] as Record<string, unknown>[]).filter(
@@ -538,20 +577,35 @@ describe("runGeneration", () => {
       const expectedRequests = (out["sidecar_requests"] as Record<string, unknown>[]).map(
         ({ tool_rpc: _hop, ...rest }) => rest,
       );
-      expect(shaped(run.requests)).toEqual(shaped(expectedRequests));
+      const offered = run.requests.map((r) => (r as { tools?: ToolDefinition[] }).tools);
+      expect(
+        offered.map((tools) => tools?.map((t) => t.name)),
+        `${c.name}: the tools offered to the model`,
+      ).toEqual(expectedRequests.map((r) => r["tools"] as string[] | undefined));
+      for (const tools of offered) {
+        for (const tool of tools ?? []) {
+          expect(
+            typeof tool.description === "string" && tool.description !== "",
+            `${tool.name} tells the model what it is for`,
+          ).toBe(true);
+          expect(
+            (tool.input_schema as { type?: string } | undefined)?.type,
+            `${tool.name} takes an object`,
+          ).toBe("object");
+        }
+      }
+      expect(
+        shaped(run.requests.map(({ tools: _defs, ...rest }) => rest)),
+        `${c.name}: what was sent to the provider`,
+      ).toEqual(shaped(expectedRequests.map(({ tools: _names, ...rest }) => rest)));
 
-      expect(shaped(await readBack(run.dataDir))).toEqual(shaped(out["conversation"]));
+      const conversation = await readBack(run.dataDir);
+      recordedValue(CAPTURE, ["handle_generation", index, "output", "conversation"], shaped(conversation));
+      recordedValue(CAPTURE, ["handle_generation", index, "output", "turn_count"], run.turnCount);
+      expect(shaped(conversation)).toEqual(shaped(out["conversation"]));
       expect(run.turnCount).toBe(out["turn_count"] as number);
 
-      const expectedCached = stripHopFields(out["cached_last_request"]);
-
-      let cached: unknown = null;
-      if (run.lastRequest !== undefined) {
-        const copy = { ...(run.lastRequest as Record<string, unknown>) };
-        delete copy["rid"];
-        cached = copy;
-      }
-      expect(shaped(dropFalseIsError(cached))).toEqual(shaped(expectedCached));
+      expectCachedIsTheSentRequestPlusTheReply(run, out);
 
       const expectedCalls = ["ensureState"];
       const body = input(c).body;

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { turnToOpenAI } from "../src/llm/providers/openai.ts";
 import type { TurnMessage } from "../src/llm/types.ts";
 
-const FIXTURE_DIR = join(import.meta.dir, "fixtures");
+const FIXTURE_DIR = join(import.meta.dir, "provider_captures");
 
 interface Fixture {
   source: string;

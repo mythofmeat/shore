@@ -1,0 +1,270 @@
+{
+  "cases": [
+    {
+      "name": "boundary_tick_exactly_on_deadline",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3299999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3300000,
+          "expect": "ping"
+        }
+      ]
+    },
+    {
+      "name": "boundary_idle_ceiling_exact",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3600000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 3600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 7200000,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 7260000,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "boundary_idle_ceiling_headroom",
+      "max_idle_ms": 7260000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3600000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 3600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 7200000,
+          "expect": "ping"
+        }
+      ]
+    },
+    {
+      "name": "boundary_giveup_inside_window",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 3599999
+        },
+        {
+          "op": "tick",
+          "at_ms": 3629999,
+          "expect": "ping"
+        }
+      ]
+    },
+    {
+      "name": "boundary_giveup_exact",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 3600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 3660000,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 18000000,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "boundary_retry_backoff_ladder",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 1200000
+        },
+        {
+          "op": "tick",
+          "at_ms": 1229999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 1230000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 2400000
+        },
+        {
+          "op": "tick",
+          "at_ms": 2459999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 2460000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 3600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 3719999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3720000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 4800000
+        },
+        {
+          "op": "tick",
+          "at_ms": 5039999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 5040000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 6000000
+        },
+        {
+          "op": "tick",
+          "at_ms": 6479999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 6480000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 7200000
+        },
+        {
+          "op": "tick",
+          "at_ms": 8099999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 8100000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 8400000
+        },
+        {
+          "op": "tick",
+          "at_ms": 9299999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 9300000,
+          "expect": "ping"
+        }
+      ]
+    }
+  ]
+}

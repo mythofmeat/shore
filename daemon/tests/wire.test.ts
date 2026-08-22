@@ -34,7 +34,7 @@ interface WireFixture {
 }
 
 const fixturePath = new URL(
-  "./rust_fixtures/wire.json",
+  "./wire_contract/wire.json",
   import.meta.url,
 );
 const wire = (await Bun.file(fixturePath).json()) as WireFixture;

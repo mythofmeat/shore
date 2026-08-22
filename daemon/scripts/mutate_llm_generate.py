@@ -76,16 +76,26 @@ MUTANTS = [
     # --- rotation -------------------------------------------------------------
     ("rotation: only the model's own env var is consulted, so `[providers].keys` is ignored",
      G,
+     "): Promise<GenerateOutcome> {\n"
      "  const entry = deps.config.providers.get(resolved.providerKey);\n"
      "  const candidates = resolveKeyCandidates(\n"
      "    resolved.providerKey,\n"
      "    entry === undefined ? undefined : credentialEntry(entry),\n"
      "    resolved.apiKeyEnv,\n"
-     "  );",
-     "  const candidates = resolveKeyCandidates(resolved.providerKey, undefined, resolved.apiKeyEnv);"),
+     "  );\n"
+     "\n"
+     "  const fallbacks: FallbackEvent[] = [];",
+     "): Promise<GenerateOutcome> {\n"
+     "  const candidates = resolveKeyCandidates(resolved.providerKey, undefined, resolved.apiKeyEnv);\n"
+     "\n"
+     "  const fallbacks: FallbackEvent[] = [];"),
     ("rotation: a credential failure is retried on the same key instead of rotating",
      G,
+     "          return callProvider(request, deps, signal);\n"
+     "        },\n"
      "        deps.retry ?? DEFAULT_RETRY,\n        undefined,\n        deps.sleep,",
+     "          return callProvider(request, deps, signal);\n"
+     "        },\n"
      "        deps.retry ?? DEFAULT_RETRY,\n"
      "        (_e, attempt, max) => attempt < max,\n"
      "        deps.sleep,"),
@@ -99,8 +109,20 @@ MUTANTS = [
      "          void candidate;"),
     ("rotation: the events are dropped, so nothing ever reports a rotation",
      G,
-     "    { record: (event) => fallbacks.push(event) },",
-     "    { record: () => {} },"),
+     "    { record: (event) => fallbacks.push(event) },\n"
+     "  );\n"
+     "\n"
+     "  return { response, fallbacks };\n"
+     "}\n"
+     "\n"
+     "export async function generate(",
+     "    { record: () => {} },\n"
+     "  );\n"
+     "\n"
+     "  return { response, fallbacks };\n"
+     "}\n"
+     "\n"
+     "export async function generate("),
     ("rotation: a provider with no enabled keys falls through to an ambient lookup",
      G,
      "  const fallbacks: FallbackEvent[] = [];\n"
@@ -132,12 +154,12 @@ MUTANTS = [
      "    recordGenerate(request.context, request, response, undefined);"),
     ("call: a failed call leaves no row, so the ledger reads as a quiet period",
      G,
-     "    recordGenerateError(request.context, request, startedAt, clock, attempt);\n    throw e;",
+     "    recordGenerateError(request.context, request, startedAt, clock, attempt, e);\n    throw e;",
      "    void startedAt;\n    throw e;"),
     ("call: a failure is swallowed and reported as an empty response",
      G,
-     "    recordGenerateError(request.context, request, startedAt, clock, attempt);\n    throw e;",
-     "    recordGenerateError(request.context, request, startedAt, clock, attempt);\n"
+     "    recordGenerateError(request.context, request, startedAt, clock, attempt, e);\n    throw e;",
+     "    recordGenerateError(request.context, request, startedAt, clock, attempt, e);\n"
      "    return {\n"
      "      content: \"\",\n"
      "      content_blocks: [],\n"

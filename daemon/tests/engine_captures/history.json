@@ -1,0 +1,1865 @@
+{
+  "normalize_model": [
+    {
+      "input": "claude-opus-4-6",
+      "expect": "claude-opus-4-6"
+    },
+    {
+      "input": "anthropic/claude-opus-4.6",
+      "expect": "anthropic/claude-opus-4-6"
+    },
+    {
+      "input": "Claude-Opus-4.6",
+      "expect": "claude-opus-4-6"
+    },
+    {
+      "input": "GPT-5",
+      "expect": "gpt-5"
+    },
+    {
+      "input": "",
+      "expect": ""
+    },
+    {
+      "input": "a.b.c",
+      "expect": "a-b-c"
+    },
+    {
+      "input": "\u00c4\u00d6\u00dc",
+      "expect": "\u00e4\u00f6\u00fc"
+    }
+  ],
+  "model_matches": [
+    {
+      "model": "claude-opus-4-6",
+      "filter": "opus-4-6",
+      "expect": true
+    },
+    {
+      "model": "anthropic/claude-opus-4.6",
+      "filter": "opus-4-6",
+      "expect": true
+    },
+    {
+      "model": "claude-opus-4-6",
+      "filter": "opus-4.6",
+      "expect": true
+    },
+    {
+      "model": "claude-opus-4-6",
+      "filter": "gpt",
+      "expect": false
+    },
+    {
+      "model": null,
+      "filter": "opus",
+      "expect": false
+    },
+    {
+      "model": null,
+      "filter": null,
+      "expect": true
+    },
+    {
+      "model": "gpt-5",
+      "filter": null,
+      "expect": true
+    },
+    {
+      "model": "gpt-5",
+      "filter": "",
+      "expect": true
+    }
+  ],
+  "tokenization": [
+    {
+      "query": "tea",
+      "raw_lower": "tea",
+      "terms": [
+        "tea"
+      ]
+    },
+    {
+      "query": "Tea",
+      "raw_lower": "tea",
+      "terms": [
+        "tea"
+      ]
+    },
+    {
+      "query": "green tea",
+      "raw_lower": "green tea",
+      "terms": [
+        "green",
+        "tea"
+      ]
+    },
+    {
+      "query": "the kettle whistled",
+      "raw_lower": "the kettle whistled",
+      "terms": [
+        "the",
+        "kettle",
+        "whistled"
+      ]
+    },
+    {
+      "query": "a b c",
+      "raw_lower": "a b c",
+      "terms": []
+    },
+    {
+      "query": "a",
+      "raw_lower": "a",
+      "terms": []
+    },
+    {
+      "query": "tea!",
+      "raw_lower": "tea!",
+      "terms": [
+        "tea"
+      ]
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "raw_lower": "tea, coffee; cocoa",
+      "terms": [
+        "tea",
+        "coffee",
+        "cocoa"
+      ]
+    },
+    {
+      "query": "snake_case-name",
+      "raw_lower": "snake_case-name",
+      "terms": [
+        "snake_case-name"
+      ]
+    },
+    {
+      "query": "  spaced   out  ",
+      "raw_lower": "  spaced   out  ",
+      "terms": [
+        "spaced",
+        "out"
+      ]
+    },
+    {
+      "query": "\u8336",
+      "raw_lower": "\u8336",
+      "terms": [
+        "\u8336"
+      ]
+    },
+    {
+      "query": "\u8336 tea",
+      "raw_lower": "\u8336 tea",
+      "terms": [
+        "\u8336",
+        "tea"
+      ]
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "raw_lower": "\u8336, \u4e16\u754c",
+      "terms": [
+        "\u8336",
+        "\u4e16\u754c"
+      ]
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "raw_lower": "\u8336\u8336 x \u754c",
+      "terms": [
+        "\u8336\u8336",
+        "\u754c"
+      ]
+    },
+    {
+      "query": "\u4e16\u754c",
+      "raw_lower": "\u4e16\u754c",
+      "terms": [
+        "\u4e16\u754c"
+      ]
+    },
+    {
+      "query": "\ud83d\ude42",
+      "raw_lower": "\ud83d\ude42",
+      "terms": []
+    },
+    {
+      "query": "tea \u8336",
+      "raw_lower": "tea \u8336",
+      "terms": [
+        "tea",
+        "\u8336"
+      ]
+    },
+    {
+      "query": "",
+      "raw_lower": "",
+      "terms": []
+    }
+  ],
+  "scoring": [
+    {
+      "query": "tea",
+      "content": "We talked about tea last winter.",
+      "score": 25
+    },
+    {
+      "query": "tea",
+      "content": "Green tea and black tea.",
+      "score": 25
+    },
+    {
+      "query": "tea",
+      "content": "green tea",
+      "score": 25
+    },
+    {
+      "query": "tea",
+      "content": "TEA",
+      "score": 25
+    },
+    {
+      "query": "tea",
+      "content": "coffee only"
+    },
+    {
+      "query": "tea",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "tea",
+      "content": "kettle"
+    },
+    {
+      "query": "tea",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "tea",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "tea",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "tea",
+      "content": ""
+    },
+    {
+      "query": "Tea",
+      "content": "We talked about tea last winter.",
+      "score": 25
+    },
+    {
+      "query": "Tea",
+      "content": "Green tea and black tea.",
+      "score": 25
+    },
+    {
+      "query": "Tea",
+      "content": "green tea",
+      "score": 25
+    },
+    {
+      "query": "Tea",
+      "content": "TEA",
+      "score": 25
+    },
+    {
+      "query": "Tea",
+      "content": "coffee only"
+    },
+    {
+      "query": "Tea",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "Tea",
+      "content": "kettle"
+    },
+    {
+      "query": "Tea",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "Tea",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "Tea",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "Tea",
+      "content": ""
+    },
+    {
+      "query": "green tea",
+      "content": "We talked about tea last winter.",
+      "score": 10
+    },
+    {
+      "query": "green tea",
+      "content": "Green tea and black tea.",
+      "score": 60
+    },
+    {
+      "query": "green tea",
+      "content": "green tea",
+      "score": 60
+    },
+    {
+      "query": "green tea",
+      "content": "TEA",
+      "score": 10
+    },
+    {
+      "query": "green tea",
+      "content": "coffee only"
+    },
+    {
+      "query": "green tea",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "green tea",
+      "content": "kettle"
+    },
+    {
+      "query": "green tea",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "green tea",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "green tea",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "green tea",
+      "content": ""
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "green tea"
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "TEA"
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "coffee only"
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "the kettle whistled loudly",
+      "score": 70
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "kettle",
+      "score": 10
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "whistled kettle the",
+      "score": 45
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "the kettle whistled",
+      "content": ""
+    },
+    {
+      "query": "a b c",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "a b c",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "a b c",
+      "content": "green tea"
+    },
+    {
+      "query": "a b c",
+      "content": "TEA"
+    },
+    {
+      "query": "a b c",
+      "content": "coffee only"
+    },
+    {
+      "query": "a b c",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "a b c",
+      "content": "kettle"
+    },
+    {
+      "query": "a b c",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "a b c",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "a b c",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "a b c",
+      "content": ""
+    },
+    {
+      "query": "a",
+      "content": "We talked about tea last winter.",
+      "score": 25
+    },
+    {
+      "query": "a",
+      "content": "Green tea and black tea.",
+      "score": 25
+    },
+    {
+      "query": "a",
+      "content": "green tea",
+      "score": 25
+    },
+    {
+      "query": "a",
+      "content": "TEA",
+      "score": 25
+    },
+    {
+      "query": "a",
+      "content": "coffee only"
+    },
+    {
+      "query": "a",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "a",
+      "content": "kettle"
+    },
+    {
+      "query": "a",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "a",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "a",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "a",
+      "content": ""
+    },
+    {
+      "query": "tea!",
+      "content": "We talked about tea last winter.",
+      "score": 25
+    },
+    {
+      "query": "tea!",
+      "content": "Green tea and black tea.",
+      "score": 25
+    },
+    {
+      "query": "tea!",
+      "content": "green tea",
+      "score": 25
+    },
+    {
+      "query": "tea!",
+      "content": "TEA",
+      "score": 25
+    },
+    {
+      "query": "tea!",
+      "content": "coffee only"
+    },
+    {
+      "query": "tea!",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "tea!",
+      "content": "kettle"
+    },
+    {
+      "query": "tea!",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "tea!",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "tea!",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "tea!",
+      "content": ""
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "We talked about tea last winter.",
+      "score": 10
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "Green tea and black tea.",
+      "score": 10
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "green tea",
+      "score": 10
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "TEA",
+      "score": 10
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "coffee only",
+      "score": 10
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "kettle"
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": ""
+    },
+    {
+      "query": "snake_case-name",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "snake_case-name",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "snake_case-name",
+      "content": "green tea"
+    },
+    {
+      "query": "snake_case-name",
+      "content": "TEA"
+    },
+    {
+      "query": "snake_case-name",
+      "content": "coffee only"
+    },
+    {
+      "query": "snake_case-name",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "snake_case-name",
+      "content": "kettle"
+    },
+    {
+      "query": "snake_case-name",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "snake_case-name",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "snake_case-name",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "snake_case-name",
+      "content": ""
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "We talked about tea last winter.",
+      "score": 10
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "green tea"
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "TEA"
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "coffee only"
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "kettle"
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": ""
+    },
+    {
+      "query": "\u8336",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\u8336",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\u8336",
+      "content": "green tea"
+    },
+    {
+      "query": "\u8336",
+      "content": "TEA"
+    },
+    {
+      "query": "\u8336",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u8336",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u8336",
+      "content": "kettle"
+    },
+    {
+      "query": "\u8336",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u8336",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 25
+    },
+    {
+      "query": "\u8336",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "\u8336",
+      "content": ""
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "We talked about tea last winter.",
+      "score": 10
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "Green tea and black tea.",
+      "score": 10
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "green tea",
+      "score": 10
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "TEA",
+      "score": 10
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "kettle"
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 10
+    },
+    {
+      "query": "\u8336 tea",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "\u8336 tea",
+      "content": ""
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "green tea"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "TEA"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "kettle"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 10
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": "\u4e16\u754c",
+      "score": 10
+    },
+    {
+      "query": "\u8336, \u4e16\u754c",
+      "content": ""
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "green tea"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "TEA"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "kettle"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": "\u4e16\u754c",
+      "score": 10
+    },
+    {
+      "query": "\u8336\u8336 x \u754c",
+      "content": ""
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "green tea"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "TEA"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "coffee only"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "kettle"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": "\u4e16\u754c",
+      "score": 25
+    },
+    {
+      "query": "\u4e16\u754c",
+      "content": ""
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "We talked about tea last winter."
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "Green tea and black tea."
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "green tea"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "TEA"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "coffee only"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "kettle"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "\u8336\u3092\u98f2\u3080"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "\ud83d\ude42",
+      "content": ""
+    },
+    {
+      "query": "tea \u8336",
+      "content": "We talked about tea last winter.",
+      "score": 10
+    },
+    {
+      "query": "tea \u8336",
+      "content": "Green tea and black tea.",
+      "score": 10
+    },
+    {
+      "query": "tea \u8336",
+      "content": "green tea",
+      "score": 10
+    },
+    {
+      "query": "tea \u8336",
+      "content": "TEA",
+      "score": 10
+    },
+    {
+      "query": "tea \u8336",
+      "content": "coffee only"
+    },
+    {
+      "query": "tea \u8336",
+      "content": "the kettle whistled loudly"
+    },
+    {
+      "query": "tea \u8336",
+      "content": "kettle"
+    },
+    {
+      "query": "tea \u8336",
+      "content": "whistled kettle the"
+    },
+    {
+      "query": "tea \u8336",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 10
+    },
+    {
+      "query": "tea \u8336",
+      "content": "\u4e16\u754c"
+    },
+    {
+      "query": "tea \u8336",
+      "content": ""
+    },
+    {
+      "query": "",
+      "content": "We talked about tea last winter.",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "Green tea and black tea.",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "green tea",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "TEA",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "coffee only",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "the kettle whistled loudly",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "kettle",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "whistled kettle the",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "\u8336\u3092\u98f2\u3080",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "\u4e16\u754c",
+      "score": 25
+    },
+    {
+      "query": "",
+      "content": "",
+      "score": 25
+    }
+  ],
+  "arg_parsing": [
+    {
+      "input": {},
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": "tea"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": "   "
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": ""
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": "  tea  "
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": 5
+      },
+      "expect": {
+        "error": "invalid args: query must be a string"
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-01T00:00:00Z"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": "2026-01-01T00:00:00+00:00",
+          "end": null,
+          "range_is_empty": false,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-01T00:00:00+10:00"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": "2026-01-01T00:00:00+10:00",
+          "end": null,
+          "range_is_empty": false,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-01"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be an RFC3339 timestamp: premature end of input"
+      }
+    },
+    {
+      "input": {
+        "start_time": "nonsense"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be an RFC3339 timestamp: premature end of input"
+      }
+    },
+    {
+      "input": {
+        "start_time": ""
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "start_time": "  2026-01-01T00:00:00Z  "
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": "2026-01-01T00:00:00+00:00",
+          "end": null,
+          "range_is_empty": false,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-02T00:00:00Z",
+        "end_time": "2026-01-01T00:00:00Z"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be before or equal to end_time"
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-01T00:00:00Z",
+        "end_time": "2026-01-01T00:00:00Z"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": "2026-01-01T00:00:00+00:00",
+          "end": "2026-01-01T00:00:00+00:00",
+          "range_is_empty": false,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "model": "  Opus-4.6 "
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": "opus-4-6"
+        }
+      }
+    },
+    {
+      "input": {
+        "model": ""
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "model": 5
+      },
+      "expect": {
+        "error": "invalid args: model must be a string"
+      }
+    }
+  ],
+  "time_range": [
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-01T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-02T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-03T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-04T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-02T10:00:00+10:00",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "not-a-timestamp",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-01T00:00:00Z",
+      "expect": false,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-02T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-03T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-04T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-02T10:00:00+10:00",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "not-a-timestamp",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-02T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-03T00:00:00Z",
+      "expect": false,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-04T00:00:00Z",
+      "expect": false,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-02T10:00:00+10:00",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "not-a-timestamp",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-02T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-03T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-04T00:00:00Z",
+      "expect": false,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-02T10:00:00+10:00",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "not-a-timestamp",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "",
+      "expect": false,
+      "skipped": 1
+    }
+  ],
+  "corpus": {
+    "segments": [
+      {
+        "file": "0001.jsonl",
+        "body": "{\"msg_id\":\"s0-tea\",\"role\":\"user\",\"timestamp\":\"2026-01-01T09:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"We talked about tea last winter, mostly oolong.\"}]}\n{\"msg_id\":\"s0-coffee\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Coffee came up too, but only briefly.\"}],\"timestamp\":\"2026-01-01T10:00:00Z\"}\n"
+      },
+      {
+        "file": "0002.jsonl",
+        "body": "{\"msg_id\":\"s1-long\",\"role\":\"assistant\",\"model\":\"anthropic/claude-opus-4.6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards\"}],\"timestamp\":\"2026-01-02T09:00:00Z\"}\n{\"msg_id\":\"s1-unicode\",\"role\":\"user\",\"timestamp\":\"2026-01-02T10:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42 \u4e16\u754c\u306e\u8a71\u3092\u3057\u3088\u3046 tea \u4e16\u754c\u4e16\u754c\u4e16\u754c \ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\ud83d\ude42\"}]}\n{\"msg_id\":\"s1-silent\",\"role\":\"assistant\",\"timestamp\":\"2026-01-02T11:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"thinking\",\"thinking\":\"tea tea tea\"},{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"q\":\"tea\"}}]}\n{\"msg_id\":\"s1-toolresult\",\"role\":\"user\",\"timestamp\":\"2026-01-02T12:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"brewing instructions\",\"is_error\":false}]}\n"
+      }
+    ],
+    "compaction.json": "{\n  \"segments\": [\n    {\n      \"file\": \"0001.jsonl\",\n      \"message_count\": 2,\n      \"compacted_at\": \"2026-01-01T12:00:00Z\"\n    },\n    {\n      \"file\": \"0002.jsonl\",\n      \"message_count\": 4,\n      \"compacted_at\": \"2026-01-02T12:00:00Z\"\n    }\n  ],\n  \"total_compacted_messages\": 6\n}",
+    "active.jsonl": "{\"msg_id\":\"a-regen\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea came up again today.\"}],\"alt_index\":0,\"alt_count\":3,\"alternatives\":[{\"content\":\"Tea came up again today.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea came up again today.\"}],\"timestamp\":\"2026-01-03T09:00:00Z\"},{\"content\":\"Coffee came up in a regenerated reply.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Coffee came up in a regenerated reply.\"}],\"timestamp\":\"2026-01-03T09:05:00Z\",\"model\":\"gpt-5\"},{\"content\":\"A third take, still about tea.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"A third take, still about tea.\"}],\"timestamp\":\"\"}],\"timestamp\":\"2026-01-03T09:00:00Z\"}\n{\"msg_id\":\"a-bad-ts\",\"role\":\"user\",\"timestamp\":\"not-a-timestamp\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea with a broken timestamp.\"}]}\n{\"msg_id\":\"a-recent\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"One more note on tea.\"}],\"timestamp\":\"2026-01-04T09:00:00Z\"}\n"
+  },
+  "end_to_end": [
+    {
+      "name": "keyword across segments and active",
+      "input": {
+        "query": "tea"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "keyword ranks by relevance blended with recency",
+      "input": {
+        "query": "tea kettle"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-long",
+          "s1-unicode",
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "keyword with no hits",
+      "input": {
+        "query": "zzzznothing"
+      },
+      "expect": {
+        "msg_ids": [],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "recency overturns a stronger older match",
+      "input": {
+        "query": "tea winter zzz"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-tea",
+          "s1-unicode",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "recency cannot overturn a much stronger older match",
+      "input": {
+        "query": "tea winter oolong"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-tea",
+          "s1-unicode",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "case-insensitive keyword",
+      "input": {
+        "query": "TEA"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "multi-term partial coverage",
+      "input": {
+        "query": "coffee tea"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-coffee",
+          "s1-unicode",
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "phrase bonus",
+      "input": {
+        "query": "kettle whistled"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "tool-result text is not searchable",
+      "input": {
+        "query": "brewing"
+      },
+      "expect": {
+        "msg_ids": [],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "thinking text is not searchable",
+      "input": {
+        "query": "zzzz",
+        "start_time": "2026-01-02T10:30:00Z",
+        "end_time": "2026-01-02T11:30:00Z"
+      },
+      "expect": {
+        "msg_ids": [],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "time range only is chronological",
+      "input": {
+        "start_time": "2026-01-01T00:00:00Z",
+        "end_time": "2026-01-02T23:59:59Z"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-tea",
+          "s0-coffee",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "time range excludes the broken timestamp",
+      "input": {
+        "start_time": "2026-01-01T00:00:00Z",
+        "end_time": "2026-01-05T00:00:00Z"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-tea",
+          "s0-coffee",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "keyword plus time range",
+      "input": {
+        "query": "tea",
+        "start_time": "2026-01-02T00:00:00Z"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "model filter matches across routes",
+      "input": {
+        "query": "tea",
+        "model": "opus-4.6"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-long"
+        ],
+        "model_filter": "opus-4-6",
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "model filter excludes everything else",
+      "input": {
+        "query": "tea",
+        "model": "gpt"
+      },
+      "expect": {
+        "msg_ids": [],
+        "model_filter": "gpt",
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "model filter alone",
+      "input": {
+        "model": "opus-4-6"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-coffee",
+          "s1-long"
+        ],
+        "model_filter": "opus-4-6",
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "alternatives surface separately",
+      "input": {
+        "query": "coffee"
+      },
+      "expect": {
+        "msg_ids": [
+          "s0-coffee"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "alternative inheriting the parent model",
+      "input": {
+        "query": "third take",
+        "model": "opus-4-6"
+      },
+      "expect": {
+        "msg_ids": [],
+        "model_filter": "opus-4-6",
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "max_results truncates after ranking",
+      "input": {
+        "query": "tea",
+        "max_results": 2
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "max_results clamps to at least one",
+      "input": {
+        "query": "tea",
+        "max_results": 0
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "the best match is not the first one found",
+      "input": {
+        "query": "\u4e16\u754c tea",
+        "max_results": 1
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "the best match is not the first one found, untruncated",
+      "input": {
+        "query": "\u4e16\u754c tea"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "excerpt_chars widens the window",
+      "input": {
+        "query": "tea",
+        "excerpt_chars": 2000
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "excerpt_chars clamps to the floor",
+      "input": {
+        "query": "tea",
+        "excerpt_chars": 1
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode",
+          "s0-tea",
+          "s1-long"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "unicode query",
+      "input": {
+        "query": "\u4e16\u754c"
+      },
+      "expect": {
+        "msg_ids": [
+          "s1-unicode"
+        ],
+        "model_filter": null,
+        "searched_messages": 6
+      }
+    },
+    {
+      "name": "no filters at all is rejected",
+      "input": {},
+      "expect": {
+        "error": "invalid args: provide query, start_time, end_time, model, or a combination"
+      }
+    },
+    {
+      "name": "blank query alone is rejected",
+      "input": {
+        "query": "   "
+      },
+      "expect": {
+        "error": "invalid args: provide query, start_time, end_time, model, or a combination"
+      }
+    },
+    {
+      "name": "inverted range is rejected",
+      "input": {
+        "start_time": "2026-02-01T00:00:00Z",
+        "end_time": "2026-01-01T00:00:00Z"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be before or equal to end_time"
+      }
+    },
+    {
+      "name": "bad timestamp is rejected",
+      "input": {
+        "start_time": "nonsense"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be an RFC3339 timestamp: premature end of input"
+      }
+    }
+  ]
+}

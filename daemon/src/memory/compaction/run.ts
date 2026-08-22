@@ -14,6 +14,7 @@ import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../conf
 import { configView } from "../../config/preferences.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import { toRequestModel } from "../../config/models.ts";
+import type { FrameSink } from "../../llm/stream.ts";
 import type { SidecarRequest } from "../../llm/types.ts";
 import type { LastRequestCache } from "../../cache/last_request.ts";
 import type { RebuildDeps } from "../../cache/rebuild.ts";
@@ -37,6 +38,7 @@ import { DEFAULT_COMPACT_PROMPT, DEFAULT_COMPACT_SYSTEM } from "./prompts.ts";
 import {
   CompactionError,
   CompactionPaused,
+  tagCompactionFrames,
   type CompactionOutcome,
   type CompactionTools,
 } from "./types.ts";
@@ -48,6 +50,7 @@ export interface CompactionRunDeps {
   tools?: Omit<ToolContextDeps, "runSubagent">;
   now?: () => string;
   newId?: () => string;
+  emit?: FrameSink;
 }
 
 export interface CompactionRunOptions {
@@ -121,6 +124,7 @@ export async function runCompactionPass(
         ...(resolved.maxToolIterations === undefined
           ? {}
           : { maxToolIterations: resolved.maxToolIterations }),
+        ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
       },
       {
         keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns,
@@ -196,6 +200,7 @@ async function resolveDeps(character: string, deps: CompactionRunDeps): Promise<
       character,
       generate: deps.generate,
       ...(providerEntry === undefined ? {} : { providerEntry }),
+      ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
     }),
     markdownStore,
     tools: compactionTools(toolCtx),

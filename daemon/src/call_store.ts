@@ -53,7 +53,6 @@ CREATE TABLE IF NOT EXISTS transcripts (
     entry_zstd         BLOB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_transcripts_ts ON transcripts (ts_unix);
-CREATE INDEX IF NOT EXISTS idx_transcripts_source ON transcripts (source, character, ts_unix);
 
 CREATE TABLE IF NOT EXISTS http_calls (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -273,6 +272,10 @@ export class CallStore {
              PRAGMA busy_timeout = 5000;`);
     db.run(SCHEMA);
     migrate(db);
+    db.run(
+      `CREATE INDEX IF NOT EXISTS idx_transcripts_source
+           ON transcripts (source, character, ts_unix);`,
+    );
   }
 
   static open(path: string): CallStore {
@@ -1014,10 +1017,8 @@ function migrate(db: Database): void {
 
   if (!columnExists(db, "transcripts", "character")) {
     db.run(
-      `ALTER TABLE transcripts ADD COLUMN character TEXT;
-       DROP INDEX IF EXISTS idx_transcripts_source;
-       CREATE INDEX idx_transcripts_source
-           ON transcripts (source, character, ts_unix);`,
+      `DROP INDEX IF EXISTS idx_transcripts_source;
+       ALTER TABLE transcripts ADD COLUMN character TEXT;`,
     );
   }
 

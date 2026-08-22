@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import fixture from "./autonomy_fixtures/deep_archive.json" with { type: "json" };
+import fixture from "./autonomy_captures/deep_archive.json" with { type: "json" };
 import { MessageStore } from "../src/engine/message_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { conversationManager } from "../src/memory/compaction/archive.ts";

@@ -1,0 +1,765 @@
+{
+  "available_tools": {
+    "empty": {
+      "enabled_tools": [],
+      "offered": [],
+      "any_enabled": false
+    },
+    "subset": {
+      "enabled_tools": [
+        "search",
+        "search_chat_logs",
+        "git"
+      ],
+      "offered": [
+        "search",
+        "git",
+        "search_chat_logs"
+      ],
+      "any_enabled": true
+    },
+    "order_is_registry_not_config": {
+      "enabled_tools": [
+        "git",
+        "read",
+        "web_search"
+      ],
+      "offered": [
+        "web_search",
+        "read",
+        "git"
+      ],
+      "any_enabled": true
+    },
+    "unknown_names_are_harmless": {
+      "enabled_tools": [
+        "read",
+        "not_a_tool"
+      ],
+      "offered": [
+        "read"
+      ],
+      "any_enabled": true
+    },
+    "glob_matches_prefix": {
+      "enabled_tools": [
+        "search*"
+      ],
+      "offered": [
+        "search",
+        "search_chat_logs"
+      ],
+      "any_enabled": true
+    },
+    "bare_star_matches_everything": {
+      "enabled_tools": [
+        "*"
+      ],
+      "offered": [
+        "generate_image",
+        "web_search",
+        "fetch_url",
+        "activity_heatmap",
+        "roll_dice",
+        "read",
+        "edit",
+        "search",
+        "delete",
+        "git",
+        "search_chat_logs",
+        "model_history"
+      ],
+      "any_enabled": true
+    },
+    "exact_pattern_is_not_a_prefix": {
+      "enabled_tools": [
+        "read",
+        "sear"
+      ],
+      "offered": [
+        "read"
+      ],
+      "any_enabled": true
+    },
+    "duplicate_entries_do_not_duplicate_offers": {
+      "enabled_tools": [
+        "read",
+        "read"
+      ],
+      "offered": [
+        "read"
+      ],
+      "any_enabled": true
+    },
+    "all": {
+      "enabled_tools": [
+        "generate_image",
+        "web_search",
+        "fetch_url",
+        "activity_heatmap",
+        "roll_dice",
+        "read",
+        "edit",
+        "search",
+        "delete",
+        "git",
+        "search_chat_logs",
+        "model_history"
+      ],
+      "offered": [
+        "generate_image",
+        "web_search",
+        "fetch_url",
+        "activity_heatmap",
+        "roll_dice",
+        "read",
+        "edit",
+        "search",
+        "delete",
+        "git",
+        "search_chat_logs",
+        "model_history"
+      ],
+      "any_enabled": true
+    }
+  },
+  "render_tool_defs": {
+    "plain": {
+      "char_name": "qifei",
+      "user_name": "ren",
+      "names": [
+        "generate_image",
+        "web_search",
+        "fetch_url",
+        "activity_heatmap",
+        "roll_dice",
+        "read",
+        "edit",
+        "search",
+        "delete",
+        "git",
+        "search_chat_logs",
+        "model_history"
+      ]
+    },
+    "empty_names": {
+      "char_name": "",
+      "user_name": "",
+      "names": [
+        "generate_image",
+        "web_search",
+        "fetch_url",
+        "activity_heatmap",
+        "roll_dice",
+        "read",
+        "edit",
+        "search",
+        "delete",
+        "git",
+        "search_chat_logs",
+        "model_history"
+      ]
+    },
+    "regex_chars": {
+      "char_name": "a.b*c",
+      "user_name": "$1\\d",
+      "names": [
+        "generate_image",
+        "web_search",
+        "fetch_url",
+        "activity_heatmap",
+        "roll_dice",
+        "read",
+        "edit",
+        "search",
+        "delete",
+        "git",
+        "search_chat_logs",
+        "model_history"
+      ]
+    },
+    "unicode": {
+      "char_name": "\u7948\u98db",
+      "user_name": "\u30ec\u30f3",
+      "names": [
+        "generate_image",
+        "web_search",
+        "fetch_url",
+        "activity_heatmap",
+        "roll_dice",
+        "read",
+        "edit",
+        "search",
+        "delete",
+        "git",
+        "search_chat_logs",
+        "model_history"
+      ]
+    },
+    "respects_allowlist": {
+      "char_name": "qifei",
+      "user_name": "ren",
+      "names": [
+        "activity_heatmap"
+      ]
+    }
+  },
+  "subagent_config": [
+    {
+      "name": "musicology",
+      "description": "A name for which {{char}}'s `music` is a strict prefix."
+    },
+    {
+      "name": "archivist",
+      "description": "Search {{character_name}}'s archive on behalf of {{user}}."
+    },
+    {
+      "name": "zoologist",
+      "description": "No placeholders here at all."
+    },
+    {
+      "name": "\ufb00ute",
+      "description": "A name in the BMP, above the surrogate range."
+    },
+    {
+      "name": "\ud83c\udfb5drum",
+      "description": "A name outside the BMP."
+    },
+    {
+      "name": "music",
+      "description": "Ask {{char}}'s music assistant about {{user}}'s taste."
+    }
+  ],
+  "subagent_tool_defs": {
+    "none_enabled": {
+      "enabled": [],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": []
+    },
+    "one_enabled": {
+      "enabled": [
+        "music"
+      ],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": [
+        {
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_music"
+        }
+      ]
+    },
+    "all_enabled_sorts_by_btreemap_not_enabled_order": {
+      "enabled": [
+        "zoologist",
+        "music",
+        "archivist"
+      ],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": [
+        {
+          "description": "Search qifei's archive on behalf of ren.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_archivist"
+        },
+        {
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_music"
+        },
+        {
+          "name": "ask_zoologist",
+          "description": "No placeholders here at all.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      ]
+    },
+    "enabled_name_with_no_config_is_dropped": {
+      "enabled": [
+        "music",
+        "ghost"
+      ],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": [
+        {
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_music"
+        }
+      ]
+    },
+    "duplicate_enabled_entry_offers_once": {
+      "enabled": [
+        "music",
+        "music"
+      ],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": [
+        {
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_music"
+        }
+      ]
+    },
+    "empty_names": {
+      "enabled": [
+        "music",
+        "archivist"
+      ],
+      "char_name": "",
+      "user_name": "",
+      "defs": [
+        {
+          "name": "ask_archivist",
+          "description": "Search 's archive on behalf of .",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        },
+        {
+          "name": "ask_music",
+          "description": "Ask 's music assistant about 's taste.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      ]
+    },
+    "utf8_byte_order_not_utf16_code_unit_order": {
+      "enabled": [
+        "\ud83c\udfb5drum",
+        "\ufb00ute"
+      ],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": [
+        {
+          "name": "ask_\ufb00ute",
+          "description": "A name in the BMP, above the surrogate range.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        },
+        {
+          "name": "ask_\ud83c\udfb5drum",
+          "description": "A name outside the BMP.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      ]
+    },
+    "prefix_names_sort_shorter_first": {
+      "enabled": [
+        "musicology",
+        "music"
+      ],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": [
+        {
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_music"
+        },
+        {
+          "name": "ask_musicology",
+          "description": "A name for which qifei's `music` is a strict prefix.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      ]
+    },
+    "character_name_is_its_own_variable": {
+      "enabled": [
+        "archivist"
+      ],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": [
+        {
+          "description": "Search qifei's archive on behalf of ren.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_archivist"
+        }
+      ]
+    },
+    "every_subagent_enabled": {
+      "enabled": [
+        "musicology",
+        "archivist",
+        "zoologist",
+        "\ufb00ute",
+        "\ud83c\udfb5drum",
+        "music"
+      ],
+      "char_name": "qifei",
+      "user_name": "ren",
+      "defs": [
+        {
+          "description": "Search qifei's archive on behalf of ren.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_archivist"
+        },
+        {
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "properties": {
+              "query": {
+                "description": "Natural-language request for this sub-agent.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "ask_music"
+        },
+        {
+          "name": "ask_musicology",
+          "description": "A name for which qifei's `music` is a strict prefix.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        },
+        {
+          "name": "ask_zoologist",
+          "description": "No placeholders here at all.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        },
+        {
+          "name": "ask_\ufb00ute",
+          "description": "A name in the BMP, above the surrogate range.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        },
+        {
+          "name": "ask_\ud83c\udfb5drum",
+          "description": "A name outside the BMP.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "assemble_tool_surface": {
+    "all_empty": {
+      "input": {
+        "static": [],
+        "subagent": [],
+        "mcp": []
+      },
+      "order": []
+    },
+    "static_only": {
+      "input": {
+        "static": [
+          "read",
+          "edit"
+        ],
+        "subagent": [],
+        "mcp": []
+      },
+      "order": [
+        "read",
+        "edit"
+      ]
+    },
+    "static_and_mcp": {
+      "input": {
+        "static": [
+          "read",
+          "edit"
+        ],
+        "subagent": [],
+        "mcp": [
+          "mcp__hue__on"
+        ]
+      },
+      "order": [
+        "read",
+        "edit",
+        "mcp__hue__on"
+      ]
+    },
+    "subagent_appends_between_static_and_mcp": {
+      "input": {
+        "static": [
+          "read",
+          "edit"
+        ],
+        "subagent": [
+          "ask_music"
+        ],
+        "mcp": [
+          "mcp__hue__on"
+        ]
+      },
+      "order": [
+        "read",
+        "edit",
+        "ask_music",
+        "mcp__hue__on"
+      ]
+    },
+    "subagent_only": {
+      "input": {
+        "static": [],
+        "subagent": [
+          "ask_music",
+          "ask_archivist"
+        ],
+        "mcp": []
+      },
+      "order": [
+        "ask_music",
+        "ask_archivist"
+      ]
+    },
+    "mcp_only": {
+      "input": {
+        "static": [],
+        "subagent": [],
+        "mcp": [
+          "mcp__hue__on",
+          "mcp__hue__off"
+        ]
+      },
+      "order": [
+        "mcp__hue__on",
+        "mcp__hue__off"
+      ]
+    },
+    "each_group_keeps_internal_order": {
+      "input": {
+        "static": [
+          "b_static",
+          "a_static"
+        ],
+        "subagent": [
+          "b_sub",
+          "a_sub"
+        ],
+        "mcp": [
+          "b_mcp",
+          "a_mcp"
+        ]
+      },
+      "order": [
+        "b_static",
+        "a_static",
+        "b_sub",
+        "a_sub",
+        "b_mcp",
+        "a_mcp"
+      ]
+    }
+  },
+  "tool_names": [
+    "generate_image",
+    "web_search",
+    "fetch_url",
+    "activity_heatmap",
+    "roll_dice",
+    "read",
+    "edit",
+    "search",
+    "delete",
+    "git",
+    "search_chat_logs",
+    "model_history"
+  ]
+}

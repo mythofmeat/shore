@@ -5,6 +5,7 @@ use crate::tui::images::ImageCache;
 
 mod alt;
 mod cache;
+mod compaction;
 mod conversation;
 mod input;
 mod notifications;
@@ -13,6 +14,7 @@ mod usage;
 
 pub(crate) use alt::*;
 pub(crate) use cache::*;
+pub(crate) use compaction::*;
 pub(crate) use conversation::*;
 pub(crate) use input::*;
 pub(crate) use notifications::*;
@@ -297,6 +299,8 @@ pub(crate) struct App {
     pub show_thinking: bool,
     pub show_tools: bool,
     pub show_subagent: bool,
+    pub show_compaction: bool,
+    pub compaction: Option<CompactionRun>,
     pub subagent_traces: std::collections::HashMap<String, Option<SubagentSection>>,
     pub pending_subagent_trace_ids: Vec<String>,
     pub subagent_tasks: Vec<SubagentTaskView>,
@@ -371,6 +375,8 @@ impl Default for App {
             show_thinking: true,
             show_tools: true,
             show_subagent: true,
+            show_compaction: false,
+            compaction: None,
             subagent_traces: std::collections::HashMap::new(),
             pending_subagent_trace_ids: Vec::new(),
             subagent_tasks: Vec::new(),
@@ -403,26 +409,27 @@ impl Default for App {
 
 impl App {
     pub(crate) fn conversation_fingerprint(&self, width: u16) -> ConvFingerprint {
+        fn block_summary(b: &Block) -> u64 {
+            match b {
+                Block::Text(s) | Block::Thinking(s) => u64::try_from(s.len()).unwrap_or(u64::MAX),
+                Block::ToolUse { tool_name, .. } => {
+                    u64::try_from(tool_name.len()).unwrap_or(u64::MAX)
+                }
+                Block::ToolResult {
+                    tool_name, output, ..
+                } => {
+                    u64::try_from(tool_name.len().saturating_add(output.len())).unwrap_or(u64::MAX)
+                }
+                Block::SubagentBegin(name) | Block::SubagentEnd(name) => {
+                    u64::try_from(name.len()).unwrap_or(u64::MAX)
+                }
+            }
+        }
+
         let entry_summary = |e: &ConversationEntry| -> u64 {
             match e {
                 ConversationEntry::Turn(turn) => {
-                    let block_len = |b: &Block| -> u64 {
-                        match b {
-                            Block::Text(s) | Block::Thinking(s) => {
-                                u64::try_from(s.len()).unwrap_or(u64::MAX)
-                            }
-                            Block::ToolUse { tool_name, .. } => {
-                                u64::try_from(tool_name.len()).unwrap_or(u64::MAX)
-                            }
-                            Block::ToolResult {
-                                tool_name, output, ..
-                            } => u64::try_from(tool_name.len().saturating_add(output.len()))
-                                .unwrap_or(u64::MAX),
-                            Block::SubagentBegin(name) | Block::SubagentEnd(name) => {
-                                u64::try_from(name.len()).unwrap_or(u64::MAX)
-                            }
-                        }
-                    };
+                    let block_len = block_summary;
                     let role_bit = u64::from(matches!(turn.role, Role::Assistant));
                     let last_len = turn.blocks.last().map_or(0, block_len);
                     (1_u64 << 56)
@@ -444,6 +451,19 @@ impl App {
             }
         };
 
+        let compaction = self.compaction.as_ref().map(|run| CompactionFingerprint {
+            round: run.round,
+            blocks: u32::try_from(run.blocks.len()).unwrap_or(u32::MAX),
+            last_block: run.blocks.last().map_or(0, block_summary),
+            tool_name_len: run
+                .tool_name
+                .as_ref()
+                .map_or(-1, |s| i32::try_from(s.len()).unwrap_or(i32::MAX)),
+            text_len: u32::try_from(run.text.len()).unwrap_or(u32::MAX),
+            thinking_len: u32::try_from(run.thinking.len()).unwrap_or(u32::MAX),
+            elapsed_secs: run.elapsed().map_or(0, |d| d.as_secs()),
+        });
+
         let last_entry = self.entries.last().map_or(0, entry_summary);
         let second_last_entry = self.entries.iter().rev().nth(1).map_or(0, entry_summary);
 
@@ -464,6 +484,8 @@ impl App {
             show_thinking: self.show_thinking,
             show_tools: self.show_tools,
             show_subagent: self.show_subagent,
+            show_compaction: self.show_compaction,
+            compaction,
             show_images: self.show_images,
             show_timestamps: self.show_timestamps,
             show_metadata: self.show_metadata,
@@ -1223,6 +1245,7 @@ impl App {
             "thinking" => Some(self.show_thinking),
             "tools" => Some(self.show_tools),
             "subagent" => Some(self.show_subagent),
+            "compaction" => Some(self.show_compaction),
             "images" => Some(self.show_images),
             "metadata" => Some(self.show_metadata),
             "usage" => Some(self.usage_display != UsageDisplay::Off),
@@ -1348,6 +1371,7 @@ impl App {
             "thinking" => self.show_thinking = enabled,
             "tools" => self.show_tools = enabled,
             "subagent" => self.show_subagent = enabled,
+            "compaction" => self.show_compaction = enabled,
             "images" => self.show_images = enabled,
             "metadata" => self.show_metadata = enabled,
             "usage" => {

@@ -1,7 +1,7 @@
 import { shoreLog } from "../log.ts";
 
 import { classifyCredentialFailure, shouldRotate } from "./credentials";
-import { describeLlmError, type LlmError } from "./errors";
+import { describeError, describeLlmError, toLlmError } from "./errors";
 
 export interface RetryPolicy {
   max_retries: number;
@@ -13,17 +13,18 @@ const RETRY: RetryDecision = { decision: "retry" };
 const FAIL: RetryDecision = { decision: "fail" };
 
 export function shouldRetryError(
-  error: LlmError,
+  raw: unknown,
   attempt: number,
   policy: RetryPolicy,
 ): RetryDecision {
+  const error = toLlmError(raw);
   if (error.kind === "aborted") return FAIL;
 
   const credKind = classifyCredentialFailure("", error);
   if (shouldRotate(credKind)) {
     shoreLog.warn(
-      `shore: credential-shaped failure (${credKind}) on attempt ${attempt}, ` +
-        `failing fast so multi-key fallback can rotate: ${describeLlmError(error)}`,
+      `shore: ${credKind} on attempt ${attempt}, failing fast so multi-key fallback can ` +
+        `rotate the key: ${describeLlmError(error)}`,
     );
     return FAIL;
   }
@@ -37,7 +38,7 @@ export function shouldRetryError(
       return RETRY;
 
     case "http_status":
-      return error.status >= 500 || error.status === 429 ? RETRY : FAIL;
+      return error.status >= 500 || error.status === 429 || error.status === 408 ? RETRY : FAIL;
 
     case "serialize":
     case "deserialize":
@@ -49,5 +50,12 @@ export function shouldRetryError(
 
     case "budget_blocked":
       return FAIL;
+
+    default:
+      shoreLog.warn(
+        `shore: unclassifiable provider failure on attempt ${attempt}, retrying as ` +
+          `transport: ${describeError(error)}`,
+      );
+      return RETRY;
   }
 }

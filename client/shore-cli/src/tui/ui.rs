@@ -9,8 +9,8 @@ use shore_common::protocol::tool_display::{format_tool_input, format_tool_output
 use shore_common::protocol::types::Role;
 
 use crate::tui::app::{
-    AltChoice, App, Block as TurnBlock, ConversationEntry, InputMode, PaletteMode, Turn,
-    ValueEditorKind,
+    AltChoice, App, Block as TurnBlock, CompactionRun, ConversationEntry, InputMode, PaletteMode,
+    Turn, ValueEditorKind, format_elapsed,
 };
 use crate::tui::images;
 use crate::tui::keymap::Scope;
@@ -581,6 +581,98 @@ fn indent_lines(src: Vec<Line<'static>>) -> Vec<Line<'static>> {
         .collect()
 }
 
+const COMPACTION_COLOR: Color = Color::Yellow;
+
+pub(crate) fn compaction_status_text(run: &CompactionRun, spinner: &str) -> String {
+    let mut parts = vec!["compacting".to_owned()];
+    if run.round > 0 {
+        parts.push(format!("round {}", run.round));
+    }
+    if let Some(ref tool) = run.tool_name {
+        parts.push(tool.clone());
+    }
+    if let Some(elapsed) = run.elapsed() {
+        parts.push(format_elapsed(elapsed));
+    }
+    format!("{} {spinner}", parts.join(" · "))
+}
+
+fn render_compaction(lines: &mut Vec<Line<'static>>, app: &App, content_width: u16) {
+    let Some(run) = app.compaction.as_ref() else {
+        return;
+    };
+
+    if app.show_compaction {
+        lines.push(Line::from(Span::styled(
+            "Compaction",
+            Style::default()
+                .fg(COMPACTION_COLOR)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
+        for block in &run.blocks {
+            match block {
+                TurnBlock::Thinking(text) if app.show_thinking => {
+                    push_bar_wrapped(
+                        lines,
+                        text,
+                        Style::default().fg(Color::DarkGray),
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::ITALIC),
+                        usize::from(content_width.saturating_sub(4)),
+                    );
+                    lines.push(Line::from(""));
+                }
+                TurnBlock::Text(text) if !text.is_empty() => {
+                    lines.extend(indent_lines(markdown::render_markdown_wrapped(
+                        text,
+                        usize::from(content_width.saturating_sub(2)),
+                    )));
+                    lines.push(Line::from(""));
+                }
+                TurnBlock::ToolUse { .. } | TurnBlock::ToolResult { .. } => {
+                    render_tool_block(lines, block, true, content_width);
+                }
+                TurnBlock::Text(_)
+                | TurnBlock::Thinking(_)
+                | TurnBlock::SubagentBegin(_)
+                | TurnBlock::SubagentEnd(_) => {}
+            }
+        }
+        if !run.thinking.is_empty() && app.show_thinking {
+            push_bar_wrapped(
+                lines,
+                &run.thinking,
+                Style::default().fg(Color::DarkGray),
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC),
+                usize::from(content_width.saturating_sub(4)),
+            );
+            lines.push(Line::from(""));
+        }
+        if !run.text.is_empty() {
+            lines.extend(indent_lines(markdown::render_markdown_wrapped(
+                &run.text,
+                usize::from(content_width.saturating_sub(2)),
+            )));
+            lines.push(Line::from(""));
+        }
+    }
+
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            compaction_status_text(run, spinner_glyphs(app.spinner_frame)),
+            Style::default()
+                .fg(COMPACTION_COLOR)
+                .add_modifier(Modifier::ITALIC),
+        ),
+    ]));
+    lines.push(Line::from(""));
+}
+
 fn render_streaming_header(lines: &mut Vec<Line<'static>>, app: &App) {
     let name = if app.character_name.is_empty() {
         "Assistant"
@@ -911,7 +1003,11 @@ fn build_conversation_lines(
         render_streaming_content(&mut lines, app, content_width);
     }
 
-    if lines.is_empty() && !app.stream.active {
+    if app.compaction.is_some() {
+        render_compaction(&mut lines, app, content_width);
+    }
+
+    if lines.is_empty() && !app.stream.active && app.compaction.is_none() {
         let hint_style = Style::default().fg(Color::DarkGray);
         lines.push(Line::from(vec![
             Span::raw("  "),
@@ -1490,6 +1586,239 @@ fn wrap_plain(text: &str, width: usize) -> Vec<String> {
         out.push(current);
     }
     out
+}
+
+#[cfg(test)]
+mod compaction_tests {
+    use super::scenario_tests::Harness;
+    use shore_common::protocol::server_msg::{
+        Phase, ServerMessage, StreamChunk, ToolCall, ToolResult,
+    };
+    use std::io::Write as _;
+
+    fn round(h: &mut Harness, n: u64) {
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::Phase(Phase {
+                rid: None,
+                phase: format!("compacting round {n}"),
+                model: None,
+            }),
+        );
+    }
+
+    fn chunk(h: &mut Harness, text: &str, content_type: &str) {
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamChunk(StreamChunk {
+                rid: None,
+                text: text.into(),
+                content_type: content_type.into(),
+                subagent: Some("compaction".into()),
+                task_id: None,
+            }),
+        );
+    }
+
+    fn tool(h: &mut Harness, id: &str, name: &str, path: &str, output: &str) {
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolCall(ToolCall {
+                rid: None,
+                tool_id: id.into(),
+                tool_name: name.into(),
+                input: serde_json::json!({ "path": path }),
+                subagent: Some("compaction".into()),
+                task_id: None,
+            }),
+        );
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolResult(ToolResult {
+                rid: None,
+                tool_id: id.into(),
+                tool_name: name.into(),
+                output: output.into(),
+                is_error: false,
+                subagent: Some("compaction".into()),
+                task_id: None,
+            }),
+        );
+    }
+
+    fn a_pass_in_progress(h: &mut Harness) {
+        h.app.connection_status = crate::tui::app::ConnectionStatus::Connected;
+        h.app.character_name = "qifei".into();
+        round(h, 1);
+        chunk(h, "Pulling the recurring threads into memory.", "text");
+        tool(h, "t1", "read", "memory/MEMORY.md", "2.1 KB");
+        round(h, 2);
+        tool(h, "t2", "edit", "memory/people.md", "written");
+        round(h, 3);
+    }
+
+    #[test]
+    fn compaction_never_lands_in_the_conversation_as_a_turn() {
+        let mut h = Harness::new();
+        a_pass_in_progress(&mut h);
+
+        assert!(
+            h.app.entries.is_empty(),
+            "a compaction pass is not a conversation turn"
+        );
+        assert!(
+            h.app.subagent_tasks.is_empty(),
+            "a compaction pass is not a sub-agent task"
+        );
+        assert!(h.app.compaction.is_some(), "it has its own lane");
+    }
+
+    #[test]
+    fn a_compaction_phase_never_steals_the_chat_stream_indicator() {
+        let mut h = Harness::new();
+        h.app.stream.phase = "responding".into();
+        round(&mut h, 2);
+        assert_eq!(
+            h.app.stream.phase, "responding",
+            "a compaction round must not relabel the chat turn"
+        );
+    }
+
+    #[test]
+    fn the_status_line_says_what_it_is_doing_right_now() {
+        let mut h = Harness::new();
+        a_pass_in_progress(&mut h);
+        let run = h.app.compaction.as_ref().expect("a run");
+        let status = super::compaction_status_text(run, "...");
+        assert!(status.contains("compacting"), "{status}");
+        assert!(status.contains("round 3"), "{status}");
+    }
+
+    #[test]
+    fn the_status_line_names_the_tool_while_it_is_running() {
+        let mut h = Harness::new();
+        h.app.connection_status = crate::tui::app::ConnectionStatus::Connected;
+        round(&mut h, 1);
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolCall(ToolCall {
+                rid: None,
+                tool_id: "t1".into(),
+                tool_name: "edit".into(),
+                input: serde_json::json!({ "path": "memory/people.md" }),
+                subagent: Some("compaction".into()),
+                task_id: None,
+            }),
+        );
+        let run = h.app.compaction.as_ref().expect("a run");
+        assert!(
+            super::compaction_status_text(run, "...").contains("edit"),
+            "the status line must name the tool that is taking the time"
+        );
+    }
+
+    #[test]
+    fn the_status_line_shows_with_the_transcript_off() {
+        let mut h = Harness::new();
+        a_pass_in_progress(&mut h);
+        h.app.show_compaction = false;
+        let f = h.render("compaction status only");
+        assert!(f.contains("compacting"), "{f}");
+        assert!(
+            !f.contains("memory/people.md"),
+            "the transcript stays hidden until it is asked for:\n{f}"
+        );
+    }
+
+    #[test]
+    fn the_transcript_shows_when_it_is_asked_for() {
+        let mut h = Harness::new();
+        a_pass_in_progress(&mut h);
+        h.app.show_compaction = true;
+        h.app.show_tools = true;
+        let f = h.render("compaction transcript");
+        assert!(f.contains("Compaction"), "{f}");
+        assert!(f.contains("memory/people.md"), "{f}");
+        assert!(f.contains("compacting"), "the status line stays too:\n{f}");
+    }
+
+    #[test]
+    fn the_lane_clears_when_the_command_comes_back() {
+        let mut h = Harness::new();
+        a_pass_in_progress(&mut h);
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::CommandOutput(shore_common::protocol::server_msg::CommandOutput {
+                rid: None,
+                name: "compact".into(),
+                data: serde_json::json!({ "status": "compacted", "character": "qifei" }),
+            }),
+        );
+        assert!(h.app.compaction.is_none(), "the run is over");
+    }
+
+    #[test]
+    fn every_step_of_a_pass_changes_the_repaint_fingerprint() {
+        let mut h = Harness::new();
+        let width = 80;
+        let mut seen = vec![h.app.conversation_fingerprint(width)];
+
+        type Step = (&'static str, fn(&mut Harness));
+        let steps: [Step; 5] = [
+            ("the first round", |t| round(t, 1)),
+            ("streamed thinking", |t| {
+                chunk(t, "thinking about it", "thinking");
+            }),
+            ("streamed text", |t| chunk(t, "writing it down", "text")),
+            ("a tool call and its result", |t| {
+                tool(t, "t1", "edit", "memory/people.md", "written");
+            }),
+            ("the next round", |t| round(t, 2)),
+        ];
+
+        for (what, step) in steps {
+            step(&mut h);
+            let next = h.app.conversation_fingerprint(width);
+            assert!(
+                !seen.contains(&next),
+                "{what} left the fingerprint unchanged, so the view would not repaint"
+            );
+            seen.push(next);
+        }
+    }
+
+    #[test]
+    fn toggling_the_transcript_repaints() {
+        let mut h = Harness::new();
+        a_pass_in_progress(&mut h);
+        let off = h.app.conversation_fingerprint(80);
+        h.app.show_compaction = true;
+        assert!(
+            h.app.conversation_fingerprint(80) != off,
+            "turning the transcript on must invalidate the cached conversation"
+        );
+    }
+
+    #[test]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh compaction-lane"]
+    fn render_preview_compaction_lane() {
+        let mut h = Harness::new();
+        a_pass_in_progress(&mut h);
+        h.app.show_compaction = true;
+        h.app.show_tools = true;
+        h.app.show_thinking = true;
+        let f = h.render_quiet();
+        h.app.show_compaction = false;
+        let g = h.render_quiet();
+
+        let mut stdout = std::io::stdout();
+        let block =
+            |label: &str, frame: &str| format!("\n----- {label} -----\n{frame}----- end -----\n");
+        let _written = stdout.write_all(block("COMPACTION LANE, TRANSCRIPT ON", &f).as_bytes());
+        let _also_written =
+            stdout.write_all(block("COMPACTION LANE, TRANSCRIPT OFF", &g).as_bytes());
+        let _flushed = stdout.flush();
+    }
 }
 
 #[cfg(test)]
@@ -2756,7 +3085,7 @@ pub(crate) mod scenario_tests {
                 .unwrap_or_default()
         }
 
-        pub(crate) fn render(&mut self, label: &str) -> String {
+        pub(crate) fn render_quiet(&mut self) -> String {
             let _ = self
                 .terminal
                 .draw(|frame| draw(frame, &mut self.app))
@@ -2774,6 +3103,11 @@ pub(crate) mod scenario_tests {
                 text.push('\n');
             }
             self.frames.push(text.clone());
+            text
+        }
+
+        pub(crate) fn render(&mut self, label: &str) -> String {
+            let text = self.render_quiet();
             eprintln!("═══ {label} ═══\n{text}");
             text
         }

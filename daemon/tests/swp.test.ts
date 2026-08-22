@@ -70,7 +70,7 @@ interface HandshakeCase {
 }
 
 const fixture = JSON.parse(
-  readFileSync(join(import.meta.dir, "swp_fixtures", "swp.json"), "utf8"),
+  readFileSync(join(import.meta.dir, "swp_captures", "swp.json"), "utf8"),
 ) as Fixture;
 
 async function* once(bytes: Uint8Array): AsyncGenerator<Uint8Array> {
@@ -116,7 +116,7 @@ async function driveFraming(
   }
 }
 
-describe("constants match the Rust", () => {
+describe("the transport constants the Rust client also implements", () => {
   test("every transport constant", () => {
     expect(SWP_V1).toBe(fixture.constants.swp_v1 as number);
     expect(MAX_WIRE_MESSAGE_SIZE).toBe(fixture.constants.max_wire_message_size as number);
@@ -203,8 +203,6 @@ describe("a message from an older client", () => {
   });
 });
 
-const FLOAT_NOTATION_DIVERGES = new Set(["usage_warning"]);
-
 describe("write_message", () => {
   for (const c of fixture.write_message) {
     test(c.name, async () => {
@@ -217,13 +215,7 @@ describe("write_message", () => {
       expect(actual).toEqual(expected);
       expect(Object.keys(actual)).toEqual(Object.keys(expected));
 
-      if (FLOAT_NOTATION_DIVERGES.has(c.name)) {
-        expect(line).not.toBe(c.line);
-        expect(c.line).toContain('"current_cost":8.0');
-        expect(line).toContain('"current_cost":8');
-      } else {
-        expect(line).toBe(c.line);
-      }
+      expect(line).toBe(c.line);
     });
   }
 });

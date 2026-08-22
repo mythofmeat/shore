@@ -1,3 +1,4 @@
+import { expandShared } from "./support/shared_subtrees.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,7 +24,8 @@ import {
   type StatusContext,
 } from "../src/commands/status.ts";
 
-import fixture from "./commands_fixtures/status.json" with { type: "json" };
+import rawFixture from "./command_captures/status.json" with { type: "json" };
+const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 const CHARACTER = "poppy";
 const TOLERANCE_SECS = fixture.tolerance_secs;
@@ -145,7 +147,7 @@ function diagEntries(d: Diagnostics): void {
 
 let root: string;
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "shore-status-parity-"));
+  root = mkdtempSync(join(tmpdir(), "shore-status-"));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 

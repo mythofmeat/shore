@@ -231,6 +231,13 @@ export async function deleteMessages(engine: ConversationEngine, args: Args): Pr
   const merged = mergeToolLoopMessages(raw);
   const turns = rawRefs.map((r) => turnMsgIds(raw, resolveRef(merged, r)));
 
+  const known = new Set(raw.map((m) => m.msg_id));
+  for (const turn of turns) {
+    for (const msgId of turn) {
+      if (!known.has(msgId)) throw notFound(`message not found: ${msgId}`);
+    }
+  }
+
   const deleted: string[] = [];
   const gone = new Set<string>();
   for (const turn of turns) {

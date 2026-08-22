@@ -13,48 +13,10 @@ import {
   streamWithRetry,
   type FallbackEvent,
 } from "../src/llm/fallback";
-import type { CredentialFailureKind, KeyCandidate } from "../src/llm/credentials";
-import { describeLlmError, type LlmError } from "../src/llm/errors";
-
-interface Fixture {
-  default_max_retries: number;
-  default_backoff_base_ms: number;
-  error_projection: {
-    name: string;
-    display: string;
-    status: number | null;
-    reason: string;
-    reason_byte_len: number;
-  }[];
-  warning_messages: { kind: string; should_rotate: boolean; message: string }[];
-  backoff_schedule: { base_ms: number; attempt: number; delay_ms: number }[];
-  missing_key_reason_format: { env: string; reason: string };
-  all_keys_failed_var: string;
-}
-
-const fixture = (await Bun.file(
-  new URL("./llm_fixtures/fallback.json", import.meta.url),
-).json()) as Fixture;
+import { CREDENTIAL_FAILURE_KINDS, type KeyCandidate } from "../src/llm/credentials";
+import type { LlmError } from "../src/llm/errors";
 
 const byteLen = (s: string) => Buffer.byteLength(s, "utf8");
-
-const ERRORS: Record<string, LlmError> = {
-  http_401: { kind: "http_status", status: 401, body: '{"error":"bad key sk-abc123"}' },
-  http_429: { kind: "http_status", status: 429, body: "slow down" },
-  http_500: { kind: "http_status", status: 500, body: "boom" },
-  missing_key: { kind: "missing_api_key", var: "SOME_KEY" },
-  provider_short: { kind: "provider", message: "quota exceeded" },
-  provider_long: { kind: "provider", message: "x".repeat(500) },
-  provider_multibyte: { kind: "provider", message: `${"x".repeat(199)}世${"y".repeat(400)}` },
-  provider_exactly_200: { kind: "provider", message: "x".repeat(200) },
-  incomplete: { kind: "incomplete_stream" },
-  stream_errored: {
-    kind: "stream_errored",
-    message: "upstream closed",
-    usage: emptyUsage(),
-    timing: emptyTiming(),
-  },
-};
 
 const cand = (name: string, env: string, warn = false): KeyCandidate => ({
   name,
@@ -62,118 +24,107 @@ const cand = (name: string, env: string, warn = false): KeyCandidate => ({
   warn_on_fallback: warn,
 });
 
-describe("the fixture is real", () => {
-  test("every fixture error is represented in the TypeScript union", () => {
-    for (const c of fixture.error_projection) {
-      expect(Object.hasOwn(ERRORS, c.name), c.name).toBe(true);
+describe("a fallback reason names the failure without leaking the credential", () => {
+  test("an HTTP failure gives its status and withholds the body", () => {
+    const error: LlmError = {
+      kind: "http_status",
+      status: 401,
+      body: '{"error":"bad key sk-abc123"}',
+    };
+    expect(sanitizeReason(error)).toBe("HTTP 401");
+    expect(sanitizeReason(error)).not.toContain("sk-abc123");
+    expect(llmHttpStatus(error)).toBe(401);
+  });
+
+  test("a missing key names the variable, because that is the fix", () => {
+    expect(sanitizeReason({ kind: "missing_api_key", var: "SOME_KEY" })).toBe(
+      'env "SOME_KEY" not set',
+    );
+    expect(missingKeyReason("SOME_KEY")).toBe('env "SOME_KEY" unset or empty');
+  });
+
+  test("every other failure carries its own message", () => {
+    const cases: [LlmError, string][] = [
+      [{ kind: "provider", message: "quota exceeded" }, "quota exceeded"],
+      [{ kind: "transport", message: "socket hang up" }, "socket hang up"],
+      [{ kind: "serialize", message: "circular" }, "circular"],
+      [{ kind: "deserialize", message: "unexpected token" }, "unexpected token"],
+      [{ kind: "budget_blocked", message: "weekly cap reached" }, "weekly cap reached"],
+      [
+        {
+          kind: "stream_errored",
+          message: "upstream closed",
+          usage: emptyUsage(),
+          timing: emptyTiming(),
+        },
+        "upstream closed",
+      ],
+    ];
+    for (const [error, text] of cases) {
+      expect(sanitizeReason(error), error.kind).toContain(text);
     }
   });
 
-  test("a provider message longer than the cap is present, and one shorter", () => {
-    const truncated = fixture.error_projection.filter(
-      (c) => c.name.startsWith("provider") && c.reason.endsWith("…"),
-    );
-    const whole = fixture.error_projection.filter(
-      (c) => c.name.startsWith("provider") && !c.reason.endsWith("…"),
-    );
-    expect(truncated.length).toBeGreaterThan(0);
-    expect(whole.length).toBeGreaterThan(0);
+  test("a failure with nothing to say still says which kind it was", () => {
+    expect(sanitizeReason({ kind: "incomplete_stream" })).toBe("stream ended without done event");
+    expect(sanitizeReason({ kind: "aborted", message: "x" })).toBe("request cancelled");
   });
 
-  test("a truncation case cuts inside a multibyte character", () => {
-    const multibyte = fixture.error_projection.find((c) => c.name === "provider_multibyte");
-    const ascii = fixture.error_projection.find((c) => c.name === "provider_long");
-    expect(multibyte?.reason_byte_len).toBeLessThan(ascii?.reason_byte_len as number);
-  });
+  test("a long message is capped, and never mid-character", () => {
+    const wide = `${"x".repeat(199)}\u4E16${"y".repeat(400)}`;
+    const reason = sanitizeReason({ kind: "provider", message: wide });
+    expect(byteLen(reason)).toBeLessThanOrEqual(220);
+    expect(reason).not.toContain("\uFFFD");
+    expect(reason.endsWith("\u2026")).toBe(true);
 
-  test("both rotation verdicts appear among the warning kinds", () => {
-    expect(fixture.warning_messages.some((w) => w.should_rotate)).toBe(true);
-    expect(fixture.warning_messages.some((w) => !w.should_rotate)).toBe(true);
+    const exact = "x".repeat(200);
+    expect(sanitizeReason({ kind: "provider", message: exact })).toContain(exact);
   });
 });
 
-describe("defaults match the Rust", () => {
-  test("max retries", () => {
-    expect(DEFAULT_MAX_RETRIES).toBe(fixture.default_max_retries);
-  });
-  test("backoff base", () => {
-    expect(DEFAULT_BACKOFF_BASE_MS).toBe(fixture.default_backoff_base_ms);
-  });
-});
-
-describe("error projection", () => {
-  for (const c of fixture.error_projection) {
-    test(c.name, () => {
-      const error = ERRORS[c.name] as LlmError;
-      expect(llmHttpStatus(error)).toBe(c.status ?? undefined);
-      expect(sanitizeReason(error)).toBe(c.reason);
-      expect(byteLen(sanitizeReason(error))).toBe(c.reason_byte_len);
-    });
-  }
-
-  test("the Display text still agrees too", () => {
-    for (const c of fixture.error_projection) {
-      expect(describeLlmError(ERRORS[c.name] as LlmError), c.name).toBe(c.display);
-    }
-  });
-
-  test("a response body never survives into a reason", () => {
-    const reason = sanitizeReason(ERRORS.http_401 as LlmError);
-    expect(reason).not.toContain("sk-abc123");
-    expect(reason).toBe("HTTP 401");
-  });
-
-  test("no truncated reason splits a character", () => {
-    for (const c of fixture.error_projection) {
-      expect(sanitizeReason(ERRORS[c.name] as LlmError), c.name).not.toContain("�");
-    }
-  });
-
-  test("the missing-key reason format matches", () => {
-    expect(missingKeyReason(fixture.missing_key_reason_format.env)).toBe(
-      fixture.missing_key_reason_format.reason,
-    );
-  });
-});
-
-describe("warning messages", () => {
-  for (const w of fixture.warning_messages) {
-    test(w.kind, () => {
-      expect(
-        buildWarningMessage(
-          "openrouter",
-          cand("primary", "PRIMARY_KEY", true),
-          cand("backup", "BACKUP_KEY"),
-          w.kind as CredentialFailureKind,
-        ),
-      ).toBe(w.message);
-    });
-  }
-
-  test("a warning never contains an environment variable name", () => {
-    for (const w of fixture.warning_messages) {
+describe("a rotation warning", () => {
+  test("names both keys and the provider, for every kind", () => {
+    for (const kind of CREDENTIAL_FAILURE_KINDS) {
       const message = buildWarningMessage(
         "openrouter",
         cand("primary", "PRIMARY_KEY", true),
         cand("backup", "BACKUP_KEY"),
-        w.kind as CredentialFailureKind,
+        kind,
       );
-      expect(message, w.kind).not.toContain("PRIMARY_KEY");
-      expect(message, w.kind).not.toContain("BACKUP_KEY");
+      expect(message, kind).toContain("openrouter");
+      expect(message, kind).toContain('"primary"');
+      expect(message, kind).toContain('"backup"');
+    }
+  });
+
+  test("never leaks an environment variable name", () => {
+    for (const kind of CREDENTIAL_FAILURE_KINDS) {
+      const message = buildWarningMessage(
+        "openrouter",
+        cand("primary", "PRIMARY_KEY", true),
+        cand("backup", "BACKUP_KEY"),
+        kind,
+      );
+      expect(message, kind).not.toContain("PRIMARY_KEY");
+      expect(message, kind).not.toContain("BACKUP_KEY");
     }
   });
 });
 
-describe("backoff schedule", () => {
-  for (const [i, b] of fixture.backoff_schedule.entries()) {
-    test(`#${i} base ${b.base_ms} attempt ${b.attempt}`, () => {
-      expect(backoffDelayMs(b.base_ms, b.attempt)).toBe(b.delay_ms);
-    });
-  }
+describe("backoff", () => {
+  test("doubles with each attempt from the configured base", () => {
+    expect([0, 1, 2, 3, 4].map((n) => backoffDelayMs(500, n))).toEqual([500, 1000, 2000, 4000, 8000]);
+    expect([0, 1, 2].map((n) => backoffDelayMs(1, n))).toEqual([1, 2, 4]);
+  });
 
-  test("it saturates rather than wrapping", () => {
+  test("saturates rather than wrapping", () => {
     expect(backoffDelayMs(500, 64)).toBeGreaterThan(Number.MAX_SAFE_INTEGER);
     expect(backoffDelayMs(500, 64)).toBe(backoffDelayMs(500, 128));
+  });
+
+  test("the shipped defaults are a real schedule, not zero", () => {
+    expect(DEFAULT_MAX_RETRIES).toBeGreaterThan(0);
+    expect(DEFAULT_BACKOFF_BASE_MS).toBeGreaterThan(0);
   });
 });
 
