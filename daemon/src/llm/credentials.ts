@@ -1,5 +1,15 @@
 import { toLlmError } from "./errors";
 
+export const CREDENTIAL_FAILURE_KINDS = [
+  "missing_key",
+  "invalid_key",
+  "quota_exhausted",
+  "budget_exhausted",
+  "rate_limited_credential",
+  "not_credential_failure",
+  "unknown",
+] as const;
+
 export type CredentialFailureKind =
   | "missing_key"
   | "invalid_key"
