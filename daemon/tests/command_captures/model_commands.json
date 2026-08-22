@@ -14,7 +14,7 @@
       },
       "steps": [
         {
-          "$ref": "s3"
+          "$ref": "s5"
         },
         {
           "op": "list_models",
@@ -23,92 +23,18 @@
           },
           "ok": {
             "models": {
-              "anthropic": [
-                {
-                  "name": "alpha",
-                  "qualified_name": "chat.anthropic.alpha",
-                  "sdk": "anthropic",
-                  "model_id": "alpha-id",
-                  "source": "static",
-                  "hidden": false
-                },
-                {
-                  "name": "beta",
-                  "qualified_name": "chat.anthropic.beta",
-                  "sdk": "anthropic",
-                  "model_id": "beta-id",
-                  "source": "static",
-                  "hidden": false
-                },
-                {
-                  "name": "delta",
-                  "qualified_name": "chat.anthropic.delta",
-                  "sdk": "anthropic",
-                  "model_id": "claude-opus-4-8",
-                  "source": "static",
-                  "hidden": false
-                }
-              ],
-              "gemini": [
-                {
-                  "name": "epsilon",
-                  "qualified_name": "chat.gemini.epsilon",
-                  "sdk": "gemini",
-                  "model_id": "gemini-3.1-pro",
-                  "source": "static",
-                  "hidden": false
-                }
-              ],
-              "openai": [
-                {
-                  "name": "gamma",
-                  "qualified_name": "chat.openai.gamma",
-                  "sdk": "openai",
-                  "model_id": "gamma-id",
-                  "source": "static",
-                  "hidden": false
-                }
-              ]
+              "$ref": "s7"
             },
             "active": "chat.anthropic.beta",
-            "roles": [
-              {
-                "role": "chat",
-                "model": "chat.anthropic.beta",
-                "source": "character"
-              },
-              {
-                "role": "heartbeat",
-                "model": "chat.anthropic.beta",
-                "source": "inherits chat"
-              },
-              {
-                "role": "compaction",
-                "model": "chat.anthropic.beta",
-                "source": "inherits chat"
-              },
-              {
-                "role": "sub-agents",
-                "model": "chat.anthropic.beta",
-                "source": "inherits chat"
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s11"
+            },
             "include_hidden": true,
             "hidden_count": 0
           }
         },
         {
-          "$ref": "s2"
+          "$ref": "s3"
         },
         {
           "op": "model_info",
@@ -116,61 +42,7 @@
             "name": "beta"
           },
           "ok": {
-            "name": "beta",
-            "qualified_name": "chat.anthropic.beta",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "beta-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": 0.2,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
-            }
+            "$ref": "s4"
           }
         },
         {
@@ -189,61 +61,7 @@
             "name": ""
           },
           "ok": {
-            "name": "beta",
-            "qualified_name": "chat.anthropic.beta",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "beta-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": 0.2,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
-            }
+            "$ref": "s4"
           }
         },
         {
@@ -252,14 +70,14 @@
             "name": ""
           },
           "ok": {
-            "$ref": "s1"
+            "$ref": "s2"
           }
         },
         {
           "op": "model_settings",
           "args": {},
           "ok": {
-            "$ref": "s1"
+            "$ref": "s2"
           }
         },
         {
@@ -288,16 +106,16 @@
           }
         },
         {
-          "$ref": "s3"
+          "$ref": "s5"
         },
         {
-          "$ref": "s2"
+          "$ref": "s3"
         },
         {
           "op": "model_settings",
           "args": {},
           "ok": {
-            "$ref": "s1"
+            "$ref": "s2"
           }
         },
         {
@@ -321,7 +139,7 @@
           }
         },
         {
-          "$ref": "s3"
+          "$ref": "s5"
         },
         {
           "op": "reset_model",
@@ -338,10 +156,10 @@
           }
         },
         {
-          "$ref": "s3"
+          "$ref": "s5"
         },
         {
-          "$ref": "s2"
+          "$ref": "s3"
         },
         {
           "op": "reset_model",
@@ -383,22 +201,7 @@
             "saved_global": null,
             "saved_character": null,
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -409,7 +212,7 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s6"
+              "$ref": "s14"
             }
           }
         },
@@ -624,20 +427,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s15"
             },
             "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s21"
             }
           }
         },
@@ -744,22 +537,7 @@
             "saved_global": null,
             "saved_character": null,
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -770,7 +548,7 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s6"
+              "$ref": "s14"
             }
           }
         },
@@ -847,22 +625,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -873,7 +636,7 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s5"
+              "$ref": "s12"
             }
           }
         }
@@ -968,56 +731,11 @@
           "args": {},
           "ok": {
             "models": {
-              "anthropic": [
-                {
-                  "name": "alpha",
-                  "qualified_name": "chat.anthropic.alpha",
-                  "sdk": "anthropic",
-                  "model_id": "alpha-id",
-                  "source": "static",
-                  "hidden": false
-                },
-                {
-                  "name": "beta",
-                  "qualified_name": "chat.anthropic.beta",
-                  "sdk": "anthropic",
-                  "model_id": "beta-id",
-                  "source": "static",
-                  "hidden": false
-                },
-                {
-                  "name": "delta",
-                  "qualified_name": "chat.anthropic.delta",
-                  "sdk": "anthropic",
-                  "model_id": "claude-opus-4-8",
-                  "source": "static",
-                  "hidden": false
-                }
-              ],
-              "gemini": [
-                {
-                  "name": "epsilon",
-                  "qualified_name": "chat.gemini.epsilon",
-                  "sdk": "gemini",
-                  "model_id": "gemini-3.1-pro",
-                  "source": "static",
-                  "hidden": false
-                }
-              ],
-              "openai": [
-                {
-                  "name": "gamma",
-                  "qualified_name": "chat.openai.gamma",
-                  "sdk": "openai",
-                  "model_id": "gamma-id",
-                  "source": "static",
-                  "hidden": false
-                }
-              ]
+              "$ref": "s7"
             },
             "active": "chat.anthropic.alpha",
             "roles": {
-              "$ref": "s4"
+              "$ref": "s10"
             },
             "include_hidden": false,
             "hidden_count": 0
@@ -1052,35 +770,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "temperature": 0.5,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
+              "$ref": "s18"
             },
             "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s20"
             }
           }
         },
@@ -1091,7 +784,7 @@
           "op": "model_roles",
           "args": {},
           "ok": {
-            "$ref": "s4"
+            "$ref": "s10"
           }
         }
       ]
@@ -1140,38 +833,9 @@
               ]
             },
             "active": "openrouter:vendor/visible",
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s19"
+            },
             "include_hidden": false,
             "hidden_count": 1
           }
@@ -1224,38 +888,9 @@
           "ok": {
             "models": {},
             "active": null,
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s19"
+            },
             "include_hidden": false,
             "hidden_count": 0
           }
@@ -1279,38 +914,9 @@
         {
           "op": "model_roles",
           "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "heartbeat",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "compaction",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "sub-agents",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "ok": {
+            "$ref": "s19"
+          }
         },
         {
           "op": "switch_model",
@@ -1392,38 +998,9 @@
               ]
             },
             "active": "openrouter:vendor/visible",
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s19"
+            },
             "include_hidden": false,
             "hidden_count": 1
           }
@@ -1455,38 +1032,9 @@
               ]
             },
             "active": "openrouter:vendor/hidden",
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s19"
+            },
             "include_hidden": true,
             "hidden_count": 1
           }
@@ -1522,20 +1070,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s15"
             },
             "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s21"
             }
           }
         },
@@ -1570,20 +1108,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s15"
             },
             "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s21"
             }
           }
         },
@@ -1698,20 +1226,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s15"
             },
             "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s21"
             }
           }
         },
@@ -1723,27 +1241,12 @@
             "provider": "openrouter",
             "model_id": "vendor/hidden",
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s15"
             },
             "saved_global": null,
             "saved_character": null,
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -1754,7 +1257,7 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s6"
+              "$ref": "s14"
             }
           }
         },
@@ -1822,22 +1325,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -1908,38 +1396,9 @@
               ]
             },
             "active": "openrouter:vendor/visible",
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s19"
+            },
             "include_hidden": false,
             "hidden_count": 0
           }
@@ -1963,38 +1422,9 @@
         {
           "op": "model_roles",
           "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "heartbeat",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "compaction",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "sub-agents",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "ok": {
+            "$ref": "s19"
+          }
         },
         {
           "op": "set_model_setting",
@@ -2138,7 +1568,7 @@
             "background_task": "compaction"
           },
           "ok": {
-            "$ref": "s1"
+            "$ref": "s2"
           }
         },
         {
@@ -2363,22 +1793,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -2464,7 +1879,7 @@
             "background_task": "all"
           },
           "ok": {
-            "$ref": "s1"
+            "$ref": "s2"
           }
         },
         {
@@ -2535,22 +1950,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -2598,7 +1998,7 @@
           "op": "model_roles",
           "args": {},
           "ok": {
-            "$ref": "s4"
+            "$ref": "s10"
           }
         },
         {
@@ -2607,72 +2007,7 @@
             "background_task": "all"
           },
           "ok": {
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "effective_sampler": {
-              "temperature": 0.5,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": null,
-            "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
+            "$ref": "s1"
           }
         },
         {
@@ -2696,38 +2031,9 @@
         {
           "op": "model_roles",
           "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": "chat.anthropic.beta",
-              "source": "character"
-            },
-            {
-              "role": "heartbeat",
-              "model": "chat.anthropic.beta",
-              "source": "inherits chat"
-            },
-            {
-              "role": "compaction",
-              "model": "chat.anthropic.beta",
-              "source": "inherits chat"
-            },
-            {
-              "role": "sub-agents",
-              "model": "chat.anthropic.beta",
-              "source": "inherits chat"
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "ok": {
+            "$ref": "s11"
+          }
         },
         {
           "op": "model_settings",
@@ -2735,7 +2041,7 @@
             "background_task": "heartbeat"
           },
           "ok": {
-            "$ref": "s1"
+            "$ref": "s2"
           }
         }
       ]
@@ -2841,22 +2147,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -2867,7 +2158,7 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s5"
+              "$ref": "s12"
             }
           }
         },
@@ -2954,22 +2245,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -3059,22 +2335,7 @@
             },
             "saved_character": null,
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -3190,22 +2451,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -3394,22 +2640,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -3420,7 +2651,7 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s5"
+              "$ref": "s12"
             }
           }
         }
@@ -3447,7 +2678,7 @@
             "provider": "anthropic",
             "model_id": "alpha-id",
             "effective_sampler": {
-              "$ref": "s7"
+              "$ref": "s16"
             },
             "saved_global": {
               "temperature": 0.33,
@@ -3486,22 +2717,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -3559,7 +2775,7 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s7"
+              "$ref": "s16"
             },
             "scopes": {
               "temperature": "global_model",
@@ -3606,22 +2822,7 @@
             "saved_global": null,
             "saved_character": null,
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -3737,7 +2938,7 @@
             "provider": "anthropic",
             "model_id": "alpha-id",
             "effective_sampler": {
-              "$ref": "s7"
+              "$ref": "s16"
             },
             "saved_global": {
               "temperature": 0.33,
@@ -3776,22 +2977,7 @@
               "zai_subscription": null
             },
             "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "honored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
+              "$ref": "s8"
             },
             "reasoning_effort_domain": [
               "adaptive",
@@ -3840,52 +3026,7 @@
           "args": {},
           "ok": {
             "models": {
-              "anthropic": [
-                {
-                  "name": "alpha",
-                  "qualified_name": "chat.anthropic.alpha",
-                  "sdk": "anthropic",
-                  "model_id": "alpha-id",
-                  "source": "static",
-                  "hidden": false
-                },
-                {
-                  "name": "beta",
-                  "qualified_name": "chat.anthropic.beta",
-                  "sdk": "anthropic",
-                  "model_id": "beta-id",
-                  "source": "static",
-                  "hidden": false
-                },
-                {
-                  "name": "delta",
-                  "qualified_name": "chat.anthropic.delta",
-                  "sdk": "anthropic",
-                  "model_id": "claude-opus-4-8",
-                  "source": "static",
-                  "hidden": false
-                }
-              ],
-              "gemini": [
-                {
-                  "name": "epsilon",
-                  "qualified_name": "chat.gemini.epsilon",
-                  "sdk": "gemini",
-                  "model_id": "gemini-3.1-pro",
-                  "source": "static",
-                  "hidden": false
-                }
-              ],
-              "openai": [
-                {
-                  "name": "gamma",
-                  "qualified_name": "chat.openai.gamma",
-                  "sdk": "openai",
-                  "model_id": "gamma-id",
-                  "source": "static",
-                  "hidden": false
-                }
-              ]
+              "$ref": "s7"
             },
             "active": "chat.anthropic.alpha",
             "roles": [
@@ -4092,56 +3233,11 @@
           "args": {},
           "ok": {
             "models": {
-              "anthropic": [
-                {
-                  "name": "alpha",
-                  "qualified_name": "chat.anthropic.alpha",
-                  "sdk": "anthropic",
-                  "model_id": "alpha-id",
-                  "source": "static",
-                  "hidden": false
-                },
-                {
-                  "name": "beta",
-                  "qualified_name": "chat.anthropic.beta",
-                  "sdk": "anthropic",
-                  "model_id": "beta-id",
-                  "source": "static",
-                  "hidden": false
-                },
-                {
-                  "name": "delta",
-                  "qualified_name": "chat.anthropic.delta",
-                  "sdk": "anthropic",
-                  "model_id": "claude-opus-4-8",
-                  "source": "static",
-                  "hidden": false
-                }
-              ],
-              "gemini": [
-                {
-                  "name": "epsilon",
-                  "qualified_name": "chat.gemini.epsilon",
-                  "sdk": "gemini",
-                  "model_id": "gemini-3.1-pro",
-                  "source": "static",
-                  "hidden": false
-                }
-              ],
-              "openai": [
-                {
-                  "name": "gamma",
-                  "qualified_name": "chat.openai.gamma",
-                  "sdk": "openai",
-                  "model_id": "gamma-id",
-                  "source": "static",
-                  "hidden": false
-                }
-              ]
+              "$ref": "s7"
             },
             "active": "chat.anthropic.alpha",
             "roles": {
-              "$ref": "s4"
+              "$ref": "s10"
             },
             "include_hidden": false,
             "hidden_count": 0
@@ -4176,35 +3272,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "temperature": 0.5,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
+              "$ref": "s18"
             },
             "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s20"
             }
           }
         },
@@ -4225,111 +3296,40 @@
     "s0": {
       "args": {},
       "ok": {
-        "applicability": {
-          "budget_tokens": "honored",
-          "cache_keepalive": "honored",
-          "cache_keepalive_max": "honored",
-          "cache_ttl": "honored",
-          "gemini_generation": "ignored",
-          "max_output_tokens": "honored",
-          "max_tool_iterations": "always",
-          "openrouter_provider": "ignored",
-          "reasoning_effort": "honored",
-          "replay_prior_thinking": "honored",
-          "sdk": "always",
-          "supports_images": "always",
-          "temperature": "honored",
-          "top_p": "honored",
-          "zai_clear_thinking": "ignored",
-          "zai_subscription": "ignored"
-        },
-        "effective_sampler": {
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_keepalive_max": null,
-          "cache_ttl": "1h",
-          "gemini_generation": null,
-          "max_output_tokens": 32768,
-          "max_tool_iterations": null,
-          "openrouter_provider": null,
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "anthropic",
-          "supports_images": null,
-          "temperature": 0.5,
-          "top_p": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
-        },
-        "model": "chat.anthropic.alpha",
-        "model_id": "alpha-id",
-        "provider": "anthropic",
-        "reasoning_effort_domain": [
-          "adaptive",
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max"
-        ],
-        "saved_character": null,
-        "saved_global": null,
-        "scopes": {
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_keepalive_max": null,
-          "cache_ttl": "static_default",
-          "gemini_generation": null,
-          "max_output_tokens": "static_default",
-          "max_tool_iterations": null,
-          "openrouter_provider": null,
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "static_default",
-          "temperature": "static_default",
-          "top_p": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
-        }
+        "$ref": "s1"
       },
       "op": "model_settings"
     },
     "s1": {
       "applicability": {
-        "budget_tokens": "honored",
-        "cache_keepalive": "honored",
-        "cache_keepalive_max": "honored",
-        "cache_ttl": "honored",
-        "gemini_generation": "ignored",
-        "max_output_tokens": "honored",
-        "max_tool_iterations": "always",
-        "openrouter_provider": "ignored",
-        "reasoning_effort": "honored",
-        "replay_prior_thinking": "honored",
-        "sdk": "always",
-        "supports_images": "always",
-        "temperature": "honored",
-        "top_p": "honored",
-        "zai_clear_thinking": "ignored",
-        "zai_subscription": "ignored"
+        "$ref": "s8"
       },
       "effective_sampler": {
-        "budget_tokens": null,
-        "cache_keepalive": null,
-        "cache_keepalive_max": null,
-        "cache_ttl": "1h",
-        "gemini_generation": null,
-        "max_output_tokens": 32768,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "reasoning_effort": null,
-        "replay_prior_thinking": null,
-        "sdk": "anthropic",
-        "supports_images": null,
-        "temperature": 0.2,
-        "top_p": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "$ref": "s18"
+      },
+      "model": "chat.anthropic.alpha",
+      "model_id": "alpha-id",
+      "provider": "anthropic",
+      "reasoning_effort_domain": [
+        "adaptive",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "saved_character": null,
+      "saved_global": null,
+      "scopes": {
+        "$ref": "s13"
+      }
+    },
+    "s2": {
+      "applicability": {
+        "$ref": "s8"
+      },
+      "effective_sampler": {
+        "$ref": "s17"
       },
       "model": "chat.anthropic.beta",
       "model_id": "beta-id",
@@ -4345,174 +3345,136 @@
       "saved_character": null,
       "saved_global": null,
       "scopes": {
-        "budget_tokens": null,
-        "cache_keepalive": null,
-        "cache_keepalive_max": null,
-        "cache_ttl": "static_default",
-        "gemini_generation": null,
-        "max_output_tokens": "static_default",
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "reasoning_effort": null,
-        "replay_prior_thinking": null,
-        "sdk": "static_default",
-        "temperature": "static_default",
-        "top_p": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "$ref": "s13"
       }
-    },
-    "s2": {
-      "args": {},
-      "ok": {
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "base_url": null,
-        "budget_tokens": null,
-        "cache_keepalive": null,
-        "cache_keepalive_max": null,
-        "cache_ttl": "1h",
-        "category": "chat",
-        "effective_sampler": {
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_keepalive_max": null,
-          "cache_ttl": "1h",
-          "gemini_generation": null,
-          "max_output_tokens": 32768,
-          "max_tool_iterations": null,
-          "openrouter_provider": null,
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "anthropic",
-          "supports_images": null,
-          "temperature": 0.2,
-          "top_p": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
-        },
-        "gemini_generation": null,
-        "max_context_tokens": 200000,
-        "max_output_tokens": 32768,
-        "max_tool_iterations": null,
-        "model_id": "beta-id",
-        "name": "beta",
-        "openrouter_provider": null,
-        "provider_key": "anthropic",
-        "qualified_name": "chat.anthropic.beta",
-        "reasoning_effort": null,
-        "replay_prior_thinking": null,
-        "scopes": {
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_keepalive_max": null,
-          "cache_ttl": "static_default",
-          "max_output_tokens": "static_default",
-          "max_tool_iterations": null,
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "static_default",
-          "temperature": "static_default",
-          "top_p": null
-        },
-        "sdk": "anthropic",
-        "supports_images": null,
-        "temperature": 0.2,
-        "top_p": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
-      },
-      "op": "model_info"
     },
     "s3": {
       "args": {},
       "ok": {
-        "active": "chat.anthropic.beta",
-        "hidden_count": 0,
-        "include_hidden": false,
-        "models": {
-          "anthropic": [
-            {
-              "hidden": false,
-              "model_id": "alpha-id",
-              "name": "alpha",
-              "qualified_name": "chat.anthropic.alpha",
-              "sdk": "anthropic",
-              "source": "static"
-            },
-            {
-              "hidden": false,
-              "model_id": "beta-id",
-              "name": "beta",
-              "qualified_name": "chat.anthropic.beta",
-              "sdk": "anthropic",
-              "source": "static"
-            },
-            {
-              "hidden": false,
-              "model_id": "claude-opus-4-8",
-              "name": "delta",
-              "qualified_name": "chat.anthropic.delta",
-              "sdk": "anthropic",
-              "source": "static"
-            }
-          ],
-          "gemini": [
-            {
-              "hidden": false,
-              "model_id": "gemini-3.1-pro",
-              "name": "epsilon",
-              "qualified_name": "chat.gemini.epsilon",
-              "sdk": "gemini",
-              "source": "static"
-            }
-          ],
-          "openai": [
-            {
-              "hidden": false,
-              "model_id": "gamma-id",
-              "name": "gamma",
-              "qualified_name": "chat.openai.gamma",
-              "sdk": "openai",
-              "source": "static"
-            }
-          ]
-        },
-        "roles": [
-          {
-            "model": "chat.anthropic.beta",
-            "role": "chat",
-            "source": "character"
-          },
-          {
-            "model": "chat.anthropic.beta",
-            "role": "heartbeat",
-            "source": "inherits chat"
-          },
-          {
-            "model": "chat.anthropic.beta",
-            "role": "compaction",
-            "source": "inherits chat"
-          },
-          {
-            "model": "chat.anthropic.beta",
-            "role": "sub-agents",
-            "source": "inherits chat"
-          },
-          {
-            "model": null,
-            "role": "embedding",
-            "source": null
-          },
-          {
-            "model": null,
-            "role": "images",
-            "source": null
-          }
-        ]
+        "$ref": "s4"
+      },
+      "op": "model_info"
+    },
+    "s4": {
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "base_url": null,
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_keepalive_max": null,
+      "cache_ttl": "1h",
+      "category": "chat",
+      "effective_sampler": {
+        "$ref": "s17"
+      },
+      "gemini_generation": null,
+      "max_context_tokens": 200000,
+      "max_output_tokens": 32768,
+      "max_tool_iterations": null,
+      "model_id": "beta-id",
+      "name": "beta",
+      "openrouter_provider": null,
+      "provider_key": "anthropic",
+      "qualified_name": "chat.anthropic.beta",
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "scopes": {
+        "$ref": "s20"
+      },
+      "sdk": "anthropic",
+      "supports_images": null,
+      "temperature": 0.2,
+      "top_p": null,
+      "zai_clear_thinking": null,
+      "zai_subscription": null
+    },
+    "s5": {
+      "args": {},
+      "ok": {
+        "$ref": "s6"
       },
       "op": "list_models"
     },
-    "s4": [
+    "s6": {
+      "active": "chat.anthropic.beta",
+      "hidden_count": 0,
+      "include_hidden": false,
+      "models": {
+        "$ref": "s7"
+      },
+      "roles": {
+        "$ref": "s11"
+      }
+    },
+    "s7": {
+      "anthropic": {
+        "$ref": "s9"
+      },
+      "gemini": [
+        {
+          "hidden": false,
+          "model_id": "gemini-3.1-pro",
+          "name": "epsilon",
+          "qualified_name": "chat.gemini.epsilon",
+          "sdk": "gemini",
+          "source": "static"
+        }
+      ],
+      "openai": [
+        {
+          "hidden": false,
+          "model_id": "gamma-id",
+          "name": "gamma",
+          "qualified_name": "chat.openai.gamma",
+          "sdk": "openai",
+          "source": "static"
+        }
+      ]
+    },
+    "s8": {
+      "budget_tokens": "honored",
+      "cache_keepalive": "honored",
+      "cache_keepalive_max": "honored",
+      "cache_ttl": "honored",
+      "gemini_generation": "ignored",
+      "max_output_tokens": "honored",
+      "max_tool_iterations": "always",
+      "openrouter_provider": "ignored",
+      "reasoning_effort": "honored",
+      "replay_prior_thinking": "honored",
+      "sdk": "always",
+      "supports_images": "always",
+      "temperature": "honored",
+      "top_p": "honored",
+      "zai_clear_thinking": "ignored",
+      "zai_subscription": "ignored"
+    },
+    "s9": [
+      {
+        "hidden": false,
+        "model_id": "alpha-id",
+        "name": "alpha",
+        "qualified_name": "chat.anthropic.alpha",
+        "sdk": "anthropic",
+        "source": "static"
+      },
+      {
+        "hidden": false,
+        "model_id": "beta-id",
+        "name": "beta",
+        "qualified_name": "chat.anthropic.beta",
+        "sdk": "anthropic",
+        "source": "static"
+      },
+      {
+        "hidden": false,
+        "model_id": "claude-opus-4-8",
+        "name": "delta",
+        "qualified_name": "chat.anthropic.delta",
+        "sdk": "anthropic",
+        "source": "static"
+      }
+    ],
+    "s10": [
       {
         "model": "chat.anthropic.alpha",
         "role": "chat",
@@ -4544,7 +3506,39 @@
         "source": null
       }
     ],
-    "s5": {
+    "s11": [
+      {
+        "model": "chat.anthropic.beta",
+        "role": "chat",
+        "source": "character"
+      },
+      {
+        "model": "chat.anthropic.beta",
+        "role": "heartbeat",
+        "source": "inherits chat"
+      },
+      {
+        "model": "chat.anthropic.beta",
+        "role": "compaction",
+        "source": "inherits chat"
+      },
+      {
+        "model": "chat.anthropic.beta",
+        "role": "sub-agents",
+        "source": "inherits chat"
+      },
+      {
+        "model": null,
+        "role": "embedding",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "images",
+        "source": null
+      }
+    ],
+    "s12": {
       "budget_tokens": null,
       "cache_keepalive": null,
       "cache_keepalive_max": null,
@@ -4561,7 +3555,24 @@
       "zai_clear_thinking": null,
       "zai_subscription": null
     },
-    "s6": {
+    "s13": {
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_keepalive_max": null,
+      "cache_ttl": "static_default",
+      "gemini_generation": null,
+      "max_output_tokens": "static_default",
+      "max_tool_iterations": null,
+      "openrouter_provider": null,
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "sdk": "static_default",
+      "temperature": "static_default",
+      "top_p": null,
+      "zai_clear_thinking": null,
+      "zai_subscription": null
+    },
+    "s14": {
       "budget_tokens": null,
       "cache_keepalive": null,
       "cache_keepalive_max": null,
@@ -4578,7 +3589,25 @@
       "zai_clear_thinking": null,
       "zai_subscription": null
     },
-    "s7": {
+    "s15": {
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_keepalive_max": null,
+      "cache_ttl": "1h",
+      "gemini_generation": null,
+      "max_output_tokens": 32000,
+      "max_tool_iterations": null,
+      "openrouter_provider": null,
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "sdk": "anthropic",
+      "supports_images": null,
+      "temperature": null,
+      "top_p": null,
+      "zai_clear_thinking": null,
+      "zai_subscription": null
+    },
+    "s16": {
       "budget_tokens": 1024,
       "cache_keepalive": null,
       "cache_keepalive_max": null,
@@ -4596,23 +3625,99 @@
       "zai_clear_thinking": null,
       "zai_subscription": null
     },
-    "s8": {
+    "s17": {
       "budget_tokens": null,
       "cache_keepalive": null,
       "cache_keepalive_max": null,
       "cache_ttl": "1h",
       "gemini_generation": null,
-      "max_output_tokens": 32000,
+      "max_output_tokens": 32768,
       "max_tool_iterations": null,
       "openrouter_provider": null,
       "reasoning_effort": null,
       "replay_prior_thinking": null,
       "sdk": "anthropic",
       "supports_images": null,
-      "temperature": null,
+      "temperature": 0.2,
       "top_p": null,
       "zai_clear_thinking": null,
       "zai_subscription": null
+    },
+    "s18": {
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_keepalive_max": null,
+      "cache_ttl": "1h",
+      "gemini_generation": null,
+      "max_output_tokens": 32768,
+      "max_tool_iterations": null,
+      "openrouter_provider": null,
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "sdk": "anthropic",
+      "supports_images": null,
+      "temperature": 0.5,
+      "top_p": null,
+      "zai_clear_thinking": null,
+      "zai_subscription": null
+    },
+    "s19": [
+      {
+        "model": null,
+        "role": "chat",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "heartbeat",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "compaction",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "sub-agents",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "embedding",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "images",
+        "source": null
+      }
+    ],
+    "s20": {
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_keepalive_max": null,
+      "cache_ttl": "static_default",
+      "max_output_tokens": "static_default",
+      "max_tool_iterations": null,
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "sdk": "static_default",
+      "temperature": "static_default",
+      "top_p": null
+    },
+    "s21": {
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_keepalive_max": null,
+      "cache_ttl": "static_default",
+      "max_output_tokens": "static_default",
+      "max_tool_iterations": null,
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "sdk": "static_default",
+      "temperature": null,
+      "top_p": null
     }
   }
 }

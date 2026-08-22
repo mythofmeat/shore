@@ -338,23 +338,7 @@
       "ok": {
         "key": "tools",
         "config": {
-          "enabled_tools": [
-            "web_search",
-            "not_a_real_tool"
-          ],
-          "enabled_subagents": [
-            "researcher",
-            "ghost"
-          ],
-          "max_result_chars": 50000,
-          "timeout": "5m",
-          "web_search": {
-            "api_key_env": "TAVILY_API_KEY",
-            "result_limit": 10,
-            "search_depth": "advanced",
-            "include_answer": true
-          },
-          "config": {}
+          "$ref": "s6"
         },
         "defaults": {
           "enabled_tools": [],
@@ -384,28 +368,7 @@
       "ok": {
         "key": "subagents",
         "config": {
-          "idle": {
-            "description": "Never enabled",
-            "prompt": "You are idle.",
-            "timeout": null,
-            "tools": [
-              "fetch_url",
-              "idle_not_real"
-            ],
-            "model": null,
-            "max_iterations": null
-          },
-          "researcher": {
-            "description": "Looks things up",
-            "prompt": "You look things up.",
-            "timeout": null,
-            "tools": [
-              "web_search",
-              "also_not_real"
-            ],
-            "model": "primary",
-            "max_iterations": null
-          }
+          "$ref": "s4"
         },
         "defaults": {}
       }
@@ -910,267 +873,253 @@
   "$shared": {
     "s0": {
       "config": {
-        "advanced": {
-          "max_retries": null,
-          "retry_backoff": null
-        },
-        "behavior": {
-          "autonomy": {
-            "enabled": true,
-            "heartbeat": {
-              "dormant_after_heartbeat_turns": 3,
-              "dormant_after_idle_time": "2d",
-              "enabled": true,
-              "fallback_heartbeat_interval": "1h",
-              "minimum_heartbeat_latency": "1h",
-              "wrap_up_grace_rounds": 3
-            }
-          },
-          "user_message_timestamps": "auto"
-        },
-        "cache": {
-          "forensics": false,
-          "keepalive_max": "12h"
-        },
-        "chat": {
-          "anthropic": {
-            "primary": {
-              "api_key_env": "SHORE_FIXTURE_KEY_SET",
-              "model_id": "claude-primary"
-            },
-            "secondary": {
-              "api_key_env": "SHORE_FIXTURE_KEY_MISSING",
-              "model_id": "claude-secondary"
-            }
-          }
-        },
-        "connections": {
-          "matrix": null
-        },
-        "daemon": {
-          "addr": "127.0.0.1:7320"
-        },
-        "defaults": {
-          "background": {
-            "compaction": null,
-            "heartbeat": null,
-            "model": null
-          },
-          "display_name": null,
-          "embedding": null,
-          "image_generation": null,
-          "model": "primary",
-          "stream": false,
-          "subagent_model": null
-        },
-        "embedding": null,
-        "image_generation": null,
-        "mcp": {},
-        "memory": {
-          "compaction": {
-            "archive_after": "0s",
-            "enabled": true,
-            "idle_trigger": "2h",
-            "keep_recent_turns": 2,
-            "max_context_tokens": 200000,
-            "max_turns": 30,
-            "min_turns": 12
-          },
-          "git_push": false,
-          "retrieval": {
-            "binary": "skip",
-            "max_embed_chars_per_file": 4000,
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "mode": "auto"
-          },
-          "thinking": {
-            "replay_prior_thinking": "all"
-          }
-        },
-        "notifications": {
-          "backend": "notify_send",
-          "command": {
-            "template": ""
-          },
-          "enabled": false,
-          "events": {
-            "autonomous_message": true,
-            "cache_warning": false,
-            "compaction_complete": false,
-            "error": false,
-            "message_complete": true,
-            "usage_warning": false
-          },
-          "generation_threshold": "0s",
-          "ntfy": {
-            "token": "",
-            "topic": "",
-            "url": "https://ntfy.sh"
-          }
-        },
-        "providers": null,
-        "subagents": {
-          "idle": {
-            "description": "Never enabled",
-            "max_iterations": null,
-            "model": null,
-            "prompt": "You are idle.",
-            "timeout": null,
-            "tools": [
-              "fetch_url",
-              "idle_not_real"
-            ]
-          },
-          "researcher": {
-            "description": "Looks things up",
-            "max_iterations": null,
-            "model": "primary",
-            "prompt": "You look things up.",
-            "timeout": null,
-            "tools": [
-              "web_search",
-              "also_not_real"
-            ]
-          }
-        },
-        "tools": {
-          "config": {},
-          "enabled_subagents": [
-            "researcher",
-            "ghost"
-          ],
-          "enabled_tools": [
-            "web_search",
-            "not_a_real_tool"
-          ],
-          "max_result_chars": 50000,
-          "timeout": "5m",
-          "web_search": {
-            "api_key_env": "TAVILY_API_KEY",
-            "include_answer": true,
-            "result_limit": 10,
-            "search_depth": "advanced"
-          }
-        },
-        "usage": {
-          "allow_compaction_over_budget": false,
-          "budgets": [],
-          "timezone": "local"
-        }
+        "$ref": "s1"
       },
       "defaults": {
-        "advanced": {
-          "max_retries": null,
-          "retry_backoff": null
-        },
-        "behavior": {
-          "autonomy": {
-            "enabled": false,
-            "heartbeat": {
-              "dormant_after_heartbeat_turns": 3,
-              "dormant_after_idle_time": "2d",
-              "enabled": true,
-              "fallback_heartbeat_interval": "1h",
-              "minimum_heartbeat_latency": "1h",
-              "wrap_up_grace_rounds": 3
-            }
+        "$ref": "s2"
+      }
+    },
+    "s1": {
+      "advanced": {
+        "max_retries": null,
+        "retry_backoff": null
+      },
+      "behavior": {
+        "$ref": "s8"
+      },
+      "cache": {
+        "forensics": false,
+        "keepalive_max": "12h"
+      },
+      "chat": {
+        "anthropic": {
+          "primary": {
+            "api_key_env": "SHORE_FIXTURE_KEY_SET",
+            "model_id": "claude-primary"
           },
-          "user_message_timestamps": "auto"
+          "secondary": {
+            "api_key_env": "SHORE_FIXTURE_KEY_MISSING",
+            "model_id": "claude-secondary"
+          }
+        }
+      },
+      "connections": {
+        "matrix": null
+      },
+      "daemon": {
+        "addr": "127.0.0.1:7320"
+      },
+      "defaults": {
+        "background": {
+          "compaction": null,
+          "heartbeat": null,
+          "model": null
         },
-        "cache": {
-          "forensics": false,
-          "keepalive_max": "12h"
-        },
-        "chat": null,
-        "connections": {
-          "matrix": null
-        },
-        "daemon": {
-          "addr": "127.0.0.1:7320"
-        },
-        "defaults": {
-          "background": {
-            "compaction": null,
-            "heartbeat": null,
-            "model": null
-          },
-          "display_name": null,
-          "embedding": null,
-          "image_generation": null,
-          "model": null,
-          "stream": true,
-          "subagent_model": null
-        },
+        "display_name": null,
         "embedding": null,
         "image_generation": null,
-        "mcp": {},
-        "memory": {
-          "compaction": {
-            "archive_after": "0s",
-            "enabled": true,
-            "idle_trigger": "2h",
-            "keep_recent_turns": 2,
-            "max_context_tokens": 200000,
-            "max_turns": 30,
-            "min_turns": 12
-          },
-          "git_push": false,
-          "retrieval": {
-            "binary": "skip",
-            "max_embed_chars_per_file": 4000,
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "mode": "auto"
-          },
-          "thinking": {
-            "replay_prior_thinking": "all"
-          }
-        },
-        "notifications": {
-          "backend": "notify_send",
-          "command": {
-            "template": ""
-          },
-          "enabled": false,
-          "events": {
-            "autonomous_message": true,
-            "cache_warning": false,
-            "compaction_complete": false,
-            "error": false,
-            "message_complete": true,
-            "usage_warning": false
-          },
-          "generation_threshold": "0s",
-          "ntfy": {
-            "token": "",
-            "topic": "",
-            "url": "https://ntfy.sh"
-          }
-        },
-        "providers": null,
-        "subagents": {},
-        "tools": {
-          "config": {},
-          "enabled_subagents": [],
-          "enabled_tools": [],
-          "max_result_chars": 50000,
-          "timeout": "5m",
-          "web_search": {
-            "api_key_env": "TAVILY_API_KEY",
-            "include_answer": true,
-            "result_limit": 10,
-            "search_depth": "advanced"
-          }
-        },
-        "usage": {
-          "allow_compaction_over_budget": false,
-          "budgets": [],
-          "timezone": "local"
-        }
+        "model": "primary",
+        "stream": false,
+        "subagent_model": null
+      },
+      "embedding": null,
+      "image_generation": null,
+      "mcp": {},
+      "memory": {
+        "$ref": "s3"
+      },
+      "notifications": {
+        "$ref": "s5"
+      },
+      "providers": null,
+      "subagents": {
+        "$ref": "s4"
+      },
+      "tools": {
+        "$ref": "s6"
+      },
+      "usage": {
+        "allow_compaction_over_budget": false,
+        "budgets": [],
+        "timezone": "local"
       }
+    },
+    "s2": {
+      "advanced": {
+        "max_retries": null,
+        "retry_backoff": null
+      },
+      "behavior": {
+        "$ref": "s7"
+      },
+      "cache": {
+        "forensics": false,
+        "keepalive_max": "12h"
+      },
+      "chat": null,
+      "connections": {
+        "matrix": null
+      },
+      "daemon": {
+        "addr": "127.0.0.1:7320"
+      },
+      "defaults": {
+        "background": {
+          "compaction": null,
+          "heartbeat": null,
+          "model": null
+        },
+        "display_name": null,
+        "embedding": null,
+        "image_generation": null,
+        "model": null,
+        "stream": true,
+        "subagent_model": null
+      },
+      "embedding": null,
+      "image_generation": null,
+      "mcp": {},
+      "memory": {
+        "$ref": "s3"
+      },
+      "notifications": {
+        "$ref": "s5"
+      },
+      "providers": null,
+      "subagents": {},
+      "tools": {
+        "config": {},
+        "enabled_subagents": [],
+        "enabled_tools": [],
+        "max_result_chars": 50000,
+        "timeout": "5m",
+        "web_search": {
+          "api_key_env": "TAVILY_API_KEY",
+          "include_answer": true,
+          "result_limit": 10,
+          "search_depth": "advanced"
+        }
+      },
+      "usage": {
+        "allow_compaction_over_budget": false,
+        "budgets": [],
+        "timezone": "local"
+      }
+    },
+    "s3": {
+      "compaction": {
+        "archive_after": "0s",
+        "enabled": true,
+        "idle_trigger": "2h",
+        "keep_recent_turns": 2,
+        "max_context_tokens": 200000,
+        "max_turns": 30,
+        "min_turns": 12
+      },
+      "git_push": false,
+      "retrieval": {
+        "binary": "skip",
+        "max_embed_chars_per_file": 4000,
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "mode": "auto"
+      },
+      "thinking": {
+        "replay_prior_thinking": "all"
+      }
+    },
+    "s4": {
+      "idle": {
+        "description": "Never enabled",
+        "max_iterations": null,
+        "model": null,
+        "prompt": "You are idle.",
+        "timeout": null,
+        "tools": [
+          "fetch_url",
+          "idle_not_real"
+        ]
+      },
+      "researcher": {
+        "description": "Looks things up",
+        "max_iterations": null,
+        "model": "primary",
+        "prompt": "You look things up.",
+        "timeout": null,
+        "tools": [
+          "web_search",
+          "also_not_real"
+        ]
+      }
+    },
+    "s5": {
+      "backend": "notify_send",
+      "command": {
+        "template": ""
+      },
+      "enabled": false,
+      "events": {
+        "autonomous_message": true,
+        "cache_warning": false,
+        "compaction_complete": false,
+        "error": false,
+        "message_complete": true,
+        "usage_warning": false
+      },
+      "generation_threshold": "0s",
+      "ntfy": {
+        "token": "",
+        "topic": "",
+        "url": "https://ntfy.sh"
+      }
+    },
+    "s6": {
+      "config": {},
+      "enabled_subagents": [
+        "researcher",
+        "ghost"
+      ],
+      "enabled_tools": [
+        "web_search",
+        "not_a_real_tool"
+      ],
+      "max_result_chars": 50000,
+      "timeout": "5m",
+      "web_search": {
+        "api_key_env": "TAVILY_API_KEY",
+        "include_answer": true,
+        "result_limit": 10,
+        "search_depth": "advanced"
+      }
+    },
+    "s7": {
+      "autonomy": {
+        "enabled": false,
+        "heartbeat": {
+          "dormant_after_heartbeat_turns": 3,
+          "dormant_after_idle_time": "2d",
+          "enabled": true,
+          "fallback_heartbeat_interval": "1h",
+          "minimum_heartbeat_latency": "1h",
+          "wrap_up_grace_rounds": 3
+        }
+      },
+      "user_message_timestamps": "auto"
+    },
+    "s8": {
+      "autonomy": {
+        "enabled": true,
+        "heartbeat": {
+          "dormant_after_heartbeat_turns": 3,
+          "dormant_after_idle_time": "2d",
+          "enabled": true,
+          "fallback_heartbeat_interval": "1h",
+          "minimum_heartbeat_latency": "1h",
+          "wrap_up_grace_rounds": 3
+        }
+      },
+      "user_message_timestamps": "auto"
     }
   }
 }

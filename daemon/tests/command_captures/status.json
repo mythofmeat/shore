@@ -67,7 +67,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -145,7 +145,7 @@
           ]
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -197,7 +197,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -245,7 +245,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -295,7 +295,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -343,7 +343,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -391,7 +391,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -439,7 +439,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -487,7 +487,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -537,7 +537,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -585,7 +585,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -637,7 +637,7 @@
           "recent_events": []
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -923,7 +923,7 @@
           ]
         },
         "activity": {
-          "$ref": "s2"
+          "$ref": "s5"
         },
         "keepalive_halted": null,
         "sections": [
@@ -1203,7 +1203,7 @@
       "setup": "diagnostics_seeded",
       "args": {},
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -1249,7 +1249,7 @@
         "count": 12
       },
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -1259,7 +1259,7 @@
         "count": 50
       },
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -1286,7 +1286,7 @@
         "count": -1
       },
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -1296,7 +1296,7 @@
         "count": "3"
       },
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -1306,7 +1306,7 @@
         "count": 1.5
       },
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -1327,193 +1327,202 @@
   ],
   "$shared": {
     "s0": {
-      "events": [
-        {
-          "detail": "event 5",
-          "kind": "dormant",
-          "timestamp": "2026-01-15T09:05:00+00:00"
-        },
-        {
-          "detail": "event 6",
-          "kind": "wake",
-          "timestamp": "2026-01-15T09:06:00+00:00"
-        },
-        {
-          "detail": "event 7",
-          "kind": "timeout",
-          "timestamp": "2026-01-15T09:07:00+00:00"
-        },
-        {
-          "detail": "event 8",
-          "kind": "dormant_ping",
-          "timestamp": "2026-01-15T09:08:00+00:00"
-        },
-        {
-          "detail": "event 9",
-          "kind": "recap_written",
-          "timestamp": "2026-01-15T09:09:00+00:00"
-        },
-        {
-          "detail": "event 10",
-          "kind": "tick_fired",
-          "timestamp": "2026-01-15T09:10:00+00:00"
-        },
-        {
-          "detail": "event 11",
-          "kind": "tool_use",
-          "timestamp": "2026-01-15T09:11:00+00:00"
-        },
-        {
-          "detail": "event 12",
-          "kind": "message_sent",
-          "timestamp": "2026-01-15T09:12:00+00:00"
-        },
-        {
-          "detail": "event 13",
-          "kind": "tick_fired",
-          "timestamp": "2026-01-15T09:13:00+00:00"
-        },
-        {
-          "detail": "event 14",
-          "kind": "message_skipped",
-          "timestamp": "2026-01-15T09:14:00+00:00"
-        },
-        {
-          "detail": "event 15",
-          "kind": "dormant",
-          "timestamp": "2026-01-15T09:15:00+00:00"
-        },
-        {
-          "detail": "event 16",
-          "kind": "wake",
-          "timestamp": "2026-01-15T09:16:00+00:00"
-        },
-        {
-          "detail": "event 17",
-          "kind": "timeout",
-          "timestamp": "2026-01-15T09:17:00+00:00"
-        },
-        {
-          "detail": "event 18",
-          "kind": "dormant_ping",
-          "timestamp": "2026-01-15T09:18:00+00:00"
-        },
-        {
-          "detail": "event 19",
-          "kind": "recap_written",
-          "timestamp": "2026-01-15T09:19:00+00:00"
-        },
-        {
-          "detail": "event 20",
-          "kind": "tick_fired",
-          "timestamp": "2026-01-15T09:20:00+00:00"
-        },
-        {
-          "detail": "event 21",
-          "kind": "tool_use",
-          "timestamp": "2026-01-15T09:21:00+00:00"
-        },
-        {
-          "detail": "event 22",
-          "kind": "message_sent",
-          "timestamp": "2026-01-15T09:22:00+00:00"
-        },
-        {
-          "detail": "event 23",
-          "kind": "tick_fired",
-          "timestamp": "2026-01-15T09:23:00+00:00"
-        },
-        {
-          "detail": "event 24",
-          "kind": "message_skipped",
-          "timestamp": "2026-01-15T09:24:00+00:00"
-        }
-      ]
+      "events": {
+        "$ref": "s1"
+      }
     },
-    "s1": {
+    "s1": [
+      {
+        "detail": "event 5",
+        "kind": "dormant",
+        "timestamp": "2026-01-15T09:05:00+00:00"
+      },
+      {
+        "detail": "event 6",
+        "kind": "wake",
+        "timestamp": "2026-01-15T09:06:00+00:00"
+      },
+      {
+        "detail": "event 7",
+        "kind": "timeout",
+        "timestamp": "2026-01-15T09:07:00+00:00"
+      },
+      {
+        "detail": "event 8",
+        "kind": "dormant_ping",
+        "timestamp": "2026-01-15T09:08:00+00:00"
+      },
+      {
+        "detail": "event 9",
+        "kind": "recap_written",
+        "timestamp": "2026-01-15T09:09:00+00:00"
+      },
+      {
+        "detail": "event 10",
+        "kind": "tick_fired",
+        "timestamp": "2026-01-15T09:10:00+00:00"
+      },
+      {
+        "detail": "event 11",
+        "kind": "tool_use",
+        "timestamp": "2026-01-15T09:11:00+00:00"
+      },
+      {
+        "detail": "event 12",
+        "kind": "message_sent",
+        "timestamp": "2026-01-15T09:12:00+00:00"
+      },
+      {
+        "detail": "event 13",
+        "kind": "tick_fired",
+        "timestamp": "2026-01-15T09:13:00+00:00"
+      },
+      {
+        "detail": "event 14",
+        "kind": "message_skipped",
+        "timestamp": "2026-01-15T09:14:00+00:00"
+      },
+      {
+        "detail": "event 15",
+        "kind": "dormant",
+        "timestamp": "2026-01-15T09:15:00+00:00"
+      },
+      {
+        "detail": "event 16",
+        "kind": "wake",
+        "timestamp": "2026-01-15T09:16:00+00:00"
+      },
+      {
+        "detail": "event 17",
+        "kind": "timeout",
+        "timestamp": "2026-01-15T09:17:00+00:00"
+      },
+      {
+        "detail": "event 18",
+        "kind": "dormant_ping",
+        "timestamp": "2026-01-15T09:18:00+00:00"
+      },
+      {
+        "detail": "event 19",
+        "kind": "recap_written",
+        "timestamp": "2026-01-15T09:19:00+00:00"
+      },
+      {
+        "detail": "event 20",
+        "kind": "tick_fired",
+        "timestamp": "2026-01-15T09:20:00+00:00"
+      },
+      {
+        "detail": "event 21",
+        "kind": "tool_use",
+        "timestamp": "2026-01-15T09:21:00+00:00"
+      },
+      {
+        "detail": "event 22",
+        "kind": "message_sent",
+        "timestamp": "2026-01-15T09:22:00+00:00"
+      },
+      {
+        "detail": "event 23",
+        "kind": "tick_fired",
+        "timestamp": "2026-01-15T09:23:00+00:00"
+      },
+      {
+        "detail": "event 24",
+        "kind": "message_skipped",
+        "timestamp": "2026-01-15T09:24:00+00:00"
+      }
+    ],
+    "s2": {
       "errors": {
-        "count": 12,
-        "recent": [
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 0",
-            "timestamp": "2026-01-15T12:00:00+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 1",
-            "timestamp": "2026-01-15T12:00:01+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 2",
-            "timestamp": "2026-01-15T12:00:02+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 3",
-            "timestamp": "2026-01-15T12:00:03+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 4",
-            "timestamp": "2026-01-15T12:00:04+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 5",
-            "timestamp": "2026-01-15T12:00:05+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 6",
-            "timestamp": "2026-01-15T12:00:06+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 7",
-            "timestamp": "2026-01-15T12:00:07+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 8",
-            "timestamp": "2026-01-15T12:00:08+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 9",
-            "timestamp": "2026-01-15T12:00:09+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 10",
-            "timestamp": "2026-01-15T12:00:10+00:00"
-          },
-          {
-            "context": "character=poppy",
-            "error_type": "llm",
-            "message": "failure 11",
-            "timestamp": "2026-01-15T12:00:11+00:00"
-          }
-        ]
+        "$ref": "s3"
       },
       "key_fallbacks": {
         "count": 0,
         "recent": []
       }
     },
-    "s2": {
+    "s3": {
+      "count": 12,
+      "recent": {
+        "$ref": "s4"
+      }
+    },
+    "s4": [
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 0",
+        "timestamp": "2026-01-15T12:00:00+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 1",
+        "timestamp": "2026-01-15T12:00:01+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 2",
+        "timestamp": "2026-01-15T12:00:02+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 3",
+        "timestamp": "2026-01-15T12:00:03+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 4",
+        "timestamp": "2026-01-15T12:00:04+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 5",
+        "timestamp": "2026-01-15T12:00:05+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 6",
+        "timestamp": "2026-01-15T12:00:06+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 7",
+        "timestamp": "2026-01-15T12:00:07+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 8",
+        "timestamp": "2026-01-15T12:00:08+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 9",
+        "timestamp": "2026-01-15T12:00:09+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 10",
+        "timestamp": "2026-01-15T12:00:10+00:00"
+      },
+      {
+        "context": "character=poppy",
+        "error_type": "llm",
+        "message": "failure 11",
+        "timestamp": "2026-01-15T12:00:11+00:00"
+      }
+    ],
+    "s5": {
       "engagement_score": 0.2,
       "has_sufficient_heatmap": false,
       "hour_classifications": [

@@ -1267,27 +1267,7 @@
                 "timestamp": "2025-12-01T00:00:00Z"
               },
               {
-                "msg_id": "s2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_1",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  },
-                  {
-                    "type": "tool_result",
-                    "tool_use_id": "tu_1",
-                    "content": "file contents",
-                    "is_error": false
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
+                "$ref": "s1"
               },
               {
                 "msg_id": "a1",
@@ -1371,27 +1351,7 @@
                 "timestamp": "2025-12-01T00:00:00Z"
               },
               {
-                "msg_id": "s2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_1",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  },
-                  {
-                    "type": "tool_result",
-                    "tool_use_id": "tu_1",
-                    "content": "file contents",
-                    "is_error": false
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
+                "$ref": "s1"
               },
               {
                 "msg_id": "a1",
@@ -1507,27 +1467,7 @@
                 "timestamp": "2025-12-01T00:00:00Z"
               },
               {
-                "msg_id": "s2",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tu_1",
-                    "name": "read_file",
-                    "input": {
-                      "path": "/tmp/x"
-                    }
-                  },
-                  {
-                    "type": "tool_result",
-                    "tool_use_id": "tu_1",
-                    "content": "file contents",
-                    "is_error": false
-                  }
-                ],
-                "timestamp": "2025-12-01T00:00:01Z"
+                "$ref": "s1"
               },
               {
                 "msg_id": "a1",
@@ -2775,6 +2715,29 @@
       "msg_id": "w6",
       "role": "assistant",
       "timestamp": "2026-01-01T00:00:03Z"
+    },
+    "s1": {
+      "content": "",
+      "content_blocks": [
+        {
+          "id": "tu_1",
+          "input": {
+            "path": "/tmp/x"
+          },
+          "name": "read_file",
+          "type": "tool_use"
+        },
+        {
+          "content": "file contents",
+          "is_error": false,
+          "tool_use_id": "tu_1",
+          "type": "tool_result"
+        }
+      ],
+      "images": [],
+      "msg_id": "s2",
+      "role": "assistant",
+      "timestamp": "2025-12-01T00:00:01Z"
     }
   }
 }

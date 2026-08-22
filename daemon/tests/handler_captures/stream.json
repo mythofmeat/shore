@@ -18,87 +18,87 @@
     {
       "input": "exactly-five!",
       "max": 12,
-      "output": "exactly-five\u2026"
+      "output": "exactly-five…"
     },
     {
-      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
+      "input": "ééééé",
       "max": 10,
-      "output": "\u00e9\u00e9\u00e9\u00e9\u00e9"
+      "output": "ééééé"
     },
     {
-      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
+      "input": "ééééé",
       "max": 9,
-      "output": "\u00e9\u00e9\u00e9\u00e9\u2026"
+      "output": "éééé…"
     },
     {
-      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
+      "input": "ééééé",
       "max": 8,
-      "output": "\u00e9\u00e9\u00e9\u00e9\u2026"
+      "output": "éééé…"
     },
     {
-      "input": "a\u00e9b",
+      "input": "aéb",
       "max": 2,
-      "output": "a\u2026"
+      "output": "a…"
     },
     {
-      "input": "a\u00e9b",
+      "input": "aéb",
       "max": 3,
-      "output": "a\u00e9\u2026"
+      "output": "aé…"
     },
     {
-      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
+      "input": "🎵🎵🎵",
       "max": 12,
-      "output": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5"
+      "output": "🎵🎵🎵"
     },
     {
-      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
+      "input": "🎵🎵🎵",
       "max": 11,
-      "output": "\ud83c\udfb5\ud83c\udfb5\u2026"
+      "output": "🎵🎵…"
     },
     {
-      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
+      "input": "🎵🎵🎵",
       "max": 9,
-      "output": "\ud83c\udfb5\ud83c\udfb5\u2026"
+      "output": "🎵🎵…"
     },
     {
-      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
+      "input": "🎵🎵🎵",
       "max": 4,
-      "output": "\ud83c\udfb5\u2026"
+      "output": "🎵…"
     },
     {
-      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
+      "input": "🎵🎵🎵",
       "max": 3,
-      "output": "\u2026"
+      "output": "…"
     },
     {
-      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
+      "input": "🎵🎵🎵",
       "max": 0,
-      "output": "\u2026"
+      "output": "…"
     },
     {
       "input": "abc",
       "max": 0,
-      "output": "\u2026"
+      "output": "…"
     },
     {
-      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
+      "input": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵",
       "max": 200,
-      "output": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\u2026"
+      "output": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵…"
     },
     {
-      "input": "e\u0301x",
+      "input": "éx",
       "max": 1,
-      "output": "e\u2026"
+      "output": "e…"
     },
     {
-      "input": "e\u0301x",
+      "input": "éx",
       "max": 2,
-      "output": "e\u2026"
+      "output": "e…"
     },
     {
-      "input": "e\u0301x",
+      "input": "éx",
       "max": 3,
-      "output": "e\u0301\u2026"
+      "output": "é…"
     }
   ],
   "shell_escape": [
@@ -167,16 +167,16 @@
       "output": "'\\''('\\''"
     },
     {
-      "input": "\ud83c\udfb5 unicode \ud83c\udfb5",
-      "output": "\ud83c\udfb5 unicode \ud83c\udfb5"
+      "input": "🎵 unicode 🎵",
+      "output": "🎵 unicode 🎵"
     }
   ],
   "command_template": [
     {
       "template": "echo '{title}: {body}'",
-      "title": "Shore \u2014 Test",
+      "title": "Shore — Test",
       "body": "hello world",
-      "rendered": "echo 'Shore \u2014 Test: hello world'"
+      "rendered": "echo 'Shore — Test: hello world'"
     },
     {
       "template": "echo '{title}'",
@@ -576,25 +576,7 @@
       "name": "empty",
       "toml": "",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "$ref": "s0"
       }
     },
     {
@@ -636,25 +618,7 @@
       "name": "threshold_zero_int",
       "toml": "generation_threshold = 0\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "$ref": "s0"
       }
     },
     {
@@ -671,25 +635,7 @@
       "name": "threshold_float_tiny",
       "toml": "generation_threshold = 0.0005\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "$ref": "s0"
       }
     },
     {
@@ -871,25 +817,7 @@
       "name": "backend_notify_send",
       "toml": "backend = \"notify_send\"\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "$ref": "s0"
       }
     },
     {
@@ -956,25 +884,7 @@
       "name": "ntfy_empty_table",
       "toml": "[ntfy]\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "$ref": "s0"
       }
     },
     {
@@ -1156,25 +1066,7 @@
       "name": "events_empty",
       "toml": "[events]\n",
       "ok": {
-        "enabled": false,
-        "backend": "notify_send",
-        "ntfy": {
-          "url": "https://ntfy.sh",
-          "topic": "",
-          "token": ""
-        },
-        "command": {
-          "template": ""
-        },
-        "generation_threshold_ms": "0",
-        "events": {
-          "autonomous_message": true,
-          "cache_warning": true,
-          "compaction_complete": true,
-          "error": true,
-          "message_complete": false,
-          "usage_warning": true
-        }
+        "$ref": "s0"
       }
     },
     {
@@ -1479,24 +1371,7 @@
         }
       ],
       "outcome": {
-        "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
-          "tool_uses": [],
-          "content_blocks": []
-        }
+        "$ref": "s1"
       }
     },
     {
@@ -1708,28 +1583,9 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t",
-          "content_type": "thinking",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "a",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
+      "frames": {
+        "$ref": "s3"
+      },
       "outcome": {
         "ok": {
           "content": "C",
@@ -1942,28 +1798,9 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t",
-          "content_type": "thinking",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "a",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
+      "frames": {
+        "$ref": "s3"
+      },
       "outcome": {
         "ok": {
           "content": "C",
@@ -2014,28 +1851,9 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t",
-          "content_type": "thinking",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "a",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
+      "frames": {
+        "$ref": "s3"
+      },
       "outcome": {
         "ok": {
           "content": "C",
@@ -2236,28 +2054,9 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "t",
-          "content_type": "thinking",
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "a",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
+      "frames": {
+        "$ref": "s3"
+      },
       "outcome": {
         "ok": {
           "content": "C",
@@ -2498,24 +2297,7 @@
         }
       ],
       "outcome": {
-        "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
-          "tool_uses": [],
-          "content_blocks": []
-        }
+        "$ref": "s1"
       }
     },
     {
@@ -2627,32 +2409,15 @@
         }
       ],
       "outcome": {
-        "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
-          "tool_uses": [],
-          "content_blocks": []
-        }
+        "$ref": "s1"
       }
     },
     {
       "name": "multibyte_text",
       "lines": [
         "{\"type\":\"start\",\"model\":\"m\"}",
-        "{\"type\":\"text\",\"text\":\"\ud83c\udfb5\"}",
-        "{\"type\":\"text\",\"text\":\"\u00e9\"}",
+        "{\"type\":\"text\",\"text\":\"🎵\"}",
+        "{\"type\":\"text\",\"text\":\"é\"}",
         "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
       ],
       "regen": false,
@@ -2667,14 +2432,14 @@
         {
           "type": "stream_chunk",
           "rid": null,
-          "text": "\ud83c\udfb5",
+          "text": "🎵",
           "content_type": "text",
           "subagent": null
         },
         {
           "type": "stream_chunk",
           "rid": null,
-          "text": "\u00e9",
+          "text": "é",
           "content_type": "text",
           "subagent": null
         }
@@ -2699,7 +2464,7 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": "\ud83c\udfb5\u00e9"
+              "text": "🎵é"
             }
           ]
         }
@@ -3384,13 +3149,13 @@
             {
               "type": "tool_result",
               "tool_use_id": "t",
-              "content": "\ufeff",
+              "content": "﻿",
               "is_error": false
             }
           ]
         }
       ],
-      "notify_content": "\ufeff"
+      "notify_content": "﻿"
     },
     {
       "name": "next_line_tool_result_is_blank",
@@ -3401,7 +3166,7 @@
             {
               "type": "tool_result",
               "tool_use_id": "t",
-              "content": "\u0085",
+              "content": "",
               "is_error": false
             }
           ]
@@ -3417,7 +3182,7 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": "\u0085"
+              "text": ""
             }
           ]
         }
@@ -3432,12 +3197,12 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": "\ufeff"
+              "text": "﻿"
             }
           ]
         }
       ],
-      "notify_content": "\ufeff"
+      "notify_content": "﻿"
     }
   ],
   "message_from_response": [
@@ -3584,114 +3349,21 @@
   "last_request": [
     {
       "name": "no_response",
-      "sent": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q1"
-            }
-          ]
-        },
-        {
-          "role": "assistant",
-          "content": [
-            {
-              "type": "thinking",
-              "thinking": "t1",
-              "signature": "s1"
-            },
-            {
-              "type": "text",
-              "text": "a1"
-            }
-          ]
-        },
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q2"
-            }
-          ]
-        }
-      ],
+      "sent": {
+        "$ref": "s4"
+      },
       "provider_key": "anthropic",
       "response": [],
-      "messages_after": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q1"
-            }
-          ]
-        },
-        {
-          "role": "assistant",
-          "content": [
-            {
-              "type": "thinking",
-              "thinking": "t1",
-              "signature": "s1"
-            },
-            {
-              "type": "text",
-              "text": "a1"
-            }
-          ]
-        },
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q2"
-            }
-          ]
-        }
-      ],
+      "messages_after": {
+        "$ref": "s4"
+      },
       "prefix_unchanged": true
     },
     {
       "name": "appends_without_touching_prefix",
-      "sent": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q1"
-            }
-          ]
-        },
-        {
-          "role": "assistant",
-          "content": [
-            {
-              "type": "thinking",
-              "thinking": "t1",
-              "signature": "s1"
-            },
-            {
-              "type": "text",
-              "text": "a1"
-            }
-          ]
-        },
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q2"
-            }
-          ]
-        }
-      ],
+      "sent": {
+        "$ref": "s4"
+      },
       "provider_key": "anthropic",
       "response": [
         {
@@ -3766,40 +3438,9 @@
     },
     {
       "name": "empty_turn_skipped",
-      "sent": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q1"
-            }
-          ]
-        },
-        {
-          "role": "assistant",
-          "content": [
-            {
-              "type": "thinking",
-              "thinking": "t1",
-              "signature": "s1"
-            },
-            {
-              "type": "text",
-              "text": "a1"
-            }
-          ]
-        },
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q2"
-            }
-          ]
-        }
-      ],
+      "sent": {
+        "$ref": "s4"
+      },
       "provider_key": "anthropic",
       "response": [
         {
@@ -3865,40 +3506,9 @@
     },
     {
       "name": "no_provider_key",
-      "sent": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q1"
-            }
-          ]
-        },
-        {
-          "role": "assistant",
-          "content": [
-            {
-              "type": "thinking",
-              "thinking": "t1",
-              "signature": "s1"
-            },
-            {
-              "type": "text",
-              "text": "a1"
-            }
-          ]
-        },
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "q2"
-            }
-          ]
-        }
-      ],
+      "sent": {
+        "$ref": "s4"
+      },
       "provider_key": null,
       "response": [
         {
@@ -4118,5 +3728,107 @@
       }
     ],
     "count": 3
+  },
+  "$shared": {
+    "s0": {
+      "backend": "notify_send",
+      "command": {
+        "template": ""
+      },
+      "enabled": false,
+      "events": {
+        "autonomous_message": true,
+        "cache_warning": true,
+        "compaction_complete": true,
+        "error": true,
+        "message_complete": false,
+        "usage_warning": true
+      },
+      "generation_threshold_ms": "0",
+      "ntfy": {
+        "token": "",
+        "topic": "",
+        "url": "https://ntfy.sh"
+      }
+    },
+    "s1": {
+      "ok": {
+        "$ref": "s2"
+      }
+    },
+    "s2": {
+      "content": "C",
+      "content_blocks": [],
+      "finish_reason": "end_turn",
+      "model": "m",
+      "timing": {
+        "time_to_first_token_ms": 50,
+        "total_ms": 150
+      },
+      "tool_uses": [],
+      "usage": {
+        "cache_creation_tokens": 2,
+        "cache_read_tokens": 8,
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "total_cost_usd": null
+      }
+    },
+    "s3": [
+      {
+        "regen": false,
+        "rid": null,
+        "subagent": null,
+        "type": "stream_start"
+      },
+      {
+        "content_type": "thinking",
+        "rid": null,
+        "subagent": null,
+        "text": "t",
+        "type": "stream_chunk"
+      },
+      {
+        "content_type": "text",
+        "rid": null,
+        "subagent": null,
+        "text": "a",
+        "type": "stream_chunk"
+      }
+    ],
+    "s4": [
+      {
+        "content": [
+          {
+            "text": "q1",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "signature": "s1",
+            "thinking": "t1",
+            "type": "thinking"
+          },
+          {
+            "text": "a1",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "q2",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
   }
 }

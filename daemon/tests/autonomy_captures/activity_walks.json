@@ -7,25 +7,25 @@
       "message_count": 0,
       "by_weekday": {
         "Mon": {
-          "$ref": "s12"
+          "$ref": "s11"
         },
         "Tue": {
-          "$ref": "s12"
+          "$ref": "s11"
         },
         "Wed": {
-          "$ref": "s12"
+          "$ref": "s11"
         },
         "Thu": {
-          "$ref": "s12"
+          "$ref": "s11"
         },
         "Fri": {
-          "$ref": "s12"
+          "$ref": "s11"
         },
         "Sat": {
-          "$ref": "s12"
+          "$ref": "s11"
         },
         "Sun": {
-          "$ref": "s12"
+          "$ref": "s11"
         }
       }
     },
@@ -38,25 +38,25 @@
       "message_count": 1,
       "by_weekday": {
         "Mon": {
-          "$ref": "s11"
+          "$ref": "s12"
         },
         "Tue": {
-          "$ref": "s11"
+          "$ref": "s12"
         },
         "Wed": {
-          "$ref": "s11"
+          "$ref": "s12"
         },
         "Thu": {
-          "$ref": "s11"
+          "$ref": "s12"
         },
         "Fri": {
-          "$ref": "s11"
+          "$ref": "s12"
         },
         "Sat": {
-          "$ref": "s11"
+          "$ref": "s12"
         },
         "Sun": {
-          "$ref": "s11"
+          "$ref": "s12"
         }
       }
     },
@@ -406,25 +406,25 @@
       "message_count": 40,
       "by_weekday": {
         "Mon": {
-          "$ref": "s7"
+          "$ref": "s6"
         },
         "Tue": {
-          "$ref": "s7"
+          "$ref": "s6"
         },
         "Wed": {
-          "$ref": "s7"
+          "$ref": "s6"
         },
         "Thu": {
-          "$ref": "s7"
+          "$ref": "s6"
         },
         "Fri": {
-          "$ref": "s7"
+          "$ref": "s6"
         },
         "Sat": {
-          "$ref": "s7"
+          "$ref": "s6"
         },
         "Sun": {
-          "$ref": "s7"
+          "$ref": "s6"
         }
       }
     },
@@ -478,25 +478,25 @@
       "message_count": 8,
       "by_weekday": {
         "Mon": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Tue": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Wed": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Thu": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Fri": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Sat": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Sun": {
-          "$ref": "s6"
+          "$ref": "s7"
         }
       }
     },
@@ -1869,32 +1869,9 @@
         "trough",
         "normal"
       ],
-      "hour_histogram": [
-        0.1111111111111111,
-        0.011111111111111112,
-        0.011111111111111112,
-        0.0,
-        0.022222222222222223,
-        0.0,
-        0.0,
-        0.0,
-        0.03333333333333333,
-        0.011111111111111112,
-        0.03333333333333333,
-        0.0,
-        0.14444444444444443,
-        0.13333333333333333,
-        0.044444444444444446,
-        0.03333333333333333,
-        0.022222222222222223,
-        0.18888888888888888,
-        0.07777777777777778,
-        0.06666666666666667,
-        0.0,
-        0.011111111111111112,
-        0.011111111111111112,
-        0.03333333333333333
-      ],
+      "hour_histogram": {
+        "$ref": "s13"
+      },
       "median_session_gap": 4350.0,
       "session_count": 23,
       "sessions_per_day": 4.6,
@@ -1932,32 +1909,9 @@
         "trough",
         "trough"
       ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.13333333333333333,
-        0.06666666666666667,
-        0.08333333333333333,
-        0.11666666666666667,
-        0.03333333333333333,
-        0.06666666666666667,
-        0.08333333333333333,
-        0.03333333333333333,
-        0.0,
-        0.06666666666666667,
-        0.08333333333333333,
-        0.2,
-        0.0,
-        0.03333333333333333,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "hour_histogram": {
+        "$ref": "s14"
+      },
       "median_session_gap": 4402.0,
       "session_count": 10,
       "sessions_per_day": 3.3333333333333335,
@@ -2218,69 +2172,6 @@
     "s6": {
       "anomaly_z_score": null,
       "consistency": 1.0,
-      "engagement_score": 0.9476161265076359,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": null,
-      "session_count": 1,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.8690403162690898
-    },
-    "s7": {
-      "anomaly_z_score": null,
-      "consistency": 1.0,
       "engagement_score": 0.9577979634562186,
       "has_sufficient_data": false,
       "has_sufficient_heatmap": false,
@@ -2340,6 +2231,69 @@
       "session_count": 1,
       "sessions_per_day": 1.0,
       "tempo_score": 0.8944949086405465
+    },
+    "s7": {
+      "anomaly_z_score": null,
+      "consistency": 1.0,
+      "engagement_score": 0.9476161265076359,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_classifications": [
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "normal",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough",
+        "trough"
+      ],
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": null,
+      "session_count": 1,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.8690403162690898
     },
     "s8": {
       "anomaly_z_score": null,
@@ -2532,6 +2486,69 @@
     },
     "s11": {
       "anomaly_z_score": null,
+      "consistency": 0.0,
+      "engagement_score": 0.2,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_classifications": [
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal",
+        "normal"
+      ],
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": null,
+      "session_count": 0,
+      "sessions_per_day": 0.0,
+      "tempo_score": 0.5
+    },
+    "s12": {
+      "anomaly_z_score": null,
       "consistency": 1.0,
       "engagement_score": 0.8,
       "has_sufficient_data": false,
@@ -2593,68 +2610,57 @@
       "sessions_per_day": 1.0,
       "tempo_score": 0.5
     },
-    "s12": {
-      "anomaly_z_score": null,
-      "consistency": 0.0,
-      "engagement_score": 0.2,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": null,
-      "session_count": 0,
-      "sessions_per_day": 0.0,
-      "tempo_score": 0.5
-    }
+    "s13": [
+      0.1111111111111111,
+      0.011111111111111112,
+      0.011111111111111112,
+      0.0,
+      0.022222222222222223,
+      0.0,
+      0.0,
+      0.0,
+      0.03333333333333333,
+      0.011111111111111112,
+      0.03333333333333333,
+      0.0,
+      0.14444444444444443,
+      0.13333333333333333,
+      0.044444444444444446,
+      0.03333333333333333,
+      0.022222222222222223,
+      0.18888888888888888,
+      0.07777777777777778,
+      0.06666666666666667,
+      0.0,
+      0.011111111111111112,
+      0.011111111111111112,
+      0.03333333333333333
+    ],
+    "s14": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.13333333333333333,
+      0.06666666666666667,
+      0.08333333333333333,
+      0.11666666666666667,
+      0.03333333333333333,
+      0.06666666666666667,
+      0.08333333333333333,
+      0.03333333333333333,
+      0.0,
+      0.06666666666666667,
+      0.08333333333333333,
+      0.2,
+      0.0,
+      0.03333333333333333,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
   }
 }

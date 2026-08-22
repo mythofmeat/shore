@@ -3,49 +3,11 @@
     {
       "name": "root listing via absent path",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {},
       "result": {
-        "ok": {
-          "entries": [
-            {
-              "name": "SOUL.md",
-              "type": "file",
-              "size": 12
-            },
-            {
-              "name": "empty.md",
-              "type": "file",
-              "size": 0
-            },
-            {
-              "name": "memory",
-              "type": "directory",
-              "size": 4096
-            },
-            {
-              "name": "no-trailing.md",
-              "type": "file",
-              "size": 10
-            },
-            {
-              "name": "notes.md",
-              "type": "file",
-              "size": 39
-            },
-            {
-              "name": "sub",
-              "type": "directory",
-              "size": 4096
-            },
-            {
-              "name": "unicode.md",
-              "type": "file",
-              "size": 29
-            }
-          ]
-        }
+        "$ref": "s15"
       }
     },
     {
@@ -61,7 +23,7 @@
     {
       "name": "whole file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md"
@@ -77,7 +39,7 @@
     {
       "name": "file without trailing newline",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "no-trailing.md"
@@ -93,7 +55,7 @@
     {
       "name": "empty file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "empty.md"
@@ -109,7 +71,7 @@
     {
       "name": "offset only",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -128,7 +90,7 @@
     {
       "name": "offset and limit",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -149,7 +111,7 @@
     {
       "name": "limit only",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -169,7 +131,7 @@
     {
       "name": "limit zero",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -189,7 +151,7 @@
     {
       "name": "offset zero",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -206,7 +168,7 @@
     {
       "name": "offset past end",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -225,7 +187,7 @@
     {
       "name": "limit past end",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -242,7 +204,7 @@
     {
       "name": "offset float is ignored",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -259,7 +221,7 @@
     {
       "name": "offset negative is ignored",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -276,7 +238,7 @@
     {
       "name": "offset string is ignored",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -293,7 +255,7 @@
     {
       "name": "limit negative is ignored",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -310,7 +272,7 @@
     {
       "name": "limit negative with offset",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -330,7 +292,7 @@
     {
       "name": "unicode file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "unicode.md"
@@ -346,7 +308,7 @@
     {
       "name": "directory path lists",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "sub"
@@ -365,62 +327,9 @@
     },
     {
       "name": "memory prefix directory",
-      "tree": [
-        {
-          "content": "I am qifei.\n",
-          "kind": "file",
-          "mtime_secs": 1700000300,
-          "path": "SOUL.md"
-        },
-        {
-          "content": "line one\nline two\nline three\nline four\n",
-          "kind": "file",
-          "mtime_secs": 1700000200,
-          "path": "notes.md"
-        },
-        {
-          "content": "alpha\nbeta",
-          "kind": "file",
-          "mtime_secs": 1700000100,
-          "path": "no-trailing.md"
-        },
-        {
-          "content": "",
-          "kind": "file",
-          "mtime_secs": 1700000050,
-          "path": "empty.md"
-        },
-        {
-          "content": "🌊 tea\n茶 is tea\nTEA time\n",
-          "kind": "file",
-          "mtime_secs": 1700000400,
-          "path": "unicode.md"
-        },
-        {
-          "kind": "dir",
-          "path": "sub"
-        },
-        {
-          "content": "deep tea\n",
-          "kind": "file",
-          "mtime_secs": 1700000500,
-          "path": "sub/deep.md"
-        },
-        {
-          "kind": "dir",
-          "path": "memory"
-        },
-        {
-          "kind": "dir",
-          "path": "memory/people"
-        },
-        {
-          "content": "Ren likes tea.\n",
-          "kind": "file",
-          "mtime_secs": 1700000600,
-          "path": "memory/people/ren.md"
-        }
-      ],
+      "tree": {
+        "$ref": "s9"
+      },
       "input": {
         "path": "memory"
       },
@@ -439,7 +348,7 @@
     {
       "name": "memory prefix file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "memory/people/ren.md"
@@ -455,7 +364,7 @@
     {
       "name": "workspace prefix file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "workspace/notes.md"
@@ -470,62 +379,9 @@
     },
     {
       "name": "workspace prefix root",
-      "tree": [
-        {
-          "content": "I am qifei.\n",
-          "kind": "file",
-          "mtime_secs": 1700000300,
-          "path": "SOUL.md"
-        },
-        {
-          "content": "line one\nline two\nline three\nline four\n",
-          "kind": "file",
-          "mtime_secs": 1700000200,
-          "path": "notes.md"
-        },
-        {
-          "content": "alpha\nbeta",
-          "kind": "file",
-          "mtime_secs": 1700000100,
-          "path": "no-trailing.md"
-        },
-        {
-          "content": "",
-          "kind": "file",
-          "mtime_secs": 1700000050,
-          "path": "empty.md"
-        },
-        {
-          "content": "🌊 tea\n茶 is tea\nTEA time\n",
-          "kind": "file",
-          "mtime_secs": 1700000400,
-          "path": "unicode.md"
-        },
-        {
-          "kind": "dir",
-          "path": "sub"
-        },
-        {
-          "content": "deep tea\n",
-          "kind": "file",
-          "mtime_secs": 1700000500,
-          "path": "sub/deep.md"
-        },
-        {
-          "kind": "dir",
-          "path": "memory"
-        },
-        {
-          "kind": "dir",
-          "path": "memory/people"
-        },
-        {
-          "content": "Ren likes tea.\n",
-          "kind": "file",
-          "mtime_secs": 1700000600,
-          "path": "memory/people/ren.md"
-        }
-      ],
+      "tree": {
+        "$ref": "s9"
+      },
       "input": {
         "path": "workspace"
       },
@@ -574,7 +430,7 @@
     {
       "name": "missing file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "nope.md"
@@ -586,7 +442,7 @@
     {
       "name": "missing directory",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "nodir/"
@@ -598,7 +454,7 @@
     {
       "name": "traversal refused",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "../secret.md"
@@ -610,7 +466,7 @@
     {
       "name": "absolute refused",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "/etc/hostname"
@@ -622,7 +478,7 @@
     {
       "name": "blank path",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "   "
@@ -634,57 +490,19 @@
     {
       "name": "path not a string lists root",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": 5
       },
       "result": {
-        "ok": {
-          "entries": [
-            {
-              "name": "SOUL.md",
-              "type": "file",
-              "size": 12
-            },
-            {
-              "name": "empty.md",
-              "type": "file",
-              "size": 0
-            },
-            {
-              "name": "memory",
-              "type": "directory",
-              "size": 4096
-            },
-            {
-              "name": "no-trailing.md",
-              "type": "file",
-              "size": 10
-            },
-            {
-              "name": "notes.md",
-              "type": "file",
-              "size": 39
-            },
-            {
-              "name": "sub",
-              "type": "directory",
-              "size": 4096
-            },
-            {
-              "name": "unicode.md",
-              "type": "file",
-              "size": 29
-            }
-          ]
-        }
+        "$ref": "s15"
       }
     },
     {
       "name": "listing sorts and does not follow links",
       "tree": {
-        "$ref": "s6"
+        "$ref": "s11"
       },
       "input": {},
       "result": {
@@ -742,7 +560,7 @@
     {
       "name": "listing a symlinked directory",
       "tree": {
-        "$ref": "s6"
+        "$ref": "s11"
       },
       "input": {
         "path": "dirlink"
@@ -762,7 +580,7 @@
     {
       "name": "reading through a file symlink",
       "tree": {
-        "$ref": "s6"
+        "$ref": "s11"
       },
       "input": {
         "path": "link.md"
@@ -778,51 +596,13 @@
     {
       "name": "dot path lists root",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "."
       },
       "result": {
-        "ok": {
-          "entries": [
-            {
-              "name": "SOUL.md",
-              "type": "file",
-              "size": 12
-            },
-            {
-              "name": "empty.md",
-              "type": "file",
-              "size": 0
-            },
-            {
-              "name": "memory",
-              "type": "directory",
-              "size": 4096
-            },
-            {
-              "name": "no-trailing.md",
-              "type": "file",
-              "size": 10
-            },
-            {
-              "name": "notes.md",
-              "type": "file",
-              "size": 39
-            },
-            {
-              "name": "sub",
-              "type": "directory",
-              "size": 4096
-            },
-            {
-              "name": "unicode.md",
-              "type": "file",
-              "size": 29
-            }
-          ]
-        }
+        "$ref": "s15"
       }
     },
     {
@@ -903,7 +683,7 @@
     {
       "name": "overwrite",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1010,7 +790,7 @@
     {
       "name": "memory namespace",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "memory/people/ren.md",
@@ -1075,7 +855,7 @@
     {
       "name": "both content and edits",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1086,13 +866,13 @@
         "err": "invalid args: pass either 'content' (whole file) or 'edits' (targeted replacements), not both"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "neither content nor edits",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md"
@@ -1101,13 +881,13 @@
         "err": "invalid args: missing required field: pass 'content' to write a whole file, or 'edits' to replace text within one"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "content wrong type falls through",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1117,13 +897,13 @@
         "err": "invalid args: missing required field: pass 'content' to write a whole file, or 'edits' to replace text within one"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "missing path",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "content": "x"
@@ -1132,13 +912,13 @@
         "err": "invalid args: missing required field: path"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "path wrong type",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": 5,
@@ -1148,13 +928,13 @@
         "err": "invalid args: missing required field: path"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "traversal refused",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "../out.md",
@@ -1164,13 +944,13 @@
         "err": "invalid args: path traversal (..) is not allowed"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "git internal refused",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": ".git/config",
@@ -1180,13 +960,13 @@
         "err": "invalid args: writing to .git/ is not allowed"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "git internal via workspace prefix",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "workspace/.git/config",
@@ -1196,13 +976,13 @@
         "err": "invalid args: writing to .git/ is not allowed"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "git internal bare",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": ".git",
@@ -1212,13 +992,13 @@
         "err": "invalid args: writing to .git/ is not allowed"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "git internal with dot prefix",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "./.git/config",
@@ -1228,13 +1008,13 @@
         "err": "invalid args: writing to .git/ is not allowed"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "gitignore is allowed",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": ".gitignore",
@@ -1304,7 +1084,7 @@
     {
       "name": "nested git is allowed",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "sub/.git/config",
@@ -1378,7 +1158,7 @@
     {
       "name": "backslash git name is allowed",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": ".git\\notes",
@@ -1448,7 +1228,7 @@
     {
       "name": "empty edits array",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1458,13 +1238,13 @@
         "err": "invalid args: 'edits' array is empty"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "single replacement",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1534,7 +1314,7 @@
     {
       "name": "two edits in order",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1608,7 +1388,7 @@
     {
       "name": "second edit sees the first",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1682,7 +1462,7 @@
     {
       "name": "ambiguous without replace_all",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1697,13 +1477,13 @@
         "err": "invalid args: Found 4 occurrences of old_string in notes.md; it must match exactly once. Add surrounding context to target a single occurrence, or set \"replace_all\": true to replace every one."
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "ambiguous with replace_all",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1774,7 +1554,7 @@
     {
       "name": "replace_all wrong type",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1790,13 +1570,13 @@
         "err": "invalid args: Found 4 occurrences of old_string in notes.md; it must match exactly once. Add surrounding context to target a single occurrence, or set \"replace_all\": true to replace every one."
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "no match, short file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1811,7 +1591,7 @@
         "err": "invalid args: Could not find the exact text in notes.md.\nCurrent file contents:\nline one\nline two\nline three\nline four\n"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
@@ -1966,7 +1746,7 @@
     {
       "name": "empty old_string",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -1981,13 +1761,13 @@
         "err": "invalid args: old_string must not be empty"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "missing old_string",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -2001,13 +1781,13 @@
         "err": "invalid args: each edit must have 'old_string'"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "missing new_string",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -2021,13 +1801,13 @@
         "err": "invalid args: each edit must have 'new_string'"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "edit entry not an object",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md",
@@ -2039,13 +1819,13 @@
         "err": "invalid args: each edit must have 'old_string'"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
       "name": "edits on a missing file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "gone.md",
@@ -2060,7 +1840,7 @@
         "err": "io: file not found: gone.md (pass 'content' instead of 'edits' to create it)"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       }
     },
     {
@@ -2133,7 +1913,7 @@
     {
       "name": "delete a file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md"
@@ -2205,7 +1985,7 @@
     {
       "name": "delete a nested file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "sub/deep.md"
@@ -2281,7 +2061,7 @@
     {
       "name": "delete under memory prefix",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "memory/people/ren.md"
@@ -2361,7 +2141,7 @@
     {
       "name": "refuse SOUL.md",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "SOUL.md"
@@ -2371,14 +2151,14 @@
         "err": "invalid args: SOUL.md is a prompt-visible file and cannot be deleted"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "refuse ./SOUL.md",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "./SOUL.md"
@@ -2388,14 +2168,14 @@
         "err": "invalid args: ./SOUL.md is a prompt-visible file and cannot be deleted"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "refuse workspace/SOUL.md",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "workspace/SOUL.md"
@@ -2405,14 +2185,14 @@
         "err": "invalid args: workspace/SOUL.md is a prompt-visible file and cannot be deleted"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "refuse MEMORY.md",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "MEMORY.md"
@@ -2422,14 +2202,14 @@
         "err": "invalid args: MEMORY.md is a prompt-visible file and cannot be deleted"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "refuse a directory",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "sub"
@@ -2439,14 +2219,14 @@
         "err": "invalid args: sub is not a file (delete only operates on regular files)"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "missing file",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "gone.md"
@@ -2456,14 +2236,14 @@
         "err": "io: file not found: gone.md"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "missing path field",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {},
       "with_data_dir": true,
@@ -2471,14 +2251,14 @@
         "err": "invalid args: missing required field: path"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "git internal refused",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": ".git/config"
@@ -2488,14 +2268,14 @@
         "err": "invalid args: writing to .git/ is not allowed"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "traversal refused",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "../x.md"
@@ -2505,14 +2285,14 @@
         "err": "invalid args: path traversal (..) is not allowed"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     },
     {
       "name": "data dir unset",
       "tree": {
-        "$ref": "s4"
+        "$ref": "s9"
       },
       "input": {
         "path": "notes.md"
@@ -2522,7 +2302,7 @@
         "err": "invalid args: character data directory not configured"
       },
       "after": {
-        "$ref": "s5"
+        "$ref": "s10"
       },
       "trash": []
     }
@@ -2569,20 +2349,20 @@
     {
       "name": "plain query",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea"
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s2"
+        "$ref": "s4"
       }
     },
     {
       "name": "case insensitive",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "TEA"
@@ -2591,53 +2371,9 @@
       "result": {
         "ok": {
           "query": "TEA",
-          "results": [
-            {
-              "path": "recent.md",
-              "line": 1,
-              "excerpt": "Tea is good"
-            },
-            {
-              "path": "memory/m.md",
-              "line": 1,
-              "excerpt": "memory tea"
-            },
-            {
-              "path": "tie-a.md",
-              "line": 1,
-              "excerpt": "tea a"
-            },
-            {
-              "path": "tie-b.md",
-              "line": 1,
-              "excerpt": "tea b"
-            },
-            {
-              "path": "unicode.md",
-              "line": 1,
-              "excerpt": "🌊🌊🌊 tea after emoji"
-            },
-            {
-              "path": "unicode.md",
-              "line": 2,
-              "excerpt": "茶 tea"
-            },
-            {
-              "path": "sub/scoped.md",
-              "line": 1,
-              "excerpt": "scoped tea here"
-            },
-            {
-              "path": "older.md",
-              "line": 1,
-              "excerpt": "indented tea line"
-            },
-            {
-              "path": "older.md",
-              "line": 2,
-              "excerpt": "TEA again"
-            }
-          ],
+          "results": {
+            "$ref": "s12"
+          },
           "count": 9,
           "searched_files": 7,
           "skipped_binary_or_large": 1,
@@ -2680,20 +2416,20 @@
     {
       "name": "query is trimmed",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "  tea  "
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s2"
+        "$ref": "s4"
       }
     },
     {
       "name": "no matches",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "zzzz"
@@ -2714,7 +2450,7 @@
     {
       "name": "max_results clamps low",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2722,13 +2458,13 @@
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s7"
+        "$ref": "s13"
       }
     },
     {
       "name": "max_results clamps high",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2736,13 +2472,13 @@
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s2"
+        "$ref": "s4"
       }
     },
     {
       "name": "max_results one",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2750,13 +2486,13 @@
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s7"
+        "$ref": "s13"
       }
     },
     {
       "name": "max_results two",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2800,7 +2536,7 @@
     {
       "name": "scoped to a subtree",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2835,7 +2571,7 @@
     {
       "name": "scoped to memory",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2870,7 +2606,7 @@
     {
       "name": "scoped to a file",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2878,13 +2614,13 @@
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s7"
+        "$ref": "s13"
       }
     },
     {
       "name": "scoped to a missing path",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2905,7 +2641,7 @@
     {
       "name": "scoped to dot",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -2913,13 +2649,13 @@
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s2"
+        "$ref": "s4"
       }
     },
     {
       "name": "unicode query",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "茶"
@@ -2953,7 +2689,7 @@
     {
       "name": "emoji-led line",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "after"
@@ -2987,7 +2723,7 @@
     {
       "name": "missing query",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {},
       "max_file_bytes": null,
@@ -2998,7 +2734,7 @@
     {
       "name": "blank query",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "   "
@@ -3011,7 +2747,7 @@
     {
       "name": "query wrong type",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": 5
@@ -3024,7 +2760,7 @@
     {
       "name": "mode lexical",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -3034,53 +2770,9 @@
       "result": {
         "ok": {
           "query": "tea",
-          "results": [
-            {
-              "path": "recent.md",
-              "line": 1,
-              "excerpt": "Tea is good"
-            },
-            {
-              "path": "memory/m.md",
-              "line": 1,
-              "excerpt": "memory tea"
-            },
-            {
-              "path": "tie-a.md",
-              "line": 1,
-              "excerpt": "tea a"
-            },
-            {
-              "path": "tie-b.md",
-              "line": 1,
-              "excerpt": "tea b"
-            },
-            {
-              "path": "unicode.md",
-              "line": 1,
-              "excerpt": "🌊🌊🌊 tea after emoji"
-            },
-            {
-              "path": "unicode.md",
-              "line": 2,
-              "excerpt": "茶 tea"
-            },
-            {
-              "path": "sub/scoped.md",
-              "line": 1,
-              "excerpt": "scoped tea here"
-            },
-            {
-              "path": "older.md",
-              "line": 1,
-              "excerpt": "indented tea line"
-            },
-            {
-              "path": "older.md",
-              "line": 2,
-              "excerpt": "TEA again"
-            }
-          ],
+          "results": {
+            "$ref": "s12"
+          },
           "count": 9,
           "searched_files": 7,
           "skipped_binary_or_large": 1,
@@ -3122,7 +2814,7 @@
     {
       "name": "mode hybrid without embedder",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -3130,13 +2822,13 @@
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s2"
+        "$ref": "s4"
       }
     },
     {
       "name": "mode vector without embedder",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -3144,13 +2836,13 @@
       },
       "max_file_bytes": null,
       "result": {
-        "$ref": "s2"
+        "$ref": "s4"
       }
     },
     {
       "name": "mode unknown",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -3164,7 +2856,7 @@
     {
       "name": "mode wrong type",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea",
@@ -3178,7 +2870,7 @@
     {
       "name": "oversize files skipped",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea"
@@ -3221,7 +2913,7 @@
     {
       "name": "indented line excerpt",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "indented"
@@ -3255,7 +2947,7 @@
     {
       "name": "size equal to the cap is kept",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "tea"
@@ -3298,7 +2990,7 @@
     {
       "name": "more matches than the default limit",
       "tree": {
-        "$ref": "s1"
+        "$ref": "s3"
       },
       "input": {
         "query": "tea"
@@ -3427,7 +3119,7 @@
     {
       "name": "more matches than the hard cap",
       "tree": {
-        "$ref": "s1"
+        "$ref": "s3"
       },
       "input": {
         "query": "tea",
@@ -3441,7 +3133,7 @@
     {
       "name": "max_results at the hard cap",
       "tree": {
-        "$ref": "s1"
+        "$ref": "s3"
       },
       "input": {
         "query": "tea",
@@ -3455,7 +3147,7 @@
     {
       "name": "max_results one past the hard cap",
       "tree": {
-        "$ref": "s1"
+        "$ref": "s3"
       },
       "input": {
         "query": "tea",
@@ -3469,7 +3161,7 @@
     {
       "name": "max_results zero clamps up",
       "tree": {
-        "$ref": "s1"
+        "$ref": "s3"
       },
       "input": {
         "query": "tea",
@@ -3504,7 +3196,7 @@
     {
       "name": "max_results spanning two files",
       "tree": {
-        "$ref": "s1"
+        "$ref": "s3"
       },
       "input": {
         "query": "tea",
@@ -3888,7 +3580,7 @@
     {
       "name": "max_results zero over a non-matching first file",
       "tree": {
-        "$ref": "s3"
+        "$ref": "s6"
       },
       "input": {
         "query": "indented",
@@ -5231,7 +4923,7 @@
       "err": "invalid args: workspace not configured"
     },
     "tree": {
-      "$ref": "s4"
+      "$ref": "s9"
     },
     "safety_flags": [
       "-c",
@@ -5305,539 +4997,539 @@
   "$shared": {
     "s0": {
       "ok": {
-        "count": 100,
-        "files": [
-          {
-            "hits": 60,
-            "path": "a-many.md"
-          },
-          {
-            "hits": 40,
-            "path": "b-many.md"
-          }
-        ],
-        "mode": "lexical",
-        "note": "These are line-level excerpts, ordered by file recency. Call `read` on the top file paths to see surrounding context — excerpts almost never contain the full answer, and one file often references others worth reading too.",
-        "query": "tea",
-        "results": [
-          {
-            "excerpt": "tea line 1",
-            "line": 1,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 2",
-            "line": 2,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 3",
-            "line": 3,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 4",
-            "line": 4,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 5",
-            "line": 5,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 6",
-            "line": 6,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 7",
-            "line": 7,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 8",
-            "line": 8,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 9",
-            "line": 9,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 10",
-            "line": 10,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 11",
-            "line": 11,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 12",
-            "line": 12,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 13",
-            "line": 13,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 14",
-            "line": 14,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 15",
-            "line": 15,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 16",
-            "line": 16,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 17",
-            "line": 17,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 18",
-            "line": 18,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 19",
-            "line": 19,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 20",
-            "line": 20,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 21",
-            "line": 21,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 22",
-            "line": 22,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 23",
-            "line": 23,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 24",
-            "line": 24,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 25",
-            "line": 25,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 26",
-            "line": 26,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 27",
-            "line": 27,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 28",
-            "line": 28,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 29",
-            "line": 29,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 30",
-            "line": 30,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 31",
-            "line": 31,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 32",
-            "line": 32,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 33",
-            "line": 33,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 34",
-            "line": 34,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 35",
-            "line": 35,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 36",
-            "line": 36,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 37",
-            "line": 37,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 38",
-            "line": 38,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 39",
-            "line": 39,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 40",
-            "line": 40,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 41",
-            "line": 41,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 42",
-            "line": 42,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 43",
-            "line": 43,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 44",
-            "line": 44,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 45",
-            "line": 45,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 46",
-            "line": 46,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 47",
-            "line": 47,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 48",
-            "line": 48,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 49",
-            "line": 49,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 50",
-            "line": 50,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 51",
-            "line": 51,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 52",
-            "line": 52,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 53",
-            "line": 53,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 54",
-            "line": 54,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 55",
-            "line": 55,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 56",
-            "line": 56,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 57",
-            "line": 57,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 58",
-            "line": 58,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 59",
-            "line": 59,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 60",
-            "line": 60,
-            "path": "a-many.md"
-          },
-          {
-            "excerpt": "tea line 1",
-            "line": 1,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 2",
-            "line": 2,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 3",
-            "line": 3,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 4",
-            "line": 4,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 5",
-            "line": 5,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 6",
-            "line": 6,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 7",
-            "line": 7,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 8",
-            "line": 8,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 9",
-            "line": 9,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 10",
-            "line": 10,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 11",
-            "line": 11,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 12",
-            "line": 12,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 13",
-            "line": 13,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 14",
-            "line": 14,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 15",
-            "line": 15,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 16",
-            "line": 16,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 17",
-            "line": 17,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 18",
-            "line": 18,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 19",
-            "line": 19,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 20",
-            "line": 20,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 21",
-            "line": 21,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 22",
-            "line": 22,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 23",
-            "line": 23,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 24",
-            "line": 24,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 25",
-            "line": 25,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 26",
-            "line": 26,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 27",
-            "line": 27,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 28",
-            "line": 28,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 29",
-            "line": 29,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 30",
-            "line": 30,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 31",
-            "line": 31,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 32",
-            "line": 32,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 33",
-            "line": 33,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 34",
-            "line": 34,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 35",
-            "line": 35,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 36",
-            "line": 36,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 37",
-            "line": 37,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 38",
-            "line": 38,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 39",
-            "line": 39,
-            "path": "b-many.md"
-          },
-          {
-            "excerpt": "tea line 40",
-            "line": 40,
-            "path": "b-many.md"
-          }
-        ],
-        "searched_files": 2,
-        "semantic_unavailable": "embedder not configured",
-        "skipped_binary_or_large": 0
+        "$ref": "s1"
       }
     },
-    "s1": [
+    "s1": {
+      "count": 100,
+      "files": [
+        {
+          "hits": 60,
+          "path": "a-many.md"
+        },
+        {
+          "hits": 40,
+          "path": "b-many.md"
+        }
+      ],
+      "mode": "lexical",
+      "note": "These are line-level excerpts, ordered by file recency. Call `read` on the top file paths to see surrounding context — excerpts almost never contain the full answer, and one file often references others worth reading too.",
+      "query": "tea",
+      "results": {
+        "$ref": "s2"
+      },
+      "searched_files": 2,
+      "semantic_unavailable": "embedder not configured",
+      "skipped_binary_or_large": 0
+    },
+    "s2": [
       {
-        "content": "tea line 1\ntea line 2\ntea line 3\ntea line 4\ntea line 5\ntea line 6\ntea line 7\ntea line 8\ntea line 9\ntea line 10\ntea line 11\ntea line 12\ntea line 13\ntea line 14\ntea line 15\ntea line 16\ntea line 17\ntea line 18\ntea line 19\ntea line 20\ntea line 21\ntea line 22\ntea line 23\ntea line 24\ntea line 25\ntea line 26\ntea line 27\ntea line 28\ntea line 29\ntea line 30\ntea line 31\ntea line 32\ntea line 33\ntea line 34\ntea line 35\ntea line 36\ntea line 37\ntea line 38\ntea line 39\ntea line 40\ntea line 41\ntea line 42\ntea line 43\ntea line 44\ntea line 45\ntea line 46\ntea line 47\ntea line 48\ntea line 49\ntea line 50\ntea line 51\ntea line 52\ntea line 53\ntea line 54\ntea line 55\ntea line 56\ntea line 57\ntea line 58\ntea line 59\ntea line 60\n",
-        "kind": "file",
-        "mtime_secs": 1700000900,
+        "excerpt": "tea line 1",
+        "line": 1,
         "path": "a-many.md"
       },
       {
-        "content": "tea line 1\ntea line 2\ntea line 3\ntea line 4\ntea line 5\ntea line 6\ntea line 7\ntea line 8\ntea line 9\ntea line 10\ntea line 11\ntea line 12\ntea line 13\ntea line 14\ntea line 15\ntea line 16\ntea line 17\ntea line 18\ntea line 19\ntea line 20\ntea line 21\ntea line 22\ntea line 23\ntea line 24\ntea line 25\ntea line 26\ntea line 27\ntea line 28\ntea line 29\ntea line 30\ntea line 31\ntea line 32\ntea line 33\ntea line 34\ntea line 35\ntea line 36\ntea line 37\ntea line 38\ntea line 39\ntea line 40\ntea line 41\ntea line 42\ntea line 43\ntea line 44\ntea line 45\ntea line 46\ntea line 47\ntea line 48\ntea line 49\ntea line 50\ntea line 51\ntea line 52\ntea line 53\ntea line 54\ntea line 55\ntea line 56\ntea line 57\ntea line 58\ntea line 59\ntea line 60\n",
-        "kind": "file",
-        "mtime_secs": 1700000800,
+        "excerpt": "tea line 2",
+        "line": 2,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 3",
+        "line": 3,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 4",
+        "line": 4,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 5",
+        "line": 5,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 6",
+        "line": 6,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 7",
+        "line": 7,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 8",
+        "line": 8,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 9",
+        "line": 9,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 10",
+        "line": 10,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 11",
+        "line": 11,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 12",
+        "line": 12,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 13",
+        "line": 13,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 14",
+        "line": 14,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 15",
+        "line": 15,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 16",
+        "line": 16,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 17",
+        "line": 17,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 18",
+        "line": 18,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 19",
+        "line": 19,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 20",
+        "line": 20,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 21",
+        "line": 21,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 22",
+        "line": 22,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 23",
+        "line": 23,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 24",
+        "line": 24,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 25",
+        "line": 25,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 26",
+        "line": 26,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 27",
+        "line": 27,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 28",
+        "line": 28,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 29",
+        "line": 29,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 30",
+        "line": 30,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 31",
+        "line": 31,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 32",
+        "line": 32,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 33",
+        "line": 33,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 34",
+        "line": 34,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 35",
+        "line": 35,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 36",
+        "line": 36,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 37",
+        "line": 37,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 38",
+        "line": 38,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 39",
+        "line": 39,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 40",
+        "line": 40,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 41",
+        "line": 41,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 42",
+        "line": 42,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 43",
+        "line": 43,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 44",
+        "line": 44,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 45",
+        "line": 45,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 46",
+        "line": 46,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 47",
+        "line": 47,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 48",
+        "line": 48,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 49",
+        "line": 49,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 50",
+        "line": 50,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 51",
+        "line": 51,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 52",
+        "line": 52,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 53",
+        "line": 53,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 54",
+        "line": 54,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 55",
+        "line": 55,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 56",
+        "line": 56,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 57",
+        "line": 57,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 58",
+        "line": 58,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 59",
+        "line": 59,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 60",
+        "line": 60,
+        "path": "a-many.md"
+      },
+      {
+        "excerpt": "tea line 1",
+        "line": 1,
         "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 2",
+        "line": 2,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 3",
+        "line": 3,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 4",
+        "line": 4,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 5",
+        "line": 5,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 6",
+        "line": 6,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 7",
+        "line": 7,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 8",
+        "line": 8,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 9",
+        "line": 9,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 10",
+        "line": 10,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 11",
+        "line": 11,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 12",
+        "line": 12,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 13",
+        "line": 13,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 14",
+        "line": 14,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 15",
+        "line": 15,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 16",
+        "line": 16,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 17",
+        "line": 17,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 18",
+        "line": 18,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 19",
+        "line": 19,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 20",
+        "line": 20,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 21",
+        "line": 21,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 22",
+        "line": 22,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 23",
+        "line": 23,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 24",
+        "line": 24,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 25",
+        "line": 25,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 26",
+        "line": 26,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 27",
+        "line": 27,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 28",
+        "line": 28,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 29",
+        "line": 29,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 30",
+        "line": 30,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 31",
+        "line": 31,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 32",
+        "line": 32,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 33",
+        "line": 33,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 34",
+        "line": 34,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 35",
+        "line": 35,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 36",
+        "line": 36,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 37",
+        "line": 37,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 38",
+        "line": 38,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 39",
+        "line": 39,
+        "path": "b-many.md"
+      },
+      {
+        "excerpt": "tea line 40",
+        "line": 40,
+        "path": "b-many.md"
+      }
+    ],
+    "s3": [
+      {
+        "$ref": "s7"
+      },
+      {
+        "$ref": "s8"
       },
       {
         "content": "tea line 1\ntea line 2\ntea line 3\ntea line 4\ntea line 5\ntea line 6\ntea line 7\ntea line 8\ntea line 9\ntea line 10\n",
@@ -5846,95 +5538,54 @@
         "path": "c-many.md"
       }
     ],
-    "s2": {
+    "s4": {
       "ok": {
-        "count": 9,
-        "files": [
-          {
-            "hits": 1,
-            "path": "recent.md"
-          },
-          {
-            "hits": 1,
-            "path": "memory/m.md"
-          },
-          {
-            "hits": 1,
-            "path": "tie-a.md"
-          },
-          {
-            "hits": 1,
-            "path": "tie-b.md"
-          },
-          {
-            "hits": 2,
-            "path": "unicode.md"
-          },
-          {
-            "hits": 1,
-            "path": "sub/scoped.md"
-          },
-          {
-            "hits": 2,
-            "path": "older.md"
-          }
-        ],
-        "mode": "lexical",
-        "note": "These are line-level excerpts, ordered by file recency. Call `read` on the top file paths to see surrounding context — excerpts almost never contain the full answer, and one file often references others worth reading too.",
-        "query": "tea",
-        "results": [
-          {
-            "excerpt": "Tea is good",
-            "line": 1,
-            "path": "recent.md"
-          },
-          {
-            "excerpt": "memory tea",
-            "line": 1,
-            "path": "memory/m.md"
-          },
-          {
-            "excerpt": "tea a",
-            "line": 1,
-            "path": "tie-a.md"
-          },
-          {
-            "excerpt": "tea b",
-            "line": 1,
-            "path": "tie-b.md"
-          },
-          {
-            "excerpt": "🌊🌊🌊 tea after emoji",
-            "line": 1,
-            "path": "unicode.md"
-          },
-          {
-            "excerpt": "茶 tea",
-            "line": 2,
-            "path": "unicode.md"
-          },
-          {
-            "excerpt": "scoped tea here",
-            "line": 1,
-            "path": "sub/scoped.md"
-          },
-          {
-            "excerpt": "indented tea line",
-            "line": 1,
-            "path": "older.md"
-          },
-          {
-            "excerpt": "TEA again",
-            "line": 2,
-            "path": "older.md"
-          }
-        ],
-        "searched_files": 7,
-        "semantic_unavailable": "embedder not configured",
-        "skipped_binary_or_large": 1
+        "$ref": "s5"
       }
     },
-    "s3": [
+    "s5": {
+      "count": 9,
+      "files": [
+        {
+          "hits": 1,
+          "path": "recent.md"
+        },
+        {
+          "hits": 1,
+          "path": "memory/m.md"
+        },
+        {
+          "hits": 1,
+          "path": "tie-a.md"
+        },
+        {
+          "hits": 1,
+          "path": "tie-b.md"
+        },
+        {
+          "hits": 2,
+          "path": "unicode.md"
+        },
+        {
+          "hits": 1,
+          "path": "sub/scoped.md"
+        },
+        {
+          "hits": 2,
+          "path": "older.md"
+        }
+      ],
+      "mode": "lexical",
+      "note": "These are line-level excerpts, ordered by file recency. Call `read` on the top file paths to see surrounding context — excerpts almost never contain the full answer, and one file often references others worth reading too.",
+      "query": "tea",
+      "results": {
+        "$ref": "s12"
+      },
+      "searched_files": 7,
+      "semantic_unavailable": "embedder not configured",
+      "skipped_binary_or_large": 1
+    },
+    "s6": [
       {
         "content": "Tea is good\nnothing here\n",
         "kind": "file",
@@ -6013,7 +5664,19 @@
         "target": "/etc/hostname"
       }
     ],
-    "s4": [
+    "s7": {
+      "content": "tea line 1\ntea line 2\ntea line 3\ntea line 4\ntea line 5\ntea line 6\ntea line 7\ntea line 8\ntea line 9\ntea line 10\ntea line 11\ntea line 12\ntea line 13\ntea line 14\ntea line 15\ntea line 16\ntea line 17\ntea line 18\ntea line 19\ntea line 20\ntea line 21\ntea line 22\ntea line 23\ntea line 24\ntea line 25\ntea line 26\ntea line 27\ntea line 28\ntea line 29\ntea line 30\ntea line 31\ntea line 32\ntea line 33\ntea line 34\ntea line 35\ntea line 36\ntea line 37\ntea line 38\ntea line 39\ntea line 40\ntea line 41\ntea line 42\ntea line 43\ntea line 44\ntea line 45\ntea line 46\ntea line 47\ntea line 48\ntea line 49\ntea line 50\ntea line 51\ntea line 52\ntea line 53\ntea line 54\ntea line 55\ntea line 56\ntea line 57\ntea line 58\ntea line 59\ntea line 60\n",
+      "kind": "file",
+      "mtime_secs": 1700000900,
+      "path": "a-many.md"
+    },
+    "s8": {
+      "content": "tea line 1\ntea line 2\ntea line 3\ntea line 4\ntea line 5\ntea line 6\ntea line 7\ntea line 8\ntea line 9\ntea line 10\ntea line 11\ntea line 12\ntea line 13\ntea line 14\ntea line 15\ntea line 16\ntea line 17\ntea line 18\ntea line 19\ntea line 20\ntea line 21\ntea line 22\ntea line 23\ntea line 24\ntea line 25\ntea line 26\ntea line 27\ntea line 28\ntea line 29\ntea line 30\ntea line 31\ntea line 32\ntea line 33\ntea line 34\ntea line 35\ntea line 36\ntea line 37\ntea line 38\ntea line 39\ntea line 40\ntea line 41\ntea line 42\ntea line 43\ntea line 44\ntea line 45\ntea line 46\ntea line 47\ntea line 48\ntea line 49\ntea line 50\ntea line 51\ntea line 52\ntea line 53\ntea line 54\ntea line 55\ntea line 56\ntea line 57\ntea line 58\ntea line 59\ntea line 60\n",
+      "kind": "file",
+      "mtime_secs": 1700000800,
+      "path": "b-many.md"
+    },
+    "s9": [
       {
         "content": "I am qifei.\n",
         "kind": "file",
@@ -6069,7 +5732,7 @@
         "path": "memory/people/ren.md"
       }
     ],
-    "s5": [
+    "s10": [
       {
         "content": "I am qifei.\n",
         "kind": "file",
@@ -6118,7 +5781,7 @@
         "path": "unicode.md"
       }
     ],
-    "s6": [
+    "s11": [
       {
         "content": "bee\n",
         "kind": "file",
@@ -6173,29 +5836,126 @@
         "path": ".gitignore"
       }
     ],
-    "s7": {
-      "ok": {
-        "count": 1,
-        "files": [
-          {
-            "hits": 1,
-            "path": "recent.md"
-          }
-        ],
-        "mode": "lexical",
-        "note": "These are line-level excerpts, ordered by file recency. Call `read` on the top file paths to see surrounding context — excerpts almost never contain the full answer, and one file often references others worth reading too.",
-        "query": "tea",
-        "results": [
-          {
-            "excerpt": "Tea is good",
-            "line": 1,
-            "path": "recent.md"
-          }
-        ],
-        "searched_files": 1,
-        "semantic_unavailable": "embedder not configured",
-        "skipped_binary_or_large": 0
+    "s12": [
+      {
+        "excerpt": "Tea is good",
+        "line": 1,
+        "path": "recent.md"
+      },
+      {
+        "excerpt": "memory tea",
+        "line": 1,
+        "path": "memory/m.md"
+      },
+      {
+        "excerpt": "tea a",
+        "line": 1,
+        "path": "tie-a.md"
+      },
+      {
+        "excerpt": "tea b",
+        "line": 1,
+        "path": "tie-b.md"
+      },
+      {
+        "excerpt": "🌊🌊🌊 tea after emoji",
+        "line": 1,
+        "path": "unicode.md"
+      },
+      {
+        "excerpt": "茶 tea",
+        "line": 2,
+        "path": "unicode.md"
+      },
+      {
+        "excerpt": "scoped tea here",
+        "line": 1,
+        "path": "sub/scoped.md"
+      },
+      {
+        "excerpt": "indented tea line",
+        "line": 1,
+        "path": "older.md"
+      },
+      {
+        "excerpt": "TEA again",
+        "line": 2,
+        "path": "older.md"
       }
-    }
+    ],
+    "s13": {
+      "ok": {
+        "$ref": "s14"
+      }
+    },
+    "s14": {
+      "count": 1,
+      "files": [
+        {
+          "hits": 1,
+          "path": "recent.md"
+        }
+      ],
+      "mode": "lexical",
+      "note": "These are line-level excerpts, ordered by file recency. Call `read` on the top file paths to see surrounding context — excerpts almost never contain the full answer, and one file often references others worth reading too.",
+      "query": "tea",
+      "results": [
+        {
+          "excerpt": "Tea is good",
+          "line": 1,
+          "path": "recent.md"
+        }
+      ],
+      "searched_files": 1,
+      "semantic_unavailable": "embedder not configured",
+      "skipped_binary_or_large": 0
+    },
+    "s15": {
+      "ok": {
+        "$ref": "s16"
+      }
+    },
+    "s16": {
+      "entries": {
+        "$ref": "s17"
+      }
+    },
+    "s17": [
+      {
+        "name": "SOUL.md",
+        "size": 12,
+        "type": "file"
+      },
+      {
+        "name": "empty.md",
+        "size": 0,
+        "type": "file"
+      },
+      {
+        "name": "memory",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "no-trailing.md",
+        "size": 10,
+        "type": "file"
+      },
+      {
+        "name": "notes.md",
+        "size": 39,
+        "type": "file"
+      },
+      {
+        "name": "sub",
+        "size": 4096,
+        "type": "directory"
+      },
+      {
+        "name": "unicode.md",
+        "size": 29,
+        "type": "file"
+      }
+    ]
   }
 }

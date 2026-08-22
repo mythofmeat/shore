@@ -1333,30 +1333,7 @@
         ]
       },
       "key_fallbacks": {
-        "count": 2,
-        "recent": [
-          {
-            "character": "poppy",
-            "from_key": "primary",
-            "kind": "quota",
-            "model": "claude-x",
-            "provider": "anthropic",
-            "reason": "rate limited",
-            "rid": "rid_1",
-            "status": 429,
-            "timestamp": "2026-01-01T00:00:03Z",
-            "to_key": "backup"
-          },
-          {
-            "character": "wren",
-            "from_key": "only",
-            "kind": "missing",
-            "model": "gpt",
-            "provider": "openai",
-            "reason": "no key configured",
-            "timestamp": "2026-01-01T00:01:01Z"
-          }
-        ]
+        "$ref": "s2"
       }
     },
     "s1": {
@@ -1388,6 +1365,35 @@
           }
         ]
       }
-    }
+    },
+    "s2": {
+      "count": 2,
+      "recent": {
+        "$ref": "s3"
+      }
+    },
+    "s3": [
+      {
+        "character": "poppy",
+        "from_key": "primary",
+        "kind": "quota",
+        "model": "claude-x",
+        "provider": "anthropic",
+        "reason": "rate limited",
+        "rid": "rid_1",
+        "status": 429,
+        "timestamp": "2026-01-01T00:00:03Z",
+        "to_key": "backup"
+      },
+      {
+        "character": "wren",
+        "from_key": "only",
+        "kind": "missing",
+        "model": "gpt",
+        "provider": "openai",
+        "reason": "no key configured",
+        "timestamp": "2026-01-01T00:01:01Z"
+      }
+    ]
   }
 }
