@@ -281,7 +281,11 @@ describe("Field keys", () => {
 describe("hardcodedProviderDefaults", () => {
   for (const row of fx.provider_defaults) {
     test(row.provider || "<empty>", () => {
-      expect(fieldsToWire(hardcodedProviderDefaults(row.provider).fields)).toEqual(row.fields);
+      expectOnlyWhatIsSet(
+        fieldsToWire(hardcodedProviderDefaults(row.provider).fields),
+        row.fields,
+        `${row.provider || "<empty>"}: the defaults a provider brings`,
+      );
       expect(defaultSdk(row.provider)).toBe(row.default_sdk as Sdk);
     });
   }
@@ -296,6 +300,21 @@ describe("hardcodedProviderDefaults", () => {
     expect(defaultSdk("opencode-go")).toBe("openai");
   });
 });
+
+function expectOnlyWhatIsSet(
+  actual: Record<string, unknown>,
+  recorded: Record<string, unknown>,
+  where: string,
+): void {
+  expect(
+    Object.fromEntries(Object.entries(actual).filter(([, v]) => v !== null)),
+    `${where}: what resolving the model settled on`,
+  ).toEqual(recorded);
+  for (const [field, value] of Object.entries(actual)) {
+    if (field in recorded) continue;
+    expect(value, `${where}: ${field} is unset, because nothing set it`).toBeNull();
+  }
+}
 
 describe("resolvedModelFromParts", () => {
   for (const [i, row] of fx.from_parts.entries()) {
@@ -313,7 +332,11 @@ describe("resolvedModelFromParts", () => {
         row.sdk_fallback as Sdk,
         fields,
       );
-      expect(toWire(resolved)).toEqual(row.resolved);
+      expectOnlyWhatIsSet(
+        toWire(resolved),
+        row.resolved,
+        `${row.sdk_fallback} / ${row.model_id}`,
+      );
     });
   }
 
@@ -419,8 +442,10 @@ describe("catalogFromSections", () => {
 
       expect([...catalog.chat.keys()]).toEqual(expected.chat_order);
       for (const [key, model] of catalog.chat) {
-        expect(toWire(model)).toEqual(
+        expectOnlyWhatIsSet(
+          toWire(model),
           expected.chat[key] as Record<string, unknown>,
+          `${row.name}: ${key}`,
         );
       }
 
