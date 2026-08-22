@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import fixture from "./engine_fixtures/characters.json" with { type: "json" };
+import fixture from "./engine_captures/characters.json" with { type: "json" };
 
 import {
   CharacterConfigError,

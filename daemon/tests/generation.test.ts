@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import rawFixture from "./handler_fixtures/generation.json" with { type: "json" };
+import rawFixture from "./handler_captures/generation.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { characterActiveJsonl } from "../src/config/dirs.ts";

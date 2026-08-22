@@ -6,7 +6,7 @@ import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
-import fixture from "./memory_fixtures/compaction.json";
+import fixture from "./memory_captures/compaction.json";
 
 import { pushAssistantTurn, pushInlineSystem } from "../src/llm/request";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../src/llm/types";

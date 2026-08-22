@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./tools_fixtures/mcp.json" with { type: "json" };
+import fixture from "./tools_captures/mcp.json" with { type: "json" };
 import {
   McpRegistry,
   resolveCommand,

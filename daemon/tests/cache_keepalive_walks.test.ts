@@ -2,7 +2,7 @@ import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./keepalive_fixtures/cache_keepalive_walks.json";
+import fixture from "./keepalive_captures/cache_keepalive_walks.json";
 import {
   CacheKeepalive,
   type CacheKeepaliveAction,

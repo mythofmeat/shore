@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import fixture from "./handler_fixtures/turn.json" with { type: "json" };
+import fixture from "./handler_captures/turn.json" with { type: "json" };
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { StreamResult } from "../src/llm/stream.ts";

@@ -11,7 +11,7 @@ import {
   } from "../src/engine/message_store";
 import type { Message, MessageAlternative } from "../src/engine/types";
 
-import fixture from "./engine_fixtures/messages.json";
+import fixture from "./engine_captures/messages.json";
 
 const wire = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
 

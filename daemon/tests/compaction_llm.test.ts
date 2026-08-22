@@ -2,7 +2,7 @@ import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./memory_fixtures/compaction_llm.json";
+import fixture from "./memory_captures/compaction_llm.json";
 
 import {
   resolveImageGenConfig,

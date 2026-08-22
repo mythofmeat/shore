@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { lstat, mkdtemp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import rawFixture from "./handler_fixtures/context.json" with { type: "json" };
+import rawFixture from "./handler_captures/context.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";

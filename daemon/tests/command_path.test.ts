@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import fixture from "./handler_fixtures/command_path.json" with { type: "json" };
+import fixture from "./handler_captures/command_path.json" with { type: "json" };
 import { CharacterError } from "../src/characters.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { defaultAppConfig } from "../src/config/app.ts";

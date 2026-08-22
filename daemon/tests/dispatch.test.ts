@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
-import fixture from "./tools_fixtures/dispatch.json" with { type: "json" };
+import fixture from "./tools_captures/dispatch.json" with { type: "json" };
 
 import {
   DEFAULT_SUBAGENT_TIMEOUT_MS,

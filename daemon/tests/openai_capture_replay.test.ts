@@ -21,7 +21,7 @@ interface Capture {
 
 function capture(name: string): Capture {
   return JSON.parse(
-    readFileSync(join(import.meta.dir, "fixtures", `${name}.json`), "utf8"),
+    readFileSync(join(import.meta.dir, "provider_captures", `${name}.json`), "utf8"),
   ) as Capture;
 }
 

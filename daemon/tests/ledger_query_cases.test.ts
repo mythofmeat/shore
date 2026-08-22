@@ -4,7 +4,7 @@ import { required } from "../src/util/required.ts";
 import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 
-import rawFixture from "./ledger_fixtures/ledger_query_cases.json";
+import rawFixture from "./ledger_captures/ledger_query_cases.json";
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 import {
   activeAnthropicCharacters,

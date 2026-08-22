@@ -20,7 +20,7 @@ interface Case {
 
 const fixture = JSON.parse(
   readFileSync(
-    join(import.meta.dir, "memory_fixtures/archive_writer.json"),
+    join(import.meta.dir, "memory_captures/archive_writer.json"),
     "utf8",
   ),
 ) as {

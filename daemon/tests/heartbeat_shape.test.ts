@@ -55,7 +55,7 @@ interface Fixture {
 }
 
 const fixture = (await Bun.file(
-  new URL("./autonomy_fixtures/heartbeat_shape.json", import.meta.url),
+  new URL("./autonomy_captures/heartbeat_shape.json", import.meta.url),
 ).json()) as Fixture;
 
 const opt = (value: string | null): string | undefined => value ?? undefined;

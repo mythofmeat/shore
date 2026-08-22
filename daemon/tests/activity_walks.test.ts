@@ -35,7 +35,7 @@ interface Fixture {
 }
 
 const fixture = expandShared<Fixture>(
-  await Bun.file(new URL("./autonomy_fixtures/activity_walks.json", import.meta.url)).json(),
+  await Bun.file(new URL("./autonomy_captures/activity_walks.json", import.meta.url)).json(),
 );
 
 const WEEKDAYS: readonly Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

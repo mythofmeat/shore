@@ -54,7 +54,7 @@ interface Fixture {
 }
 
 const fixture = expandShared<Fixture>(
-  await Bun.file(new URL("./engine_fixtures/engine.json", import.meta.url)).json(),
+  await Bun.file(new URL("./engine_captures/engine.json", import.meta.url)).json(),
 );
 
 async function scratch(): Promise<string> {

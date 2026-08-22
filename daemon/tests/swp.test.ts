@@ -70,7 +70,7 @@ interface HandshakeCase {
 }
 
 const fixture = JSON.parse(
-  readFileSync(join(import.meta.dir, "swp_fixtures", "swp.json"), "utf8"),
+  readFileSync(join(import.meta.dir, "swp_captures", "swp.json"), "utf8"),
 ) as Fixture;
 
 async function* once(bytes: Uint8Array): AsyncGenerator<Uint8Array> {

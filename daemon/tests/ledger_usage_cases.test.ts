@@ -2,7 +2,7 @@ import { required } from "../src/util/required.ts";
 
 import { afterAll, describe, expect, test } from "bun:test";
 
-import seedDoc from "./ledger_fixtures/ledger_seed.json";
+import seedDoc from "./ledger_captures/ledger_seed.json";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { parseLastPeriod, usageReport } from "../src/ledger/usage.ts";

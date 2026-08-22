@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { mergeToolLoopMessages } from "../src/engine/merge";
 import type { Message } from "../src/engine/types";
 
-import fixture from "./engine_fixtures/merge.json";
+import fixture from "./engine_captures/merge.json";
 
 interface MergeCase {
   name: string;

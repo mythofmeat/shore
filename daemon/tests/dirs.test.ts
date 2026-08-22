@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import fixture from "./config_fixtures/dirs.json" with { type: "json" };
+import fixture from "./config_captures/dirs.json" with { type: "json" };
 
 import {
   characterActiveJsonl,

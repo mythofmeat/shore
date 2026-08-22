@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./tools_fixtures/web_images.json" with { type: "json" };
+import fixture from "./tools_captures/web_images.json" with { type: "json" };
 import {
   handleFetchUrl,
   handleWebSearch,

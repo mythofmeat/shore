@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import fixture from "./handler_fixtures/router.json" with { type: "json" };
+import fixture from "./handler_captures/router.json" with { type: "json" };
 import { CharacterConfigError } from "../src/characters.ts";
 import {
   MessageHandler,

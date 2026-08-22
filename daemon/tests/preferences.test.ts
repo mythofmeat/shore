@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import rawFixture from "./config_fixtures/preferences.json" with { type: "json" };
+import rawFixture from "./config_captures/preferences.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { catalogFromSections, defaultSdk, type ResolvedModel } from "../src/config/models.ts";

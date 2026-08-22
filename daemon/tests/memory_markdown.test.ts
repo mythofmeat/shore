@@ -52,7 +52,7 @@ interface PureCase {
 
 const fixture = expandShared(
   JSON.parse(
-    readFileSync(join(import.meta.dir, "memory_fixtures/memory_markdown.json"), "utf8"),
+    readFileSync(join(import.meta.dir, "memory_captures/memory_markdown.json"), "utf8"),
   ),
 ) as {
   constants: { max_direct_hits: number };

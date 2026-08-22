@@ -218,7 +218,7 @@ interface Fixture {
 
 const fixture = expandShared<Fixture>(
   JSON.parse(
-  readFileSync(new URL("./memory_fixtures/workspace_index.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./memory_captures/workspace_index.json", import.meta.url), "utf8"),
   ),
 );
 

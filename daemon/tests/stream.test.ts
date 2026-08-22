@@ -2,7 +2,7 @@ import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 
-import rawStreamFixture from "./handler_fixtures/stream.json" with { type: "json" };
+import rawStreamFixture from "./handler_captures/stream.json" with { type: "json" };
 import { expandShared } from "./support/shared_subtrees.ts";
 const fixture = expandShared(rawStreamFixture);
 

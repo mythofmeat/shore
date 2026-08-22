@@ -59,7 +59,7 @@ interface Fixture {
 }
 
 const fixture = (await Bun.file(
-  new URL("./engine_fixtures/history.json", import.meta.url),
+  new URL("./engine_captures/history.json", import.meta.url),
 ).json()) as Fixture;
 
 describe("the fixture is real", () => {

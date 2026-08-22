@@ -12,7 +12,7 @@ import {
 } from "../src/engine/prompt";
 import type { Message } from "../src/engine/types";
 
-import rawFixture from "./engine_fixtures/prompt.json";
+import rawFixture from "./engine_captures/prompt.json";
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 const ZONE: string = fixture.timezone;

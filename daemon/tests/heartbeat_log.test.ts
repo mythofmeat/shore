@@ -19,7 +19,7 @@ interface Fixture {
 }
 
 const fixture = (await Bun.file(
-  new URL("./autonomy_fixtures/heartbeat_log.json", import.meta.url),
+  new URL("./autonomy_captures/heartbeat_log.json", import.meta.url),
 ).json()) as Fixture;
 
 function stamp(i: number): string {

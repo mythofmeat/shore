@@ -8,7 +8,7 @@ import {
   type KeyFallbackEntry,
 } from "../src/diagnostics.ts";
 
-import rawFixture from "./diagnostics_fixtures/diagnostics.json" with { type: "json" };
+import rawFixture from "./diagnostics_captures/diagnostics.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 interface RingCase {

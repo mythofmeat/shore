@@ -33,7 +33,7 @@ interface Case {
 const fixture = expandShared(
   JSON.parse(
     readFileSync(
-      join(import.meta.dir, "memory_fixtures/deferred_edits.json"),
+      join(import.meta.dir, "memory_captures/deferred_edits.json"),
       "utf8",
     ),
   ),

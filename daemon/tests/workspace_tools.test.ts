@@ -32,7 +32,7 @@ import { expandShared } from "./support/shared_subtrees.ts";
 
 const fixture = expandShared<Fixture>(
   JSON.parse(
-  readFileSync(new URL("./tools_fixtures/workspace_tools.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./tools_captures/workspace_tools.json", import.meta.url), "utf8"),
   ),
 );
 
