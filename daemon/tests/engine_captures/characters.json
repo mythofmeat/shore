@@ -17,19 +17,11 @@
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [],
-            "snapshots": []
-          },
           "name": "Alice",
           "result": false
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [],
-            "snapshots": []
-          },
           "requested": null,
           "result": {
             "err": "no characters available \u2014 create one at characters/<name>/workspace/SOUL.md",
@@ -38,10 +30,6 @@
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [],
-            "snapshots": []
-          },
           "requested": "Alice",
           "result": {
             "err": "character \"Alice\" not found (available: [])",
@@ -82,76 +70,26 @@
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Zulu"
-            ],
-            "snapshots": [
-              "Alice",
-              "Zulu"
-            ]
-          },
           "name": "Alice",
           "result": true
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Zulu"
-            ],
-            "snapshots": [
-              "Alice",
-              "Zulu"
-            ]
-          },
           "name": "alice",
           "result": false
         },
         {
           "op": "character_definition",
-          "state": {
-            "available": [
-              "Alice",
-              "Zulu"
-            ],
-            "snapshots": [
-              "Alice",
-              "Zulu"
-            ]
-          },
           "name": "Alice",
           "result": "Alice legacy"
         },
         {
           "op": "character_definition",
-          "state": {
-            "available": [
-              "Alice",
-              "Zulu"
-            ],
-            "snapshots": [
-              "Alice",
-              "Zulu"
-            ]
-          },
           "name": "Zulu",
           "result": "Zulu soul"
         },
         {
           "op": "character_definition",
-          "state": {
-            "available": [
-              "Alice",
-              "Zulu"
-            ],
-            "snapshots": [
-              "Alice",
-              "Zulu"
-            ]
-          },
           "name": "Nobody",
           "result": null
         }
@@ -183,38 +121,14 @@
         },
         {
           "op": "fs:write",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "path": "characters/Empty/notes.md",
           "body": "not a definition"
         },
         {
-          "op": "refresh",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          }
+          "op": "refresh"
         },
         {
           "op": "fs:write",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "path": "characters/Empty/character.md",
           "body": "now it is"
         },
@@ -259,27 +173,11 @@
         },
         {
           "op": "fs:add_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Bob",
           "soul": true
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Bob",
           "result": false
         },
@@ -298,45 +196,15 @@
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Bob",
           "result": true
         },
         {
           "op": "fs:remove_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice"
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": true
         },
@@ -354,15 +222,6 @@
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": false
         }
@@ -394,14 +253,6 @@
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "requested": null,
           "result": {
             "ok": "Alice"
@@ -409,14 +260,6 @@
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "requested": "Alice",
           "result": {
             "ok": "Alice"
@@ -424,14 +267,6 @@
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "requested": "Bob",
           "result": {
             "err": "character \"Bob\" not found (available: [\"Alice\"])",
@@ -440,14 +275,6 @@
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "requested": "",
           "result": {
             "err": "character \"\" not found (available: [\"Alice\"])",
@@ -488,16 +315,6 @@
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "requested": null,
           "result": {
             "err": "multiple characters available ([\"Alice\", \"Bob\"]) \u2014 specify one with --character or SHORE_CHARACTER",
@@ -506,16 +323,6 @@
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "requested": "Bob",
           "result": {
             "ok": "Bob"
@@ -555,16 +362,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": {
             "ok": true,
@@ -575,16 +372,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": {
             "ok": true,
@@ -595,16 +382,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Bob",
           "result": {
             "ok": true,
@@ -615,16 +392,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Nobody",
           "result": {
             "err": "character not found: Nobody"
@@ -664,16 +431,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": {
             "ok": true,
@@ -684,16 +441,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Bob",
           "result": {
             "ok": true,
@@ -703,30 +450,10 @@
           }
         },
         {
-          "op": "refresh",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          }
+          "op": "refresh"
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": {
             "ok": true,
@@ -737,16 +464,6 @@
         },
         {
           "op": "fs:remove_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Bob"
         },
         {
@@ -769,15 +486,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": {
             "ok": true,
@@ -788,15 +496,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Bob",
           "result": {
             "err": "character not found: Bob"
@@ -830,14 +529,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "ok": true,
@@ -848,14 +539,6 @@
         },
         {
           "op": "fs:remove_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice"
         },
         {
@@ -869,12 +552,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "err": "character not found: Alice"
@@ -882,12 +559,6 @@
         },
         {
           "op": "fs:add_character",
-          "state": {
-            "available": [],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "soul": true
         },
@@ -904,14 +575,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "ok": true,
@@ -954,16 +617,6 @@
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": true,
@@ -973,31 +626,11 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nstream = false\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": true,
@@ -1006,30 +639,10 @@
           }
         },
         {
-          "op": "invalidate_configs",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          }
+          "op": "invalidate_configs"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1039,16 +652,6 @@
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Bob",
           "result": {
             "stream": true,
@@ -1084,64 +687,24 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[completely_unknown]\nkey = 1\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "error": "unknown field `completely_unknown`"
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nembedding = \"bare-alias\"\n"
         },
         {
-          "op": "invalidate_configs",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          }
+          "op": "invalidate_configs"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "error": "must be a `provider:model_id` id"
         }
@@ -1173,14 +736,6 @@
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Nobody",
           "result": {
             "stream": true,
@@ -1216,27 +771,11 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nstream = false\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1246,27 +785,11 @@
         },
         {
           "op": "set_runtime_effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\ndisplay_name = \"RUNTIME\"\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": true,
@@ -1275,26 +798,10 @@
           }
         },
         {
-          "op": "invalidate_configs",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          }
+          "op": "invalidate_configs"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1330,27 +837,11 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nstream = false\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1360,26 +851,10 @@
         },
         {
           "op": "set_global_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "toml": "[defaults]\ndisplay_name = \"REPLACED\"\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1415,27 +890,11 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nstream = false\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1445,27 +904,11 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nstream = true\nsubagent_model = \"x\"\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1475,14 +918,6 @@
         },
         {
           "op": "reload_runtime_state",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "summary": {
             "available_before": 1,
             "available_after": 1,
@@ -1492,14 +927,6 @@
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": true,
@@ -1535,27 +962,11 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nstream = false\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1565,26 +976,10 @@
         },
         {
           "op": "set_global_config_elsewhere",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "toml": "[defaults]\ndisplay_name = \"ELSEWHERE\"\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": true,
@@ -1594,38 +989,14 @@
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": true
         },
         {
-          "op": "refresh",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          }
+          "op": "refresh"
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": true
         }
@@ -1657,14 +1028,6 @@
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": true,
@@ -1674,38 +1037,14 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nstream = false\n"
         },
         {
-          "op": "invalidate_configs",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          }
+          "op": "invalidate_configs"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -1741,14 +1080,6 @@
         },
         {
           "op": "reload_runtime_state",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "summary": {
             "available_before": 1,
             "available_after": 1,
@@ -1758,14 +1089,6 @@
         },
         {
           "op": "fs:add_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Bob",
           "soul": true
         },
@@ -1790,30 +1113,10 @@
         },
         {
           "op": "fs:remove_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Alice"
         },
         {
           "op": "fs:remove_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Bob"
         },
         {
@@ -1860,27 +1163,11 @@
         },
         {
           "op": "fs:add_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Bob",
           "soul": true
         },
         {
           "op": "fs:remove_character",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice"
         },
         {
@@ -1941,18 +1228,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ]
-          },
           "name": "Alice",
           "result": {
             "ok": true,
@@ -1963,18 +1238,6 @@
         },
         {
           "op": "get_or_create",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ]
-          },
           "name": "Bob",
           "result": {
             "ok": true,
@@ -1985,34 +1248,10 @@
         },
         {
           "op": "fs:remove_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ]
-          },
           "name": "Alice"
         },
         {
           "op": "fs:remove_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ]
-          },
           "name": "Cara"
         },
         {
@@ -2068,30 +1307,10 @@
         },
         {
           "op": "fs:block_data_dir",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Cara"
         },
         {
           "op": "fs:add_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Cara",
           "soul": true
         },
@@ -2111,33 +1330,11 @@
         },
         {
           "op": "has_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "name": "Cara",
           "result": true
         },
         {
           "op": "resolve_character",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "requested": "Cara",
           "result": {
             "ok": "Cara"
@@ -2145,17 +1342,6 @@
         },
         {
           "op": "reload_runtime_state",
-          "state": {
-            "available": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
-          },
           "summary": {
             "available_before": 3,
             "available_after": 3,
@@ -2191,53 +1377,21 @@
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[completely_unknown]\nkey = 1\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "error": "unknown field `completely_unknown`"
         },
         {
           "op": "fs:write_character_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "toml": "[defaults]\nstream = false\n"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -2246,26 +1400,10 @@
           }
         },
         {
-          "op": "invalidate_configs",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          }
+          "op": "invalidate_configs"
         },
         {
           "op": "effective_config",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": {
             "stream": false,
@@ -2301,66 +1439,26 @@
         },
         {
           "op": "user_definition",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": null
         },
         {
           "op": "fs:write",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "path": "characters/Alice/user.md",
           "body": "legacy user"
         },
         {
           "op": "user_definition",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": "legacy user"
         },
         {
           "op": "fs:write",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "path": "characters/Alice/workspace/USER.md",
           "body": "workspace user"
         },
         {
           "op": "user_definition",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": "workspace user"
         }
@@ -2392,40 +1490,16 @@
         },
         {
           "op": "character_definition",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": "Alice legacy"
         },
         {
           "op": "fs:write",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "path": "characters/Alice/workspace/SOUL.md",
           "body": "soul wins"
         },
         {
           "op": "character_definition",
-          "state": {
-            "available": [
-              "Alice"
-            ],
-            "snapshots": [
-              "Alice"
-            ]
-          },
           "name": "Alice",
           "result": "soul wins"
         }

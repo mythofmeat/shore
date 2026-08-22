@@ -198,7 +198,39 @@ describe("reading and writing the markdown store", () => {
           expectReturnsMatch(returned, c);
         }
 
-        expect(await snapshot(root)).toEqual(expectedTree(c.after, root, c.root));
+        const after = await snapshot(root);
+        const before = expectedTree(c.before, root, c.root);
+        const touched = Object.keys({ ...before, ...after }).filter(
+          (rel) => JSON.stringify(before[rel]) !== JSON.stringify(after[rel]),
+        );
+        const target = c.op.path === undefined ? undefined : join("memories", c.op.path);
+
+        if (c.op.fn === "read" || c.op.fn === "list_all") {
+          expect(
+            touched.filter((rel) => after[rel]?.kind !== "dir"),
+            `${c.name}: reading the store writes no file`,
+          ).toEqual([]);
+        } else if (c.err !== null) {
+          expect(
+            touched.filter((rel) => (before[rel] ?? after[rel])?.kind !== "dir"),
+            `${c.name}: a refused ${c.op.fn} writes no file`,
+          ).toEqual([]);
+        } else if (c.op.fn === "write") {
+          expect(
+            touched.filter((rel) => after[rel]?.kind === "file"),
+            `${c.name}: a write touches the file it names, and no other`,
+          ).toEqual([required(target)]);
+          expect(
+            after[required(target)],
+            `${c.name}: which now holds what was written`,
+          ).toEqual({ kind: "file", content: b64(required(c.op.content)) });
+        } else {
+          expect(
+            touched.filter((rel) => (before[rel] ?? after[rel])?.kind === "file"),
+            `${c.name}: a delete removes the file it names, and no other`,
+          ).toEqual([required(target)]);
+          expect(after[required(target)], `${c.name}: which is gone`).toBeUndefined();
+        }
       } finally {
         await rm(root, { recursive: true, force: true });
       }

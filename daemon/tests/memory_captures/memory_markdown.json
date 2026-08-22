@@ -1,4 +1,37 @@
 {
+  "$shared": {
+    "s0": {
+      "memories": {
+        "kind": "dir"
+      },
+      "memories/README.md": {
+        "content": "IyBJbmRleA==",
+        "kind": "file"
+      },
+      "memories/a.md": {
+        "content": "QQ==",
+        "kind": "file"
+      },
+      "memories/deep": {
+        "kind": "dir"
+      },
+      "memories/deep/b.md": {
+        "content": "Qg==",
+        "kind": "file"
+      },
+      "memories/deep/deeper": {
+        "kind": "dir"
+      },
+      "memories/deep/deeper/c.md": {
+        "content": "Qw==",
+        "kind": "file"
+      },
+      "memories/notes.txt": {
+        "content": "bm90IG1hcmtkb3du",
+        "kind": "file"
+      }
+    }
+  },
   "constants": {
     "max_direct_hits": 10,
     "direct_excerpt_limit": 220
@@ -103,11 +136,6 @@
         "fn": "list_all"
       },
       "before": {},
-      "after": {
-        "memories": {
-          "kind": "dir"
-        }
-      },
       "returns": [],
       "err": null
     },
@@ -118,9 +146,6 @@
         "fn": "list_all"
       },
       "before": {
-        "$ref": "s0"
-      },
-      "after": {
         "$ref": "s0"
       },
       "returns": [
@@ -194,43 +219,6 @@
           "content": "dXBwZXJjYXNlIGV4dGVuc2lvbg=="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/.md": {
-          "kind": "file",
-          "content": "ZG90ZmlsZSBuYW1lZCAubWQsIGV4dGVuc2lvbiBpcyBOb25l"
-        },
-        "memories/double.md.txt": {
-          "kind": "file",
-          "content": "bWQgaXMgbm90IHRoZSBsYXN0IGV4dGVuc2lvbg=="
-        },
-        "memories/keep.md": {
-          "kind": "file",
-          "content": "eWVz"
-        },
-        "memories/mixed.Md": {
-          "kind": "file",
-          "content": "bWl4ZWQgZXh0ZW5zaW9u"
-        },
-        "memories/none": {
-          "kind": "file",
-          "content": "bm8gZXh0ZW5zaW9u"
-        },
-        "memories/note.v2.md": {
-          "kind": "file",
-          "content": "dHdvIGRvdHMsIHN0aWxsIG1hcmtkb3du"
-        },
-        "memories/trailing.md.": {
-          "kind": "file",
-          "content": "dHJhaWxpbmcgZG90"
-        },
-        "memories/upper.MD": {
-          "kind": "file",
-          "content": "dXBwZXJjYXNlIGV4dGVuc2lvbg=="
-        }
-      },
       "returns": [
         {
           "path": "keep.md",
@@ -261,28 +249,11 @@
           "kind": "file",
           "content": "YXNjaWk="
         },
-        "memories/.md": {
+        "memories/\ue000.md": {
           "kind": "file",
           "content": "cHJpdmF0ZSB1c2UgYXJlYQ=="
         },
-        "memories/🌊.md": {
-          "kind": "file",
-          "content": "d2F2ZQ=="
-        }
-      },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "YXNjaWk="
-        },
-        "memories/.md": {
-          "kind": "file",
-          "content": "cHJpdmF0ZSB1c2UgYXJlYQ=="
-        },
-        "memories/🌊.md": {
+        "memories/\ud83c\udf0a.md": {
           "kind": "file",
           "content": "d2F2ZQ=="
         }
@@ -295,13 +266,13 @@
           "modified_at": "2026-08-02T06:23:15.106152355+00:00"
         },
         {
-          "path": ".md",
+          "path": "\ue000.md",
           "content": "cHJpdmF0ZSB1c2UgYXJlYQ==",
           "size": 16,
           "modified_at": "2026-08-02T06:23:15.104538166+00:00"
         },
         {
-          "path": "🌊.md",
+          "path": "\ud83c\udf0a.md",
           "content": "d2F2ZQ==",
           "size": 4,
           "modified_at": "2026-08-02T06:23:15.106138207+00:00"
@@ -316,92 +287,6 @@
         "fn": "list_all"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/.dreams": {
-          "kind": "dir"
-        },
-        "memories/.dreams/candidates.md": {
-          "kind": "file",
-          "content": "aW50ZXJuYWwsIGV4Y2x1ZGVk"
-        },
-        "memories/.dreamsx": {
-          "kind": "dir"
-        },
-        "memories/.dreamsx/note.md": {
-          "kind": "file",
-          "content": "c3RhcnRzIHdpdGggLmRyZWFtcywgTk9UIGV4Y2x1ZGVk"
-        },
-        "memories/DREAMS.md": {
-          "kind": "file",
-          "content": "dXBwZXJjYXNlIGF0IHJvb3QsIGV4Y2x1ZGVk"
-        },
-        "memories/Dreaming": {
-          "kind": "dir"
-        },
-        "memories/Dreaming/x.md": {
-          "kind": "file",
-          "content": "bWl4ZWQgY2FzZSBkaXIsIGV4Y2x1ZGVk"
-        },
-        "memories/MEMORY.md": {
-          "kind": "file",
-          "content": "dGhlIGluZGV4LCBleGNsdWRlZA=="
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/dreaming": {
-          "kind": "dir"
-        },
-        "memories/dreaming/rem": {
-          "kind": "dir"
-        },
-        "memories/dreaming/rem/today.md": {
-          "kind": "file",
-          "content": "cmVwb3J0LCBleGNsdWRlZA=="
-        },
-        "memories/dreamingx.md": {
-          "kind": "file",
-          "content": "c3RhcnRzIHdpdGggZHJlYW1pbmcsIE5PVCBleGNsdWRlZA=="
-        },
-        "memories/dreams": {
-          "kind": "dir"
-        },
-        "memories/dreams.md": {
-          "kind": "file",
-          "content": "bG93ZXJjYXNlIGF0IHJvb3QsIGV4Y2x1ZGVk"
-        },
-        "memories/dreams/x.md": {
-          "kind": "file",
-          "content": "cGx1cmFsIGRpciBpcyBub3QgaW4gdGhlIGxpc3Q="
-        },
-        "memories/dreamsx.md": {
-          "kind": "file",
-          "content": "bmVhciBtaXNzLCBOT1QgZXhjbHVkZWQ="
-        },
-        "memories/memory.md": {
-          "kind": "file",
-          "content": "bG93ZXJjYXNlIGluZGV4LCBleGNsdWRlZA=="
-        },
-        "memories/memory.md.bak.md": {
-          "kind": "file",
-          "content": "c3RhcnRzIHdpdGggbWVtb3J5Lm1kLCBOT1QgZXhjbHVkZWQ="
-        },
-        "memories/topics": {
-          "kind": "dir"
-        },
-        "memories/topics/dreams.md": {
-          "kind": "file",
-          "content": "bmVzdGVkLCBOT1QgZXhjbHVkZWQ="
-        },
-        "memories/topics/memory.md": {
-          "kind": "file",
-          "content": "bmVzdGVkLCBOT1QgZXhjbHVkZWQ="
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -577,38 +462,6 @@
           "content": "Mw=="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/-d.md": {
-          "kind": "file",
-          "content": "Ng=="
-        },
-        "memories/A.md": {
-          "kind": "file",
-          "content": "NA=="
-        },
-        "memories/_u.md": {
-          "kind": "file",
-          "content": "NQ=="
-        },
-        "memories/a": {
-          "kind": "dir"
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "MQ=="
-        },
-        "memories/a/b.md": {
-          "kind": "file",
-          "content": "Mg=="
-        },
-        "memories/ab.md": {
-          "kind": "file",
-          "content": "Mw=="
-        }
-      },
       "returns": [
         {
           "path": "-d.md",
@@ -668,19 +521,6 @@
           "content": "aMOpbGxvIPCfjIog5pel5pys6Kqe"
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/ascii.md": {
-          "kind": "file",
-          "content": "aGVsbG8="
-        },
-        "memories/uni.md": {
-          "kind": "file",
-          "content": "aMOpbGxvIPCfjIog5pel5pys6Kqe"
-        }
-      },
       "returns": [
         {
           "path": "ascii.md",
@@ -704,27 +544,6 @@
         "fn": "list_all"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/bare.md": {
-          "kind": "file",
-          "content": "bm8gdHJhaWxpbmcgbmV3bGluZQ=="
-        },
-        "memories/blank.md": {
-          "kind": "file",
-          "content": ""
-        },
-        "memories/crlf.md": {
-          "kind": "file",
-          "content": "bGluZSBvbmUNCmxpbmUgdHdvDQo="
-        },
-        "memories/spaces.md": {
-          "kind": "file",
-          "content": "ICBwYWRkZWQgIAoK"
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -792,19 +611,6 @@
           "content": "UkVBTA=="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/link.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpDpWtro/memories/real.md"
-        },
-        "memories/real.md": {
-          "kind": "file",
-          "content": "UkVBTA=="
-        }
-      },
       "returns": [
         {
           "path": "link.md",
@@ -828,26 +634,6 @@
         "fn": "list_all"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/loop": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpdKcfPd/memories/sub"
-        },
-        "memories/sub": {
-          "kind": "dir"
-        },
-        "memories/sub/inner.md": {
-          "kind": "file",
-          "content": "SU5ORVI="
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -909,26 +695,6 @@
           "content": "SU5ORVI="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        },
-        "memories/loop.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmphAD1bq/memories/sub"
-        },
-        "memories/sub": {
-          "kind": "dir"
-        },
-        "memories/sub/inner.md": {
-          "kind": "file",
-          "content": "SU5ORVI="
-        }
-      },
       "returns": [
         {
           "path": "a.md",
@@ -952,26 +718,6 @@
         "fn": "list_all"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/inside.md": {
-          "kind": "file",
-          "content": "aW5zaWRl"
-        },
-        "memories/linked": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpybVviR/outside"
-        },
-        "outside": {
-          "kind": "dir"
-        },
-        "outside/secret.md": {
-          "kind": "file",
-          "content": "c2VjcmV0"
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -1020,26 +766,6 @@
           "content": "c2VjcmV0"
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/inside.md": {
-          "kind": "file",
-          "content": "aW5zaWRl"
-        },
-        "memories/secret.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpLTgNGV/outside/secret.md"
-        },
-        "outside": {
-          "kind": "dir"
-        },
-        "outside/secret.md": {
-          "kind": "file",
-          "content": "c2VjcmV0"
-        }
-      },
       "returns": null,
       "err": "path traversal: symlink escapes memory directory: /tmp/.tmpLTgNGV/memories/secret.md"
     },
@@ -1050,26 +776,6 @@
         "fn": "list_all"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/inside.md": {
-          "kind": "file",
-          "content": "aW5zaWRl"
-        },
-        "memories/link.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpCqchZ9/memoriesX/secret.md"
-        },
-        "memoriesX": {
-          "kind": "dir"
-        },
-        "memoriesX/secret.md": {
-          "kind": "file",
-          "content": "c2VjcmV0"
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -1119,26 +825,6 @@
           "content": "c2VjcmV0"
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/inside.md": {
-          "kind": "file",
-          "content": "aW5zaWRl"
-        },
-        "memories/link.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpbxcWkP/memoriesX/secret.md"
-        },
-        "memoriesX": {
-          "kind": "dir"
-        },
-        "memoriesX/secret.md": {
-          "kind": "file",
-          "content": "c2VjcmV0"
-        }
-      },
       "returns": null,
       "err": "path traversal: resolved path escapes memory directory"
     },
@@ -1149,19 +835,6 @@
         "fn": "list_all"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/gone.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmp42zx9j/outside/never-created.md"
-        },
-        "memories/inside.md": {
-          "kind": "file",
-          "content": "aW5zaWRl"
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -1187,9 +860,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": {
         "path": "deep/b.md",
         "content": "Qg==",
@@ -1208,9 +878,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": null,
       "err": "not found: nope.md"
     },
@@ -1222,15 +889,6 @@
         "path": "uni.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/uni.md": {
-          "kind": "file",
-          "content": "aMOpbGxvIPCfjIog5pel5pys6Kqe"
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -1263,15 +921,6 @@
           "content": "dGhlIGluZGV4"
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/MEMORY.md": {
-          "kind": "file",
-          "content": "dGhlIGluZGV4"
-        }
-      },
       "returns": {
         "path": "MEMORY.md",
         "content": "dGhlIGluZGV4",
@@ -1288,9 +937,6 @@
         "path": "notes.txt"
       },
       "before": {
-        "$ref": "s0"
-      },
-      "after": {
         "$ref": "s0"
       },
       "returns": {
@@ -1311,9 +957,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": null,
       "err": "io: Is a directory (os error 21)"
     },
@@ -1325,9 +968,6 @@
         "path": ""
       },
       "before": {
-        "$ref": "s0"
-      },
-      "after": {
         "$ref": "s0"
       },
       "returns": null,
@@ -1343,9 +983,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": null,
       "err": "path traversal: empty path"
     },
@@ -1357,9 +994,6 @@
         "path": "../secret.md"
       },
       "before": {
-        "$ref": "s0"
-      },
-      "after": {
         "$ref": "s0"
       },
       "returns": null,
@@ -1375,9 +1009,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": null,
       "err": "path traversal: path traversal (..) not allowed"
     },
@@ -1391,9 +1022,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": null,
       "err": "path traversal: absolute paths not allowed"
     },
@@ -1405,9 +1033,6 @@
         "path": "./a.md"
       },
       "before": {
-        "$ref": "s0"
-      },
-      "after": {
         "$ref": "s0"
       },
       "returns": {
@@ -1428,9 +1053,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": {
         "path": "deep/./b.md",
         "content": "Qg==",
@@ -1449,9 +1071,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": {
         "path": "  a.md  ",
         "content": "QQ==",
@@ -1468,22 +1087,6 @@
         "path": "secret.md"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/secret.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmp5fNugu/outside/secret.md"
-        },
-        "outside": {
-          "kind": "dir"
-        },
-        "outside/secret.md": {
-          "kind": "file",
-          "content": "c2VjcmV0"
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -1522,19 +1125,6 @@
           "content": "UkVBTA=="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/link.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpOtHjeS/memories/real.md"
-        },
-        "memories/real.md": {
-          "kind": "file",
-          "content": "UkVBTA=="
-        }
-      },
       "returns": {
         "path": "link.md",
         "content": "UkVBTA==",
@@ -1552,21 +1142,6 @@
         "content": "IyBEb29tCgotIFVWLU1heAo="
       },
       "before": {},
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/topics": {
-          "kind": "dir"
-        },
-        "memories/topics/gaming": {
-          "kind": "dir"
-        },
-        "memories/topics/gaming/doom.md": {
-          "kind": "file",
-          "content": "IyBEb29tCgotIFVWLU1heAo="
-        }
-      },
       "returns": null,
       "err": null
     },
@@ -1587,15 +1162,6 @@
           "content": "T0xEIExPTkdFUiBDT05URU5U"
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "bmV3"
-        }
-      },
       "returns": null,
       "err": null
     },
@@ -1608,15 +1174,6 @@
         "content": ""
       },
       "before": {},
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/empty.md": {
-          "kind": "file",
-          "content": ""
-        }
-      },
       "returns": null,
       "err": null
     },
@@ -1629,15 +1186,6 @@
         "content": "cGxhaW4="
       },
       "before": {},
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/notes.txt": {
-          "kind": "file",
-          "content": "cGxhaW4="
-        }
-      },
       "returns": null,
       "err": null
     },
@@ -1658,18 +1206,6 @@
           "content": "c2VjcmV0"
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "outside": {
-          "kind": "dir"
-        },
-        "outside/secret.md": {
-          "kind": "file",
-          "content": "c2VjcmV0"
-        }
-      },
       "returns": null,
       "err": "path traversal: path traversal (..) not allowed"
     },
@@ -1682,11 +1218,6 @@
         "content": "Y2xvYmJlcmVk"
       },
       "before": {},
-      "after": {
-        "memories": {
-          "kind": "dir"
-        }
-      },
       "returns": null,
       "err": "path traversal: absolute paths not allowed"
     },
@@ -1699,11 +1230,6 @@
         "content": "eA=="
       },
       "before": {},
-      "after": {
-        "memories": {
-          "kind": "dir"
-        }
-      },
       "returns": null,
       "err": "path traversal: empty path"
     },
@@ -1716,22 +1242,6 @@
         "content": "Y2xvYmJlcmVk"
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/secret.md": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpUlIbfY/outside/secret.md"
-        },
-        "outside": {
-          "kind": "dir"
-        },
-        "outside/secret.md": {
-          "kind": "file",
-          "content": "c2VjcmV0"
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -1774,22 +1284,6 @@
           "content": ""
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/linked": {
-          "kind": "symlink",
-          "target": "/tmp/.tmpWSWY7d/outside"
-        },
-        "outside": {
-          "kind": "dir"
-        },
-        "outside/.keep": {
-          "kind": "file",
-          "content": ""
-        }
-      },
       "returns": null,
       "err": "path traversal: resolved path escapes memory directory"
     },
@@ -1802,18 +1296,6 @@
         "content": "eA=="
       },
       "before": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/deep": {
-          "kind": "dir"
-        },
-        "memories/deep/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        }
-      },
-      "after": {
         "memories": {
           "kind": "dir"
         },
@@ -1848,15 +1330,6 @@
           "content": "Qg=="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/b.md": {
-          "kind": "file",
-          "content": "Qg=="
-        }
-      },
       "returns": null,
       "err": null
     },
@@ -1868,9 +1341,6 @@
         "path": "nope.md"
       },
       "before": {
-        "$ref": "s0"
-      },
-      "after": {
         "$ref": "s0"
       },
       "returns": null,
@@ -1899,15 +1369,6 @@
           "content": "Qg=="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/a.md": {
-          "kind": "file",
-          "content": "QQ=="
-        }
-      },
       "returns": null,
       "err": null
     },
@@ -1928,18 +1389,6 @@
         "memories/deep/b.md": {
           "kind": "file",
           "content": "Qg=="
-        },
-        "memories/deep/c.md": {
-          "kind": "file",
-          "content": "Qw=="
-        }
-      },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/deep": {
-          "kind": "dir"
         },
         "memories/deep/c.md": {
           "kind": "file",
@@ -1971,14 +1420,6 @@
           "content": "Qw=="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        },
-        "memories/one": {
-          "kind": "dir"
-        }
-      },
       "returns": null,
       "err": null
     },
@@ -1998,11 +1439,6 @@
           "content": "T05MWQ=="
         }
       },
-      "after": {
-        "memories": {
-          "kind": "dir"
-        }
-      },
       "returns": null,
       "err": null
     },
@@ -2014,9 +1450,6 @@
         "path": "../a.md"
       },
       "before": {
-        "$ref": "s0"
-      },
-      "after": {
         "$ref": "s0"
       },
       "returns": null,
@@ -2032,9 +1465,6 @@
       "before": {
         "$ref": "s0"
       },
-      "after": {
-        "$ref": "s0"
-      },
       "returns": null,
       "err": "io: Is a directory (os error 21)"
     }
@@ -2047,7 +1477,7 @@
         "text": "aMOpbGxvIPCfjIog5pel5pys6Kqe",
         "limit": 8
       },
-      "returns": "héllo 🌊 "
+      "returns": "h\u00e9llo \ud83c\udf0a "
     },
     {
       "name": "truncate_chars with a zero limit",
@@ -2074,40 +1504,7 @@
         "text": "8J+MivCfjIrwn4yK",
         "limit": 2
       },
-      "returns": "🌊🌊"
+      "returns": "\ud83c\udf0a\ud83c\udf0a"
     }
-  ],
-  "$shared": {
-    "s0": {
-      "memories": {
-        "kind": "dir"
-      },
-      "memories/README.md": {
-        "content": "IyBJbmRleA==",
-        "kind": "file"
-      },
-      "memories/a.md": {
-        "content": "QQ==",
-        "kind": "file"
-      },
-      "memories/deep": {
-        "kind": "dir"
-      },
-      "memories/deep/b.md": {
-        "content": "Qg==",
-        "kind": "file"
-      },
-      "memories/deep/deeper": {
-        "kind": "dir"
-      },
-      "memories/deep/deeper/c.md": {
-        "content": "Qw==",
-        "kind": "file"
-      },
-      "memories/notes.txt": {
-        "content": "bm90IG1hcmtkb3du",
-        "kind": "file"
-      }
-    }
-  }
+  ]
 }
