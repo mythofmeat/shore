@@ -20,7 +20,6 @@ import {
 } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { loadConfig } from "../src/config/loader.ts";
-import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const REMOVED = [
@@ -358,19 +357,27 @@ describe("config read", () => {
       defaults: stripRemoved(whole.defaults),
     };
   };
-  const explicit = pathsSetBy(Bun.TOML.parse(FURNISHED));
 
-  const recordedWhole = (ok: unknown) => {
-    const whole = ok as { config: unknown; defaults: unknown };
-    return {
-      config: replayOntoCurrentDefaults(
-        stripRemoved(whole.config),
-        stripRemoved(whole.defaults),
-        liveDefaults(),
-        explicit,
-      ),
-      defaults: liveDefaults(),
-    };
+  function setPath(root: Record<string, unknown>, path: string, value: unknown): void {
+    const parts = path.split(".");
+    let node = root;
+    for (const part of parts.slice(0, -1)) {
+      const next = node[part];
+      node[part] = typeof next === "object" && next !== null && !Array.isArray(next) ? { ...next } : {};
+      node = node[part] as Record<string, unknown>;
+    }
+    node[required(parts.at(-1))] = value;
+  }
+
+  function overlaid(base: unknown, overrides: Record<string, unknown> | undefined): unknown {
+    const out = structuredClone(base) as Record<string, unknown>;
+    for (const [path, value] of Object.entries(overrides ?? {})) setPath(out, path, value);
+    return out;
+  }
+
+  const expectedWhole = (ok: unknown) => {
+    const overrides = (ok as { overrides?: Record<string, unknown> } | null)?.overrides;
+    return { config: overlaid(liveDefaults(), overrides), defaults: liveDefaults() };
   };
 
   test("the whole config and the whole default baseline", async () => {
@@ -379,7 +386,7 @@ describe("config read", () => {
       row("config_read", "the whole config and the whole default baseline"),
       w,
       () => config(w.ctx, {}),
-      recordedWhole,
+      expectedWhole,
       actualWhole,
     );
   });
@@ -396,22 +403,17 @@ describe("config read", () => {
         w,
         () => config(w.ctx, args),
         (ok) => {
-          const whole = ok as Record<string, unknown> & { config: unknown; defaults: unknown };
+          const row_ = ok as { key?: unknown; overrides?: Record<string, unknown> } | null;
           return {
-            ...whole,
-            config: replayOntoCurrentDefaults(
-              stripSection(section, whole.config),
-              stripSection(section, whole.defaults),
-              liveSectionDefaults(section),
-              new Set([...explicit].flatMap((p) => (p.startsWith(`${section}.`) ? [p.slice(section.length + 1)] : []))),
-            ),
+            key: row_?.key,
+            config: overlaid(liveSectionDefaults(section), row_?.overrides),
             defaults: liveSectionDefaults(section),
           };
         },
         (ok) => {
           const whole = ok as Record<string, unknown> & { config: unknown; defaults: unknown };
           return {
-            ...whole,
+            key: whole["key"],
             config: stripSection(section, whole.config),
             defaults: stripSection(section, whole.defaults),
           };
@@ -431,7 +433,7 @@ describe("config read", () => {
         row("config_read", name),
         w,
         () => config(w.ctx, args),
-        recordedWhole,
+        expectedWhole,
         actualWhole,
       );
     });

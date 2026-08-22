@@ -1,4 +1,43 @@
 {
+  "$shared": {
+    "s0": {
+      "overrides": {
+        "behavior.autonomy.enabled": true,
+        "chat.anthropic.primary.api_key_env": "SHORE_FIXTURE_KEY_SET",
+        "chat.anthropic.primary.model_id": "claude-primary",
+        "chat.anthropic.secondary.api_key_env": "SHORE_FIXTURE_KEY_MISSING",
+        "chat.anthropic.secondary.model_id": "claude-secondary",
+        "defaults.model": "primary",
+        "defaults.stream": false,
+        "subagents.idle.description": "Never enabled",
+        "subagents.idle.max_iterations": null,
+        "subagents.idle.model": null,
+        "subagents.idle.prompt": "You are idle.",
+        "subagents.idle.timeout": null,
+        "subagents.idle.tools": [
+          "fetch_url",
+          "idle_not_real"
+        ],
+        "subagents.researcher.description": "Looks things up",
+        "subagents.researcher.max_iterations": null,
+        "subagents.researcher.model": "primary",
+        "subagents.researcher.prompt": "You look things up.",
+        "subagents.researcher.timeout": null,
+        "subagents.researcher.tools": [
+          "web_search",
+          "also_not_real"
+        ],
+        "tools.enabled_subagents": [
+          "researcher",
+          "ghost"
+        ],
+        "tools.enabled_tools": [
+          "web_search",
+          "not_a_real_tool"
+        ]
+      }
+    }
+  },
   "tools": [
     {
       "name": "the furnished surface, with every warning kind",
@@ -113,7 +152,7 @@
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The roster is the registry's, not the config's — only `main` changes.",
+      "note": "The roster is the registry's, not the config's \u2014 only `main` changes.",
       "ok": {
         "tools": [
           {
@@ -219,7 +258,7 @@
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The no-models warning fires and the no-default-model warning does not — it is gated on the catalog being non-empty.",
+      "note": "The no-models warning fires and the no-default-model warning does not \u2014 it is gated on the catalog being non-empty.",
       "ok": {
         "valid": false,
         "warnings": [
@@ -337,21 +376,15 @@
       "note": "`defaults` is that section of the built-in defaults, not the whole baseline.",
       "ok": {
         "key": "tools",
-        "config": {
-          "$ref": "s6"
-        },
-        "defaults": {
-          "enabled_tools": [],
-          "enabled_subagents": [],
-          "max_result_chars": 50000,
-          "timeout": "5m",
-          "web_search": {
-            "api_key_env": "TAVILY_API_KEY",
-            "result_limit": 10,
-            "search_depth": "advanced",
-            "include_answer": true
-          },
-          "config": {}
+        "overrides": {
+          "enabled_subagents": [
+            "researcher",
+            "ghost"
+          ],
+          "enabled_tools": [
+            "web_search",
+            "not_a_real_tool"
+          ]
         }
       }
     },
@@ -367,10 +400,26 @@
       "note": "The default for `subagents` is an empty map, not null.",
       "ok": {
         "key": "subagents",
-        "config": {
-          "$ref": "s4"
-        },
-        "defaults": {}
+        "overrides": {
+          "idle.description": "Never enabled",
+          "idle.max_iterations": null,
+          "idle.model": null,
+          "idle.prompt": "You are idle.",
+          "idle.timeout": null,
+          "idle.tools": [
+            "fetch_url",
+            "idle_not_real"
+          ],
+          "researcher.description": "Looks things up",
+          "researcher.max_iterations": null,
+          "researcher.model": "primary",
+          "researcher.prompt": "You look things up.",
+          "researcher.timeout": null,
+          "researcher.tools": [
+            "web_search",
+            "also_not_real"
+          ]
+        }
       }
     },
     {
@@ -701,7 +750,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "No `prompts_refreshed` field at all in check mode — not `false`.",
+      "note": "No `prompts_refreshed` field at all in check mode \u2014 not `false`.",
       "ok": {
         "applied": false,
         "config_path": "<root>/config/config.toml",
@@ -753,7 +802,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "`state_after` still shows the original config — the failure is before any mutation.",
+      "note": "`state_after` still shows the original config \u2014 the failure is before any mutation.",
       "err": {
         "code": "invalid_request",
         "message": "Config error: failed to parse config.toml: TOML parse error at line 1, column 6\n  |\n1 | this is not toml [[[\n  |      ^\nexpected `.`, `=`\n"
@@ -869,257 +918,5 @@
         "SOUL.md"
       ]
     }
-  ],
-  "$shared": {
-    "s0": {
-      "config": {
-        "$ref": "s1"
-      },
-      "defaults": {
-        "$ref": "s2"
-      }
-    },
-    "s1": {
-      "advanced": {
-        "max_retries": null,
-        "retry_backoff": null
-      },
-      "behavior": {
-        "$ref": "s8"
-      },
-      "cache": {
-        "forensics": false,
-        "keepalive_max": "12h"
-      },
-      "chat": {
-        "anthropic": {
-          "primary": {
-            "api_key_env": "SHORE_FIXTURE_KEY_SET",
-            "model_id": "claude-primary"
-          },
-          "secondary": {
-            "api_key_env": "SHORE_FIXTURE_KEY_MISSING",
-            "model_id": "claude-secondary"
-          }
-        }
-      },
-      "connections": {
-        "matrix": null
-      },
-      "daemon": {
-        "addr": "127.0.0.1:7320"
-      },
-      "defaults": {
-        "background": {
-          "compaction": null,
-          "heartbeat": null,
-          "model": null
-        },
-        "display_name": null,
-        "embedding": null,
-        "image_generation": null,
-        "model": "primary",
-        "stream": false,
-        "subagent_model": null
-      },
-      "embedding": null,
-      "image_generation": null,
-      "mcp": {},
-      "memory": {
-        "$ref": "s3"
-      },
-      "notifications": {
-        "$ref": "s5"
-      },
-      "providers": null,
-      "subagents": {
-        "$ref": "s4"
-      },
-      "tools": {
-        "$ref": "s6"
-      },
-      "usage": {
-        "allow_compaction_over_budget": false,
-        "budgets": [],
-        "timezone": "local"
-      }
-    },
-    "s2": {
-      "advanced": {
-        "max_retries": null,
-        "retry_backoff": null
-      },
-      "behavior": {
-        "$ref": "s7"
-      },
-      "cache": {
-        "forensics": false,
-        "keepalive_max": "12h"
-      },
-      "chat": null,
-      "connections": {
-        "matrix": null
-      },
-      "daemon": {
-        "addr": "127.0.0.1:7320"
-      },
-      "defaults": {
-        "background": {
-          "compaction": null,
-          "heartbeat": null,
-          "model": null
-        },
-        "display_name": null,
-        "embedding": null,
-        "image_generation": null,
-        "model": null,
-        "stream": true,
-        "subagent_model": null
-      },
-      "embedding": null,
-      "image_generation": null,
-      "mcp": {},
-      "memory": {
-        "$ref": "s3"
-      },
-      "notifications": {
-        "$ref": "s5"
-      },
-      "providers": null,
-      "subagents": {},
-      "tools": {
-        "config": {},
-        "enabled_subagents": [],
-        "enabled_tools": [],
-        "max_result_chars": 50000,
-        "timeout": "5m",
-        "web_search": {
-          "api_key_env": "TAVILY_API_KEY",
-          "include_answer": true,
-          "result_limit": 10,
-          "search_depth": "advanced"
-        }
-      },
-      "usage": {
-        "allow_compaction_over_budget": false,
-        "budgets": [],
-        "timezone": "local"
-      }
-    },
-    "s3": {
-      "compaction": {
-        "archive_after": "0s",
-        "enabled": true,
-        "idle_trigger": "2h",
-        "keep_recent_turns": 2,
-        "max_context_tokens": 200000,
-        "max_turns": 30,
-        "min_turns": 12
-      },
-      "git_push": false,
-      "retrieval": {
-        "binary": "skip",
-        "max_embed_chars_per_file": 4000,
-        "max_file_bytes": 2097152,
-        "max_indexed_files": 50000,
-        "max_total_indexed_bytes": 1073741824,
-        "mode": "auto"
-      },
-      "thinking": {
-        "replay_prior_thinking": "all"
-      }
-    },
-    "s4": {
-      "idle": {
-        "description": "Never enabled",
-        "max_iterations": null,
-        "model": null,
-        "prompt": "You are idle.",
-        "timeout": null,
-        "tools": [
-          "fetch_url",
-          "idle_not_real"
-        ]
-      },
-      "researcher": {
-        "description": "Looks things up",
-        "max_iterations": null,
-        "model": "primary",
-        "prompt": "You look things up.",
-        "timeout": null,
-        "tools": [
-          "web_search",
-          "also_not_real"
-        ]
-      }
-    },
-    "s5": {
-      "backend": "notify_send",
-      "command": {
-        "template": ""
-      },
-      "enabled": false,
-      "events": {
-        "autonomous_message": true,
-        "cache_warning": false,
-        "compaction_complete": false,
-        "error": false,
-        "message_complete": true,
-        "usage_warning": false
-      },
-      "generation_threshold": "0s",
-      "ntfy": {
-        "token": "",
-        "topic": "",
-        "url": "https://ntfy.sh"
-      }
-    },
-    "s6": {
-      "config": {},
-      "enabled_subagents": [
-        "researcher",
-        "ghost"
-      ],
-      "enabled_tools": [
-        "web_search",
-        "not_a_real_tool"
-      ],
-      "max_result_chars": 50000,
-      "timeout": "5m",
-      "web_search": {
-        "api_key_env": "TAVILY_API_KEY",
-        "include_answer": true,
-        "result_limit": 10,
-        "search_depth": "advanced"
-      }
-    },
-    "s7": {
-      "autonomy": {
-        "enabled": false,
-        "heartbeat": {
-          "dormant_after_heartbeat_turns": 3,
-          "dormant_after_idle_time": "2d",
-          "enabled": true,
-          "fallback_heartbeat_interval": "1h",
-          "minimum_heartbeat_latency": "1h",
-          "wrap_up_grace_rounds": 3
-        }
-      },
-      "user_message_timestamps": "auto"
-    },
-    "s8": {
-      "autonomy": {
-        "enabled": true,
-        "heartbeat": {
-          "dormant_after_heartbeat_turns": 3,
-          "dormant_after_idle_time": "2d",
-          "enabled": true,
-          "fallback_heartbeat_interval": "1h",
-          "minimum_heartbeat_latency": "1h",
-          "wrap_up_grace_rounds": 3
-        }
-      },
-      "user_message_timestamps": "auto"
-    }
-  }
+  ]
 }
