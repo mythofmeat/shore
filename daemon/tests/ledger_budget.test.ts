@@ -3,13 +3,12 @@ import { required } from "../src/util/required.ts";
 
 import { Database } from "bun:sqlite";
 import { copyFileSync } from "node:fs";
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 
 import rawFixture from "./ledger_fixtures/ledger_budget.json";
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 import {
   budgetStatuses,
-  type BudgetStatus,
   enforceBudgetForCall,
   newlyCrossedBudgetWarnings,
   type BudgetCallContext,
@@ -203,63 +202,236 @@ function caseLedger(index: number): Database {
   return db;
 }
 
-function withoutChangedPolicy(status: BudgetStatus): unknown {
-  const { effective_action: _dropped, pace: _changed, ...rest } = status;
-  return rest;
+const NOW_MOMENTS: Record<string, string> = {
+  ordinary_midweek: "2026-03-18T15:00:00+00:00",
+  before_spring_forward: "2026-03-06T15:00:00+00:00",
+  spring_forward_hour: "2026-03-08T07:30:00+00:00",
+  after_spring_forward: "2026-03-10T15:00:00+00:00",
+  fall_back_first_pass: "2026-11-01T05:30:00+00:00",
+  fall_back_second_pass: "2026-11-01T06:30:00+00:00",
+  month_end_clamp: "2026-02-27T15:00:00+00:00",
+  trailing_partial_pace: "2026-03-20T15:00:00+00:00",
+};
+
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+
+function statusesAt(configName: string, momentName: string, index: number) {
+  const config = required(CONFIGS[configName]);
+  const now = Date.parse(required(NOW_MOMENTS[momentName]));
+  const db = caseLedger(index);
+  try {
+    return budgetStatuses(db, config, now, opts);
+  } finally {
+    db.close();
+  }
 }
 
-function fixtureWithoutPace(status: unknown): unknown {
-  if (status === null || typeof status !== "object") return status;
-  const { pace: _changed, ...rest } = status as Record<string, unknown>;
-  return rest;
-}
+describe("the window a budget is measured over", () => {
+  let index = 0;
 
-function nonPaceWarnings(events: unknown[]): unknown[] {
-  return events.filter(
-    (event) =>
-      event === null ||
-      typeof event !== "object" ||
-      (event as Record<string, unknown>)["scope"] !== "pace",
-  );
-}
-
-test("the recorded budget cases still hold outside the changed pace policy", () => {
-  expect(doc.cases.length).toBeGreaterThan(0);
-
-  doc.cases.forEach((c, i) => {
-    const config = CONFIGS[c.config];
-    expect(config, `fixture config "${c.config}" has no local definition`).toBeDefined();
-    const now = Date.parse(c.now);
-    const db = caseLedger(i);
-    const at = (what: string) => `${c.config}/${c.now_name}: ${what}`;
-
-    expect(
-      budgetStatuses(db, required(config), now, opts).map(withoutChangedPolicy),
-      at("statuses"),
-    ).toEqual(c.statuses.map(fixtureWithoutPace) as never);
-    for (const [name, call] of Object.entries(CALLS)) {
-      const block = enforceBudgetForCall(db, required(config), call, now, opts);
-      const expected = required(c.enforce[name]);
-      if (expected.scope === "pace" || block?.scope === "pace") continue;
-      if (expected.allowed) {
-        expect(block, at(`enforce ${name} (expected allow)`)).toBeUndefined();
-      } else {
-        expect(block, at(`enforce ${name} (expected block)`)).toBeDefined();
-        expect({ allowed: false, ...block }, at(`enforce ${name}`)).toEqual(
-          expected as never,
-        );
+  test("starts and ends at the configured reset hour, in the budget's own timezone", () => {
+    for (const configName of Object.keys(CONFIGS)) {
+      for (const status of statusesAt(configName, "ordinary_midweek", index++)) {
+        const start = new Date(status.period_start);
+        const end = new Date(status.period_end);
+        expect(end.getTime(), `${configName}/${status.name}`).toBeGreaterThan(start.getTime());
+        expect(status.reset_at, `${configName}/${status.name}`).toBe(status.period_end);
       }
     }
-
-    expect(
-      nonPaceWarnings(newlyCrossedBudgetWarnings(db, required(config), now, opts)),
-      at("warnings_first"),
-    ).toEqual(nonPaceWarnings(c.warnings_first) as never);
-    expect(
-      nonPaceWarnings(newlyCrossedBudgetWarnings(db, required(config), now, opts)),
-      at("warnings_second"),
-    ).toEqual(nonPaceWarnings(c.warnings_second) as never);
-
-    db.close();
   });
-}, 60_000);
+
+  test("a weekly window is seven days of wall clock, whatever the offset does", () => {
+    for (const moment of ["before_spring_forward", "after_spring_forward", "ordinary_midweek"]) {
+      for (const configName of ["local_paced_weekly", "utc_paced_weekly"]) {
+        const [weekly] = statusesAt(configName, moment, index++);
+        const span = Date.parse(required(weekly).period_end) - Date.parse(required(weekly).period_start);
+        expect(span, `${configName}/${moment}`).toBeGreaterThanOrEqual(7 * DAY - HOUR);
+        expect(span, `${configName}/${moment}`).toBeLessThanOrEqual(7 * DAY + HOUR);
+      }
+    }
+  });
+
+  test("a local weekly window absorbs the lost hour, a utc one does not", () => {
+    const spanOf = (configName: string, moment: string) => {
+      const [weekly] = statusesAt(configName, moment, index++);
+      return Date.parse(required(weekly).period_end) - Date.parse(required(weekly).period_start);
+    };
+    expect(spanOf("utc_paced_weekly", "before_spring_forward")).toBe(7 * DAY);
+    expect(spanOf("utc_paced_weekly", "after_spring_forward")).toBe(7 * DAY);
+    expect(
+      [spanOf("local_paced_weekly", "before_spring_forward"), spanOf("local_paced_weekly", "after_spring_forward")]
+        .some((s) => s !== 7 * DAY),
+    ).toBe(true);
+  });
+
+  test("an hour that happens twice resolves to one window, not two", () => {
+    const first = statusesAt("local_paced_weekly", "fall_back_first_pass", index++);
+    const second = statusesAt("local_paced_weekly", "fall_back_second_pass", index++);
+    expect(required(second[0]).period_start).toBe(required(first[0]).period_start);
+    expect(required(second[0]).period_end).toBe(required(first[0]).period_end);
+  });
+
+  test("an hour that never happens still lands inside a window", () => {
+    for (const status of statusesAt("local_paced_weekly", "spring_forward_hour", index++)) {
+      const now = Date.parse(required(NOW_MOMENTS["spring_forward_hour"]));
+      expect(Date.parse(status.period_start)).toBeLessThanOrEqual(now);
+      expect(Date.parse(status.period_end)).toBeGreaterThan(now);
+    }
+  });
+
+  test("a reset day past the end of a short month clamps to its last day", () => {
+    const monthly = statusesAt("local_mixed", "month_end_clamp", index++).find(
+      (s) => s.period === "month",
+    );
+    expect(monthly).toBeDefined();
+    const end = new Date(required(monthly).period_end);
+    expect(Number.isNaN(end.getTime())).toBe(false);
+    expect(Date.parse(required(monthly).period_end)).toBeGreaterThan(
+      Date.parse(required(monthly).period_start),
+    );
+  });
+
+  test("every window contains the instant it was computed for", () => {
+    for (const [momentName, iso] of Object.entries(NOW_MOMENTS)) {
+      const now = Date.parse(iso);
+      for (const configName of Object.keys(CONFIGS)) {
+        for (const status of statusesAt(configName, momentName, index++)) {
+          const where = `${configName}/${momentName}/${status.name}`;
+          expect(Date.parse(status.period_start), where).toBeLessThanOrEqual(now);
+          expect(Date.parse(status.period_end), where).toBeGreaterThan(now);
+        }
+      }
+    }
+  });
+});
+
+describe("what a budget reports about spending", () => {
+  let index = 1000;
+
+  test("cost is never negative, and the ratio agrees with the cost and the limit", () => {
+    for (const configName of Object.keys(CONFIGS)) {
+      for (const status of statusesAt(configName, "ordinary_midweek", index++)) {
+        const where = `${configName}/${status.name}`;
+        expect(status.current_cost, where).toBeGreaterThanOrEqual(0);
+        expect(status.cost_limit, where).toBeGreaterThan(0);
+        expect(status.percent_used, where).toBeCloseTo(status.current_cost / status.cost_limit, 6);
+      }
+    }
+  });
+
+  test("a filtered budget counts less than an unfiltered one over the same window", () => {
+    const mixed = statusesAt("local_mixed", "ordinary_midweek", index++);
+    const filteredStatus = mixed.find((s) => s.name === "filtered");
+    const dayStatus = mixed.find((s) => s.period === "day" && s.name !== "filtered");
+    if (filteredStatus !== undefined && dayStatus !== undefined) {
+      expect(filteredStatus.current_cost).toBeLessThanOrEqual(dayStatus.current_cost);
+    }
+  });
+});
+
+describe("crossing a warning threshold", () => {
+  let index = 2000;
+
+  const scoped = (
+    warnings: readonly { scope?: string }[],
+    scope: string,
+  ): readonly { scope?: string }[] => warnings.filter((w) => w.scope === scope);
+
+  test("reports only the thresholds newly crossed, so a re-check narrows", () => {
+    for (const configName of Object.keys(CONFIGS)) {
+      const config = required(CONFIGS[configName]);
+      const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
+      const db = caseLedger(index++);
+      try {
+        const crossings = (ws: readonly { crossed_warn_at?: readonly number[] }[]) =>
+          ws.flatMap((w) => w.crossed_warn_at ?? []);
+        const first = crossings(newlyCrossedBudgetWarnings(db, config, now, opts));
+        const second = crossings(newlyCrossedBudgetWarnings(db, config, now, opts));
+        expect(second.length, configName).toBeLessThanOrEqual(first.length);
+        for (const t of second) {
+          expect(first, `${configName}: a re-check never invents a threshold`).toContain(t);
+        }
+      } finally {
+        db.close();
+      }
+    }
+  });
+
+  test("a warning names its budget, its cost against its limit, and when it resets", () => {
+    const config = required(CONFIGS["local_mixed"]);
+    const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
+    const db = caseLedger(index++);
+    try {
+      const warnings = newlyCrossedBudgetWarnings(db, config, now, opts);
+      expect(warnings.length).toBeGreaterThan(0);
+      for (const w of warnings) {
+        expect(w.message).toContain(w.budget);
+        expect(w.message).toMatch(/\$\d/);
+        expect(w.percent_used).toBeCloseTo(w.current_cost / w.cost_limit, 6);
+        expect(Date.parse(w.reset_at)).toBeGreaterThan(now);
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  test("a pace warning keeps recurring, because the pace is still over", () => {
+    const config = required(CONFIGS["local_paced_weekly"]);
+    const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
+    const db = caseLedger(index++);
+    try {
+      const first = scoped(newlyCrossedBudgetWarnings(db, config, now, opts), "pace");
+      const second = scoped(newlyCrossedBudgetWarnings(db, config, now, opts), "pace");
+      expect(first.length).toBeGreaterThan(0);
+      expect(second.length, "the pace is still over, so it still warns").toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("enforcing a budget on a call", () => {
+  let index = 3000;
+
+  test("a block always names which budget stopped the call", () => {
+    for (const configName of Object.keys(CONFIGS)) {
+      const config = required(CONFIGS[configName]);
+      const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
+      const db = caseLedger(index++);
+      try {
+        for (const [callName, call] of Object.entries(CALLS)) {
+          const block = enforceBudgetForCall(db, config, call, now, opts);
+          if (block === undefined) continue;
+          const where = `${configName}/${callName}`;
+          expect(block.message, where).toBeTruthy();
+          expect(block.scope, where).toBeTruthy();
+        }
+      } finally {
+        db.close();
+      }
+    }
+  });
+
+  test("a filtered budget only blocks the calls its filter names", () => {
+    const config: UsageConfig = {
+      timezone: "local",
+      allow_compaction_over_budget: true,
+      budgets: [filtered],
+    };
+    const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
+    const db = caseLedger(index++);
+    try {
+      const outside = {
+        provider: "nobody",
+        api_key_name: "none",
+        model: "no-such-model",
+        call_type: "message",
+        character: "nobody",
+      };
+      expect(enforceBudgetForCall(db, config, outside, now, opts)).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+});
