@@ -214,8 +214,8 @@ export function buildRequest(
   env: NodeJS.ProcessEnv = process.env,
 ): BuiltRequest {
   const apiKeyEnv = model.api_key_env ?? defaultApiKeyEnv(model.provider_key);
-  const apiKey = env[apiKeyEnv];
-  if (apiKey === undefined || apiKey === "") throw new MissingApiKey(apiKeyEnv);
+  const apiKey = readCandidateEnv({ name: "default", env: apiKeyEnv, warn_on_fallback: false }, env);
+  if (apiKey === undefined) throw new MissingApiKey(apiKeyEnv);
 
   const built = buildRequestWithResolvedKey(model, apiKey, inputs);
   return { ...built, api_key_name: "default" };

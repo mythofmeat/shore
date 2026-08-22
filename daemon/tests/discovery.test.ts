@@ -25,365 +25,287 @@ import {
 import { requestUrl } from "./support/fetch.ts";
 import { testTmp } from "./support/tmp.ts";
 
-interface UrlCase {
-  base_url: string;
-  expect: string;
-}
-
-interface TruncCase {
-  name: string;
-  input: string;
-  input_byte_len: number;
-  expect: string;
-  expect_byte_len: number;
-}
-
-interface SdkCase {
-  provider_key: string;
-  model_id: string;
-  default_sdk: string;
-  expect: string;
-}
-
-interface MapCase {
-  name: string;
-  provider_key: string;
-  base_url: string;
-  sdk: string;
-  raw: unknown;
-  expect: Record<string, unknown> | null;
-}
-
-interface ParseCase {
-  name: string;
-  provider_key: string;
-  base_url: string;
-  kind: string;
-  body: string;
-  expect:
-    | { ok: { model_id: string; sdk: string; display_name: string | null }[] }
-    | { error: string };
-}
-
-interface PathCase {
-  cache_dir: string;
-  provider_key: string;
-  expect: string;
-}
-
-interface StalenessCase {
-  name: string;
-  offset_secs?: number;
-  fetched_at?: string;
-  age_is_known: boolean;
-  stale: boolean;
-}
-
-interface ReadCase {
-  name: string;
-  file: string | null;
-  expect: Record<string, unknown> | null;
-}
-
-interface Fixture {
-  cache_version: number;
-  refresh_interval_secs: number;
-  anthropic_version_header: string;
-  build_models_url: UrlCase[];
-  build_anthropic_models_url: UrlCase[];
-  truncate_for_log: TruncCase[];
-  effective_model_sdk: SdkCase[];
-  map_entry: { now: string; cases: MapCase[] };
-  parse_models_response: ParseCase[];
-  cache_path: PathCase[];
-  staleness: StalenessCase[];
-  write_cache: {
-    full: {
-      cache: ProviderModelsCache;
-      bytes: string;
-      tmp_left_behind: boolean;
-      round_trips: boolean;
-    };
-    empty: { cache: ProviderModelsCache; bytes: string };
-  };
-  read_cache: ReadCase[];
-}
-
-const fixture = (await Bun.file(
-  new URL("./llm_fixtures/discovery.json", import.meta.url),
-).json()) as Fixture;
-
 const byteLen = (s: string) => Buffer.byteLength(s, "utf8");
+const scratch = () => mkdtemp(testTmp("shore-discovery-"));
 
-async function scratch(): Promise<string> {
-  return await mkdtemp(testTmp("discovery-parity-"));
-}
-
-describe("the fixture is real", () => {
-  test("the truncation cases actually straddle the byte cap", () => {
-    const straddling = fixture.truncate_for_log.filter((c) => {
-      if (c.input_byte_len <= 512) return false;
-      return c.expect_byte_len - byteLen("…") < 512;
-    });
-    expect(straddling.length).toBeGreaterThan(0);
-  });
-
-  test("capabilities are recorded in all three states", () => {
-    const states = new Set<string>();
-    for (const c of fixture.map_entry.cases) {
-      if (c.expect === null) continue;
-      const v = c.expect.supports_tools;
-      states.add(v === undefined ? "unknown" : JSON.stringify(v));
-    }
-    expect(states).toEqual(new Set(["unknown", "true", "false"]));
-  });
-
-  test("both parse outcomes are represented", () => {
-    const ok = fixture.parse_models_response.filter((c) => "ok" in c.expect);
-    const err = fixture.parse_models_response.filter((c) => "error" in c.expect);
-    expect(ok.length).toBeGreaterThan(0);
-    expect(err.length).toBeGreaterThan(0);
-  });
-
-  test("staleness is recorded in both directions", () => {
-    const fresh = fixture.staleness.filter((c) => !c.stale);
-    const stale = fixture.staleness.filter((c) => c.stale);
-    expect(fresh.length).toBeGreaterThan(0);
-    expect(stale.length).toBeGreaterThan(0);
-  });
-
-  test("the written cache exercises both present and absent optionals", () => {
-    const models = fixture.write_cache.full.cache.models;
-    expect(models.some((m) => m.display_name !== undefined)).toBe(true);
-    expect(models.some((m) => m.display_name === undefined)).toBe(true);
-  });
+const NOW = "2026-04-28T10:00:00.000Z";
+const cacheOf = (over: Partial<ProviderModelsCache> = {}): ProviderModelsCache => ({
+  version: CACHE_VERSION,
+  provider_key: "openrouter",
+  fetched_at: NOW,
+  models: [],
+  ...over,
 });
 
-describe("constants match the Rust", () => {
-  test("cache version", () => {
-    expect(CACHE_VERSION).toBe(fixture.cache_version);
+describe("the models URL a provider is asked for", () => {
+  test("hangs /models off the configured base", () => {
+    expect(buildModelsUrl("https://api.openai.com/v1")).toBe("https://api.openai.com/v1/models");
   });
 
-  test("refresh interval", () => {
-    expect(REFRESH_INTERVAL_MS).toBe(fixture.refresh_interval_secs * 1000);
-  });
-});
-
-describe("buildModelsUrl", () => {
-  for (const c of fixture.build_models_url) {
-    test(`${c.base_url || "(empty)"} → ${c.expect}`, () => {
-      expect(buildModelsUrl(c.base_url)).toBe(c.expect);
-    });
-  }
-});
-
-describe("buildAnthropicModelsUrl", () => {
-  for (const c of fixture.build_anthropic_models_url) {
-    test(`${c.base_url || "(empty)"} → ${c.expect}`, () => {
-      expect(buildAnthropicModelsUrl(c.base_url)).toBe(c.expect);
-    });
-  }
-});
-
-describe("truncateForLog", () => {
-  for (const c of fixture.truncate_for_log) {
-    test(c.name, () => {
-      const got = truncateForLog(c.input);
-      expect(got).toBe(c.expect);
-      expect(byteLen(got)).toBe(c.expect_byte_len);
-    });
-  }
-
-  test("output is always valid UTF-8, never a split character", () => {
-    for (const c of fixture.truncate_for_log) {
-      const got = truncateForLog(c.input);
-      expect(got, c.name).not.toContain("�");
+  test("does not double the slash when the base has trailing ones", () => {
+    for (const base of ["https://x.test/v1/", "https://x.test/v1//", "https://x.test/v1///"]) {
+      expect(buildModelsUrl(base), base).toBe("https://x.test/v1/models");
     }
   });
-});
 
-describe("effectiveModelSdk", () => {
-  for (const c of fixture.effective_model_sdk) {
-    test(`${c.provider_key} / ${c.model_id || "(empty)"} / ${c.default_sdk}`, () => {
-      expect(effectiveModelSdk(c.provider_key, c.model_id, c.default_sdk)).toBe(c.expect);
-    });
-  }
-});
+  test("still produces a path when the base is empty, rather than throwing", () => {
+    expect(buildModelsUrl("")).toBe("/models");
+  });
 
-describe("mapEntry", () => {
-  const now = fixture.map_entry.now;
+  test("anthropic supplies the /v1 the base is missing", () => {
+    expect(buildAnthropicModelsUrl("https://api.anthropic.com")).toBe(
+      "https://api.anthropic.com/v1/models",
+    );
+    expect(buildAnthropicModelsUrl("https://api.anthropic.com/")).toBe(
+      "https://api.anthropic.com/v1/models",
+    );
+  });
 
-  for (const c of fixture.map_entry.cases) {
-    test(c.name, () => {
-      const got = mapEntry(c.provider_key, c.base_url, c.sdk, c.raw, now);
-      if (c.expect === null) {
-        expect(got).toBeUndefined();
-        return;
-      }
-      expect(JSON.parse(JSON.stringify(got))).toEqual(c.expect);
-    });
-  }
+  test("anthropic does not repeat a /v1 the base already has", () => {
+    expect(buildAnthropicModelsUrl("https://api.anthropic.com/v1")).toBe(
+      "https://api.anthropic.com/v1/models",
+    );
+    expect(buildAnthropicModelsUrl("https://gw.test/v1//")).toBe("https://gw.test/v1/models");
+  });
 
-  test("keys absent in the Rust are absent here, not present-and-undefined", () => {
-    for (const c of fixture.map_entry.cases) {
-      if (c.expect === null) continue;
-      const got = mapEntry(c.provider_key, c.base_url, c.sdk, c.raw, now);
-      expect(got, c.name).toBeDefined();
-      for (const key of Object.keys(got as object)) {
-        if (key === "raw_provider_metadata") continue;
-        expect(Object.hasOwn(c.expect, key), `${c.name}: extra key ${key}`).toBe(true);
-      }
-    }
+  test("a base ending in something v1-ish is not mistaken for /v1", () => {
+    expect(buildAnthropicModelsUrl("https://gw.test/apiv1")).toBe("https://gw.test/apiv1/v1/models");
   });
 });
 
-describe("parseModelsResponse", () => {
-  for (const c of fixture.parse_models_response) {
-    test(c.name, () => {
-      const got = parseModelsResponse(c.provider_key, c.base_url, c.kind, c.body, "2026-01-01");
-      if ("error" in c.expect) {
-        expect(got).toHaveProperty("err");
-        expect((got as { err: { kind: string } }).err.kind).toBe(c.expect.error);
-        return;
-      }
-      expect(got).toHaveProperty("ok");
-      const models = (got as { ok: DiscoveredModel[] }).ok;
-      expect(
-        models.map((m) => ({
-          model_id: m.model_id,
-          sdk: m.sdk,
-          display_name: m.display_name ?? null,
-        })),
-      ).toEqual(c.expect.ok);
-    });
-  }
+describe("an error body written to the log", () => {
+  test("is left alone when it already fits", () => {
+    expect(truncateForLog("short")).toBe("short");
+    expect(truncateForLog("x".repeat(512))).toBe("x".repeat(512));
+  });
+
+  test("is capped once it does not, and says it was cut", () => {
+    const got = truncateForLog("x".repeat(2000));
+    expect(got.endsWith("\u2026")).toBe(true);
+    expect(byteLen(got)).toBe(512 + byteLen("\u2026"));
+  });
+
+  test("never cuts a character in half, however the bytes fall", () => {
+    for (let lead = 508; lead <= 514; lead += 1) {
+      const body = `${"x".repeat(lead)}\u4E16${"y".repeat(600)}`;
+      const got = truncateForLog(body);
+      expect(got, `lead ${lead}`).not.toContain("\uFFFD");
+      expect(byteLen(got), `lead ${lead}`).toBeLessThanOrEqual(512 + byteLen("\u2026"));
+    }
+  });
+
+  test("counts bytes, not characters, so a multibyte body still fits the cap", () => {
+    expect(byteLen(truncateForLog("\u4E16".repeat(400)))).toBeLessThanOrEqual(
+      512 + byteLen("\u2026"),
+    );
+  });
 });
 
-describe("cachePath", () => {
-  for (const c of fixture.cache_path) {
-    test(`${c.cache_dir} / ${c.provider_key}`, () => {
-      expect(cachePath(c.cache_dir, c.provider_key)).toBe(c.expect);
-    });
-  }
+describe("which dialect a discovered model speaks", () => {
+  test("is the provider's own, for every provider that serves one", () => {
+    expect(effectiveModelSdk("openai", "gpt-4o", "openai")).toBe("openai");
+    expect(effectiveModelSdk("anthropic", "claude-opus-4", "anthropic")).toBe("anthropic");
+    expect(effectiveModelSdk("openrouter", "qwen/qwen3", "openai")).toBe("openai");
+  });
+
+  test("is decided per model on opencode-go, which serves both", () => {
+    expect(effectiveModelSdk("opencode-go", "qwen3-coder", "openai")).toBe("anthropic");
+    expect(effectiveModelSdk("opencode-go", "minimax-m2", "openai")).toBe("anthropic");
+    expect(effectiveModelSdk("opencode-go", "gpt-4o", "openai")).toBe("openai");
+  });
+
+  test("reads the model name after any vendor prefix, case-insensitively", () => {
+    expect(effectiveModelSdk("opencode-go", "alibaba/Qwen3-Max", "openai")).toBe("anthropic");
+    expect(effectiveModelSdk("opencode-go", "MINIMAX-M2", "openai")).toBe("anthropic");
+    expect(effectiveModelSdk("opencode-go", "vendor/qwen/gpt-4o", "openai")).toBe("openai");
+  });
 });
 
-describe("staleness", () => {
-  for (const c of fixture.staleness) {
-    test(c.name, () => {
-      const now = Date.parse("2026-04-28T10:00:00Z");
-      const fetchedAt =
-        c.fetched_at ?? new Date(now - (c.offset_secs as number) * 1000).toISOString();
+describe("turning a provider's catalog entry into a model", () => {
+  const entry = (raw: unknown) => mapEntry("openrouter", "https://or.test/api/v1", "openai", raw, NOW);
 
-      expect(cacheAgeMs(fetchedAt, now) !== undefined).toBe(c.age_is_known);
+  test("needs an id, and rejects anything shaped wrong", () => {
+    for (const bad of [null, undefined, 42, "a string", [], {}, { id: 7 }]) {
+      expect(entry(bad), JSON.stringify(bad) ?? "undefined").toBeUndefined();
+    }
+  });
 
-      const cache: ProviderModelsCache = {
-        version: CACHE_VERSION,
-        provider_key: "p",
-        fetched_at: fetchedAt,
-        models: [],
-      };
-      expect(isStale(cache, now)).toBe(c.stale);
+  test("carries the id, the provider and the base url it was found at", () => {
+    expect(entry({ id: "qwen/qwen3" })).toMatchObject({
+      provider_key: "openrouter",
+      model_id: "qwen/qwen3",
+      base_url: "https://or.test/api/v1",
+      sdk: "openai",
+      discovered_at: NOW,
     });
-  }
+  });
 
-  test("an unparseable timestamp is stale rather than pinned fresh", () => {
+  test("omits what the provider did not say, rather than writing it as undefined", () => {
+    const got = entry({ id: "m" });
+    expect(Object.hasOwn(got as object, "display_name")).toBe(false);
+    expect(Object.hasOwn(got as object, "context_length")).toBe(false);
+    expect(Object.hasOwn(got as object, "supports_tools")).toBe(false);
+  });
+
+  test("records a capability the provider denies as false, not as absent", () => {
+    const off = entry({ id: "m", supported_parameters: [] });
+    expect(off?.supports_tools).toBe(false);
+    const on = entry({ id: "m", supported_parameters: ["tools"] });
+    expect(on?.supports_tools).toBe(true);
+  });
+
+  test("takes the sdk from the per-model rule, not the provider default", () => {
+    const got = mapEntry("opencode-go", "https://oc.test", "openai", { id: "qwen3" }, NOW);
+    expect(got?.sdk).toBe("anthropic");
+  });
+});
+
+describe("reading a provider's models response", () => {
+  const parse = (body: string, kind = "openai") =>
+    parseModelsResponse("openrouter", "https://or.test/v1", kind, body, NOW);
+
+  test("returns the models it could read", () => {
+    const got = parse('{"data":[{"id":"a"},{"id":"b"}]}');
+    expect((got as { ok: DiscoveredModel[] }).ok.map((m) => m.model_id)).toEqual(["a", "b"]);
+  });
+
+  test("skips an entry it cannot make sense of instead of failing the batch", () => {
+    const got = parse('{"data":[{"id":"a"},{"no_id":true},7,{"id":"b"}]}');
+    expect((got as { ok: DiscoveredModel[] }).ok.map((m) => m.model_id)).toEqual(["a", "b"]);
+  });
+
+  test("an empty catalog is an empty list, not an error", () => {
+    expect((parse('{"data":[]}') as { ok: DiscoveredModel[] }).ok).toEqual([]);
+  });
+
+  test("malformed JSON is a parse error", () => {
+    expect((parse("{bad json") as { err: { kind: string } }).err.kind).toBe("parse");
+  });
+
+  test("a top-level array is a parse error, since the envelope is an object", () => {
+    expect((parse("[]") as { err: { kind: string } }).err.kind).toBe("parse");
+    expect((parse('"a string"') as { err: { kind: string } }).err.kind).toBe("parse");
+  });
+
+  test("a `data` that is not a list is a parse error", () => {
+    expect((parse('{"data":{}}') as { err: { kind: string } }).err.kind).toBe("parse");
+  });
+
+  test("an envelope with no `data` at all is an empty catalog, not a failure", () => {
+    expect((parse('{"models":[]}') as { ok: DiscoveredModel[] }).ok).toEqual([]);
+  });
+});
+
+describe("where a provider's catalog is cached", () => {
+  test("is one file per provider, under the cache dir", () => {
+    expect(cachePath("/cache", "openrouter")).toBe("/cache/providers/openrouter/models.json");
+  });
+
+  test("keeps providers apart, so refreshing one cannot clobber another", () => {
+    expect(cachePath("/cache", "openai")).not.toBe(cachePath("/cache", "anthropic"));
+  });
+});
+
+describe("when a cached catalog needs refreshing", () => {
+  const now = Date.parse(NOW);
+  const at = (msAgo: number) => new Date(now - msAgo).toISOString();
+
+  test("a fresh one does not", () => {
+    expect(isStale(cacheOf({ fetched_at: at(0) }), now)).toBe(false);
+    expect(isStale(cacheOf({ fetched_at: at(60_000) }), now)).toBe(false);
+  });
+
+  test("one older than the refresh interval does", () => {
+    expect(isStale(cacheOf({ fetched_at: at(REFRESH_INTERVAL_MS * 2) }), now)).toBe(true);
+  });
+
+  test("the boundary itself counts as stale, so it cannot sit there forever", () => {
+    expect(isStale(cacheOf({ fetched_at: at(REFRESH_INTERVAL_MS) }), now)).toBe(true);
+    expect(isStale(cacheOf({ fetched_at: at(REFRESH_INTERVAL_MS - 1000) }), now)).toBe(false);
+  });
+
+  test("one stamped in the future refreshes, because the clock cannot be trusted", () => {
+    expect(cacheAgeMs(at(-60_000), now)).toBeUndefined();
+    expect(isStale(cacheOf({ fetched_at: at(-60_000) }), now)).toBe(true);
+  });
+
+  test("an unreadable timestamp is stale, rather than pinned fresh forever", () => {
     for (const bad of ["2026-04-28", "Apr 28 2026", "not-a-timestamp", "", "2026"]) {
       expect(cacheAgeMs(bad), bad).toBeUndefined();
+      expect(isStale(cacheOf({ fetched_at: bad }), now), bad).toBe(true);
     }
   });
 
-  test("the interval boundary is inclusive", () => {
-    const now = Date.parse("2026-04-28T10:00:00Z");
-    const at = new Date(now - REFRESH_INTERVAL_MS).toISOString();
-    const justUnder = new Date(now - REFRESH_INTERVAL_MS + 1000).toISOString();
-    const cache = (fetched_at: string): ProviderModelsCache => ({
-      version: CACHE_VERSION,
-      provider_key: "p",
-      fetched_at,
-      models: [],
-    });
-    expect(isStale(cache(at), now)).toBe(true);
-    expect(isStale(cache(justUnder), now)).toBe(false);
+  test("the refresh interval is a day, not a debugging value someone left in", () => {
+    expect(REFRESH_INTERVAL_MS).toBe(24 * 60 * 60 * 1000);
   });
 });
 
-describe("the cache file is byte-identical to the Rust's", () => {
-  test("a full cache", () => {
-    expect(serializeCache(fixture.write_cache.full.cache)).toBe(fixture.write_cache.full.bytes);
+describe("writing the cache", () => {
+  const full = cacheOf({
+    models: [
+      {
+        provider_key: "openrouter",
+        model_id: "a",
+        display_name: "Model A",
+        sdk: "openai",
+        discovered_at: NOW,
+      },
+      { provider_key: "openrouter", model_id: "b", sdk: "openai", discovered_at: NOW },
+    ] as DiscoveredModel[],
   });
 
-  test("an empty cache", () => {
-    expect(serializeCache(fixture.write_cache.empty.cache)).toBe(fixture.write_cache.empty.bytes);
+  test("omits absent optionals rather than writing them as null", () => {
+    const bytes = serializeCache(full);
+    expect(bytes).not.toContain("null");
+    expect(bytes).toContain('"display_name"');
   });
 
-  test("absent optionals are omitted, not written as null", () => {
-    expect(fixture.write_cache.full.bytes).not.toContain("null");
-  });
-
-  test("writeCache lands those exact bytes on disk", async () => {
+  test("round-trips through disk unchanged", async () => {
     const dir = await scratch();
     const path = cachePath(dir, "openrouter");
-    await writeCache(path, fixture.write_cache.full.cache);
-    expect(await readFile(path, "utf8")).toBe(fixture.write_cache.full.bytes);
+    await writeCache(path, full);
+    expect(await readCache(path)).toEqual(full);
   });
 
-  test("writeCache leaves no tmp sibling behind", async () => {
-    const dir = await scratch();
-    const path = cachePath(dir, "openrouter");
-    await writeCache(path, fixture.write_cache.full.cache);
-    expect(fixture.write_cache.full.tmp_left_behind).toBe(false);
-    const entries = await readdir(join(dir, "providers", "openrouter"));
-    expect(entries).toEqual(["models.json"]);
-  });
-
-  test("writeCache creates missing parent directories", async () => {
+  test("creates the parent directories it needs", async () => {
     const dir = await scratch();
     const path = cachePath(join(dir, "deep", "nested"), "p");
-    await writeCache(path, fixture.write_cache.empty.cache);
-    expect(await readFile(path, "utf8")).toBe(fixture.write_cache.empty.bytes);
+    await writeCache(path, cacheOf({ models: [] }));
+    expect(await readCache(path)).toBeDefined();
   });
 
-  test("a failed write leaves the previous catalog intact", async () => {
+  test("leaves no staging file behind", async () => {
+    const dir = await scratch();
+    await writeCache(cachePath(dir, "openrouter"), full);
+    expect(await readdir(join(dir, "providers", "openrouter"))).toEqual(["models.json"]);
+  });
+
+  test("a failed write leaves the previous catalog intact and no debris", async () => {
     const dir = await scratch();
     const path = cachePath(dir, "openrouter");
-    await writeCache(path, fixture.write_cache.full.cache);
+    await writeCache(path, full);
+    const before = await readFile(path, "utf8");
 
     const poisoned = {
-      ...fixture.write_cache.empty.cache,
-      models: [
-        {
-          provider_key: "p",
-          model_id: "m",
-          sdk: "openai",
-          raw_provider_metadata: { bad: 1n },
-          discovered_at: "t",
-        },
-      ],
+      ...full,
+      models: [{ provider_key: "p", model_id: "m", sdk: "openai", raw_provider_metadata: { bad: 1n }, discovered_at: NOW }],
     } as unknown as ProviderModelsCache;
     expect(writeCache(path, poisoned)).rejects.toThrow();
 
-    expect(await readFile(path, "utf8")).toBe(fixture.write_cache.full.bytes);
-    const entries = await readdir(join(dir, "providers", "openrouter"));
-    expect(entries, "no half-written tmp file left behind").toEqual(["models.json"]);
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(await readdir(join(dir, "providers", "openrouter"))).toEqual(["models.json"]);
   });
 
   test("the destination is untouched until the staged write has succeeded", async () => {
     const dir = await scratch();
     const path = cachePath(dir, "openrouter");
-    await writeCache(path, fixture.write_cache.full.cache);
+    await writeCache(path, full);
+    const before = await readFile(path, "utf8");
 
     await mkdir(`${path}.tmp`, { recursive: true });
-    expect(writeCache(path, fixture.write_cache.empty.cache)).rejects.toThrow();
-
-    expect(await readFile(path, "utf8")).toBe(fixture.write_cache.full.bytes);
-  });
-
-  test("a written cache reads back equal", async () => {
-    const dir = await scratch();
-    const path = cachePath(dir, "openrouter");
-    await writeCache(path, fixture.write_cache.full.cache);
-    expect(fixture.write_cache.full.round_trips).toBe(true);
-    expect(await readCache(path)).toEqual(fixture.write_cache.full.cache);
+    expect(writeCache(path, cacheOf({ models: [] }))).rejects.toThrow();
+    expect(await readFile(path, "utf8")).toBe(before);
   });
 });
 
@@ -414,7 +336,7 @@ describe("the fetchers", () => {
     const got = await discoverAnthropic("anthropic", "https://api.anthropic.com", "sk-a", impl);
     expect(calls[0]?.url).toBe("https://api.anthropic.com/v1/models");
     expect(calls[0]?.headers["x-api-key"]).toBe("sk-a");
-    expect(calls[0]?.headers["anthropic-version"]).toBe(fixture.anthropic_version_header);
+    expect(calls[0]?.headers["anthropic-version"]).toBe("2023-06-01");
     expect(calls[0]?.headers.authorization).toBeUndefined();
     expect(got).toHaveProperty("ok");
   });
@@ -450,23 +372,41 @@ describe("the fetchers", () => {
   });
 });
 
-describe("readCache", () => {
-  for (const c of fixture.read_cache) {
-    test(c.name, async () => {
-      const dir = await scratch();
-      const path = cachePath(dir, "openrouter");
-      if (c.file !== null) {
-        await mkdir(join(dir, "providers", "openrouter"), { recursive: true });
-        await writeFile(path, c.file);
-      }
-      const got = await readCache(path);
-      if (c.expect === null) {
-        expect(got).toBeUndefined();
-        return;
-      }
-      expect(JSON.parse(JSON.stringify(got))).toEqual(c.expect);
-    });
+describe("reading the cache back", () => {
+  async function withFile(contents: string | null): Promise<string> {
+    const dir = await scratch();
+    const path = cachePath(dir, "openrouter");
+    if (contents !== null) {
+      await mkdir(join(dir, "providers", "openrouter"), { recursive: true });
+      await writeFile(path, contents);
+    }
+    return path;
   }
+
+  test("a missing file is simply no cache, not a failure", async () => {
+    expect(await readCache(await withFile(null))).toBeUndefined();
+  });
+
+  test("an unreadable file is discarded rather than crashing a refresh", async () => {
+    for (const junk of ["", "{bad json", "[]", "null"]) {
+      expect(await readCache(await withFile(junk)), junk).toBeUndefined();
+    }
+  });
+
+  test("one written by a newer build is discarded, since its shape is unknown here", async () => {
+    const newer = JSON.stringify({ ...cacheOf(), version: CACHE_VERSION + 1 });
+    expect(await readCache(await withFile(newer))).toBeUndefined();
+  });
+
+  test("one written by an older build still loads, so an upgrade does not refetch", async () => {
+    const older = JSON.stringify({ ...cacheOf(), version: CACHE_VERSION - 1 });
+    expect(await readCache(await withFile(older))).toMatchObject({ version: CACHE_VERSION - 1 });
+  });
+
+  test("a well-formed cache loads", async () => {
+    const path = await withFile(serializeCache(cacheOf()));
+    expect(await readCache(path)).toEqual(cacheOf());
+  });
 
   test("a genuine I/O failure is not swallowed", async () => {
     const dir = await scratch();

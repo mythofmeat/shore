@@ -1,5 +1,3 @@
-import { required } from "../src/util/required.ts";
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -10,329 +8,330 @@ import {
   MissingApiKey,
   preprocessRequest,
   providerOptionsFor,
-  providerOptionsFor as derive,
   requiresReasoningReplay,
   type ResolvedModel,
 } from "../src/llm/request";
 import { defaultApiKeyEnv, type ProviderEntry } from "../src/llm/credentials";
-import type { ProviderOptions, SidecarRequest, ThinkingReplay } from "../src/llm/types";
+import type { SidecarRequest, ThinkingReplay } from "../src/llm/types";
 
-type Json = Record<string, unknown>;
-
-interface ModelJson {
-  name: string;
-  qualified_name: string;
-  category: string;
-  provider_key: string;
-  sdk: string;
-  model_id: string;
-  api_key_env: string | null;
-  base_url: string | null;
-  max_context_tokens: number | null;
-  max_output_tokens: number | null;
-  temperature: number | null;
-  top_p: number | null;
-  reasoning_effort: string | null;
-  budget_tokens: number | null;
-  cache_ttl: string | null;
-  cache_keepalive: string | null;
-  openrouter_provider: unknown;
-  gemini_generation: number | null;
-  zai_clear_thinking: boolean | null;
-  zai_subscription: boolean | null;
-  max_tool_iterations: number | null;
+function model(over: Partial<ResolvedModel> = {}): ResolvedModel {
+  return {
+    name: "fixture",
+    qualifiedName: "chat.fixture",
+    providerKey: "openrouter",
+    provider_key: "openrouter",
+    sdk: "openai",
+    model_id: "vendor/model",
+    ...over,
+  } as unknown as ResolvedModel;
 }
 
-interface Fixture {
-  provider_tables: {
-    provider_key: string;
-    default_api_key_env: string;
-    default_base_url: string | null;
-    requires_reasoning_replay: boolean;
-  }[];
-  provider_options_for: { name: string; model: ModelJson; expect: Json | null }[];
-  build_request_with_resolved_key: {
-    name: string;
-    model: ModelJson;
-    replay: ThinkingReplay;
-    expect: Json;
-    keepalive_interval_ms: number | null;
-    retain_long: boolean;
-  }[];
-  build_request: {
-    name: string;
-    model: ModelJson;
-    env: Record<string, string>;
-    expect: { ok: { api_key: string; api_key_name: string | null } } | { error: string };
-  }[];
-  build_request_with_provider_keys: {
-    name: string;
-    providers_toml: string;
-    model: ModelJson;
-    expect: { ok: { api_key: string; api_key_name: string | null } } | { error: string };
-  }[];
-  preprocess_request: { name: string; request: Json; borrowed: boolean; expect: Json }[];
-}
+const INPUTS = { messages: [], replay: "all" as ThinkingReplay };
+const plain = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
 
-const fixture = (await Bun.file(
-  new URL("./llm_fixtures/request.json", import.meta.url),
-).json()) as Fixture;
-
-function model(m: ModelJson): ResolvedModel {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(m)) {
-    if (v !== null) out[k] = v;
-  }
-  return out as unknown as ResolvedModel;
-}
-
-function plain(v: unknown): unknown {
-  return JSON.parse(JSON.stringify(v));
-}
-
-describe("the fixture is real", () => {
-  test("provider options are recorded present and absent", () => {
-    expect(fixture.provider_options_for.some((c) => c.expect === null)).toBe(true);
-    expect(fixture.provider_options_for.some((c) => c.expect !== null)).toBe(true);
-  });
-
-  test("both credential outcomes are recorded", () => {
-    for (const section of [fixture.build_request, fixture.build_request_with_provider_keys]) {
-      expect(section.some((c) => "ok" in c.expect)).toBe(true);
-      expect(section.some((c) => "error" in c.expect)).toBe(true);
+describe("what a provider is reached at by default", () => {
+  test("each supported provider has its own endpoint and key variable", () => {
+    for (const key of ["anthropic", "openai", "openrouter", "deepseek", "xai", "zai"]) {
+      expect(defaultBaseUrl(key), key).toMatch(/^https:\/\//);
+      expect(defaultApiKeyEnv(key), key).toMatch(/_API_KEY$/);
     }
   });
 
-  test("a keepalive case carries a real interval and another carries none", () => {
-    const withInterval = fixture.build_request_with_resolved_key.filter(
-      (c) => c.keepalive_interval_ms !== null,
+  test("no two providers share an endpoint, so one cannot be reached as another", () => {
+    const urls = ["anthropic", "openai", "openrouter", "deepseek", "xai", "zai"].map((k) =>
+      defaultBaseUrl(k),
     );
-    const without = fixture.build_request_with_resolved_key.filter(
-      (c) => c.keepalive_interval_ms === null,
-    );
-    expect(withInterval.length).toBeGreaterThan(0);
-    expect(without.length).toBeGreaterThan(0);
+    expect(new Set(urls).size).toBe(urls.length);
   });
 
-  test("both preprocessing branches are recorded", () => {
-    expect(fixture.preprocess_request.some((c) => c.borrowed)).toBe(true);
-    expect(fixture.preprocess_request.some((c) => !c.borrowed)).toBe(true);
+  test("moonshot's two spellings are one provider", () => {
+    expect(defaultBaseUrl("moonshotai")).toBe(defaultBaseUrl("moonshot"));
+    expect(defaultApiKeyEnv("moonshotai")).toBe(defaultApiKeyEnv("moonshot"));
   });
-});
 
-describe("provider tables", () => {
-  for (const c of fixture.provider_tables) {
-    test(c.provider_key || "(empty)", () => {
-      expect(defaultApiKeyEnv(c.provider_key)).toBe(c.default_api_key_env);
-      expect(defaultBaseUrl(c.provider_key)).toBe(c.default_base_url ?? undefined);
-      expect(requiresReasoningReplay(c.provider_key)).toBe(c.requires_reasoning_replay);
-    });
-  }
-
-  test("an unknown provider gets a fallback key var but no base URL", () => {
+  test("an unknown provider gets a fallback key variable but no invented endpoint", () => {
     expect(defaultApiKeyEnv("nobody-has-heard-of-this")).toBe("LLM_API_KEY");
     expect(defaultBaseUrl("nobody-has-heard-of-this")).toBeUndefined();
+    expect(defaultBaseUrl("")).toBeUndefined();
   });
 });
 
-describe("providerOptionsFor", () => {
-  for (const c of fixture.provider_options_for) {
-    test(c.name, () => {
-      const got = providerOptionsFor(model(c.model));
-      if (c.expect === null) {
-        expect(got).toBeUndefined();
-        return;
-      }
-      expect(plain(got)).toEqual(c.expect);
-    });
-  }
-
-  test("the off sentinel never reaches the wire as an effort", () => {
-    const m = model(required(fixture.provider_options_for[0]).model);
-    const got = derive({ ...m, reasoning_effort: "off" }) as ProviderOptions;
-    expect(got.reasoning_effort).toBeUndefined();
-    expect(got.thinking_enabled).toBe(false);
+describe("which providers need prior reasoning replayed back to them", () => {
+  test("the ones that collapse without it", () => {
+    expect(requiresReasoningReplay("deepseek")).toBe(true);
+    expect(requiresReasoningReplay("moonshot")).toBe(true);
+    expect(requiresReasoningReplay("moonshotai")).toBe(true);
   });
-});
 
-describe("buildRequestWithResolvedKey", () => {
-  for (const c of fixture.build_request_with_resolved_key) {
-    test(c.name, () => {
-      const built = buildRequestWithResolvedKey(model(c.model), "sk-resolved", {
-        messages: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
-        replay: c.replay,
-      });
-      expect(plain(built.request)).toEqual(c.expect);
-      expect(built.keepalive_interval_ms ?? null).toBe(c.keepalive_interval_ms);
-    });
-  }
-
-  test("keepalive never reaches the serialized request", () => {
-    for (const c of fixture.build_request_with_resolved_key) {
-      const built = buildRequestWithResolvedKey(model(c.model), "k", {
-        messages: [],
-        replay: c.replay,
-      });
-      expect(Object.keys(built.request), c.name).not.toContain("keepalive_interval");
+  test("and no others, so nobody else pays to resend thinking", () => {
+    for (const key of ["anthropic", "openai", "openrouter", "zai", "xai", "unknown"]) {
+      expect(requiresReasoningReplay(key), key).toBe(false);
     }
   });
+});
 
-  test("the model's idle ceiling arrives in seconds and stays off the wire", () => {
-    const built = buildRequestWithResolvedKey(
-      model({
-        ...required(fixture.build_request_with_resolved_key[0]).model,
-        cache_keepalive_max: "90m",
-      } as never),
-      "k",
-      { messages: [], replay: "all" },
-    );
-    expect(built.keepalive_max_secs).toBe(5400);
-    expect(Object.keys(built.request)).not.toContain("cache_keepalive_max");
-    expect(Object.keys(built.request)).not.toContain("keepalive_max_secs");
+describe("the provider options a model derives", () => {
+  test("are absent entirely when the model asks for nothing", () => {
+    expect(providerOptionsFor(model())).toBeUndefined();
   });
 
-  test("a model with no ceiling leaves the field absent rather than zero", () => {
-    const built = buildRequestWithResolvedKey(
-      model(required(fixture.build_request_with_resolved_key[0]).model),
-      "k",
-      { messages: [], replay: "all" },
-    );
-    expect(built.keepalive_max_secs).toBeUndefined();
-  });
-
-  test("caller-supplied provider options replace the derived ones", () => {
-    const withEffort = model({
-      ...required(fixture.provider_options_for[0]).model,
+  test("carry only what the model actually set", () => {
+    expect(plain(providerOptionsFor(model({ reasoning_effort: "high" })))).toEqual({
       reasoning_effort: "high",
     });
-    const built = buildRequestWithResolvedKey(withEffort, "k", {
-      messages: [],
-      replay: "all",
+    expect(plain(providerOptionsFor(model({ cache_ttl: "1h" })))).toEqual({ cache_ttl: "1h" });
+  });
+
+  test("combine when several are set", () => {
+    const got = plain(
+      providerOptionsFor(model({ reasoning_effort: "low", budget_tokens: 2048, cache_ttl: "5m" })),
+    );
+    expect(got).toEqual({ reasoning_effort: "low", budget_tokens: 2048, cache_ttl: "5m" });
+  });
+
+  test("turn `off` into a disabled flag, never an effort level on the wire", () => {
+    const got = plain(providerOptionsFor(model({ reasoning_effort: "off" }))) as Record<
+      string,
+      unknown
+    >;
+    expect(got.thinking_enabled).toBe(false);
+    expect(Object.hasOwn(got, "reasoning_effort")).toBe(false);
+  });
+
+  test("carry a false flag, which is a setting, not an absence", () => {
+    const got = plain(providerOptionsFor(model({ zai_clear_thinking: false }))) as Record<
+      string,
+      unknown
+    >;
+    expect(got.zai_clear_thinking).toBe(false);
+  });
+});
+
+describe("building a request once the key is known", () => {
+  test("carries the model's identity and the caller's key", () => {
+    const built = buildRequestWithResolvedKey(
+      model({ base_url: "https://or.test/v1" }),
+      "sk-resolved",
+      INPUTS,
+    );
+    expect(built.request).toMatchObject({
+      sdk: "openai",
+      model: "vendor/model",
+      api_key: "sk-resolved",
+      base_url: "https://or.test/v1",
+      provider_key: "openrouter",
+      replay_prior_thinking: "all",
+    });
+  });
+
+  test("gives max_tokens a default rather than sending nothing", () => {
+    expect(buildRequestWithResolvedKey(model(), "k", INPUTS).request.max_tokens).toBeGreaterThan(0);
+    expect(
+      buildRequestWithResolvedKey(model({ max_output_tokens: 100 }), "k", INPUTS).request.max_tokens,
+    ).toBe(100);
+  });
+
+  test("omits sampling knobs the model did not set", () => {
+    const request = buildRequestWithResolvedKey(model(), "k", INPUTS).request;
+    expect(Object.hasOwn(request, "temperature")).toBe(false);
+    expect(Object.hasOwn(request, "top_p")).toBe(false);
+  });
+
+  test("keeps a zero temperature, which is a real setting", () => {
+    expect(
+      buildRequestWithResolvedKey(model({ temperature: 0 }), "k", INPUTS).request.temperature,
+    ).toBe(0);
+  });
+
+  test("caller-supplied provider options replace the derived ones outright", () => {
+    const built = buildRequestWithResolvedKey(model({ reasoning_effort: "high" }), "k", {
+      ...INPUTS,
       providerOptions: { cache_ttl: "1h" },
     });
     expect(built.request.provider_options).toEqual({ cache_ttl: "1h" });
   });
 });
 
-describe("buildRequest", () => {
-  for (const c of fixture.build_request) {
-    test(c.name, () => {
-      const inputs = { messages: [], replay: "all" as ThinkingReplay };
-      if ("error" in c.expect) {
-        expect(() => buildRequest(model(c.model), inputs, c.env)).toThrow(c.expect.error);
-        return;
-      }
-      const built = buildRequest(model(c.model), inputs, c.env);
-      expect(built.request.api_key).toBe(c.expect.ok.api_key);
-      expect(built.api_key_name ?? null).toBe(c.expect.ok.api_key_name);
-    });
-  }
-
-  test("an empty environment value is not a credential", () => {
-    const m = model(required(fixture.build_request[0]).model);
-    expect(() => buildRequest({ ...m, api_key_env: "E" }, { messages: [], replay: "all" }, { E: "" })).toThrow(
-      MissingApiKey,
-    );
+describe("keepalive settings ride alongside the request, never inside it", () => {
+  test("an interval is returned in milliseconds and stays off the wire", () => {
+    const built = buildRequestWithResolvedKey(model({ cache_keepalive: "10m" }), "k", INPUTS);
+    expect(built.keepalive_interval_ms).toBe(600_000);
+    expect(Object.keys(built.request)).not.toContain("keepalive_interval");
+    expect(Object.keys(built.request)).not.toContain("cache_keepalive");
   });
 
-  test("the error names the variable and never the value", () => {
-    const m = model(required(fixture.build_request[0]).model);
+  test("an idle ceiling is returned in seconds and stays off the wire", () => {
+    const built = buildRequestWithResolvedKey(model({ cache_keepalive_max: "90m" }), "k", INPUTS);
+    expect(built.keepalive_max_secs).toBe(5400);
+    expect(Object.keys(built.request)).not.toContain("keepalive_max_secs");
+    expect(Object.keys(built.request)).not.toContain("cache_keepalive_max");
+  });
+
+  test("a model with neither leaves both absent rather than zero", () => {
+    const built = buildRequestWithResolvedKey(model(), "k", INPUTS);
+    expect(built.keepalive_interval_ms).toBeUndefined();
+    expect(built.keepalive_max_secs).toBeUndefined();
+  });
+});
+
+describe("finding the key in the environment", () => {
+  test("the model's own variable is used when it names one", () => {
+    const built = buildRequest(model({ api_key_env: "MY_KEY" }), INPUTS, { MY_KEY: "sk-mine" });
+    expect(built.request.api_key).toBe("sk-mine");
+  });
+
+  test("the provider's conventional variable is the fallback", () => {
+    const built = buildRequest(model(), INPUTS, { OPENROUTER_API_KEY: "sk-conventional" });
+    expect(built.request.api_key).toBe("sk-conventional");
+  });
+
+  test("an unset variable is an error naming it, never a silent empty key", () => {
+    expect(() => buildRequest(model({ api_key_env: "ABSENT_VAR" }), INPUTS, {})).toThrow(
+      MissingApiKey,
+    );
     try {
-      buildRequest({ ...m, api_key_env: "ABSENT_VAR" }, { messages: [], replay: "all" }, {});
+      buildRequest(model({ api_key_env: "ABSENT_VAR" }), INPUTS, {});
       throw new Error("should have thrown");
     } catch (e) {
       expect((e as MissingApiKey).variable).toBe("ABSENT_VAR");
       expect((e as Error).message).toContain("ABSENT_VAR");
     }
   });
+
+  test("an empty or blank value is not a credential", () => {
+    for (const value of ["", "   "]) {
+      expect(() => buildRequest(model({ api_key_env: "E" }), INPUTS, { E: value })).toThrow(
+        MissingApiKey,
+      );
+    }
+  });
 });
 
-describe("buildRequestWithProviderKeys", () => {
-  const entries: Record<string, ProviderEntry | undefined> = {
-    "the first candidate whose env is set wins": {
-      enabled: true,
-      keys: [
-        { name: "primary", env: "FIX_PRIMARY", enabled: true, warn_on_fallback: false },
-        { name: "fallback", env: "FIX_FALLBACK", enabled: true, warn_on_fallback: false },
-      ],
-    },
-    "with several candidates set, the first still wins": {
-      enabled: true,
-      keys: [
-        { name: "first", env: "FIX_FALLBACK", enabled: true, warn_on_fallback: false },
-        { name: "second", env: "FIX_LEGACY", enabled: true, warn_on_fallback: false },
-      ],
-    },
-    "a disabled key is skipped even when its variable is set": {
-      enabled: true,
-      keys: [
-        { name: "off", env: "FIX_FALLBACK", enabled: false, warn_on_fallback: false },
-        { name: "on", env: "FIX_LEGACY", enabled: true, warn_on_fallback: false },
-      ],
-    },
-    "a registry entry with no keys keeps the legacy single-key path": {
-      enabled: true,
-      keys: [],
-    },
-    "a disabled provider is an error, not an ambient env lookup": {
-      enabled: false,
-      keys: [],
-    },
-    "every candidate unset names the last variable tried": {
-      enabled: true,
-      keys: [
-        { name: "one", env: "FIX_MISSING_ONE", enabled: true, warn_on_fallback: false },
-        { name: "two", env: "FIX_MISSING_TWO", enabled: true, warn_on_fallback: false },
-      ],
-    },
-    "the model's api_key_env seeds the legacy candidate": { enabled: true, keys: [] },
-  };
-
+describe("choosing among a provider's configured keys", () => {
   const env: NodeJS.ProcessEnv = {
     FIX_FALLBACK: "sk-fallback",
     FIX_LEGACY: "sk-legacy",
     OPENROUTER_API_KEY: "sk-openrouter-default",
   };
+  const key = (name: string, e: string, enabled = true) => ({
+    name,
+    env: e,
+    enabled,
+    warn_on_fallback: false,
+  });
+  const entry = (keys: ReturnType<typeof key>[], enabled = true): ProviderEntry => ({
+    enabled,
+    keys,
+  });
 
-  for (const c of fixture.build_request_with_provider_keys) {
-    test(c.name, () => {
-      const entry = entries[c.name];
-      const inputs = { messages: [], replay: "all" as ThinkingReplay };
-      if ("error" in c.expect) {
-        expect(() => buildRequestWithProviderKeys(model(c.model), entry, inputs, env)).toThrow(
-          c.expect.error,
-        );
-        return;
-      }
-      const built = buildRequestWithProviderKeys(model(c.model), entry, inputs, env);
-      expect(built.request.api_key).toBe(c.expect.ok.api_key);
-      expect(built.api_key_name ?? null).toBe(c.expect.ok.api_key_name);
-    });
-  }
+  test("the first candidate whose variable is set wins", () => {
+    const built = buildRequestWithProviderKeys(
+      model(),
+      entry([key("primary", "FIX_PRIMARY"), key("fallback", "FIX_FALLBACK")]),
+      INPUTS,
+      env,
+    );
+    expect(built.request.api_key).toBe("sk-fallback");
+    expect(built.api_key_name).toBe("fallback");
+  });
 
-  test("every fixture case is covered by a mapped registry entry", () => {
-    for (const c of fixture.build_request_with_provider_keys) {
-      expect(Object.hasOwn(entries, c.name), c.name).toBe(true);
+  test("with several set, order still decides", () => {
+    const built = buildRequestWithProviderKeys(
+      model(),
+      entry([key("first", "FIX_FALLBACK"), key("second", "FIX_LEGACY")]),
+      INPUTS,
+      env,
+    );
+    expect(built.api_key_name).toBe("first");
+  });
+
+  test("a disabled key is skipped even when its variable is set", () => {
+    const built = buildRequestWithProviderKeys(
+      model(),
+      entry([key("off", "FIX_FALLBACK", false), key("on", "FIX_LEGACY")]),
+      INPUTS,
+      env,
+    );
+    expect(built.api_key_name).toBe("on");
+    expect(built.request.api_key).toBe("sk-legacy");
+  });
+
+  test("an entry with no keys falls back to the conventional variable", () => {
+    const built = buildRequestWithProviderKeys(model(), entry([]), INPUTS, env);
+    expect(built.request.api_key).toBe("sk-openrouter-default");
+  });
+
+  test("a disabled provider is an error, not an ambient lookup", () => {
+    expect(() => buildRequestWithProviderKeys(model(), entry([], false), INPUTS, env)).toThrow(
+      MissingApiKey,
+    );
+  });
+
+  test("every candidate unset names the last variable tried, so the fix is obvious", () => {
+    try {
+      buildRequestWithProviderKeys(
+        model(),
+        entry([key("one", "FIX_MISSING_ONE"), key("two", "FIX_MISSING_TWO")]),
+        INPUTS,
+        env,
+      );
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect((e as MissingApiKey).variable).toBe("FIX_MISSING_TWO");
     }
+  });
+
+  test("with no registry entry at all, the model's own variable still seeds the lookup", () => {
+    const built = buildRequestWithProviderKeys(
+      model({ api_key_env: "FIX_LEGACY" }),
+      undefined,
+      INPUTS,
+      env,
+    );
+    expect(built.request.api_key).toBe("sk-legacy");
   });
 });
 
-describe("preprocessRequest", () => {
-  for (const c of fixture.preprocess_request) {
-    test(c.name, () => {
-      const request = c.request as unknown as SidecarRequest;
-      const got = preprocessRequest(request);
-      expect(plain(got)).toEqual(c.expect);
-      expect(got === request, "borrowed").toBe(c.borrowed);
-    });
-  }
+describe("preprocessing a request before it goes out", () => {
+  const request = (over: Partial<SidecarRequest> = {}): SidecarRequest =>
+    ({
+      sdk: "openai",
+      model: "m",
+      api_key: "k",
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      max_tokens: 1024,
+      replay_prior_thinking: "all",
+      ...over,
+    }) as unknown as SidecarRequest;
 
-  test("the input request is never mutated", () => {
-    for (const c of fixture.preprocess_request) {
-      const request = c.request as unknown as SidecarRequest;
-      const before = JSON.stringify(request);
-      preprocessRequest(request);
-      expect(JSON.stringify(request), c.name).toBe(before);
+  test("a request needing no repair is handed back as-is, not copied", () => {
+    const input = request();
+    expect(preprocessRequest(input)).toBe(input);
+  });
+
+  test("an orphaned tool pair is repaired into a new request", () => {
+    const input = request({
+      messages: [
+        { role: "assistant", content: [{ type: "tool_use", id: "a", name: "read", input: {} }] },
+      ],
+    });
+    const got = preprocessRequest(input);
+    expect(got).not.toBe(input);
+    expect(got.messages).toEqual([]);
+  });
+
+  test("the input is never mutated, whichever branch runs", () => {
+    for (const input of [
+      request(),
+      request({
+        messages: [
+          { role: "assistant", content: [{ type: "tool_use", id: "a", name: "read", input: {} }] },
+        ],
+      }),
+    ]) {
+      const before = JSON.stringify(input);
+      preprocessRequest(input);
+      expect(JSON.stringify(input)).toBe(before);
     }
   });
 });
