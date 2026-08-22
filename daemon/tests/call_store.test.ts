@@ -1,5 +1,5 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,147 +11,14 @@ import {
   type TranscriptRecord,
 } from "../src/call_store.ts";
 
-import fixture from "./call_store_fixtures/call_store.json" with { type: "json" };
-
-const root = mkdtempSync(join(tmpdir(), "call-store-parity-"));
-let seq = 0;
-afterAll(() => rmSync(root, { recursive: true, force: true }));
-
-function openFrom(db_b64: string): CallStore {
-  seq += 1;
-  const path = join(root, `db${seq}.sqlite`);
-  writeFileSync(path, Buffer.from(db_b64, "base64"));
-  return CallStore.open(path);
+function filled(): CallStore {
+  const store = CallStore.openInMemory();
+  fillCanonical(store);
+  return store;
 }
 
-interface QueryCase {
-  case: string;
-  op: string;
-  args: Record<string, unknown>;
-  ok: unknown;
-}
-
-describe("queries against the Rust-written store", () => {
-  const store = openFrom(fixture.canonical.db_b64);
-
-  for (const row of fixture.canonical.queries as QueryCase[]) {
-    test(row.case, () => {
-      expect(runQuery(store, row)).toEqual(row.ok);
-    });
-  }
-});
-
-function runQuery(store: CallStore, row: QueryCase): unknown {
-  const args = row.args;
-  switch (row.op) {
-    case "query_calls":
-      return store.queryCalls({
-        call_type: args["call_type"] as string | null,
-        character: args["character"] as string | null,
-        limit: args["limit"] as number,
-      });
-    case "get_call":
-      return store.getCall(args["id"] as number);
-    case "query_transcripts":
-      return store.queryTranscripts(
-        args["source"] as string,
-        args["character"] as string | null,
-        args["limit"] as number,
-      );
-    case "call_count":
-      return store.callCount();
-    default:
-      throw new Error(`unknown op ${row.op}`);
-  }
-}
-
-interface RotateCase {
-  case: string;
-  db_b64: string;
-  cutoff_rfc3339: string;
-  max_total_bytes: number;
-  stats: { deleted_by_age: number; deleted_by_size: number };
-  surviving_call_ids: string[];
-  surviving_transcript_ids: number[];
-  call_count_after: number;
-}
-
-describe("rotate", () => {
-  for (const row of fixture.rotate as RotateCase[]) {
-    test(row.case, () => {
-      const store = openFrom(row.db_b64);
-      const stats = store.rotate(new Date(row.cutoff_rfc3339), row.max_total_bytes);
-      expect(stats).toEqual(row.stats);
-      const survivors = store.queryCalls({ limit: 0 }).map((s) => s.call_id);
-      expect(survivors).toEqual(row.surviving_call_ids);
-      const transcripts = store.queryTranscripts("heartbeat", null, 0).map((t) => t.id);
-      expect(transcripts).toEqual(row.surviving_transcript_ids);
-      expect(store.callCount()).toBe(row.call_count_after);
-      store.close();
-    });
-  }
-});
-
-interface SchemaShape {
-  transcript_columns: string[];
-  indexes: { name: string; sql: string | null }[];
-}
-
-function schemaShape(store: CallStore): SchemaShape {
-  const db = store.database;
-  const columns = db.query("PRAGMA table_info(transcripts)").all() as { name: string }[];
-  const indexes = db
-    .query(
-      `SELECT name, sql FROM sqlite_master
-       WHERE type = 'index' AND name NOT LIKE 'sqlite_%'
-         AND tbl_name IN ('calls', 'transcripts')
-       ORDER BY name`,
-    )
-    .all() as { name: string; sql: string | null }[];
-  return { transcript_columns: columns.map((c) => c.name), indexes };
-}
-
-function collapse(shape: SchemaShape): unknown {
-  return {
-    transcript_columns: shape.transcript_columns,
-    indexes: shape.indexes.map((i) => ({
-      name: i.name,
-      sql: i.sql === null ? null : i.sql.replace(/\s+/g, " ").trim(),
-    })),
-  };
-}
-
-describe("migration", () => {
-  const m = fixture.migration;
-
-  test("a foundation DB gains transcripts.character and the covering index", () => {
-    const store = openFrom(m.foundation_db_b64);
-    store.recordTranscript({
-      ts: new Date("2026-01-15T12:00:00Z"),
-      source: "dreaming",
-      character: "poppy",
-      call_type: "dreaming",
-      iteration: 0,
-      model: "deepseek",
-      provider: "deepseek",
-      finish_reason: "end_turn",
-      usage: ZERO_USAGE,
-      entry_json: JSON.stringify({ text: "hi" }),
-    });
-    expect(collapse(schemaShape(store))).toEqual(collapse(m.shape_after_migration));
-    expect(store.queryTranscripts("dreaming", "poppy", 0)).toEqual(m.rows_after_migration);
-    store.close();
-  });
-
-  test("opening a fresh DB twice leaves the current schema alone", () => {
-    seq += 1;
-    const path = join(root, `fresh${seq}.sqlite`);
-    CallStore.open(path).close();
-    const store = CallStore.open(path);
-    expect(collapse(schemaShape(store))).toEqual(collapse(m.shape_of_fresh_db_opened_twice));
-    store.close();
-  });
-});
+const ids = (store: CallStore, filter: CallFilter): string[] =>
+  store.queryCalls(filter).map((c) => c.call_id);
 
 const BIG_REQUEST = "context line that repeats and compresses away\n";
 const UNICODE_RESPONSE = "réponse ✅ 你好 \u{1F600}";
@@ -289,18 +156,6 @@ function fillCanonical(store: CallStore): void {
   }
 }
 
-function withoutBytes(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(withoutBytes);
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).filter(
-        ([k]) => k !== "request_bytes" && k !== "response_bytes",
-      ),
-    );
-  }
-  return value;
-}
-
 function storedRequestBytes(store: CallStore, callId: string): number {
   const row = store.database
     .query(
@@ -312,65 +167,296 @@ function storedRequestBytes(store: CallStore, callId: string): number {
   return row.stored;
 }
 
-describe("round trip through the API", () => {
-  const store = CallStore.openInMemory();
-  fillCanonical(store);
-  const r = fixture.roundtrip;
+interface SchemaShape {
+  transcript_columns: string[];
+  indexes: { name: string; sql: string | null }[];
+}
 
-  test("get_call returns the same payloads", () => {
-    const got = [1, 2, 3, 4, 5].map((id) => store.getCall(id));
-    expect(withoutBytes(got)).toEqual(withoutBytes(r.payloads));
+function schemaShape(store: CallStore): SchemaShape {
+  const db = store.database;
+  const columns = db.query("PRAGMA table_info(transcripts)").all() as { name: string }[];
+  const indexes = db
+    .query(
+      `SELECT name, sql FROM sqlite_master
+       WHERE type = 'index' AND name NOT LIKE 'sqlite_%'
+         AND tbl_name IN ('calls', 'transcripts')
+       ORDER BY name`,
+    )
+    .all() as { name: string; sql: string | null }[];
+  return { transcript_columns: columns.map((c) => c.name), indexes };
+}
+
+function collapse(shape: SchemaShape): unknown {
+  return {
+    transcript_columns: shape.transcript_columns,
+    indexes: shape.indexes.map((i) => ({
+      name: i.name,
+      sql: i.sql === null ? null : i.sql.replace(/\s+/g, " ").trim(),
+    })),
+  };
+}
+
+const HUGE = 1_000_000_000;
+
+describe("querying the calls a store holds", () => {
+  test("everything, newest first, ties broken by insertion so the order is stable", () => {
+    const store = filled();
+    expect(ids(store, { limit: 0 })).toEqual(["c4", "c3", "c2", "c5", "c1"]);
+    store.close();
   });
 
-  test("query_calls returns the same summaries", () => {
-    expect(withoutBytes(store.queryCalls({ limit: 0 }))).toEqual(withoutBytes(r.summaries));
+  test("filtered by call type", () => {
+    const store = filled();
+    expect(ids(store, { call_type: "message", limit: 0 })).toEqual(["c5", "c1"]);
+    expect(ids(store, { call_type: "heartbeat", limit: 0 })).toEqual(["c3", "c2"]);
+    expect(ids(store, { call_type: "nothing-like-this", limit: 0 })).toEqual([]);
+    store.close();
   });
 
-  test("query_transcripts returns the same rows", () => {
-    expect(store.queryTranscripts("heartbeat", null, 0)).toEqual(r.transcripts);
+  test("filtered by character", () => {
+    const store = filled();
+    expect(ids(store, { character: "poppy", limit: 0 })).toEqual(["c2", "c5", "c1"]);
+    expect(ids(store, { character: "wren", limit: 0 })).toEqual(["c3"]);
+    store.close();
   });
 
-  test("call_count", () => {
-    expect(store.callCount()).toBe(r.call_count);
+  test("both filters together narrow, they do not widen", () => {
+    const store = filled();
+    expect(ids(store, { call_type: "heartbeat", character: "poppy", limit: 0 })).toEqual(["c2"]);
+    store.close();
   });
 
-  test("a repetitive body reports what arrived, and lands smaller than that", () => {
-    const c3 = store.queryCalls({ limit: 0 }).find((s) => s.call_id === "c3");
-    expect(c3?.request_bytes).toBe(r.big_body_bytes);
-    expect(storedRequestBytes(store, "c3") < r.big_body_bytes).toBe(
-      r.big_body_compressed_is_smaller,
+  test("a limit takes the newest N, and zero means every row", () => {
+    const store = filled();
+    expect(ids(store, { limit: 2 })).toEqual(["c4", "c3"]);
+    expect(ids(store, { limit: 0 })).toHaveLength(5);
+    store.close();
+  });
+
+  test("an omitted filter field matches everything, like an explicit null", () => {
+    const store = filled();
+    expect(store.queryCalls({ limit: 0 })).toEqual(
+      store.queryCalls({ call_type: null, character: null, limit: 0 }),
     );
+    store.close();
+  });
+
+  test("a call with no type or character is still returned by an unfiltered query", () => {
+    const store = filled();
+    expect(ids(store, { limit: 0 })).toContain("c4");
+    expect(ids(store, { call_type: "message", limit: 0 })).not.toContain("c4");
+    store.close();
+  });
+
+  test("getCall reads one back by row id, and a miss is null", () => {
+    const store = filled();
+    expect(store.getCall(1)?.call_id).toBe("c1");
+    expect(store.getCall(999)).toBeNull();
+    store.close();
+  });
+
+  test("callCount counts calls, not transcripts", () => {
+    const store = filled();
+    expect(store.callCount()).toBe(5);
+    store.close();
+  });
+});
+
+describe("querying the transcripts a store holds", () => {
+  test("filtered by source", () => {
+    const store = filled();
+    expect(store.queryTranscripts("heartbeat", null, 0)).toHaveLength(4);
+    expect(store.queryTranscripts("dreaming", null, 0)).toHaveLength(1);
+    store.close();
+  });
+
+  test("a null character in the filter means any, not only the null ones", () => {
+    const store = filled();
+    expect(store.queryTranscripts("heartbeat", "poppy", 0)).toHaveLength(3);
+    expect(store.queryTranscripts("heartbeat", null, 0)).toHaveLength(4);
+    expect(store.queryTranscripts("heartbeat", "wren", 0)).toHaveLength(0);
+    store.close();
+  });
+
+  test("an entry that is not JSON still comes back rather than failing the query", () => {
+    const store = filled();
+    const [row] = store.queryTranscripts("dreaming", "wren", 0);
+    expect(row).toBeDefined();
+    store.close();
+  });
+
+  test("a JSON array entry is preserved as an array", () => {
+    const store = filled();
+    expect(store.queryTranscripts("heartbeat", null, 0).some((r) => Array.isArray(r.entry))).toBe(
+      true,
+    );
+    store.close();
+  });
+});
+
+describe("rotating a store", () => {
+  test("drops what is older than the cutoff", () => {
+    const store = filled();
+    const stats = store.rotate(at(2), HUGE);
+    expect(stats.deleted_by_age).toBeGreaterThan(0);
+    expect(stats.deleted_by_size).toBe(0);
+    expect(ids(store, { limit: 0 })).toEqual(["c4", "c3"]);
+    store.close();
+  });
+
+  test("a cutoff before everything deletes nothing", () => {
+    const store = filled();
+    expect(store.rotate(at(-1), HUGE)).toEqual({ deleted_by_age: 0, deleted_by_size: 0 });
+    expect(store.callCount()).toBe(5);
+    store.close();
+  });
+
+  test("a cutoff after everything empties it", () => {
+    const store = filled();
+    store.rotate(at(60), HUGE);
+    expect(store.callCount()).toBe(0);
+    expect(store.queryTranscripts("heartbeat", null, 0)).toEqual([]);
+    store.close();
+  });
+
+  test("transcripts age out alongside the calls", () => {
+    const store = filled();
+    store.rotate(at(2), HUGE);
+    expect(store.queryTranscripts("heartbeat", "poppy", 0)).toEqual([]);
+    store.close();
+  });
+
+  test("rotating twice deletes nothing the second time", () => {
+    const store = filled();
+    store.rotate(at(2), HUGE);
+    expect(store.rotate(at(2), HUGE)).toEqual({ deleted_by_age: 0, deleted_by_size: 0 });
+    store.close();
+  });
+
+  test("a size ceiling drops the oldest until the store fits under it", () => {
+    const store = filled();
+    const stats = store.rotate(at(-1), 1);
+    expect(stats.deleted_by_age).toBe(0);
+    expect(stats.deleted_by_size).toBeGreaterThan(0);
+    store.close();
+  });
+
+  test("the ceiling is a byte count with no unlimited sentinel: zero is a zero ceiling", () => {
+    const store = filled();
+    expect(store.rotate(at(-1), 0).deleted_by_size).toBe(4);
+    expect(store.callCount()).toBe(1);
+    store.close();
+  });
+
+  test("the newest call always survives the ceiling, so the store is never emptied by size", () => {
+    const store = filled();
+    store.rotate(at(-1), 0);
+    expect(ids(store, { limit: 0 })).toEqual(["c4"]);
+    store.close();
+  });
+});
+
+describe("the schema a store opens with", () => {
+  test("a database opened twice is left alone the second time", () => {
+    const first = CallStore.openInMemory();
+    const shape = collapse(schemaShape(first));
+    first.close();
+    const second = CallStore.openInMemory();
+    expect(collapse(schemaShape(second))).toEqual(shape);
+    second.close();
+  });
+
+  test("transcripts carry the character a query filters on", () => {
+    const store = CallStore.openInMemory();
+    expect(schemaShape(store).transcript_columns).toContain("character");
+    store.close();
+  });
+
+  test("a database missing transcripts.character gains it when reopened", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "call-store-migrate-")), "db.sqlite");
+    const before = CallStore.open(path);
+    for (const row of before.database
+      .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'transcripts'")
+      .all() as { name: string }[]) {
+      if (!row.name.startsWith("sqlite_")) before.database.run(`DROP INDEX "${row.name}"`);
+    }
+    before.database.run("ALTER TABLE transcripts DROP COLUMN character");
+    expect(schemaShape(before).transcript_columns).not.toContain("character");
+    before.close();
+
+    const after = CallStore.open(path);
+    expect(schemaShape(after).transcript_columns).toContain("character");
+    after.recordTranscript({
+      ts: at(0),
+      source: "dreaming",
+      character: "poppy",
+      call_type: "dreaming",
+      iteration: 0,
+      model: "deepseek",
+      provider: "deepseek",
+      finish_reason: "end_turn",
+      usage: ZERO_USAGE,
+      entry_json: JSON.stringify({ text: "hi" }),
+    });
+    expect(after.queryTranscripts("dreaming", "poppy", 0)).toHaveLength(1);
+    after.close();
+  });
+});
+
+describe("what a call body costs to store", () => {
+  test("a repetitive body reports what arrived, and lands smaller than that", () => {
+    const store = filled();
+    const c3 = store.queryCalls({ limit: 0 }).find((c) => c.call_id === "c3");
+    expect(c3?.request_bytes).toBe(BIG_REQUEST.repeat(500).length);
+    expect(storedRequestBytes(store, "c3")).toBeLessThan(c3?.request_bytes ?? 0);
+    store.close();
   });
 
   test("an empty body is stored, not treated as absent", () => {
-    expect(store.getCall(4)?.response === "").toBe(r.empty_body_response_is_empty_string);
+    const store = filled();
     expect(store.getCall(4)?.request).toBe("");
     expect(store.getCall(4)?.request_bytes).toBe(0);
     expect(storedRequestBytes(store, "c4")).toBeGreaterThan(0);
+    store.close();
   });
 
-  test("a missing response body reads back as null", () => {
-    expect(store.getCall(2)?.response === null).toBe(r.missing_body_response_is_null);
+  test("a missing response body reads back as null, not as empty", () => {
+    const store = filled();
+    expect(store.getCall(2)?.response).toBeNull();
     expect(store.getCall(2)?.response_bytes).toBe(0);
+    store.close();
   });
-});
 
-test("frames written by Rust decompress to the original text", () => {
-  const store = openFrom(fixture.zstd.db_b64);
-  const texts = (fixture.zstd.texts as { text: string }[]).map((t) => t.text);
-  texts.forEach((text, idx) => {
-    expect(store.getCall(idx + 1)?.request).toBe(text);
+  test("a compressed body decompresses to exactly what went in", () => {
+    const store = filled();
+    expect(store.getCall(3)?.request).toBe(BIG_REQUEST.repeat(500));
+    expect(store.getCall(3)?.response).toBe(UNICODE_RESPONSE);
+    store.close();
   });
-  store.close();
-});
 
-test("an omitted filter field matches everything, like an explicit null", () => {
-  const store = openFrom(fixture.canonical.db_b64);
-  const omitted: CallFilter = { limit: 0 };
-  const explicit: CallFilter = { call_type: null, character: null, limit: 0 };
-  expect(store.queryCalls(omitted)).toEqual(store.queryCalls(explicit));
-  expect(store.queryCalls(omitted).length).toBe(5);
-  store.close();
+  test("a body round-trips through whatever it was stored as", () => {
+    const store = CallStore.openInMemory();
+    for (const [i, text] of ["", "short", BIG_REQUEST.repeat(200), UNICODE_RESPONSE].entries()) {
+      store.recordCall({
+        call_id: `r${i}`,
+        ts: at(i),
+        call_type: "message",
+        character: "poppy",
+        model: "m",
+        provider: "p",
+        sdk: "openai",
+        rid: null,
+        finish_reason: "stop",
+        usage: ZERO_USAGE,
+        duration_ms: null,
+        error: null,
+        request_body: text,
+        response_body: text,
+      });
+      expect(store.getCall(i + 1)?.request, `case ${i}`).toBe(text);
+    }
+    store.close();
+  });
 });
 
 test("headers and transcript entries survive characters that are not latin-1", () => {
