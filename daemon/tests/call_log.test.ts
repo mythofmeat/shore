@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { expandShared } from "./support/shared_subtrees.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -10,9 +12,6 @@ import { CommandError } from "../src/commands/errors.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
 
 import rawFixture from "./command_captures/call_log.json" with { type: "json" };
-import { recordedValue, recording } from "./support/rerecord.ts";
-
-const CAPTURE = "tests/command_captures/call_log.json";
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 const root = mkdtempSync(join(tmpdir(), "call-log-"));
@@ -22,7 +21,7 @@ function at(secs: number): Date {
   return new Date(Date.parse("2026-01-15T12:00:00Z") + secs * 1000);
 }
 
-function fillCalls(store: CallStore): void {
+const CALL_ROWS: [string, number, string, string, string, string | null][] = (() => {
   const rows: [string, number, string, string, string, string | null][] = [
     ["call_a", 0, "message", "poppy", "request a", "response a"],
     ["call_b", 1, "heartbeat", "poppy", "request b", null],
@@ -40,8 +39,11 @@ function fillCalls(store: CallStore): void {
       null,
     ]);
   }
+  return rows;
+})();
 
-  for (const [call_id, offset, call_type, character, request, response] of rows) {
+function fillCalls(store: CallStore): void {
+  for (const [call_id, offset, call_type, character, request, response] of CALL_ROWS) {
     store.recordCall({
       call_id,
       ts: at(offset),
@@ -66,7 +68,7 @@ function fillCalls(store: CallStore): void {
   }
 }
 
-function fillTranscripts(store: CallStore): void {
+const TRANSCRIPT_ROWS: [number, string, number, string][] = (() => {
   const rows: [number, string, number, string][] = [
     [0, "poppy", 0, "t1-i0"],
     [1, "poppy", 1, "t1-i1"],
@@ -81,8 +83,11 @@ function fillTranscripts(store: CallStore): void {
   for (let i = 0; i < 20; i += 1) {
     rows.push([-1000 + i, "poppy", 0, `filler-${String(i).padStart(2, "0")}`]);
   }
+  return rows;
+})();
 
-  for (const [offset, character, iteration, marker] of rows) {
+function fillTranscripts(store: CallStore): void {
+  for (const [offset, character, iteration, marker] of TRANSCRIPT_ROWS) {
     store.recordTranscript({
       ts: at(offset),
       source: "heartbeat",
@@ -131,11 +136,51 @@ interface Case {
   err?: { code: ErrorCode; message: string };
 }
 
+function storedTs(secs: number): string {
+  return at(secs).toISOString().replace(".000Z", "+00:00");
+}
+
+function seededCall(callId: string): Record<string, unknown> {
+  const at_ = CALL_ROWS.findIndex(([id]) => id === callId);
+  const row = required(CALL_ROWS[at_]);
+  return {
+    id: at_ + 1,
+    call_id: row[0],
+    ts: storedTs(row[1]),
+    call_type: row[2],
+    character: row[3],
+    model: "claude-x",
+    provider: "anthropic",
+    finish_reason: "end_turn",
+    usage: { input_tokens: 10, output_tokens: 2, cache_read_tokens: 5, cache_write_tokens: 0 },
+    duration_ms: 42,
+    error: null,
+  };
+}
+
+function seededTranscript(marker: string): Record<string, unknown> {
+  const at_ = TRANSCRIPT_ROWS.findIndex(([, , , m]) => m === marker);
+  const row = required(TRANSCRIPT_ROWS[at_]);
+  return {
+    id: at_ + 1,
+    ts: storedTs(row[0]),
+    source: "heartbeat",
+    character: row[1],
+    call_type: "heartbeat",
+    iteration: row[2],
+    model: "claude-x",
+    provider: "anthropic",
+    finish_reason: "end_turn",
+    usage: ZERO_USAGE,
+    entry: { marker },
+  };
+}
+
 const CHARACTER_FOR = (name: string): string =>
   name === "no_rows_for_character" ? "nobody" : "poppy";
 
 describe.each(["call_log", "transcript"])("%s", (command) => {
-  for (const [index, row] of (fixture.cases as Case[]).entries()) {
+  for (const row of fixture.cases as Case[]) {
     if (row.command !== command) continue;
     test(row.case, () => {
       const ctx = contextFor(row.case, CHARACTER_FOR(row.case));
@@ -152,10 +197,32 @@ describe.each(["call_log", "transcript"])("%s", (command) => {
         }
         return;
       }
-      const got = withoutBytes(withoutWire(run()));
-      recordedValue(CAPTURE, ["cases", index, "ok"], got);
-      if (recording) return;
-      expect(got).toEqual(withoutBytes(row.ok));
+      const got = withoutBytes(withoutWire(run())) as Record<string, unknown>;
+      const want = row.ok as Record<string, unknown>;
+
+      for (const [field, value] of Object.entries(want)) {
+        if (field === "call_ids" || field === "markers") continue;
+        expect(got[field], `${row.case}: ${field}`).toEqual(value);
+      }
+
+      if (want["call_ids"] !== undefined) {
+        const entries = got["entries"] as Record<string, unknown>[];
+        expect(
+          entries.map((e) => e["call_id"]),
+          `${row.case}: the calls it logged, and their order`,
+        ).toEqual(want["call_ids"] as string[]);
+        for (const entry of entries) expect(entry).toEqual(seededCall(String(entry["call_id"])));
+      }
+      if (want["markers"] !== undefined) {
+        const entries = got["entries"] as Record<string, unknown>[];
+        expect(
+          entries.map((e) => (e["entry"] as { marker: string }).marker),
+          `${row.case}: the turns it transcribed, and their order`,
+        ).toEqual(want["markers"] as string[]);
+        for (const entry of entries) {
+          expect(entry).toEqual(seededTranscript((entry["entry"] as { marker: string }).marker));
+        }
+      }
     });
   }
 });
