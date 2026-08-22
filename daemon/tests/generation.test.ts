@@ -25,6 +25,7 @@ import type {
   SidecarProvider,
   SidecarRequest,
   StreamEvent,
+  ToolDefinition,
   WireMessage,
 } from "../src/llm/types.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
@@ -576,7 +577,27 @@ describe("runGeneration", () => {
       const expectedRequests = (out["sidecar_requests"] as Record<string, unknown>[]).map(
         ({ tool_rpc: _hop, ...rest }) => rest,
       );
-      expect(shaped(run.requests)).toEqual(shaped(expectedRequests));
+      const offered = run.requests.map((r) => (r as { tools?: ToolDefinition[] }).tools);
+      expect(
+        offered.map((tools) => tools?.map((t) => t.name)),
+        `${c.name}: the tools offered to the model`,
+      ).toEqual(expectedRequests.map((r) => r["tools"] as string[] | undefined));
+      for (const tools of offered) {
+        for (const tool of tools ?? []) {
+          expect(
+            typeof tool.description === "string" && tool.description !== "",
+            `${tool.name} tells the model what it is for`,
+          ).toBe(true);
+          expect(
+            (tool.input_schema as { type?: string } | undefined)?.type,
+            `${tool.name} takes an object`,
+          ).toBe("object");
+        }
+      }
+      expect(
+        shaped(run.requests.map(({ tools: _defs, ...rest }) => rest)),
+        `${c.name}: what was sent to the provider`,
+      ).toEqual(shaped(expectedRequests.map(({ tools: _names, ...rest }) => rest)));
 
       const conversation = await readBack(run.dataDir);
       recordedValue(CAPTURE, ["handle_generation", index, "output", "conversation"], shaped(conversation));

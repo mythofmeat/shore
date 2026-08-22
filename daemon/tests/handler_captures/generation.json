@@ -1,4 +1,71 @@
 {
+  "$shared": {
+    "s0": [
+      {
+        "label": "system",
+        "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+      },
+      {
+        "label": "tools_guidance",
+        "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+      },
+      {
+        "label": "character",
+        "text": "<ada>\nada system prompt\n</ada>"
+      }
+    ],
+    "s1": [
+      {
+        "character": "ada",
+        "content": "hello",
+        "content_blocks": [
+          {
+            "text": "hello",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "<minted_id>",
+        "origin": "user_input",
+        "revision": 1,
+        "role": "user",
+        "timestamp": "<minted_timestamp>",
+        "type": "new_message"
+      }
+    ],
+    "s2": {
+      "active_prompt_snapshot": [
+        "TOOLS.md"
+      ],
+      "autonomy_manager_present": true,
+      "character_data_dir": "<root>/data/ada",
+      "character_name": "ada",
+      "config_dir": "<root>/config",
+      "embedder": false,
+      "image_dir": "<root>/data/ada/images",
+      "image_gen_config": null,
+      "markdown_store": true,
+      "mcp_registry": true,
+      "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
+      "memory_retrieval_config": {
+        "binary": "skip",
+        "max_embed_chars_per_file": 4000,
+        "max_file_bytes": 2097152,
+        "max_indexed_files": 50000,
+        "max_total_indexed_bytes": 1073741824,
+        "mode": "auto"
+      },
+      "search_config": {
+        "api_key_env": "TAVILY_API_KEY",
+        "include_answer": true,
+        "result_limit": 5,
+        "search_depth": "basic"
+      },
+      "subagent_conversation_len": null,
+      "subagent_runtime": false,
+      "workspace_dir": "<root>/config/characters/ada/workspace"
+    }
+  },
   "timezone": "America/New_York",
   "generated_at": "2026-08-05T22:21:54.870820499-04:00",
   "handle_generation": [
@@ -86,9 +153,6 @@
         ],
         "broadcast_events": [
           {
-            "$ref": "s2"
-          },
-          {
             "type": "new_message",
             "revision": 1,
             "character": "ada",
@@ -104,42 +168,6 @@
             ],
             "timestamp": "<minted_timestamp>",
             "origin": "user_input"
-          },
-          {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              },
-              {
-                "msg_id": "<minted_id>",
-                "role": "assistant",
-                "content": "hi there",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hi there"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>",
-                "provider_key": "anthropic",
-                "model": "claude-fixture"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 2
           },
           {
             "type": "new_message",
@@ -207,7 +235,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -335,70 +363,6 @@
         ],
         "broadcast_events": [
           {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "m_seed_q",
-                "role": "user",
-                "content": "q",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "q"
-                  }
-                ],
-                "timestamp": "2026-01-01T10:00:00-05:00"
-              },
-              {
-                "msg_id": "<minted_id>",
-                "role": "assistant",
-                "content": "second answer",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "second answer"
-                  }
-                ],
-                "alt_index": 1,
-                "alt_count": 2,
-                "alternatives": [
-                  {
-                    "content": "first answer",
-                    "content_blocks": [
-                      {
-                        "text": "first answer",
-                        "type": "text"
-                      }
-                    ],
-                    "images": [],
-                    "timestamp": "2026-01-01T10:00:01-05:00"
-                  },
-                  {
-                    "content": "second answer",
-                    "content_blocks": [
-                      {
-                        "text": "second answer",
-                        "type": "text"
-                      }
-                    ],
-                    "images": [],
-                    "model": "claude-fixture",
-                    "provider_key": "anthropic",
-                    "timestamp": "<minted_timestamp>"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>",
-                "provider_key": "anthropic",
-                "model": "claude-fixture"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 1
-          },
-          {
             "type": "new_message",
             "revision": 1,
             "character": "ada",
@@ -518,7 +482,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -581,28 +545,9 @@
             "content_type": "text"
           }
         ],
-        "broadcast_events": [
-          {
-            "$ref": "s2"
-          },
-          {
-            "type": "new_message",
-            "revision": 1,
-            "character": "ada",
-            "msg_id": "<minted_id>",
-            "role": "user",
-            "content": "hello",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "hello"
-              }
-            ],
-            "timestamp": "<minted_timestamp>",
-            "origin": "user_input"
-          }
-        ],
+        "broadcast_events": {
+          "$ref": "s1"
+        },
         "conversation": [
           {
             "msg_id": "<minted_id>",
@@ -635,7 +580,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -654,7 +599,7 @@
     },
     {
       "name": "a provider error mid-stream fails the turn and persists nothing",
-      "note": "the chunks already relayed stay relayed — the client saw them — but the turn is not written and no stream_end goes out, so a client that stopped at the last chunk is left waiting on a turn that failed",
+      "note": "the chunks already relayed stay relayed \u2014 the client saw them \u2014 but the turn is not written and no stream_end goes out, so a client that stopped at the last chunk is left waiting on a turn that failed",
       "input": {
         "history": [],
         "body": {
@@ -712,28 +657,9 @@
             "content_type": "text"
           }
         ],
-        "broadcast_events": [
-          {
-            "$ref": "s2"
-          },
-          {
-            "type": "new_message",
-            "revision": 1,
-            "character": "ada",
-            "msg_id": "<minted_id>",
-            "role": "user",
-            "content": "hello",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "hello"
-              }
-            ],
-            "timestamp": "<minted_timestamp>",
-            "origin": "user_input"
-          }
-        ],
+        "broadcast_events": {
+          "$ref": "s1"
+        },
         "conversation": [
           {
             "msg_id": "<minted_id>",
@@ -766,7 +692,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -878,42 +804,6 @@
         ],
         "broadcast_events": [
           {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "m_seed_earlier question",
-                "role": "user",
-                "content": "earlier question",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "earlier question"
-                  }
-                ],
-                "timestamp": "2026-01-01T10:00:00-05:00"
-              },
-              {
-                "msg_id": "<minted_id>",
-                "role": "assistant",
-                "content": "answer",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "answer"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>",
-                "provider_key": "anthropic",
-                "model": "claude-fixture"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 1
-          },
-          {
             "type": "new_message",
             "revision": 1,
             "character": "ada",
@@ -979,7 +869,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -1135,27 +1025,6 @@
         ],
         "broadcast_events": [
           {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "what time is it",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "what time is it"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 1
-          },
-          {
             "type": "new_message",
             "revision": 1,
             "character": "ada",
@@ -1171,132 +1040,6 @@
             ],
             "timestamp": "<minted_timestamp>",
             "origin": "user_input"
-          },
-          {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "what time is it",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "what time is it"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              },
-              {
-                "msg_id": "<minted_id>",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tool_01",
-                    "name": "activity",
-                    "input": {}
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 2
-          },
-          {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "what time is it",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "what time is it"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              },
-              {
-                "msg_id": "<minted_id>",
-                "role": "assistant",
-                "content": "",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tool_01",
-                    "name": "activity",
-                    "input": {}
-                  },
-                  {
-                    "type": "tool_result",
-                    "tool_use_id": "tool_01",
-                    "content": "<recorded>",
-                    "is_error": false
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 3
-          },
-          {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "what time is it",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "what time is it"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              },
-              {
-                "msg_id": "<minted_id>",
-                "role": "assistant",
-                "content": "it is late",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "tool_use",
-                    "id": "tool_01",
-                    "name": "activity",
-                    "input": {}
-                  },
-                  {
-                    "type": "tool_result",
-                    "tool_use_id": "tool_01",
-                    "content": "<recorded>",
-                    "is_error": false
-                  },
-                  {
-                    "type": "text",
-                    "text": "it is late"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>",
-                "provider_key": "anthropic",
-                "model": "claude-fixture"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 4
           },
           {
             "type": "new_message",
@@ -1394,302 +1137,21 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "tools": [
-              {
-                "name": "generate_image",
-                "description": "Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to eshen. Be specific about subject, mood, and composition.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "prompt": {
-                      "type": "string",
-                      "description": "Text prompt for image generation."
-                    },
-                    "size": {
-                      "type": "string",
-                      "description": "Image dimensions (e.g. '1024x1024').",
-                      "default": "1024x1024"
-                    },
-                    "caption": {
-                      "type": "string",
-                      "description": "Optional caption to send with the generated image."
-                    }
-                  },
-                  "required": [
-                    "prompt"
-                  ]
-                }
-              },
-              {
-                "name": "web_search",
-                "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up — searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "query": {
-                      "type": "string",
-                      "description": "The search query."
-                    },
-                    "max_results": {
-                      "type": "integer",
-                      "description": "Maximum number of results to return.",
-                      "default": 5
-                    }
-                  },
-                  "required": [
-                    "query"
-                  ]
-                }
-              },
-              {
-                "name": "fetch_url",
-                "description": "Fetch and read the content of a web page, returning its text. Use when a `web_search` result looks relevant and you need the full context, when eshen pastes or mentions a URL you should actually read, or when you want to follow a specific page you already have in mind. Best paired with `web_search` to find candidate URLs first. Returns plain text; complex interactive pages, paywalled content, or heavily JS-rendered sites may return limited or no content.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "url": {
-                      "type": "string",
-                      "description": "The URL to fetch."
-                    }
-                  },
-                  "required": [
-                    "url"
-                  ]
-                }
-              },
-              {
-                "name": "activity_heatmap",
-                "description": "View eshen's activity heatmap — when they typically message you. Use when you want to understand their rhythm: whether now is an unusual time for them to be talking to you, when they're most likely to be around, or whether they've been more or less active lately. Two breakdowns come back over the same window: `hours` gives all 24 hours of the day with a density and a classification (peak/trough/normal), and `weekdays` gives the seven days of the week with a message count and density. Densities are shares of the window, so each breakdown sums to 1. Hours are eshen's own local clock, not UTC — an hour classified `peak` is one they are reliably awake and talking in, however late it looks. Also returns the message count in the window, the total on record, sessions per day, and an engagement score. The `days` parameter sets the window and defaults to 30; up to 90 days are retained, and asking for more than that returns what exists.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "days": {
-                      "type": "integer",
-                      "description": "Number of days of history to include.",
-                      "default": 30
-                    }
-                  }
-                }
-              },
-              {
-                "name": "roll_dice",
-                "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome — decisions, games, random prompts, divination-as-play — not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "notation": {
-                      "type": "string",
-                      "description": "Dice notation: NdS[+/-M]. Examples: '2d6', '1d20+5', '4d6-1'."
-                    }
-                  },
-                  "required": [
-                    "notation"
-                  ]
-                }
-              },
-              {
-                "name": "read",
-                "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "path": {
-                      "type": "string",
-                      "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root."
-                    },
-                    "offset": {
-                      "type": "number",
-                      "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional."
-                    },
-                    "limit": {
-                      "type": "number",
-                      "description": "Maximum number of lines to read. Files only; ignored for directories. Optional."
-                    }
-                  },
-                  "required": []
-                }
-              },
-              {
-                "name": "edit",
-                "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "path": {
-                      "type": "string",
-                      "description": "Relative path within your workspace."
-                    },
-                    "content": {
-                      "type": "string",
-                      "description": "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`."
-                    },
-                    "edits": {
-                      "type": "array",
-                      "description": "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "old_string": {
-                            "type": "string",
-                            "description": "Exact text to find and replace. Must match whitespace and newlines precisely."
-                          },
-                          "new_string": {
-                            "type": "string",
-                            "description": "Text to replace old_string with."
-                          },
-                          "replace_all": {
-                            "type": "boolean",
-                            "description": "Replace every occurrence of old_string. Defaults to false, which requires old_string to match exactly once."
-                          }
-                        },
-                        "required": [
-                          "old_string",
-                          "new_string"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "path"
-                  ]
-                }
-              },
-              {
-                "name": "search",
-                "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename — use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "query": {
-                      "type": "string",
-                      "description": "Keyword, phrase, or natural-language description to search for."
-                    },
-                    "mode": {
-                      "type": "string",
-                      "enum": [
-                        "hybrid",
-                        "lexical",
-                        "vector"
-                      ],
-                      "description": "Ranking mode. `hybrid` (default) blends semantic similarity with substring matching. `lexical` is case-insensitive substring only, ordered by file recency. `vector` is pure semantic similarity."
-                    },
-                    "path": {
-                      "type": "string",
-                      "description": "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
-                    },
-                    "max_results": {
-                      "type": "number",
-                      "description": "Maximum matches to return. Defaults to 20, maximum 100."
-                    }
-                  },
-                  "required": [
-                    "query"
-                  ]
-                }
-              },
-              {
-                "name": "delete",
-                "description": "Move a file to a trash folder. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "path": {
-                      "type": "string",
-                      "description": "Relative path to the file to remove, within your workspace."
-                    }
-                  },
-                  "required": [
-                    "path"
-                  ]
-                }
-              },
-              {
-                "name": "git",
-                "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) — the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. `args` holds only what comes after the subcommand, so `git log --oneline -8` is `subcommand: \"log\"` with `args: [\"--oneline\", \"-8\"]`; repeating the subcommand there is refused. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused — `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote — `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "subcommand": {
-                      "type": "string",
-                      "description": "The git subcommand to run, e.g. \"status\", \"add\", \"commit\", \"log\", \"diff\"."
-                    },
-                    "args": {
-                      "type": "array",
-                      "description": "Arguments for the subcommand, one array element per argument. For example [\"-m\", \"note why this matters\"]. Optional.",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "workdir": {
-                      "type": "string",
-                      "description": "Directory to run in, relative to your workspace root. Optional; defaults to the workspace root."
-                    }
-                  },
-                  "required": [
-                    "subcommand"
-                  ]
-                }
-              },
-              {
-                "name": "search_chat_logs",
-                "description": "Search your archived conversation history — everything that compaction has already swept out of your active context. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nThe active conversation is not searched, and there is no way to ask for it. Everything you can still see in this context window is excluded by construction, so a search only ever tells you something you had forgotten. When you want a message that is still in front of you, read it rather than searching for it. A message becomes searchable when compaction archives it, which is also the moment it leaves your context.\n\nOnly the answer you actually gave is stored. Regenerated alternatives you did not end up sending are never indexed and cannot be returned, so every hit is something that really was said in the conversation.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across segment boundaries. Three matching messages are returned by default.\n\nEach result's `model` field is the model that generated that message. It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "query": {
-                      "type": "string",
-                      "description": "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only."
-                    },
-                    "start_time": {
-                      "type": "string",
-                      "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-                    },
-                    "end_time": {
-                      "type": "string",
-                      "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-                    },
-                    "max_results": {
-                      "type": "number",
-                      "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
-                    },
-                    "mode": {
-                      "type": "string",
-                      "enum": [
-                        "auto",
-                        "lexical",
-                        "hybrid",
-                        "vector"
-                      ],
-                      "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
-                    },
-                    "model": {
-                      "type": "string",
-                      "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
-                    }
-                  },
-                  "required": []
-                }
-              },
-              {
-                "name": "model_history",
-                "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running — for example when auditing personality drift across model switches — or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
-                "input_schema": {
-                  "type": "object",
-                  "properties": {
-                    "start_time": {
-                      "type": "string",
-                      "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
-                    },
-                    "end_time": {
-                      "type": "string",
-                      "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
-                    }
-                  },
-                  "required": []
-                }
-              }
+              "generate_image",
+              "web_search",
+              "fetch_url",
+              "activity_heatmap",
+              "roll_dice",
+              "read",
+              "edit",
+              "search",
+              "delete",
+              "git",
+              "search_chat_logs",
+              "model_history"
             ],
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -1726,7 +1188,7 @@
     },
     {
       "name": "tools disabled keeps the loop out of the sidecar",
-      "note": "`can_delegate_tool_loop` is false, so a turn that stops on tool_use runs the daemon's own tool phase instead — which with no tools enabled produces no tool turns at all",
+      "note": "`can_delegate_tool_loop` is false, so a turn that stops on tool_use runs the daemon's own tool phase instead \u2014 which with no tools enabled produces no tool turns at all",
       "input": {
         "history": [],
         "body": {
@@ -1808,9 +1270,6 @@
         ],
         "broadcast_events": [
           {
-            "$ref": "s2"
-          },
-          {
             "type": "new_message",
             "revision": 1,
             "character": "ada",
@@ -1826,42 +1285,6 @@
             ],
             "timestamp": "<minted_timestamp>",
             "origin": "user_input"
-          },
-          {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              },
-              {
-                "msg_id": "<minted_id>",
-                "role": "assistant",
-                "content": "no tools here",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "no tools here"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>",
-                "provider_key": "anthropic",
-                "model": "claude-fixture"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 2
           },
           {
             "type": "new_message",
@@ -1929,7 +1352,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -1962,7 +1385,7 @@
         "conversation_len": 0
       },
       "output": {
-        "$ref": "s0"
+        "$ref": "s2"
       }
     },
     {
@@ -1979,7 +1402,7 @@
         "conversation_len": 1
       },
       "output": {
-        "$ref": "s0"
+        "$ref": "s2"
       }
     },
     {
@@ -2042,7 +1465,7 @@
         "conversation_len": 0
       },
       "output": {
-        "$ref": "s0"
+        "$ref": "s2"
       }
     },
     {
@@ -2526,80 +1949,5 @@
         ]
       }
     }
-  ],
-  "$shared": {
-    "s0": {
-      "active_prompt_snapshot": [
-        "TOOLS.md"
-      ],
-      "autonomy_manager_present": true,
-      "character_data_dir": "<root>/data/ada",
-      "character_name": "ada",
-      "config_dir": "<root>/config",
-      "embedder": false,
-      "image_dir": "<root>/data/ada/images",
-      "image_gen_config": null,
-      "markdown_store": true,
-      "mcp_registry": true,
-      "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-      "memory_retrieval_config": {
-        "binary": "skip",
-        "max_embed_chars_per_file": 4000,
-        "max_file_bytes": 2097152,
-        "max_indexed_files": 50000,
-        "max_total_indexed_bytes": 1073741824,
-        "mode": "auto"
-      },
-      "search_config": {
-        "api_key_env": "TAVILY_API_KEY",
-        "include_answer": true,
-        "result_limit": 5,
-        "search_depth": "basic"
-      },
-      "subagent_conversation_len": null,
-      "subagent_runtime": false,
-      "workspace_dir": "<root>/config/characters/ada/workspace"
-    },
-    "s1": [
-      {
-        "$ref": "s3"
-      },
-      {
-        "$ref": "s4"
-      },
-      {
-        "label": "character",
-        "text": "<ada>\nada system prompt\n</ada>"
-      }
-    ],
-    "s2": {
-      "config": {},
-      "messages": [
-        {
-          "content": "hello",
-          "content_blocks": [
-            {
-              "text": "hello",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "<minted_id>",
-          "role": "user",
-          "timestamp": "<minted_timestamp>"
-        }
-      ],
-      "revision": 1,
-      "selected_character": "ada",
-      "type": "history"
-    },
-    "s3": {
-      "label": "system",
-      "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-    },
-    "s4": {
-      "label": "tools_guidance",
-      "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-    }
-  }
+  ]
 }
