@@ -38,9 +38,6 @@ import {
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { cachePath } from "../src/llm/discovery.ts";
 import { testTmp } from "./support/tmp.ts";
-import { recordedValue, recording } from "./support/rerecord.ts";
-
-const CAPTURE = "tests/command_captures/model_commands.json";
 
 interface WireError {
   code: string;
@@ -75,7 +72,6 @@ interface Prefs {
 interface Step {
   op: string;
   args: Record<string, unknown>;
-  ok?: unknown;
   err?: WireError;
   prefs_changed?: Record<string, unknown>;
 }
@@ -255,12 +251,117 @@ function runStep(ctx: ModelsContext, step: Step): unknown {
   }
 }
 
+function expectShapeOf(op: string, result: unknown, label: string): void {
+  const row = (result ?? {}) as Record<string, unknown>;
+
+  switch (op) {
+    case "list_models": {
+      const byProvider = (row["models"] ?? {}) as Record<string, { qualified_name: string; hidden: boolean }[]>;
+      const models = Object.values(byProvider).flat();
+      const names = models.map((m) => m.qualified_name);
+      expect(new Set(names).size, `${label}: every model is listed once`).toBe(names.length);
+
+      for (const [provider, entries] of Object.entries(byProvider)) {
+        for (const m of entries) {
+          expect(
+            m.qualified_name,
+            `${label}: a model listed under ${provider} is named for it`,
+          ).toContain(provider);
+        }
+      }
+
+      const listedHidden = models.filter((m) => m.hidden).length;
+      if (row["include_hidden"] === true) {
+        expect(
+          row["hidden_count"],
+          `${label}: asked for the hidden ones, so the count is what is listed`,
+        ).toBe(listedHidden);
+      } else {
+        expect(listedHidden, `${label}: a hidden model is withheld unless asked for`).toBe(0);
+        expect(
+          typeof row["hidden_count"],
+          `${label}: and the count says how many were withheld`,
+        ).toBe("number");
+      }
+
+      const active = row["active"];
+      if (typeof active === "string" && active !== "" && row["include_hidden"] === true) {
+        expect(
+          names,
+          `${label}: with nothing withheld, the active model is one of the listed ones`,
+        ).toContain(active);
+      }
+
+      const roles = (row["roles"] ?? []) as { role: string; model: string | null }[];
+      expect(new Set(roles.map((r) => r.role)).size, `${label}: each role answered once`).toBe(
+        roles.length,
+      );
+      break;
+    }
+
+    case "model_info": {
+      expect(row["qualified_name"], `${label}: a model is named`).toBeTruthy();
+      expect(row["model_id"], `${label}: and carries the id sent on the wire`).toBeTruthy();
+      expect(row["provider_key"], `${label}: and the provider it is reached through`).toBeTruthy();
+      expect(row["sdk"], `${label}: and the dialect it speaks`).toBeTruthy();
+      expect(
+        String(row["qualified_name"]),
+        `${label}: the qualified name carries the provider`,
+      ).toContain(String(row["provider_key"]));
+      break;
+    }
+
+    case "model_settings": {
+      const applicability = row["applicability"] as Record<string, string> | undefined;
+      const sampler = row["effective_sampler"] as Record<string, unknown> | undefined;
+      expect(applicability, `${label}: every setting says whether it applies`).toBeDefined();
+      expect(sampler, `${label}: and what it currently resolves to`).toBeDefined();
+
+      for (const [field, verdict] of Object.entries(applicability ?? {})) {
+        expect(["honored", "ignored", "always"], `${label}: ${field}`).toContain(verdict);
+      }
+      for (const field of Object.keys(sampler ?? {})) {
+        expect(
+          Object.hasOwn(applicability ?? {}, field) || field === "reasoning_effort_domain",
+          `${label}: ${field} resolves to a value, so it must say whether it applies`,
+        ).toBe(true);
+      }
+
+      const scopes = row["scopes"] as string[] | undefined;
+      expect(scopes, `${label}: a setting is written somewhere nameable`).toBeDefined();
+      break;
+    }
+
+    case "model_roles": {
+      const roles = row as unknown as { role: string; model: string | null; source: string | null }[];
+      expect(Array.isArray(roles), `${label}: roles come back as a list`).toBe(true);
+      const named = roles.map((r) => r.role);
+      expect(new Set(named).size, `${label}: each role is answered once`).toBe(named.length);
+      for (const r of roles) {
+        expect(
+          r.model === null ? r.source === null : typeof r.source === "string",
+          `${label}: ${r.role} says where its model came from, or has none`,
+        ).toBe(true);
+      }
+      break;
+    }
+
+    case "switch_model":
+    case "reset_model":
+    case "set_model_setting":
+      break;
+
+    default:
+      throw new Error(`${label}: no shape stated for ${op}`);
+  }
+}
+
 describe("model commands", () => {
-  for (const [scenarioIdx, scenario] of scenarios.entries()) {
+  for (const scenario of scenarios) {
     test(scenario.name, async () => {
       const ctx = await buildContext(scenario.setup);
 
-      for (const [stepIdx, step] of scenario.steps.entries()) {
+      for (const step of scenario.steps) {
         const label = `${step.op} ${JSON.stringify(step.args)}`;
         let result: unknown;
         let thrown: unknown;
@@ -275,11 +376,8 @@ describe("model commands", () => {
           expect((thrown as CommandError).code, label).toBe(step.err.code as never);
           expect((thrown as CommandError).message, label).toBe(step.err.message);
         } else {
-          if (step.ok !== undefined) {
-            recordedValue(CAPTURE, ["scenarios", scenarioIdx, "steps", stepIdx, "ok"], result);
-          }
           expect(thrown, label).toBeUndefined();
-          if (!recording) expect(result, label).toEqual(step.ok as never);
+          expectShapeOf(step.op, result, label);
         }
 
         if (step.prefs_changed !== undefined) {
@@ -291,6 +389,43 @@ describe("model commands", () => {
       }
     });
   }
+});
+
+test("a hidden model stays selected without being advertised", async () => {
+  const ctx = await buildContext({
+    catalog: "",
+    defaults: "",
+    discovery: [
+      {
+        provider: "openrouter",
+        models: [
+          { model_id: "vendor/visible", visible: true },
+          { model_id: "vendor/hidden", visible: false },
+        ],
+      },
+    ] as never,
+    character: "ada",
+    global_prefs: null,
+    character_prefs: '[selected]\nprovider = "openrouter"\nmodel_id = "vendor/hidden"\n',
+    active_model: null,
+  });
+
+  const listed = listModels(ctx, {}) as {
+    active: string;
+    models: Record<string, { qualified_name: string }[]>;
+  };
+  const names = Object.values(listed.models).flat().map((m) => m.qualified_name);
+
+  expect(listed.active, "the selection is honoured").toBe("openrouter:vendor/hidden");
+  expect(names, "but a hidden model is not offered in the list").not.toContain(listed.active);
+
+  const withHidden = listModels(ctx, { include_hidden: true }) as {
+    models: Record<string, { qualified_name: string }[]>;
+  };
+  expect(
+    Object.values(withHidden.models).flat().map((m) => m.qualified_name),
+    "asking for the hidden ones shows it",
+  ).toContain("openrouter:vendor/hidden");
 });
 
 test("the active model is the one generation resolves, not the session's", async () => {

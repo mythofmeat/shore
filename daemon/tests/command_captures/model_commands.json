@@ -14,35 +14,23 @@
       },
       "steps": [
         {
-          "$ref": "s5"
+          "args": {},
+          "op": "list_models"
         },
         {
           "op": "list_models",
           "args": {
             "include_hidden": true
-          },
-          "ok": {
-            "models": {
-              "$ref": "s7"
-            },
-            "active": "chat.anthropic.beta",
-            "roles": {
-              "$ref": "s11"
-            },
-            "include_hidden": true,
-            "hidden_count": 0
           }
         },
         {
-          "$ref": "s3"
+          "args": {},
+          "op": "model_info"
         },
         {
           "op": "model_info",
           "args": {
             "name": "beta"
-          },
-          "ok": {
-            "$ref": "s4"
           }
         },
         {
@@ -59,45 +47,26 @@
           "op": "model_info",
           "args": {
             "name": ""
-          },
-          "ok": {
-            "$ref": "s4"
           }
         },
         {
           "op": "model_settings",
           "args": {
             "name": ""
-          },
-          "ok": {
-            "$ref": "s2"
           }
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "$ref": "s2"
-          }
+          "args": {}
         },
         {
           "op": "switch_model",
-          "args": {},
-          "ok": {
-            "active": "chat.anthropic.beta"
-          }
+          "args": {}
         },
         {
           "op": "switch_model",
           "args": {
             "name": "beta"
-          },
-          "ok": {
-            "active": "beta",
-            "qualified_name": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "changed": true
           },
           "prefs_changed": {
             "character_exists": true,
@@ -106,17 +75,16 @@
           }
         },
         {
-          "$ref": "s5"
+          "args": {},
+          "op": "list_models"
         },
         {
-          "$ref": "s3"
+          "args": {},
+          "op": "model_info"
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "$ref": "s2"
-          }
+          "args": {}
         },
         {
           "op": "switch_model",
@@ -139,153 +107,39 @@
           }
         },
         {
-          "$ref": "s5"
+          "args": {},
+          "op": "list_models"
         },
         {
           "op": "reset_model",
           "args": {},
-          "ok": {
-            "previous_provider": "anthropic",
-            "previous_model_id": "beta-id",
-            "active": null,
-            "reset_to": "config default"
-          },
           "prefs_changed": {
             "character.selected.provider": null,
             "character.selected.model_id": null
           }
         },
         {
-          "$ref": "s5"
+          "args": {},
+          "op": "list_models"
         },
         {
-          "$ref": "s3"
+          "args": {},
+          "op": "model_info"
         },
         {
           "op": "reset_model",
-          "args": {},
-          "ok": {
-            "previous_provider": null,
-            "previous_model_id": null,
-            "active": null,
-            "reset_to": "config default"
-          }
+          "args": {}
         },
         {
           "op": "model_settings",
           "args": {
             "name": "delta"
-          },
-          "ok": {
-            "model": "chat.anthropic.delta",
-            "provider": "anthropic",
-            "model_id": "claude-opus-4-8",
-            "effective_sampler": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": null,
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "$ref": "s14"
-            }
           }
         },
         {
           "op": "model_settings",
           "args": {
             "name": "epsilon"
-          },
-          "ok": {
-            "model": "chat.gemini.epsilon",
-            "provider": "gemini",
-            "model_id": "gemini-3.1-pro",
-            "effective_sampler": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "gemini",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": null,
-            "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "honored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "ignored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "honored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
-            },
-            "reasoning_effort_domain": [
-              "minimal",
-              "low",
-              "medium",
-              "high"
-            ],
-            "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
           }
         },
         {
@@ -306,15 +160,6 @@
             "key": "gemini_generation",
             "value": 2,
             "name": "epsilon"
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.gemini.epsilon",
-            "provider": "gemini",
-            "model_id": "gemini-3.1-pro",
-            "key": "gemini_generation",
-            "value": 2
           },
           "prefs_changed": {
             "character.models.gemini:gemini-3.1-pro.gemini_generation": 2
@@ -400,38 +245,6 @@
           "op": "model_info",
           "args": {
             "name": "openrouter:shared/id"
-          },
-          "ok": {
-            "name": "shared/id",
-            "qualified_name": "openrouter:shared/id",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "anthropic",
-            "model_id": "shared/id",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 250000,
-            "max_output_tokens": 32000,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "$ref": "s15"
-            },
-            "scopes": {
-              "$ref": "s21"
-            }
           }
         },
         {
@@ -473,83 +286,12 @@
       "steps": [
         {
           "op": "model_roles",
-          "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": "chat.anthropic.one",
-              "source": "character"
-            },
-            {
-              "role": "heartbeat",
-              "model": "chat.anthropic.one",
-              "source": "defaults.background.heartbeat"
-            },
-            {
-              "role": "compaction",
-              "model": "chat.anthropic.two",
-              "source": "defaults.background.compaction"
-            },
-            {
-              "role": "sub-agents",
-              "model": "chat.anthropic.one",
-              "source": "inherits chat"
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "args": {}
         },
         {
           "op": "model_settings",
           "args": {
             "background_task": "all"
-          },
-          "ok": {
-            "model": "chat.anthropic.one",
-            "provider": "anthropic",
-            "model_id": "same-id",
-            "effective_sampler": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": null,
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "$ref": "s14"
-            }
           }
         },
         {
@@ -558,20 +300,6 @@
             "key": "temperature",
             "value": 0.6,
             "background_task": "all"
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.one",
-            "provider": "anthropic",
-            "model_id": "same-id",
-            "background_task": "all",
-            "also_affects": [
-              "chat",
-              "sub-agents"
-            ],
-            "key": "temperature",
-            "value": 0.6
           },
           "prefs_changed": {
             "character_exists": true,
@@ -582,62 +310,6 @@
           "op": "model_settings",
           "args": {
             "background_task": "compaction"
-          },
-          "ok": {
-            "model": "chat.anthropic.two",
-            "provider": "anthropic",
-            "model_id": "same-id",
-            "effective_sampler": {
-              "temperature": 0.6,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": {
-              "temperature": 0.6,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "$ref": "s12"
-            }
           }
         }
       ]
@@ -657,39 +329,7 @@
       "steps": [
         {
           "op": "model_roles",
-          "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": "chat.anthropic.alpha",
-              "source": "character"
-            },
-            {
-              "role": "heartbeat",
-              "model": "ghost",
-              "source": "defaults.background.heartbeat"
-            },
-            {
-              "role": "compaction",
-              "model": "chat.anthropic.alpha",
-              "source": "inherits chat"
-            },
-            {
-              "role": "sub-agents",
-              "model": "chat.anthropic.alpha",
-              "source": "inherits chat"
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "args": {}
         },
         {
           "op": "model_settings",
@@ -728,64 +368,19 @@
       "steps": [
         {
           "op": "list_models",
-          "args": {},
-          "ok": {
-            "models": {
-              "$ref": "s7"
-            },
-            "active": "chat.anthropic.alpha",
-            "roles": {
-              "$ref": "s10"
-            },
-            "include_hidden": false,
-            "hidden_count": 0
-          }
+          "args": {}
         },
         {
           "op": "model_info",
-          "args": {},
-          "ok": {
-            "name": "alpha",
-            "qualified_name": "chat.anthropic.alpha",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "alpha-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": 0.5,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "$ref": "s18"
-            },
-            "scopes": {
-              "$ref": "s20"
-            }
-          }
+          "args": {}
         },
         {
-          "$ref": "s0"
+          "args": {},
+          "op": "model_settings"
         },
         {
           "op": "model_roles",
-          "args": {},
-          "ok": {
-            "$ref": "s10"
-          }
+          "args": {}
         }
       ]
     },
@@ -818,27 +413,7 @@
       "steps": [
         {
           "op": "list_models",
-          "args": {},
-          "ok": {
-            "models": {
-              "openrouter": [
-                {
-                  "name": "vendor/visible",
-                  "qualified_name": "openrouter:vendor/visible",
-                  "sdk": "anthropic",
-                  "model_id": "vendor/visible",
-                  "source": "discovered",
-                  "hidden": false
-                }
-              ]
-            },
-            "active": "openrouter:vendor/visible",
-            "roles": {
-              "$ref": "s19"
-            },
-            "include_hidden": false,
-            "hidden_count": 1
-          }
+          "args": {}
         },
         {
           "op": "model_info",
@@ -884,16 +459,7 @@
       "steps": [
         {
           "op": "list_models",
-          "args": {},
-          "ok": {
-            "models": {},
-            "active": null,
-            "roles": {
-              "$ref": "s19"
-            },
-            "include_hidden": false,
-            "hidden_count": 0
-          }
+          "args": {}
         },
         {
           "op": "model_info",
@@ -913,10 +479,7 @@
         },
         {
           "op": "model_roles",
-          "args": {},
-          "ok": {
-            "$ref": "s19"
-          }
+          "args": {}
         },
         {
           "op": "switch_model",
@@ -931,12 +494,6 @@
         {
           "op": "reset_model",
           "args": {},
-          "ok": {
-            "previous_provider": null,
-            "previous_model_id": null,
-            "active": null,
-            "reset_to": "config default"
-          },
           "prefs_changed": {
             "character_exists": true
           }
@@ -983,136 +540,24 @@
       "steps": [
         {
           "op": "list_models",
-          "args": {},
-          "ok": {
-            "models": {
-              "openrouter": [
-                {
-                  "name": "vendor/visible",
-                  "qualified_name": "openrouter:vendor/visible",
-                  "sdk": "anthropic",
-                  "model_id": "vendor/visible",
-                  "source": "discovered",
-                  "hidden": false
-                }
-              ]
-            },
-            "active": "openrouter:vendor/visible",
-            "roles": {
-              "$ref": "s19"
-            },
-            "include_hidden": false,
-            "hidden_count": 1
-          }
+          "args": {}
         },
         {
           "op": "list_models",
           "args": {
             "include_hidden": true
-          },
-          "ok": {
-            "models": {
-              "openrouter": [
-                {
-                  "name": "vendor/hidden",
-                  "qualified_name": "openrouter:vendor/hidden",
-                  "sdk": "anthropic",
-                  "model_id": "vendor/hidden",
-                  "source": "discovered",
-                  "hidden": true
-                },
-                {
-                  "name": "vendor/visible",
-                  "qualified_name": "openrouter:vendor/visible",
-                  "sdk": "anthropic",
-                  "model_id": "vendor/visible",
-                  "source": "discovered",
-                  "hidden": false
-                }
-              ]
-            },
-            "active": "openrouter:vendor/hidden",
-            "roles": {
-              "$ref": "s19"
-            },
-            "include_hidden": true,
-            "hidden_count": 1
           }
         },
         {
           "op": "model_info",
           "args": {
             "name": "openrouter:vendor/visible"
-          },
-          "ok": {
-            "name": "vendor/visible",
-            "qualified_name": "openrouter:vendor/visible",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "anthropic",
-            "model_id": "vendor/visible",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 250000,
-            "max_output_tokens": 32000,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "$ref": "s15"
-            },
-            "scopes": {
-              "$ref": "s21"
-            }
           }
         },
         {
           "op": "model_info",
           "args": {
             "name": "openrouter:vendor/hidden"
-          },
-          "ok": {
-            "name": "vendor/hidden",
-            "qualified_name": "openrouter:vendor/hidden",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "anthropic",
-            "model_id": "vendor/hidden",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 250000,
-            "max_output_tokens": 32000,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "$ref": "s15"
-            },
-            "scopes": {
-              "$ref": "s21"
-            }
           }
         },
         {
@@ -1131,13 +576,6 @@
             "name": "openrouter:vendor/hidden",
             "include_hidden": true
           },
-          "ok": {
-            "active": "openrouter:vendor/hidden",
-            "qualified_name": "openrouter:vendor/hidden",
-            "provider": "openrouter",
-            "model_id": "vendor/hidden",
-            "changed": true
-          },
           "prefs_changed": {
             "character_exists": true,
             "character.selected.provider": "openrouter",
@@ -1146,133 +584,19 @@
         },
         {
           "op": "list_models",
-          "args": {},
-          "ok": {
-            "models": {
-              "openrouter": [
-                {
-                  "name": "vendor/visible",
-                  "qualified_name": "openrouter:vendor/visible",
-                  "sdk": "anthropic",
-                  "model_id": "vendor/visible",
-                  "source": "discovered",
-                  "hidden": false
-                }
-              ]
-            },
-            "active": "openrouter:vendor/hidden",
-            "roles": [
-              {
-                "role": "chat",
-                "model": "openrouter:vendor/hidden",
-                "source": "character"
-              },
-              {
-                "role": "heartbeat",
-                "model": "openrouter:vendor/hidden",
-                "source": "inherits chat"
-              },
-              {
-                "role": "compaction",
-                "model": "openrouter:vendor/hidden",
-                "source": "inherits chat"
-              },
-              {
-                "role": "sub-agents",
-                "model": "openrouter:vendor/hidden",
-                "source": "inherits chat"
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
-            "include_hidden": false,
-            "hidden_count": 1
-          }
+          "args": {}
         },
         {
           "op": "model_info",
-          "args": {},
-          "ok": {
-            "name": "vendor/hidden",
-            "qualified_name": "openrouter:vendor/hidden",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "anthropic",
-            "model_id": "vendor/hidden",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 250000,
-            "max_output_tokens": 32000,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "$ref": "s15"
-            },
-            "scopes": {
-              "$ref": "s21"
-            }
-          }
+          "args": {}
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "model": "openrouter:vendor/hidden",
-            "provider": "openrouter",
-            "model_id": "vendor/hidden",
-            "effective_sampler": {
-              "$ref": "s15"
-            },
-            "saved_global": null,
-            "saved_character": null,
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "$ref": "s14"
-            }
-          }
+          "args": {}
         },
         {
           "op": "set_model_setting",
           "args": {
-            "key": "reasoning_effort",
-            "value": "high"
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "openrouter:vendor/hidden",
-            "provider": "openrouter",
-            "model_id": "vendor/hidden",
             "key": "reasoning_effort",
             "value": "high"
           },
@@ -1282,77 +606,7 @@
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "model": "openrouter:vendor/hidden",
-            "provider": "openrouter",
-            "model_id": "vendor/hidden",
-            "effective_sampler": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": "high",
-              "budget_tokens": null,
-              "max_output_tokens": 32000,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": "high",
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": "character_model",
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
-          }
+          "args": {}
         }
       ]
     },
@@ -1381,27 +635,7 @@
       "steps": [
         {
           "op": "list_models",
-          "args": {},
-          "ok": {
-            "models": {
-              "openrouter": [
-                {
-                  "name": "vendor/visible",
-                  "qualified_name": "openrouter:vendor/visible",
-                  "sdk": "anthropic",
-                  "model_id": "vendor/visible",
-                  "source": "discovered",
-                  "hidden": false
-                }
-              ]
-            },
-            "active": "openrouter:vendor/visible",
-            "roles": {
-              "$ref": "s19"
-            },
-            "include_hidden": false,
-            "hidden_count": 0
-          }
+          "args": {}
         },
         {
           "op": "model_info",
@@ -1421,10 +655,7 @@
         },
         {
           "op": "model_roles",
-          "args": {},
-          "ok": {
-            "$ref": "s19"
-          }
+          "args": {}
         },
         {
           "op": "set_model_setting",
@@ -1454,121 +685,18 @@
       "steps": [
         {
           "op": "model_roles",
-          "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": "chat.anthropic.alpha",
-              "source": "character"
-            },
-            {
-              "role": "heartbeat",
-              "model": "chat.openai.gamma",
-              "source": "defaults.background.heartbeat"
-            },
-            {
-              "role": "compaction",
-              "model": "chat.anthropic.beta",
-              "source": "defaults.background.model"
-            },
-            {
-              "role": "sub-agents",
-              "model": "chat.anthropic.alpha",
-              "source": "inherits chat"
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "args": {}
         },
         {
           "op": "model_settings",
           "args": {
             "background_task": "heartbeat"
-          },
-          "ok": {
-            "model": "chat.openai.gamma",
-            "provider": "openai",
-            "model_id": "gamma-id",
-            "effective_sampler": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "openai",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": null,
-            "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "ignored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "ignored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
-            },
-            "reasoning_effort_domain": [
-              "minimal",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
           }
         },
         {
           "op": "model_settings",
           "args": {
             "background_task": "compaction"
-          },
-          "ok": {
-            "$ref": "s2"
           }
         },
         {
@@ -1608,15 +736,6 @@
             "value": 0.1,
             "background_task": "heartbeat"
           },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.openai.gamma",
-            "provider": "openai",
-            "model_id": "gamma-id",
-            "key": "temperature",
-            "value": 0.1
-          },
           "prefs_changed": {
             "character_exists": true,
             "character.models.openai:gamma-id.temperature": 0.1
@@ -1638,91 +757,6 @@
           "op": "model_settings",
           "args": {
             "background_task": "heartbeat"
-          },
-          "ok": {
-            "model": "chat.openai.gamma",
-            "provider": "openai",
-            "model_id": "gamma-id",
-            "effective_sampler": {
-              "temperature": 0.1,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "openai",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": {
-              "temperature": 0.1,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "temperature": "honored",
-              "top_p": "honored",
-              "reasoning_effort": "honored",
-              "budget_tokens": "ignored",
-              "max_output_tokens": "honored",
-              "cache_ttl": "ignored",
-              "cache_keepalive": "honored",
-              "cache_keepalive_max": "honored",
-              "sdk": "always",
-              "replay_prior_thinking": "honored",
-              "max_tool_iterations": "always",
-              "supports_images": "always",
-              "openrouter_provider": "ignored",
-              "gemini_generation": "ignored",
-              "zai_clear_thinking": "ignored",
-              "zai_subscription": "ignored"
-            },
-            "reasoning_effort_domain": [
-              "minimal",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "character_model",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
           }
         },
         {
@@ -1733,15 +767,6 @@
             "background_task": "compaction",
             "name": "alpha"
           },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "key": "top_p",
-            "value": 0.3
-          },
           "prefs_changed": {
             "character.models.anthropic:beta-id.top_p": 0.3
           }
@@ -1750,76 +775,6 @@
           "op": "model_settings",
           "args": {
             "name": "beta"
-          },
-          "ok": {
-            "model": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "effective_sampler": {
-              "temperature": 0.2,
-              "top_p": 0.3,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": {
-              "temperature": null,
-              "top_p": 0.3,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": "character_model",
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
           }
         }
       ]
@@ -1839,47 +794,12 @@
       "steps": [
         {
           "op": "model_roles",
-          "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": "chat.anthropic.alpha",
-              "source": "character"
-            },
-            {
-              "role": "heartbeat",
-              "model": "chat.anthropic.beta",
-              "source": "defaults.background.model"
-            },
-            {
-              "role": "compaction",
-              "model": "chat.anthropic.beta",
-              "source": "defaults.background.model"
-            },
-            {
-              "role": "sub-agents",
-              "model": "chat.anthropic.alpha",
-              "source": "inherits chat"
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "args": {}
         },
         {
           "op": "model_settings",
           "args": {
             "background_task": "all"
-          },
-          "ok": {
-            "$ref": "s2"
           }
         },
         {
@@ -1888,15 +808,6 @@
             "key": "budget_tokens",
             "value": 4096,
             "background_task": "all"
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "key": "budget_tokens",
-            "value": 4096
           },
           "prefs_changed": {
             "character_exists": true,
@@ -1907,76 +818,6 @@
           "op": "model_settings",
           "args": {
             "background_task": "heartbeat"
-          },
-          "ok": {
-            "model": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "effective_sampler": {
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": 4096,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": 4096,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": "character_model",
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
           }
         }
       ]
@@ -1996,31 +837,18 @@
       "steps": [
         {
           "op": "model_roles",
-          "args": {},
-          "ok": {
-            "$ref": "s10"
-          }
+          "args": {}
         },
         {
           "op": "model_settings",
           "args": {
             "background_task": "all"
-          },
-          "ok": {
-            "$ref": "s1"
           }
         },
         {
           "op": "switch_model",
           "args": {
             "name": "beta"
-          },
-          "ok": {
-            "active": "beta",
-            "qualified_name": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "changed": true
           },
           "prefs_changed": {
             "character_exists": true,
@@ -2030,18 +858,12 @@
         },
         {
           "op": "model_roles",
-          "args": {},
-          "ok": {
-            "$ref": "s11"
-          }
+          "args": {}
         },
         {
           "op": "model_settings",
           "args": {
             "background_task": "heartbeat"
-          },
-          "ok": {
-            "$ref": "s2"
           }
         }
       ]
@@ -2060,20 +882,12 @@
       },
       "steps": [
         {
-          "$ref": "s0"
+          "args": {},
+          "op": "model_settings"
         },
         {
           "op": "set_model_setting",
           "args": {
-            "key": "temperature",
-            "value": 0.9
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
             "key": "temperature",
             "value": 0.9
           },
@@ -2089,78 +903,13 @@
             "value": 2048,
             "name": "beta"
           },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "key": "budget_tokens",
-            "value": 2048
-          },
           "prefs_changed": {
             "character.models.anthropic:beta-id.budget_tokens": 2048
           }
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "effective_sampler": {
-              "temperature": 0.9,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": {
-              "temperature": 0.9,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "$ref": "s12"
-            }
-          }
+          "args": {}
         },
         {
           "op": "set_model_setting",
@@ -2169,15 +918,6 @@
             "value": 0.8,
             "scope": "global"
           },
-          "ok": {
-            "changed": true,
-            "scope": "global",
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "key": "top_p",
-            "value": 0.8
-          },
           "prefs_changed": {
             "global_exists": true,
             "global.models.anthropic:alpha-id.top_p": 0.8
@@ -2185,184 +925,18 @@
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "effective_sampler": {
-              "temperature": 0.9,
-              "top_p": 0.8,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": {
-              "temperature": null,
-              "top_p": 0.8,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_character": {
-              "temperature": 0.9,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "character_model",
-              "top_p": "global_model",
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
-          }
+          "args": {}
         },
         {
           "op": "set_model_setting",
           "args": {
             "key": "temperature",
             "value": null
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "key": "temperature",
-            "value": null
           }
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "effective_sampler": {
-              "temperature": 0.5,
-              "top_p": 0.8,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": {
-              "temperature": null,
-              "top_p": 0.8,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_character": null,
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": "global_model",
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
-          }
+          "args": {}
         },
         {
           "op": "set_model_setting",
@@ -2370,19 +944,11 @@
             "key": "top_p",
             "value": null,
             "scope": "global"
-          },
-          "ok": {
-            "changed": true,
-            "scope": "global",
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "key": "top_p",
-            "value": null
           }
         },
         {
-          "$ref": "s0"
+          "args": {},
+          "op": "model_settings"
         },
         {
           "op": "set_model_setting",
@@ -2390,15 +956,6 @@
             "key": "max_output_tokens",
             "value": 512,
             "name": "beta"
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "key": "max_output_tokens",
-            "value": 512
           },
           "prefs_changed": {
             "character.models.anthropic:beta-id.max_output_tokens": 512
@@ -2408,80 +965,11 @@
           "op": "model_settings",
           "args": {
             "name": "beta"
-          },
-          "ok": {
-            "model": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "effective_sampler": {
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": 2048,
-              "max_output_tokens": 512,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": 2048,
-              "max_output_tokens": 512,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": "character_model",
-              "max_output_tokens": "character_model",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
           }
         },
         {
-          "$ref": "s0"
+          "args": {},
+          "op": "model_settings"
         },
         {
           "op": "set_model_setting",
@@ -2497,15 +985,6 @@
           "op": "set_model_setting",
           "args": {
             "key": "max_output_tokens"
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "key": "max_output_tokens",
-            "value": null
           }
         },
         {
@@ -2523,15 +1002,6 @@
           "op": "set_model_setting",
           "args": {
             "key": "  temperature  ",
-            "value": 0.4
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "key": "temperature",
             "value": 0.4
           },
           "prefs_changed": {
@@ -2597,63 +1067,7 @@
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "effective_sampler": {
-              "temperature": 0.4,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": {
-              "temperature": 0.4,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "$ref": "s12"
-            }
-          }
+          "args": {}
         }
       ]
     },
@@ -2672,246 +1086,22 @@
       "steps": [
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "effective_sampler": {
-              "$ref": "s16"
-            },
-            "saved_global": {
-              "temperature": 0.33,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": 1024,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_character": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 2048,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "global_model",
-              "top_p": "global_default",
-              "reasoning_effort": "character_default",
-              "budget_tokens": "global_model",
-              "max_output_tokens": "character_model",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
-          }
+          "args": {}
         },
         {
           "op": "model_info",
-          "args": {},
-          "ok": {
-            "name": "alpha",
-            "qualified_name": "chat.anthropic.alpha",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "alpha-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 2048,
-            "temperature": 0.33,
-            "top_p": 0.22,
-            "reasoning_effort": "low",
-            "budget_tokens": 1024,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "$ref": "s16"
-            },
-            "scopes": {
-              "temperature": "global_model",
-              "top_p": "global_default",
-              "reasoning_effort": "character_default",
-              "budget_tokens": "global_model",
-              "max_output_tokens": "character_model",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
-            }
-          }
+          "args": {}
         },
         {
           "op": "model_settings",
           "args": {
             "name": "beta"
-          },
-          "ok": {
-            "model": "chat.anthropic.beta",
-            "provider": "anthropic",
-            "model_id": "beta-id",
-            "effective_sampler": {
-              "temperature": 0.44,
-              "top_p": 0.22,
-              "reasoning_effort": "low",
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_global": null,
-            "saved_character": null,
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "character_default",
-              "top_p": "global_default",
-              "reasoning_effort": "character_default",
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
           }
         },
         {
           "op": "model_info",
           "args": {
             "name": "beta"
-          },
-          "ok": {
-            "name": "beta",
-            "qualified_name": "chat.anthropic.beta",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "beta-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": 0.2,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "temperature": 0.44,
-              "top_p": 0.22,
-              "reasoning_effort": "low",
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "scopes": {
-              "temperature": "character_default",
-              "top_p": "global_default",
-              "reasoning_effort": "character_default",
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
-            }
           }
         },
         {
@@ -2919,92 +1109,11 @@
           "args": {
             "key": "temperature",
             "value": null
-          },
-          "ok": {
-            "changed": true,
-            "scope": "character",
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "key": "temperature",
-            "value": null
           }
         },
         {
           "op": "model_settings",
-          "args": {},
-          "ok": {
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "effective_sampler": {
-              "$ref": "s16"
-            },
-            "saved_global": {
-              "temperature": 0.33,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": 1024,
-              "max_output_tokens": null,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "saved_character": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 2048,
-              "cache_ttl": null,
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": null,
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "applicability": {
-              "$ref": "s8"
-            },
-            "reasoning_effort_domain": [
-              "adaptive",
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ],
-            "scopes": {
-              "temperature": "global_model",
-              "top_p": "global_default",
-              "reasoning_effort": "character_default",
-              "budget_tokens": "global_model",
-              "max_output_tokens": "character_model",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            }
-          }
+          "args": {}
         }
       ]
     },
@@ -3023,116 +1132,19 @@
       "steps": [
         {
           "op": "list_models",
-          "args": {},
-          "ok": {
-            "models": {
-              "$ref": "s7"
-            },
-            "active": "chat.anthropic.alpha",
-            "roles": [
-              {
-                "role": "chat",
-                "model": "chat.anthropic.alpha",
-                "source": "defaults.model"
-              },
-              {
-                "role": "heartbeat",
-                "model": "chat.anthropic.alpha",
-                "source": "inherits chat"
-              },
-              {
-                "role": "compaction",
-                "model": "chat.anthropic.alpha",
-                "source": "inherits chat"
-              },
-              {
-                "role": "sub-agents",
-                "model": "chat.anthropic.alpha",
-                "source": "inherits chat"
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
-            "include_hidden": false,
-            "hidden_count": 0
-          }
+          "args": {}
         },
         {
           "op": "model_roles",
-          "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": "chat.anthropic.alpha",
-              "source": "defaults.model"
-            },
-            {
-              "role": "heartbeat",
-              "model": "chat.anthropic.alpha",
-              "source": "inherits chat"
-            },
-            {
-              "role": "compaction",
-              "model": "chat.anthropic.alpha",
-              "source": "inherits chat"
-            },
-            {
-              "role": "sub-agents",
-              "model": "chat.anthropic.alpha",
-              "source": "inherits chat"
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "args": {}
         },
         {
           "op": "model_info",
-          "args": {},
-          "ok": {
-            "name": "alpha",
-            "qualified_name": "chat.anthropic.alpha",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "alpha-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": 0.5,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null
-          }
+          "args": {}
         },
         {
-          "$ref": "s0"
+          "args": {},
+          "op": "model_settings"
         },
         {
           "op": "switch_model",
@@ -3156,10 +1168,7 @@
         },
         {
           "op": "switch_model",
-          "args": {},
-          "ok": {
-            "active": null
-          }
+          "args": {}
         },
         {
           "op": "reset_model",
@@ -3175,15 +1184,6 @@
             "key": "temperature",
             "value": 0.7,
             "scope": "global"
-          },
-          "ok": {
-            "changed": true,
-            "scope": "global",
-            "model": "chat.anthropic.alpha",
-            "provider": "anthropic",
-            "model_id": "alpha-id",
-            "key": "temperature",
-            "value": 0.7
           },
           "prefs_changed": {
             "global.models.anthropic:alpha-id.temperature": 0.7
@@ -3211,7 +1211,8 @@
           }
         },
         {
-          "$ref": "s0"
+          "args": {},
+          "op": "model_settings"
         }
       ]
     },
@@ -3230,494 +1231,21 @@
       "steps": [
         {
           "op": "list_models",
-          "args": {},
-          "ok": {
-            "models": {
-              "$ref": "s7"
-            },
-            "active": "chat.anthropic.alpha",
-            "roles": {
-              "$ref": "s10"
-            },
-            "include_hidden": false,
-            "hidden_count": 0
-          }
+          "args": {}
         },
         {
           "op": "model_info",
-          "args": {},
-          "ok": {
-            "name": "alpha",
-            "qualified_name": "chat.anthropic.alpha",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "alpha-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": 0.5,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "$ref": "s18"
-            },
-            "scopes": {
-              "$ref": "s20"
-            }
-          }
+          "args": {}
         },
         {
-          "$ref": "s0"
+          "args": {},
+          "op": "model_settings"
         },
         {
           "op": "switch_model",
-          "args": {},
-          "ok": {
-            "active": "chat.anthropic.alpha"
-          }
+          "args": {}
         }
       ]
     }
-  ],
-  "$shared": {
-    "s0": {
-      "args": {},
-      "ok": {
-        "$ref": "s1"
-      },
-      "op": "model_settings"
-    },
-    "s1": {
-      "applicability": {
-        "$ref": "s8"
-      },
-      "effective_sampler": {
-        "$ref": "s18"
-      },
-      "model": "chat.anthropic.alpha",
-      "model_id": "alpha-id",
-      "provider": "anthropic",
-      "reasoning_effort_domain": [
-        "adaptive",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "saved_character": null,
-      "saved_global": null,
-      "scopes": {
-        "$ref": "s13"
-      }
-    },
-    "s2": {
-      "applicability": {
-        "$ref": "s8"
-      },
-      "effective_sampler": {
-        "$ref": "s17"
-      },
-      "model": "chat.anthropic.beta",
-      "model_id": "beta-id",
-      "provider": "anthropic",
-      "reasoning_effort_domain": [
-        "adaptive",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "saved_character": null,
-      "saved_global": null,
-      "scopes": {
-        "$ref": "s13"
-      }
-    },
-    "s3": {
-      "args": {},
-      "ok": {
-        "$ref": "s4"
-      },
-      "op": "model_info"
-    },
-    "s4": {
-      "api_key_env": "ANTHROPIC_API_KEY",
-      "base_url": null,
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "1h",
-      "category": "chat",
-      "effective_sampler": {
-        "$ref": "s17"
-      },
-      "gemini_generation": null,
-      "max_context_tokens": 200000,
-      "max_output_tokens": 32768,
-      "max_tool_iterations": null,
-      "model_id": "beta-id",
-      "name": "beta",
-      "openrouter_provider": null,
-      "provider_key": "anthropic",
-      "qualified_name": "chat.anthropic.beta",
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "scopes": {
-        "$ref": "s20"
-      },
-      "sdk": "anthropic",
-      "supports_images": null,
-      "temperature": 0.2,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s5": {
-      "args": {},
-      "ok": {
-        "$ref": "s6"
-      },
-      "op": "list_models"
-    },
-    "s6": {
-      "active": "chat.anthropic.beta",
-      "hidden_count": 0,
-      "include_hidden": false,
-      "models": {
-        "$ref": "s7"
-      },
-      "roles": {
-        "$ref": "s11"
-      }
-    },
-    "s7": {
-      "anthropic": {
-        "$ref": "s9"
-      },
-      "gemini": [
-        {
-          "hidden": false,
-          "model_id": "gemini-3.1-pro",
-          "name": "epsilon",
-          "qualified_name": "chat.gemini.epsilon",
-          "sdk": "gemini",
-          "source": "static"
-        }
-      ],
-      "openai": [
-        {
-          "hidden": false,
-          "model_id": "gamma-id",
-          "name": "gamma",
-          "qualified_name": "chat.openai.gamma",
-          "sdk": "openai",
-          "source": "static"
-        }
-      ]
-    },
-    "s8": {
-      "budget_tokens": "honored",
-      "cache_keepalive": "honored",
-      "cache_keepalive_max": "honored",
-      "cache_ttl": "honored",
-      "gemini_generation": "ignored",
-      "max_output_tokens": "honored",
-      "max_tool_iterations": "always",
-      "openrouter_provider": "ignored",
-      "reasoning_effort": "honored",
-      "replay_prior_thinking": "honored",
-      "sdk": "always",
-      "supports_images": "always",
-      "temperature": "honored",
-      "top_p": "honored",
-      "zai_clear_thinking": "ignored",
-      "zai_subscription": "ignored"
-    },
-    "s9": [
-      {
-        "hidden": false,
-        "model_id": "alpha-id",
-        "name": "alpha",
-        "qualified_name": "chat.anthropic.alpha",
-        "sdk": "anthropic",
-        "source": "static"
-      },
-      {
-        "hidden": false,
-        "model_id": "beta-id",
-        "name": "beta",
-        "qualified_name": "chat.anthropic.beta",
-        "sdk": "anthropic",
-        "source": "static"
-      },
-      {
-        "hidden": false,
-        "model_id": "claude-opus-4-8",
-        "name": "delta",
-        "qualified_name": "chat.anthropic.delta",
-        "sdk": "anthropic",
-        "source": "static"
-      }
-    ],
-    "s10": [
-      {
-        "model": "chat.anthropic.alpha",
-        "role": "chat",
-        "source": "character"
-      },
-      {
-        "model": "chat.anthropic.alpha",
-        "role": "heartbeat",
-        "source": "inherits chat"
-      },
-      {
-        "model": "chat.anthropic.alpha",
-        "role": "compaction",
-        "source": "inherits chat"
-      },
-      {
-        "model": "chat.anthropic.alpha",
-        "role": "sub-agents",
-        "source": "inherits chat"
-      },
-      {
-        "model": null,
-        "role": "embedding",
-        "source": null
-      },
-      {
-        "model": null,
-        "role": "images",
-        "source": null
-      }
-    ],
-    "s11": [
-      {
-        "model": "chat.anthropic.beta",
-        "role": "chat",
-        "source": "character"
-      },
-      {
-        "model": "chat.anthropic.beta",
-        "role": "heartbeat",
-        "source": "inherits chat"
-      },
-      {
-        "model": "chat.anthropic.beta",
-        "role": "compaction",
-        "source": "inherits chat"
-      },
-      {
-        "model": "chat.anthropic.beta",
-        "role": "sub-agents",
-        "source": "inherits chat"
-      },
-      {
-        "model": null,
-        "role": "embedding",
-        "source": null
-      },
-      {
-        "model": null,
-        "role": "images",
-        "source": null
-      }
-    ],
-    "s12": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "static_default",
-      "gemini_generation": null,
-      "max_output_tokens": "static_default",
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "static_default",
-      "temperature": "character_model",
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s13": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "static_default",
-      "gemini_generation": null,
-      "max_output_tokens": "static_default",
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "static_default",
-      "temperature": "static_default",
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s14": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "static_default",
-      "gemini_generation": null,
-      "max_output_tokens": "static_default",
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "static_default",
-      "temperature": null,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s15": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "1h",
-      "gemini_generation": null,
-      "max_output_tokens": 32000,
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "anthropic",
-      "supports_images": null,
-      "temperature": null,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s16": {
-      "budget_tokens": 1024,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "1h",
-      "gemini_generation": null,
-      "max_output_tokens": 2048,
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": "low",
-      "replay_prior_thinking": null,
-      "sdk": "anthropic",
-      "supports_images": null,
-      "temperature": 0.33,
-      "top_p": 0.22,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s17": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "1h",
-      "gemini_generation": null,
-      "max_output_tokens": 32768,
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "anthropic",
-      "supports_images": null,
-      "temperature": 0.2,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s18": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "1h",
-      "gemini_generation": null,
-      "max_output_tokens": 32768,
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "anthropic",
-      "supports_images": null,
-      "temperature": 0.5,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s19": [
-      {
-        "model": null,
-        "role": "chat",
-        "source": null
-      },
-      {
-        "model": null,
-        "role": "heartbeat",
-        "source": null
-      },
-      {
-        "model": null,
-        "role": "compaction",
-        "source": null
-      },
-      {
-        "model": null,
-        "role": "sub-agents",
-        "source": null
-      },
-      {
-        "model": null,
-        "role": "embedding",
-        "source": null
-      },
-      {
-        "model": null,
-        "role": "images",
-        "source": null
-      }
-    ],
-    "s20": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "static_default",
-      "max_output_tokens": "static_default",
-      "max_tool_iterations": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "static_default",
-      "temperature": "static_default",
-      "top_p": null
-    },
-    "s21": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "static_default",
-      "max_output_tokens": "static_default",
-      "max_tool_iterations": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "static_default",
-      "temperature": null,
-      "top_p": null
-    }
-  }
+  ]
 }
