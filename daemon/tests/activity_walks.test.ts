@@ -4,7 +4,7 @@ import { SESSION_MEDIANS_WINDOW } from "../src/autonomy/activity.ts";
 
 import {
   ActivityTracker,
-  type HourClassification,
+  classifyHours,
   type Weekday,
 } from "../src/autonomy/activity.ts";
 
@@ -15,7 +15,6 @@ interface FixtureStats {
   session_count: number;
   sessions_per_day: number;
   hour_histogram: number[];
-  hour_classifications: HourClassification[];
   has_sufficient_data: boolean;
   has_sufficient_heatmap: boolean;
   median_session_gap: number | null;
@@ -80,7 +79,7 @@ describe("the fixture is real", () => {
     expect(all.filter((s) => s.anomaly_z_score === 0).length).toBeGreaterThan(0);
     expect(all.filter((s) => (s.anomaly_z_score ?? 0) > 1).length).toBeGreaterThan(0);
 
-    const classes = all.flatMap((s) => s.hour_classifications);
+    const classes = all.flatMap((s) => classifyHours(s.hour_histogram));
     for (const label of ["peak", "trough", "normal"]) {
       expect(classes.filter((c) => c === label).length, `${label} hours`).toBeGreaterThan(0);
     }
@@ -150,9 +149,10 @@ describe("computing stats over a recorded stream of messages", () => {
         expect(got.sessionCount, `${where} session count`).toBe(want.session_count);
         expect(got.sessionsPerDay, `${where} sessions per day`).toBe(want.sessions_per_day);
         expect(got.hourHistogram, `${where} histogram`).toEqual(want.hour_histogram);
-        expect(got.hourClassifications, `${where} classifications`).toEqual(
-          want.hour_classifications,
-        );
+        expect(
+          got.hourClassifications,
+          `${where}: an hour is a peak or a trough by how it stands against the day's own average`,
+        ).toEqual(classifyHours(got.hourHistogram));
         expect(got.hasSufficientData, `${where} sufficient data`).toBe(want.has_sufficient_data);
         expect(got.hasSufficientHeatmap, `${where} sufficient heatmap`).toBe(
           want.has_sufficient_heatmap,

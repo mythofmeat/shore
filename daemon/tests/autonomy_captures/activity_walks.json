@@ -1,4 +1,487 @@
 {
+  "$shared": {
+    "s0": {
+      "anomaly_z_score": null,
+      "consistency": 0.0,
+      "engagement_score": 0.2,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": null,
+      "session_count": 0,
+      "sessions_per_day": 0.0,
+      "tempo_score": 0.5
+    },
+    "s1": {
+      "anomaly_z_score": null,
+      "consistency": 1.0,
+      "engagement_score": 0.8,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": null,
+      "session_count": 1,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.5
+    },
+    "s2": {
+      "anomaly_z_score": null,
+      "consistency": 0.3333333333333333,
+      "engagement_score": 0.4,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": 432000.0,
+      "session_count": 2,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.5
+    },
+    "s3": {
+      "anomaly_z_score": null,
+      "consistency": 1.0,
+      "engagement_score": 0.8,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": 86400.0,
+      "session_count": 3,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.5
+    },
+    "s4": {
+      "anomaly_z_score": null,
+      "consistency": 1.0,
+      "engagement_score": 0.8,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": 129600.0,
+      "session_count": 3,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.5
+    },
+    "s5": {
+      "anomaly_z_score": 0.0,
+      "consistency": 1.0,
+      "engagement_score": 0.9563612715217549,
+      "has_sufficient_data": true,
+      "has_sufficient_heatmap": true,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": 86340.0,
+      "session_count": 35,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.8909031788043871
+    },
+    "s6": {
+      "anomaly_z_score": 1.7320508075688774,
+      "consistency": 1.0,
+      "engagement_score": 0.9563612715217549,
+      "has_sufficient_data": true,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.2,
+        0.0,
+        0.0,
+        0.0,
+        0.2,
+        0.0,
+        0.2,
+        0.0,
+        0.2,
+        0.0,
+        0.2,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": 7140.0,
+      "session_count": 5,
+      "sessions_per_day": 2.5,
+      "tempo_score": 0.8909031788043871
+    },
+    "s7": {
+      "anomaly_z_score": null,
+      "consistency": 1.0,
+      "engagement_score": 0.9577979634562186,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": null,
+      "session_count": 1,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.8944949086405465
+    },
+    "s8": {
+      "anomaly_z_score": null,
+      "consistency": 1.0,
+      "engagement_score": 0.6382261312082425,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.75,
+        0.25,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": null,
+      "session_count": 1,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.09556532802060626
+    },
+    "s9": {
+      "anomaly_z_score": null,
+      "consistency": 1.0,
+      "engagement_score": 0.9476161265076359,
+      "has_sufficient_data": false,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": null,
+      "session_count": 1,
+      "sessions_per_day": 1.0,
+      "tempo_score": 0.8690403162690898
+    },
+    "s10": {
+      "anomaly_z_score": -0.5253681240224908,
+      "consistency": 0.75,
+      "engagement_score": 0.7926481982541387,
+      "has_sufficient_data": true,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.13333333333333333,
+        0.06666666666666667,
+        0.08333333333333333,
+        0.11666666666666667,
+        0.03333333333333333,
+        0.06666666666666667,
+        0.08333333333333333,
+        0.03333333333333333,
+        0.0,
+        0.06666666666666667,
+        0.08333333333333333,
+        0.2,
+        0.0,
+        0.03333333333333333,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": 4402.0,
+      "session_count": 10,
+      "sessions_per_day": 3.3333333333333335,
+      "tempo_score": 0.8566204956353467
+    },
+    "s11": {
+      "anomaly_z_score": 0.7938355827232371,
+      "consistency": 1.0,
+      "engagement_score": 0.9486878704357025,
+      "has_sufficient_data": true,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.0,
+        0.0,
+        0.08,
+        0.0,
+        0.0,
+        0.0,
+        0.16,
+        0.0,
+        0.08,
+        0.68,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median_session_gap": 34171.5,
+      "session_count": 5,
+      "sessions_per_day": 1.6666666666666667,
+      "tempo_score": 0.871719676089256
+    },
+    "s12": {
+      "anomaly_z_score": -0.38667756349101945,
+      "consistency": 1.0,
+      "engagement_score": 0.9414714797597334,
+      "has_sufficient_data": true,
+      "has_sufficient_heatmap": false,
+      "hour_histogram": [
+        0.1111111111111111,
+        0.011111111111111112,
+        0.011111111111111112,
+        0.0,
+        0.022222222222222223,
+        0.0,
+        0.0,
+        0.0,
+        0.03333333333333333,
+        0.011111111111111112,
+        0.03333333333333333,
+        0.0,
+        0.14444444444444443,
+        0.13333333333333333,
+        0.044444444444444446,
+        0.03333333333333333,
+        0.022222222222222223,
+        0.18888888888888888,
+        0.07777777777777778,
+        0.06666666666666667,
+        0.0,
+        0.011111111111111112,
+        0.011111111111111112,
+        0.03333333333333333
+      ],
+      "median_session_gap": 4350.0,
+      "session_count": 23,
+      "sessions_per_day": 4.6,
+      "tempo_score": 0.8536786993993337
+    }
+  },
   "cases": [
     {
       "name": "no messages at all",
@@ -7,25 +490,25 @@
       "message_count": 0,
       "by_weekday": {
         "Mon": {
-          "$ref": "s11"
+          "$ref": "s0"
         },
         "Tue": {
-          "$ref": "s11"
+          "$ref": "s0"
         },
         "Wed": {
-          "$ref": "s11"
+          "$ref": "s0"
         },
         "Thu": {
-          "$ref": "s11"
+          "$ref": "s0"
         },
         "Fri": {
-          "$ref": "s11"
+          "$ref": "s0"
         },
         "Sat": {
-          "$ref": "s11"
+          "$ref": "s0"
         },
         "Sun": {
-          "$ref": "s11"
+          "$ref": "s0"
         }
       }
     },
@@ -38,25 +521,25 @@
       "message_count": 1,
       "by_weekday": {
         "Mon": {
-          "$ref": "s12"
+          "$ref": "s1"
         },
         "Tue": {
-          "$ref": "s12"
+          "$ref": "s1"
         },
         "Wed": {
-          "$ref": "s12"
+          "$ref": "s1"
         },
         "Thu": {
-          "$ref": "s12"
+          "$ref": "s1"
         },
         "Fri": {
-          "$ref": "s12"
+          "$ref": "s1"
         },
         "Sat": {
-          "$ref": "s12"
+          "$ref": "s1"
         },
         "Sun": {
-          "$ref": "s12"
+          "$ref": "s1"
         }
       }
     },
@@ -70,25 +553,25 @@
       "message_count": 2,
       "by_weekday": {
         "Mon": {
-          "$ref": "s8"
+          "$ref": "s2"
         },
         "Tue": {
-          "$ref": "s8"
+          "$ref": "s2"
         },
         "Wed": {
-          "$ref": "s8"
+          "$ref": "s2"
         },
         "Thu": {
-          "$ref": "s8"
+          "$ref": "s2"
         },
         "Fri": {
-          "$ref": "s8"
+          "$ref": "s2"
         },
         "Sat": {
-          "$ref": "s8"
+          "$ref": "s2"
         },
         "Sun": {
-          "$ref": "s8"
+          "$ref": "s2"
         }
       }
     },
@@ -103,25 +586,25 @@
       "message_count": 3,
       "by_weekday": {
         "Mon": {
-          "$ref": "s10"
+          "$ref": "s3"
         },
         "Tue": {
-          "$ref": "s10"
+          "$ref": "s3"
         },
         "Wed": {
-          "$ref": "s10"
+          "$ref": "s3"
         },
         "Thu": {
-          "$ref": "s10"
+          "$ref": "s3"
         },
         "Fri": {
-          "$ref": "s10"
+          "$ref": "s3"
         },
         "Sat": {
-          "$ref": "s10"
+          "$ref": "s3"
         },
         "Sun": {
-          "$ref": "s10"
+          "$ref": "s3"
         }
       }
     },
@@ -136,25 +619,25 @@
       "message_count": 3,
       "by_weekday": {
         "Mon": {
-          "$ref": "s9"
+          "$ref": "s4"
         },
         "Tue": {
-          "$ref": "s9"
+          "$ref": "s4"
         },
         "Wed": {
-          "$ref": "s9"
+          "$ref": "s4"
         },
         "Thu": {
-          "$ref": "s9"
+          "$ref": "s4"
         },
         "Fri": {
-          "$ref": "s9"
+          "$ref": "s4"
         },
         "Sat": {
-          "$ref": "s9"
+          "$ref": "s4"
         },
         "Sun": {
-          "$ref": "s9"
+          "$ref": "s4"
         }
       }
     },
@@ -307,54 +790,28 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": false,
           "median_session_gap": 7140.0,
           "anomaly_z_score": 1.7320508075688774
         },
         "Tue": {
-          "$ref": "s3"
+          "$ref": "s6"
         },
         "Wed": {
-          "$ref": "s3"
+          "$ref": "s6"
         },
         "Thu": {
-          "$ref": "s3"
+          "$ref": "s6"
         },
         "Fri": {
-          "$ref": "s3"
+          "$ref": "s6"
         },
         "Sat": {
-          "$ref": "s3"
+          "$ref": "s6"
         },
         "Sun": {
-          "$ref": "s3"
+          "$ref": "s6"
         }
       }
     },
@@ -406,25 +863,25 @@
       "message_count": 40,
       "by_weekday": {
         "Mon": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Tue": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Wed": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Thu": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Fri": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Sat": {
-          "$ref": "s6"
+          "$ref": "s7"
         },
         "Sun": {
-          "$ref": "s6"
+          "$ref": "s7"
         }
       }
     },
@@ -440,25 +897,25 @@
       "message_count": 4,
       "by_weekday": {
         "Mon": {
-          "$ref": "s4"
+          "$ref": "s8"
         },
         "Tue": {
-          "$ref": "s4"
+          "$ref": "s8"
         },
         "Wed": {
-          "$ref": "s4"
+          "$ref": "s8"
         },
         "Thu": {
-          "$ref": "s4"
+          "$ref": "s8"
         },
         "Fri": {
-          "$ref": "s4"
+          "$ref": "s8"
         },
         "Sat": {
-          "$ref": "s4"
+          "$ref": "s8"
         },
         "Sun": {
-          "$ref": "s4"
+          "$ref": "s8"
         }
       }
     },
@@ -478,25 +935,25 @@
       "message_count": 8,
       "by_weekday": {
         "Mon": {
-          "$ref": "s7"
+          "$ref": "s9"
         },
         "Tue": {
-          "$ref": "s7"
+          "$ref": "s9"
         },
         "Wed": {
-          "$ref": "s7"
+          "$ref": "s9"
         },
         "Thu": {
-          "$ref": "s7"
+          "$ref": "s9"
         },
         "Fri": {
-          "$ref": "s7"
+          "$ref": "s9"
         },
         "Sat": {
-          "$ref": "s7"
+          "$ref": "s9"
         },
         "Sun": {
-          "$ref": "s7"
+          "$ref": "s9"
         }
       }
     },
@@ -568,13 +1025,13 @@
       "message_count": 60,
       "by_weekday": {
         "Mon": {
-          "$ref": "s1"
+          "$ref": "s10"
         },
         "Tue": {
-          "$ref": "s1"
+          "$ref": "s10"
         },
         "Wed": {
-          "$ref": "s1"
+          "$ref": "s10"
         },
         "Thu": {
           "engagement_score": 0.7926481982541387,
@@ -608,45 +1065,19 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "normal",
-            "normal",
-            "normal",
-            "trough",
-            "trough",
-            "normal",
-            "trough",
-            "trough",
-            "normal",
-            "normal",
-            "peak",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": false,
           "median_session_gap": 4402.0,
           "anomaly_z_score": -0.5253681240224908
         },
         "Fri": {
-          "$ref": "s1"
+          "$ref": "s10"
         },
         "Sat": {
-          "$ref": "s1"
+          "$ref": "s10"
         },
         "Sun": {
-          "$ref": "s1"
+          "$ref": "s10"
         }
       }
     },
@@ -889,32 +1320,6 @@
             0.14705882352941177,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "peak",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "normal",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": true,
           "median_session_gap": 5596.0,
@@ -951,32 +1356,6 @@
             0.2608695652173913,
             0.30434782608695654,
             0.13043478260869565
-          ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "normal",
-            "trough",
-            "peak",
-            "peak",
-            "normal"
           ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": true,
@@ -1015,32 +1394,6 @@
             0.06666666666666667,
             0.06666666666666667
           ],
-          "hour_classifications": [
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "normal",
-            "normal",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "peak",
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "normal"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": true,
           "median_session_gap": 5596.0,
@@ -1077,32 +1430,6 @@
             0.05555555555555555,
             0.0,
             0.05555555555555555
-          ],
-          "hour_classifications": [
-            "normal",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "normal",
-            "trough",
-            "peak",
-            "normal",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "peak",
-            "trough",
-            "normal",
-            "normal",
-            "trough",
-            "normal"
           ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": true,
@@ -1141,32 +1468,6 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "peak",
-            "trough",
-            "trough",
-            "normal",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": true,
           "median_session_gap": 5596.0,
@@ -1204,32 +1505,6 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "peak",
-            "trough",
-            "normal",
-            "trough",
-            "peak",
-            "trough",
-            "trough",
-            "trough",
-            "peak",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": true,
           "median_session_gap": 5596.0,
@@ -1266,32 +1541,6 @@
             0.0,
             0.0,
             0.0
-          ],
-          "hour_classifications": [
-            "normal",
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "trough",
-            "peak",
-            "trough",
-            "peak",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
           ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": true,
@@ -1364,32 +1613,6 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": false,
           "median_session_gap": 34171.5,
@@ -1427,51 +1650,25 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "trough",
-            "trough",
-            "peak",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": false,
           "median_session_gap": 34171.5,
           "anomaly_z_score": 0.7938355827232371
         },
         "Wed": {
-          "$ref": "s2"
+          "$ref": "s11"
         },
         "Thu": {
-          "$ref": "s2"
+          "$ref": "s11"
         },
         "Fri": {
-          "$ref": "s2"
+          "$ref": "s11"
         },
         "Sat": {
-          "$ref": "s2"
+          "$ref": "s11"
         },
         "Sun": {
-          "$ref": "s2"
+          "$ref": "s11"
         }
       }
     },
@@ -1604,32 +1801,6 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "normal",
-            "normal",
-            "trough",
-            "trough",
-            "peak",
-            "normal",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": false,
           "median_session_gap": 4350.0,
@@ -1666,32 +1837,6 @@
             0.02631578947368421,
             0.02631578947368421,
             0.07894736842105263
-          ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "peak",
-            "peak",
-            "normal",
-            "normal",
-            "trough",
-            "normal",
-            "normal",
-            "normal",
-            "trough",
-            "trough",
-            "trough",
-            "normal"
           ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": false,
@@ -1730,39 +1875,13 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "peak",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": false,
           "median_session_gap": 4350.0,
           "anomaly_z_score": -0.38667756349101945
         },
         "Thu": {
-          "$ref": "s0"
+          "$ref": "s12"
         },
         "Fri": {
           "engagement_score": 0.9414714797597334,
@@ -1796,871 +1915,18 @@
             0.0,
             0.0
           ],
-          "hour_classifications": [
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "normal",
-            "trough",
-            "normal",
-            "trough",
-            "peak",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough",
-            "trough"
-          ],
           "has_sufficient_data": true,
           "has_sufficient_heatmap": false,
           "median_session_gap": 4350.0,
           "anomaly_z_score": -0.38667756349101945
         },
         "Sat": {
-          "$ref": "s0"
+          "$ref": "s12"
         },
         "Sun": {
-          "$ref": "s0"
+          "$ref": "s12"
         }
       }
     }
-  ],
-  "$shared": {
-    "s0": {
-      "anomaly_z_score": -0.38667756349101945,
-      "consistency": 1.0,
-      "engagement_score": 0.9414714797597334,
-      "has_sufficient_data": true,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "peak",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "normal",
-        "trough",
-        "peak",
-        "peak",
-        "normal",
-        "normal",
-        "trough",
-        "peak",
-        "normal",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "normal"
-      ],
-      "hour_histogram": {
-        "$ref": "s13"
-      },
-      "median_session_gap": 4350.0,
-      "session_count": 23,
-      "sessions_per_day": 4.6,
-      "tempo_score": 0.8536786993993337
-    },
-    "s1": {
-      "anomaly_z_score": -0.5253681240224908,
-      "consistency": 0.75,
-      "engagement_score": 0.7926481982541387,
-      "has_sufficient_data": true,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "peak",
-        "normal",
-        "normal",
-        "normal",
-        "trough",
-        "normal",
-        "normal",
-        "trough",
-        "trough",
-        "normal",
-        "normal",
-        "peak",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": {
-        "$ref": "s14"
-      },
-      "median_session_gap": 4402.0,
-      "session_count": 10,
-      "sessions_per_day": 3.3333333333333335,
-      "tempo_score": 0.8566204956353467
-    },
-    "s2": {
-      "anomaly_z_score": 0.7938355827232371,
-      "consistency": 1.0,
-      "engagement_score": 0.9486878704357025,
-      "has_sufficient_data": true,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "peak",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.08,
-        0.0,
-        0.0,
-        0.0,
-        0.16,
-        0.0,
-        0.08,
-        0.68,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": 34171.5,
-      "session_count": 5,
-      "sessions_per_day": 1.6666666666666667,
-      "tempo_score": 0.871719676089256
-    },
-    "s3": {
-      "anomaly_z_score": 1.7320508075688774,
-      "consistency": 1.0,
-      "engagement_score": 0.9563612715217549,
-      "has_sufficient_data": true,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "normal",
-        "trough",
-        "normal",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.2,
-        0.0,
-        0.0,
-        0.0,
-        0.2,
-        0.0,
-        0.2,
-        0.0,
-        0.2,
-        0.0,
-        0.2,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": 7140.0,
-      "session_count": 5,
-      "sessions_per_day": 2.5,
-      "tempo_score": 0.8909031788043871
-    },
-    "s4": {
-      "anomaly_z_score": null,
-      "consistency": 1.0,
-      "engagement_score": 0.6382261312082425,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.75,
-        0.25,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": null,
-      "session_count": 1,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.09556532802060626
-    },
-    "s5": {
-      "anomaly_z_score": 0.0,
-      "consistency": 1.0,
-      "engagement_score": 0.9563612715217549,
-      "has_sufficient_data": true,
-      "has_sufficient_heatmap": true,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": 86340.0,
-      "session_count": 35,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.8909031788043871
-    },
-    "s6": {
-      "anomaly_z_score": null,
-      "consistency": 1.0,
-      "engagement_score": 0.9577979634562186,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": null,
-      "session_count": 1,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.8944949086405465
-    },
-    "s7": {
-      "anomaly_z_score": null,
-      "consistency": 1.0,
-      "engagement_score": 0.9476161265076359,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": null,
-      "session_count": 1,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.8690403162690898
-    },
-    "s8": {
-      "anomaly_z_score": null,
-      "consistency": 0.3333333333333333,
-      "engagement_score": 0.4,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": 432000.0,
-      "session_count": 2,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.5
-    },
-    "s9": {
-      "anomaly_z_score": null,
-      "consistency": 1.0,
-      "engagement_score": 0.8,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": 129600.0,
-      "session_count": 3,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.5
-    },
-    "s10": {
-      "anomaly_z_score": null,
-      "consistency": 1.0,
-      "engagement_score": 0.8,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": 86400.0,
-      "session_count": 3,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.5
-    },
-    "s11": {
-      "anomaly_z_score": null,
-      "consistency": 0.0,
-      "engagement_score": 0.2,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal",
-        "normal"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": null,
-      "session_count": 0,
-      "sessions_per_day": 0.0,
-      "tempo_score": 0.5
-    },
-    "s12": {
-      "anomaly_z_score": null,
-      "consistency": 1.0,
-      "engagement_score": 0.8,
-      "has_sufficient_data": false,
-      "has_sufficient_heatmap": false,
-      "hour_classifications": [
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "normal",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough",
-        "trough"
-      ],
-      "hour_histogram": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "median_session_gap": null,
-      "session_count": 1,
-      "sessions_per_day": 1.0,
-      "tempo_score": 0.5
-    },
-    "s13": [
-      0.1111111111111111,
-      0.011111111111111112,
-      0.011111111111111112,
-      0.0,
-      0.022222222222222223,
-      0.0,
-      0.0,
-      0.0,
-      0.03333333333333333,
-      0.011111111111111112,
-      0.03333333333333333,
-      0.0,
-      0.14444444444444443,
-      0.13333333333333333,
-      0.044444444444444446,
-      0.03333333333333333,
-      0.022222222222222223,
-      0.18888888888888888,
-      0.07777777777777778,
-      0.06666666666666667,
-      0.0,
-      0.011111111111111112,
-      0.011111111111111112,
-      0.03333333333333333
-    ],
-    "s14": [
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.13333333333333333,
-      0.06666666666666667,
-      0.08333333333333333,
-      0.11666666666666667,
-      0.03333333333333333,
-      0.06666666666666667,
-      0.08333333333333333,
-      0.03333333333333333,
-      0.0,
-      0.06666666666666667,
-      0.08333333333333333,
-      0.2,
-      0.0,
-      0.03333333333333333,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0
-    ]
-  }
+  ]
 }
