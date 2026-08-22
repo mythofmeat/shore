@@ -65,7 +65,7 @@ function normalizeManifest(raw: string, seeded: Set<string>): string {
 const UUID_V4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-describe("compaction writer parity", () => {
+describe("writing an archived segment", () => {
   test("the fixture pins the path constants this module hardcodes", () => {
     expect(fixture.constants.active_jsonl_file).toBe("active.jsonl");
     expect(fixture.constants.segments_dir).toBe("segments");

@@ -71,7 +71,7 @@ describe("the bounds match", () => {
   });
 });
 
-describe("replaying the Rust's decisions", () => {
+describe("deciding when to wake, over a recorded day", () => {
   for (const walk of fixture.walks) {
     test(`walk ${walk.seed} (interval ${walk.config.default_interval_secs}s, ceiling ${walk.config.max_idle_ticks} ticks)`, () => {
       const clock = new HeartbeatClock(

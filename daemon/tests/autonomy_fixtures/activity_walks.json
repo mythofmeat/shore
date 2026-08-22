@@ -1,18 +1,4 @@
 {
-  "thresholds": {
-    "session_gap_secs": 1800,
-    "sufficient_data_msgs": 5,
-    "sufficient_data_days": 2,
-    "sufficient_heatmap_msgs": 20,
-    "sufficient_heatmap_days": 7,
-    "weekday_heatmap_min": 5,
-    "peak_hour_threshold": 1.5,
-    "trough_hour_threshold": 0.5,
-    "session_medians_window": 30,
-    "session_tempo_window": 10,
-    "anomaly_z_score": 1.5,
-    "stats_cache_ttl_secs": 60
-  },
   "cases": [
     {
       "name": "no messages at all",

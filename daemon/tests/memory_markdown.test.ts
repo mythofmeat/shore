@@ -135,7 +135,7 @@ function expectSameError(actual: unknown, recorded: string, root: string, oldRoo
   expect(message).toBe(recorded.split(oldRoot).join(root));
 }
 
-describe("markdown store parity", () => {
+describe("reading and writing the markdown store", () => {
   test("the modified-at format matches chrono's AutoSi, truncated to milliseconds", () => {
     const originalTz = process.env.TZ;
     try {
@@ -206,7 +206,7 @@ describe("markdown store parity", () => {
   }
 });
 
-describe("markdown query parity", () => {
+describe("querying the markdown store", () => {
   for (const c of fixture.pure_cases) {
     test(c.name, () => {
       switch (c.op.fn) {

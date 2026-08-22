@@ -71,7 +71,7 @@ function paramsOf(c: AssembleCase): PromptParams {
   };
 }
 
-describe("prompt parity: assemble_prompt", () => {
+describe("assembling the system prompt", () => {
   const cases = fixture.assemble_prompt as unknown as AssembleCase[];
 
   test("the fixture is the one that was generated", () => {
@@ -115,7 +115,7 @@ const KEPT_UNDER_CORRECTED_ESTIMATOR = new Map<string, number>([
   ["multibyte_counts_utf8_bytes_not_chars", 1],
 ]);
 
-describe("prompt parity: xml_tag_from_name", () => {
+describe("the xml tag a prompt section gets", () => {
   for (const c of fixture.xml_tag_from_name as {
     input: string;
     fallback: string;
@@ -127,7 +127,7 @@ describe("prompt parity: xml_tag_from_name", () => {
   }
 });
 
-describe("prompt parity: render_template", () => {
+describe("rendering a template", () => {
   for (const c of fixture.render_template as {
     template: string;
     vars: Record<string, string>;

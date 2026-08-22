@@ -116,7 +116,7 @@ async function driveFraming(
   }
 }
 
-describe("constants match the Rust", () => {
+describe("the transport constants the Rust client also implements", () => {
   test("every transport constant", () => {
     expect(SWP_V1).toBe(fixture.constants.swp_v1 as number);
     expect(MAX_WIRE_MESSAGE_SIZE).toBe(fixture.constants.max_wire_message_size as number);

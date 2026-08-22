@@ -126,7 +126,7 @@ describe("the fixture is real", () => {
   });
 });
 
-describe("SegmentReader matches the Rust", () => {
+describe("reading a conversation back off disk", () => {
   for (const c of fixture.segment_reader) {
     test(c.name, async () => {
       const dir = await scratch();
@@ -166,7 +166,7 @@ describe("SegmentReader matches the Rust", () => {
   }
 });
 
-describe("ConversationEngine matches the Rust", () => {
+describe("driving the conversation engine", () => {
   for (const walk of fixture.engine_walk) {
     test(walk.name, async () => {
       const root = await scratch();

@@ -21,7 +21,7 @@ function wire(m: Message): unknown {
   return JSON.parse(JSON.stringify(m));
 }
 
-describe("merge parity", () => {
+describe("merging a streamed turn into the conversation", () => {
   const cases = fixture.cases as unknown as MergeCase[];
 
   test("the fixture is the one that was generated", () => {

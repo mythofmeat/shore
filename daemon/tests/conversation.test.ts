@@ -200,7 +200,7 @@ describe("resolveRef", () => {
   }
 });
 
-describe("resolveRef rejects what Rust's integer parse rejects", () => {
+describe("a message reference shore refuses to resolve", () => {
   const messages: Message[] = [
     { msg_id: "m1", role: "user", content: "A", images: [], content_blocks: [], timestamp: "t" },
     { msg_id: "m2", role: "user", content: "B", images: [], content_blocks: [], timestamp: "t" },

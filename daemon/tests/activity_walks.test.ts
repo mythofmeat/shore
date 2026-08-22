@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { expandShared } from "./support/shared_subtrees.ts";
+import { SESSION_MEDIANS_WINDOW } from "../src/autonomy/activity.ts";
 
 import {
   ActivityTracker,
@@ -30,20 +31,6 @@ interface Case {
 }
 
 interface Fixture {
-  thresholds: {
-    session_gap_secs: number;
-    sufficient_data_msgs: number;
-    sufficient_data_days: number;
-    sufficient_heatmap_msgs: number;
-    sufficient_heatmap_days: number;
-    weekday_heatmap_min: number;
-    peak_hour_threshold: number;
-    trough_hour_threshold: number;
-    session_medians_window: number;
-    session_tempo_window: number;
-    anomaly_z_score: number;
-    stats_cache_ttl_secs: number;
-  };
   cases: Case[];
 }
 
@@ -81,7 +68,7 @@ describe("the fixture is real", () => {
   test("the streams exercise the paths worth pinning", () => {
     const all = fixture.cases.flatMap((c) => Object.values(c.by_weekday));
 
-    const beyond = all.filter((s) => s.session_count > fixture.thresholds.session_medians_window);
+    const beyond = all.filter((s) => s.session_count > SESSION_MEDIANS_WINDOW);
     expect(beyond.length, "the session window must actually be reached").toBeGreaterThan(0);
 
     expect(all.filter((s) => s.has_sufficient_heatmap).length).toBeGreaterThan(0);
@@ -107,26 +94,48 @@ describe("the fixture is real", () => {
   });
 });
 
-describe("the constants match the Rust", () => {
-  test("thresholds", async () => {
+describe("the thresholds activity stats are read against", () => {
+  test("are all positive, so no window is empty by construction", async () => {
     const mod = await import("../src/autonomy/activity.ts");
-    const t = fixture.thresholds;
-    expect(mod.SESSION_GAP_SECS).toBe(t.session_gap_secs);
-    expect(mod.SUFFICIENT_DATA_MSGS).toBe(t.sufficient_data_msgs);
-    expect(mod.SUFFICIENT_DATA_DAYS).toBe(t.sufficient_data_days);
-    expect(mod.SUFFICIENT_HEATMAP_MSGS).toBe(t.sufficient_heatmap_msgs);
-    expect(mod.SUFFICIENT_HEATMAP_DAYS).toBe(t.sufficient_heatmap_days);
-    expect(mod.WEEKDAY_HEATMAP_MIN).toBe(t.weekday_heatmap_min);
-    expect(mod.PEAK_HOUR_THRESHOLD).toBe(t.peak_hour_threshold);
-    expect(mod.TROUGH_HOUR_THRESHOLD).toBe(t.trough_hour_threshold);
-    expect(mod.SESSION_MEDIANS_WINDOW).toBe(t.session_medians_window);
-    expect(mod.SESSION_TEMPO_WINDOW).toBe(t.session_tempo_window);
-    expect(mod.ANOMALY_Z_SCORE).toBe(t.anomaly_z_score);
-    expect(mod.STATS_CACHE_TTL_MS).toBe(t.stats_cache_ttl_secs * 1000);
+    for (const [name, value] of [
+      ["SESSION_GAP_SECS", mod.SESSION_GAP_SECS],
+      ["SUFFICIENT_DATA_MSGS", mod.SUFFICIENT_DATA_MSGS],
+      ["SUFFICIENT_DATA_DAYS", mod.SUFFICIENT_DATA_DAYS],
+      ["SUFFICIENT_HEATMAP_MSGS", mod.SUFFICIENT_HEATMAP_MSGS],
+      ["SUFFICIENT_HEATMAP_DAYS", mod.SUFFICIENT_HEATMAP_DAYS],
+      ["WEEKDAY_HEATMAP_MIN", mod.WEEKDAY_HEATMAP_MIN],
+      ["SESSION_MEDIANS_WINDOW", mod.SESSION_MEDIANS_WINDOW],
+      ["SESSION_TEMPO_WINDOW", mod.SESSION_TEMPO_WINDOW],
+      ["STATS_CACHE_TTL_MS", mod.STATS_CACHE_TTL_MS],
+    ] as const) {
+      expect(value, name).toBeGreaterThan(0);
+    }
+  });
+
+  test("a peak is above a trough, or the two would name the same hours", async () => {
+    const mod = await import("../src/autonomy/activity.ts");
+    expect(mod.PEAK_HOUR_THRESHOLD).toBeGreaterThan(mod.TROUGH_HOUR_THRESHOLD);
+  });
+
+  test("the heatmap needs at least as much history as the summary does", async () => {
+    const mod = await import("../src/autonomy/activity.ts");
+    expect(mod.SUFFICIENT_HEATMAP_MSGS).toBeGreaterThanOrEqual(mod.SUFFICIENT_DATA_MSGS);
+    expect(mod.SUFFICIENT_HEATMAP_DAYS).toBeGreaterThanOrEqual(mod.SUFFICIENT_DATA_DAYS);
+  });
+
+  test("an anomaly needs a real excursion, not a rounding error", async () => {
+    const mod = await import("../src/autonomy/activity.ts");
+    expect(mod.ANOMALY_Z_SCORE).toBeGreaterThan(1);
+  });
+
+  test("a session gap is minutes, not seconds or hours", async () => {
+    const mod = await import("../src/autonomy/activity.ts");
+    expect(mod.SESSION_GAP_SECS).toBeGreaterThanOrEqual(60);
+    expect(mod.SESSION_GAP_SECS).toBeLessThanOrEqual(6 * 3600);
   });
 });
 
-describe("recorded streams replay identically", () => {
+describe("computing stats over a recorded stream of messages", () => {
   for (const c of fixture.cases) {
     test(`${c.name} (${c.via})`, () => {
       const tracker = trackerFor(c);

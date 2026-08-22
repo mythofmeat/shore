@@ -72,7 +72,7 @@ function normalizeQueue(raw: string): string {
     .join("\n");
 }
 
-describe("deferred edits parity", () => {
+describe("applying a deferred edit", () => {
   test("the fixture pins the constants this module hardcodes", () => {
     expect(fixture.constants.protected_paths).toEqual([
       "SOUL.md",
