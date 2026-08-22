@@ -3,7 +3,7 @@
     {
       "name": "last",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "last",
       "note": "the last message regardless of role",
@@ -12,7 +12,7 @@
     {
       "name": "latest",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "latest",
       "note": "alias for last",
@@ -21,7 +21,7 @@
     {
       "name": "negative -1",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "-1",
       "note": "-1 is the last",
@@ -30,7 +30,7 @@
     {
       "name": "negative -2",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "-2",
       "ok": "m2"
@@ -38,7 +38,7 @@
     {
       "name": "negative -3",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "-3",
       "note": "reaches the first",
@@ -47,7 +47,7 @@
     {
       "name": "positive 1",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "1",
       "note": "positive indices are 1-based",
@@ -56,7 +56,7 @@
     {
       "name": "positive 2",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "2",
       "ok": "m2"
@@ -64,7 +64,7 @@
     {
       "name": "positive 3",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "3",
       "ok": "m3"
@@ -72,7 +72,7 @@
     {
       "name": "zero",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "0",
       "note": "0 is neither a valid 1-based nor a valid negative index",
@@ -83,21 +83,9 @@
     },
     {
       "name": "positive out of range",
-      "messages": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "A",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "A"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "messages": {
+        "$ref": "s84"
+      },
       "ref": "99",
       "err": {
         "code": "not_found",
@@ -106,21 +94,9 @@
     },
     {
       "name": "negative out of range",
-      "messages": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "A",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "A"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "messages": {
+        "$ref": "s84"
+      },
       "ref": "-99",
       "note": "len + n underflows past 0",
       "err": {
@@ -131,7 +107,7 @@
     {
       "name": "negative exactly out of range",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "-4",
       "note": "len + n == -1",
@@ -143,7 +119,7 @@
     {
       "name": "positive exactly out of range",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "4",
       "note": "index 3 == len",
@@ -154,63 +130,27 @@
     },
     {
       "name": "literal msg_id",
-      "messages": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "A",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "A"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "messages": {
+        "$ref": "s84"
+      },
       "ref": "m1",
       "note": "an id that exists",
       "ok": "m1"
     },
     {
       "name": "literal passthrough of a missing id",
-      "messages": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "A",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "A"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "messages": {
+        "$ref": "s84"
+      },
       "ref": "nope",
       "note": "resolve_ref does NOT verify the id exists; the caller does",
       "ok": "nope"
     },
     {
       "name": "non-integer is a literal",
-      "messages": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "A",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "A"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "messages": {
+        "$ref": "s84"
+      },
       "ref": "1.5",
       "note": "parse::<i64> fails, so it falls through to passthrough",
       "ok": "1.5"
@@ -218,7 +158,7 @@
     {
       "name": "leading-plus integer",
       "messages": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "ref": "+2",
       "note": "parse::<i64> accepts a leading +, so this is index 2, not a literal",
@@ -325,7 +265,7 @@
           "args": {},
           "history_pushes": 0,
           "ok": {
-            "$ref": "s3"
+            "$ref": "s0"
           }
         },
         {
@@ -335,7 +275,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s8"
+            "$ref": "s4"
           }
         },
         {
@@ -362,7 +302,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s3"
+            "$ref": "s0"
           }
         },
         {
@@ -372,7 +312,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s8"
+            "$ref": "s4"
           }
         },
         {
@@ -399,7 +339,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s3"
+            "$ref": "s0"
           }
         },
         {
@@ -410,7 +350,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s8"
+            "$ref": "s4"
           }
         },
         {
@@ -579,7 +519,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s3"
+            "$ref": "s0"
           }
         },
         {
@@ -589,7 +529,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s3"
+            "$ref": "s0"
           }
         },
         {
@@ -599,7 +539,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s3"
+            "$ref": "s0"
           }
         },
         {
@@ -609,7 +549,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s3"
+            "$ref": "s0"
           }
         },
         {
@@ -620,7 +560,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s8"
+            "$ref": "s4"
           }
         }
       ],
@@ -725,67 +665,25 @@
         }
       ],
       "files": [],
-      "initial_display_history": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "archived one",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "archived one"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m2",
-          "role": "assistant",
-          "content": "archived two",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "archived two"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m3",
-          "role": "user",
-          "content": "active three",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "active three"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "msg_id": "m4",
-          "role": "assistant",
-          "content": "active four",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "active four"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "initial_display_history": {
+        "$ref": "s1"
+      },
       "steps": [
         {
           "op": "log",
           "args": {},
           "history_pushes": 0,
           "ok": {
-            "$ref": "s2"
+            "active_start": 2,
+            "cursor": 0,
+            "global_active_start": 2,
+            "has_more_before": false,
+            "messages": {
+              "$ref": "s1"
+            },
+            "next_before": 0,
+            "total_messages": 2,
+            "total_turns": 2
           }
         },
         {
@@ -1135,7 +1033,16 @@
           },
           "history_pushes": 0,
           "ok": {
-            "$ref": "s2"
+            "active_start": 2,
+            "cursor": 0,
+            "global_active_start": 2,
+            "has_more_before": false,
+            "messages": {
+              "$ref": "s1"
+            },
+            "next_before": 0,
+            "total_messages": 2,
+            "total_turns": 2
           }
         },
         {
@@ -1197,7 +1104,16 @@
           "args": {},
           "history_pushes": 0,
           "ok": {
-            "$ref": "s2"
+            "active_start": 2,
+            "cursor": 0,
+            "global_active_start": 2,
+            "has_more_before": false,
+            "messages": {
+              "$ref": "s1"
+            },
+            "next_before": 0,
+            "total_messages": 2,
+            "total_turns": 2
           }
         },
         {
@@ -1384,53 +1300,13 @@
       "archived": [],
       "active": [
         {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "do the thing",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "do the thing"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s13"
         },
         {
-          "msg_id": "m2",
-          "role": "assistant",
-          "content": "checking",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "checking"
-            },
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "read_file",
-              "input": {
-                "path": "notes.md"
-              }
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s9"
         },
         {
-          "msg_id": "m3",
-          "role": "user",
-          "content": "file contents",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "file contents",
-              "is_error": false
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s10"
         },
         {
           "msg_id": "m4",
@@ -1446,45 +1322,47 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "msg_id": "m5",
-          "role": "user",
-          "content": "thanks",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "thanks"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s75"
         },
         {
-          "msg_id": "m6",
-          "role": "assistant",
-          "content": "any time",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "any time"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s14"
         }
       ],
       "files": [],
-      "initial_display_history": {
-        "$ref": "s1"
-      },
+      "initial_display_history": [
+        {
+          "$ref": "s13"
+        },
+        {
+          "$ref": "s6"
+        },
+        {
+          "$ref": "s75"
+        },
+        {
+          "$ref": "s14"
+        }
+      ],
       "steps": [
         {
           "op": "log",
           "args": {},
           "history_pushes": 0,
           "ok": {
-            "messages": {
-              "$ref": "s1"
-            },
+            "messages": [
+              {
+                "$ref": "s13"
+              },
+              {
+                "$ref": "s6"
+              },
+              {
+                "$ref": "s75"
+              },
+              {
+                "$ref": "s14"
+              }
+            ],
             "active_start": 0,
             "cursor": 0,
             "next_before": 0,
@@ -1503,30 +1381,10 @@
           "ok": {
             "messages": [
               {
-                "msg_id": "m5",
-                "role": "user",
-                "content": "thanks",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "thanks"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s75"
               },
               {
-                "msg_id": "m6",
-                "role": "assistant",
-                "content": "any time",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "any time"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s14"
               }
             ],
             "active_start": 0,
@@ -1545,9 +1403,20 @@
           },
           "history_pushes": 0,
           "ok": {
-            "messages": {
-              "$ref": "s1"
-            },
+            "messages": [
+              {
+                "$ref": "s13"
+              },
+              {
+                "$ref": "s6"
+              },
+              {
+                "$ref": "s75"
+              },
+              {
+                "$ref": "s14"
+              }
+            ],
             "active_start": 0,
             "cursor": 0,
             "next_before": 0,
@@ -1566,30 +1435,10 @@
           "ok": {
             "messages": [
               {
-                "msg_id": "m5",
-                "role": "user",
-                "content": "thanks",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "thanks"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s75"
               },
               {
-                "msg_id": "m6",
-                "role": "assistant",
-                "content": "any time",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "any time"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s14"
               }
             ],
             "active_start": 0,
@@ -1608,17 +1457,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m6",
-            "role": "assistant",
-            "content": "any time",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "any time"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s14"
           }
         },
         {
@@ -1628,35 +1467,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m4",
-            "role": "assistant",
-            "content": "checking\ndone",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "checking"
-              },
-              {
-                "type": "tool_use",
-                "id": "t1",
-                "name": "read_file",
-                "input": {
-                  "path": "notes.md"
-                }
-              },
-              {
-                "type": "tool_result",
-                "tool_use_id": "t1",
-                "content": "file contents",
-                "is_error": false
-              },
-              {
-                "type": "text",
-                "text": "done"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s6"
           }
         },
         {
@@ -1667,17 +1478,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m5",
-            "role": "user",
-            "content": "thanks",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "thanks"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s75"
           }
         },
         {
@@ -1688,35 +1489,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m4",
-            "role": "assistant",
-            "content": "checking\ndone",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "checking"
-              },
-              {
-                "type": "tool_use",
-                "id": "t1",
-                "name": "read_file",
-                "input": {
-                  "path": "notes.md"
-                }
-              },
-              {
-                "type": "tool_result",
-                "tool_use_id": "t1",
-                "content": "file contents",
-                "is_error": false
-              },
-              {
-                "type": "text",
-                "text": "done"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s6"
           }
         }
       ],
@@ -1742,59 +1515,19 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "msg_id": "m2",
-          "role": "assistant",
-          "content": "carrying on",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "carrying on"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s12"
         },
         {
-          "msg_id": "m3",
-          "role": "user",
-          "content": "next",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "next"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s83"
         }
       ],
       "files": [],
       "initial_display_history": [
         {
-          "msg_id": "m2",
-          "role": "assistant",
-          "content": "carrying on",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "carrying on"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s12"
         },
         {
-          "msg_id": "m3",
-          "role": "user",
-          "content": "next",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "next"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s83"
         }
       ],
       "steps": [
@@ -1805,30 +1538,10 @@
           "ok": {
             "messages": [
               {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "carrying on",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "carrying on"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s12"
               },
               {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "next",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "next"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s83"
               }
             ],
             "active_start": 0,
@@ -1847,17 +1560,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m2",
-            "role": "assistant",
-            "content": "carrying on",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "carrying on"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s12"
           }
         },
         {
@@ -1912,17 +1615,7 @@
               "timestamp": "2026-01-01T00:00:00Z"
             },
             {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "next",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "next"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
+              "$ref": "s83"
             }
           ]
         }
@@ -2055,22 +1748,7 @@
       "name": "image data is embedded for the active tail only",
       "archived": [
         {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "archived image",
-          "images": [
-            {
-              "path": "<tmp>/pic.bin",
-              "caption": "old"
-            }
-          ],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "archived image"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s11"
         }
       ],
       "active": [
@@ -2101,22 +1779,7 @@
       ],
       "initial_display_history": [
         {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "archived image",
-          "images": [
-            {
-              "path": "<tmp>/pic.bin",
-              "caption": "old"
-            }
-          ],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "archived image"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s11"
         },
         {
           "msg_id": "m2",
@@ -2147,22 +1810,7 @@
           "ok": {
             "messages": [
               {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "archived image",
-                "images": [
-                  {
-                    "path": "<tmp>/pic.bin",
-                    "caption": "old"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived image"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s11"
               },
               {
                 "msg_id": "m2",
@@ -2202,22 +1850,7 @@
           "ok": {
             "messages": [
               {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "archived image",
-                "images": [
-                  {
-                    "path": "<tmp>/pic.bin",
-                    "caption": "old"
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived image"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s11"
               }
             ],
             "active_start": 1,
@@ -2320,17 +1953,7 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "msg_id": "m3",
-          "role": "user",
-          "content": "last user",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "last user"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s16"
         },
         {
           "msg_id": "m4",
@@ -2376,17 +1999,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m3",
-            "role": "user",
-            "content": "last user",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "last user"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s16"
           }
         },
         {
@@ -2397,17 +2010,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m3",
-            "role": "user",
-            "content": "last user",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "last user"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s16"
           }
         },
         {
@@ -2438,17 +2041,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m3",
-            "role": "user",
-            "content": "last user",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "last user"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s16"
           }
         },
         {
@@ -2748,35 +2341,7 @@
           "err": {
             "code": "invalid_request",
             "message": "Missing required argument: ref"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": ""
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by -1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by -1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "edit",
@@ -2787,35 +2352,7 @@
           "err": {
             "code": "invalid_request",
             "message": "Missing required argument: ref"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": ""
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by -1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by -1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "edit",
@@ -2826,35 +2363,7 @@
           "err": {
             "code": "invalid_request",
             "message": "Missing required argument: content"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": ""
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by -1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by -1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "edit",
@@ -2866,35 +2375,7 @@
           "err": {
             "code": "not_found",
             "message": "message not found: nope"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": ""
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by -1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by -1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "edit",
@@ -2906,35 +2387,7 @@
           "err": {
             "code": "not_found",
             "message": "Message index 99 out of range (conversation has 2 messages)"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": ""
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by -1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by -1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         }
       ],
       "note": "each step's engine snapshot shows the edit landed on the raw store by msg_id"
@@ -2944,53 +2397,13 @@
       "archived": [],
       "active": [
         {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "do the thing",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "do the thing"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s13"
         },
         {
-          "msg_id": "m2",
-          "role": "assistant",
-          "content": "checking",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "checking"
-            },
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "read_file",
-              "input": {
-                "path": "notes.md"
-              }
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s9"
         },
         {
-          "msg_id": "m3",
-          "role": "user",
-          "content": "file contents",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "file contents",
-              "is_error": false
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s10"
         },
         {
           "msg_id": "m4",
@@ -3009,48 +2422,10 @@
       "files": [],
       "initial_display_history": [
         {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "do the thing",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "do the thing"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s13"
         },
         {
-          "msg_id": "m4",
-          "role": "assistant",
-          "content": "checking\ndone",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "checking"
-            },
-            {
-              "type": "tool_use",
-              "id": "t1",
-              "name": "read_file",
-              "input": {
-                "path": "notes.md"
-              }
-            },
-            {
-              "type": "tool_result",
-              "tool_use_id": "t1",
-              "content": "file contents",
-              "is_error": false
-            },
-            {
-              "type": "text",
-              "text": "done"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
+          "$ref": "s6"
         }
       ],
       "steps": [
@@ -3067,53 +2442,13 @@
           },
           "engine_after": [
             {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "do the thing",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "do the thing"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
+              "$ref": "s13"
             },
             {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "checking",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "checking"
-                },
-                {
-                  "type": "tool_use",
-                  "id": "t1",
-                  "name": "read_file",
-                  "input": {
-                    "path": "notes.md"
-                  }
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
+              "$ref": "s9"
             },
             {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "file contents",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "tool_result",
-                  "tool_use_id": "t1",
-                  "content": "file contents",
-                  "is_error": false
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
+              "$ref": "s10"
             },
             {
               "msg_id": "m4",
@@ -3143,53 +2478,13 @@
           },
           "engine_after": [
             {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "do the thing",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "do the thing"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
+              "$ref": "s13"
             },
             {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "checking",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "checking"
-                },
-                {
-                  "type": "tool_use",
-                  "id": "t1",
-                  "name": "read_file",
-                  "input": {
-                    "path": "notes.md"
-                  }
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
+              "$ref": "s9"
             },
             {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "file contents",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "tool_result",
-                  "tool_use_id": "t1",
-                  "content": "file contents",
-                  "is_error": false
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
+              "$ref": "s10"
             },
             {
               "msg_id": "m4",
@@ -3399,22 +2694,7 @@
           "err": {
             "code": "invalid_request",
             "message": "Missing required argument: refs"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "C",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "C"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "delete",
@@ -3427,22 +2707,7 @@
           "err": {
             "code": "invalid_request",
             "message": "refs must be an array of strings"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "C",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "C"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "delete",
@@ -3452,22 +2717,7 @@
           "history_pushes": 0,
           "ok": {
             "deleted": []
-          },
-          "engine_after": [
-            {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "C",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "C"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "delete",
@@ -3478,22 +2728,7 @@
           "err": {
             "code": "invalid_request",
             "message": "Missing required argument: refs"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "C",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "C"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "delete",
@@ -3506,22 +2741,7 @@
           "err": {
             "code": "not_found",
             "message": "Message index 99 out of range (conversation has 1 messages)"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "C",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "C"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         }
       ],
       "note": "refs resolve first, then delete runs in order — a failure mid-list keeps the deletions that already happened"
@@ -3530,7 +2750,7 @@
       "name": "delete resolves every ref before deleting any",
       "archived": [],
       "active": {
-        "$ref": "s9"
+        "$ref": "s5"
       },
       "files": [],
       "steps": [
@@ -3549,21 +2769,9 @@
               "m2"
             ]
           },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "A",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "A"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "engine_after": {
+            "$ref": "s84"
+          }
         }
       ],
       "note": "both refs are relative; the second resolves against the pre-delete list, so `last` and `-2` name two different messages rather than shifting"
@@ -3632,28 +2840,7 @@
           "args": {},
           "history_pushes": 0,
           "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "alternatives": [
-              {
-                "index": 0,
-                "position": 1,
-                "active": false,
-                "content": "First answer",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "index": 1,
-                "position": 2,
-                "active": true,
-                "content": "Second answer",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ]
+            "$ref": "s8"
           }
         },
         {
@@ -3663,28 +2850,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "alternatives": [
-              {
-                "index": 0,
-                "position": 1,
-                "active": false,
-                "content": "First answer",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "index": 1,
-                "position": 2,
-                "active": true,
-                "content": "Second answer",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ]
+            "$ref": "s8"
           }
         },
         {
@@ -3694,28 +2860,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "alternatives": [
-              {
-                "index": 0,
-                "position": 1,
-                "active": false,
-                "content": "First answer",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "index": 1,
-                "position": 2,
-                "active": true,
-                "content": "Second answer",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ]
+            "$ref": "s8"
           }
         },
         {
@@ -3754,7 +2899,7 @@
             "content": "First answer"
           },
           "engine_after": {
-            "$ref": "s5"
+            "$ref": "s3"
           }
         },
         {
@@ -3769,9 +2914,6 @@
             "position": 1,
             "alt_count": 2,
             "content": "First answer"
-          },
-          "engine_after": {
-            "$ref": "s5"
           }
         },
         {
@@ -3788,7 +2930,7 @@
             "content": "Second answer"
           },
           "engine_after": {
-            "$ref": "s4"
+            "$ref": "s2"
           }
         },
         {
@@ -3803,9 +2945,6 @@
             "position": 2,
             "alt_count": 2,
             "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s4"
           }
         },
         {
@@ -3822,7 +2961,7 @@
             "content": "First answer"
           },
           "engine_after": {
-            "$ref": "s5"
+            "$ref": "s3"
           }
         },
         {
@@ -3839,7 +2978,7 @@
             "content": "Second answer"
           },
           "engine_after": {
-            "$ref": "s4"
+            "$ref": "s2"
           }
         },
         {
@@ -3856,7 +2995,7 @@
             "content": "First answer"
           },
           "engine_after": {
-            "$ref": "s5"
+            "$ref": "s3"
           }
         },
         {
@@ -3868,9 +3007,6 @@
           "err": {
             "code": "invalid_request",
             "message": "unknown alt direction: sideways"
-          },
-          "engine_after": {
-            "$ref": "s5"
           }
         },
         {
@@ -3885,7 +3021,7 @@
             "content": "Second answer"
           },
           "engine_after": {
-            "$ref": "s4"
+            "$ref": "s2"
           }
         },
         {
@@ -3902,7 +3038,7 @@
             "content": "First answer"
           },
           "engine_after": {
-            "$ref": "s5"
+            "$ref": "s3"
           }
         },
         {
@@ -3919,7 +3055,7 @@
             "content": "Second answer"
           },
           "engine_after": {
-            "$ref": "s4"
+            "$ref": "s2"
           }
         },
         {
@@ -3931,9 +3067,6 @@
           "err": {
             "code": "invalid_request",
             "message": "alternate index 3 out of range (message has 2 alternate response(s))"
-          },
-          "engine_after": {
-            "$ref": "s4"
           }
         },
         {
@@ -3950,7 +3083,7 @@
             "content": "First answer"
           },
           "engine_after": {
-            "$ref": "s5"
+            "$ref": "s3"
           }
         },
         {
@@ -3967,7 +3100,7 @@
             "content": "Second answer"
           },
           "engine_after": {
-            "$ref": "s4"
+            "$ref": "s2"
           }
         },
         {
@@ -3979,9 +3112,6 @@
           "err": {
             "code": "invalid_request",
             "message": "alternate position 0 out of range (message has 2 alternate response(s))"
-          },
-          "engine_after": {
-            "$ref": "s4"
           }
         },
         {
@@ -3993,9 +3123,6 @@
           "err": {
             "code": "invalid_request",
             "message": "alternate position 3 out of range (message has 2 alternate response(s))"
-          },
-          "engine_after": {
-            "$ref": "s4"
           }
         },
         {
@@ -4014,7 +3141,7 @@
             "content": "First answer"
           },
           "engine_after": {
-            "$ref": "s5"
+            "$ref": "s3"
           }
         },
         {
@@ -4030,9 +3157,6 @@
             "position": 1,
             "alt_count": 2,
             "content": "First answer"
-          },
-          "engine_after": {
-            "$ref": "s5"
           }
         },
         {
@@ -4049,7 +3173,7 @@
             "content": "Second answer"
           },
           "engine_after": {
-            "$ref": "s4"
+            "$ref": "s2"
           }
         },
         {
@@ -4064,9 +3188,6 @@
             "position": 2,
             "alt_count": 2,
             "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s4"
           }
         },
         {
@@ -4081,9 +3202,6 @@
             "position": 2,
             "alt_count": 2,
             "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s4"
           }
         },
         {
@@ -4096,9 +3214,6 @@
           "err": {
             "code": "invalid_request",
             "message": "Alternate response selection only applies to assistant messages"
-          },
-          "engine_after": {
-            "$ref": "s4"
           }
         },
         {
@@ -4106,28 +3221,7 @@
           "args": {},
           "history_pushes": 0,
           "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "alternatives": [
-              {
-                "index": 0,
-                "position": 1,
-                "active": false,
-                "content": "First answer",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "index": 1,
-                "position": 2,
-                "active": true,
-                "content": "Second answer",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ]
+            "$ref": "s8"
           }
         }
       ]
@@ -4466,9 +3560,216 @@
     {
       "name": "the default log bound is 64 user turns",
       "archived": [],
-      "active": {
-        "$ref": "s0"
-      },
+      "active": [
+        {
+          "content": "turn 1",
+          "content_blocks": [
+            {
+              "text": "turn 1",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "$ref": "s74"
+        },
+        {
+          "$ref": "s80"
+        },
+        {
+          "$ref": "s77"
+        },
+        {
+          "$ref": "s76"
+        },
+        {
+          "$ref": "s78"
+        },
+        {
+          "$ref": "s81"
+        },
+        {
+          "$ref": "s82"
+        },
+        {
+          "$ref": "s79"
+        },
+        {
+          "$ref": "s27"
+        },
+        {
+          "$ref": "s33"
+        },
+        {
+          "$ref": "s30"
+        },
+        {
+          "$ref": "s23"
+        },
+        {
+          "$ref": "s32"
+        },
+        {
+          "$ref": "s65"
+        },
+        {
+          "$ref": "s62"
+        },
+        {
+          "$ref": "s52"
+        },
+        {
+          "$ref": "s45"
+        },
+        {
+          "$ref": "s64"
+        },
+        {
+          "$ref": "s31"
+        },
+        {
+          "$ref": "s57"
+        },
+        {
+          "$ref": "s21"
+        },
+        {
+          "$ref": "s44"
+        },
+        {
+          "$ref": "s18"
+        },
+        {
+          "$ref": "s39"
+        },
+        {
+          "$ref": "s60"
+        },
+        {
+          "$ref": "s47"
+        },
+        {
+          "$ref": "s63"
+        },
+        {
+          "$ref": "s58"
+        },
+        {
+          "$ref": "s22"
+        },
+        {
+          "$ref": "s69"
+        },
+        {
+          "$ref": "s71"
+        },
+        {
+          "$ref": "s56"
+        },
+        {
+          "$ref": "s46"
+        },
+        {
+          "$ref": "s38"
+        },
+        {
+          "$ref": "s48"
+        },
+        {
+          "$ref": "s20"
+        },
+        {
+          "$ref": "s36"
+        },
+        {
+          "$ref": "s67"
+        },
+        {
+          "$ref": "s72"
+        },
+        {
+          "$ref": "s35"
+        },
+        {
+          "$ref": "s73"
+        },
+        {
+          "$ref": "s34"
+        },
+        {
+          "$ref": "s59"
+        },
+        {
+          "$ref": "s28"
+        },
+        {
+          "$ref": "s70"
+        },
+        {
+          "$ref": "s25"
+        },
+        {
+          "$ref": "s61"
+        },
+        {
+          "$ref": "s50"
+        },
+        {
+          "$ref": "s53"
+        },
+        {
+          "$ref": "s51"
+        },
+        {
+          "$ref": "s26"
+        },
+        {
+          "$ref": "s17"
+        },
+        {
+          "$ref": "s19"
+        },
+        {
+          "$ref": "s37"
+        },
+        {
+          "$ref": "s66"
+        },
+        {
+          "$ref": "s68"
+        },
+        {
+          "$ref": "s41"
+        },
+        {
+          "$ref": "s54"
+        },
+        {
+          "$ref": "s40"
+        },
+        {
+          "$ref": "s55"
+        },
+        {
+          "$ref": "s24"
+        },
+        {
+          "$ref": "s42"
+        },
+        {
+          "$ref": "s49"
+        },
+        {
+          "$ref": "s43"
+        },
+        {
+          "$ref": "s29"
+        }
+      ],
       "files": [],
       "steps": [
         {
@@ -4478,836 +3779,196 @@
           "ok": {
             "messages": [
               {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "turn 3",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 3"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s80"
               },
               {
-                "msg_id": "m4",
-                "role": "user",
-                "content": "turn 4",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 4"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s77"
               },
               {
-                "msg_id": "m5",
-                "role": "user",
-                "content": "turn 5",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 5"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s76"
               },
               {
-                "msg_id": "m6",
-                "role": "user",
-                "content": "turn 6",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 6"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s78"
               },
               {
-                "msg_id": "m7",
-                "role": "user",
-                "content": "turn 7",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 7"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s81"
               },
               {
-                "msg_id": "m8",
-                "role": "user",
-                "content": "turn 8",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 8"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s82"
               },
               {
-                "msg_id": "m9",
-                "role": "user",
-                "content": "turn 9",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 9"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s79"
               },
               {
-                "msg_id": "m10",
-                "role": "user",
-                "content": "turn 10",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 10"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s27"
               },
               {
-                "msg_id": "m11",
-                "role": "user",
-                "content": "turn 11",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 11"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s33"
               },
               {
-                "msg_id": "m12",
-                "role": "user",
-                "content": "turn 12",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 12"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s30"
               },
               {
-                "msg_id": "m13",
-                "role": "user",
-                "content": "turn 13",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 13"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s23"
               },
               {
-                "msg_id": "m14",
-                "role": "user",
-                "content": "turn 14",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 14"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s32"
               },
               {
-                "msg_id": "m15",
-                "role": "user",
-                "content": "turn 15",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 15"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s65"
               },
               {
-                "msg_id": "m16",
-                "role": "user",
-                "content": "turn 16",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 16"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s62"
               },
               {
-                "msg_id": "m17",
-                "role": "user",
-                "content": "turn 17",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 17"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s52"
               },
               {
-                "msg_id": "m18",
-                "role": "user",
-                "content": "turn 18",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 18"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s45"
               },
               {
-                "msg_id": "m19",
-                "role": "user",
-                "content": "turn 19",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 19"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s64"
               },
               {
-                "msg_id": "m20",
-                "role": "user",
-                "content": "turn 20",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 20"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s31"
               },
               {
-                "msg_id": "m21",
-                "role": "user",
-                "content": "turn 21",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 21"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s57"
               },
               {
-                "msg_id": "m22",
-                "role": "user",
-                "content": "turn 22",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 22"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s21"
               },
               {
-                "msg_id": "m23",
-                "role": "user",
-                "content": "turn 23",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 23"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s44"
               },
               {
-                "msg_id": "m24",
-                "role": "user",
-                "content": "turn 24",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 24"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s18"
               },
               {
-                "msg_id": "m25",
-                "role": "user",
-                "content": "turn 25",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 25"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s39"
               },
               {
-                "msg_id": "m26",
-                "role": "user",
-                "content": "turn 26",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 26"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s60"
               },
               {
-                "msg_id": "m27",
-                "role": "user",
-                "content": "turn 27",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 27"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s47"
               },
               {
-                "msg_id": "m28",
-                "role": "user",
-                "content": "turn 28",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 28"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s63"
               },
               {
-                "msg_id": "m29",
-                "role": "user",
-                "content": "turn 29",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 29"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s58"
               },
               {
-                "msg_id": "m30",
-                "role": "user",
-                "content": "turn 30",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 30"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s22"
               },
               {
-                "msg_id": "m31",
-                "role": "user",
-                "content": "turn 31",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 31"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s69"
               },
               {
-                "msg_id": "m32",
-                "role": "user",
-                "content": "turn 32",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 32"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s71"
               },
               {
-                "msg_id": "m33",
-                "role": "user",
-                "content": "turn 33",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 33"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s56"
               },
               {
-                "msg_id": "m34",
-                "role": "user",
-                "content": "turn 34",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 34"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s46"
               },
               {
-                "msg_id": "m35",
-                "role": "user",
-                "content": "turn 35",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 35"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s38"
               },
               {
-                "msg_id": "m36",
-                "role": "user",
-                "content": "turn 36",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 36"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s48"
               },
               {
-                "msg_id": "m37",
-                "role": "user",
-                "content": "turn 37",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 37"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s20"
               },
               {
-                "msg_id": "m38",
-                "role": "user",
-                "content": "turn 38",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 38"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s36"
               },
               {
-                "msg_id": "m39",
-                "role": "user",
-                "content": "turn 39",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 39"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s67"
               },
               {
-                "msg_id": "m40",
-                "role": "user",
-                "content": "turn 40",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 40"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s72"
               },
               {
-                "msg_id": "m41",
-                "role": "user",
-                "content": "turn 41",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 41"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s35"
               },
               {
-                "msg_id": "m42",
-                "role": "user",
-                "content": "turn 42",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 42"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s73"
               },
               {
-                "msg_id": "m43",
-                "role": "user",
-                "content": "turn 43",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 43"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s34"
               },
               {
-                "msg_id": "m44",
-                "role": "user",
-                "content": "turn 44",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 44"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s59"
               },
               {
-                "msg_id": "m45",
-                "role": "user",
-                "content": "turn 45",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 45"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s28"
               },
               {
-                "msg_id": "m46",
-                "role": "user",
-                "content": "turn 46",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 46"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s70"
               },
               {
-                "msg_id": "m47",
-                "role": "user",
-                "content": "turn 47",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 47"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s25"
               },
               {
-                "msg_id": "m48",
-                "role": "user",
-                "content": "turn 48",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 48"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s61"
               },
               {
-                "msg_id": "m49",
-                "role": "user",
-                "content": "turn 49",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 49"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s50"
               },
               {
-                "msg_id": "m50",
-                "role": "user",
-                "content": "turn 50",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 50"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s53"
               },
               {
-                "msg_id": "m51",
-                "role": "user",
-                "content": "turn 51",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 51"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s51"
               },
               {
-                "msg_id": "m52",
-                "role": "user",
-                "content": "turn 52",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 52"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s26"
               },
               {
-                "msg_id": "m53",
-                "role": "user",
-                "content": "turn 53",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 53"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s17"
               },
               {
-                "msg_id": "m54",
-                "role": "user",
-                "content": "turn 54",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 54"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s19"
               },
               {
-                "msg_id": "m55",
-                "role": "user",
-                "content": "turn 55",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 55"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s37"
               },
               {
-                "msg_id": "m56",
-                "role": "user",
-                "content": "turn 56",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 56"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s66"
               },
               {
-                "msg_id": "m57",
-                "role": "user",
-                "content": "turn 57",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 57"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s68"
               },
               {
-                "msg_id": "m58",
-                "role": "user",
-                "content": "turn 58",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 58"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s41"
               },
               {
-                "msg_id": "m59",
-                "role": "user",
-                "content": "turn 59",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 59"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s54"
               },
               {
-                "msg_id": "m60",
-                "role": "user",
-                "content": "turn 60",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 60"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s40"
               },
               {
-                "msg_id": "m61",
-                "role": "user",
-                "content": "turn 61",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 61"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s55"
               },
               {
-                "msg_id": "m62",
-                "role": "user",
-                "content": "turn 62",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 62"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s24"
               },
               {
-                "msg_id": "m63",
-                "role": "user",
-                "content": "turn 63",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 63"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s42"
               },
               {
-                "msg_id": "m64",
-                "role": "user",
-                "content": "turn 64",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 64"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s49"
               },
               {
-                "msg_id": "m65",
-                "role": "user",
-                "content": "turn 65",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 65"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s43"
               },
               {
-                "msg_id": "m66",
-                "role": "user",
-                "content": "turn 66",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 66"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s29"
               }
             ],
             "active_start": 0,
@@ -5328,849 +3989,199 @@
           "ok": {
             "messages": [
               {
-                "msg_id": "m2",
-                "role": "user",
-                "content": "turn 2",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 2"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "turn 3",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 3"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m4",
-                "role": "user",
-                "content": "turn 4",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 4"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m5",
-                "role": "user",
-                "content": "turn 5",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 5"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m6",
-                "role": "user",
-                "content": "turn 6",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 6"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m7",
-                "role": "user",
-                "content": "turn 7",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 7"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m8",
-                "role": "user",
-                "content": "turn 8",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 8"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m9",
-                "role": "user",
-                "content": "turn 9",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 9"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m10",
-                "role": "user",
-                "content": "turn 10",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 10"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m11",
-                "role": "user",
-                "content": "turn 11",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 11"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m12",
-                "role": "user",
-                "content": "turn 12",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 12"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m13",
-                "role": "user",
-                "content": "turn 13",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 13"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m14",
-                "role": "user",
-                "content": "turn 14",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 14"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m15",
-                "role": "user",
-                "content": "turn 15",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 15"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m16",
-                "role": "user",
-                "content": "turn 16",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 16"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m17",
-                "role": "user",
-                "content": "turn 17",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 17"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m18",
-                "role": "user",
-                "content": "turn 18",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 18"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m19",
-                "role": "user",
-                "content": "turn 19",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 19"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m20",
-                "role": "user",
-                "content": "turn 20",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 20"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m21",
-                "role": "user",
-                "content": "turn 21",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 21"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m22",
-                "role": "user",
-                "content": "turn 22",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 22"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m23",
-                "role": "user",
-                "content": "turn 23",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 23"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m24",
-                "role": "user",
-                "content": "turn 24",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 24"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m25",
-                "role": "user",
-                "content": "turn 25",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 25"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m26",
-                "role": "user",
-                "content": "turn 26",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 26"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m27",
-                "role": "user",
-                "content": "turn 27",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 27"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m28",
-                "role": "user",
-                "content": "turn 28",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 28"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m29",
-                "role": "user",
-                "content": "turn 29",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 29"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m30",
-                "role": "user",
-                "content": "turn 30",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 30"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m31",
-                "role": "user",
-                "content": "turn 31",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 31"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m32",
-                "role": "user",
-                "content": "turn 32",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 32"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m33",
-                "role": "user",
-                "content": "turn 33",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 33"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m34",
-                "role": "user",
-                "content": "turn 34",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 34"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m35",
-                "role": "user",
-                "content": "turn 35",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 35"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m36",
-                "role": "user",
-                "content": "turn 36",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 36"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m37",
-                "role": "user",
-                "content": "turn 37",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 37"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m38",
-                "role": "user",
-                "content": "turn 38",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 38"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m39",
-                "role": "user",
-                "content": "turn 39",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 39"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m40",
-                "role": "user",
-                "content": "turn 40",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 40"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m41",
-                "role": "user",
-                "content": "turn 41",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 41"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m42",
-                "role": "user",
-                "content": "turn 42",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 42"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m43",
-                "role": "user",
-                "content": "turn 43",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 43"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m44",
-                "role": "user",
-                "content": "turn 44",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 44"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m45",
-                "role": "user",
-                "content": "turn 45",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 45"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m46",
-                "role": "user",
-                "content": "turn 46",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 46"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m47",
-                "role": "user",
-                "content": "turn 47",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 47"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m48",
-                "role": "user",
-                "content": "turn 48",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 48"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m49",
-                "role": "user",
-                "content": "turn 49",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 49"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m50",
-                "role": "user",
-                "content": "turn 50",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 50"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m51",
-                "role": "user",
-                "content": "turn 51",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 51"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m52",
-                "role": "user",
-                "content": "turn 52",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 52"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m53",
-                "role": "user",
-                "content": "turn 53",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 53"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m54",
-                "role": "user",
-                "content": "turn 54",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 54"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m55",
-                "role": "user",
-                "content": "turn 55",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 55"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m56",
-                "role": "user",
-                "content": "turn 56",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 56"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m57",
-                "role": "user",
-                "content": "turn 57",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 57"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m58",
-                "role": "user",
-                "content": "turn 58",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 58"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m59",
-                "role": "user",
-                "content": "turn 59",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 59"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m60",
-                "role": "user",
-                "content": "turn 60",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 60"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m61",
-                "role": "user",
-                "content": "turn 61",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 61"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m62",
-                "role": "user",
-                "content": "turn 62",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 62"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m63",
-                "role": "user",
-                "content": "turn 63",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 63"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m64",
-                "role": "user",
-                "content": "turn 64",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 64"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m65",
-                "role": "user",
-                "content": "turn 65",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 65"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m66",
-                "role": "user",
-                "content": "turn 66",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "turn 66"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s74"
+              },
+              {
+                "$ref": "s80"
+              },
+              {
+                "$ref": "s77"
+              },
+              {
+                "$ref": "s76"
+              },
+              {
+                "$ref": "s78"
+              },
+              {
+                "$ref": "s81"
+              },
+              {
+                "$ref": "s82"
+              },
+              {
+                "$ref": "s79"
+              },
+              {
+                "$ref": "s27"
+              },
+              {
+                "$ref": "s33"
+              },
+              {
+                "$ref": "s30"
+              },
+              {
+                "$ref": "s23"
+              },
+              {
+                "$ref": "s32"
+              },
+              {
+                "$ref": "s65"
+              },
+              {
+                "$ref": "s62"
+              },
+              {
+                "$ref": "s52"
+              },
+              {
+                "$ref": "s45"
+              },
+              {
+                "$ref": "s64"
+              },
+              {
+                "$ref": "s31"
+              },
+              {
+                "$ref": "s57"
+              },
+              {
+                "$ref": "s21"
+              },
+              {
+                "$ref": "s44"
+              },
+              {
+                "$ref": "s18"
+              },
+              {
+                "$ref": "s39"
+              },
+              {
+                "$ref": "s60"
+              },
+              {
+                "$ref": "s47"
+              },
+              {
+                "$ref": "s63"
+              },
+              {
+                "$ref": "s58"
+              },
+              {
+                "$ref": "s22"
+              },
+              {
+                "$ref": "s69"
+              },
+              {
+                "$ref": "s71"
+              },
+              {
+                "$ref": "s56"
+              },
+              {
+                "$ref": "s46"
+              },
+              {
+                "$ref": "s38"
+              },
+              {
+                "$ref": "s48"
+              },
+              {
+                "$ref": "s20"
+              },
+              {
+                "$ref": "s36"
+              },
+              {
+                "$ref": "s67"
+              },
+              {
+                "$ref": "s72"
+              },
+              {
+                "$ref": "s35"
+              },
+              {
+                "$ref": "s73"
+              },
+              {
+                "$ref": "s34"
+              },
+              {
+                "$ref": "s59"
+              },
+              {
+                "$ref": "s28"
+              },
+              {
+                "$ref": "s70"
+              },
+              {
+                "$ref": "s25"
+              },
+              {
+                "$ref": "s61"
+              },
+              {
+                "$ref": "s50"
+              },
+              {
+                "$ref": "s53"
+              },
+              {
+                "$ref": "s51"
+              },
+              {
+                "$ref": "s26"
+              },
+              {
+                "$ref": "s17"
+              },
+              {
+                "$ref": "s19"
+              },
+              {
+                "$ref": "s37"
+              },
+              {
+                "$ref": "s66"
+              },
+              {
+                "$ref": "s68"
+              },
+              {
+                "$ref": "s41"
+              },
+              {
+                "$ref": "s54"
+              },
+              {
+                "$ref": "s40"
+              },
+              {
+                "$ref": "s55"
+              },
+              {
+                "$ref": "s24"
+              },
+              {
+                "$ref": "s42"
+              },
+              {
+                "$ref": "s49"
+              },
+              {
+                "$ref": "s43"
+              },
+              {
+                "$ref": "s29"
               }
             ],
             "active_start": 0,
@@ -6189,9 +4200,216 @@
           },
           "history_pushes": 0,
           "ok": {
-            "messages": {
-              "$ref": "s0"
-            },
+            "messages": [
+              {
+                "content": "turn 1",
+                "content_blocks": [
+                  {
+                    "text": "turn 1",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "m1",
+                "role": "user",
+                "timestamp": "2026-01-01T00:00:00Z"
+              },
+              {
+                "$ref": "s74"
+              },
+              {
+                "$ref": "s80"
+              },
+              {
+                "$ref": "s77"
+              },
+              {
+                "$ref": "s76"
+              },
+              {
+                "$ref": "s78"
+              },
+              {
+                "$ref": "s81"
+              },
+              {
+                "$ref": "s82"
+              },
+              {
+                "$ref": "s79"
+              },
+              {
+                "$ref": "s27"
+              },
+              {
+                "$ref": "s33"
+              },
+              {
+                "$ref": "s30"
+              },
+              {
+                "$ref": "s23"
+              },
+              {
+                "$ref": "s32"
+              },
+              {
+                "$ref": "s65"
+              },
+              {
+                "$ref": "s62"
+              },
+              {
+                "$ref": "s52"
+              },
+              {
+                "$ref": "s45"
+              },
+              {
+                "$ref": "s64"
+              },
+              {
+                "$ref": "s31"
+              },
+              {
+                "$ref": "s57"
+              },
+              {
+                "$ref": "s21"
+              },
+              {
+                "$ref": "s44"
+              },
+              {
+                "$ref": "s18"
+              },
+              {
+                "$ref": "s39"
+              },
+              {
+                "$ref": "s60"
+              },
+              {
+                "$ref": "s47"
+              },
+              {
+                "$ref": "s63"
+              },
+              {
+                "$ref": "s58"
+              },
+              {
+                "$ref": "s22"
+              },
+              {
+                "$ref": "s69"
+              },
+              {
+                "$ref": "s71"
+              },
+              {
+                "$ref": "s56"
+              },
+              {
+                "$ref": "s46"
+              },
+              {
+                "$ref": "s38"
+              },
+              {
+                "$ref": "s48"
+              },
+              {
+                "$ref": "s20"
+              },
+              {
+                "$ref": "s36"
+              },
+              {
+                "$ref": "s67"
+              },
+              {
+                "$ref": "s72"
+              },
+              {
+                "$ref": "s35"
+              },
+              {
+                "$ref": "s73"
+              },
+              {
+                "$ref": "s34"
+              },
+              {
+                "$ref": "s59"
+              },
+              {
+                "$ref": "s28"
+              },
+              {
+                "$ref": "s70"
+              },
+              {
+                "$ref": "s25"
+              },
+              {
+                "$ref": "s61"
+              },
+              {
+                "$ref": "s50"
+              },
+              {
+                "$ref": "s53"
+              },
+              {
+                "$ref": "s51"
+              },
+              {
+                "$ref": "s26"
+              },
+              {
+                "$ref": "s17"
+              },
+              {
+                "$ref": "s19"
+              },
+              {
+                "$ref": "s37"
+              },
+              {
+                "$ref": "s66"
+              },
+              {
+                "$ref": "s68"
+              },
+              {
+                "$ref": "s41"
+              },
+              {
+                "$ref": "s54"
+              },
+              {
+                "$ref": "s40"
+              },
+              {
+                "$ref": "s55"
+              },
+              {
+                "$ref": "s24"
+              },
+              {
+                "$ref": "s42"
+              },
+              {
+                "$ref": "s49"
+              },
+              {
+                "$ref": "s43"
+              },
+              {
+                "$ref": "s29"
+              }
+            ],
             "active_start": 0,
             "cursor": 0,
             "next_before": 0,
@@ -6208,9 +4426,216 @@
           },
           "history_pushes": 0,
           "ok": {
-            "messages": {
-              "$ref": "s0"
-            },
+            "messages": [
+              {
+                "content": "turn 1",
+                "content_blocks": [
+                  {
+                    "text": "turn 1",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "m1",
+                "role": "user",
+                "timestamp": "2026-01-01T00:00:00Z"
+              },
+              {
+                "$ref": "s74"
+              },
+              {
+                "$ref": "s80"
+              },
+              {
+                "$ref": "s77"
+              },
+              {
+                "$ref": "s76"
+              },
+              {
+                "$ref": "s78"
+              },
+              {
+                "$ref": "s81"
+              },
+              {
+                "$ref": "s82"
+              },
+              {
+                "$ref": "s79"
+              },
+              {
+                "$ref": "s27"
+              },
+              {
+                "$ref": "s33"
+              },
+              {
+                "$ref": "s30"
+              },
+              {
+                "$ref": "s23"
+              },
+              {
+                "$ref": "s32"
+              },
+              {
+                "$ref": "s65"
+              },
+              {
+                "$ref": "s62"
+              },
+              {
+                "$ref": "s52"
+              },
+              {
+                "$ref": "s45"
+              },
+              {
+                "$ref": "s64"
+              },
+              {
+                "$ref": "s31"
+              },
+              {
+                "$ref": "s57"
+              },
+              {
+                "$ref": "s21"
+              },
+              {
+                "$ref": "s44"
+              },
+              {
+                "$ref": "s18"
+              },
+              {
+                "$ref": "s39"
+              },
+              {
+                "$ref": "s60"
+              },
+              {
+                "$ref": "s47"
+              },
+              {
+                "$ref": "s63"
+              },
+              {
+                "$ref": "s58"
+              },
+              {
+                "$ref": "s22"
+              },
+              {
+                "$ref": "s69"
+              },
+              {
+                "$ref": "s71"
+              },
+              {
+                "$ref": "s56"
+              },
+              {
+                "$ref": "s46"
+              },
+              {
+                "$ref": "s38"
+              },
+              {
+                "$ref": "s48"
+              },
+              {
+                "$ref": "s20"
+              },
+              {
+                "$ref": "s36"
+              },
+              {
+                "$ref": "s67"
+              },
+              {
+                "$ref": "s72"
+              },
+              {
+                "$ref": "s35"
+              },
+              {
+                "$ref": "s73"
+              },
+              {
+                "$ref": "s34"
+              },
+              {
+                "$ref": "s59"
+              },
+              {
+                "$ref": "s28"
+              },
+              {
+                "$ref": "s70"
+              },
+              {
+                "$ref": "s25"
+              },
+              {
+                "$ref": "s61"
+              },
+              {
+                "$ref": "s50"
+              },
+              {
+                "$ref": "s53"
+              },
+              {
+                "$ref": "s51"
+              },
+              {
+                "$ref": "s26"
+              },
+              {
+                "$ref": "s17"
+              },
+              {
+                "$ref": "s19"
+              },
+              {
+                "$ref": "s37"
+              },
+              {
+                "$ref": "s66"
+              },
+              {
+                "$ref": "s68"
+              },
+              {
+                "$ref": "s41"
+              },
+              {
+                "$ref": "s54"
+              },
+              {
+                "$ref": "s40"
+              },
+              {
+                "$ref": "s55"
+              },
+              {
+                "$ref": "s24"
+              },
+              {
+                "$ref": "s42"
+              },
+              {
+                "$ref": "s49"
+              },
+              {
+                "$ref": "s43"
+              },
+              {
+                "$ref": "s29"
+              }
+            ],
             "active_start": 0,
             "cursor": 0,
             "next_before": 0,
@@ -6253,41 +4678,9 @@
           ],
           "alt_index": 7,
           "alt_count": 3,
-          "alternatives": [
-            {
-              "content": "one",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "one"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "content": "two",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "two"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:01Z"
-            },
-            {
-              "content": "three",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "three"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:02Z"
-            }
-          ],
+          "alternatives": {
+            "$ref": "s7"
+          },
           "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
@@ -6319,41 +4712,9 @@
           ],
           "alt_index": 2,
           "alt_count": 3,
-          "alternatives": [
-            {
-              "content": "one",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "one"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "content": "two",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "two"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:01Z"
-            },
-            {
-              "content": "three",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "three"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:02Z"
-            }
-          ],
+          "alternatives": {
+            "$ref": "s7"
+          },
           "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
@@ -6384,41 +4745,9 @@
           ],
           "alt_index": 2,
           "alt_count": 3,
-          "alternatives": [
-            {
-              "content": "one",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "one"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "content": "two",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "two"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:01Z"
-            },
-            {
-              "content": "three",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "three"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:02Z"
-            }
-          ],
+          "alternatives": {
+            "$ref": "s7"
+          },
           "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
@@ -6500,41 +4829,9 @@
               ],
               "alt_index": 1,
               "alt_count": 3,
-              "alternatives": [
-                {
-                  "content": "one",
-                  "images": [],
-                  "content_blocks": [
-                    {
-                      "type": "text",
-                      "text": "one"
-                    }
-                  ],
-                  "timestamp": "2026-01-01T00:00:00Z"
-                },
-                {
-                  "content": "two",
-                  "images": [],
-                  "content_blocks": [
-                    {
-                      "type": "text",
-                      "text": "two"
-                    }
-                  ],
-                  "timestamp": "2026-01-01T00:00:01Z"
-                },
-                {
-                  "content": "three",
-                  "images": [],
-                  "content_blocks": [
-                    {
-                      "type": "text",
-                      "text": "three"
-                    }
-                  ],
-                  "timestamp": "2026-01-01T00:00:02Z"
-                }
-              ],
+              "alternatives": {
+                "$ref": "s7"
+              },
               "timestamp": "2026-01-01T00:00:01Z"
             }
           ]
@@ -6635,35 +4932,7 @@
           "err": {
             "code": "invalid_request",
             "message": "message a2 has no alternate responses"
-          },
-          "engine_after": [
-            {
-              "msg_id": "u1",
-              "role": "user",
-              "content": "Prompt",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Prompt"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "a2",
-              "role": "assistant",
-              "content": "Only answer",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Only answer"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         }
       ]
     },
@@ -6845,21 +5114,9 @@
     {
       "name": "inject_system",
       "archived": [],
-      "active": [
-        {
-          "msg_id": "m1",
-          "role": "user",
-          "content": "A",
-          "images": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "A"
-            }
-          ],
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
+      "active": {
+        "$ref": "s84"
+      },
       "files": [],
       "steps": [
         {
@@ -6907,35 +5164,7 @@
           "err": {
             "code": "invalid_request",
             "message": "Missing required argument: text"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "A",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "A"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "<uuid>",
-              "role": "system",
-              "content": "Stop using actions",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Stop using actions"
-                }
-              ],
-              "timestamp": "<local-now>"
-            }
-          ]
+          }
         },
         {
           "op": "inject_system",
@@ -6946,9 +5175,47 @@
           "ok": {
             "injected": true
           },
-          "engine_after": {
-            "$ref": "s6"
-          }
+          "engine_after": [
+            {
+              "content": "A",
+              "content_blocks": [
+                {
+                  "text": "A",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "msg_id": "m1",
+              "role": "user",
+              "timestamp": "2026-01-01T00:00:00Z"
+            },
+            {
+              "content": "Stop using actions",
+              "content_blocks": [
+                {
+                  "text": "Stop using actions",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "msg_id": "<uuid>",
+              "role": "system",
+              "timestamp": "<local-now>"
+            },
+            {
+              "content": "",
+              "content_blocks": [
+                {
+                  "text": "",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "msg_id": "<uuid>",
+              "role": "system",
+              "timestamp": "<local-now>"
+            }
+          ]
         },
         {
           "op": "inject_system",
@@ -6959,9 +5226,6 @@
           "err": {
             "code": "invalid_request",
             "message": "Missing required argument: text"
-          },
-          "engine_after": {
-            "$ref": "s6"
           }
         },
         {
@@ -6969,9 +5233,47 @@
           "args": {},
           "history_pushes": 0,
           "ok": {
-            "messages": {
-              "$ref": "s6"
-            },
+            "messages": [
+              {
+                "content": "A",
+                "content_blocks": [
+                  {
+                    "text": "A",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "m1",
+                "role": "user",
+                "timestamp": "2026-01-01T00:00:00Z"
+              },
+              {
+                "content": "Stop using actions",
+                "content_blocks": [
+                  {
+                    "text": "Stop using actions",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "<uuid>",
+                "role": "system",
+                "timestamp": "<local-now>"
+              },
+              {
+                "content": "",
+                "content_blocks": [
+                  {
+                    "text": "",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "<uuid>",
+                "role": "system",
+                "timestamp": "<local-now>"
+              }
+            ],
             "active_start": 0,
             "cursor": 0,
             "next_before": 0,
@@ -6987,9 +5289,37 @@
     {
       "name": "a system message already in history",
       "archived": [],
-      "active": {
-        "$ref": "s7"
-      },
+      "active": [
+        {
+          "content": "A",
+          "content_blocks": [
+            {
+              "text": "A",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "$ref": "s15"
+        },
+        {
+          "content": "ok",
+          "content_blocks": [
+            {
+              "text": "ok",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
       "files": [],
       "steps": [
         {
@@ -6997,9 +5327,37 @@
           "args": {},
           "history_pushes": 0,
           "ok": {
-            "messages": {
-              "$ref": "s7"
-            },
+            "messages": [
+              {
+                "content": "A",
+                "content_blocks": [
+                  {
+                    "text": "A",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "m1",
+                "role": "user",
+                "timestamp": "2026-01-01T00:00:00Z"
+              },
+              {
+                "$ref": "s15"
+              },
+              {
+                "content": "ok",
+                "content_blocks": [
+                  {
+                    "text": "ok",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "m3",
+                "role": "assistant",
+                "timestamp": "2026-01-01T00:00:00Z"
+              }
+            ],
             "active_start": 0,
             "cursor": 0,
             "next_before": 0,
@@ -7018,17 +5376,7 @@
           "ok": {
             "messages": [
               {
-                "msg_id": "m2",
-                "role": "system",
-                "content": "be brief",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "be brief"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
+                "$ref": "s15"
               }
             ],
             "active_start": 0,
@@ -7047,9 +5395,37 @@
           },
           "history_pushes": 0,
           "ok": {
-            "messages": {
-              "$ref": "s7"
-            },
+            "messages": [
+              {
+                "content": "A",
+                "content_blocks": [
+                  {
+                    "text": "A",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "m1",
+                "role": "user",
+                "timestamp": "2026-01-01T00:00:00Z"
+              },
+              {
+                "$ref": "s15"
+              },
+              {
+                "content": "ok",
+                "content_blocks": [
+                  {
+                    "text": "ok",
+                    "type": "text"
+                  }
+                ],
+                "images": [],
+                "msg_id": "m3",
+                "role": "assistant",
+                "timestamp": "2026-01-01T00:00:00Z"
+              }
+            ],
             "active_start": 0,
             "cursor": 0,
             "next_before": 0,
@@ -7067,17 +5443,7 @@
           },
           "history_pushes": 0,
           "ok": {
-            "msg_id": "m2",
-            "role": "system",
-            "content": "be brief",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "be brief"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
+            "$ref": "s15"
           }
         }
       ],
@@ -7085,1002 +5451,7 @@
     }
   ],
   "$shared": {
-    "s0": [
-      {
-        "content": "turn 1",
-        "content_blocks": [
-          {
-            "text": "turn 1",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 2",
-        "content_blocks": [
-          {
-            "text": "turn 2",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m2",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 3",
-        "content_blocks": [
-          {
-            "text": "turn 3",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m3",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 4",
-        "content_blocks": [
-          {
-            "text": "turn 4",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m4",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 5",
-        "content_blocks": [
-          {
-            "text": "turn 5",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m5",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 6",
-        "content_blocks": [
-          {
-            "text": "turn 6",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m6",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 7",
-        "content_blocks": [
-          {
-            "text": "turn 7",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m7",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 8",
-        "content_blocks": [
-          {
-            "text": "turn 8",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m8",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 9",
-        "content_blocks": [
-          {
-            "text": "turn 9",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m9",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 10",
-        "content_blocks": [
-          {
-            "text": "turn 10",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m10",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 11",
-        "content_blocks": [
-          {
-            "text": "turn 11",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m11",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 12",
-        "content_blocks": [
-          {
-            "text": "turn 12",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m12",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 13",
-        "content_blocks": [
-          {
-            "text": "turn 13",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m13",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 14",
-        "content_blocks": [
-          {
-            "text": "turn 14",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m14",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 15",
-        "content_blocks": [
-          {
-            "text": "turn 15",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m15",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 16",
-        "content_blocks": [
-          {
-            "text": "turn 16",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m16",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 17",
-        "content_blocks": [
-          {
-            "text": "turn 17",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m17",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 18",
-        "content_blocks": [
-          {
-            "text": "turn 18",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m18",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 19",
-        "content_blocks": [
-          {
-            "text": "turn 19",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m19",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 20",
-        "content_blocks": [
-          {
-            "text": "turn 20",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m20",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 21",
-        "content_blocks": [
-          {
-            "text": "turn 21",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m21",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 22",
-        "content_blocks": [
-          {
-            "text": "turn 22",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m22",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 23",
-        "content_blocks": [
-          {
-            "text": "turn 23",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m23",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 24",
-        "content_blocks": [
-          {
-            "text": "turn 24",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m24",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 25",
-        "content_blocks": [
-          {
-            "text": "turn 25",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m25",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 26",
-        "content_blocks": [
-          {
-            "text": "turn 26",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m26",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 27",
-        "content_blocks": [
-          {
-            "text": "turn 27",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m27",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 28",
-        "content_blocks": [
-          {
-            "text": "turn 28",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m28",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 29",
-        "content_blocks": [
-          {
-            "text": "turn 29",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m29",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 30",
-        "content_blocks": [
-          {
-            "text": "turn 30",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m30",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 31",
-        "content_blocks": [
-          {
-            "text": "turn 31",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m31",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 32",
-        "content_blocks": [
-          {
-            "text": "turn 32",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m32",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 33",
-        "content_blocks": [
-          {
-            "text": "turn 33",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m33",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 34",
-        "content_blocks": [
-          {
-            "text": "turn 34",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m34",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 35",
-        "content_blocks": [
-          {
-            "text": "turn 35",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m35",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 36",
-        "content_blocks": [
-          {
-            "text": "turn 36",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m36",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 37",
-        "content_blocks": [
-          {
-            "text": "turn 37",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m37",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 38",
-        "content_blocks": [
-          {
-            "text": "turn 38",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m38",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 39",
-        "content_blocks": [
-          {
-            "text": "turn 39",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m39",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 40",
-        "content_blocks": [
-          {
-            "text": "turn 40",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m40",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 41",
-        "content_blocks": [
-          {
-            "text": "turn 41",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m41",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 42",
-        "content_blocks": [
-          {
-            "text": "turn 42",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m42",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 43",
-        "content_blocks": [
-          {
-            "text": "turn 43",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m43",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 44",
-        "content_blocks": [
-          {
-            "text": "turn 44",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m44",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 45",
-        "content_blocks": [
-          {
-            "text": "turn 45",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m45",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 46",
-        "content_blocks": [
-          {
-            "text": "turn 46",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m46",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 47",
-        "content_blocks": [
-          {
-            "text": "turn 47",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m47",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 48",
-        "content_blocks": [
-          {
-            "text": "turn 48",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m48",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 49",
-        "content_blocks": [
-          {
-            "text": "turn 49",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m49",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 50",
-        "content_blocks": [
-          {
-            "text": "turn 50",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m50",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 51",
-        "content_blocks": [
-          {
-            "text": "turn 51",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m51",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 52",
-        "content_blocks": [
-          {
-            "text": "turn 52",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m52",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 53",
-        "content_blocks": [
-          {
-            "text": "turn 53",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m53",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 54",
-        "content_blocks": [
-          {
-            "text": "turn 54",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m54",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 55",
-        "content_blocks": [
-          {
-            "text": "turn 55",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m55",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 56",
-        "content_blocks": [
-          {
-            "text": "turn 56",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m56",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 57",
-        "content_blocks": [
-          {
-            "text": "turn 57",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m57",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 58",
-        "content_blocks": [
-          {
-            "text": "turn 58",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m58",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 59",
-        "content_blocks": [
-          {
-            "text": "turn 59",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m59",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 60",
-        "content_blocks": [
-          {
-            "text": "turn 60",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m60",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 61",
-        "content_blocks": [
-          {
-            "text": "turn 61",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m61",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 62",
-        "content_blocks": [
-          {
-            "text": "turn 62",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m62",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 63",
-        "content_blocks": [
-          {
-            "text": "turn 63",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m63",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 64",
-        "content_blocks": [
-          {
-            "text": "turn 64",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m64",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 65",
-        "content_blocks": [
-          {
-            "text": "turn 65",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m65",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "turn 66",
-        "content_blocks": [
-          {
-            "text": "turn 66",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m66",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      }
-    ],
-    "s1": [
-      {
-        "content": "do the thing",
-        "content_blocks": [
-          {
-            "text": "do the thing",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "checking\ndone",
-        "content_blocks": [
-          {
-            "text": "checking",
-            "type": "text"
-          },
-          {
-            "id": "t1",
-            "input": {
-              "path": "notes.md"
-            },
-            "name": "read_file",
-            "type": "tool_use"
-          },
-          {
-            "content": "file contents",
-            "is_error": false,
-            "tool_use_id": "t1",
-            "type": "tool_result"
-          },
-          {
-            "text": "done",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m4",
-        "role": "assistant",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "thanks",
-        "content_blocks": [
-          {
-            "text": "thanks",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m5",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "any time",
-        "content_blocks": [
-          {
-            "text": "any time",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m6",
-        "role": "assistant",
-        "timestamp": "2026-01-01T00:00:00Z"
-      }
-    ],
-    "s2": {
-      "active_start": 2,
-      "cursor": 0,
-      "global_active_start": 2,
-      "has_more_before": false,
-      "messages": [
-        {
-          "content": "archived one",
-          "content_blocks": [
-            {
-              "text": "archived one",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m1",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "content": "archived two",
-          "content_blocks": [
-            {
-              "text": "archived two",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m2",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "content": "active three",
-          "content_blocks": [
-            {
-              "text": "active three",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m3",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "content": "active four",
-          "content_blocks": [
-            {
-              "text": "active four",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m4",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
-      "next_before": 0,
-      "total_messages": 2,
-      "total_turns": 2
-    },
-    "s3": {
+    "s0": {
       "active_start": 0,
       "cursor": 0,
       "global_active_start": 0,
@@ -8143,7 +5514,61 @@
       "total_messages": 2,
       "total_turns": 2
     },
-    "s4": [
+    "s1": [
+      {
+        "content": "archived one",
+        "content_blocks": [
+          {
+            "text": "archived one",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m1",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "archived two",
+        "content_blocks": [
+          {
+            "text": "archived two",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m2",
+        "role": "assistant",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "active three",
+        "content_blocks": [
+          {
+            "text": "active three",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m3",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "active four",
+        "content_blocks": [
+          {
+            "text": "active four",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m4",
+        "role": "assistant",
+        "timestamp": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "s2": [
       {
         "content": "Prompt",
         "content_blocks": [
@@ -8197,7 +5622,7 @@
         "timestamp": "2026-01-01T00:00:01Z"
       }
     ],
-    "s5": [
+    "s3": [
       {
         "content": "Prompt",
         "content_blocks": [
@@ -8251,89 +5676,7 @@
         "timestamp": "2026-01-01T00:00:00Z"
       }
     ],
-    "s6": [
-      {
-        "content": "A",
-        "content_blocks": [
-          {
-            "text": "A",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "Stop using actions",
-        "content_blocks": [
-          {
-            "text": "Stop using actions",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "<uuid>",
-        "role": "system",
-        "timestamp": "<local-now>"
-      },
-      {
-        "content": "",
-        "content_blocks": [
-          {
-            "text": "",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "<uuid>",
-        "role": "system",
-        "timestamp": "<local-now>"
-      }
-    ],
-    "s7": [
-      {
-        "content": "A",
-        "content_blocks": [
-          {
-            "text": "A",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "be brief",
-        "content_blocks": [
-          {
-            "text": "be brief",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m2",
-        "role": "system",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "ok",
-        "content_blocks": [
-          {
-            "text": "ok",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m3",
-        "role": "assistant",
-        "timestamp": "2026-01-01T00:00:00Z"
-      }
-    ],
-    "s8": {
+    "s4": {
       "active_start": 0,
       "cursor": 2,
       "global_active_start": 0,
@@ -8370,7 +5713,7 @@
       "total_messages": 2,
       "total_turns": 2
     },
-    "s9": [
+    "s5": [
       {
         "content": "A",
         "content_blocks": [
@@ -8407,6 +5750,1101 @@
         ],
         "images": [],
         "msg_id": "m3",
+        "role": "user",
+        "timestamp": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "s6": {
+      "content": "checking\ndone",
+      "content_blocks": [
+        {
+          "text": "checking",
+          "type": "text"
+        },
+        {
+          "id": "t1",
+          "input": {
+            "path": "notes.md"
+          },
+          "name": "read_file",
+          "type": "tool_use"
+        },
+        {
+          "content": "file contents",
+          "is_error": false,
+          "tool_use_id": "t1",
+          "type": "tool_result"
+        },
+        {
+          "text": "done",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m4",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s7": [
+      {
+        "content": "one",
+        "content_blocks": [
+          {
+            "text": "one",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "timestamp": "2026-01-01T00:00:00Z"
+      },
+      {
+        "content": "two",
+        "content_blocks": [
+          {
+            "text": "two",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "timestamp": "2026-01-01T00:00:01Z"
+      },
+      {
+        "content": "three",
+        "content_blocks": [
+          {
+            "text": "three",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "timestamp": "2026-01-01T00:00:02Z"
+      }
+    ],
+    "s8": {
+      "alt_count": 2,
+      "alt_index": 1,
+      "alternatives": [
+        {
+          "active": false,
+          "content": "First answer",
+          "images": [],
+          "index": 0,
+          "position": 1,
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "active": true,
+          "content": "Second answer",
+          "images": [],
+          "index": 1,
+          "position": 2,
+          "timestamp": "2026-01-01T00:00:01Z"
+        }
+      ],
+      "position": 2,
+      "ref": "a2"
+    },
+    "s9": {
+      "content": "checking",
+      "content_blocks": [
+        {
+          "text": "checking",
+          "type": "text"
+        },
+        {
+          "id": "t1",
+          "input": {
+            "path": "notes.md"
+          },
+          "name": "read_file",
+          "type": "tool_use"
+        }
+      ],
+      "images": [],
+      "msg_id": "m2",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s10": {
+      "content": "file contents",
+      "content_blocks": [
+        {
+          "content": "file contents",
+          "is_error": false,
+          "tool_use_id": "t1",
+          "type": "tool_result"
+        }
+      ],
+      "images": [],
+      "msg_id": "m3",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s11": {
+      "content": "archived image",
+      "content_blocks": [
+        {
+          "text": "archived image",
+          "type": "text"
+        }
+      ],
+      "images": [
+        {
+          "caption": "old",
+          "path": "<tmp>/pic.bin"
+        }
+      ],
+      "msg_id": "m1",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s12": {
+      "content": "carrying on",
+      "content_blocks": [
+        {
+          "text": "carrying on",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m2",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s13": {
+      "content": "do the thing",
+      "content_blocks": [
+        {
+          "text": "do the thing",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m1",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s14": {
+      "content": "any time",
+      "content_blocks": [
+        {
+          "text": "any time",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m6",
+      "role": "assistant",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s15": {
+      "content": "be brief",
+      "content_blocks": [
+        {
+          "text": "be brief",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m2",
+      "role": "system",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s16": {
+      "content": "last user",
+      "content_blocks": [
+        {
+          "text": "last user",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m3",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s17": {
+      "content": "turn 53",
+      "content_blocks": [
+        {
+          "text": "turn 53",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m53",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s18": {
+      "content": "turn 24",
+      "content_blocks": [
+        {
+          "text": "turn 24",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m24",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s19": {
+      "content": "turn 54",
+      "content_blocks": [
+        {
+          "text": "turn 54",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m54",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s20": {
+      "content": "turn 37",
+      "content_blocks": [
+        {
+          "text": "turn 37",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m37",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s21": {
+      "content": "turn 22",
+      "content_blocks": [
+        {
+          "text": "turn 22",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m22",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s22": {
+      "content": "turn 30",
+      "content_blocks": [
+        {
+          "text": "turn 30",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m30",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s23": {
+      "content": "turn 13",
+      "content_blocks": [
+        {
+          "text": "turn 13",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m13",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s24": {
+      "content": "turn 62",
+      "content_blocks": [
+        {
+          "text": "turn 62",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m62",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s25": {
+      "content": "turn 47",
+      "content_blocks": [
+        {
+          "text": "turn 47",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m47",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s26": {
+      "content": "turn 52",
+      "content_blocks": [
+        {
+          "text": "turn 52",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m52",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s27": {
+      "content": "turn 10",
+      "content_blocks": [
+        {
+          "text": "turn 10",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m10",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s28": {
+      "content": "turn 45",
+      "content_blocks": [
+        {
+          "text": "turn 45",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m45",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s29": {
+      "content": "turn 66",
+      "content_blocks": [
+        {
+          "text": "turn 66",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m66",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s30": {
+      "content": "turn 12",
+      "content_blocks": [
+        {
+          "text": "turn 12",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m12",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s31": {
+      "content": "turn 20",
+      "content_blocks": [
+        {
+          "text": "turn 20",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m20",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s32": {
+      "content": "turn 14",
+      "content_blocks": [
+        {
+          "text": "turn 14",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m14",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s33": {
+      "content": "turn 11",
+      "content_blocks": [
+        {
+          "text": "turn 11",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m11",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s34": {
+      "content": "turn 43",
+      "content_blocks": [
+        {
+          "text": "turn 43",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m43",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s35": {
+      "content": "turn 41",
+      "content_blocks": [
+        {
+          "text": "turn 41",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m41",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s36": {
+      "content": "turn 38",
+      "content_blocks": [
+        {
+          "text": "turn 38",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m38",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s37": {
+      "content": "turn 55",
+      "content_blocks": [
+        {
+          "text": "turn 55",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m55",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s38": {
+      "content": "turn 35",
+      "content_blocks": [
+        {
+          "text": "turn 35",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m35",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s39": {
+      "content": "turn 25",
+      "content_blocks": [
+        {
+          "text": "turn 25",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m25",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s40": {
+      "content": "turn 60",
+      "content_blocks": [
+        {
+          "text": "turn 60",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m60",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s41": {
+      "content": "turn 58",
+      "content_blocks": [
+        {
+          "text": "turn 58",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m58",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s42": {
+      "content": "turn 63",
+      "content_blocks": [
+        {
+          "text": "turn 63",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m63",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s43": {
+      "content": "turn 65",
+      "content_blocks": [
+        {
+          "text": "turn 65",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m65",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s44": {
+      "content": "turn 23",
+      "content_blocks": [
+        {
+          "text": "turn 23",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m23",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s45": {
+      "content": "turn 18",
+      "content_blocks": [
+        {
+          "text": "turn 18",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m18",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s46": {
+      "content": "turn 34",
+      "content_blocks": [
+        {
+          "text": "turn 34",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m34",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s47": {
+      "content": "turn 27",
+      "content_blocks": [
+        {
+          "text": "turn 27",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m27",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s48": {
+      "content": "turn 36",
+      "content_blocks": [
+        {
+          "text": "turn 36",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m36",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s49": {
+      "content": "turn 64",
+      "content_blocks": [
+        {
+          "text": "turn 64",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m64",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s50": {
+      "content": "turn 49",
+      "content_blocks": [
+        {
+          "text": "turn 49",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m49",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s51": {
+      "content": "turn 51",
+      "content_blocks": [
+        {
+          "text": "turn 51",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m51",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s52": {
+      "content": "turn 17",
+      "content_blocks": [
+        {
+          "text": "turn 17",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m17",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s53": {
+      "content": "turn 50",
+      "content_blocks": [
+        {
+          "text": "turn 50",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m50",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s54": {
+      "content": "turn 59",
+      "content_blocks": [
+        {
+          "text": "turn 59",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m59",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s55": {
+      "content": "turn 61",
+      "content_blocks": [
+        {
+          "text": "turn 61",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m61",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s56": {
+      "content": "turn 33",
+      "content_blocks": [
+        {
+          "text": "turn 33",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m33",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s57": {
+      "content": "turn 21",
+      "content_blocks": [
+        {
+          "text": "turn 21",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m21",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s58": {
+      "content": "turn 29",
+      "content_blocks": [
+        {
+          "text": "turn 29",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m29",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s59": {
+      "content": "turn 44",
+      "content_blocks": [
+        {
+          "text": "turn 44",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m44",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s60": {
+      "content": "turn 26",
+      "content_blocks": [
+        {
+          "text": "turn 26",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m26",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s61": {
+      "content": "turn 48",
+      "content_blocks": [
+        {
+          "text": "turn 48",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m48",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s62": {
+      "content": "turn 16",
+      "content_blocks": [
+        {
+          "text": "turn 16",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m16",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s63": {
+      "content": "turn 28",
+      "content_blocks": [
+        {
+          "text": "turn 28",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m28",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s64": {
+      "content": "turn 19",
+      "content_blocks": [
+        {
+          "text": "turn 19",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m19",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s65": {
+      "content": "turn 15",
+      "content_blocks": [
+        {
+          "text": "turn 15",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m15",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s66": {
+      "content": "turn 56",
+      "content_blocks": [
+        {
+          "text": "turn 56",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m56",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s67": {
+      "content": "turn 39",
+      "content_blocks": [
+        {
+          "text": "turn 39",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m39",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s68": {
+      "content": "turn 57",
+      "content_blocks": [
+        {
+          "text": "turn 57",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m57",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s69": {
+      "content": "turn 31",
+      "content_blocks": [
+        {
+          "text": "turn 31",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m31",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s70": {
+      "content": "turn 46",
+      "content_blocks": [
+        {
+          "text": "turn 46",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m46",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s71": {
+      "content": "turn 32",
+      "content_blocks": [
+        {
+          "text": "turn 32",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m32",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s72": {
+      "content": "turn 40",
+      "content_blocks": [
+        {
+          "text": "turn 40",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m40",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s73": {
+      "content": "turn 42",
+      "content_blocks": [
+        {
+          "text": "turn 42",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m42",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s74": {
+      "content": "turn 2",
+      "content_blocks": [
+        {
+          "text": "turn 2",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m2",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s75": {
+      "content": "thanks",
+      "content_blocks": [
+        {
+          "text": "thanks",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m5",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s76": {
+      "content": "turn 5",
+      "content_blocks": [
+        {
+          "text": "turn 5",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m5",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s77": {
+      "content": "turn 4",
+      "content_blocks": [
+        {
+          "text": "turn 4",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m4",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s78": {
+      "content": "turn 6",
+      "content_blocks": [
+        {
+          "text": "turn 6",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m6",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s79": {
+      "content": "turn 9",
+      "content_blocks": [
+        {
+          "text": "turn 9",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m9",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s80": {
+      "content": "turn 3",
+      "content_blocks": [
+        {
+          "text": "turn 3",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m3",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s81": {
+      "content": "turn 7",
+      "content_blocks": [
+        {
+          "text": "turn 7",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m7",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s82": {
+      "content": "turn 8",
+      "content_blocks": [
+        {
+          "text": "turn 8",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m8",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s83": {
+      "content": "next",
+      "content_blocks": [
+        {
+          "text": "next",
+          "type": "text"
+        }
+      ],
+      "images": [],
+      "msg_id": "m3",
+      "role": "user",
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "s84": [
+      {
+        "content": "A",
+        "content_blocks": [
+          {
+            "text": "A",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m1",
         "role": "user",
         "timestamp": "2026-01-01T00:00:00Z"
       }

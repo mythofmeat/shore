@@ -229,6 +229,7 @@ describe("conversation commands", () => {
       );
 
       let seen = pushes();
+      let lastEngineAfter: unknown;
       for (const step of scenario.steps) {
         const label = `${step.op} ${JSON.stringify(step.args)}`;
         let result: unknown;
@@ -253,9 +254,13 @@ describe("conversation commands", () => {
         expect(pushes() - seen, `${label} — history pushes`).toBe(step.history_pushes);
         seen = pushes();
 
+
         if (step.engine_after !== undefined) {
+          lastEngineAfter = remask(expand(step.engine_after, root));
+        }
+        if (lastEngineAfter !== undefined) {
           expect(remask(serdeShape(engine.messages())), `${label} — engine after`).toEqual(
-            remask(expand(step.engine_after, root)) as never,
+            lastEngineAfter as never,
           );
         }
       }
