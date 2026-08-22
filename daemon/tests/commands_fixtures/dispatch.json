@@ -269,7 +269,7 @@
           "roles"
         ],
         "data_shape": {
-          "models": "array[fixture]",
+          "models": "object",
           "active": "string",
           "include_hidden": "bool",
           "hidden_count": "number:0",
@@ -792,7 +792,7 @@
           "roles"
         ],
         "data_shape": {
-          "models": "array[fixture]",
+          "models": "object",
           "active": "string",
           "include_hidden": "bool",
           "hidden_count": "number:0",

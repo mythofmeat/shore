@@ -57,14 +57,14 @@ fn write_roles<W: Write>(out: &mut W, data: &Value) {
 pub(crate) fn write_model_list<W: Write>(out: &mut W, data: &Value) {
     write_roles(out, data);
     section(out, "models", None);
-    let models = rows_of(data, "models");
+    let models = super::models_by_provider(data);
     if models.is_empty() {
         empty(out, "no models available");
         return;
     }
     let active = text(data, "active");
     let mut rows = Rows::new();
-    for model in models {
+    for model in &models {
         let name = text(model, "name");
         let is_active = !active.is_empty() && text(model, "qualified_name") == active;
         let mark = if is_active { Mark::Active } else { Mark::None };
@@ -438,12 +438,16 @@ mod tests {
 
     fn models() -> Value {
         json!({
-            "models": [
-                {"name": "claude-opus-5", "qualified_name": "anthropic:claude-opus-5",
-                 "provider": "anthropic", "hidden": false},
-                {"name": "deepseek-v4-pro", "qualified_name": "deepseek:deepseek-v4-pro",
-                 "provider": "deepseek", "hidden": false}
-            ],
+            "models": {
+                "anthropic": [
+                    {"name": "claude-opus-5", "qualified_name": "anthropic:claude-opus-5",
+                     "hidden": false}
+                ],
+                "deepseek": [
+                    {"name": "deepseek-v4-pro", "qualified_name": "deepseek:deepseek-v4-pro",
+                     "hidden": false}
+                ]
+            },
             "active": "deepseek:deepseek-v4-pro",
             "roles": [
                 {"role": "chat", "model": "deepseek:deepseek-v4-pro", "source": "character"},
@@ -524,16 +528,20 @@ mod tests {
     fn render_preview_models() {
         set_color_enabled(true);
         let data = json!({
-            "models": [
-                {"name": "claude-opus-5", "qualified_name": "anthropic:claude-opus-5",
-                 "provider": "anthropic", "hidden": false},
-                {"name": "glm-5.2", "qualified_name": "opencode-go:glm-5.2",
-                 "provider": "opencode-go", "hidden": false},
-                {"name": "glm-5.3", "qualified_name": "opencode-go:glm-5.3",
-                 "provider": "opencode-go", "hidden": false},
-                {"name": "kimi-k3", "qualified_name": "opencode-go:kimi-k3",
-                 "provider": "opencode-go", "hidden": false}
-            ],
+            "models": {
+                "anthropic": [
+                    {"name": "claude-opus-5", "qualified_name": "anthropic:claude-opus-5",
+                     "hidden": false}
+                ],
+                "opencode-go": [
+                    {"name": "glm-5.2", "qualified_name": "opencode-go:glm-5.2",
+                     "hidden": false},
+                    {"name": "glm-5.3", "qualified_name": "opencode-go:glm-5.3",
+                     "hidden": false},
+                    {"name": "kimi-k3", "qualified_name": "opencode-go:kimi-k3",
+                     "hidden": false}
+                ]
+            },
             "active": "opencode-go:glm-5.3",
             "roles": [
                 {"role": "chat", "model": "opencode-go:glm-5.3", "source": "character"},
@@ -785,7 +793,7 @@ mod tests {
 
     #[test]
     fn an_empty_catalog_says_so_instead_of_printing_a_bare_header() {
-        let out = render(|b| write_model_list(b, &json!({"models": []})));
+        let out = render(|b| write_model_list(b, &json!({"models": {}})));
         assert!(out.contains("(no models available)"), "{out}");
     }
 

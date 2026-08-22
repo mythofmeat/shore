@@ -72,22 +72,23 @@ function renderCharacters(data: Json): string | undefined {
 }
 
 function renderModels(data: Json): string | undefined {
-  const models = arr(data, "models");
-  if (models === undefined) return undefined;
+  const groups = isJson(data.models) ? data.models : undefined;
+  if (groups === undefined) return undefined;
   const active = str(data, "active");
 
   const lines = ["**Models**"];
-  for (const entry of models) {
-    if (!isJson(entry)) return undefined;
-    const qualified = str(entry, "qualified_name") ?? str(entry, "name");
-    if (qualified === undefined) return undefined;
-    const short = str(entry, "name") ?? qualified;
-    const marker = active === qualified || active === short ? "**●** " : "";
-    let line = `- ${marker}\`${qualified}\``;
-    const provider = str(entry, "provider");
-    if (provider !== undefined) line += ` (${provider})`;
-    if (entry.hidden === true) line += " _hidden_";
-    lines.push(line);
+  for (const [provider, models] of Object.entries(groups)) {
+    if (!Array.isArray(models)) return undefined;
+    for (const entry of models) {
+      if (!isJson(entry)) return undefined;
+      const qualified = str(entry, "qualified_name") ?? str(entry, "name");
+      if (qualified === undefined) return undefined;
+      const short = str(entry, "name") ?? qualified;
+      const marker = active === qualified || active === short ? "**●** " : "";
+      let line = `- ${marker}\`${qualified}\` (${provider})`;
+      if (entry.hidden === true) line += " _hidden_";
+      lines.push(line);
+    }
   }
 
   const hidden = num(data, "hidden_count");

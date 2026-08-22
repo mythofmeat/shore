@@ -75,53 +75,54 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [
-              {
-                "name": "alpha",
-                "qualified_name": "chat.anthropic.alpha",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "alpha-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "beta",
-                "qualified_name": "chat.anthropic.beta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "beta-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "delta",
-                "qualified_name": "chat.anthropic.delta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "claude-opus-4-8",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "epsilon",
-                "qualified_name": "chat.gemini.epsilon",
-                "sdk": "gemini",
-                "provider": "gemini",
-                "model_id": "gemini-3.1-pro",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "gamma",
-                "qualified_name": "chat.openai.gamma",
-                "sdk": "openai",
-                "provider": "openai",
-                "model_id": "gamma-id",
-                "source": "static",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "anthropic": [
+                {
+                  "name": "alpha",
+                  "qualified_name": "chat.anthropic.alpha",
+                  "sdk": "anthropic",
+                  "model_id": "alpha-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "beta",
+                  "qualified_name": "chat.anthropic.beta",
+                  "sdk": "anthropic",
+                  "model_id": "beta-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "delta",
+                  "qualified_name": "chat.anthropic.delta",
+                  "sdk": "anthropic",
+                  "model_id": "claude-opus-4-8",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "gemini": [
+                {
+                  "name": "epsilon",
+                  "qualified_name": "chat.gemini.epsilon",
+                  "sdk": "gemini",
+                  "model_id": "gemini-3.1-pro",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "openai": [
+                {
+                  "name": "gamma",
+                  "qualified_name": "chat.openai.gamma",
+                  "sdk": "openai",
+                  "model_id": "gamma-id",
+                  "source": "static",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "chat.anthropic.beta",
             "roles": [
               {
@@ -221,53 +222,54 @@
             "include_hidden": true
           },
           "ok": {
-            "models": [
-              {
-                "name": "alpha",
-                "qualified_name": "chat.anthropic.alpha",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "alpha-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "beta",
-                "qualified_name": "chat.anthropic.beta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "beta-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "delta",
-                "qualified_name": "chat.anthropic.delta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "claude-opus-4-8",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "epsilon",
-                "qualified_name": "chat.gemini.epsilon",
-                "sdk": "gemini",
-                "provider": "gemini",
-                "model_id": "gemini-3.1-pro",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "gamma",
-                "qualified_name": "chat.openai.gamma",
-                "sdk": "openai",
-                "provider": "openai",
-                "model_id": "gamma-id",
-                "source": "static",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "anthropic": [
+                {
+                  "name": "alpha",
+                  "qualified_name": "chat.anthropic.alpha",
+                  "sdk": "anthropic",
+                  "model_id": "alpha-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "beta",
+                  "qualified_name": "chat.anthropic.beta",
+                  "sdk": "anthropic",
+                  "model_id": "beta-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "delta",
+                  "qualified_name": "chat.anthropic.delta",
+                  "sdk": "anthropic",
+                  "model_id": "claude-opus-4-8",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "gemini": [
+                {
+                  "name": "epsilon",
+                  "qualified_name": "chat.gemini.epsilon",
+                  "sdk": "gemini",
+                  "model_id": "gemini-3.1-pro",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "openai": [
+                {
+                  "name": "gamma",
+                  "qualified_name": "chat.openai.gamma",
+                  "sdk": "openai",
+                  "model_id": "gamma-id",
+                  "source": "static",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "chat.anthropic.beta",
             "roles": [
               {
@@ -1176,53 +1178,54 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [
-              {
-                "name": "alpha",
-                "qualified_name": "chat.anthropic.alpha",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "alpha-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "beta",
-                "qualified_name": "chat.anthropic.beta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "beta-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "delta",
-                "qualified_name": "chat.anthropic.delta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "claude-opus-4-8",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "epsilon",
-                "qualified_name": "chat.gemini.epsilon",
-                "sdk": "gemini",
-                "provider": "gemini",
-                "model_id": "gemini-3.1-pro",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "gamma",
-                "qualified_name": "chat.openai.gamma",
-                "sdk": "openai",
-                "provider": "openai",
-                "model_id": "gamma-id",
-                "source": "static",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "anthropic": [
+                {
+                  "name": "alpha",
+                  "qualified_name": "chat.anthropic.alpha",
+                  "sdk": "anthropic",
+                  "model_id": "alpha-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "beta",
+                  "qualified_name": "chat.anthropic.beta",
+                  "sdk": "anthropic",
+                  "model_id": "beta-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "delta",
+                  "qualified_name": "chat.anthropic.delta",
+                  "sdk": "anthropic",
+                  "model_id": "claude-opus-4-8",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "gemini": [
+                {
+                  "name": "epsilon",
+                  "qualified_name": "chat.gemini.epsilon",
+                  "sdk": "gemini",
+                  "model_id": "gemini-3.1-pro",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "openai": [
+                {
+                  "name": "gamma",
+                  "qualified_name": "chat.openai.gamma",
+                  "sdk": "openai",
+                  "model_id": "gamma-id",
+                  "source": "static",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "chat.anthropic.beta",
             "roles": [
               {
@@ -1697,53 +1700,54 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [
-              {
-                "name": "alpha",
-                "qualified_name": "chat.anthropic.alpha",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "alpha-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "beta",
-                "qualified_name": "chat.anthropic.beta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "beta-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "delta",
-                "qualified_name": "chat.anthropic.delta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "claude-opus-4-8",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "epsilon",
-                "qualified_name": "chat.gemini.epsilon",
-                "sdk": "gemini",
-                "provider": "gemini",
-                "model_id": "gemini-3.1-pro",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "gamma",
-                "qualified_name": "chat.openai.gamma",
-                "sdk": "openai",
-                "provider": "openai",
-                "model_id": "gamma-id",
-                "source": "static",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "anthropic": [
+                {
+                  "name": "alpha",
+                  "qualified_name": "chat.anthropic.alpha",
+                  "sdk": "anthropic",
+                  "model_id": "alpha-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "beta",
+                  "qualified_name": "chat.anthropic.beta",
+                  "sdk": "anthropic",
+                  "model_id": "beta-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "delta",
+                  "qualified_name": "chat.anthropic.delta",
+                  "sdk": "anthropic",
+                  "model_id": "claude-opus-4-8",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "gemini": [
+                {
+                  "name": "epsilon",
+                  "qualified_name": "chat.gemini.epsilon",
+                  "sdk": "gemini",
+                  "model_id": "gemini-3.1-pro",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "openai": [
+                {
+                  "name": "gamma",
+                  "qualified_name": "chat.openai.gamma",
+                  "sdk": "openai",
+                  "model_id": "gamma-id",
+                  "source": "static",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "chat.anthropic.beta",
             "roles": [
               {
@@ -1907,53 +1911,54 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [
-              {
-                "name": "alpha",
-                "qualified_name": "chat.anthropic.alpha",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "alpha-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "beta",
-                "qualified_name": "chat.anthropic.beta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "beta-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "delta",
-                "qualified_name": "chat.anthropic.delta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "claude-opus-4-8",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "epsilon",
-                "qualified_name": "chat.gemini.epsilon",
-                "sdk": "gemini",
-                "provider": "gemini",
-                "model_id": "gemini-3.1-pro",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "gamma",
-                "qualified_name": "chat.openai.gamma",
-                "sdk": "openai",
-                "provider": "openai",
-                "model_id": "gamma-id",
-                "source": "static",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "anthropic": [
+                {
+                  "name": "alpha",
+                  "qualified_name": "chat.anthropic.alpha",
+                  "sdk": "anthropic",
+                  "model_id": "alpha-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "beta",
+                  "qualified_name": "chat.anthropic.beta",
+                  "sdk": "anthropic",
+                  "model_id": "beta-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "delta",
+                  "qualified_name": "chat.anthropic.delta",
+                  "sdk": "anthropic",
+                  "model_id": "claude-opus-4-8",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "gemini": [
+                {
+                  "name": "epsilon",
+                  "qualified_name": "chat.gemini.epsilon",
+                  "sdk": "gemini",
+                  "model_id": "gemini-3.1-pro",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "openai": [
+                {
+                  "name": "gamma",
+                  "qualified_name": "chat.openai.gamma",
+                  "sdk": "openai",
+                  "model_id": "gamma-id",
+                  "source": "static",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "chat.anthropic.beta",
             "roles": [
               {
@@ -2737,7 +2742,7 @@
     },
     {
       "name": "a model id that two providers both discovered",
-      "note": "the only route to the catalog's Ambiguous error, which is the one kind it reports as a bad request rather than a miss — a bare id has to be unique across every enabled provider's cache",
+      "note": "the only route to the catalog's Ambiguous error, which is the one kind it reports as a bad request rather than a miss \u2014 a bare id has to be unique across every enabled provider's cache",
       "setup": {
         "catalog": "\n[chat.anthropic.shared]\nmodel_id = \"a-id\"\nsdk = \"anthropic\"\n\n[chat.openai.shared]\nmodel_id = \"o-id\"\nsdk = \"openai\"\n",
         "defaults": "[defaults]\n",
@@ -3280,7 +3285,7 @@
     },
     {
       "name": "two catalog names for one model id",
-      "note": "`all` collapses on (provider, model_id) identity, not on qualified_name — these two differ by name and are the same model",
+      "note": "`all` collapses on (provider, model_id) identity, not on qualified_name \u2014 these two differ by name and are the same model",
       "setup": {
         "catalog": "\n[chat.anthropic.one]\nmodel_id = \"same-id\"\nsdk = \"anthropic\"\n\n[chat.anthropic.two]\nmodel_id = \"same-id\"\nsdk = \"anthropic\"\n",
         "defaults": "[defaults]\nmodel = \"one\"\n\n[defaults.background]\nheartbeat = \"one\"\ncompaction = \"two\"\n",
@@ -3836,7 +3841,7 @@
     },
     {
       "name": "a background pin that does not resolve",
-      "note": "a diagnostic, so the row echoes the name the user wrote rather than failing — but a settings command targeting that task still errors",
+      "note": "a diagnostic, so the row echoes the name the user wrote rather than failing \u2014 but a settings command targeting that task still errors",
       "setup": {
         "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
         "defaults": "[defaults]\nmodel = \"alpha\"\n\n[defaults.background]\nheartbeat = \"ghost\"\n",
@@ -4262,53 +4267,54 @@
             }
           },
           "ok": {
-            "models": [
-              {
-                "name": "alpha",
-                "qualified_name": "chat.anthropic.alpha",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "alpha-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "beta",
-                "qualified_name": "chat.anthropic.beta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "beta-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "delta",
-                "qualified_name": "chat.anthropic.delta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "claude-opus-4-8",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "epsilon",
-                "qualified_name": "chat.gemini.epsilon",
-                "sdk": "gemini",
-                "provider": "gemini",
-                "model_id": "gemini-3.1-pro",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "gamma",
-                "qualified_name": "chat.openai.gamma",
-                "sdk": "openai",
-                "provider": "openai",
-                "model_id": "gamma-id",
-                "source": "static",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "anthropic": [
+                {
+                  "name": "alpha",
+                  "qualified_name": "chat.anthropic.alpha",
+                  "sdk": "anthropic",
+                  "model_id": "alpha-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "beta",
+                  "qualified_name": "chat.anthropic.beta",
+                  "sdk": "anthropic",
+                  "model_id": "beta-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "delta",
+                  "qualified_name": "chat.anthropic.delta",
+                  "sdk": "anthropic",
+                  "model_id": "claude-opus-4-8",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "gemini": [
+                {
+                  "name": "epsilon",
+                  "qualified_name": "chat.gemini.epsilon",
+                  "sdk": "gemini",
+                  "model_id": "gemini-3.1-pro",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "openai": [
+                {
+                  "name": "gamma",
+                  "qualified_name": "chat.openai.gamma",
+                  "sdk": "openai",
+                  "model_id": "gamma-id",
+                  "source": "static",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "chat.anthropic.alpha",
             "roles": [
               {
@@ -4830,17 +4836,18 @@
             }
           },
           "ok": {
-            "models": [
-              {
-                "name": "vendor/visible",
-                "qualified_name": "openrouter:vendor/visible",
-                "sdk": "anthropic",
-                "provider": "openrouter",
-                "model_id": "vendor/visible",
-                "source": "discovered",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "openrouter": [
+                {
+                  "name": "vendor/visible",
+                  "qualified_name": "openrouter:vendor/visible",
+                  "sdk": "anthropic",
+                  "model_id": "vendor/visible",
+                  "source": "discovered",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "openrouter:vendor/visible",
             "roles": [
               {
@@ -5150,7 +5157,7 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [],
+            "models": {},
             "active": null,
             "roles": [
               {
@@ -5754,17 +5761,18 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [
-              {
-                "name": "vendor/visible",
-                "qualified_name": "openrouter:vendor/visible",
-                "sdk": "anthropic",
-                "provider": "openrouter",
-                "model_id": "vendor/visible",
-                "source": "discovered",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "openrouter": [
+                {
+                  "name": "vendor/visible",
+                  "qualified_name": "openrouter:vendor/visible",
+                  "sdk": "anthropic",
+                  "model_id": "vendor/visible",
+                  "source": "discovered",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "openrouter:vendor/visible",
             "roles": [
               {
@@ -5864,26 +5872,26 @@
             "include_hidden": true
           },
           "ok": {
-            "models": [
-              {
-                "name": "vendor/hidden",
-                "qualified_name": "openrouter:vendor/hidden",
-                "sdk": "anthropic",
-                "provider": "openrouter",
-                "model_id": "vendor/hidden",
-                "source": "discovered",
-                "hidden": true
-              },
-              {
-                "name": "vendor/visible",
-                "qualified_name": "openrouter:vendor/visible",
-                "sdk": "anthropic",
-                "provider": "openrouter",
-                "model_id": "vendor/visible",
-                "source": "discovered",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "openrouter": [
+                {
+                  "name": "vendor/hidden",
+                  "qualified_name": "openrouter:vendor/hidden",
+                  "sdk": "anthropic",
+                  "model_id": "vendor/hidden",
+                  "source": "discovered",
+                  "hidden": true
+                },
+                {
+                  "name": "vendor/visible",
+                  "qualified_name": "openrouter:vendor/visible",
+                  "sdk": "anthropic",
+                  "model_id": "vendor/visible",
+                  "source": "discovered",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "openrouter:vendor/hidden",
             "roles": [
               {
@@ -6355,17 +6363,18 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [
-              {
-                "name": "vendor/visible",
-                "qualified_name": "openrouter:vendor/visible",
-                "sdk": "anthropic",
-                "provider": "openrouter",
-                "model_id": "vendor/visible",
-                "source": "discovered",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "openrouter": [
+                {
+                  "name": "vendor/visible",
+                  "qualified_name": "openrouter:vendor/visible",
+                  "sdk": "anthropic",
+                  "model_id": "vendor/visible",
+                  "source": "discovered",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "openrouter:vendor/hidden",
             "roles": [
               {
@@ -7044,17 +7053,18 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [
-              {
-                "name": "vendor/visible",
-                "qualified_name": "openrouter:vendor/visible",
-                "sdk": "anthropic",
-                "provider": "openrouter",
-                "model_id": "vendor/visible",
-                "source": "discovered",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "openrouter": [
+                {
+                  "name": "vendor/visible",
+                  "qualified_name": "openrouter:vendor/visible",
+                  "sdk": "anthropic",
+                  "model_id": "vendor/visible",
+                  "source": "discovered",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "openrouter:vendor/visible",
             "roles": [
               {
@@ -7867,7 +7877,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "background tasks use different models (heartbeat → chat.openai.gamma, compaction → chat.anthropic.beta); target a specific task instead of `all`"
+            "message": "background tasks use different models (heartbeat \u2192 chat.openai.gamma, compaction \u2192 chat.anthropic.beta); target a specific task instead of `all`"
           },
           "prefs": {
             "global_exists": false,
@@ -8158,7 +8168,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "background tasks use different models (heartbeat → chat.openai.gamma, compaction → chat.anthropic.beta); target a specific task instead of `all`"
+            "message": "background tasks use different models (heartbeat \u2192 chat.openai.gamma, compaction \u2192 chat.anthropic.beta); target a specific task instead of `all`"
           },
           "prefs": {
             "global_exists": false,
@@ -13888,53 +13898,54 @@
           "op": "list_models",
           "args": {},
           "ok": {
-            "models": [
-              {
-                "name": "alpha",
-                "qualified_name": "chat.anthropic.alpha",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "alpha-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "beta",
-                "qualified_name": "chat.anthropic.beta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "beta-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "delta",
-                "qualified_name": "chat.anthropic.delta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "claude-opus-4-8",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "epsilon",
-                "qualified_name": "chat.gemini.epsilon",
-                "sdk": "gemini",
-                "provider": "gemini",
-                "model_id": "gemini-3.1-pro",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "gamma",
-                "qualified_name": "chat.openai.gamma",
-                "sdk": "openai",
-                "provider": "openai",
-                "model_id": "gamma-id",
-                "source": "static",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "anthropic": [
+                {
+                  "name": "alpha",
+                  "qualified_name": "chat.anthropic.alpha",
+                  "sdk": "anthropic",
+                  "model_id": "alpha-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "beta",
+                  "qualified_name": "chat.anthropic.beta",
+                  "sdk": "anthropic",
+                  "model_id": "beta-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "delta",
+                  "qualified_name": "chat.anthropic.delta",
+                  "sdk": "anthropic",
+                  "model_id": "claude-opus-4-8",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "gemini": [
+                {
+                  "name": "epsilon",
+                  "qualified_name": "chat.gemini.epsilon",
+                  "sdk": "gemini",
+                  "model_id": "gemini-3.1-pro",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "openai": [
+                {
+                  "name": "gamma",
+                  "qualified_name": "chat.openai.gamma",
+                  "sdk": "openai",
+                  "model_id": "gamma-id",
+                  "source": "static",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "chat.anthropic.alpha",
             "roles": [
               {
@@ -14952,53 +14963,54 @@
             }
           },
           "ok": {
-            "models": [
-              {
-                "name": "alpha",
-                "qualified_name": "chat.anthropic.alpha",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "alpha-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "beta",
-                "qualified_name": "chat.anthropic.beta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "beta-id",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "delta",
-                "qualified_name": "chat.anthropic.delta",
-                "sdk": "anthropic",
-                "provider": "anthropic",
-                "model_id": "claude-opus-4-8",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "epsilon",
-                "qualified_name": "chat.gemini.epsilon",
-                "sdk": "gemini",
-                "provider": "gemini",
-                "model_id": "gemini-3.1-pro",
-                "source": "static",
-                "hidden": false
-              },
-              {
-                "name": "gamma",
-                "qualified_name": "chat.openai.gamma",
-                "sdk": "openai",
-                "provider": "openai",
-                "model_id": "gamma-id",
-                "source": "static",
-                "hidden": false
-              }
-            ],
+            "models": {
+              "anthropic": [
+                {
+                  "name": "alpha",
+                  "qualified_name": "chat.anthropic.alpha",
+                  "sdk": "anthropic",
+                  "model_id": "alpha-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "beta",
+                  "qualified_name": "chat.anthropic.beta",
+                  "sdk": "anthropic",
+                  "model_id": "beta-id",
+                  "source": "static",
+                  "hidden": false
+                },
+                {
+                  "name": "delta",
+                  "qualified_name": "chat.anthropic.delta",
+                  "sdk": "anthropic",
+                  "model_id": "claude-opus-4-8",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "gemini": [
+                {
+                  "name": "epsilon",
+                  "qualified_name": "chat.gemini.epsilon",
+                  "sdk": "gemini",
+                  "model_id": "gemini-3.1-pro",
+                  "source": "static",
+                  "hidden": false
+                }
+              ],
+              "openai": [
+                {
+                  "name": "gamma",
+                  "qualified_name": "chat.openai.gamma",
+                  "sdk": "openai",
+                  "model_id": "gamma-id",
+                  "source": "static",
+                  "hidden": false
+                }
+              ]
+            },
             "active": "chat.anthropic.alpha",
             "roles": [
               {

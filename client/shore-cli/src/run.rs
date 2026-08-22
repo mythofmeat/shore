@@ -1044,14 +1044,27 @@ async fn handle_complete_query(
         return Ok(());
     }
 
+    if kind == CompleteKind::Models {
+        let _ignored = conn
+            .send_command("list_models", serde_json::json!({}))
+            .await?;
+        let data = recv_command_data(&mut conn).await?;
+        for model in output::models_by_provider(&data) {
+            if let Some(name) = model.get("name").and_then(serde_json::Value::as_str) {
+                cli_out!("{name}");
+            }
+        }
+        return Ok(());
+    }
+
     let (cmd, array_keys) = match kind {
-        CompleteKind::Models => ("list_models", &["models"][..]),
         CompleteKind::Characters => ("list_characters", &["characters"][..]),
         CompleteKind::Providers => ("list_providers", &["providers"][..]),
         CompleteKind::Sections => ("status", &["sections"][..]),
         CompleteKind::Tools => ("tools", &["tools", "subagents", "mcp"][..]),
         CompleteKind::Subagents => ("tools", &["subagents"][..]),
-        CompleteKind::SettingKeys
+        CompleteKind::Models
+        | CompleteKind::SettingKeys
         | CompleteKind::ConfigKeys
         | CompleteKind::ConfigSections
         | CompleteKind::ConfigValues => {

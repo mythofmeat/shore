@@ -325,11 +325,18 @@ function effectiveModelToJson(entry: EffectiveModel): unknown {
     name: m.name,
     qualified_name: m.qualifiedName,
     sdk: m.sdk,
-    provider: m.providerKey,
     model_id: m.modelId,
     source: entry.source,
     hidden: entry.hidden,
   };
+}
+
+function modelsByProvider(entries: EffectiveModel[]): Record<string, unknown[]> {
+  const out: Record<string, unknown[]> = {};
+  for (const entry of entries) {
+    (out[entry.resolved.providerKey] ??= []).push(effectiveModelToJson(entry));
+  }
+  return out;
 }
 
 function activeName(ctx: ModelsContext, entries: EffectiveModel[]): string | undefined {
@@ -360,7 +367,7 @@ export function listModels(ctx: ModelsContext, args: Args): unknown {
   ).filter((e) => e.hidden).length;
 
   return {
-    models: entries.map(effectiveModelToJson),
+    models: modelsByProvider(entries),
     active: activeName(ctx, entries) ?? null,
     roles: modelRoles(ctx),
     include_hidden: includeHidden,

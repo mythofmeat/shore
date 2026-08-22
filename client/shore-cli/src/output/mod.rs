@@ -110,6 +110,26 @@ pub(crate) fn abbreviate_model(model_id: &str) -> &str {
     model_id
 }
 
+pub(crate) fn models_by_provider(data: &serde_json::Value) -> Vec<serde_json::Value> {
+    let Some(groups) = data.get("models").and_then(serde_json::Value::as_object) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (provider, models) in groups {
+        for model in models.as_array().map_or(&[][..], Vec::as_slice) {
+            let mut entry = model.clone();
+            if let Some(fields) = entry.as_object_mut() {
+                let _replaced = fields.insert(
+                    "provider".to_owned(),
+                    serde_json::Value::String(provider.clone()),
+                );
+            }
+            out.push(entry);
+        }
+    }
+    out
+}
+
 pub(crate) const MAX_TOOL_OUTPUT: usize = 500;
 
 pub(crate) fn term_width() -> usize {

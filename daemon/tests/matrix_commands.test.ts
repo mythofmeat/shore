@@ -237,7 +237,9 @@ describe("rendering command output", () => {
 
   test("a known command with the wrong shape falls back rather than half-rendering", () => {
     expect(renderCommandOutput("status", { weird: true })).toContain("```json");
-    expect(renderCommandOutput("list_models", { models: [{ nope: 1 }] })).toContain("```json");
+    expect(renderCommandOutput("list_models", { models: { anthropic: [{ nope: 1 }] } })).toContain(
+      "```json",
+    );
   });
 
   test("status renders summary lines and no code block", () => {
@@ -266,10 +268,10 @@ describe("rendering command output", () => {
 
   test("models mark the active one and note what is hidden", () => {
     const out = renderCommandOutput("list_models", {
-      models: [
-        { name: "sonnet", qualified_name: "anthropic:sonnet", provider: "anthropic" },
-        { name: "gpt", qualified_name: "openai:gpt", provider: "openai" },
-      ],
+      models: {
+        anthropic: [{ name: "sonnet", qualified_name: "anthropic:sonnet" }],
+        openai: [{ name: "gpt", qualified_name: "openai:gpt" }],
+      },
       active: "anthropic:sonnet",
       include_hidden: false,
       hidden_count: 3,

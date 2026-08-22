@@ -1761,7 +1761,8 @@ fn named_palette_values(data: &serde_json::Value, array: &str) -> Vec<crate::cli
 fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
     match kind {
         "models" => {
-            if let Some(models) = data.get("models").and_then(|value| value.as_array()) {
+            if data.get("models").is_some_and(serde_json::Value::is_object) {
+                let models = crate::output::models_by_provider(data);
                 app.model_names = models.iter().filter_map(model_switch_name).collect();
             }
         }
@@ -2222,7 +2223,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     }
                 }
                 "list_models" => {
-                    if let Some(models) = co.data.get("models").and_then(|v| v.as_array()) {
+                    if co
+                        .data
+                        .get("models")
+                        .is_some_and(serde_json::Value::is_object)
+                    {
+                        let models = crate::output::models_by_provider(&co.data);
                         app.model_names = models.iter().filter_map(model_switch_name).collect();
                         let active = co
                             .data
@@ -3448,7 +3454,10 @@ mod redraw_tests {
                 rid: Some(rid),
                 name: "list_models".into(),
                 data: serde_json::json!({
-                    "models": [{ "name": "kimi-k3" }, { "name": "opus" }]
+                    "models": {
+                        "moonshotai": [{ "name": "kimi-k3" }],
+                        "anthropic": [{ "name": "opus" }]
+                    }
                 }),
             }),
         );
@@ -3678,20 +3687,20 @@ mod redraw_tests {
                 name: "list_models".into(),
                 data: serde_json::json!({
                     "active": "chat.anthropic.beta",
-                    "models": [
-                        {
-                            "name": "alpha",
-                            "qualified_name": "chat.anthropic.alpha",
-                            "provider": "anthropic",
-                            "model_id": "alpha"
-                        },
-                        {
-                            "name": "beta",
-                            "qualified_name": "chat.anthropic.beta",
-                            "provider": "anthropic",
-                            "model_id": "beta"
-                        }
-                    ]
+                    "models": {
+                        "anthropic": [
+                            {
+                                "name": "alpha",
+                                "qualified_name": "chat.anthropic.alpha",
+                                "model_id": "alpha"
+                            },
+                            {
+                                "name": "beta",
+                                "qualified_name": "chat.anthropic.beta",
+                                "model_id": "beta"
+                            }
+                        ]
+                    }
                 }),
             }),
         );
@@ -3720,22 +3729,24 @@ mod redraw_tests {
                 rid: None,
                 name: "list_models".into(),
                 data: serde_json::json!({
-                    "models": [
-                        {
-                            "name": "deepseek-v4-pro",
-                            "qualified_name": "deepseek:deepseek-v4-pro",
-                            "provider": "deepseek",
-                            "model_id": "deepseek-v4-pro",
-                            "source": "discovered"
-                        },
-                        {
-                            "name": "deepseek-v4-pro",
-                            "qualified_name": "opencode-go:deepseek-v4-pro",
-                            "provider": "opencode-go",
-                            "model_id": "deepseek-v4-pro",
-                            "source": "discovered"
-                        }
-                    ]
+                    "models": {
+                        "deepseek": [
+                            {
+                                "name": "deepseek-v4-pro",
+                                "qualified_name": "deepseek:deepseek-v4-pro",
+                                "model_id": "deepseek-v4-pro",
+                                "source": "discovered"
+                            }
+                        ],
+                        "opencode-go": [
+                            {
+                                "name": "deepseek-v4-pro",
+                                "qualified_name": "opencode-go:deepseek-v4-pro",
+                                "model_id": "deepseek-v4-pro",
+                                "source": "discovered"
+                            }
+                        ]
+                    }
                 }),
             }),
         );
