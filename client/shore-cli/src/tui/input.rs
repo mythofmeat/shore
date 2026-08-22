@@ -864,6 +864,7 @@ fn run_view_command(app: &mut App, key: ViewKey, value: Option<&str>) -> Action 
         | ViewKey::Thinking
         | ViewKey::Tools
         | ViewKey::Subagent
+        | ViewKey::Compaction
         | ViewKey::Images
         | ViewKey::Metadata => {
             let name = key.as_str();

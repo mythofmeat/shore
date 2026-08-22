@@ -33,8 +33,9 @@ use tracing_subscriber::EnvFilter;
 #[cfg(test)]
 use app::UsageBudget;
 use app::{
-    AltChoice, App, Block, ConnectionStatus, ConversationEntry, EffectiveSamplerSnapshot,
-    InputState, SubagentSection, Turn, TurnState, UsageDisplay, UsageLevel, UsageScope,
+    AltChoice, App, Block, COMPACTION_SUBAGENT, CompactionRun, ConnectionStatus, ConversationEntry,
+    EffectiveSamplerSnapshot, InputState, SubagentSection, Turn, TurnState, UsageDisplay,
+    UsageLevel, UsageScope, compaction_round_from_phase,
 };
 use connection::{ConnCommand, ConnEvent};
 use input::Action;
@@ -460,6 +461,12 @@ fn load_prefs(app: &mut App) {
             app.show_subagent = b;
         }
         if let Some(b) = prefs
+            .get("show_compaction")
+            .and_then(serde_json::Value::as_bool)
+        {
+            app.show_compaction = b;
+        }
+        if let Some(b) = prefs
             .get("show_images")
             .and_then(serde_json::Value::as_bool)
         {
@@ -506,6 +513,7 @@ fn save_prefs(app: &App) {
         "show_thinking": app.show_thinking,
         "show_tools": app.show_tools,
         "show_subagent": app.show_subagent,
+        "show_compaction": app.show_compaction,
         "show_images": app.show_images,
         "show_timestamps": app.show_timestamps,
         "show_metadata": app.show_metadata,
@@ -1850,7 +1858,94 @@ fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
     }
 }
 
+fn is_compaction_frame(msg: &ServerMessage) -> bool {
+    if msg.subagent() == Some(COMPACTION_SUBAGENT) {
+        return true;
+    }
+    match msg {
+        ServerMessage::Phase(phase) => compaction_round_from_phase(&phase.phase).is_some(),
+        ServerMessage::Hello(_)
+        | ServerMessage::History(_)
+        | ServerMessage::Shutdown(_)
+        | ServerMessage::Ping(_)
+        | ServerMessage::CommandOutput(_)
+        | ServerMessage::Error(_)
+        | ServerMessage::StreamStart(_)
+        | ServerMessage::StreamChunk(_)
+        | ServerMessage::StreamEnd(_)
+        | ServerMessage::NewMessage(_)
+        | ServerMessage::ToolCall(_)
+        | ServerMessage::ToolResult(_)
+        | ServerMessage::SendImage(_)
+        | ServerMessage::CacheWarning(_)
+        | ServerMessage::ProviderFallbackWarning(_)
+        | ServerMessage::UsageWarning(_)
+        | ServerMessage::ConfigWarning(_)
+        | ServerMessage::Unknown => false,
+    }
+}
+
+fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
+    let run = app.compaction.get_or_insert_with(CompactionRun::default);
+
+    match msg {
+        ServerMessage::Phase(phase) => {
+            if let Some(round) = compaction_round_from_phase(&phase.phase) {
+                run.note_round(round);
+            }
+        }
+        ServerMessage::StreamChunk(chunk) => {
+            if chunk.content_type == "thinking" {
+                run.append_thinking(&chunk.text);
+            } else {
+                run.append_text(&chunk.text);
+            }
+        }
+        ServerMessage::StreamEnd(_) => {
+            run.flush_text();
+            run.flush_thinking();
+        }
+        ServerMessage::ToolCall(tc) => {
+            run.push_block(Block::ToolUse {
+                tool_id: tc.tool_id,
+                tool_name: tc.tool_name,
+                input: tc.input,
+            });
+        }
+        ServerMessage::ToolResult(tr) => {
+            run.push_block(Block::ToolResult {
+                tool_id: tr.tool_id,
+                tool_name: tr.tool_name,
+                output: tr.output,
+                is_error: tr.is_error,
+            });
+        }
+        ServerMessage::Hello(_)
+        | ServerMessage::History(_)
+        | ServerMessage::Shutdown(_)
+        | ServerMessage::Ping(_)
+        | ServerMessage::CommandOutput(_)
+        | ServerMessage::Error(_)
+        | ServerMessage::StreamStart(_)
+        | ServerMessage::NewMessage(_)
+        | ServerMessage::SendImage(_)
+        | ServerMessage::CacheWarning(_)
+        | ServerMessage::ProviderFallbackWarning(_)
+        | ServerMessage::UsageWarning(_)
+        | ServerMessage::ConfigWarning(_)
+        | ServerMessage::Unknown => {}
+    }
+
+    if app.auto_scroll {
+        app.scroll_to_bottom();
+    }
+    UiEffect::redraw(RedrawEffect::DeferredStream)
+}
+
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
+    if is_compaction_frame(&msg) {
+        return route_compaction_frame(app, msg);
+    }
     if msg.task_id().is_some() || msg.subagent().is_some() {
         return route_subagent_task_frame(app, msg);
     }
@@ -2017,6 +2112,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::CommandOutput(co) => {
+            if co.name == "compact" {
+                app.compaction = None;
+            }
             if let Some(kind) = app.take_palette_catalog_request(co.rid.as_deref()) {
                 absorb_palette_catalog(app, &kind, &co.data);
                 return UiEffect::redraw(RedrawEffect::Immediate);
@@ -2483,6 +2581,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::Error(err) => {
+            app.compaction = None;
             if app.alt_picker.is_some() {
                 app.cancel_alt_picker();
             }

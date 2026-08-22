@@ -1375,6 +1375,27 @@ fn pause_reason_text(data: &serde_json::Value) -> String {
     }
 }
 
+fn write_resume_rows(out: &mut impl Write, rounds: u64) {
+    if rounds == 0 {
+        write_row(out, "Resume", "shore compact");
+        write_row(out, "Start over", "shore compact --restart");
+        return;
+    }
+    let plural = if rounds == 1 { "" } else { "s" };
+    write_row_colored(
+        out,
+        "Resume",
+        &format!("shore compact — continues from the {rounds} round{plural} already paid for"),
+        Tone::Good,
+    );
+    write_row_colored(
+        out,
+        "Start over",
+        &format!("shore compact --restart — discards {rounds} round{plural} and pays again"),
+        Tone::Warn,
+    );
+}
+
 fn kept_row(out: &mut impl Write, data: &serde_json::Value) {
     let turns = planned_turns(data);
     write_row(
@@ -1435,7 +1456,7 @@ pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Val
                 write_row(out, "Retry after", resume_at);
             }
             kept_row(out, data);
-            write_row(out, "Start over", "shore compact --restart");
+            write_resume_rows(out, rounds);
         }
         "truncated" => {
             write_row_colored(
@@ -2286,7 +2307,7 @@ mod tests {
 
     #[test]
     #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh compact"]
-    fn render_preview_compaction() {
+    fn render_preview_compaction_result() {
         let cases = [
             (
                 "COMPACTED (shore compact)",
@@ -2416,7 +2437,17 @@ mod tests {
             rendered.contains("13 planned, all still in the conversation"),
             "a paused pass reports its plan as a plan: {rendered}"
         );
-        assert!(rendered.contains("shore compact --restart"), "{rendered}");
+        assert!(
+            rendered.contains("shore compact — continues from the 2 rounds already paid for"),
+            "the cheap recovery must come first: {rendered}"
+        );
+        assert!(
+            rendered.contains("shore compact --restart — discards 2 rounds and pays again"),
+            "the destructive option must say what it costs: {rendered}"
+        );
+        let resume_at = rendered.find("Resume").expect("a Resume row");
+        let restart_at = rendered.find("Start over").expect("a Start over row");
+        assert!(resume_at < restart_at, "resume is listed first: {rendered}");
         assert!(
             !rendered.contains("compacted, "),
             "a paused pass must never read as a completed one: {rendered}"
