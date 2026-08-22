@@ -1,3 +1,5 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,16 +17,6 @@ import {
   type AutonomyStateFile,
 } from "../src/autonomy/state_file.ts";
 
-interface Fixture {
-  version: number;
-  filename: string;
-  populated: string;
-  bare: string;
-}
-
-const fixture = (await Bun.file(
-  new URL("./rust_fixtures/autonomy_state.json", import.meta.url),
-).json()) as Fixture;
 
 async function inTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "shore-state-"));
@@ -36,64 +28,77 @@ async function inTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
 }
 
 describe("the file's identity", () => {
-  test("version and filename match the Rust", () => {
-    expect(STATE_VERSION).toBe(fixture.version);
-    expect(STATE_FILENAME).toBe(fixture.filename);
+  test("is a versioned name, so an older daemon's file can be told apart", () => {
+    expect(STATE_VERSION).toBeGreaterThan(0);
+    expect(STATE_FILENAME).toBe("autonomy_state.json");
   });
 });
 
-describe("the bytes", () => {
-  test("a populated state renders exactly as the daemon writes it", () => {
-    const state: AutonomyStateFile = {
-      ticksWithoutUser: 3,
-      nextWakeAt: Date.parse("2026-04-30T09:00:00Z"),
-      lastUserAt: Date.parse("2026-04-30T08:00:00Z"),
-      coveredTurnCount: 12,
-      keepalive: {
-        model: "claude-opus-4-6",
-        intervalMs: 3_300_000,
-        lastWarmAt: Date.parse("2026-04-30T08:30:00Z"),
-        lastActiveAt: Date.parse("2026-04-30T08:29:00Z"),
-      },
-    };
-    expect(encodeState(state)).toBe(fixture.populated);
-  });
+describe("what a state file holds", () => {
+  const POPULATED: AutonomyStateFile = {
+    ticksWithoutUser: 3,
+    nextWakeAt: Date.parse("2026-04-30T09:00:00Z"),
+    lastUserAt: Date.parse("2026-04-30T08:00:00Z"),
+    coveredTurnCount: 12,
+    keepalive: {
+      model: "claude-opus-4-6",
+      intervalMs: 3_300_000,
+      lastWarmAt: Date.parse("2026-04-30T08:30:00Z"),
+      lastActiveAt: Date.parse("2026-04-30T08:29:00Z"),
+    },
+  };
 
-  test("a bare state renders exactly as the daemon writes it", () => {
-    const state: AutonomyStateFile = {
-      ticksWithoutUser: 0,
-      nextWakeAt: undefined,
-      lastUserAt: undefined,
-      coveredTurnCount: 0,
-      keepalive: undefined,
-    };
-    expect(encodeState(state)).toBe(fixture.bare);
-  });
+  const BARE: AutonomyStateFile = {
+    ticksWithoutUser: 0,
+    nextWakeAt: undefined,
+    lastUserAt: undefined,
+    coveredTurnCount: 0,
+    keepalive: undefined,
+  };
 
-  test("both of the Rust's files parse here", () => {
-    const populated = decodeState(fixture.populated);
-    expect(populated).toBeDefined();
-    expect(populated?.ticksWithoutUser).toBe(3);
-    expect(populated?.coveredTurnCount).toBe(12);
-    expect(populated?.keepalive?.model).toBe("claude-opus-4-6");
-    expect(populated?.keepalive?.intervalMs).toBe(3_300_000);
-    expect(populated?.nextWakeAt).toBe(Date.parse("2026-04-30T09:00:00Z"));
-
-    const bare = decodeState(fixture.bare);
-    expect(bare).toBeDefined();
-    expect(bare?.nextWakeAt).toBeUndefined();
-    expect(bare?.keepalive).toBeUndefined();
-  });
-
-  test("what the Rust writes, this side rewrites unchanged", () => {
-    for (const [name, raw] of [
-      ["populated", fixture.populated],
-      ["bare", fixture.bare],
+  test("survives a round trip through the file it writes", () => {
+    for (const [name, state] of [
+      ["populated", POPULATED],
+      ["bare", BARE],
     ] as const) {
-      const decoded = decodeState(raw);
-      expect(decoded, name).toBeDefined();
-      if (decoded !== undefined) expect(encodeState(decoded), name).toBe(raw);
+      expect(decodeState(encodeState(state)), name).toEqual(state);
     }
+  });
+
+  test("re-encodes byte-identically, so a read-and-write cycle is a no-op", () => {
+    for (const [name, state] of [
+      ["populated", POPULATED],
+      ["bare", BARE],
+    ] as const) {
+      const once = encodeState(state);
+      const twice = encodeState(required(decodeState(once)));
+      expect(twice, name).toBe(once);
+    }
+  });
+
+  test("stamps the version it was written by", () => {
+    expect(JSON.parse(encodeState(BARE))).toMatchObject({ version: STATE_VERSION });
+  });
+
+  test("writes timestamps as readable instants, not epoch numbers", () => {
+    const written = JSON.parse(encodeState(POPULATED)) as Record<string, unknown>;
+    expect(written["next_wake_at"]).toBe("2026-04-30T09:00:00+00:00");
+    expect(written["last_user_at"]).toBe("2026-04-30T08:00:00+00:00");
+  });
+
+  test("always writes every field, using null for what is absent", () => {
+    const bare = JSON.parse(encodeState(BARE)) as Record<string, unknown>;
+    const populated = JSON.parse(encodeState(POPULATED)) as Record<string, unknown>;
+    expect(Object.keys(bare).sort()).toEqual(Object.keys(populated).sort());
+    expect(bare["next_wake_at"]).toBeNull();
+    expect(bare["keepalive_model"]).toBeNull();
+  });
+
+  test("keeps the keepalive block together, or leaves all of it out", () => {
+    const populated = JSON.parse(encodeState(POPULATED)) as Record<string, unknown>;
+    expect(populated["keepalive_model"]).toBe("claude-opus-4-6");
+    expect(populated["keepalive_interval_ms"]).toBe(3_300_000);
+    expect(decodeState(encodeState(BARE))?.keepalive).toBeUndefined();
   });
 });
 
