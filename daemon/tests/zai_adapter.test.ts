@@ -102,7 +102,7 @@ describe("request construction", () => {
     expect(params.stream).toBe(true);
     expect(params.stream_options).toEqual({ include_usage: true });
     expect(params.thinking).toEqual({ type: "enabled", clear_thinking: true });
-    expect(params).not.toHaveProperty("reasoning_effort");
+    expect(params.reasoning_effort).toBe("high");
     expect(params.tools as unknown).toEqual([
       {
         type: "function",
@@ -129,6 +129,19 @@ describe("request construction", () => {
   test("disables thinking when thinking_enabled is false (reasoning_effort=off)", () => {
     const params = buildZaiParams(req({ provider_options: { thinking_enabled: false } }), false);
     expect(params.thinking).toEqual({ type: "disabled" });
+  });
+
+  test("disabled thinking suppresses reasoning_effort", () => {
+    const params = buildZaiParams(
+      req({ provider_options: { thinking_enabled: false, reasoning_effort: "high" } }),
+      false,
+    );
+    expect(params).not.toHaveProperty("reasoning_effort");
+  });
+
+  test("reasoning_effort=off is not sent as an effort value", () => {
+    const params = buildZaiParams(req({ provider_options: { reasoning_effort: "off" } }), false);
+    expect(params).not.toHaveProperty("reasoning_effort");
   });
 
   test("disabled thinking omits clear_thinking and never replays reasoning", () => {

@@ -21,6 +21,7 @@ import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { turnToOpenAI } from "./openai.ts";
 import { parseToolArgs } from "../tool_args.ts";
+import { REASONING_OFF } from "../capabilities.ts";
 
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
 export const ZAI_CODING_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
@@ -95,6 +96,11 @@ export function buildZaiParams(
     stream: streaming,
     thinking,
   };
+
+  const effort = req.provider_options?.reasoning_effort;
+  if (!thinkingDisabled && typeof effort === "string" && effort !== REASONING_OFF) {
+    params.reasoning_effort = effort as NonNullable<ChatCompletionCreateParams["reasoning_effort"]>;
+  }
 
   if (streaming) params.stream_options = { include_usage: true };
 

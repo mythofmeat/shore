@@ -48,11 +48,29 @@ describe("buildProviderOptions", () => {
     });
   });
 
+  test("moonshot reasoning_effort → reasoningEffort", () => {
+    expect(buildProviderOptions(req("moonshot", { reasoning_effort: "high" }))).toEqual({
+      moonshotai: { reasoningEffort: "high" },
+    });
+  });
+
+  test("moonshot effort and budget travel together", () => {
+    expect(
+      buildProviderOptions(req("moonshot", { reasoning_effort: "max", budget_tokens: 4096 })),
+    ).toEqual({
+      moonshotai: { reasoningEffort: "max", thinking: { type: "enabled", budgetTokens: 4096 } },
+    });
+  });
+
+  test("reasoning_effort=off is not sent as an effort value", () => {
+    expect(buildProviderOptions(req("moonshot", { reasoning_effort: "off" }))).toBeUndefined();
+    expect(buildProviderOptions(req("deepseek", { reasoning_effort: "off" }))).toBeUndefined();
+  });
+
   test("no reasoning options → undefined", () => {
     expect(buildProviderOptions(req("deepseek"))).toBeUndefined();
     expect(buildProviderOptions(req("moonshot"))).toBeUndefined();
     expect(buildProviderOptions(req("deepseek", { budget_tokens: 4096 }))).toBeUndefined();
-    expect(buildProviderOptions(req("moonshot", { reasoning_effort: "high" }))).toBeUndefined();
   });
 });
 
