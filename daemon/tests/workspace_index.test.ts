@@ -46,6 +46,9 @@ import {
 } from "../src/memory/retrieval";
 import { defaultBaseUrl, hardcodedProviderBaseUrl } from "../src/llm/request";
 import { expandShared } from "./support/shared_subtrees.ts";
+import { recordedValue } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/memory_captures/workspace_index.json";
 
 interface RawConfig {
   binary: string;
@@ -306,7 +309,7 @@ function must<T>(value: T | undefined, what: string): T {
 }
 
 describe("hybridSearch", () => {
-  for (const c of fixture.cases) {
+  for (const [caseIdx, c] of fixture.cases.entries()) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       const idx = join(root, "cache/workspace_index.db");
@@ -368,13 +371,18 @@ describe("hybridSearch", () => {
             break;
           case "search": {
             const run = must(c.runs[runIdx], `run ${runIdx} of ${c.name}`);
+            const runPointer = ["cases", caseIdx, "runs", runIdx] as const;
             runIdx += 1;
-            await replayRun(run, {
+            await replayRun(
+              run,
+              {
               workspaceDir: c.unconfigured ? "" : ws,
               indexFile: idx,
               embedder,
-              config: config ?? configOf(run.config),
-            });
+                config: config ?? configOf(run.config),
+              },
+              runPointer,
+            );
             break;
           }
           default:
@@ -394,7 +402,11 @@ interface RunContext {
   config: RetrievalConfig;
 }
 
-async function replayRun(run: Run, ctx: RunContext): Promise<void> {
+async function replayRun(
+  run: Run,
+  ctx: RunContext,
+  pointer: readonly (string | number)[] = [],
+): Promise<void> {
   ctx.embedder.takeCalls();
 
   let result: Awaited<ReturnType<typeof hybridSearch>> | undefined;
@@ -421,6 +433,27 @@ async function replayRun(run: Run, ctx: RunContext): Promise<void> {
   }
   if (error !== undefined) throw error;
   const got = required(result);
+
+  if (pointer.length > 0)
+    recordedValue(CAPTURE, [...pointer, "outcome"], {
+    searched_files: got.searchedFiles,
+    embedded_files: got.embeddedFiles,
+    skipped_binary_or_large: got.skippedBinaryOrLarge,
+    ...(run.counts_only
+      ? {}
+      : {
+          files: got.files.map((file) => ({
+            display_path: file.displayPath,
+            fs_path: file.fsPath.replace(root, "<tmp>"),
+            content: file.content ?? null,
+            lexical_score: file.lexicalScore,
+            semantic_score: file.semanticScore,
+            combined_score: file.combinedScore,
+            embedded: file.embedded,
+            skip_reason: file.skipReason ?? null,
+          })),
+        }),
+  });
 
   expect(got.searchedFiles).toBe(run.outcome.searched_files);
   expect(got.embeddedFiles).toBe(run.outcome.embedded_files);

@@ -10,6 +10,9 @@ import { CommandError } from "../src/commands/errors.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
 
 import rawFixture from "./command_captures/call_log.json" with { type: "json" };
+import { recordedValue, recording } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/command_captures/call_log.json";
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 const root = mkdtempSync(join(tmpdir(), "call-log-parity-"));
@@ -132,7 +135,8 @@ const CHARACTER_FOR = (name: string): string =>
   name === "no_rows_for_character" ? "nobody" : "poppy";
 
 describe.each(["call_log", "transcript"])("%s", (command) => {
-  for (const row of (fixture.cases as Case[]).filter((c) => c.command === command)) {
+  for (const [index, row] of (fixture.cases as Case[]).entries()) {
+    if (row.command !== command) continue;
     test(row.case, () => {
       const ctx = contextFor(row.case, CHARACTER_FOR(row.case));
       const run = () =>
@@ -148,7 +152,10 @@ describe.each(["call_log", "transcript"])("%s", (command) => {
         }
         return;
       }
-      expect(withoutBytes(withoutWire(run()))).toEqual(withoutBytes(row.ok));
+      const got = withoutBytes(withoutWire(run()));
+      recordedValue(CAPTURE, ["cases", index, "ok"], got);
+      if (recording) return;
+      expect(got).toEqual(withoutBytes(row.ok));
     });
   }
 });

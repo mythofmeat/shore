@@ -49,6 +49,9 @@ import {
 } from "../src/notifications.ts";
 
 import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
+import { recordedValue, recording } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/handler_captures/stream.json";
 
 type Row = Record<string, unknown>;
 
@@ -460,7 +463,7 @@ function fillEventDefaults(event: Row): Row {
 }
 
 describe("stream accumulation", () => {
-  for (const c of f["streams"] as Row[]) {
+  for (const [index, c] of (f["streams"] as Row[]).entries()) {
     test(c["name"] as string, async () => {
       const frames: ServerMessage[] = [];
       const sink: FrameSink = (m) => frames.push(m);
@@ -509,8 +512,12 @@ describe("stream accumulation", () => {
         expected["err"] = { kind: "deserialize" };
       }
 
+      const shaped = frames.map(frameToFixtureShape);
+      recordedValue(CAPTURE, ["streams", index, "frames"], shaped);
+      if (recording) return;
+
       expect(outcome).toEqual(expected);
-      expect(frames.map(frameToFixtureShape)).toEqual(c["frames"] as Row[]);
+      expect(shaped).toEqual(c["frames"] as Row[]);
     });
   }
 
