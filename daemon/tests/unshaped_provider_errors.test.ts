@@ -108,8 +108,15 @@ describe("an error that does not carry shore's own shape", () => {
     expect(describeError(toLlmError(bunFetchTimeout()))).toContain("timed out");
   });
 
-  test("sanitizeReason still withholds it, which is the Rust-parity contract", () => {
-    expect(sanitizeReason(new Error("socket hang up"))).toBe("transport error");
+  test("sanitizeReason carries it too, so a fallback warning says what went wrong", () => {
+    expect(sanitizeReason(new Error("socket hang up"))).toBe("transport error: socket hang up");
+    expect(sanitizeReason(bunFetchTimeout())).toContain("timed out");
+  });
+
+  test("a long transport message is still truncated without splitting a character", () => {
+    const reason = sanitizeReason(new Error(`${"x".repeat(199)}\u4E16${"y".repeat(400)}`));
+    expect(reason).not.toContain("\uFFFD");
+    expect(Buffer.from(reason, "utf8").length).toBeLessThanOrEqual(220);
   });
 });
 

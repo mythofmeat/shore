@@ -33,11 +33,11 @@ export function sanitizeReason(raw: unknown): string {
     case "stream_errored":
       return `stream errored: ${error.message}`;
     case "transport":
-      return "transport error";
+      return `transport error: ${truncateBytes(error.message, MAX_REASON_BYTES)}`;
     case "serialize":
-      return "request serialization failed";
+      return `request serialization failed: ${truncateBytes(error.message, MAX_REASON_BYTES)}`;
     case "deserialize":
-      return "response deserialization failed";
+      return `response deserialization failed: ${truncateBytes(error.message, MAX_REASON_BYTES)}`;
     case "budget_blocked":
       return truncateBytes(error.message, MAX_REASON_BYTES);
     case "aborted":
