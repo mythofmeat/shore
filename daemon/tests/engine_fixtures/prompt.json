@@ -140,15 +140,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -166,31 +157,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, talking to Dana."
-          },
-          {
-            "label": "tools_guidance",
-            "content": "Use tools sparingly."
-          },
-          {
-            "label": "character",
-            "content": "<ada>\nCurious and terse.\n</ada>"
-          },
-          {
-            "label": "user",
-            "content": "<dana>\nPrefers short answers.\n</dana>"
-          },
-          {
-            "label": "memory_index",
-            "content": "<memory_index>\nThe following is your active memory from workspace/MEMORY.md — a dated, continuously pruned scratchpad of what is live right now: current state, still-relevant conversational throughlines, and thin pointers to where deeper material lives. It is not long-term storage; that is the job of your memory/ files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n- likes tea\n</memory_index>"
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -208,15 +174,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -234,23 +191,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Dr. Ada  Lovelace!, in conversation with ###.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          },
-          {
-            "label": "character",
-            "content": "<dr_ada_lovelace>\ndef\n</dr_ada_lovelace>"
-          },
-          {
-            "label": "user",
-            "content": "<user>\nudef\n</user>"
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -268,15 +208,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "Today is  at . I am Ada."
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -294,15 +225,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "Ada and Ada are the same."
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -320,15 +242,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "[{{nope}}]"
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -346,15 +259,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "I am Ada."
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -372,15 +276,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "|end"
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -398,15 +293,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "before {{#if char}} body with no close"
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -424,15 +310,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "outer inner"
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -450,15 +327,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "before  after"
-          }
-        ],
-        "messages": []
       }
     },
     {
@@ -516,55 +384,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "one",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "one"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "two",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "two"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "three",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "three"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -663,46 +482,6 @@
         "max_context_tokens": 500,
         "max_output_tokens": 100,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            "images": [],
-            "content_blocks": {
-              "$ref": "s1"
-            },
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            "images": [],
-            "content_blocks": {
-              "$ref": "s1"
-            },
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            "images": [],
-            "content_blocks": {
-              "$ref": "s1"
-            },
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -747,29 +526,6 @@
         "max_context_tokens": 0,
         "max_output_tokens": 0,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "newest",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "newest"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -801,29 +557,6 @@
         "max_context_tokens": 100,
         "max_output_tokens": 4096,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "only",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "only"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -868,42 +601,6 @@
         "max_context_tokens": 300,
         "max_output_tokens": 100,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語日本語"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "short",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "short"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -965,59 +662,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "ignored",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
-              },
-              {
-                "type": "thinking",
-                "thinking": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
-                "signature": "sig"
-              },
-              {
-                "type": "redacted_thinking",
-                "data": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-              },
-              {
-                "type": "tool_use",
-                "id": "tu1",
-                "name": "grep",
-                "input": {
-                  "pattern": "needle"
-                }
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "next",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "next"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1052,32 +696,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
-            "images": [],
-            "content_blocks": [],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "reply",
-            "images": [],
-            "content_blocks": [],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1122,29 +740,6 @@
         "max_context_tokens": 21,
         "max_output_tokens": 0,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "S"
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "b",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "b"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1193,46 +788,6 @@
         "max_context_tokens": 21,
         "max_output_tokens": 0,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "S"
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "ignored",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-              },
-              {
-                "type": "redacted_thinking",
-                "data": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "b",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "b"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1285,29 +840,6 @@
         "max_context_tokens": 21,
         "max_output_tokens": 0,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "S"
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "b",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "b"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1352,33 +884,6 @@
         "max_context_tokens": 13,
         "max_output_tokens": 0,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "AAAA"
-          },
-          {
-            "label": "tools_guidance",
-            "content": "BBBB"
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "b",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "b"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1423,42 +928,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:00 PM]\n\nfirst",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:00 PM]\n\nfirst"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:29 PM]\n\nsecond",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:29 PM]\n\nsecond"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1505,29 +974,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:01 PM]\n\nreal turn",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:01 PM]\n\nreal turn"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1589,29 +1035,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "done",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "done"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1649,35 +1072,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "thinking out loud",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "thinking out loud"
-              },
-              {
-                "type": "tool_use",
-                "id": "tu1",
-                "name": "grep",
-                "input": {}
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1697,55 +1091,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "morning",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "morning"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "hi",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "hi"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[6 hours later · Saturday 2026-04-04 · 3:30 PM]\n\nback",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[6 hours later · Saturday 2026-04-04 · 3:30 PM]\n\nback"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1765,55 +1110,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "morning",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "morning"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "hi",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "hi"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "back",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "back"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1833,55 +1129,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 9:00 AM]\n\nmorning",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 9:00 AM]\n\nmorning"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "hi",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "hi"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[6 hours later · Saturday 2026-04-04 · 3:30 PM]\n\nback",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[6 hours later · Saturday 2026-04-04 · 3:30 PM]\n\nback"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -1939,55 +1186,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "a",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "a"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "b",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "b"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "c",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "c"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2032,42 +1230,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:00 PM]\n\nfirst visible",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:00 PM]\n\nfirst visible"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "reply",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "reply"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2177,107 +1339,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:00 PM]\n\nu1",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:00 PM]\n\nu1"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "a1",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "a1"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "u2",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "u2"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "a2",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "a2"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 1:20 PM]\n\nu3",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 1:20 PM]\n\nu3"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "a3",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "a3"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "u4",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "u4"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2400,120 +1461,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:00 AM]\n\nbase",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:00 AM]\n\nbase"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:29 AM]\n\ng1799",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:29 AM]\n\ng1799"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[about an hour later · Saturday 2026-04-04 · 12:59 AM]\n\ng1800",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[about an hour later · Saturday 2026-04-04 · 12:59 AM]\n\ng1800"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[about an hour later · Saturday 2026-04-04 · 2:29 AM]\n\ng5399",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[about an hour later · Saturday 2026-04-04 · 2:29 AM]\n\ng5399"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[2 hours later · Saturday 2026-04-04 · 3:59 AM]\n\ng5400",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[2 hours later · Saturday 2026-04-04 · 3:59 AM]\n\ng5400"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[18 hours later · Saturday 2026-04-04 · 9:59 PM]\n\ng64799",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[18 hours later · Saturday 2026-04-04 · 9:59 PM]\n\ng64799"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[about a day later · Sunday 2026-04-05 · 3:59 PM]\n\ng64800",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[about a day later · Sunday 2026-04-05 · 3:59 PM]\n\ng64800"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[2 days later · Tuesday 2026-04-07 · 3:59 AM]\n\ng129600",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[2 days later · Tuesday 2026-04-07 · 3:59 AM]\n\ng129600"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2551,35 +1498,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:00 PM]\n\nbody",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "tool_result",
-                "tool_use_id": "tu1",
-                "content": "r",
-                "is_error": false
-              },
-              {
-                "type": "text",
-                "text": "body"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2624,42 +1542,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "bad ts",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "bad ts"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:00 PM]\n\ngood ts",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:00 PM]\n\ngood ts"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2704,42 +1586,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:00 AM]\n\nu",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:00 AM]\n\nu"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "assistant",
-            "content": "a much later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "a much later"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2784,42 +1630,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "system",
-            "content": "heartbeat recap",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "heartbeat recap"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[about a day later · Sunday 2026-04-05 · 12:00 AM]\n\nu",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[about a day later · Sunday 2026-04-05 · 12:00 AM]\n\nu"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2864,42 +1674,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 6:00 PM]\n\nlater first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 6:00 PM]\n\nlater first"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 9:00 AM]\n\nearlier second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 9:00 AM]\n\nearlier second"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -2944,42 +1718,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Sunday 2026-03-08 · 1:30 AM]\n\nbefore",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Sunday 2026-03-08 · 1:30 AM]\n\nbefore"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[about an hour later · Sunday 2026-03-08 · 3:30 AM]\n\nafter",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[about an hour later · Sunday 2026-03-08 · 3:30 AM]\n\nafter"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -3024,42 +1762,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Sunday 2026-11-01 · 1:30 AM]\n\nfirst 1:30",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Sunday 2026-11-01 · 1:30 AM]\n\nfirst 1:30"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[about an hour later · Sunday 2026-11-01 · 1:30 AM]\n\nsecond 1:30",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[about an hour later · Sunday 2026-11-01 · 1:30 AM]\n\nsecond 1:30"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -3117,55 +1819,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 12:00 AM]\n\nmidnight",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 12:00 AM]\n\nmidnight"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[12 hours later · Saturday 2026-04-04 · 12:00 PM]\n\nnoon",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[12 hours later · Saturday 2026-04-04 · 12:00 PM]\n\nnoon"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          },
-          {
-            "role": "user",
-            "content": "[Saturday 2026-04-04 · 9:05 AM]\n\nsingle digit",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "[Saturday 2026-04-04 · 9:05 AM]\n\nsingle digit"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -3202,34 +1855,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "user",
-            "content": "look",
-            "images": [
-              {
-                "path": "/cache/images/abc123.png",
-                "caption": "a screenshot"
-              }
-            ],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "look"
-              }
-            ],
-            "provider_key": null,
-            "model": null
-          }
-        ]
       }
     },
     {
@@ -3263,29 +1888,6 @@
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
-      },
-      "expect": {
-        "system": [
-          {
-            "label": "system",
-            "content": "You are Ada, in conversation with Dana.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-          }
-        ],
-        "messages": [
-          {
-            "role": "assistant",
-            "content": "hi",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "hi"
-              }
-            ],
-            "provider_key": "openrouter-anthropic",
-            "model": "anthropic/claude-opus-4.6"
-          }
-        ]
       }
     }
   ],
