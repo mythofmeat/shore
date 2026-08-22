@@ -214,12 +214,41 @@ function blankDirectorySizes(o: Outcome): Outcome {
   return { ok: { ...ok, entries } };
 }
 
+function changedPaths(
+  before: { path: string; content?: string }[],
+  after: { path: string; content?: string }[],
+): string[] {
+  const key = (n: { path: string; content?: string }) => `${n.path}\u0000${n.content ?? ""}`;
+  const was = new Set(before.map(key));
+  const now = new Set(after.map(key));
+  const paths = new Set<string>();
+  for (const n of after) if (!was.has(key(n))) paths.add(n.path);
+  for (const n of before) if (!now.has(key(n))) paths.add(n.path);
+  return [...paths].sort();
+}
+
 describe("edit", () => {
   for (const c of fixture.edit) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree);
-      expect(await outcome(() => handleEdit(c.input, workspace))).toEqual(c.result);
-      expect(await snapshot(workspace)).toEqual(c.after);
+      const before = await snapshot(workspace);
+      const got = await outcome(() => handleEdit(c.input, workspace));
+      expect(got).toEqual(c.result);
+
+      const after = await snapshot(workspace);
+      expect(after).toEqual(c.after);
+
+      const written = "ok" in got ? (got.ok as { path?: string }).path : undefined;
+      const touched = changedPaths(before, after);
+      if (written === undefined) {
+        expect(touched, "a refused edit leaves the workspace alone").toEqual([]);
+      } else {
+        const onTheWay = (p: string) => written.startsWith(`${p}/`);
+        expect(
+          touched.filter((p) => p !== written && !onTheWay(p)),
+          "an edit writes the path it reports, and only the directories leading to it",
+        ).toEqual([]);
+      }
     });
   }
 
