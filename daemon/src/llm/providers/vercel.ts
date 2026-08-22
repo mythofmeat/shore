@@ -26,6 +26,7 @@ import type {
 import { systemToText, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
+import { REASONING_OFF } from "../capabilities.ts";
 
 export class VercelProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -150,12 +151,11 @@ export function buildProviderOptions(req: SidecarRequest): ProviderOptionsValue 
 
   if (opts.thinking_enabled === false) {
     inner["thinking"] = { type: "disabled" };
-  } else if (req.sdk === "deepseek") {
-    const effort = opts.reasoning_effort;
-    if (typeof effort === "string" && effort !== "off") inner["reasoningEffort"] = effort;
   } else {
+    const effort = opts.reasoning_effort;
+    if (typeof effort === "string" && effort !== REASONING_OFF) inner["reasoningEffort"] = effort;
     const budget = opts.budget_tokens;
-    if (typeof budget === "number" && budget > 0) {
+    if (req.sdk !== "deepseek" && typeof budget === "number" && budget > 0) {
       inner["thinking"] = { type: "enabled", budgetTokens: budget };
     }
   }
