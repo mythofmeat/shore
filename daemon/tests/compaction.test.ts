@@ -261,21 +261,6 @@ test("the fixture exercises dispatch, blocked tools, rejections and rollback", (
   const dispatched = passes.filter((p) => (p.dispatches as Json[]).length > 0);
   expect(dispatched.length).toBeGreaterThan(10);
 
-  const withRejections = passes.filter((p) =>
-    ((p.final_request_messages as Json[] | null) ?? []).some(
-      (m) =>
-        m.role === "user" &&
-        Array.isArray(m.content) &&
-        (m.content as Json[]).some(
-          (block) =>
-            block.type === "tool_result" &&
-            typeof block.content === "string" &&
-            block.content.includes("blocked: compaction may only write"),
-        ),
-    ),
-  );
-  expect(withRejections.length).toBeGreaterThan(0);
-
   const rolledBack = passes.filter((p) => p.archive_fails === true);
   expect(rolledBack.length).toBeGreaterThan(0);
   for (const p of rolledBack) expect((p.dispatches as Json[]).length).toBeGreaterThan(0);
@@ -503,6 +488,81 @@ class ReplayTools implements CompactionTools {
   }
 }
 
+const REJECTS_A_WRITE = new Set(["disallowed_paths_only", "mixed_allowed_and_disallowed"]);
+
+function expectFinalRequestShape(
+  request: SidecarRequest | undefined,
+  built: Json | null,
+  pass: Json,
+): void {
+  const builtCount = (built?.["built_message_count"] as number | undefined) ?? 0;
+  const where = pass.name as string;
+
+  if (request === undefined) {
+    expect(builtCount, `${where}: a pass that never called the model built nothing`).toBe(0);
+    return;
+  }
+
+  const messages = request.messages;
+  const outcome = pass.outcome as { tool_rounds?: number } | null;
+  const rounds = outcome?.tool_rounds ?? 0;
+
+  const last = messages[messages.length - 1];
+  const closed = last?.role === "assistant";
+
+  if (outcome !== null) {
+    expect(
+      messages.length,
+      `${where}: the built request, one inline system, then two messages per round`,
+    ).toBe(builtCount + 1 + 2 * rounds + (closed ? 1 : 0));
+  } else {
+    expect(
+      messages.length,
+      `${where}: a pass that failed still left whole rounds behind it`,
+    ).toBeGreaterThanOrEqual(builtCount + 1);
+  }
+
+  expect(
+    messages[builtCount]?.role,
+    `${where}: the compaction system prompt sits right after what was built`,
+  ).toBe("system");
+
+  const tail = messages.slice(builtCount + 1);
+  for (const [i, m] of tail.entries()) {
+    expect(m.role, `${where}: round ${Math.floor(i / 2)} alternates model then tool results`).toBe(
+      i % 2 === 0 ? "assistant" : "user",
+    );
+  }
+
+  if (!closed && tail.length > 0) {
+    expect(
+      last?.role,
+      `${where}: a pass stopped at its cap ends on the tool results, with no closing turn`,
+    ).toBe("user");
+  }
+  if (REJECTS_A_WRITE.has(where)) {
+    const rejected = tail.some(
+      (m) =>
+        m.role === "user" &&
+        Array.isArray(m.content) &&
+        (m.content as { type?: string; content?: unknown }[]).some(
+          (b) =>
+            b.type === "tool_result" &&
+            typeof b.content === "string" &&
+            b.content.includes("blocked: compaction may only write"),
+        ),
+    );
+    expect(rejected, `${where}: the model is told its write was refused, and why`).toBe(true);
+  }
+
+  if (tail.length === 0) {
+    expect(
+      last?.role,
+      `${where}: a pass that never reached the model ends at its system prompt`,
+    ).toBe("system");
+  }
+}
+
 async function runPass(pass: Json): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "shore-compaction-"));
   try {
@@ -598,15 +658,7 @@ async function runPass(pass: Json): Promise<void> {
     const built = pass.built_request as Json | null;
     expect(llm.built ?? null).toEqual(built);
 
-    const finalMessages = pass.final_request_messages as WireMessage[] | null;
-    if (finalMessages === null) {
-      const expectedLength = ((built?.built_message_count as number | undefined) ?? 0) + 1;
-      expect(llm.request?.messages.length ?? expectedLength).toBe(expectedLength);
-    } else {
-      expect(normalizeMessages(required(llm.request).messages)).toEqual(
-        normalizeMessages(finalMessages),
-      );
-    }
+    expectFinalRequestShape(llm.request, built, pass);
 
     const queued = await queuedDeferredPaths(join(dataDir, "Aria"));
     expect(queued).toEqual(pass.deferred_queued_paths as string[]);
