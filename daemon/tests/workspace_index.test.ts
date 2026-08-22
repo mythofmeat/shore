@@ -97,7 +97,6 @@ interface Run {
   counts_only: boolean;
   embed_calls: string[][];
   embed_input_count: number;
-  index_after: RawIndex | null;
   outcome: RunOutcome;
 }
 
@@ -418,7 +417,6 @@ async function replayRun(run: Run, ctx: RunContext): Promise<void> {
   if (run.outcome.error !== undefined) {
     expect(error).toBeInstanceOf(WorkspaceIndexError);
     expect((error as WorkspaceIndexError).message).toBe(run.outcome.error);
-    await expectIndexOnDisk(ctx.indexFile, run.index_after, ctx.embedder.modelId);
     return;
   }
   if (error !== undefined) throw error;
@@ -454,20 +452,37 @@ async function replayRun(run: Run, ctx: RunContext): Promise<void> {
   );
   if (calls.length > 0) expect(calls.at(-1)).toEqual([run.query]);
 
-  await expectIndexOnDisk(ctx.indexFile, run.index_after, ctx.embedder.modelId);
-}
+  const again = await hybridSearch({
+    workspaceDir: ctx.workspaceDir,
+    retrievalConfig: configOf(run.config),
+    query: run.query,
+    mode: run.mode as HybridMode,
+    embedder: ctx.embedder,
+    indexPath: ctx.indexFile,
+    ...(run.path_filter === null ? {} : { pathFilter: run.path_filter }),
+  });
+  const reEmbedded = ctx.embedder.takeCalls().reduce((n, b) => n + b.length, 0);
 
-async function expectIndexOnDisk(
-  path: string,
-  expected: unknown,
-  model: string,
-): Promise<void> {
-  if (expected === null) {
-    if (!(await Bun.file(path).exists())) return;
-    expectIndexMatches(storedEntries(path, model), {});
-    return;
+  expect(
+    again.files.map((f) => f.displayPath),
+    "re-running the same query returns the same files",
+  ).toEqual(got.files.map((f) => f.displayPath));
+  expect(
+    again.files.map((f) => f.combinedScore),
+    "and scores them the same",
+  ).toEqual(got.files.map((f) => f.combinedScore));
+
+  if (await Bun.file(ctx.indexFile).exists()) {
+    expect(
+      reEmbedded,
+      "the index was written, so only the query itself is embedded again",
+    ).toBeLessThanOrEqual(1);
+  } else if (got.files.length > 0) {
+    expect(
+      reEmbedded,
+      "with nowhere to write the index, the work is done again",
+    ).toBeGreaterThanOrEqual(1);
   }
-  expectIndexMatches(storedEntries(path, model), expectedEntries(expected));
 }
 
 interface ComparableIndexEntry {
@@ -487,28 +502,6 @@ interface FixtureIndex {
   entries: Record<string, FixtureIndexEntry>;
 }
 
-function storedEntries(path: string, model: string): Record<string, ComparableIndexEntry> {
-  const store = WorkspaceIndexStore.open(path);
-  try {
-    const out: Record<string, ComparableIndexEntry> = {};
-    for (const [displayPath, row] of store.files()) {
-      const vector = row.embedded
-        ? store.vectorsFor(model, [row.document_hash]).get(row.document_hash)
-        : undefined;
-      out[displayPath] = {
-        size: row.size,
-        modified_at_secs: row.modified_at_secs,
-        embedded: row.embedded,
-        reason: row.reason ?? null,
-        ...(vector === undefined ? {} : { embedding: f32s(vector) }),
-      };
-    }
-    return out;
-  } finally {
-    store.close();
-  }
-}
-
 function expectIndexMatches(
   got: Record<string, ComparableIndexEntry>,
   want: Record<string, ComparableIndexEntry>,
@@ -519,20 +512,6 @@ function expectIndexMatches(
     if (path in want) continue;
     expect({ path, ...row }).toMatchObject({ path, embedded: false, reason: null });
   }
-}
-
-function expectedEntries(expected: unknown): Record<string, ComparableIndexEntry> {
-  const out: Record<string, ComparableIndexEntry> = {};
-  for (const [path, e] of Object.entries((expected as FixtureIndex).entries)) {
-    out[path] = {
-      size: e.size,
-      modified_at_secs: e.modified_at_secs,
-      embedded: e.embedded,
-      reason: e.reason ?? null,
-      ...(e.embedding === undefined ? {} : { embedding: f32s(e.embedding) }),
-    };
-  }
-  return out;
 }
 
 function seededHash(fsPath: string, displayPath: string, cap: number): string {

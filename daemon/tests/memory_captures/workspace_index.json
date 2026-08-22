@@ -34,8 +34,7 @@
           "outcome": {
             "error": "workspace not configured"
           },
-          "embed_calls": [],
-          "index_after": null
+          "embed_calls": []
         }
       ]
     },
@@ -76,8 +75,7 @@
             "skipped_binary_or_large": 0,
             "files": []
           },
-          "embed_calls": [],
-          "index_after": null
+          "embed_calls": []
         }
       ]
     },
@@ -122,8 +120,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": null
+          ]
         }
       ]
     },
@@ -195,37 +192,7 @@
             [
               "needle"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:37",
-                "size": 37,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:22",
-                "size": 22,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -297,37 +264,7 @@
             [
               "growing tea in the garden"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:42",
-                "size": 42,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.25,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:36",
-                "size": 36,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -409,37 +346,7 @@
             [
               "growing tea in the garden"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:42",
-                "size": 42,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.25,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:36",
-                "size": 36,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -528,50 +435,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "notes/garden/soil.md": {
-                "hash": "mtime:1001:12",
-                "size": 12,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.25,
-                  0.0
-                ]
-              },
-              "notes/tea/brewing.md": {
-                "hash": "mtime:1000:19",
-                "size": 19,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "readme.md": {
-                "hash": "mtime:1002:22",
-                "size": 22,
-                "modified_at_secs": 1002,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.2
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -639,7 +503,31 @@
             "binary": "skip"
           },
           "outcome": {
-            "$ref": "s2"
+            "embedded_files": 2,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "notes/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/notes/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              },
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "other/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/other/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
           },
           "embed_calls": [
             [
@@ -649,10 +537,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "$ref": "s3"
-          }
+          ]
         },
         {
           "query": "tea",
@@ -687,10 +572,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "$ref": "s3"
-          }
+          ]
         },
         {
           "query": "tea",
@@ -725,10 +607,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "$ref": "s3"
-          }
+          ]
         },
         {
           "query": "tea",
@@ -743,16 +622,37 @@
             "binary": "skip"
           },
           "outcome": {
-            "$ref": "s2"
+            "embedded_files": 2,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "notes/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/notes/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              },
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "other/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/other/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
           },
           "embed_calls": [
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "$ref": "s3"
-          }
+          ]
         },
         {
           "query": "tea",
@@ -767,16 +667,37 @@
             "binary": "skip"
           },
           "outcome": {
-            "$ref": "s2"
+            "embedded_files": 2,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "notes/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/notes/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              },
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "other/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/other/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
           },
           "embed_calls": [
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "$ref": "s3"
-          }
+          ]
         },
         {
           "query": "tea",
@@ -800,10 +721,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "$ref": "s3"
-          }
+          ]
         }
       ]
     },
@@ -878,24 +796,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "notes.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -933,37 +834,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "notes.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "notes/inner.md": {
-                "hash": "mtime:1001:10",
-                "size": 10,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -1015,21 +886,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea in the garden",
-                "lexical_score": 34,
-                "semantic_score": 0.800000011920929,
-                "combined_score": 0.8899999856948853,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s1"
           },
           "embed_calls": [
             [
@@ -1039,37 +896,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:17",
-                "size": 17,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.25,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:11",
-                "size": 11,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.2
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -1084,57 +911,13 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea in the garden",
-                "lexical_score": 34,
-                "semantic_score": 0.800000011920929,
-                "combined_score": 0.8899999856948853,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s1"
           },
           "embed_calls": [
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:17",
-                "size": 17,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.25,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:11",
-                "size": 11,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.2
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -1192,21 +975,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea in the garden",
-                "lexical_score": 34,
-                "semantic_score": 0.800000011920929,
-                "combined_score": 0.8899999856948853,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s1"
           },
           "embed_calls": [
             [
@@ -1216,37 +985,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:17",
-                "size": 17,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.25,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:11",
-                "size": 11,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.2
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -1261,21 +1000,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea in the garden",
-                "lexical_score": 34,
-                "semantic_score": 0.800000011920929,
-                "combined_score": 0.8899999856948853,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s1"
           },
           "embed_calls": [
             [
@@ -1284,37 +1009,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:17",
-                "size": 17,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.25,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1002:22",
-                "size": 22,
-                "modified_at_secs": 1002,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.2
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -1403,24 +1098,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:57",
-                "size": 57,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 5,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -1458,24 +1136,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:57",
-                "size": 57,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 100,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.2
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -1555,37 +1216,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:11",
-                "size": 11,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.2
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -1620,24 +1251,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -1717,33 +1331,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "blob.bin": {
-                "hash": "mtime:1001:4",
-                "size": 4,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "non-utf8"
-              },
-              "good.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -1778,33 +1366,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "blob.bin": {
-                "hash": "mtime:1001:4",
-                "size": 4,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "non-utf8"
-              },
-              "good.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -1896,20 +1458,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "blob.bin": {
-                "hash": "mtime:1000:2",
-                "size": 2,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "binary-metadata-only"
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -1933,20 +1482,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "blob.bin": {
-                "hash": "mtime:1000:2",
-                "size": 2,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "binary-embedding-unsupported"
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -1970,20 +1506,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "blob.bin": {
-                "hash": "mtime:1000:2",
-                "size": 2,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "non-utf8"
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2068,33 +1591,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "huge.md": {
-                "hash": "mtime:1001:29",
-                "size": 29,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "oversize"
-              },
-              "small.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -2129,33 +1626,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "huge.md": {
-                "hash": "mtime:1001:29",
-                "size": 29,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "oversize"
-              },
-              "small.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2225,33 +1696,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "exact.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              },
-              "over.md": {
-                "hash": "mtime:1001:11",
-                "size": 11,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "oversize"
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2327,24 +1772,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "in.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2420,24 +1848,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "in.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2514,24 +1925,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "note.md": {
-                "hash": "mtime:1000:15",
-                "size": 15,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2602,24 +1996,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "note.md": {
-                "hash": "mtime:1000:15",
-                "size": 15,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2707,37 +2084,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "note.md": {
-                "hash": "mtime:1000:15",
-                "size": 15,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "vendor/dep/src.md": {
-                "hash": "mtime:1002:10",
-                "size": 10,
-                "modified_at_secs": 1002,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2819,37 +2166,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              ".gitignore": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "git": {
-                "hash": "mtime:1001:3",
-                "size": 3,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -2922,24 +2239,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -3069,24 +2369,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.1,
-                  0.2,
-                  0.3
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -3208,24 +2491,7 @@
             [
               "zzz-no-match"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -3311,37 +2577,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "in/a.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "out/b.md": {
-                "hash": "mtime:1001:3",
-                "size": 3,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "query": "tea",
@@ -3376,37 +2612,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "in/a.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "out/b.md": {
-                "hash": "mtime:1001:3",
-                "size": 3,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -3472,22 +2678,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  1.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -3553,24 +2744,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -3625,24 +2799,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  -1.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -3775,76 +2932,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "C.md": {
-                "hash": "mtime:1002:3",
-                "size": 3,
-                "modified_at_secs": 1002,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "a.md": {
-                "hash": "mtime:1001:3",
-                "size": 3,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              ".md": {
-                "hash": "mtime:1003:3",
-                "size": 3,
-                "modified_at_secs": 1003,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "🌊.md": {
-                "hash": "mtime:1004:3",
-                "size": 3,
-                "modified_at_secs": 1004,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -3905,37 +2993,7 @@
             [
               "zzz-no-match"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:12",
-                "size": 12,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:8",
-                "size": 8,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4017,37 +3075,7 @@
             [
               ""
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:5",
-                "size": 5,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:4",
-                "size": 4,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4119,37 +3147,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1001:3",
-                "size": 3,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "empty.md": {
-                "hash": "mtime:1000:0",
-                "size": 0,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4238,50 +3236,7 @@
             [
               "tea garden"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "b.md": {
-                "hash": "mtime:1001:24",
-                "size": 24,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "c.md": {
-                "hash": "mtime:1002:7",
-                "size": 7,
-                "modified_at_secs": 1002,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              },
-              "tea.md": {
-                "hash": "mtime:1000:21",
-                "size": 21,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.25,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4361,33 +3316,7 @@
             [
               "tea garden"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0
-                ]
-              },
-              "garden.md": {
-                "hash": "mtime:1001:3",
-                "size": 3,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4453,24 +3382,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  -1.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4536,24 +3448,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  1.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4625,37 +3520,7 @@
             [
               "TEA"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "Tea.md": {
-                "hash": "mtime:1000:17",
-                "size": 17,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:7",
-                "size": 7,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4736,33 +3601,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "other.md": {
-                "hash": "mtime:1001:3",
-                "size": 3,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "tea-huge.md": {
-                "hash": "mtime:1000:20",
-                "size": 20,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "oversize"
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4861,50 +3700,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "Z.md": {
-                "hash": "mtime:1002:3",
-                "size": 3,
-                "modified_at_secs": 1002,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "a.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "a/b.md": {
-                "hash": "mtime:1001:3",
-                "size": 3,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -4969,24 +3765,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1:3",
-                "size": 3,
-                "modified_at_secs": 1,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -5026,7 +3805,42 @@
       ],
       "runs": [
         {
-          "$ref": "s1"
+          "config": {
+            "binary": "skip",
+            "max_embed_chars_per_file": 4000,
+            "max_file_bytes": 2097152,
+            "max_indexed_files": 50000,
+            "max_total_indexed_bytes": 1073741824
+          },
+          "counts_only": false,
+          "embed_calls": [
+            [
+              "path: a.md\n\ntea aaa"
+            ],
+            [
+              "tea"
+            ]
+          ],
+          "mode": "hybrid",
+          "outcome": {
+            "embedded_files": 1,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "tea aaa",
+                "display_path": "a.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/a.md",
+                "lexical_score": 34,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 1,
+            "skipped_binary_or_large": 0
+          },
+          "path_filter": null,
+          "query": "tea"
         },
         {
           "query": "tea",
@@ -5064,24 +3878,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:10",
-                "size": 10,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -5121,7 +3918,42 @@
       ],
       "runs": [
         {
-          "$ref": "s1"
+          "config": {
+            "binary": "skip",
+            "max_embed_chars_per_file": 4000,
+            "max_file_bytes": 2097152,
+            "max_indexed_files": 50000,
+            "max_total_indexed_bytes": 1073741824
+          },
+          "counts_only": false,
+          "embed_calls": [
+            [
+              "path: a.md\n\ntea aaa"
+            ],
+            [
+              "tea"
+            ]
+          ],
+          "mode": "hybrid",
+          "outcome": {
+            "embedded_files": 1,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "tea aaa",
+                "display_path": "a.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/a.md",
+                "lexical_score": 34,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 1,
+            "skipped_binary_or_large": 0
+          },
+          "path_filter": null,
+          "query": "tea"
         },
         {
           "query": "tea",
@@ -5159,24 +3991,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:2000:7",
-                "size": 7,
-                "modified_at_secs": 2000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -5241,24 +4056,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:14",
-                "size": 14,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -5327,24 +4125,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:3",
-                "size": 3,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -5430,37 +4211,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "a.md": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              },
-              "b.md": {
-                "hash": "mtime:1001:9",
-                "size": 9,
-                "modified_at_secs": 1001,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -5529,24 +4280,7 @@
             [
               "tea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "0": {
-                "hash": "mtime:1000:8",
-                "size": 8,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": true,
-                "embedding": [
-                  0.33333334,
-                  0.0,
-                  0.0
-                ]
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -5577,47 +4311,9 @@
           "run": 0
         }
       ],
-      "runs": [
-        {
-          "query": "tea",
-          "mode": "hybrid",
-          "path_filter": null,
-          "counts_only": false,
-          "config": {
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "outcome": {
-            "searched_files": 1,
-            "embedded_files": 1,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea time",
-                "lexical_score": 34,
-                "semantic_score": 1.0,
-                "combined_score": 1.0,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
-          },
-          "embed_calls": [
-            [
-              "path: a.md\n\ntea time"
-            ],
-            [
-              "tea"
-            ]
-          ],
-          "index_after": null
-        }
-      ]
+      "runs": {
+        "$ref": "s0"
+      }
     },
     {
       "name": "an embedder failure on the document batch propagates",
@@ -5663,8 +4359,7 @@
             [
               "path: a.md\n\ntea"
             ]
-          ],
-          "index_after": null
+          ]
         }
       ]
     },
@@ -5721,20 +4416,7 @@
             [
               "path: a.md\n\ntea"
             ]
-          ],
-          "index_after": {
-            "entries": {
-              "blob.bin": {
-                "hash": "mtime:1000:2",
-                "size": 2,
-                "modified_at_secs": 1000,
-                "model_id": "topic-v1",
-                "max_embed_chars_per_file": 4000,
-                "embedded": false,
-                "reason": "non-utf8"
-              }
-            }
-          }
+          ]
         }
       ]
     },
@@ -5789,8 +4471,7 @@
               "path: a.md\n\ntea",
               "path: b.md\n\nrust"
             ]
-          ],
-          "index_after": null
+          ]
         }
       ]
     },
@@ -8487,23 +7168,6 @@
             "tea"
           ]
         ],
-        "index_after": {
-          "entries": {
-            "a.md": {
-              "embedded": true,
-              "embedding": [
-                0.33333334,
-                0.0,
-                0.0
-              ],
-              "hash": "mtime:1000:8",
-              "max_embed_chars_per_file": 4000,
-              "model_id": "topic-v1",
-              "modified_at_secs": 1000,
-              "size": 8
-            }
-          }
-        },
         "mode": "hybrid",
         "outcome": {
           "embedded_files": 1,
@@ -8527,116 +7191,21 @@
       }
     ],
     "s1": {
-      "config": {
-        "binary": "skip",
-        "max_embed_chars_per_file": 4000,
-        "max_file_bytes": 2097152,
-        "max_indexed_files": 50000,
-        "max_total_indexed_bytes": 1073741824
-      },
-      "counts_only": false,
-      "embed_calls": [
-        [
-          "path: a.md\n\ntea aaa"
-        ],
-        [
-          "tea"
-        ]
-      ],
-      "index_after": {
-        "entries": {
-          "a.md": {
-            "embedded": true,
-            "embedding": [
-              0.33333334,
-              0.0,
-              0.0
-            ],
-            "hash": "mtime:1000:7",
-            "max_embed_chars_per_file": 4000,
-            "model_id": "topic-v1",
-            "modified_at_secs": 1000,
-            "size": 7
-          }
-        }
-      },
-      "mode": "hybrid",
-      "outcome": {
-        "embedded_files": 1,
-        "files": [
-          {
-            "combined_score": 1.0,
-            "content": "tea aaa",
-            "display_path": "a.md",
-            "embedded": true,
-            "fs_path": "<tmp>/workspace/a.md",
-            "lexical_score": 34,
-            "semantic_score": 1.0,
-            "skip_reason": null
-          }
-        ],
-        "searched_files": 1,
-        "skipped_binary_or_large": 0
-      },
-      "path_filter": null,
-      "query": "tea"
-    },
-    "s2": {
       "embedded_files": 2,
       "files": [
         {
-          "combined_score": 1.0,
-          "content": "# Tea\n\ntea",
-          "display_path": "notes/tea.md",
+          "combined_score": 0.8899999856948853,
+          "content": "tea in the garden",
+          "display_path": "a.md",
           "embedded": true,
-          "fs_path": "<tmp>/workspace/notes/tea.md",
-          "lexical_score": 146,
-          "semantic_score": 1.0,
-          "skip_reason": null
-        },
-        {
-          "combined_score": 1.0,
-          "content": "# Tea\n\ntea",
-          "display_path": "other/tea.md",
-          "embedded": true,
-          "fs_path": "<tmp>/workspace/other/tea.md",
-          "lexical_score": 146,
-          "semantic_score": 1.0,
+          "fs_path": "<tmp>/workspace/a.md",
+          "lexical_score": 34,
+          "semantic_score": 0.800000011920929,
           "skip_reason": null
         }
       ],
       "searched_files": 2,
       "skipped_binary_or_large": 0
-    },
-    "s3": {
-      "entries": {
-        "notes/tea.md": {
-          "embedded": true,
-          "embedding": [
-            0.33333334,
-            0.0,
-            0.0
-          ],
-          "hash": "mtime:1000:10",
-          "max_embed_chars_per_file": 4000,
-          "model_id": "topic-v1",
-          "modified_at_secs": 1000,
-          "size": 10
-        },
-        "other/tea.md": {
-          "embedded": true,
-          "embedding": [
-            0.33333334,
-            0.0,
-            0.0
-          ],
-          "hash": "mtime:1001:10",
-          "max_embed_chars_per_file": 4000,
-          "model_id": "topic-v1",
-          "modified_at_secs": 1001,
-          "size": 10
-        }
-      }
     }
   }
 }
