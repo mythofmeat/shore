@@ -1960,11 +1960,7 @@
               "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
+              "$ref": "s0"
             },
             {
               "msg_id": "s0-tea",
@@ -2111,11 +2107,7 @@
               "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
+              "$ref": "s0"
             },
             {
               "msg_id": "s0-tea",
@@ -2154,11 +2146,7 @@
               "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
+              "$ref": "s0"
             },
             {
               "msg_id": "s0-coffee",
@@ -2359,11 +2347,7 @@
               "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
+              "$ref": "s0"
             }
           ],
           "count": 2,
@@ -2389,11 +2373,7 @@
           "model_filter": "opus-4-6",
           "results": [
             {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
+              "$ref": "s0"
             }
           ],
           "count": 1,
@@ -2535,11 +2515,7 @@
               "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "model": "anthropic/claude-opus-4.6",
-              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
+              "$ref": "s0"
             }
           ],
           "count": 2,
@@ -2807,5 +2783,14 @@
   },
   "unconfigured_character_dir": {
     "error": "invalid args: conversation history is not configured"
+  },
+  "$shared": {
+    "s0": {
+      "model": "anthropic/claude-opus-4.6",
+      "msg_id": "s1-long",
+      "role": "assistant",
+      "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …",
+      "timestamp": "2026-01-02T09:00:00Z"
+    }
   }
 }

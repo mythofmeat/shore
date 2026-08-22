@@ -1942,16 +1942,9 @@
           "model": null
         }
       ],
-      "active_after": [
-        {
-          "name": "SOUL.md",
-          "content": "I am qifei.\n"
-        },
-        {
-          "name": "TOOLS.md",
-          "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-        }
-      ]
+      "active_after": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "subagents and mcp join the surface",
@@ -2076,16 +2069,9 @@
           "model": null
         }
       ],
-      "active_after": [
-        {
-          "name": "SOUL.md",
-          "content": "I am qifei.\n"
-        },
-        {
-          "name": "TOOLS.md",
-          "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-        }
-      ]
+      "active_after": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "mcp defs alone make tools available",
@@ -2165,16 +2151,9 @@
           "model": null
         }
       ],
-      "active_after": [
-        {
-          "name": "SOUL.md",
-          "content": "I am qifei.\n"
-        },
-        {
-          "name": "TOOLS.md",
-          "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-        }
-      ]
+      "active_after": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "a non-anthropic sdk with tools still uses the text standin",
@@ -2242,16 +2221,9 @@
           "model": null
         }
       ],
-      "active_after": [
-        {
-          "name": "SOUL.md",
-          "content": "I am qifei.\n"
-        },
-        {
-          "name": "TOOLS.md",
-          "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-        }
-      ]
+      "active_after": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "a blocked active_prompt is warned about, not fatal",
@@ -2425,16 +2397,9 @@
           "model": null
         }
       ],
-      "active_after": [
-        {
-          "name": "SOUL.md",
-          "content": "I am qifei.\n"
-        },
-        {
-          "name": "TOOLS.md",
-          "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-        }
-      ]
+      "active_after": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "the same image with tools on takes the tool pair",
@@ -2568,16 +2533,9 @@
           "model": null
         }
       ],
-      "active_after": [
-        {
-          "name": "SOUL.md",
-          "content": "I am qifei.\n"
-        },
-        {
-          "name": "TOOLS.md",
-          "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-        }
-      ]
+      "active_after": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "prior context earns the first user turn a time marker",
@@ -2639,16 +2597,9 @@
           "model": null
         }
       ],
-      "active_after": [
-        {
-          "name": "SOUL.md",
-          "content": "I am qifei.\n"
-        },
-        {
-          "name": "TOOLS.md",
-          "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-        }
-      ]
+      "active_after": {
+        "$ref": "s2"
+      }
     },
     {
       "name": "without prior context the same turn gets no marker",
@@ -2710,16 +2661,9 @@
           "model": null
         }
       ],
-      "active_after": [
-        {
-          "name": "SOUL.md",
-          "content": "I am qifei.\n"
-        },
-        {
-          "name": "TOOLS.md",
-          "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-        }
-      ]
+      "active_after": {
+        "$ref": "s2"
+      }
     }
   ],
   "$shared": {
@@ -2757,6 +2701,16 @@
       {
         "label": "character",
         "text": "<qifei>\nI am qifei.\n\n</qifei>"
+      }
+    ],
+    "s2": [
+      {
+        "content": "I am qifei.\n",
+        "name": "SOUL.md"
+      },
+      {
+        "content": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+        "name": "TOOLS.md"
       }
     ]
   }

@@ -348,7 +348,7 @@
       "seed": "full",
       "last_n": 1,
       "ok": {
-        "$ref": "s1"
+        "$ref": "s0"
       }
     },
     {
@@ -356,7 +356,7 @@
       "seed": "full",
       "last_n": 2,
       "ok": {
-        "$ref": "s1"
+        "$ref": "s0"
       }
     },
     {
@@ -364,7 +364,7 @@
       "seed": "full",
       "last_n": 10,
       "ok": {
-        "$ref": "s1"
+        "$ref": "s0"
       }
     },
     {
@@ -372,7 +372,7 @@
       "seed": "full",
       "last_n": 1000,
       "ok": {
-        "$ref": "s1"
+        "$ref": "s0"
       }
     },
     {
@@ -542,7 +542,43 @@
       "seed": "mixed",
       "last_n": 2,
       "ok": {
-        "$ref": "s0"
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "context": "character=test",
+              "error_type": "llm",
+              "message": "connection refused",
+              "timestamp": "2026-01-01T00:00:02Z"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": [
+            {
+              "character": "poppy",
+              "from_key": "primary",
+              "kind": "quota",
+              "model": "claude-x",
+              "provider": "anthropic",
+              "reason": "rate limited",
+              "rid": "rid_1",
+              "status": 429,
+              "timestamp": "2026-01-01T00:00:03Z",
+              "to_key": "backup"
+            },
+            {
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "model": "gpt",
+              "provider": "openai",
+              "reason": "no key configured",
+              "timestamp": "2026-01-01T00:01:01Z"
+            }
+          ]
+        }
       }
     },
     {
@@ -550,7 +586,43 @@
       "seed": "mixed",
       "last_n": 10,
       "ok": {
-        "$ref": "s0"
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "context": "character=test",
+              "error_type": "llm",
+              "message": "connection refused",
+              "timestamp": "2026-01-01T00:00:02Z"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": [
+            {
+              "character": "poppy",
+              "from_key": "primary",
+              "kind": "quota",
+              "model": "claude-x",
+              "provider": "anthropic",
+              "reason": "rate limited",
+              "rid": "rid_1",
+              "status": 429,
+              "timestamp": "2026-01-01T00:00:03Z",
+              "to_key": "backup"
+            },
+            {
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "model": "gpt",
+              "provider": "openai",
+              "reason": "no key configured",
+              "timestamp": "2026-01-01T00:01:01Z"
+            }
+          ]
+        }
       }
     },
     {
@@ -558,7 +630,43 @@
       "seed": "mixed",
       "last_n": 1000,
       "ok": {
-        "$ref": "s0"
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "context": "character=test",
+              "error_type": "llm",
+              "message": "connection refused",
+              "timestamp": "2026-01-01T00:00:02Z"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": [
+            {
+              "character": "poppy",
+              "from_key": "primary",
+              "kind": "quota",
+              "model": "claude-x",
+              "provider": "anthropic",
+              "reason": "rate limited",
+              "rid": "rid_1",
+              "status": 429,
+              "timestamp": "2026-01-01T00:00:03Z",
+              "to_key": "backup"
+            },
+            {
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "model": "gpt",
+              "provider": "openai",
+              "reason": "no key configured",
+              "timestamp": "2026-01-01T00:01:01Z"
+            }
+          ]
+        }
       }
     },
     {
@@ -1321,45 +1429,6 @@
   ],
   "$shared": {
     "s0": {
-      "errors": {
-        "count": 1,
-        "recent": [
-          {
-            "context": "character=test",
-            "error_type": "llm",
-            "message": "connection refused",
-            "timestamp": "2026-01-01T00:00:02Z"
-          }
-        ]
-      },
-      "key_fallbacks": {
-        "count": 2,
-        "recent": [
-          {
-            "character": "poppy",
-            "from_key": "primary",
-            "kind": "quota",
-            "model": "claude-x",
-            "provider": "anthropic",
-            "reason": "rate limited",
-            "rid": "rid_1",
-            "status": 429,
-            "timestamp": "2026-01-01T00:00:03Z",
-            "to_key": "backup"
-          },
-          {
-            "character": "wren",
-            "from_key": "only",
-            "kind": "missing",
-            "model": "gpt",
-            "provider": "openai",
-            "reason": "no key configured",
-            "timestamp": "2026-01-01T00:01:01Z"
-          }
-        ]
-      }
-    },
-    "s1": {
       "errors": {
         "count": 1,
         "recent": [

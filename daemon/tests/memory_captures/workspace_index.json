@@ -639,7 +639,31 @@
             "binary": "skip"
           },
           "outcome": {
-            "$ref": "s2"
+            "embedded_files": 2,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "notes/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/notes/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              },
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "other/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/other/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
           },
           "embed_calls": [
             [
@@ -651,7 +675,7 @@
             ]
           ],
           "index_after": {
-            "$ref": "s3"
+            "$ref": "s1"
           }
         },
         {
@@ -689,7 +713,7 @@
             ]
           ],
           "index_after": {
-            "$ref": "s3"
+            "$ref": "s1"
           }
         },
         {
@@ -727,7 +751,7 @@
             ]
           ],
           "index_after": {
-            "$ref": "s3"
+            "$ref": "s1"
           }
         },
         {
@@ -743,7 +767,31 @@
             "binary": "skip"
           },
           "outcome": {
-            "$ref": "s2"
+            "embedded_files": 2,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "notes/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/notes/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              },
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "other/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/other/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
           },
           "embed_calls": [
             [
@@ -751,7 +799,7 @@
             ]
           ],
           "index_after": {
-            "$ref": "s3"
+            "$ref": "s1"
           }
         },
         {
@@ -767,7 +815,31 @@
             "binary": "skip"
           },
           "outcome": {
-            "$ref": "s2"
+            "embedded_files": 2,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "notes/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/notes/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              },
+              {
+                "combined_score": 1.0,
+                "content": "# Tea\n\ntea",
+                "display_path": "other/tea.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/other/tea.md",
+                "lexical_score": 146,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 2,
+            "skipped_binary_or_large": 0
           },
           "embed_calls": [
             [
@@ -775,7 +847,7 @@
             ]
           ],
           "index_after": {
-            "$ref": "s3"
+            "$ref": "s1"
           }
         },
         {
@@ -802,7 +874,7 @@
             ]
           ],
           "index_after": {
-            "$ref": "s3"
+            "$ref": "s1"
           }
         }
       ]
@@ -1015,21 +1087,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea in the garden",
-                "lexical_score": 34,
-                "semantic_score": 0.800000011920929,
-                "combined_score": 0.8899999856948853,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s2"
           },
           "embed_calls": [
             [
@@ -1084,21 +1142,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea in the garden",
-                "lexical_score": 34,
-                "semantic_score": 0.800000011920929,
-                "combined_score": 0.8899999856948853,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s2"
           },
           "embed_calls": [
             [
@@ -1192,21 +1236,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea in the garden",
-                "lexical_score": 34,
-                "semantic_score": 0.800000011920929,
-                "combined_score": 0.8899999856948853,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s2"
           },
           "embed_calls": [
             [
@@ -1261,21 +1291,7 @@
             "binary": "skip"
           },
           "outcome": {
-            "searched_files": 2,
-            "embedded_files": 2,
-            "skipped_binary_or_large": 0,
-            "files": [
-              {
-                "display_path": "a.md",
-                "fs_path": "<tmp>/workspace/a.md",
-                "content": "tea in the garden",
-                "lexical_score": 34,
-                "semantic_score": 0.800000011920929,
-                "combined_score": 0.8899999856948853,
-                "embedded": true,
-                "skip_reason": null
-              }
-            ]
+            "$ref": "s2"
           },
           "embed_calls": [
             [
@@ -5026,7 +5042,59 @@
       ],
       "runs": [
         {
-          "$ref": "s1"
+          "config": {
+            "binary": "skip",
+            "max_embed_chars_per_file": 4000,
+            "max_file_bytes": 2097152,
+            "max_indexed_files": 50000,
+            "max_total_indexed_bytes": 1073741824
+          },
+          "counts_only": false,
+          "embed_calls": [
+            [
+              "path: a.md\n\ntea aaa"
+            ],
+            [
+              "tea"
+            ]
+          ],
+          "index_after": {
+            "entries": {
+              "a.md": {
+                "embedded": true,
+                "embedding": [
+                  0.33333334,
+                  0.0,
+                  0.0
+                ],
+                "hash": "mtime:1000:7",
+                "max_embed_chars_per_file": 4000,
+                "model_id": "topic-v1",
+                "modified_at_secs": 1000,
+                "size": 7
+              }
+            }
+          },
+          "mode": "hybrid",
+          "outcome": {
+            "embedded_files": 1,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "tea aaa",
+                "display_path": "a.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/a.md",
+                "lexical_score": 34,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 1,
+            "skipped_binary_or_large": 0
+          },
+          "path_filter": null,
+          "query": "tea"
         },
         {
           "query": "tea",
@@ -5121,7 +5189,59 @@
       ],
       "runs": [
         {
-          "$ref": "s1"
+          "config": {
+            "binary": "skip",
+            "max_embed_chars_per_file": 4000,
+            "max_file_bytes": 2097152,
+            "max_indexed_files": 50000,
+            "max_total_indexed_bytes": 1073741824
+          },
+          "counts_only": false,
+          "embed_calls": [
+            [
+              "path: a.md\n\ntea aaa"
+            ],
+            [
+              "tea"
+            ]
+          ],
+          "index_after": {
+            "entries": {
+              "a.md": {
+                "embedded": true,
+                "embedding": [
+                  0.33333334,
+                  0.0,
+                  0.0
+                ],
+                "hash": "mtime:1000:7",
+                "max_embed_chars_per_file": 4000,
+                "model_id": "topic-v1",
+                "modified_at_secs": 1000,
+                "size": 7
+              }
+            }
+          },
+          "mode": "hybrid",
+          "outcome": {
+            "embedded_files": 1,
+            "files": [
+              {
+                "combined_score": 1.0,
+                "content": "tea aaa",
+                "display_path": "a.md",
+                "embedded": true,
+                "fs_path": "<tmp>/workspace/a.md",
+                "lexical_score": 34,
+                "semantic_score": 1.0,
+                "skip_reason": null
+              }
+            ],
+            "searched_files": 1,
+            "skipped_binary_or_large": 0
+          },
+          "path_filter": null,
+          "query": "tea"
         },
         {
           "query": "tea",
@@ -8527,88 +8647,6 @@
       }
     ],
     "s1": {
-      "config": {
-        "binary": "skip",
-        "max_embed_chars_per_file": 4000,
-        "max_file_bytes": 2097152,
-        "max_indexed_files": 50000,
-        "max_total_indexed_bytes": 1073741824
-      },
-      "counts_only": false,
-      "embed_calls": [
-        [
-          "path: a.md\n\ntea aaa"
-        ],
-        [
-          "tea"
-        ]
-      ],
-      "index_after": {
-        "entries": {
-          "a.md": {
-            "embedded": true,
-            "embedding": [
-              0.33333334,
-              0.0,
-              0.0
-            ],
-            "hash": "mtime:1000:7",
-            "max_embed_chars_per_file": 4000,
-            "model_id": "topic-v1",
-            "modified_at_secs": 1000,
-            "size": 7
-          }
-        }
-      },
-      "mode": "hybrid",
-      "outcome": {
-        "embedded_files": 1,
-        "files": [
-          {
-            "combined_score": 1.0,
-            "content": "tea aaa",
-            "display_path": "a.md",
-            "embedded": true,
-            "fs_path": "<tmp>/workspace/a.md",
-            "lexical_score": 34,
-            "semantic_score": 1.0,
-            "skip_reason": null
-          }
-        ],
-        "searched_files": 1,
-        "skipped_binary_or_large": 0
-      },
-      "path_filter": null,
-      "query": "tea"
-    },
-    "s2": {
-      "embedded_files": 2,
-      "files": [
-        {
-          "combined_score": 1.0,
-          "content": "# Tea\n\ntea",
-          "display_path": "notes/tea.md",
-          "embedded": true,
-          "fs_path": "<tmp>/workspace/notes/tea.md",
-          "lexical_score": 146,
-          "semantic_score": 1.0,
-          "skip_reason": null
-        },
-        {
-          "combined_score": 1.0,
-          "content": "# Tea\n\ntea",
-          "display_path": "other/tea.md",
-          "embedded": true,
-          "fs_path": "<tmp>/workspace/other/tea.md",
-          "lexical_score": 146,
-          "semantic_score": 1.0,
-          "skip_reason": null
-        }
-      ],
-      "searched_files": 2,
-      "skipped_binary_or_large": 0
-    },
-    "s3": {
       "entries": {
         "notes/tea.md": {
           "embedded": true,
@@ -8637,6 +8675,23 @@
           "size": 10
         }
       }
+    },
+    "s2": {
+      "embedded_files": 2,
+      "files": [
+        {
+          "combined_score": 0.8899999856948853,
+          "content": "tea in the garden",
+          "display_path": "a.md",
+          "embedded": true,
+          "fs_path": "<tmp>/workspace/a.md",
+          "lexical_score": 34,
+          "semantic_score": 0.800000011920929,
+          "skip_reason": null
+        }
+      ],
+      "searched_files": 2,
+      "skipped_binary_or_large": 0
     }
   }
 }

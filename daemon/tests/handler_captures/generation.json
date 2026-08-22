@@ -86,25 +86,7 @@
         ],
         "broadcast_events": [
           {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 1
+            "$ref": "s1"
           },
           {
             "type": "new_message",
@@ -227,7 +209,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -269,7 +251,7 @@
             }
           ],
           "system": {
-            "$ref": "s1"
+            "$ref": "s0"
           },
           "max_tokens": 4096,
           "provider_key": "anthropic",
@@ -575,7 +557,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -617,7 +599,7 @@
             }
           ],
           "system": {
-            "$ref": "s1"
+            "$ref": "s0"
           },
           "max_tokens": 4096,
           "provider_key": "anthropic",
@@ -673,25 +655,7 @@
         ],
         "broadcast_events": [
           {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 1
+            "$ref": "s1"
           },
           {
             "type": "new_message",
@@ -744,7 +708,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -824,25 +788,7 @@
         ],
         "broadcast_events": [
           {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 1
+            "$ref": "s1"
           },
           {
             "type": "new_message",
@@ -895,7 +841,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -1111,7 +1057,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -1152,7 +1098,7 @@
             }
           ],
           "system": {
-            "$ref": "s1"
+            "$ref": "s0"
           },
           "max_tokens": 4096,
           "provider_key": "anthropic",
@@ -1563,7 +1509,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "tools": [
               {
@@ -1943,7 +1889,7 @@
             }
           ],
           "system": {
-            "$ref": "s1"
+            "$ref": "s0"
           },
           "tools": [
             {
@@ -2335,25 +2281,7 @@
         ],
         "broadcast_events": [
           {
-            "type": "history",
-            "messages": [
-              {
-                "msg_id": "<minted_id>",
-                "role": "user",
-                "content": "hello",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "hello"
-                  }
-                ],
-                "timestamp": "<minted_timestamp>"
-              }
-            ],
-            "config": {},
-            "selected_character": "ada",
-            "revision": 1
+            "$ref": "s1"
           },
           {
             "type": "new_message",
@@ -2476,7 +2404,7 @@
               }
             ],
             "system": {
-              "$ref": "s1"
+              "$ref": "s0"
             },
             "max_tokens": 4096,
             "provider_key": "anthropic",
@@ -2518,7 +2446,7 @@
             }
           ],
           "system": {
-            "$ref": "s1"
+            "$ref": "s0"
           },
           "max_tokens": 4096,
           "provider_key": "anthropic",
@@ -2542,7 +2470,36 @@
         "conversation_len": 0
       },
       "output": {
-        "$ref": "s0"
+        "active_prompt_snapshot": [
+          "TOOLS.md"
+        ],
+        "autonomy_manager_present": true,
+        "character_data_dir": "<root>/data/ada",
+        "character_name": "ada",
+        "config_dir": "<root>/config",
+        "embedder": false,
+        "image_dir": "<root>/data/ada/images",
+        "image_gen_config": null,
+        "markdown_store": true,
+        "mcp_registry": true,
+        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
+        "memory_retrieval_config": {
+          "binary": "skip",
+          "max_embed_chars_per_file": 4000,
+          "max_file_bytes": 2097152,
+          "max_indexed_files": 50000,
+          "max_total_indexed_bytes": 1073741824,
+          "mode": "auto"
+        },
+        "search_config": {
+          "api_key_env": "TAVILY_API_KEY",
+          "include_answer": true,
+          "result_limit": 5,
+          "search_depth": "basic"
+        },
+        "subagent_conversation_len": null,
+        "subagent_runtime": false,
+        "workspace_dir": "<root>/config/characters/ada/workspace"
       }
     },
     {
@@ -2559,7 +2516,36 @@
         "conversation_len": 1
       },
       "output": {
-        "$ref": "s0"
+        "active_prompt_snapshot": [
+          "TOOLS.md"
+        ],
+        "autonomy_manager_present": true,
+        "character_data_dir": "<root>/data/ada",
+        "character_name": "ada",
+        "config_dir": "<root>/config",
+        "embedder": false,
+        "image_dir": "<root>/data/ada/images",
+        "image_gen_config": null,
+        "markdown_store": true,
+        "mcp_registry": true,
+        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
+        "memory_retrieval_config": {
+          "binary": "skip",
+          "max_embed_chars_per_file": 4000,
+          "max_file_bytes": 2097152,
+          "max_indexed_files": 50000,
+          "max_total_indexed_bytes": 1073741824,
+          "mode": "auto"
+        },
+        "search_config": {
+          "api_key_env": "TAVILY_API_KEY",
+          "include_answer": true,
+          "result_limit": 5,
+          "search_depth": "basic"
+        },
+        "subagent_conversation_len": null,
+        "subagent_runtime": false,
+        "workspace_dir": "<root>/config/characters/ada/workspace"
       }
     },
     {
@@ -2622,7 +2608,36 @@
         "conversation_len": 0
       },
       "output": {
-        "$ref": "s0"
+        "active_prompt_snapshot": [
+          "TOOLS.md"
+        ],
+        "autonomy_manager_present": true,
+        "character_data_dir": "<root>/data/ada",
+        "character_name": "ada",
+        "config_dir": "<root>/config",
+        "embedder": false,
+        "image_dir": "<root>/data/ada/images",
+        "image_gen_config": null,
+        "markdown_store": true,
+        "mcp_registry": true,
+        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
+        "memory_retrieval_config": {
+          "binary": "skip",
+          "max_embed_chars_per_file": 4000,
+          "max_file_bytes": 2097152,
+          "max_indexed_files": 50000,
+          "max_total_indexed_bytes": 1073741824,
+          "mode": "auto"
+        },
+        "search_config": {
+          "api_key_env": "TAVILY_API_KEY",
+          "include_answer": true,
+          "result_limit": 5,
+          "search_depth": "basic"
+        },
+        "subagent_conversation_len": null,
+        "subagent_runtime": false,
+        "workspace_dir": "<root>/config/characters/ada/workspace"
       }
     },
     {
@@ -3108,39 +3123,7 @@
     }
   ],
   "$shared": {
-    "s0": {
-      "active_prompt_snapshot": [
-        "TOOLS.md"
-      ],
-      "autonomy_manager_present": true,
-      "character_data_dir": "<root>/data/ada",
-      "character_name": "ada",
-      "config_dir": "<root>/config",
-      "embedder": false,
-      "image_dir": "<root>/data/ada/images",
-      "image_gen_config": null,
-      "markdown_store": true,
-      "mcp_registry": true,
-      "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-      "memory_retrieval_config": {
-        "binary": "skip",
-        "max_embed_chars_per_file": 4000,
-        "max_file_bytes": 2097152,
-        "max_indexed_files": 50000,
-        "max_total_indexed_bytes": 1073741824,
-        "mode": "auto"
-      },
-      "search_config": {
-        "api_key_env": "TAVILY_API_KEY",
-        "include_answer": true,
-        "result_limit": 5,
-        "search_depth": "basic"
-      },
-      "subagent_conversation_len": null,
-      "subagent_runtime": false,
-      "workspace_dir": "<root>/config/characters/ada/workspace"
-    },
-    "s1": [
+    "s0": [
       {
         "label": "system",
         "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
@@ -3153,6 +3136,27 @@
         "label": "character",
         "text": "<ada>\nada system prompt\n</ada>"
       }
-    ]
+    ],
+    "s1": {
+      "config": {},
+      "messages": [
+        {
+          "content": "hello",
+          "content_blocks": [
+            {
+              "text": "hello",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "<minted_id>",
+          "role": "user",
+          "timestamp": "<minted_timestamp>"
+        }
+      ],
+      "revision": 1,
+      "selected_character": "ada",
+      "type": "history"
+    }
   }
 }

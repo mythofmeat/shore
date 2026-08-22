@@ -108,7 +108,11 @@
           }
         },
         {
-          "$ref": "s2"
+          "args": {},
+          "ok": {
+            "$ref": "s2"
+          },
+          "op": "model_info"
         },
         {
           "op": "model_info",
@@ -116,61 +120,7 @@
             "name": "beta"
           },
           "ok": {
-            "name": "beta",
-            "qualified_name": "chat.anthropic.beta",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "beta-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": 0.2,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
-            }
+            "$ref": "s2"
           }
         },
         {
@@ -189,61 +139,7 @@
             "name": ""
           },
           "ok": {
-            "name": "beta",
-            "qualified_name": "chat.anthropic.beta",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "anthropic",
-            "model_id": "beta-id",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": 0.2,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "cache_keepalive_max": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "supports_images": null,
-            "effective_sampler": {
-              "temperature": 0.2,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": 32768,
-              "cache_ttl": "1h",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "anthropic",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null,
-              "supports_images": null,
-              "openrouter_provider": null,
-              "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
-            },
-            "scopes": {
-              "temperature": "static_default",
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
-            }
+            "$ref": "s2"
           }
         },
         {
@@ -291,7 +187,11 @@
           "$ref": "s3"
         },
         {
-          "$ref": "s2"
+          "args": {},
+          "ok": {
+            "$ref": "s2"
+          },
+          "op": "model_info"
         },
         {
           "op": "model_settings",
@@ -341,7 +241,11 @@
           "$ref": "s3"
         },
         {
-          "$ref": "s2"
+          "args": {},
+          "ok": {
+            "$ref": "s2"
+          },
+          "op": "model_info"
         },
         {
           "op": "reset_model",
@@ -409,7 +313,21 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s6"
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "static_default",
+              "gemini_generation": null,
+              "max_output_tokens": "static_default",
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "replay_prior_thinking": null,
+              "sdk": "static_default",
+              "temperature": null,
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         },
@@ -624,20 +542,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s5"
             },
             "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s7"
             }
           }
         },
@@ -770,7 +678,21 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s6"
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "static_default",
+              "gemini_generation": null,
+              "max_output_tokens": "static_default",
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "replay_prior_thinking": null,
+              "sdk": "static_default",
+              "temperature": null,
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         },
@@ -873,7 +795,21 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s5"
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "static_default",
+              "gemini_generation": null,
+              "max_output_tokens": "static_default",
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "replay_prior_thinking": null,
+              "sdk": "static_default",
+              "temperature": "character_model",
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         }
@@ -1140,38 +1076,9 @@
               ]
             },
             "active": "openrouter:vendor/visible",
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s6"
+            },
             "include_hidden": false,
             "hidden_count": 1
           }
@@ -1224,38 +1131,9 @@
           "ok": {
             "models": {},
             "active": null,
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s6"
+            },
             "include_hidden": false,
             "hidden_count": 0
           }
@@ -1279,38 +1157,9 @@
         {
           "op": "model_roles",
           "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "heartbeat",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "compaction",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "sub-agents",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "ok": {
+            "$ref": "s6"
+          }
         },
         {
           "op": "switch_model",
@@ -1392,38 +1241,9 @@
               ]
             },
             "active": "openrouter:vendor/visible",
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s6"
+            },
             "include_hidden": false,
             "hidden_count": 1
           }
@@ -1455,38 +1275,9 @@
               ]
             },
             "active": "openrouter:vendor/hidden",
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s6"
+            },
             "include_hidden": true,
             "hidden_count": 1
           }
@@ -1522,20 +1313,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s5"
             },
             "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s7"
             }
           }
         },
@@ -1570,20 +1351,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s5"
             },
             "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s7"
             }
           }
         },
@@ -1698,20 +1469,10 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s5"
             },
             "scopes": {
-              "temperature": null,
-              "top_p": null,
-              "reasoning_effort": null,
-              "budget_tokens": null,
-              "max_output_tokens": "static_default",
-              "cache_ttl": "static_default",
-              "cache_keepalive": null,
-              "cache_keepalive_max": null,
-              "sdk": "static_default",
-              "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "$ref": "s7"
             }
           }
         },
@@ -1723,7 +1484,7 @@
             "provider": "openrouter",
             "model_id": "vendor/hidden",
             "effective_sampler": {
-              "$ref": "s8"
+              "$ref": "s5"
             },
             "saved_global": null,
             "saved_character": null,
@@ -1754,7 +1515,21 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s6"
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "static_default",
+              "gemini_generation": null,
+              "max_output_tokens": "static_default",
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "replay_prior_thinking": null,
+              "sdk": "static_default",
+              "temperature": null,
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         },
@@ -1908,38 +1683,9 @@
               ]
             },
             "active": "openrouter:vendor/visible",
-            "roles": [
-              {
-                "role": "chat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "heartbeat",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "compaction",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "sub-agents",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "embedding",
-                "model": null,
-                "source": null
-              },
-              {
-                "role": "images",
-                "model": null,
-                "source": null
-              }
-            ],
+            "roles": {
+              "$ref": "s6"
+            },
             "include_hidden": false,
             "hidden_count": 0
           }
@@ -1963,38 +1709,9 @@
         {
           "op": "model_roles",
           "args": {},
-          "ok": [
-            {
-              "role": "chat",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "heartbeat",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "compaction",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "sub-agents",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "embedding",
-              "model": null,
-              "source": null
-            },
-            {
-              "role": "images",
-              "model": null,
-              "source": null
-            }
-          ]
+          "ok": {
+            "$ref": "s6"
+          }
         },
         {
           "op": "set_model_setting",
@@ -2867,7 +2584,21 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s5"
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "static_default",
+              "gemini_generation": null,
+              "max_output_tokens": "static_default",
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "replay_prior_thinking": null,
+              "sdk": "static_default",
+              "temperature": "character_model",
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         },
@@ -3420,7 +3151,21 @@
               "max"
             ],
             "scopes": {
-              "$ref": "s5"
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "static_default",
+              "gemini_generation": null,
+              "max_output_tokens": "static_default",
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "replay_prior_thinking": null,
+              "sdk": "static_default",
+              "temperature": "character_model",
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         }
@@ -3447,7 +3192,22 @@
             "provider": "anthropic",
             "model_id": "alpha-id",
             "effective_sampler": {
-              "$ref": "s7"
+              "budget_tokens": 1024,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "1h",
+              "gemini_generation": null,
+              "max_output_tokens": 2048,
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": "low",
+              "replay_prior_thinking": null,
+              "sdk": "anthropic",
+              "supports_images": null,
+              "temperature": 0.33,
+              "top_p": 0.22,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             },
             "saved_global": {
               "temperature": 0.33,
@@ -3559,7 +3319,22 @@
             "max_tool_iterations": null,
             "supports_images": null,
             "effective_sampler": {
-              "$ref": "s7"
+              "budget_tokens": 1024,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "1h",
+              "gemini_generation": null,
+              "max_output_tokens": 2048,
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": "low",
+              "replay_prior_thinking": null,
+              "sdk": "anthropic",
+              "supports_images": null,
+              "temperature": 0.33,
+              "top_p": 0.22,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             },
             "scopes": {
               "temperature": "global_model",
@@ -3737,7 +3512,22 @@
             "provider": "anthropic",
             "model_id": "alpha-id",
             "effective_sampler": {
-              "$ref": "s7"
+              "budget_tokens": 1024,
+              "cache_keepalive": null,
+              "cache_keepalive_max": null,
+              "cache_ttl": "1h",
+              "gemini_generation": null,
+              "max_output_tokens": 2048,
+              "max_tool_iterations": null,
+              "openrouter_provider": null,
+              "reasoning_effort": "low",
+              "replay_prior_thinking": null,
+              "sdk": "anthropic",
+              "supports_images": null,
+              "temperature": 0.33,
+              "top_p": 0.22,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             },
             "saved_global": {
               "temperature": 0.33,
@@ -4363,57 +4153,24 @@
       }
     },
     "s2": {
-      "args": {},
-      "ok": {
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "base_url": null,
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "base_url": null,
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_keepalive_max": null,
+      "cache_ttl": "1h",
+      "category": "chat",
+      "effective_sampler": {
         "budget_tokens": null,
         "cache_keepalive": null,
         "cache_keepalive_max": null,
         "cache_ttl": "1h",
-        "category": "chat",
-        "effective_sampler": {
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_keepalive_max": null,
-          "cache_ttl": "1h",
-          "gemini_generation": null,
-          "max_output_tokens": 32768,
-          "max_tool_iterations": null,
-          "openrouter_provider": null,
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "anthropic",
-          "supports_images": null,
-          "temperature": 0.2,
-          "top_p": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
-        },
         "gemini_generation": null,
-        "max_context_tokens": 200000,
         "max_output_tokens": 32768,
         "max_tool_iterations": null,
-        "model_id": "beta-id",
-        "name": "beta",
         "openrouter_provider": null,
-        "provider_key": "anthropic",
-        "qualified_name": "chat.anthropic.beta",
         "reasoning_effort": null,
         "replay_prior_thinking": null,
-        "scopes": {
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_keepalive_max": null,
-          "cache_ttl": "static_default",
-          "max_output_tokens": "static_default",
-          "max_tool_iterations": null,
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "static_default",
-          "temperature": "static_default",
-          "top_p": null
-        },
         "sdk": "anthropic",
         "supports_images": null,
         "temperature": 0.2,
@@ -4421,7 +4178,36 @@
         "zai_clear_thinking": null,
         "zai_subscription": null
       },
-      "op": "model_info"
+      "gemini_generation": null,
+      "max_context_tokens": 200000,
+      "max_output_tokens": 32768,
+      "max_tool_iterations": null,
+      "model_id": "beta-id",
+      "name": "beta",
+      "openrouter_provider": null,
+      "provider_key": "anthropic",
+      "qualified_name": "chat.anthropic.beta",
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "scopes": {
+        "budget_tokens": null,
+        "cache_keepalive": null,
+        "cache_keepalive_max": null,
+        "cache_ttl": "static_default",
+        "max_output_tokens": "static_default",
+        "max_tool_iterations": null,
+        "reasoning_effort": null,
+        "replay_prior_thinking": null,
+        "sdk": "static_default",
+        "temperature": "static_default",
+        "top_p": null
+      },
+      "sdk": "anthropic",
+      "supports_images": null,
+      "temperature": 0.2,
+      "top_p": null,
+      "zai_clear_thinking": null,
+      "zai_subscription": null
     },
     "s3": {
       "args": {},
@@ -4548,58 +4334,6 @@
       "budget_tokens": null,
       "cache_keepalive": null,
       "cache_keepalive_max": null,
-      "cache_ttl": "static_default",
-      "gemini_generation": null,
-      "max_output_tokens": "static_default",
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "static_default",
-      "temperature": "character_model",
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s6": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "static_default",
-      "gemini_generation": null,
-      "max_output_tokens": "static_default",
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "static_default",
-      "temperature": null,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s7": {
-      "budget_tokens": 1024,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
-      "cache_ttl": "1h",
-      "gemini_generation": null,
-      "max_output_tokens": 2048,
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": "low",
-      "replay_prior_thinking": null,
-      "sdk": "anthropic",
-      "supports_images": null,
-      "temperature": 0.33,
-      "top_p": 0.22,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s8": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_keepalive_max": null,
       "cache_ttl": "1h",
       "gemini_generation": null,
       "max_output_tokens": 32000,
@@ -4613,6 +4347,51 @@
       "top_p": null,
       "zai_clear_thinking": null,
       "zai_subscription": null
+    },
+    "s6": [
+      {
+        "model": null,
+        "role": "chat",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "heartbeat",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "compaction",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "sub-agents",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "embedding",
+        "source": null
+      },
+      {
+        "model": null,
+        "role": "images",
+        "source": null
+      }
+    ],
+    "s7": {
+      "budget_tokens": null,
+      "cache_keepalive": null,
+      "cache_keepalive_max": null,
+      "cache_ttl": "static_default",
+      "max_output_tokens": "static_default",
+      "max_tool_iterations": null,
+      "reasoning_effort": null,
+      "replay_prior_thinking": null,
+      "sdk": "static_default",
+      "temperature": null,
+      "top_p": null
     }
   }
 }
