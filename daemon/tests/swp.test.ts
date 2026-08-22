@@ -203,8 +203,6 @@ describe("a message from an older client", () => {
   });
 });
 
-const FLOAT_NOTATION_DIVERGES = new Set(["usage_warning"]);
-
 describe("write_message", () => {
   for (const c of fixture.write_message) {
     test(c.name, async () => {
@@ -217,13 +215,7 @@ describe("write_message", () => {
       expect(actual).toEqual(expected);
       expect(Object.keys(actual)).toEqual(Object.keys(expected));
 
-      if (FLOAT_NOTATION_DIVERGES.has(c.name)) {
-        expect(line).not.toBe(c.line);
-        expect(c.line).toContain('"current_cost":8.0');
-        expect(line).toContain('"current_cost":8');
-      } else {
-        expect(line).toBe(c.line);
-      }
+      expect(line).toBe(c.line);
     });
   }
 });

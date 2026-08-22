@@ -556,7 +556,7 @@
         "reset_at_display": "midnight",
         "scope": "alice"
       },
-      "line": "{\"type\":\"usage_warning\",\"budget\":\"daily\",\"message\":\"80%\",\"current_cost\":8.0,\"cost_limit\":10.0,\"percent_used\":80.0,\"crossed_warn_at\":[0.5,0.8],\"period\":\"day\",\"period_start\":\"2026-01-01T00:00:00Z\",\"reset_at\":\"2026-01-02T00:00:00Z\",\"reset_at_display\":\"midnight\",\"scope\":\"alice\"}\n"
+      "line": "{\"type\":\"usage_warning\",\"budget\":\"daily\",\"message\":\"80%\",\"current_cost\":8,\"cost_limit\":10,\"percent_used\":80,\"crossed_warn_at\":[0.5,0.8],\"period\":\"day\",\"period_start\":\"2026-01-01T00:00:00Z\",\"reset_at\":\"2026-01-02T00:00:00Z\",\"reset_at_display\":\"midnight\",\"scope\":\"alice\"}\n"
     },
     {
       "name": "unknown",

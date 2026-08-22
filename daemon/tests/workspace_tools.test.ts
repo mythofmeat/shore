@@ -182,25 +182,12 @@ function syncOutcome(run: () => void): Outcome {
   }
 }
 
-const READ_DIVERGES_FROM_RUST = new Map([
-  ["memory prefix directory", "invalid args: path is empty"],
-  ["workspace prefix root", "invalid args: path is empty"],
-]);
-
 describe("read", () => {
   for (const c of fixture.read) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree, c.workspace_missing === true);
       const ws = c.workspace_unset === true ? "" : workspace;
       const got = blankDirectorySizes(await outcome(() => handleRead(c.input, ws)));
-
-      const rustError = READ_DIVERGES_FROM_RUST.get(c.name);
-      if (rustError !== undefined) {
-        expect(c.result).toEqual({ err: rustError });
-        const viaDot = await outcome(() => handleRead({ path: `${String(c.input.path)}/.` }, ws));
-        expect(got).toEqual(blankDirectorySizes(viaDot));
-        return;
-      }
 
       expect(got).toEqual(blankDirectorySizes(c.result));
     });

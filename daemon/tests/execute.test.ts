@@ -177,7 +177,7 @@ interface ExecCase {
   output: unknown;
 }
 
-const TRUNCATION_FORMAT_DIVERGES = new Set([
+const TRUNCATION_CHECKED_BY_SHAPE = new Set([
   "a long result is truncated before anything sees it",
   "a per-tool cap outranks the global one",
   "an error result is truncated too",
@@ -185,8 +185,8 @@ const TRUNCATION_FORMAT_DIVERGES = new Set([
 
 describe("execute_tool_use", () => {
   for (const c of fixture.execute_tool_use as unknown as ExecCase[]) {
-    if (TRUNCATION_FORMAT_DIVERGES.has(c.name)) {
-      test(`${c.name} (diverges: #92)`, async () => {
+    if (TRUNCATION_CHECKED_BY_SHAPE.has(c.name)) {
+      test(`${c.name} (checked by shape, not by exact text)`, async () => {
         const ctx = scriptedContext(c.input.tool.name, c.input.scripted);
         const { exec } = harness(c.input.rid, limitsFrom(c.input.limits), ctx);
         const run = await runToolUse(

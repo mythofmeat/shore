@@ -306,13 +306,8 @@ function must<T>(value: T | undefined, what: string): T {
   return value;
 }
 
-const CORRECTED = new Set([
-  "a same-size same-mtime rewrite is missed by design",
-  "an entry recorded as not embedded is stale even when the tuple matches",
-]);
-
 describe("hybridSearch", () => {
-  for (const c of fixture.cases.filter((entry) => !CORRECTED.has(entry.name))) {
+  for (const c of fixture.cases) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       const idx = join(root, "cache/workspace_index.db");
@@ -576,8 +571,72 @@ function expectedIndexShape(index: unknown): Record<string, ComparableIndexEntry
   return out;
 }
 
+describe("deciding an indexed file needs re-embedding", () => {
+  async function refresh(opts: {
+    content: string;
+    mtime: number;
+    recorded?: { size: number; modified_at_secs: number; embedded: boolean };
+    vectorFor?: "current" | "none";
+  }) {
+    const ws = join(root, "workspace");
+    await mkdir(ws, { recursive: true });
+    const rel = "note.md";
+    const bytes = Buffer.from(opts.content);
+    await writeAt(join(ws, rel), bytes, opts.mtime);
+
+    const config = configOf(required(fixture.refresh_index_entries[0]).config);
+    const candidates = await enumerateFiles(ws, config);
+    const currentHash = seededHash(join(ws, rel), rel, config.maxEmbedCharsPerFile);
+
+    const existing = new Map<string, FileRow>();
+    if (opts.recorded !== undefined) {
+      existing.set(rel, {
+        display_path: rel,
+        size: opts.recorded.size,
+        modified_at_secs: opts.recorded.modified_at_secs,
+        document_hash: currentHash,
+        embed_chars: config.maxEmbedCharsPerFile,
+        embedded: opts.recorded.embedded,
+        reason: undefined,
+      });
+    }
+
+    const has = (h: string) => opts.vectorFor === "current" && h === currentHash;
+    const out = await refreshIndexEntries(candidates, existing, config, has);
+    return out.stale.map((e) => e.row.display_path);
+  }
+
+  test("is decided by whether a vector exists for the content, not by size or mtime", async () => {
+    const mtime = 1_700_000_000;
+    const sameTuple = { size: 5, modified_at_secs: mtime, embedded: true };
+
+    expect(
+      await refresh({ content: "hello", mtime, recorded: sameTuple, vectorFor: "current" }),
+      "a file whose vector is present is not re-embedded",
+    ).toEqual([]);
+
+    expect(
+      await refresh({ content: "hello", mtime, recorded: sameTuple, vectorFor: "none" }),
+      "the same file with no vector is, however unchanged the tuple looks",
+    ).toContain("note.md");
+  });
+
+  test("a rewrite keeping the same size and mtime is caught, because the hash is not", async () => {
+    const mtime = 1_700_000_000;
+    const recorded = { size: 5, modified_at_secs: mtime, embedded: true };
+    expect(
+      await refresh({ content: "world", mtime, recorded, vectorFor: "none" }),
+      "content can change without size or mtime moving",
+    ).toContain("note.md");
+  });
+
+  test("a file the index has never seen is embedded", async () => {
+    expect(await refresh({ content: "brand new", mtime: 1_700_000_000 })).toContain("note.md");
+  });
+});
+
 describe("refreshIndexEntries", () => {
-  for (const c of fixture.refresh_index_entries.filter((entry) => !CORRECTED.has(entry.name))) {
+  for (const c of fixture.refresh_index_entries) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       await mkdir(ws, { recursive: true });
