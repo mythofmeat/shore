@@ -1,4 +1,200 @@
 {
+  "$shared": {
+    "s0": {
+      "api_key_env": null,
+      "base_url": null,
+      "defaults": {
+        "api_key_env": null,
+        "base_url": null,
+        "budget_tokens": null,
+        "cache_keepalive": null,
+        "cache_ttl": null,
+        "gemini_generation": null,
+        "max_context_tokens": null,
+        "max_output_tokens": null,
+        "openrouter_provider": null,
+        "reasoning_effort": null,
+        "sdk": null,
+        "temperature": null,
+        "top_p": null,
+        "zai_clear_thinking": null,
+        "zai_subscription": null
+      },
+      "discovery": {
+        "enabled": false,
+        "ignore": []
+      },
+      "enabled": true,
+      "keys": [],
+      "sdk": null
+    },
+    "s1": {
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "cache_ttl": "1h",
+      "category": "chat",
+      "max_context_tokens": 200000,
+      "max_output_tokens": 32768,
+      "model_id": "claude-opus-4-6",
+      "name": "opus",
+      "provider_key": "anthropic",
+      "qualified_name": "chat.anthropic.opus",
+      "sdk": "anthropic"
+    },
+    "s2": [
+      {
+        "body": "{\n  \"version\": 1,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"openrouter\", \"model_id\": \"meta-llama/llama-3\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\"},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 64000, \"max_output_tokens\": 4096},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"anthropic/claude-opus-4-6\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 111000, \"max_output_tokens\": 2222}\n  ]\n}",
+        "provider": "openrouter"
+      }
+    ],
+    "s3": {
+      "base_url": "https://openrouter.ai/api/v1",
+      "category": "chat",
+      "max_context_tokens": 64000,
+      "max_output_tokens": 4096,
+      "model_id": "deepseek/deepseek-r1",
+      "name": "deepseek/deepseek-r1",
+      "provider_key": "openrouter",
+      "qualified_name": "openrouter:deepseek/deepseek-r1",
+      "sdk": "openrouter"
+    },
+    "s4": [
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:anthropic/claude-opus-4-6",
+        "source": "discovered"
+      },
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:deepseek/deepseek-r1",
+        "source": "discovered"
+      },
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:meta-llama/llama-3",
+        "source": "discovered"
+      }
+    ],
+    "s5": [
+      {
+        "include_hidden": false,
+        "name": "openrouter:deepseek/deepseek-r1",
+        "resolved": {
+          "base_url": "https://openrouter.ai/api/v1",
+          "category": "chat",
+          "max_context_tokens": 200000,
+          "max_output_tokens": 32768,
+          "model_id": "deepseek/deepseek-r1",
+          "name": "deepseek/deepseek-r1",
+          "provider_key": "openrouter",
+          "qualified_name": "openrouter:deepseek/deepseek-r1",
+          "sdk": "openrouter"
+        }
+      },
+      {
+        "err": "model \"deepseek/deepseek-r1\" not found in static catalog or discovered models",
+        "include_hidden": false,
+        "name": "deepseek/deepseek-r1"
+      }
+    ],
+    "s6": {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "base_url": "https://openrouter.ai/api/v1",
+      "category": "chat",
+      "max_context_tokens": 200000,
+      "max_output_tokens": 999,
+      "model_id": "anthropic/claude-opus-4-6",
+      "name": "opus",
+      "provider_key": "openrouter",
+      "qualified_name": "chat.openrouter.opus",
+      "sdk": "openrouter"
+    },
+    "s7": [
+      {
+        "hidden": false,
+        "qualified_name": "chat.openrouter.opus",
+        "source": "static"
+      },
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:deepseek/deepseek-r1",
+        "source": "discovered"
+      },
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:meta-llama/llama-3",
+        "source": "discovered"
+      }
+    ],
+    "s8": {
+      "err": "model \"meta-llama/llama-3\" is hidden by [providers.openrouter.discovery.ignore]; pass include_hidden=true or update the ignore rules to allow it",
+      "include_hidden": false,
+      "name": "meta-llama/llama-3"
+    },
+    "s9": {
+      "include_hidden": true,
+      "name": "meta-llama/llama-3",
+      "resolved": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "category": "chat",
+        "max_context_tokens": 200000,
+        "max_output_tokens": 32768,
+        "model_id": "meta-llama/llama-3",
+        "name": "meta-llama/llama-3",
+        "provider_key": "openrouter",
+        "qualified_name": "openrouter:meta-llama/llama-3",
+        "sdk": "openrouter"
+      }
+    },
+    "s10": [
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:anthropic/claude-opus-4-6",
+        "source": "discovered"
+      },
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:deepseek/deepseek-r1",
+        "source": "discovered"
+      },
+      {
+        "hidden": true,
+        "qualified_name": "openrouter:meta-llama/llama-3",
+        "source": "discovered"
+      }
+    ],
+    "s11": [
+      {
+        "body": "{\n  \"version\": 1,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"openrouter\", \"model_id\": \"meta-llama/llama-3\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\"},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 64000, \"max_output_tokens\": 4096},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"anthropic/claude-opus-4-6\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 111000, \"max_output_tokens\": 2222}\n  ]\n}",
+        "provider": "openrouter"
+      },
+      {
+        "body": "{\n  \"version\": 1,\n  \"provider_key\": \"other\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"other\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"base_url\": \"https://other/v1\", \"context_length\": 1000, \"max_output_tokens\": 100}\n  ]\n}",
+        "provider": "other"
+      }
+    ],
+    "s12": [
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:anthropic/claude-opus-4-6",
+        "source": "discovered"
+      },
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:deepseek/deepseek-r1",
+        "source": "discovered"
+      },
+      {
+        "hidden": false,
+        "qualified_name": "openrouter:meta-llama/llama-3",
+        "source": "discovered"
+      },
+      {
+        "hidden": false,
+        "qualified_name": "other:deepseek/deepseek-r1",
+        "source": "discovered"
+      }
+    ]
+  },
   "glob": [
     {
       "pattern": "",
@@ -116,38 +312,38 @@
       "matches": false
     },
     {
-      "pattern": "é*",
-      "input": "éa",
+      "pattern": "\u00e9*",
+      "input": "\u00e9a",
       "matches": true
     },
     {
-      "pattern": "*é",
-      "input": "aé",
+      "pattern": "*\u00e9",
+      "input": "a\u00e9",
       "matches": true
     },
     {
       "pattern": "*",
-      "input": "🎵",
+      "input": "\ud83c\udfb5",
       "matches": true
     },
     {
-      "pattern": "🎵*",
-      "input": "🎵drum",
+      "pattern": "\ud83c\udfb5*",
+      "input": "\ud83c\udfb5drum",
       "matches": true
     },
     {
-      "pattern": "a*🎵",
-      "input": "a🎵",
+      "pattern": "a*\ud83c\udfb5",
+      "input": "a\ud83c\udfb5",
       "matches": true
     },
     {
       "pattern": "ab*",
-      "input": "é",
+      "input": "\u00e9",
       "matches": false
     },
     {
-      "pattern": "🎵*🎵",
-      "input": "🎵",
+      "pattern": "\ud83c\udfb5*\ud83c\udfb5",
+      "input": "\ud83c\udfb5",
       "matches": false
     },
     {
@@ -266,18 +462,7 @@
         {
           "provider": "openrouter",
           "entry": {
-            "enabled": true,
-            "sdk": null,
-            "base_url": null,
-            "api_key_env": null,
-            "keys": [],
-            "discovery": {
-              "enabled": false,
-              "ignore": []
-            },
-            "defaults": {
-              "$ref": "s5"
-            }
+            "$ref": "s0"
           }
         }
       ]
@@ -359,7 +544,21 @@
               "ignore": []
             },
             "defaults": {
-              "$ref": "s5"
+              "api_key_env": null,
+              "base_url": null,
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_ttl": null,
+              "gemini_generation": null,
+              "max_context_tokens": null,
+              "max_output_tokens": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "sdk": null,
+              "temperature": null,
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         }
@@ -382,7 +581,21 @@
               "ignore": []
             },
             "defaults": {
-              "$ref": "s5"
+              "api_key_env": null,
+              "base_url": null,
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_ttl": null,
+              "gemini_generation": null,
+              "max_context_tokens": null,
+              "max_output_tokens": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "sdk": null,
+              "temperature": null,
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         }
@@ -407,7 +620,21 @@
               ]
             },
             "defaults": {
-              "$ref": "s5"
+              "api_key_env": null,
+              "base_url": null,
+              "budget_tokens": null,
+              "cache_keepalive": null,
+              "cache_ttl": null,
+              "gemini_generation": null,
+              "max_context_tokens": null,
+              "max_output_tokens": null,
+              "openrouter_provider": null,
+              "reasoning_effort": null,
+              "sdk": null,
+              "temperature": null,
+              "top_p": null,
+              "zai_clear_thinking": null,
+              "zai_subscription": null
             }
           }
         }
@@ -420,18 +647,7 @@
         {
           "provider": "p",
           "entry": {
-            "enabled": true,
-            "sdk": null,
-            "base_url": null,
-            "api_key_env": null,
-            "keys": [],
-            "discovery": {
-              "enabled": false,
-              "ignore": []
-            },
-            "defaults": {
-              "$ref": "s5"
-            }
+            "$ref": "s0"
           }
         }
       ]
@@ -439,7 +655,7 @@
     {
       "name": "removed_provider",
       "toml": "[claude_code]\n",
-      "err": "[providers.claude_code] is no longer supported — the Claude Code transport was removed; drop this section from your config"
+      "err": "[providers.claude_code] is no longer supported \u2014 the Claude Code transport was removed; drop this section from your config"
     },
     {
       "name": "conflicting_key_forms",
@@ -492,12 +708,9 @@
       "name": "empty",
       "toml": "",
       "parsed": {
-        "selected": {
-          "provider": null,
-          "model_id": null
-        },
+        "selected": {},
         "defaults": {
-          "$ref": "s4"
+          "sampler": {}
         },
         "models": {}
       },
@@ -516,7 +729,7 @@
           "model_id": "anthropic/claude-sonnet-4.5"
         },
         "defaults": {
-          "$ref": "s4"
+          "sampler": {}
         },
         "models": {}
       },
@@ -531,11 +744,10 @@
       "toml": "[selected]\nprovider = \"p\"\n",
       "parsed": {
         "selected": {
-          "provider": "p",
-          "model_id": null
+          "provider": "p"
         },
         "defaults": {
-          "$ref": "s4"
+          "sampler": {}
         },
         "models": {}
       },
@@ -550,11 +762,10 @@
       "toml": "[selected]\nmodel_id = \"m\"\n",
       "parsed": {
         "selected": {
-          "provider": null,
           "model_id": "m"
         },
         "defaults": {
-          "$ref": "s4"
+          "sampler": {}
         },
         "models": {}
       },
@@ -568,26 +779,11 @@
       "name": "defaults_sampler",
       "toml": "[defaults.sampler]\ntemperature = 0.7\nreasoning_effort = \"medium\"\n",
       "parsed": {
-        "selected": {
-          "provider": null,
-          "model_id": null
-        },
+        "selected": {},
         "defaults": {
           "sampler": {
             "temperature": 0.7,
-            "top_p": null,
-            "reasoning_effort": "medium",
-            "budget_tokens": null,
-            "max_output_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "sdk": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null
+            "reasoning_effort": "medium"
           }
         },
         "models": {}
@@ -602,29 +798,18 @@
       "name": "per_model",
       "toml": "\n        [models.\"openrouter:anthropic/claude-sonnet-4.5\"]\n        temperature = 0.8\n        top_p = 0.95\n        reasoning_effort = \"medium\"\n        max_tool_iterations = 4\n        cache_keepalive = \"30m\"\n        zai_clear_thinking = false\n        ",
       "parsed": {
-        "selected": {
-          "provider": null,
-          "model_id": null
-        },
+        "selected": {},
         "defaults": {
-          "$ref": "s4"
+          "sampler": {}
         },
         "models": {
           "openrouter:anthropic/claude-sonnet-4.5": {
             "temperature": 0.8,
             "top_p": 0.95,
             "reasoning_effort": "medium",
-            "budget_tokens": null,
-            "max_output_tokens": null,
-            "cache_ttl": null,
             "cache_keepalive": "30m",
-            "sdk": null,
-            "replay_prior_thinking": null,
             "max_tool_iterations": 4,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": false,
-            "zai_subscription": null
+            "zai_clear_thinking": false
           }
         }
       },
@@ -640,26 +825,10 @@
       "name": "legacy_bool_replay",
       "toml": "[defaults.sampler]\nreplay_prior_thinking = true\n",
       "parsed": {
-        "selected": {
-          "provider": null,
-          "model_id": null
-        },
+        "selected": {},
         "defaults": {
           "sampler": {
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "max_output_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "sdk": null,
-            "replay_prior_thinking": "all",
-            "max_tool_iterations": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null
+            "replay_prior_thinking": "all"
           }
         },
         "models": {}
@@ -674,26 +843,10 @@
       "name": "replay_none",
       "toml": "[defaults.sampler]\nreplay_prior_thinking = \"none\"\n",
       "parsed": {
-        "selected": {
-          "provider": null,
-          "model_id": null
-        },
+        "selected": {},
         "defaults": {
           "sampler": {
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "max_output_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "sdk": null,
-            "replay_prior_thinking": "none",
-            "max_tool_iterations": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null
+            "replay_prior_thinking": "none"
           }
         },
         "models": {}
@@ -708,34 +861,18 @@
       "name": "openrouter_provider_object",
       "toml": "[models.\"p:m\".openrouter_provider]\norder = [\"a\", \"b\"]\n",
       "parsed": {
-        "selected": {
-          "provider": null,
-          "model_id": null
-        },
+        "selected": {},
         "defaults": {
-          "$ref": "s4"
+          "sampler": {}
         },
         "models": {
           "p:m": {
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "max_output_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "sdk": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
             "openrouter_provider": {
               "order": [
                 "a",
                 "b"
               ]
-            },
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null
+            }
           }
         }
       },
@@ -751,45 +888,16 @@
       "name": "model_key_order",
       "toml": "[models.\"zzz:m\"]\ntemperature = 1.0\n[models.\"aaa:m\"]\ntemperature = 2.0\n",
       "parsed": {
-        "selected": {
-          "provider": null,
-          "model_id": null
-        },
+        "selected": {},
         "defaults": {
-          "$ref": "s4"
+          "sampler": {}
         },
         "models": {
           "aaa:m": {
-            "temperature": 2.0,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "max_output_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "sdk": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null
+            "temperature": 2.0
           },
           "zzz:m": {
-            "temperature": 1.0,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "max_output_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "sdk": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null
+            "temperature": 1.0
           }
         }
       },
@@ -839,7 +947,22 @@
       "model_id": null
     },
     "defaults": {
-      "$ref": "s4"
+      "sampler": {
+        "budget_tokens": null,
+        "cache_keepalive": null,
+        "cache_ttl": null,
+        "gemini_generation": null,
+        "max_output_tokens": null,
+        "max_tool_iterations": null,
+        "openrouter_provider": null,
+        "reasoning_effort": null,
+        "replay_prior_thinking": null,
+        "sdk": null,
+        "temperature": null,
+        "top_p": null,
+        "zai_clear_thinking": null,
+        "zai_subscription": null
+      }
     },
     "models": {}
   },
@@ -851,10 +974,8 @@
       "provider": "p",
       "model_id": "m",
       "use_static": false,
-      "settings": {
-        "$ref": "s6"
-      },
-      "scopes": "SamplerScopes { temperature: None, top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "settings": {},
+      "scopes": {},
       "selected": null,
       "patched": null
     },
@@ -866,22 +987,11 @@
       "model_id": "m",
       "use_static": false,
       "settings": {
-        "temperature": 0.5,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "max_output_tokens": null,
-        "cache_ttl": null,
-        "cache_keepalive": null,
-        "sdk": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "temperature": 0.5
       },
-      "scopes": "SamplerScopes { temperature: Some(GlobalDefault), top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "temperature": "global_default"
+      },
       "selected": null,
       "patched": null
     },
@@ -893,22 +1003,11 @@
       "model_id": "m",
       "use_static": false,
       "settings": {
-        "temperature": 0.9,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "max_output_tokens": null,
-        "cache_ttl": null,
-        "cache_keepalive": null,
-        "sdk": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "temperature": 0.9
       },
-      "scopes": "SamplerScopes { temperature: Some(CharacterDefault), top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "temperature": "character_default"
+      },
       "selected": null,
       "patched": null
     },
@@ -920,22 +1019,11 @@
       "model_id": "m",
       "use_static": false,
       "settings": {
-        "temperature": 0.1,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "max_output_tokens": null,
-        "cache_ttl": null,
-        "cache_keepalive": null,
-        "sdk": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "temperature": 0.1
       },
-      "scopes": "SamplerScopes { temperature: Some(GlobalModel), top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "temperature": "global_model"
+      },
       "selected": null,
       "patched": null
     },
@@ -947,22 +1035,11 @@
       "model_id": "m",
       "use_static": false,
       "settings": {
-        "temperature": 0.2,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "max_output_tokens": null,
-        "cache_ttl": null,
-        "cache_keepalive": null,
-        "sdk": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "temperature": 0.2
       },
-      "scopes": "SamplerScopes { temperature: Some(CharacterModel), top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "temperature": "character_model"
+      },
       "selected": null,
       "patched": null
     },
@@ -973,10 +1050,8 @@
       "provider": "p",
       "model_id": "m",
       "use_static": false,
-      "settings": {
-        "$ref": "s6"
-      },
-      "scopes": "SamplerScopes { temperature: None, top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "settings": {},
+      "scopes": {},
       "selected": null,
       "patched": null
     },
@@ -988,25 +1063,18 @@
       "model_id": "claude-opus-4-6",
       "use_static": true,
       "settings": {
-        "temperature": null,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
         "max_output_tokens": 32768,
         "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "sdk": "anthropic",
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "sdk": "anthropic"
       },
-      "scopes": "SamplerScopes { temperature: None, top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: Some(StaticDefault), cache_ttl: Some(StaticDefault), cache_keepalive: None, sdk: Some(StaticDefault), replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "max_output_tokens": "static_default",
+        "cache_ttl": "static_default",
+        "sdk": "static_default"
+      },
       "selected": null,
       "patched": {
-        "$ref": "s3"
+        "$ref": "s1"
       }
     },
     {
@@ -1017,22 +1085,15 @@
       "model_id": "claude-opus-4-6",
       "use_static": true,
       "settings": {
-        "temperature": null,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
         "max_output_tokens": 32000,
         "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "sdk": "anthropic",
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "sdk": "anthropic"
       },
-      "scopes": "SamplerScopes { temperature: None, top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: Some(GlobalDefault), cache_ttl: Some(StaticDefault), cache_keepalive: None, sdk: Some(StaticDefault), replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "max_output_tokens": "global_default",
+        "cache_ttl": "static_default",
+        "sdk": "static_default"
+      },
       "selected": null,
       "patched": {
         "name": "opus",
@@ -1042,21 +1103,9 @@
         "sdk": "anthropic",
         "model_id": "claude-opus-4-6",
         "api_key_env": "ANTHROPIC_API_KEY",
-        "base_url": null,
         "max_context_tokens": 200000,
         "max_output_tokens": 32000,
-        "temperature": null,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "cache_ttl": "1h",
-        "cache_keepalive": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null
+        "cache_ttl": "1h"
       }
     },
     {
@@ -1066,10 +1115,8 @@
       "provider": "p",
       "model_id": "m",
       "use_static": false,
-      "settings": {
-        "$ref": "s6"
-      },
-      "scopes": "SamplerScopes { temperature: None, top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "settings": {},
+      "scopes": {},
       "selected": null,
       "patched": null
     },
@@ -1081,22 +1128,11 @@
       "model_id": "m",
       "use_static": false,
       "settings": {
-        "temperature": null,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "max_output_tokens": null,
-        "cache_ttl": null,
-        "cache_keepalive": null,
-        "sdk": "gemini",
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "sdk": "gemini"
       },
-      "scopes": "SamplerScopes { temperature: None, top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: Some(GlobalDefault), replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "sdk": "global_default"
+      },
       "selected": null,
       "patched": null
     },
@@ -1107,10 +1143,8 @@
       "provider": "p",
       "model_id": "m",
       "use_static": false,
-      "settings": {
-        "$ref": "s6"
-      },
-      "scopes": "SamplerScopes { temperature: None, top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "settings": {},
+      "scopes": {},
       "selected": null,
       "patched": null
     },
@@ -1122,22 +1156,11 @@
       "model_id": "m",
       "use_static": false,
       "settings": {
-        "temperature": null,
-        "top_p": null,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "max_output_tokens": null,
-        "cache_ttl": null,
-        "cache_keepalive": null,
-        "sdk": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": 3,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "max_tool_iterations": 3
       },
-      "scopes": "SamplerScopes { temperature: None, top_p: None, reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: Some(GlobalDefault), openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "max_tool_iterations": "global_default"
+      },
       "selected": null,
       "patched": null
     },
@@ -1150,21 +1173,12 @@
       "use_static": false,
       "settings": {
         "temperature": 0.9,
-        "top_p": 0.8,
-        "reasoning_effort": null,
-        "budget_tokens": null,
-        "max_output_tokens": null,
-        "cache_ttl": null,
-        "cache_keepalive": null,
-        "sdk": null,
-        "replay_prior_thinking": null,
-        "max_tool_iterations": null,
-        "openrouter_provider": null,
-        "gemini_generation": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "top_p": 0.8
       },
-      "scopes": "SamplerScopes { temperature: Some(CharacterModel), top_p: Some(GlobalDefault), reasoning_effort: None, budget_tokens: None, max_output_tokens: None, cache_ttl: None, cache_keepalive: None, sdk: None, replay_prior_thinking: None, max_tool_iterations: None, openrouter_provider: None, gemini_generation: None, zai_clear_thinking: None, zai_subscription: None }",
+      "scopes": {
+        "temperature": "character_model",
+        "top_p": "global_default"
+      },
       "selected": null,
       "patched": null
     }
@@ -1197,14 +1211,14 @@
           "name": "opus",
           "include_hidden": false,
           "resolved": {
-            "$ref": "s3"
+            "$ref": "s1"
           }
         },
         {
           "name": "chat.anthropic.opus",
           "include_hidden": false,
           "resolved": {
-            "$ref": "s3"
+            "$ref": "s1"
           }
         },
         {
@@ -1254,22 +1268,9 @@
             "provider_key": "openrouter",
             "sdk": "openrouter",
             "model_id": "some/model",
-            "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "max_output_tokens": 32768
           }
         },
         {
@@ -1282,22 +1283,9 @@
             "provider_key": "openrouter",
             "sdk": "openrouter",
             "model_id": "anthropic/claude-opus-4-6",
-            "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "max_output_tokens": 32768
           }
         },
         {
@@ -1314,35 +1302,14 @@
       "chat_toml": "",
       "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\n",
       "caches": {
-        "$ref": "s0"
+        "$ref": "s2"
       },
       "lookups": [
         {
           "name": "openrouter:deepseek/deepseek-r1",
           "include_hidden": false,
           "resolved": {
-            "name": "deepseek/deepseek-r1",
-            "qualified_name": "openrouter:deepseek/deepseek-r1",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "openrouter",
-            "model_id": "deepseek/deepseek-r1",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 64000,
-            "max_output_tokens": 4096,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "$ref": "s3"
           }
         },
         {
@@ -1355,50 +1322,60 @@
             "provider_key": "openrouter",
             "sdk": "anthropic",
             "model_id": "anthropic/claude-opus-4-6",
-            "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 111000,
             "max_output_tokens": 2222,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "1h",
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "cache_ttl": "1h"
           }
         },
         {
           "name": "deepseek/deepseek-r1",
           "include_hidden": false,
           "resolved": {
-            "name": "deepseek/deepseek-r1",
-            "qualified_name": "openrouter:deepseek/deepseek-r1",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "openrouter",
-            "model_id": "deepseek/deepseek-r1",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 64000,
-            "max_output_tokens": 4096,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "$ref": "s3"
+          }
+        }
+      ],
+      "listed": {
+        "$ref": "s4"
+      },
+      "listed_include_hidden": {
+        "$ref": "s4"
+      }
+    },
+    {
+      "name": "discovery_off_ignores_cache",
+      "chat_toml": "",
+      "providers_toml": "[openrouter]\n",
+      "caches": {
+        "$ref": "s2"
+      },
+      "lookups": {
+        "$ref": "s5"
+      },
+      "listed": [],
+      "listed_include_hidden": []
+    },
+    {
+      "name": "static_wins_over_discovered",
+      "chat_toml": "[openrouter.opus]\nmodel_id = \"anthropic/claude-opus-4-6\"\nmax_output_tokens = 999\n",
+      "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\n",
+      "caches": {
+        "$ref": "s2"
+      },
+      "lookups": [
+        {
+          "name": "openrouter:anthropic/claude-opus-4-6",
+          "include_hidden": false,
+          "resolved": {
+            "$ref": "s6"
+          }
+        },
+        {
+          "name": "anthropic/claude-opus-4-6",
+          "include_hidden": false,
+          "resolved": {
+            "$ref": "s6"
           }
         }
       ],
@@ -1410,156 +1387,11 @@
       }
     },
     {
-      "name": "discovery_off_ignores_cache",
-      "chat_toml": "",
-      "providers_toml": "[openrouter]\n",
-      "caches": {
-        "$ref": "s0"
-      },
-      "lookups": [
-        {
-          "name": "openrouter:deepseek/deepseek-r1",
-          "include_hidden": false,
-          "resolved": {
-            "name": "deepseek/deepseek-r1",
-            "qualified_name": "openrouter:deepseek/deepseek-r1",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "openrouter",
-            "model_id": "deepseek/deepseek-r1",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
-          }
-        },
-        {
-          "name": "deepseek/deepseek-r1",
-          "include_hidden": false,
-          "err": "model \"deepseek/deepseek-r1\" not found in static catalog or discovered models"
-        }
-      ],
-      "listed": [],
-      "listed_include_hidden": []
-    },
-    {
-      "name": "static_wins_over_discovered",
-      "chat_toml": "[openrouter.opus]\nmodel_id = \"anthropic/claude-opus-4-6\"\nmax_output_tokens = 999\n",
-      "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\n",
-      "caches": {
-        "$ref": "s0"
-      },
-      "lookups": [
-        {
-          "name": "openrouter:anthropic/claude-opus-4-6",
-          "include_hidden": false,
-          "resolved": {
-            "name": "opus",
-            "qualified_name": "chat.openrouter.opus",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "openrouter",
-            "model_id": "anthropic/claude-opus-4-6",
-            "api_key_env": "OPENROUTER_API_KEY",
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 200000,
-            "max_output_tokens": 999,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
-          }
-        },
-        {
-          "name": "anthropic/claude-opus-4-6",
-          "include_hidden": false,
-          "resolved": {
-            "name": "opus",
-            "qualified_name": "chat.openrouter.opus",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "openrouter",
-            "model_id": "anthropic/claude-opus-4-6",
-            "api_key_env": "OPENROUTER_API_KEY",
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 200000,
-            "max_output_tokens": 999,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
-          }
-        }
-      ],
-      "listed": [
-        {
-          "source": "static",
-          "qualified_name": "chat.openrouter.opus",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:deepseek/deepseek-r1",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:meta-llama/llama-3",
-          "hidden": false
-        }
-      ],
-      "listed_include_hidden": [
-        {
-          "source": "static",
-          "qualified_name": "chat.openrouter.opus",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:deepseek/deepseek-r1",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:meta-llama/llama-3",
-          "hidden": false
-        }
-      ]
-    },
-    {
       "name": "disabled_provider_is_uniformly_unreferenceable",
       "chat_toml": "[openrouter.opus]\nmodel_id = \"anthropic/claude-opus-4-6\"\n",
       "providers_toml": "[openrouter]\nenabled = false\n[openrouter.discovery]\nenabled = true\n",
       "caches": {
-        "$ref": "s0"
+        "$ref": "s2"
       },
       "lookups": [
         {
@@ -1585,19 +1417,7 @@
             "api_key_env": "OPENROUTER_API_KEY",
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "max_output_tokens": 32768
           }
         }
       ],
@@ -1621,7 +1441,7 @@
       "chat_toml": "",
       "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\nignore = [\"meta-llama/*\"]\n",
       "caches": {
-        "$ref": "s0"
+        "$ref": "s2"
       },
       "lookups": [
         {
@@ -1633,20 +1453,22 @@
           "name": "openrouter:meta-llama/llama-3",
           "include_hidden": true,
           "resolved": {
-            "$ref": "s2"
+            "base_url": "https://openrouter.ai/api/v1",
+            "category": "chat",
+            "max_context_tokens": 200000,
+            "max_output_tokens": 32768,
+            "model_id": "meta-llama/llama-3",
+            "name": "meta-llama/llama-3",
+            "provider_key": "openrouter",
+            "qualified_name": "openrouter:meta-llama/llama-3",
+            "sdk": "openrouter"
           }
         },
         {
-          "name": "meta-llama/llama-3",
-          "include_hidden": false,
-          "err": "model \"meta-llama/llama-3\" is hidden by [providers.openrouter.discovery.ignore]; pass include_hidden=true or update the ignore rules to allow it"
+          "$ref": "s8"
         },
         {
-          "name": "meta-llama/llama-3",
-          "include_hidden": true,
-          "resolved": {
-            "$ref": "s2"
-          }
+          "$ref": "s9"
         },
         {
           "name": "openrouter:meta-llama/not-cached",
@@ -1663,22 +1485,9 @@
             "provider_key": "openrouter",
             "sdk": "openrouter",
             "model_id": "meta-llama/not-cached",
-            "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "max_output_tokens": 32768
           }
         }
       ],
@@ -1694,37 +1503,17 @@
           "hidden": false
         }
       ],
-      "listed_include_hidden": [
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:anthropic/claude-opus-4-6",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:deepseek/deepseek-r1",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:meta-llama/llama-3",
-          "hidden": true
-        }
-      ]
+      "listed_include_hidden": {
+        "$ref": "s10"
+      }
     },
     {
       "name": "hidden_hits_do_not_create_ambiguity",
       "chat_toml": "",
       "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\nignore = [\"deepseek/*\"]\n[other]\n[other.discovery]\nenabled = true\nignore = [\"deepseek/*\"]\n",
-      "caches": [
-        {
-          "$ref": "s1"
-        },
-        {
-          "provider": "other",
-          "body": "{\n  \"version\": 1,\n  \"provider_key\": \"other\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"other\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"base_url\": \"https://other/v1\", \"context_length\": 1000, \"max_output_tokens\": 100}\n  ]\n}"
-        }
-      ],
+      "caches": {
+        "$ref": "s11"
+      },
       "lookups": [
         {
           "name": "deepseek/deepseek-r1",
@@ -1777,20 +1566,14 @@
       "chat_toml": "",
       "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\nignore = [\"meta-llama/*\"]\n",
       "caches": {
-        "$ref": "s0"
+        "$ref": "s2"
       },
       "lookups": [
         {
-          "name": "meta-llama/llama-3",
-          "include_hidden": false,
-          "err": "model \"meta-llama/llama-3\" is hidden by [providers.openrouter.discovery.ignore]; pass include_hidden=true or update the ignore rules to allow it"
+          "$ref": "s8"
         },
         {
-          "name": "meta-llama/llama-3",
-          "include_hidden": true,
-          "resolved": {
-            "$ref": "s2"
-          }
+          "$ref": "s9"
         }
       ],
       "listed": [
@@ -1805,37 +1588,17 @@
           "hidden": false
         }
       ],
-      "listed_include_hidden": [
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:anthropic/claude-opus-4-6",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:deepseek/deepseek-r1",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:meta-llama/llama-3",
-          "hidden": true
-        }
-      ]
+      "listed_include_hidden": {
+        "$ref": "s10"
+      }
     },
     {
       "name": "ambiguous_bare_id",
       "chat_toml": "",
       "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\n[other]\n[other.discovery]\nenabled = true\n",
-      "caches": [
-        {
-          "$ref": "s1"
-        },
-        {
-          "provider": "other",
-          "body": "{\n  \"version\": 1,\n  \"provider_key\": \"other\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"other\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"base_url\": \"https://other/v1\", \"context_length\": 1000, \"max_output_tokens\": 100}\n  ]\n}"
-        }
-      ],
+      "caches": {
+        "$ref": "s11"
+      },
       "lookups": [
         {
           "name": "deepseek/deepseek-r1",
@@ -1843,57 +1606,19 @@
           "err": "model name \"deepseek/deepseek-r1\" is ambiguous across providers: openrouter:deepseek/deepseek-r1, other:deepseek/deepseek-r1"
         }
       ],
-      "listed": [
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:anthropic/claude-opus-4-6",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:deepseek/deepseek-r1",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:meta-llama/llama-3",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "other:deepseek/deepseek-r1",
-          "hidden": false
-        }
-      ],
-      "listed_include_hidden": [
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:anthropic/claude-opus-4-6",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:deepseek/deepseek-r1",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "openrouter:meta-llama/llama-3",
-          "hidden": false
-        },
-        {
-          "source": "discovered",
-          "qualified_name": "other:deepseek/deepseek-r1",
-          "hidden": false
-        }
-      ]
+      "listed": {
+        "$ref": "s12"
+      },
+      "listed_include_hidden": {
+        "$ref": "s12"
+      }
     },
     {
       "name": "provider_defaults_win_over_discovered",
       "chat_toml": "",
       "providers_toml": "[openrouter]\n[openrouter.discovery]\nenabled = true\n[openrouter.defaults]\nmax_output_tokens = 111\ncache_ttl = \"5m\"\n",
       "caches": {
-        "$ref": "s0"
+        "$ref": "s2"
       },
       "lookups": [
         {
@@ -1906,30 +1631,18 @@
             "provider_key": "openrouter",
             "sdk": "openrouter",
             "model_id": "deepseek/deepseek-r1",
-            "api_key_env": null,
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 64000,
             "max_output_tokens": 111,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": "5m",
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "cache_ttl": "5m"
           }
         }
       ],
       "listed": {
-        "$ref": "s7"
+        "$ref": "s4"
       },
       "listed_include_hidden": {
-        "$ref": "s7"
+        "$ref": "s4"
       }
     },
     {
@@ -1948,22 +1661,9 @@
             "provider_key": "zai",
             "sdk": "zai",
             "model_id": "glm-5",
-            "api_key_env": null,
-            "base_url": null,
             "max_context_tokens": 200000,
             "max_output_tokens": 32768,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": false,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "zai_clear_thinking": false
           }
         }
       ],
@@ -1980,41 +1680,9 @@
           "body": "{\n  \"version\": 99,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"openrouter\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 64000, \"max_output_tokens\": 4096}\n  ]\n}"
         }
       ],
-      "lookups": [
-        {
-          "name": "openrouter:deepseek/deepseek-r1",
-          "include_hidden": false,
-          "resolved": {
-            "name": "deepseek/deepseek-r1",
-            "qualified_name": "openrouter:deepseek/deepseek-r1",
-            "category": "chat",
-            "provider_key": "openrouter",
-            "sdk": "openrouter",
-            "model_id": "deepseek/deepseek-r1",
-            "api_key_env": null,
-            "base_url": "https://openrouter.ai/api/v1",
-            "max_context_tokens": 200000,
-            "max_output_tokens": 32768,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
-          }
-        },
-        {
-          "name": "deepseek/deepseek-r1",
-          "include_hidden": false,
-          "err": "model \"deepseek/deepseek-r1\" not found in static catalog or discovered models"
-        }
-      ],
+      "lookups": {
+        "$ref": "s5"
+      },
       "listed": [],
       "listed_include_hidden": []
     },
@@ -2039,22 +1707,8 @@
             "provider_key": "custom",
             "sdk": "openai",
             "model_id": "m",
-            "api_key_env": null,
             "base_url": "https://from-the-entry/v1",
-            "max_context_tokens": null,
-            "max_output_tokens": 4096,
-            "temperature": null,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "max_output_tokens": 4096
           }
         }
       ],
@@ -2224,119 +1878,5 @@
         "max_output_tokens": 32000
       }
     }
-  ],
-  "$shared": {
-    "s0": [
-      {
-        "$ref": "s1"
-      }
-    ],
-    "s1": {
-      "body": "{\n  \"version\": 1,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-01-01T00:00:00Z\",\n  \"models\": [\n    {\"provider_key\": \"openrouter\", \"model_id\": \"meta-llama/llama-3\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\"},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"deepseek/deepseek-r1\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 64000, \"max_output_tokens\": 4096},\n    {\"provider_key\": \"openrouter\", \"model_id\": \"anthropic/claude-opus-4-6\", \"sdk\": \"openai\", \"discovered_at\": \"2026-01-01T00:00:00Z\",\n     \"context_length\": 111000, \"max_output_tokens\": 2222}\n  ]\n}",
-      "provider": "openrouter"
-    },
-    "s2": {
-      "api_key_env": null,
-      "base_url": "https://openrouter.ai/api/v1",
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_ttl": null,
-      "category": "chat",
-      "gemini_generation": null,
-      "max_context_tokens": 200000,
-      "max_output_tokens": 32768,
-      "max_tool_iterations": null,
-      "model_id": "meta-llama/llama-3",
-      "name": "meta-llama/llama-3",
-      "openrouter_provider": null,
-      "provider_key": "openrouter",
-      "qualified_name": "openrouter:meta-llama/llama-3",
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "openrouter",
-      "temperature": null,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s3": {
-      "api_key_env": "ANTHROPIC_API_KEY",
-      "base_url": null,
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_ttl": "1h",
-      "category": "chat",
-      "gemini_generation": null,
-      "max_context_tokens": 200000,
-      "max_output_tokens": 32768,
-      "max_tool_iterations": null,
-      "model_id": "claude-opus-4-6",
-      "name": "opus",
-      "openrouter_provider": null,
-      "provider_key": "anthropic",
-      "qualified_name": "chat.anthropic.opus",
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": "anthropic",
-      "temperature": null,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s4": {
-      "sampler": {
-        "$ref": "s6"
-      }
-    },
-    "s5": {
-      "api_key_env": null,
-      "base_url": null,
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_ttl": null,
-      "gemini_generation": null,
-      "max_context_tokens": null,
-      "max_output_tokens": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "sdk": null,
-      "temperature": null,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s6": {
-      "budget_tokens": null,
-      "cache_keepalive": null,
-      "cache_ttl": null,
-      "gemini_generation": null,
-      "max_output_tokens": null,
-      "max_tool_iterations": null,
-      "openrouter_provider": null,
-      "reasoning_effort": null,
-      "replay_prior_thinking": null,
-      "sdk": null,
-      "temperature": null,
-      "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
-    },
-    "s7": [
-      {
-        "hidden": false,
-        "qualified_name": "openrouter:anthropic/claude-opus-4-6",
-        "source": "discovered"
-      },
-      {
-        "hidden": false,
-        "qualified_name": "openrouter:deepseek/deepseek-r1",
-        "source": "discovered"
-      },
-      {
-        "hidden": false,
-        "qualified_name": "openrouter:meta-llama/llama-3",
-        "source": "discovered"
-      }
-    ]
-  }
+  ]
 }
