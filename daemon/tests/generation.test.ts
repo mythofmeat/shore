@@ -496,23 +496,55 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   };
 }
 
-function stripHopFields(cached: unknown): unknown {
-  if (cached === null || typeof cached !== "object") return cached;
-  const { tool_rpc: _hop, max_tool_iterations: _cap, ...rest } = cached as Record<string, unknown>;
-  return rest;
-}
+function expectCachedIsTheSentRequestPlusTheReply(
+  run: { lastRequest?: unknown; requests: unknown[] },
+  out: Record<string, unknown>,
+): void {
+  const sent = run.requests.at(-1) as Record<string, unknown> | undefined;
 
-function dropFalseIsError(v: unknown): unknown {
-  if (Array.isArray(v)) return v.map(dropFalseIsError);
-  if (v !== null && typeof v === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, val] of Object.entries(v)) {
-      if (k === "is_error" && val === false) continue;
-      out[k] = dropFalseIsError(val);
-    }
-    return out;
+  if (run.lastRequest === undefined) {
+    expect(
+      out["result"],
+      "a turn caches nothing for the next one only when it did not finish",
+    ).not.toEqual({ ok: true });
+    return;
   }
-  return v;
+
+  const cached = { ...(run.lastRequest as Record<string, unknown>) };
+  delete cached["rid"];
+  expect(sent, "something was cached, so something was sent").toBeDefined();
+
+  const {
+    context: _context,
+    max_tool_iterations: _iterations,
+    ...withoutContext
+  } = (sent ?? {}) as Record<string, unknown> & {
+    context?: unknown;
+    max_tool_iterations?: unknown;
+  };
+
+  const sentMessages = (withoutContext["messages"] ?? []) as unknown[];
+  const cachedMessages = (cached["messages"] ?? []) as unknown[];
+
+  expect(
+    shaped({ ...cached, messages: undefined }),
+    "the cached request is the one that was sent, minus its call context",
+  ).toEqual(shaped({ ...withoutContext, messages: undefined }));
+
+  expect(
+    shaped(cachedMessages.slice(0, sentMessages.length)),
+    "with everything that was sent still in front",
+  ).toEqual(shaped(sentMessages));
+
+  expect(
+    cachedMessages.length,
+    "and the turn's own replies appended, so the next turn extends the same prefix",
+  ).toBeGreaterThan(sentMessages.length);
+
+  expect(
+    Object.hasOwn(cached, "max_tool_iterations"),
+    "a keepalive ping replays this prefix, and must not drive a tool loop doing it",
+  ).toBe(false);
 }
 
 function input(c: unknown): GenerationInput {
@@ -545,15 +577,7 @@ describe("runGeneration", () => {
       expect(shaped(await readBack(run.dataDir))).toEqual(shaped(out["conversation"]));
       expect(run.turnCount).toBe(out["turn_count"] as number);
 
-      const expectedCached = stripHopFields(out["cached_last_request"]);
-
-      let cached: unknown = null;
-      if (run.lastRequest !== undefined) {
-        const copy = { ...(run.lastRequest as Record<string, unknown>) };
-        delete copy["rid"];
-        cached = copy;
-      }
-      expect(shaped(dropFalseIsError(cached))).toEqual(shaped(expectedCached));
+      expectCachedIsTheSentRequestPlusTheReply(run, out);
 
       const expectedCalls = ["ensureState"];
       const body = input(c).body;
