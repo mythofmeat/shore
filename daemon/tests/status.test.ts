@@ -23,7 +23,7 @@ import {
   type StatusContext,
 } from "../src/commands/status.ts";
 
-import fixture from "./commands_fixtures/status.json" with { type: "json" };
+import fixture from "./command_captures/status.json" with { type: "json" };
 
 const CHARACTER = "poppy";
 const TOLERANCE_SECS = fixture.tolerance_secs;

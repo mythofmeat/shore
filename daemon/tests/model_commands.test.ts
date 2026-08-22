@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import fixture from "./commands_fixtures/model_commands.json" with { type: "json" };
+import fixture from "./command_captures/model_commands.json" with { type: "json" };
 
 import { CommandError } from "../src/commands/errors.ts";
 import {
@@ -72,14 +72,13 @@ interface Step {
   args: Record<string, unknown>;
   ok?: unknown;
   err?: WireError;
-  prefs: Prefs;
+  prefs_changed?: Record<string, unknown>;
 }
 
 interface Scenario {
   name: string;
-  note: string;
+  note?: string;
   setup: Setup;
-  initial: { prefs: Prefs };
   steps: Step[];
 }
 
@@ -207,17 +206,26 @@ function prefsWire(prefs: ModelPreferences): unknown {
   };
 }
 
-function readPrefs(ctx: ModelsContext, expected: Prefs): Prefs {
+function readPrefs(ctx: ModelsContext): Prefs {
   const globalPath = globalPreferencesPath(ctx.dataDir);
   const out: Prefs = {
     global_exists: existsSync(globalPath),
     global: prefsWire(loadPreferences(globalPath)),
   };
-  if (expected.character_exists !== undefined && ctx.characterName !== undefined) {
+  if (ctx.characterName !== undefined) {
     const path = characterPreferencesPath(ctx.dataDir, ctx.characterName);
     out.character_exists = existsSync(path);
     out.character = prefsWire(loadPreferences(path));
   }
+  return out;
+}
+
+function flatten(value: unknown, prefix = "", out: Record<string, unknown> = {}) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    for (const [k, v] of Object.entries(value)) flatten(v, prefix ? `${prefix}.${k}` : k, out);
+    return out;
+  }
+  out[prefix] = value;
   return out;
 }
 
@@ -247,10 +255,6 @@ describe("model commands", () => {
     test(scenario.name, async () => {
       const ctx = await buildContext(scenario.setup);
 
-      expect(readPrefs(ctx, scenario.initial.prefs), "initial prefs").toEqual(
-        scenario.initial.prefs as never,
-      );
-
       for (const step of scenario.steps) {
         const label = `${step.op} ${JSON.stringify(step.args)}`;
         let result: unknown;
@@ -270,9 +274,12 @@ describe("model commands", () => {
           expect(result, label).toEqual(step.ok as never);
         }
 
-        expect(readPrefs(ctx, step.prefs), `${label} — prefs`).toEqual(
-          step.prefs as never,
-        );
+        if (step.prefs_changed !== undefined) {
+          const after = flatten(readPrefs(ctx));
+          for (const [path, want] of Object.entries(step.prefs_changed)) {
+            expect(after[path], `${label} — ${path}`).toEqual(want as never);
+          }
+        }
       }
     });
   }

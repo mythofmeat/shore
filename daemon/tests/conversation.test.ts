@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import fixture from "./commands_fixtures/conversation.json" with { type: "json" };
+import fixture from "./command_captures/conversation.json" with { type: "json" };
 
 import {
   alt,

@@ -8,7 +8,7 @@ import { callLog, transcript, type CallLogContext } from "../src/commands/call_l
 import { CommandError } from "../src/commands/errors.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
 
-import fixture from "./commands_fixtures/call_log.json" with { type: "json" };
+import fixture from "./command_captures/call_log.json" with { type: "json" };
 
 const root = mkdtempSync(join(tmpdir(), "call-log-parity-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
