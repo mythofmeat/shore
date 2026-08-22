@@ -51,8 +51,8 @@ interface Scenario {
   archived: Message[];
   active: Message[];
   files: { name: string; bytes_utf8: string }[];
-  initial_messages: Message[];
-  initial_display_history: Message[];
+  initial_messages?: Message[];
+  initial_display_history?: Message[];
   steps: Step[];
 }
 
@@ -219,11 +219,11 @@ describe("conversation commands", () => {
       const { engine, pushes, root } = await buildScenario(scenario);
 
       expect(serdeShape(engine.messages())).toEqual(
-        expand(scenario.initial_messages, root) as never,
+        expand(scenario.initial_messages ?? scenario.active, root) as never,
       );
       const display = await engine.displayHistory();
       expect(serdeShape(display.messages)).toEqual(
-        expand(scenario.initial_display_history, root) as never,
+        expand(scenario.initial_display_history ?? scenario.active, root) as never,
       );
 
       let seen = pushes();
