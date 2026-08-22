@@ -1,4 +1,4 @@
-import type { LlmError } from "./errors";
+import { toLlmError } from "./errors";
 
 export type CredentialFailureKind =
   | "missing_key"
@@ -10,13 +10,14 @@ export type CredentialFailureKind =
   | "unknown";
 
 export function shouldRotate(kind: CredentialFailureKind): boolean {
-  return kind !== "not_credential_failure";
+  return kind !== "not_credential_failure" && kind !== "unknown";
 }
 
 export function classifyCredentialFailure(
   _providerKey: string,
-  error: LlmError,
+  raw: unknown,
 ): CredentialFailureKind {
+  const error = toLlmError(raw);
   switch (error.kind) {
     case "missing_api_key":
       return "missing_key";
@@ -33,6 +34,8 @@ export function classifyCredentialFailure(
     case "budget_blocked":
     case "aborted":
       return "not_credential_failure";
+    default:
+      return "unknown";
   }
 }
 

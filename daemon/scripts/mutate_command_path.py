@@ -125,8 +125,8 @@ MUTANTS = [
      "  return frameWithRid(frame, rid);\n}\n\nasync function refreshProviderModels(",
      "  return frame;\n}\n\nasync function refreshProviderModels("),
     ("rid: nothing attaches it at all",
-     "  if (rid === undefined) return frame;\n  if (frame.type === \"command_output\" || frame.type === \"error\") return { ...frame, rid };",
-     "  if (frame.type === \"command_output\" || frame.type === \"error\") return frame;"),
+     "  if (rid === undefined) return frame;\n  switch (frame.type) {",
+     "  return frame;\n  switch (frame.type) {"),
 ]
 
 

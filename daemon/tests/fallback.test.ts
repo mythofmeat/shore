@@ -118,7 +118,7 @@ describe("error projection", () => {
   });
 
   test("a response body never survives into a reason", () => {
-    const reason = sanitizeReason(ERRORS.http_401 as LlmError);
+    const reason = sanitizeReason(ERRORS.http_401);
     expect(reason).not.toContain("sk-abc123");
     expect(reason).toBe("HTTP 401");
   });

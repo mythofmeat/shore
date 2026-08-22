@@ -12,7 +12,8 @@ import { rustJoin } from "../config/dirs.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import type { Message } from "../engine/types.ts";
-import { generate, generateWithCredentialFallback } from "../llm/generate.ts";
+import { generate, generateViaStream } from "../llm/generate.ts";
+import type { FrameSink } from "../llm/stream.ts";
 import type { GenerateDeps } from "../llm/generate.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import type { ToolContextDeps } from "../handler/tool_context.ts";
@@ -198,15 +199,17 @@ export type CompactionGenerate = (
   request: SidecarRequest,
   model: { provider_key: string; api_key_env?: string | undefined },
   character: string,
+  sink?: FrameSink,
 ) => Promise<GenerateResponse>;
 
 export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
-  return async (request, model, character) => {
+  return async (request, model, character, sink) => {
     labelAccountedCall(request, deps.config, character, "compaction");
-    const { response, fallbacks } = await generateWithCredentialFallback(
+    const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
       deps,
+      sink === undefined ? {} : { sink },
     );
     for (const event of fallbacks) {
       shoreLog.warn(

@@ -13,7 +13,11 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import { AutonomyService } from "../src/autonomy/service.ts";
-import { dispatchCommand, type CommandPathDeps } from "../src/handler/commands.ts";
+import {
+  dispatchCommand,
+  sessionEmitter,
+  type CommandPathDeps,
+} from "../src/handler/commands.ts";
 import { characterPreferencesPath, loadPreferences } from "../src/config/preferences.ts";
 import type { RequestMeta } from "../src/swp/session.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -394,4 +398,46 @@ test("config_reload adopts the config the command re-read, not the one it starte
   expect(adopted).toHaveLength(1);
   expect(adopted[0]).not.toBe(before);
   expect(adopted[0]?.app.defaults.model).toBe("spare");
+});
+
+test("progress frames from a command reach the session that asked, stamped with its rid", () => {
+  const sent: Array<[number, Record<string, unknown>]> = [];
+  const router = {
+    sendToSession: async (sessionId: number, frame: unknown) => {
+      sent.push([sessionId, frame as Record<string, unknown>]);
+    },
+  };
+
+  const emit = sessionEmitter(router, 7, "r-compact");
+  emit({ type: "phase", rid: null, phase: "compacting round 1", model: null });
+  emit({
+    type: "tool_call",
+    rid: null,
+    tool_id: "t1",
+    tool_name: "edit",
+    input: { path: "memory/notes.md" },
+    subagent: "compaction",
+    task_id: null,
+  });
+
+  expect(sent).toHaveLength(2);
+  expect(sent[0]?.[0]).toBe(7);
+  expect(sent[0]?.[1]).toMatchObject({ phase: "compacting round 1", rid: "r-compact" });
+  expect(sent[1]?.[1]).toMatchObject({
+    tool_name: "edit",
+    subagent: "compaction",
+    rid: "r-compact",
+  });
+});
+
+test("a session with no rid still gets its progress frames", () => {
+  const sent: unknown[] = [];
+  const emit = sessionEmitter(
+    { sendToSession: async (_id: number, frame: unknown) => void sent.push(frame) },
+    3,
+    undefined,
+  );
+  emit({ type: "phase", rid: null, phase: "compacting round 2", model: null });
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ phase: "compacting round 2", rid: null });
 });

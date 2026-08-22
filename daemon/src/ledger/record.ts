@@ -3,6 +3,7 @@ import { shoreLog } from "../log.ts";
 import { Ledger, type RecordCall, type Timing, type Usage } from "./store.ts";
 import { toolSurfaceFingerprint } from "./tool_surface.ts";
 import { estimateTokens } from "../engine/tokens.ts";
+import { describeError, toLlmError } from "../llm/errors.ts";
 import type { CallContext, GenerateResponse, SidecarRequest, StreamEvent } from "../llm/types.ts";
 
 const ledgers = new Map<string, Ledger | null>();
@@ -69,6 +70,7 @@ interface Recorded {
   finish_reason: string;
   call_type?: string;
   output_tokens_estimated?: boolean;
+  error?: string;
 }
 
 export interface CallAttempt {
@@ -122,6 +124,7 @@ function record(
     tool_surface: toolSurfaceFingerprint(req.tools),
     ...(call.output_tokens_estimated === true ? { output_tokens_estimated: true } : {}),
     ...(ctx.thinking_dropped === undefined ? {} : { thinking_dropped: ctx.thinking_dropped }),
+    ...(call.error === undefined ? {} : { error: call.error }),
   };
   const row = ledger.record(entry, () => new Date(), attempt?.id);
   if (row.cache_anomaly !== null) {
@@ -292,6 +295,7 @@ export async function* recordingStream(
           usage: useEstimate ? { ...seen, output_tokens: partial.usage.output_tokens } : seen,
           timing: event.timing,
           finish_reason: "error",
+          error: event.message,
           ...(useEstimate ? { output_tokens_estimated: true } : {}),
         }, attempt);
         attempt = undefined;
@@ -332,11 +336,13 @@ export function recordGenerateError(
   startedAt: number,
   now: () => number = () => Date.now(),
   attempt?: CallAttempt,
+  cause?: unknown,
 ): void {
   if (ctx === undefined) return;
   tryRecord(ctx, req, {
     usage: NO_USAGE,
     timing: { total_ms: now() - startedAt, time_to_first_token_ms: 0 },
     finish_reason: "error",
+    ...(cause === undefined ? {} : { error: describeError(toLlmError(cause)) }),
   }, attempt);
 }

@@ -1,6 +1,8 @@
 import { buildRequestWithProviderKeys, pushInlineSystem, type ResolvedModel } from "../../llm/request";
 import type { ProviderEntry } from "../../llm/credentials";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
+import { describeError } from "../../llm/errors";
+import type { FrameSink } from "../../llm/stream";
 import { CompactionError, type CompactionLlm } from "./types";
 
 export const COMPACTION_TAIL_ENTRY_COUNT = 2;
@@ -18,6 +20,7 @@ export type LedgerGenerate = (
   request: SidecarRequest,
   model: ResolvedModel,
   character: string,
+  sink?: FrameSink,
 ) => Promise<GenerateResponse>;
 
 export interface RealCompactionLlmOptions {
@@ -26,6 +29,7 @@ export interface RealCompactionLlmOptions {
   character: string;
   generate: LedgerGenerate;
   env?: NodeJS.ProcessEnv;
+  emit?: FrameSink;
 }
 
 export class RealCompactionLlm implements CompactionLlm {
@@ -64,9 +68,14 @@ export class RealCompactionLlm implements CompactionLlm {
 
   async generate(request: SidecarRequest): Promise<GenerateResponse> {
     try {
-      return await this.#opts.generate(request, this.#opts.model, this.#opts.character);
+      return await this.#opts.generate(
+        request,
+        this.#opts.model,
+        this.#opts.character,
+        this.#opts.emit,
+      );
     } catch (e) {
-      throw CompactionError.llm((e as Error).message, e);
+      throw CompactionError.llm(describeError(e), e);
     }
   }
 }
