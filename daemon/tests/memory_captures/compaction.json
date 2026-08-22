@@ -1,862 +1,4 @@
 {
-  "write_allowed_path": [
-    {
-      "path": "MEMORY.md",
-      "allowed": true
-    },
-    {
-      "path": "./MEMORY.md",
-      "allowed": true
-    },
-    {
-      "path": "././MEMORY.md",
-      "allowed": true
-    },
-    {
-      "path": "././memory/a.md",
-      "allowed": true
-    },
-    {
-      "path": ".\\memory\\a.md",
-      "allowed": false
-    },
-    {
-      "path": "./memory\\a.md",
-      "allowed": true
-    },
-    {
-      "path": "memory.md",
-      "allowed": true
-    },
-    {
-      "path": "MeMoRy.Md",
-      "allowed": true
-    },
-    {
-      "path": "workspace/MEMORY.md",
-      "allowed": true
-    },
-    {
-      "path": "/MEMORY.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/daily/2026-03-25.md",
-      "allowed": true
-    },
-    {
-      "path": "memory/preferences/tea.md",
-      "allowed": true
-    },
-    {
-      "path": "memory/a.md",
-      "allowed": true
-    },
-    {
-      "path": "memory/",
-      "allowed": false
-    },
-    {
-      "path": "memory",
-      "allowed": false
-    },
-    {
-      "path": "memory/.dreams/x.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/.DREAMS/x.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/dreaming/x.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/DREAMING/x.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/dreams.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/DREAMS.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/dreams",
-      "allowed": false
-    },
-    {
-      "path": "memory/dreams/",
-      "allowed": false
-    },
-    {
-      "path": "memory/dreams/x.md",
-      "allowed": true
-    },
-    {
-      "path": "memory/dreamsx.md",
-      "allowed": true
-    },
-    {
-      "path": "SOUL.md",
-      "allowed": true
-    },
-    {
-      "path": "USER.md",
-      "allowed": true
-    },
-    {
-      "path": "AGENTS.md",
-      "allowed": true
-    },
-    {
-      "path": "TOOLS.md",
-      "allowed": true
-    },
-    {
-      "path": "soul.md",
-      "allowed": false
-    },
-    {
-      "path": "workspace/SOUL.md",
-      "allowed": true
-    },
-    {
-      "path": "workspace/./SOUL.md",
-      "allowed": true
-    },
-    {
-      "path": "./workspace/SOUL.md",
-      "allowed": true
-    },
-    {
-      "path": "./USER.md",
-      "allowed": true
-    },
-    {
-      "path": "HEARTBEAT.md",
-      "allowed": false
-    },
-    {
-      "path": "RECENT_MEMORY.md",
-      "allowed": false
-    },
-    {
-      "path": "DREAMS.md",
-      "allowed": false
-    },
-    {
-      "path": "notes.md",
-      "allowed": false
-    },
-    {
-      "path": "topics/foo.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/../../SOUL.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/../USER.md",
-      "allowed": false
-    },
-    {
-      "path": "../SOUL.md",
-      "allowed": false
-    },
-    {
-      "path": "memory/sub/../../escape.md",
-      "allowed": false
-    },
-    {
-      "path": "memory\\..\\..\\SOUL.md",
-      "allowed": false
-    },
-    {
-      "path": "memory\\daily\\a.md",
-      "allowed": true
-    },
-    {
-      "path": ".\\SOUL.md",
-      "allowed": true
-    },
-    {
-      "path": "/etc/passwd",
-      "allowed": false
-    },
-    {
-      "path": "/SOUL.md",
-      "allowed": false
-    },
-    {
-      "path": "",
-      "allowed": false
-    },
-    {
-      "path": "   ",
-      "allowed": false
-    },
-    {
-      "path": "  MEMORY.md  ",
-      "allowed": true
-    },
-    {
-      "path": "\tmemory/a.md\n",
-      "allowed": true
-    },
-    {
-      "path": "﻿MEMORY.md",
-      "allowed": false
-    },
-    {
-      "path": "MEMORY.md",
-      "allowed": true
-    },
-    {
-      "path": " MEMORY.md",
-      "allowed": true
-    },
-    {
-      "path": "MEMORY.md",
-      "allowed": true
-    },
-    {
-      "path": "memory//a.md",
-      "allowed": true
-    },
-    {
-      "path": "memory/./a.md",
-      "allowed": true
-    },
-    {
-      "path": "memory/a/../b.md",
-      "allowed": false
-    },
-    {
-      "path": "./memory/a.md",
-      "allowed": true
-    },
-    {
-      "path": "memory/日記/a.md",
-      "allowed": true
-    }
-  ],
-  "workspace_paths": [
-    {
-      "path": "MEMORY.md",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/MEMORY.md"
-      }
-    },
-    {
-      "path": "./MEMORY.md",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/./MEMORY.md"
-      }
-    },
-    {
-      "path": "././MEMORY.md",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/././MEMORY.md"
-      }
-    },
-    {
-      "path": "././memory/a.md",
-      "normalize_workspace_path": "memory/a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/././memory/a.md"
-      }
-    },
-    {
-      "path": ".\\memory\\a.md",
-      "normalize_workspace_path": "memory/a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/.\\memory\\a.md"
-      }
-    },
-    {
-      "path": "./memory\\a.md",
-      "normalize_workspace_path": "memory/a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/./memory\\a.md"
-      }
-    },
-    {
-      "path": "memory.md",
-      "normalize_workspace_path": "memory.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory.md"
-      }
-    },
-    {
-      "path": "MeMoRy.Md",
-      "normalize_workspace_path": "MeMoRy.Md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/MeMoRy.Md"
-      }
-    },
-    {
-      "path": "workspace/MEMORY.md",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/MEMORY.md"
-      }
-    },
-    {
-      "path": "/MEMORY.md",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "err": "invalid args: absolute paths are not allowed"
-      }
-    },
-    {
-      "path": "memory/daily/2026-03-25.md",
-      "normalize_workspace_path": "memory/daily/2026-03-25.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/daily/2026-03-25.md"
-      }
-    },
-    {
-      "path": "memory/preferences/tea.md",
-      "normalize_workspace_path": "memory/preferences/tea.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/preferences/tea.md"
-      }
-    },
-    {
-      "path": "memory/a.md",
-      "normalize_workspace_path": "memory/a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/a.md"
-      }
-    },
-    {
-      "path": "memory/",
-      "normalize_workspace_path": "memory/",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path is empty"
-      }
-    },
-    {
-      "path": "memory",
-      "normalize_workspace_path": "memory",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path is empty"
-      }
-    },
-    {
-      "path": "memory/.dreams/x.md",
-      "normalize_workspace_path": "memory/.dreams/x.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/.dreams/x.md"
-      }
-    },
-    {
-      "path": "memory/.DREAMS/x.md",
-      "normalize_workspace_path": "memory/.DREAMS/x.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/.DREAMS/x.md"
-      }
-    },
-    {
-      "path": "memory/dreaming/x.md",
-      "normalize_workspace_path": "memory/dreaming/x.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/dreaming/x.md"
-      }
-    },
-    {
-      "path": "memory/DREAMING/x.md",
-      "normalize_workspace_path": "memory/DREAMING/x.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/DREAMING/x.md"
-      }
-    },
-    {
-      "path": "memory/dreams.md",
-      "normalize_workspace_path": "memory/dreams.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/dreams.md"
-      }
-    },
-    {
-      "path": "memory/DREAMS.md",
-      "normalize_workspace_path": "memory/DREAMS.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/DREAMS.md"
-      }
-    },
-    {
-      "path": "memory/dreams",
-      "normalize_workspace_path": "memory/dreams",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/dreams"
-      }
-    },
-    {
-      "path": "memory/dreams/",
-      "normalize_workspace_path": "memory/dreams/",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/dreams/"
-      }
-    },
-    {
-      "path": "memory/dreams/x.md",
-      "normalize_workspace_path": "memory/dreams/x.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/dreams/x.md"
-      }
-    },
-    {
-      "path": "memory/dreamsx.md",
-      "normalize_workspace_path": "memory/dreamsx.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/dreamsx.md"
-      }
-    },
-    {
-      "path": "SOUL.md",
-      "normalize_workspace_path": "SOUL.md",
-      "normalize_protected_path": "SOUL.md",
-      "normalize_prompt_visible_path": "SOUL.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/SOUL.md"
-      }
-    },
-    {
-      "path": "USER.md",
-      "normalize_workspace_path": "USER.md",
-      "normalize_protected_path": "USER.md",
-      "normalize_prompt_visible_path": "USER.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/USER.md"
-      }
-    },
-    {
-      "path": "AGENTS.md",
-      "normalize_workspace_path": "AGENTS.md",
-      "normalize_protected_path": "AGENTS.md",
-      "normalize_prompt_visible_path": "AGENTS.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/AGENTS.md"
-      }
-    },
-    {
-      "path": "TOOLS.md",
-      "normalize_workspace_path": "TOOLS.md",
-      "normalize_protected_path": "TOOLS.md",
-      "normalize_prompt_visible_path": "TOOLS.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/TOOLS.md"
-      }
-    },
-    {
-      "path": "soul.md",
-      "normalize_workspace_path": "soul.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/soul.md"
-      }
-    },
-    {
-      "path": "workspace/SOUL.md",
-      "normalize_workspace_path": "SOUL.md",
-      "normalize_protected_path": "SOUL.md",
-      "normalize_prompt_visible_path": "SOUL.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/SOUL.md"
-      }
-    },
-    {
-      "path": "workspace/./SOUL.md",
-      "normalize_workspace_path": "SOUL.md",
-      "normalize_protected_path": "SOUL.md",
-      "normalize_prompt_visible_path": "SOUL.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/./SOUL.md"
-      }
-    },
-    {
-      "path": "./workspace/SOUL.md",
-      "normalize_workspace_path": "SOUL.md",
-      "normalize_protected_path": "SOUL.md",
-      "normalize_prompt_visible_path": "SOUL.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/./workspace/SOUL.md"
-      }
-    },
-    {
-      "path": "./USER.md",
-      "normalize_workspace_path": "USER.md",
-      "normalize_protected_path": "USER.md",
-      "normalize_prompt_visible_path": "USER.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/./USER.md"
-      }
-    },
-    {
-      "path": "HEARTBEAT.md",
-      "normalize_workspace_path": "HEARTBEAT.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/HEARTBEAT.md"
-      }
-    },
-    {
-      "path": "RECENT_MEMORY.md",
-      "normalize_workspace_path": "RECENT_MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/RECENT_MEMORY.md"
-      }
-    },
-    {
-      "path": "DREAMS.md",
-      "normalize_workspace_path": "DREAMS.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/DREAMS.md"
-      }
-    },
-    {
-      "path": "notes.md",
-      "normalize_workspace_path": "notes.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/notes.md"
-      }
-    },
-    {
-      "path": "topics/foo.md",
-      "normalize_workspace_path": "topics/foo.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/topics/foo.md"
-      }
-    },
-    {
-      "path": "memory/../../SOUL.md",
-      "normalize_workspace_path": "memory/../../SOUL.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path traversal (..) is not allowed"
-      }
-    },
-    {
-      "path": "memory/../USER.md",
-      "normalize_workspace_path": "memory/../USER.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path traversal (..) is not allowed"
-      }
-    },
-    {
-      "path": "../SOUL.md",
-      "normalize_workspace_path": "../SOUL.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path traversal (..) is not allowed"
-      }
-    },
-    {
-      "path": "memory/sub/../../escape.md",
-      "normalize_workspace_path": "memory/sub/../../escape.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path traversal (..) is not allowed"
-      }
-    },
-    {
-      "path": "memory\\..\\..\\SOUL.md",
-      "normalize_workspace_path": "memory/../../SOUL.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory\\..\\..\\SOUL.md"
-      }
-    },
-    {
-      "path": "memory\\daily\\a.md",
-      "normalize_workspace_path": "memory/daily/a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory\\daily\\a.md"
-      }
-    },
-    {
-      "path": ".\\SOUL.md",
-      "normalize_workspace_path": "SOUL.md",
-      "normalize_protected_path": "SOUL.md",
-      "normalize_prompt_visible_path": "SOUL.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/.\\SOUL.md"
-      }
-    },
-    {
-      "path": "/etc/passwd",
-      "normalize_workspace_path": "etc/passwd",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: absolute paths are not allowed"
-      }
-    },
-    {
-      "path": "/SOUL.md",
-      "normalize_workspace_path": "SOUL.md",
-      "normalize_protected_path": "SOUL.md",
-      "normalize_prompt_visible_path": "SOUL.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "err": "invalid args: absolute paths are not allowed"
-      }
-    },
-    {
-      "path": "",
-      "normalize_workspace_path": "",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path is empty"
-      }
-    },
-    {
-      "path": "   ",
-      "normalize_workspace_path": "",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path is empty"
-      }
-    },
-    {
-      "path": "  MEMORY.md  ",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/MEMORY.md"
-      }
-    },
-    {
-      "path": "\tmemory/a.md\n",
-      "normalize_workspace_path": "memory/a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/a.md"
-      }
-    },
-    {
-      "path": "﻿MEMORY.md",
-      "normalize_workspace_path": "﻿MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/﻿MEMORY.md"
-      }
-    },
-    {
-      "path": "MEMORY.md",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/MEMORY.md"
-      }
-    },
-    {
-      "path": " MEMORY.md",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/MEMORY.md"
-      }
-    },
-    {
-      "path": "MEMORY.md",
-      "normalize_workspace_path": "MEMORY.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": "MEMORY.md",
-      "is_prompt_visible_path": true,
-      "resolve_path": {
-        "ok": "/ws/MEMORY.md"
-      }
-    },
-    {
-      "path": "memory//a.md",
-      "normalize_workspace_path": "memory//a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: absolute paths are not allowed"
-      }
-    },
-    {
-      "path": "memory/./a.md",
-      "normalize_workspace_path": "memory/./a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/./a.md"
-      }
-    },
-    {
-      "path": "memory/a/../b.md",
-      "normalize_workspace_path": "memory/a/../b.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "err": "invalid args: path traversal (..) is not allowed"
-      }
-    },
-    {
-      "path": "./memory/a.md",
-      "normalize_workspace_path": "memory/a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/./memory/a.md"
-      }
-    },
-    {
-      "path": "memory/日記/a.md",
-      "normalize_workspace_path": "memory/日記/a.md",
-      "normalize_protected_path": null,
-      "normalize_prompt_visible_path": null,
-      "is_prompt_visible_path": false,
-      "resolve_path": {
-        "ok": "/ws/memory/日記/a.md"
-      }
-    }
-  ],
   "build_system": [
     {
       "template": "Hello {{char}} and {{user}}",
@@ -1275,1218 +417,6 @@
       "out": ""
     }
   ],
-  "splits": [
-    {
-      "name": "empty",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "empty",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 6,
-      "archive_split_index": 6,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 6,
-      "archive_split_index": 6,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 4,
-      "archive_split_index": 4,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 4,
-      "archive_split_index": 4,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_6",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 1,
-      "archive_split_index": 1,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 1,
-      "archive_split_index": 1,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "alternating_1",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 8,
-      "archive_split_index": 8,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 8,
-      "archive_split_index": 8,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 6,
-      "archive_split_index": 6,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 6,
-      "archive_split_index": 6,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "tool_loop",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 3,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 3,
-      "archive_split_index": 3,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 3,
-      "archive_split_index": 3,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "all_tool_results",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 6,
-      "archive_split_index": 6,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 6,
-      "archive_split_index": 4,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_tail",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 3,
-      "archive_split_index": 3,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 3,
-      "archive_split_index": 3,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_user_tail",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 2,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "only_autonomous",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 0,
-      "trailing_autonomous_len": 2
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 4,
-      "archive_split_index": 4,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 4,
-      "archive_split_index": 4,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "autonomous_then_user",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 3,
-      "archive_split_index": 3,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 3,
-      "archive_split_index": 3,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 2,
-      "archive_split_index": 2,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "assistant_whitespace_content",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 2,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 3,
-      "archive_split_index": 3,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 0,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 3,
-      "archive_split_index": 3,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 1,
-      "archive_split_index": 1,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 1,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 1,
-      "archive_split_index": 1,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 2,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 3,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 5,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": false,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    },
-    {
-      "name": "system_role",
-      "keep_turns": 10,
-      "retain_trailing_autonomous": true,
-      "find_turn_split": 0,
-      "archive_split_index": 0,
-      "count_turns": 1,
-      "trailing_autonomous_len": 0
-    }
-  ],
-  "run_guard": [
-    {
-      "step": "first(a, Aria)",
-      "acquired": true
-    },
-    {
-      "step": "second(a, Aria)",
-      "acquired": false
-    },
-    {
-      "step": "other character(a, Other)",
-      "acquired": true
-    },
-    {
-      "step": "other data dir(b, Aria)",
-      "acquired": true
-    },
-    {
-      "step": "after drop(a, Aria)",
-      "acquired": true
-    }
-  ],
   "push_turns": [
     {
       "name": "blocks",
@@ -2807,7 +737,7 @@
           "content": [
             {
               "type": "text",
-              "text": "﻿"
+              "text": "\ufeff"
             }
           ],
           "provider_key": "prov",
@@ -2842,7 +772,7 @@
           "content": [
             {
               "type": "text",
-              "text": "﻿"
+              "text": "\ufeff"
             }
           ],
           "model": "mock-chat-model"
@@ -2883,10 +813,6 @@
       ]
     }
   ],
-  "prompt_templates": {
-    "compact_system": "You are {{char}}. This conversation with {{user}} is about to be archived and your active context will be cleared. Before that happens, save anything important to your long-term memory files AND update `MEMORY.md` so a future-you can pick up where this conversation left off.\n\n## How to write memory\n\nYou have access to your workspace tools. Use them to read existing memory files, then call `edit` to persist what should survive the archive:\n\n- `edit` with `path` + `content` — create a new file, or rewrite an existing one end to end.\n- `edit` with `path` + `edits` — change specific text inside a file that already exists, leaving the rest untouched. Prefer this when you're correcting or adding to a file.\n- `read`, `search` — inspect what's already there before you write. `read` on a folder lists it; `read` on a file returns its contents.\n\n### Guidelines\n\n- Files in the workspace root (`AGENTS.md`, `TOOLS.md`, `SOUL.md`, `USER.md`, `MEMORY.md`) are in your system prompt every turn. Bloat here has real cost — keep them slim and distilled.\n- IMPORTANT: These root files are notes from *past-you* to *future-you.* When editing them, keep the voice they're already written in: second person for any files in the root folder, third-person for memories. DO NOT UNDER ANY CIRCUMSTANCES USE FIRST-PERSON, it severely hinders your future ability to understand the system prompt.\n- **Prefer updating existing files** over creating new ones. Inspect the current memory snapshot before deciding, however, if an existing file is getting long (over ~100 lines) the file should likely be split up.\n- Use clear filenames and folder structure. Each memory file should have a heading and concise bullets.\n- If {{user}} corrected previous information, **edit** the file rather than appending.\n- Update `MEMORY.md` (workspace root) with what is still live: current state, ongoing topics, unresolved threads, anything future-you needs to pick the thread back up. It is the only memory always in your system prompt — keep it to current state plus thin pointers to where deeper material lives. See **the MEMORY.md principle** below.\n- **Date every entry in `MEMORY.md`.** Use the date the entry describes, in the format the file already uses. When you update or re-confirm an existing entry, change its date to today. An undated entry can never be reaped, because future-you cannot tell whether it has gone stale.\n- Anything {{char}} plans to do later is a live thread: it goes in `MEMORY.md` (dated) if it is still pending, or in the relevant `memory/` file if it is a durable commitment. Both are visible in every kind of turn — heartbeat and conversation alike.\n- Include timestamps or session context when relevant.\n- When info gets stale but still has historical value, **condense or relocate** it. But **delete** facts that are obsolete, retracted, or that {{user}} corrected — keeping them around as if current will mislead future-you. If the history itself matters, keep a short note clearly marked as historical.\n- If a memory file is getting long, split it or trim duplicate/outdated content.\n- Smaller, focused entries beat sprawling ones.\n\n### the MEMORY.md principle — active memory, not storage\n**You can't know about something if it's not in your system prompt.** But that doesn't mean the *detail* needs to live there — just a pointer.\n\n`MEMORY.md` is **active memory**: the working set that gives you instant conversation-to-conversation continuity. It is a scratchpad — something you update and purge constantly — not a place to store things. It holds what is live *right now* and what is potentially temporary. Long-term memory is the job of every other file and folder in the workspace: `memory/` holds the durable record, and permanent facts belong in the relevant root file (`SOUL.md`, `USER.md`, `TOOLS.md`).\n\nIt has three jobs:\n1. **Vibes & context:** what's going on right now, what happened the last couple days, what's {{user}}'s mood/situation\n2. **Lightweight index:** if a topic might come up, a one-line pointer to where the detail lives (e.g. `kink details: see kinks-and-fantasies/`). you need to know something EXISTS so you know to look it up — but the content itself stays in the proper file.\n3. **Conversation seeds:** a slim table of things to bring up naturally\n\n**Keeping it tidy and current is part of the job, not cleanup for later.** Every pass, re-read what is already there and:\n- **Refresh** what is still live, re-dating it to today.\n- **Relocate** anything that turned out to be durable into the proper `memory/` file, leaving at most a one-line pointer behind.\n- **Reap** low-priority entries older than **~2 weeks**. If something sat there two weeks without mattering, it was never active memory: move it into a `memory/` file if it still has value, deleting only what has none. A genuinely live thread may stay past two weeks, but only if you re-date it — an old date is a signal, so never refresh a date you cannot justify.\n- **Respect {{user}}'s hand edits.** If {{user}} wrote something into `MEMORY.md` themselves, that is a deliberate pin, not clutter: keep it in view until it is clearly resolved, and even then relocate it with a pointer rather than delete.\n\nMEMORY.md is NOT for: duplicating content that's already in memory files, session replays (that's what daily-logs are for), or detailed quick-references (that's what the dedicated files are for). Use `ask_memory` or `read` to pull detail on-demand when a topic actually comes up. **If you find yourself copying content from a memory file into MEMORY.md, you're doing it wrong — just point to the file.**\n\n## Committing your writes\n\nYour workspace is a git repository. After writing, commit your changes with the `git` tool: pass the subcommand and its arguments separately, e.g. `subcommand: \"add\"`, `args: [\"memory/people/alex.md\"]`, then `subcommand: \"commit\"`, `args: [\"-m\", \"...\"]`.\n\n- Group related writes into small commits; one topic or person per commit is a good default.\n- The commit message is the explanation: say what you saved and *why it matters* — what in this conversation produced it, what it supersedes or corrects. Reference files by workspace-relative path.\n- Local commits only. Pushing, remotes, config, and history rewriting are refused by the tool.\n- Commits are bookkeeping, not memory: only `edit` calls count as memory writes for the archive decision below.\n\n## Ending the pass\n\nFinish when you have written everything that needs to survive. End your final turn with a brief plain-text summary (no tool calls) of what you wrote — that signals the loop is done.\n\n## What \"no writes\" means\n\nThe compaction system treats **zero memory writes** as a deliberate signal that this conversation does **not** need to be archived. If you call no `edit` tools, the active conversation stays intact and the next compaction trigger will retry. So write *something* whenever the conversation produced anything worth remembering — even a one-line note in `MEMORY.md` — instead of falling silent.",
-    "compact_prompt": "The conversation above is now complete and will be archived once you finish writing memory. Review it, then call your `edit` tool to persist anything important.\n\nYour `MEMORY.md` index (already in your system prompt) maps your existing memory files. Use `read` and `search` to check what's already there before writing, so you edit in place instead of creating near-duplicates.\n\nReminder:\n- Prefer changing existing files (`edit` with `edits`) over creating new ones (`edit` with `content`), unless the file is somewhat long (over 100 lines). If the file is long, then it should be split into focused files instead.\n- End with a brief plain-text summary (no tool call) when you're done.\n- If you produce zero writes, the conversation will NOT be archived and the next compaction trigger will retry."
-  },
   "load_messages": {
     "active_jsonl": "{\"msg_id\":\"1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-03-25T10:00:00Z\"}\n{\"msg_id\":\"2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-03-25T10:00:01Z\"}\n{\"msg_id\":\"3\",\"role\":\"user\",\"content\":\"\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"out\",\"is_error\":false}],\"timestamp\":\"2026-03-25T10:00:02Z\"}\n{\"msg_id\":\"4\",\"role\":\"assistant\",\"content\":\"nudge\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"nudge\"}],\"timestamp\":\"2026-03-25T10:00:03Z\",\"origin\":\"autonomous\"}\n{\"msg_id\":\"5\",\"role\":\"user\",\"content\":\"mixed\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t2\",\"content\":\"out\",\"is_error\":false},{\"type\":\"text\",\"text\":\"mixed\"}],\"timestamp\":\"2026-03-25T10:00:04Z\"}\n{\"msg_id\":\"6\",\"role\":\"system\",\"content\":\"sys\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"sys\"}],\"timestamp\":\"2026-03-25T10:00:05Z\"}\n",
     "messages": [
@@ -2963,7 +889,7 @@
       "retained": 2,
       "notifications": [
         {
-          "title": "Shore — Aria",
+          "title": "Shore \u2014 Aria",
           "body": "Compaction complete: 2 entries from 3 turns",
           "retained": 2
         }
@@ -2989,7 +915,7 @@
       "retained": 2,
       "notifications": [
         {
-          "title": "Shore — Aria",
+          "title": "Shore \u2014 Aria",
           "body": "Compaction complete: 0 entries from 3 turns",
           "retained": 0
         }
@@ -3033,12 +959,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3054,45 +974,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/daily/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/daily/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/daily/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3111,12 +994,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3145,49 +1022,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/daily/a.md": "# A\n",
-        "memory/people/b.md": "# B\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/daily/a.md",
-          "memory/people/b.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/daily/a.md",
-          "memory/people/b.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3206,12 +1042,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3227,49 +1057,12 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [
         "MEMORY.md"
       ],
       "deferred_queued_paths": [
         "MEMORY.md"
       ],
-      "workspace_before": {},
-      "workspace_after": {
-        "MEMORY.md": "# Index\n- thread\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "MEMORY.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "MEMORY.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3288,12 +1081,6 @@
       "store_elsewhere": false,
       "config_dir_set": true,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3309,47 +1096,10 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [
         "MEMORY.md"
       ],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "MEMORY.md": "# Index\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "MEMORY.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "MEMORY.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3368,12 +1118,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": false,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3389,47 +1133,10 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [
         "MEMORY.md"
       ],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "MEMORY.md": "# Index\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "MEMORY.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "MEMORY.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3448,12 +1155,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "read",
@@ -3464,39 +1165,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [],
-        "tool_rounds": 1,
-        "tools_called": [
-          "read"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3515,44 +1185,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [],
-        "tool_rounds": 0,
-        "tools_called": []
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3571,48 +1206,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit",
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3631,12 +1227,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3665,52 +1255,10 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [
         "SOUL.md"
       ],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "SOUL.md": "# soul\n",
-        "memory/ok.md": "# ok\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/ok.md",
-          "SOUL.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/ok.md",
-          "SOUL.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit",
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3729,12 +1277,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3750,46 +1292,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "delete",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3808,12 +1312,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3829,46 +1327,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3892,12 +1352,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -3918,47 +1372,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {
-        "memory/a.md": "# A\nold line\n"
-      },
-      "workspace_after": {
-        "memory/a.md": "# A\nnew line\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -3977,12 +1392,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4001,39 +1410,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4057,12 +1435,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4078,47 +1450,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {
-        "memory/a.md": "# original\n"
-      },
-      "workspace_after": {
-        "memory/a.md": "# replaced\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4142,12 +1475,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4176,34 +1503,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        },
-        {
-          "call": "git_commit_all",
-          "char": "Aria",
-          "message": "revert: compaction rolled back after archive failure"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {
-        "memory/a.md": "# original\n"
-      },
-      "workspace_after": {
-        "memory/a.md": "# original\n"
-      },
-      "outcome": null,
       "error": "conversation: simulated archive failure",
       "messages_ref": "set1"
     },
@@ -4222,41 +1523,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "dry_run",
-        "would_write_files": 1,
-        "file_ops_preview": [
-          {
-            "path": "memory/a.md",
-            "content": "# A\n"
-          }
-        ],
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_preview": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4275,40 +1544,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "dry_run",
-        "would_write_files": 1,
-        "file_ops_preview": [
-          {
-            "path": "memory/a.md",
-            "content": "<edit: in-place edits, no preview available>"
-          }
-        ],
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_preview": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4327,33 +1565,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "dry_run",
-        "would_write_files": 0,
-        "file_ops_preview": [],
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_preview": [],
-        "tool_rounds": 1,
-        "tools_called": [
-          "git"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4372,40 +1586,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "dry_run",
-        "would_write_files": 1,
-        "file_ops_preview": [
-          {
-            "path": "memory/a.md",
-            "content": "# A\n"
-          }
-        ],
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_preview": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4424,15 +1607,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": null,
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": null,
       "error": "markdown store: markdown memory store not available",
       "messages_ref": "set1"
     },
@@ -4451,15 +1628,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": null,
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": null,
       "error": "insufficient messages",
       "messages_ref": "set2"
     },
@@ -4478,15 +1649,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": null,
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": null,
       "error": "insufficient messages",
       "messages_ref": "set3"
     },
@@ -4505,12 +1670,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4526,45 +1685,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 0,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/daily/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/daily/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 6,
-        "compacted_turns": 3,
-        "retained_count": 0,
-        "retained_turns": 0,
-        "markdown_paths": [
-          "memory/daily/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4583,12 +1705,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 10,
-        "built_message_count": 11,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4604,45 +1720,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 8,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/daily/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/daily/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 8,
-        "retained_turns": 4,
-        "markdown_paths": [
-          "memory/daily/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set4"
     },
@@ -4661,12 +1740,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 5,
-        "built_message_count": 6,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4682,45 +1755,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 1,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/daily/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/daily/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 4,
-        "compacted_turns": 2,
-        "retained_count": 1,
-        "retained_turns": 0,
-        "markdown_paths": [
-          "memory/daily/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set5"
     },
@@ -4739,12 +1775,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 3,
-        "built_message_count": 4,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4760,45 +1790,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 0,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/daily/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/daily/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 3,
-        "compacted_turns": 1,
-        "retained_count": 0,
-        "retained_turns": 0,
-        "markdown_paths": [
-          "memory/daily/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set6"
     },
@@ -4817,15 +1810,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": null,
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": null,
       "error": "insufficient messages",
       "messages_ref": "set7"
     },
@@ -4844,44 +1831,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [],
-        "tool_rounds": 0,
-        "tools_called": []
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4900,12 +1852,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4921,45 +1867,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -4978,12 +1887,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -4999,45 +1902,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5056,12 +1922,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -5090,49 +1950,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n",
-        "memory/b.md": "# B\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md",
-          "memory/b.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md",
-          "memory/b.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5151,12 +1970,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -5172,21 +1985,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": null,
       "error": "llm: scripted LLM exhausted",
       "messages_ref": "set1"
     },
@@ -5205,12 +2005,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -5239,46 +2033,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "edit",
-          "git"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5297,12 +2053,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "roll_dice",
@@ -5328,46 +2078,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "roll_dice",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5386,12 +2098,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "write",
@@ -5418,46 +2124,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "write",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5476,12 +2144,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -5497,46 +2159,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5555,12 +2179,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -5574,39 +2192,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5625,40 +2212,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "dry_run",
-        "would_write_files": 1,
-        "file_ops_preview": [
-          {
-            "path": "memory/a.md",
-            "content": "<edit: in-place edits, no preview available>"
-          }
-        ],
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_preview": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5682,12 +2238,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -5703,46 +2253,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5768,12 +2280,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -5789,49 +2295,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {
-        "memory/sub/keep.md": "kept\n"
-      },
-      "workspace_after": {
-        "memory/a.md": "# A\n",
-        "memory/sub/keep.md": "kept\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md"
-        ],
-        "tool_rounds": 2,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5850,20 +2315,9 @@
       "store_elsewhere": true,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [],
-      "archive_calls": [],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": null,
       "error": "markdown store: workspace root mismatch: store=<root>/other tool_ctx=<root>/workspace",
       "messages_ref": "set1"
     },
@@ -5882,12 +2336,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -5916,53 +2364,12 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [
         "MEMORY.md"
       ],
       "deferred_queued_paths": [
         "MEMORY.md"
       ],
-      "workspace_before": {},
-      "workspace_after": {
-        "MEMORY.md": "# Index\n",
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "MEMORY.md",
-          "memory/a.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "MEMORY.md",
-          "memory/a.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -5981,12 +2388,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -6015,51 +2416,10 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [
         "SOUL.md"
       ],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {
-        "SOUL.md": "# soul\n",
-        "memory/a.md": "# A\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [
-          "memory/a.md",
-          "SOUL.md"
-        ],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [
-          "memory/a.md",
-          "SOUL.md"
-        ],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit",
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -6083,12 +2443,6 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [
         {
           "name": "edit",
@@ -6117,34 +2471,8 @@
           "deletes": []
         }
       ],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        },
-        {
-          "call": "git_commit_all",
-          "char": "Aria",
-          "message": "revert: compaction rolled back after archive failure"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {
-        "memory/a.md": "# original\n"
-      },
-      "workspace_after": {
-        "memory/a.md": "# original\n"
-      },
-      "outcome": null,
       "error": "conversation: simulated archive failure",
       "messages_ref": "set1"
     },
@@ -6168,46 +2496,9 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {},
-      "workspace_after": {},
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     },
@@ -6233,350 +2524,13 @@
       "store_elsewhere": false,
       "config_dir_set": false,
       "with_data_dir": true,
-      "built_request": {
-        "system": "System for Aria and Tom.",
-        "chat_prefix_len": 6,
-        "built_message_count": 7,
-        "compact_now_text": "Compact now, Aria."
-      },
       "dispatches": [],
-      "git_calls": [
-        {
-          "call": "ensure_workspace_git_repo",
-          "char": "Aria",
-          "reason": "compaction"
-        }
-      ],
-      "archive_calls": [
-        {
-          "conversation_id": "conv-1",
-          "keep_last_n": 4,
-          "active_content": "line1\nline2\nline3\n"
-        }
-      ],
       "deferred_via_ctx": [],
       "deferred_queued_paths": [],
-      "workspace_before": {
-        "memory/sub/keep.md": "kept\n"
-      },
-      "workspace_after": {
-        "memory/sub/keep.md": "kept\n"
-      },
-      "outcome": {
-        "kind": "compacted",
-        "memory_files_written": [],
-        "conversation_id": "conv-1",
-        "new_conversation_id": "new-conv-id",
-        "message_count": 2,
-        "compacted_turns": 1,
-        "retained_count": 4,
-        "retained_turns": 2,
-        "markdown_paths": [],
-        "tool_rounds": 1,
-        "tools_called": [
-          "edit"
-        ]
-      },
       "error": null,
       "messages_ref": "set1"
     }
   ],
-  "split_shapes": {
-    "empty": [],
-    "alternating_6": [
-      {
-        "role": "user",
-        "content": "Message 0",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "Message 1",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "Message 2",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "Message 3",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "Message 4",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "Message 5",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      }
-    ],
-    "alternating_1": [
-      {
-        "role": "user",
-        "content": "Message 0",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      }
-    ],
-    "tool_loop": [
-      {
-        "role": "user",
-        "content": "real one",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "reply",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "real two",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "tool output",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": true,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "final",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "real three",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "reply",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      }
-    ],
-    "all_tool_results": [
-      {
-        "role": "user",
-        "content": "a",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": true,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "b",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": true,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "c",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": true,
-        "is_autonomous": false
-      }
-    ],
-    "autonomous_tail": [
-      {
-        "role": "user",
-        "content": "hi",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "hello",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "more",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "sure",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "still there?",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": true
-      },
-      {
-        "role": "assistant",
-        "content": "checking in",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": true
-      }
-    ],
-    "autonomous_user_tail": [
-      {
-        "role": "user",
-        "content": "hi",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "hello",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "autonomous but a user",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": true
-      }
-    ],
-    "only_autonomous": [
-      {
-        "role": "assistant",
-        "content": "a",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": true
-      },
-      {
-        "role": "assistant",
-        "content": "b",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": true
-      }
-    ],
-    "autonomous_then_user": [
-      {
-        "role": "user",
-        "content": "hi",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "nudge",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": true
-      },
-      {
-        "role": "user",
-        "content": "back",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "hey",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      }
-    ],
-    "assistant_whitespace_content": [
-      {
-        "role": "user",
-        "content": "a",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": " ",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "b",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      }
-    ],
-    "system_role": [
-      {
-        "role": "system",
-        "content": "sys",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "user",
-        "content": "a",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      },
-      {
-        "role": "assistant",
-        "content": "b",
-        "timestamp": "2026-03-25T10:00:00Z",
-        "is_tool_result_only": false,
-        "is_autonomous": false
-      }
-    ]
-  },
   "pass_message_sets": {
     "set1": [
       {

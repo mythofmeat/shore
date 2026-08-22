@@ -168,9 +168,8 @@ export function archiveSplitIndex(
 }
 
 export function writeAllowedPath(path: string): boolean {
-  let normalized = rustTrim(path);
+  let normalized = rustTrim(path).replaceAll("\\", "/");
   while (normalized.startsWith("./")) normalized = normalized.slice(2);
-  normalized = normalized.replaceAll("\\", "/");
 
   for (const component of pathComponents(normalized)) {
     if (component === ".." || component === "/") return false;

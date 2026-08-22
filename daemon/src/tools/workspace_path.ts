@@ -19,7 +19,8 @@ const ACTIVE_PROMPT_DIR = "active_prompt";
 export function resolveRoots(workspaceDir: string, relativeRaw: string): [string, string] {
   if (workspaceDir === "") throw new PathError("invalid args: workspace not configured");
 
-  const relative = rustTrim(relativeRaw);
+  let relative = rustTrim(relativeRaw);
+  while (relative.startsWith("./")) relative = relative.slice(2);
   if (relative === "") throw new PathError("invalid args: path is empty");
 
   if (relative === "workspace") return [workspaceDir, ""];
