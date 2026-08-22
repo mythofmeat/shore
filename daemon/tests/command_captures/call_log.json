@@ -5,7 +5,7 @@
       "command": "call_log",
       "args": {},
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -331,435 +331,7 @@
         "count": 25
       },
       "ok": {
-        "enabled": true,
-        "entries": [
-          {
-            "call_id": "filler_00",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 6,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:20+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "$ref": "s3"
-          },
-          {
-            "$ref": "s2"
-          },
-          {
-            "call_id": "filler_03",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 9,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:23+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_04",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 10,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:24+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_05",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 11,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:25+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_06",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 12,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:26+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_07",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 13,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:27+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_08",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 14,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:28+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_09",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 15,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:29+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_10",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 16,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:30+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_11",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 17,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:31+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_12",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 18,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:32+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_13",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 19,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:33+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_14",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 20,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:34+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_15",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 21,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:35+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_16",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 22,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:36+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_17",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 23,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:37+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_18",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 24,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:38+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_19",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 25,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:39+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_a",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 1,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 19,
-            "ts": "2026-01-15T12:00:00+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_b",
-            "call_type": "heartbeat",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 2,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 0,
-            "ts": "2026-01-15T12:00:01+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_d",
-            "call_type": "heartbeat",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 4,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 19,
-            "ts": "2026-01-15T12:00:03+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          }
-        ]
+        "$ref": "s0"
       }
     },
     {
@@ -769,435 +341,7 @@
         "count": 0
       },
       "ok": {
-        "enabled": true,
-        "entries": [
-          {
-            "call_id": "filler_00",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 6,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:20+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "$ref": "s3"
-          },
-          {
-            "$ref": "s2"
-          },
-          {
-            "call_id": "filler_03",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 9,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:23+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_04",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 10,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:24+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_05",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 11,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:25+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_06",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 12,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:26+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_07",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 13,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:27+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_08",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 14,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:28+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_09",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 15,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:29+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_10",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 16,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:30+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_11",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 17,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:31+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_12",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 18,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:32+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_13",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 19,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:33+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_14",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 20,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:34+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_15",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 21,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:35+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_16",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 22,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:36+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_17",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 23,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:37+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_18",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 24,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:38+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_19",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 25,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:39+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_a",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 1,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 19,
-            "ts": "2026-01-15T12:00:00+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_b",
-            "call_type": "heartbeat",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 2,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 0,
-            "ts": "2026-01-15T12:00:01+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_d",
-            "call_type": "heartbeat",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 4,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 19,
-            "ts": "2026-01-15T12:00:03+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          }
-        ]
+        "$ref": "s0"
       }
     },
     {
@@ -1207,435 +351,7 @@
         "count": 10000
       },
       "ok": {
-        "enabled": true,
-        "entries": [
-          {
-            "call_id": "filler_00",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 6,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:20+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "$ref": "s3"
-          },
-          {
-            "$ref": "s2"
-          },
-          {
-            "call_id": "filler_03",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 9,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:23+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_04",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 10,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:24+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_05",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 11,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:25+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_06",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 12,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:26+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_07",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 13,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:27+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_08",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 14,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:28+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_09",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 15,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:29+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_10",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 16,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:30+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_11",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 17,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:31+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_12",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 18,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:32+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_13",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 19,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:33+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_14",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 20,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:34+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_15",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 21,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:35+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_16",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 22,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:36+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_17",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 23,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:37+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_18",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 24,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:38+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "filler_19",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 25,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 23,
-            "response_bytes": 0,
-            "ts": "2026-01-15T11:43:39+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_a",
-            "call_type": "message",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 1,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 19,
-            "ts": "2026-01-15T12:00:00+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_b",
-            "call_type": "heartbeat",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 2,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 0,
-            "ts": "2026-01-15T12:00:01+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          },
-          {
-            "call_id": "call_d",
-            "call_type": "heartbeat",
-            "character": "poppy",
-            "duration_ms": 42,
-            "error": null,
-            "finish_reason": "end_turn",
-            "id": 4,
-            "model": "claude-x",
-            "provider": "anthropic",
-            "request_bytes": 18,
-            "response_bytes": 19,
-            "ts": "2026-01-15T12:00:03+00:00",
-            "usage": {
-              "cache_read_tokens": 5,
-              "cache_write_tokens": 0,
-              "input_tokens": 10,
-              "output_tokens": 2
-            }
-          }
-        ]
+        "$ref": "s0"
       }
     },
     {
@@ -1645,7 +361,7 @@
         "count": -1
       },
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -1655,7 +371,7 @@
         "count": "3"
       },
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -1665,7 +381,7 @@
         "count": 1.5
       },
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -1675,7 +391,7 @@
         "count": null
       },
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -1740,10 +456,44 @@
         "enabled": true,
         "entries": [
           {
-            "$ref": "s3"
+            "id": 7,
+            "call_id": "filler_01",
+            "ts": "2026-01-15T11:43:21+00:00",
+            "call_type": "message",
+            "character": "poppy",
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cache_read_tokens": 5,
+              "cache_write_tokens": 0
+            },
+            "duration_ms": 42,
+            "error": null,
+            "request_bytes": 23,
+            "response_bytes": 0
           },
           {
-            "$ref": "s2"
+            "id": 8,
+            "call_id": "filler_02",
+            "ts": "2026-01-15T11:43:22+00:00",
+            "call_type": "message",
+            "character": "poppy",
+            "model": "claude-x",
+            "provider": "anthropic",
+            "finish_reason": "end_turn",
+            "usage": {
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cache_read_tokens": 5,
+              "cache_write_tokens": 0
+            },
+            "duration_ms": 42,
+            "error": null,
+            "request_bytes": 23,
+            "response_bytes": 0
           },
           {
             "id": 9,
@@ -2126,7 +876,7 @@
         "call_type": 7
       },
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -2232,7 +982,7 @@
         "character": 7
       },
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -2339,7 +1089,7 @@
         "id": "1"
       },
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -2349,7 +1099,7 @@
         "id": 1.5
       },
       "ok": {
-        "$ref": "s0"
+        "$ref": "s1"
       }
     },
     {
@@ -2411,7 +1161,7 @@
       "command": "transcript",
       "args": {},
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -2421,7 +1171,7 @@
         "source": "heartbeat"
       },
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -3452,7 +2202,7 @@
         "count": "2"
       },
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -3484,7 +2234,7 @@
         "source": 7
       },
       "ok": {
-        "$ref": "s1"
+        "$ref": "s2"
       }
     },
     {
@@ -3531,6 +2281,471 @@
   ],
   "$shared": {
     "s0": {
+      "enabled": true,
+      "entries": [
+        {
+          "call_id": "filler_00",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 6,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:20+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_01",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 7,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:21+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_02",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 8,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:22+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_03",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 9,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:23+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_04",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 10,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:24+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_05",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 11,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:25+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_06",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 12,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:26+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_07",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 13,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:27+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_08",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 14,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:28+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_09",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 15,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:29+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_10",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 16,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:30+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_11",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 17,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:31+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_12",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 18,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:32+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_13",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 19,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:33+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_14",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 20,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:34+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_15",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 21,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:35+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_16",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 22,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:36+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_17",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 23,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:37+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_18",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 24,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:38+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "filler_19",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 25,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 23,
+          "response_bytes": 0,
+          "ts": "2026-01-15T11:43:39+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "call_a",
+          "call_type": "message",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 1,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 18,
+          "response_bytes": 19,
+          "ts": "2026-01-15T12:00:00+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "call_b",
+          "call_type": "heartbeat",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 2,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 18,
+          "response_bytes": 0,
+          "ts": "2026-01-15T12:00:01+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        },
+        {
+          "call_id": "call_d",
+          "call_type": "heartbeat",
+          "character": "poppy",
+          "duration_ms": 42,
+          "error": null,
+          "finish_reason": "end_turn",
+          "id": 4,
+          "model": "claude-x",
+          "provider": "anthropic",
+          "request_bytes": 18,
+          "response_bytes": 19,
+          "ts": "2026-01-15T12:00:03+00:00",
+          "usage": {
+            "cache_read_tokens": 5,
+            "cache_write_tokens": 0,
+            "input_tokens": 10,
+            "output_tokens": 2
+          }
+        }
+      ]
+    },
+    "s1": {
       "enabled": true,
       "entries": [
         {
@@ -3935,7 +3150,7 @@
         }
       ]
     },
-    "s1": {
+    "s2": {
       "character": "poppy",
       "enabled": true,
       "entries": [
@@ -4341,46 +3556,6 @@
         }
       ],
       "source": "heartbeat"
-    },
-    "s2": {
-      "call_id": "filler_02",
-      "call_type": "message",
-      "character": "poppy",
-      "duration_ms": 42,
-      "error": null,
-      "finish_reason": "end_turn",
-      "id": 8,
-      "model": "claude-x",
-      "provider": "anthropic",
-      "request_bytes": 23,
-      "response_bytes": 0,
-      "ts": "2026-01-15T11:43:22+00:00",
-      "usage": {
-        "cache_read_tokens": 5,
-        "cache_write_tokens": 0,
-        "input_tokens": 10,
-        "output_tokens": 2
-      }
-    },
-    "s3": {
-      "call_id": "filler_01",
-      "call_type": "message",
-      "character": "poppy",
-      "duration_ms": 42,
-      "error": null,
-      "finish_reason": "end_turn",
-      "id": 7,
-      "model": "claude-x",
-      "provider": "anthropic",
-      "request_bytes": 23,
-      "response_bytes": 0,
-      "ts": "2026-01-15T11:43:21+00:00",
-      "usage": {
-        "cache_read_tokens": 5,
-        "cache_write_tokens": 0,
-        "input_tokens": 10,
-        "output_tokens": 2
-      }
     }
   }
 }

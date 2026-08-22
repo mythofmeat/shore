@@ -18,87 +18,87 @@
     {
       "input": "exactly-five!",
       "max": 12,
-      "output": "exactly-five…"
+      "output": "exactly-five\u2026"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 10,
-      "output": "ééééé"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u00e9"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 9,
-      "output": "éééé…"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u2026"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 8,
-      "output": "éééé…"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u2026"
     },
     {
-      "input": "aéb",
+      "input": "a\u00e9b",
       "max": 2,
-      "output": "a…"
+      "output": "a\u2026"
     },
     {
-      "input": "aéb",
+      "input": "a\u00e9b",
       "max": 3,
-      "output": "aé…"
+      "output": "a\u00e9\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 12,
-      "output": "🎵🎵🎵"
+      "output": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 11,
-      "output": "🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 9,
-      "output": "🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 4,
-      "output": "🎵…"
+      "output": "\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 3,
-      "output": "…"
+      "output": "\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 0,
-      "output": "…"
+      "output": "\u2026"
     },
     {
       "input": "abc",
       "max": 0,
-      "output": "…"
+      "output": "\u2026"
     },
     {
-      "input": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 200,
-      "output": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 1,
-      "output": "e…"
+      "output": "e\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 2,
-      "output": "e…"
+      "output": "e\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 3,
-      "output": "é…"
+      "output": "e\u0301\u2026"
     }
   ],
   "shell_escape": [
@@ -167,16 +167,16 @@
       "output": "'\\''('\\''"
     },
     {
-      "input": "🎵 unicode 🎵",
-      "output": "🎵 unicode 🎵"
+      "input": "\ud83c\udfb5 unicode \ud83c\udfb5",
+      "output": "\ud83c\udfb5 unicode \ud83c\udfb5"
     }
   ],
   "command_template": [
     {
       "template": "echo '{title}: {body}'",
-      "title": "Shore — Test",
+      "title": "Shore \u2014 Test",
       "body": "hello world",
-      "rendered": "echo 'Shore — Test: hello world'"
+      "rendered": "echo 'Shore \u2014 Test: hello world'"
     },
     {
       "template": "echo '{title}'",
@@ -576,7 +576,25 @@
       "name": "empty",
       "toml": "",
       "ok": {
-        "$ref": "s0"
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
       }
     },
     {
@@ -618,7 +636,25 @@
       "name": "threshold_zero_int",
       "toml": "generation_threshold = 0\n",
       "ok": {
-        "$ref": "s0"
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
       }
     },
     {
@@ -635,7 +671,25 @@
       "name": "threshold_float_tiny",
       "toml": "generation_threshold = 0.0005\n",
       "ok": {
-        "$ref": "s0"
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
       }
     },
     {
@@ -817,7 +871,25 @@
       "name": "backend_notify_send",
       "toml": "backend = \"notify_send\"\n",
       "ok": {
-        "$ref": "s0"
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
       }
     },
     {
@@ -884,7 +956,25 @@
       "name": "ntfy_empty_table",
       "toml": "[ntfy]\n",
       "ok": {
-        "$ref": "s0"
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
       }
     },
     {
@@ -1066,7 +1156,25 @@
       "name": "events_empty",
       "toml": "[events]\n",
       "ok": {
-        "$ref": "s0"
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
       }
     },
     {
@@ -1600,9 +1708,28 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": {
-        "$ref": "s1"
-      },
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
       "outcome": {
         "ok": {
           "content": "C",
@@ -1815,9 +1942,28 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": {
-        "$ref": "s1"
-      },
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
       "outcome": {
         "ok": {
           "content": "C",
@@ -1868,9 +2014,28 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": {
-        "$ref": "s1"
-      },
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
       "outcome": {
         "ok": {
           "content": "C",
@@ -2071,9 +2236,28 @@
       ],
       "regen": false,
       "rid": null,
-      "frames": {
-        "$ref": "s1"
-      },
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
       "outcome": {
         "ok": {
           "content": "C",
@@ -2467,8 +2651,8 @@
       "name": "multibyte_text",
       "lines": [
         "{\"type\":\"start\",\"model\":\"m\"}",
-        "{\"type\":\"text\",\"text\":\"🎵\"}",
-        "{\"type\":\"text\",\"text\":\"é\"}",
+        "{\"type\":\"text\",\"text\":\"\ud83c\udfb5\"}",
+        "{\"type\":\"text\",\"text\":\"\u00e9\"}",
         "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
       ],
       "regen": false,
@@ -2483,14 +2667,14 @@
         {
           "type": "stream_chunk",
           "rid": null,
-          "text": "🎵",
+          "text": "\ud83c\udfb5",
           "content_type": "text",
           "subagent": null
         },
         {
           "type": "stream_chunk",
           "rid": null,
-          "text": "é",
+          "text": "\u00e9",
           "content_type": "text",
           "subagent": null
         }
@@ -2515,7 +2699,7 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": "🎵é"
+              "text": "\ud83c\udfb5\u00e9"
             }
           ]
         }
@@ -3200,13 +3384,13 @@
             {
               "type": "tool_result",
               "tool_use_id": "t",
-              "content": "﻿",
+              "content": "\ufeff",
               "is_error": false
             }
           ]
         }
       ],
-      "notify_content": "﻿"
+      "notify_content": "\ufeff"
     },
     {
       "name": "next_line_tool_result_is_blank",
@@ -3217,7 +3401,7 @@
             {
               "type": "tool_result",
               "tool_use_id": "t",
-              "content": "",
+              "content": "\u0085",
               "is_error": false
             }
           ]
@@ -3233,7 +3417,7 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": ""
+              "text": "\u0085"
             }
           ]
         }
@@ -3248,12 +3432,12 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": "﻿"
+              "text": "\ufeff"
             }
           ]
         }
       ],
-      "notify_content": "﻿"
+      "notify_content": "\ufeff"
     }
   ],
   "message_from_response": [
@@ -3400,21 +3584,114 @@
   "last_request": [
     {
       "name": "no_response",
-      "sent": {
-        "$ref": "s2"
-      },
+      "sent": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
       "provider_key": "anthropic",
       "response": [],
-      "messages_after": {
-        "$ref": "s2"
-      },
+      "messages_after": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
       "prefix_unchanged": true
     },
     {
       "name": "appends_without_touching_prefix",
-      "sent": {
-        "$ref": "s2"
-      },
+      "sent": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
       "provider_key": "anthropic",
       "response": [
         {
@@ -3489,9 +3766,40 @@
     },
     {
       "name": "empty_turn_skipped",
-      "sent": {
-        "$ref": "s2"
-      },
+      "sent": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
       "provider_key": "anthropic",
       "response": [
         {
@@ -3557,9 +3865,40 @@
     },
     {
       "name": "no_provider_key",
-      "sent": {
-        "$ref": "s2"
-      },
+      "sent": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
       "provider_key": null,
       "response": [
         {
@@ -3779,84 +4118,5 @@
       }
     ],
     "count": 3
-  },
-  "$shared": {
-    "s0": {
-      "backend": "notify_send",
-      "command": {
-        "template": ""
-      },
-      "enabled": false,
-      "events": {
-        "autonomous_message": true,
-        "cache_warning": true,
-        "compaction_complete": true,
-        "error": true,
-        "message_complete": false,
-        "usage_warning": true
-      },
-      "generation_threshold_ms": "0",
-      "ntfy": {
-        "token": "",
-        "topic": "",
-        "url": "https://ntfy.sh"
-      }
-    },
-    "s1": [
-      {
-        "regen": false,
-        "rid": null,
-        "subagent": null,
-        "type": "stream_start"
-      },
-      {
-        "content_type": "thinking",
-        "rid": null,
-        "subagent": null,
-        "text": "t",
-        "type": "stream_chunk"
-      },
-      {
-        "content_type": "text",
-        "rid": null,
-        "subagent": null,
-        "text": "a",
-        "type": "stream_chunk"
-      }
-    ],
-    "s2": [
-      {
-        "content": [
-          {
-            "text": "q1",
-            "type": "text"
-          }
-        ],
-        "role": "user"
-      },
-      {
-        "content": [
-          {
-            "signature": "s1",
-            "thinking": "t1",
-            "type": "thinking"
-          },
-          {
-            "text": "a1",
-            "type": "text"
-          }
-        ],
-        "role": "assistant"
-      },
-      {
-        "content": [
-          {
-            "text": "q2",
-            "type": "text"
-          }
-        ],
-        "role": "user"
-      }
-    ]
   }
 }

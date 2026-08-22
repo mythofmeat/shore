@@ -6,60 +6,31 @@
       "note": "an empty overlay must not rebuild the model — the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
       "input": {
         "active_model": {
-          "api_key_env": "TEST_KEY",
-          "base_url": null,
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_ttl": null,
-          "category": "chat",
-          "gemini_generation": null,
-          "max_context_tokens": null,
-          "max_output_tokens": 1024,
-          "max_tool_iterations": null,
-          "model_id": "opus-id",
-          "name": "opus",
-          "openrouter_provider": null,
-          "provider_key": "anthropic",
-          "qualified_name": "chat.anthropic.opus",
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "anthropic",
-          "temperature": 0.5,
-          "top_p": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
+          "$ref": "s1"
         },
         "default_model": "alpha",
         "with_catalog": true,
         "discovery": null,
         "overlay": {
-          "$ref": "s2"
+          "temperature": null,
+          "top_p": null,
+          "reasoning_effort": null,
+          "budget_tokens": null,
+          "max_output_tokens": null,
+          "cache_ttl": null,
+          "cache_keepalive": null,
+          "sdk": null,
+          "replay_prior_thinking": null,
+          "max_tool_iterations": null,
+          "openrouter_provider": null,
+          "gemini_generation": null,
+          "zai_clear_thinking": null,
+          "zai_subscription": null
         }
       },
       "result": {
         "ok": {
-          "api_key_env": "TEST_KEY",
-          "base_url": null,
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_ttl": null,
-          "category": "chat",
-          "gemini_generation": null,
-          "max_context_tokens": null,
-          "max_output_tokens": 1024,
-          "max_tool_iterations": null,
-          "model_id": "opus-id",
-          "name": "opus",
-          "openrouter_provider": null,
-          "provider_key": "anthropic",
-          "qualified_name": "chat.anthropic.opus",
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "anthropic",
-          "temperature": 0.5,
-          "top_p": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
+          "$ref": "s1"
         }
       }
     },
@@ -68,28 +39,7 @@
       "note": "and only the fields the overlay sets",
       "input": {
         "active_model": {
-          "api_key_env": "TEST_KEY",
-          "base_url": null,
-          "budget_tokens": null,
-          "cache_keepalive": null,
-          "cache_ttl": null,
-          "category": "chat",
-          "gemini_generation": null,
-          "max_context_tokens": null,
-          "max_output_tokens": 1024,
-          "max_tool_iterations": null,
-          "model_id": "opus-id",
-          "name": "opus",
-          "openrouter_provider": null,
-          "provider_key": "anthropic",
-          "qualified_name": "chat.anthropic.opus",
-          "reasoning_effort": null,
-          "replay_prior_thinking": null,
-          "sdk": "anthropic",
-          "temperature": 0.5,
-          "top_p": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
+          "$ref": "s1"
         },
         "default_model": null,
         "with_catalog": false,
@@ -147,7 +97,20 @@
         "with_catalog": true,
         "discovery": null,
         "overlay": {
-          "$ref": "s2"
+          "temperature": null,
+          "top_p": null,
+          "reasoning_effort": null,
+          "budget_tokens": null,
+          "max_output_tokens": null,
+          "cache_ttl": null,
+          "cache_keepalive": null,
+          "sdk": null,
+          "replay_prior_thinking": null,
+          "max_tool_iterations": null,
+          "openrouter_provider": null,
+          "gemini_generation": null,
+          "zai_clear_thinking": null,
+          "zai_subscription": null
         }
       },
       "result": {
@@ -238,7 +201,20 @@
         "with_catalog": true,
         "discovery": null,
         "overlay": {
-          "$ref": "s2"
+          "temperature": null,
+          "top_p": null,
+          "reasoning_effort": null,
+          "budget_tokens": null,
+          "max_output_tokens": null,
+          "cache_ttl": null,
+          "cache_keepalive": null,
+          "sdk": null,
+          "replay_prior_thinking": null,
+          "max_tool_iterations": null,
+          "openrouter_provider": null,
+          "gemini_generation": null,
+          "zai_clear_thinking": null,
+          "zai_subscription": null
         }
       },
       "result": {
@@ -254,7 +230,20 @@
         "with_catalog": true,
         "discovery": null,
         "overlay": {
-          "$ref": "s2"
+          "temperature": null,
+          "top_p": null,
+          "reasoning_effort": null,
+          "budget_tokens": null,
+          "max_output_tokens": null,
+          "cache_ttl": null,
+          "cache_keepalive": null,
+          "sdk": null,
+          "replay_prior_thinking": null,
+          "max_tool_iterations": null,
+          "openrouter_provider": null,
+          "gemini_generation": null,
+          "zai_clear_thinking": null,
+          "zai_subscription": null
         }
       },
       "result": {
@@ -293,7 +282,20 @@
         "with_catalog": false,
         "discovery": null,
         "overlay": {
-          "$ref": "s2"
+          "temperature": null,
+          "top_p": null,
+          "reasoning_effort": null,
+          "budget_tokens": null,
+          "max_output_tokens": null,
+          "cache_ttl": null,
+          "cache_keepalive": null,
+          "sdk": null,
+          "replay_prior_thinking": null,
+          "max_tool_iterations": null,
+          "openrouter_provider": null,
+          "gemini_generation": null,
+          "zai_clear_thinking": null,
+          "zai_subscription": null
         }
       },
       "result": {
@@ -321,7 +323,20 @@
           ]
         },
         "overlay": {
-          "$ref": "s2"
+          "temperature": null,
+          "top_p": null,
+          "reasoning_effort": null,
+          "budget_tokens": null,
+          "max_output_tokens": null,
+          "cache_ttl": null,
+          "cache_keepalive": null,
+          "sdk": null,
+          "replay_prior_thinking": null,
+          "max_tool_iterations": null,
+          "openrouter_provider": null,
+          "gemini_generation": null,
+          "zai_clear_thinking": null,
+          "zai_subscription": null
         }
       },
       "result": {
@@ -372,7 +387,20 @@
           ]
         },
         "overlay": {
-          "$ref": "s2"
+          "temperature": null,
+          "top_p": null,
+          "reasoning_effort": null,
+          "budget_tokens": null,
+          "max_output_tokens": null,
+          "cache_ttl": null,
+          "cache_keepalive": null,
+          "sdk": null,
+          "replay_prior_thinking": null,
+          "max_tool_iterations": null,
+          "openrouter_provider": null,
+          "gemini_generation": null,
+          "zai_clear_thinking": null,
+          "zai_subscription": null
         }
       },
       "result": {
@@ -426,12 +454,58 @@
         "sdk": "anthropic",
         "model": "opus-id",
         "api_key": "",
-        "messages": {
-          "$ref": "s3"
-        },
-        "system": {
-          "$ref": "s1"
-        },
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "first"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "answer"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "second"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "later"
+              }
+            ]
+          }
+        ],
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "max_tokens": 1024,
         "temperature": 0.5,
         "provider_key": "anthropic",
@@ -489,9 +563,20 @@
             ]
           }
         ],
-        "system": {
-          "$ref": "s1"
-        },
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "max_tokens": 1024,
         "temperature": 0.5,
         "provider_key": "anthropic",
@@ -558,9 +643,20 @@
             ]
           }
         ],
-        "system": {
-          "$ref": "s1"
-        },
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "max_tokens": 1024,
         "temperature": 0.5,
         "provider_key": "anthropic",
@@ -589,12 +685,58 @@
         "sdk": "anthropic",
         "model": "opus-id",
         "api_key": "",
-        "messages": {
-          "$ref": "s3"
-        },
-        "system": {
-          "$ref": "s1"
-        },
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "first"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "answer"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "second"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "later"
+              }
+            ]
+          }
+        ],
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "max_tokens": 1024,
         "temperature": 0.5,
         "provider_key": "anthropic",
@@ -635,12 +777,58 @@
         "sdk": "anthropic",
         "model": "opus-id",
         "api_key": "",
-        "messages": {
-          "$ref": "s3"
-        },
-        "system": {
-          "$ref": "s1"
-        },
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "first"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "answer"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "second"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "later"
+              }
+            ]
+          }
+        ],
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "tools": [
           {
             "name": "read",
@@ -711,12 +899,58 @@
         "sdk": "anthropic",
         "model": "opus-id",
         "api_key": "",
-        "messages": {
-          "$ref": "s3"
-        },
-        "system": {
-          "$ref": "s1"
-        },
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "first"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "answer"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "second"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "later"
+              }
+            ]
+          }
+        ],
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "tools": [
           {
             "name": "mcp__fs__list",
@@ -760,9 +994,20 @@
         "model": "opus-id",
         "api_key": "",
         "messages": [],
-        "system": {
-          "$ref": "s1"
-        },
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "max_tokens": 1024,
         "temperature": 0.5,
         "provider_key": "anthropic",
@@ -814,9 +1059,20 @@
             ]
           }
         ],
-        "system": {
-          "$ref": "s1"
-        },
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "max_tokens": 1024,
         "temperature": 0.5,
         "provider_key": "anthropic",
@@ -845,12 +1101,58 @@
         "sdk": "anthropic",
         "model": "opus-id",
         "api_key": "",
-        "messages": {
-          "$ref": "s3"
-        },
-        "system": {
-          "$ref": "s1"
-        },
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "first"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "answer"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "second"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "later"
+              }
+            ]
+          }
+        ],
+        "system": [
+          {
+            "text": "Answer as qifei, tersely.\n",
+            "label": "system"
+          },
+          {
+            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
+            "label": "tools_guidance"
+          },
+          {
+            "text": "<qifei>\nI am qifei.\n\n</qifei>",
+            "label": "character"
+          }
+        ],
         "max_tokens": 1024,
         "temperature": 0.5,
         "top_p": 0.77,
@@ -917,73 +1219,29 @@
         "timestamp": "2026-07-01T00:01:10Z"
       }
     ],
-    "s1": [
-      {
-        "label": "system",
-        "text": "Answer as qifei, tersely.\n"
-      },
-      {
-        "label": "tools_guidance",
-        "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-      },
-      {
-        "label": "character",
-        "text": "<qifei>\nI am qifei.\n\n</qifei>"
-      }
-    ],
-    "s2": {
+    "s1": {
+      "api_key_env": "TEST_KEY",
+      "base_url": null,
       "budget_tokens": null,
       "cache_keepalive": null,
       "cache_ttl": null,
+      "category": "chat",
       "gemini_generation": null,
-      "max_output_tokens": null,
+      "max_context_tokens": null,
+      "max_output_tokens": 1024,
       "max_tool_iterations": null,
+      "model_id": "opus-id",
+      "name": "opus",
       "openrouter_provider": null,
+      "provider_key": "anthropic",
+      "qualified_name": "chat.anthropic.opus",
       "reasoning_effort": null,
       "replay_prior_thinking": null,
-      "sdk": null,
-      "temperature": null,
+      "sdk": "anthropic",
+      "temperature": 0.5,
       "top_p": null,
       "zai_clear_thinking": null,
       "zai_subscription": null
-    },
-    "s3": [
-      {
-        "content": [
-          {
-            "text": "first",
-            "type": "text"
-          }
-        ],
-        "role": "user"
-      },
-      {
-        "content": [
-          {
-            "text": "answer",
-            "type": "text"
-          }
-        ],
-        "role": "assistant"
-      },
-      {
-        "content": [
-          {
-            "text": "second",
-            "type": "text"
-          }
-        ],
-        "role": "user"
-      },
-      {
-        "content": [
-          {
-            "text": "later",
-            "type": "text"
-          }
-        ],
-        "role": "assistant"
-      }
-    ]
+    }
   }
 }

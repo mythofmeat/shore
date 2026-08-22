@@ -4,7 +4,25 @@
       "name": "generate_image",
       "description": "Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to {{user}}. Be specific about subject, mood, and composition.",
       "parameters": {
-        "$ref": "s9"
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Text prompt for image generation."
+          },
+          "size": {
+            "type": "string",
+            "description": "Image dimensions (e.g. '1024x1024').",
+            "default": "1024x1024"
+          },
+          "caption": {
+            "type": "string",
+            "description": "Optional caption to send with the generated image."
+          }
+        },
+        "required": [
+          "prompt"
+        ]
       },
       "category": "other"
     },
@@ -421,7 +439,25 @@
           "name": "generate_image",
           "description": "Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to ren. Be specific about subject, mood, and composition.",
           "input_schema": {
-            "$ref": "s9"
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "description": "Text prompt for image generation."
+              },
+              "size": {
+                "type": "string",
+                "description": "Image dimensions (e.g. '1024x1024').",
+                "default": "1024x1024"
+              },
+              "caption": {
+                "type": "string",
+                "description": "Optional caption to send with the generated image."
+              }
+            },
+            "required": [
+              "prompt"
+            ]
           }
         },
         {
@@ -491,7 +527,25 @@
           "name": "generate_image",
           "description": "Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to . Be specific about subject, mood, and composition.",
           "input_schema": {
-            "$ref": "s9"
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "description": "Text prompt for image generation."
+              },
+              "size": {
+                "type": "string",
+                "description": "Image dimensions (e.g. '1024x1024').",
+                "default": "1024x1024"
+              },
+              "caption": {
+                "type": "string",
+                "description": "Optional caption to send with the generated image."
+              }
+            },
+            "required": [
+              "prompt"
+            ]
           }
         },
         {
@@ -561,7 +615,25 @@
           "name": "generate_image",
           "description": "Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to $1\\d. Be specific about subject, mood, and composition.",
           "input_schema": {
-            "$ref": "s9"
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "description": "Text prompt for image generation."
+              },
+              "size": {
+                "type": "string",
+                "description": "Image dimensions (e.g. '1024x1024').",
+                "default": "1024x1024"
+              },
+              "caption": {
+                "type": "string",
+                "description": "Optional caption to send with the generated image."
+              }
+            },
+            "required": [
+              "prompt"
+            ]
           }
         },
         {
@@ -631,7 +703,25 @@
           "name": "generate_image",
           "description": "Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to レン. Be specific about subject, mood, and composition.",
           "input_schema": {
-            "$ref": "s9"
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "description": "Text prompt for image generation."
+              },
+              "size": {
+                "type": "string",
+                "description": "Image dimensions (e.g. '1024x1024').",
+                "default": "1024x1024"
+              },
+              "caption": {
+                "type": "string",
+                "description": "Optional caption to send with the generated image."
+              }
+            },
+            "required": [
+              "prompt"
+            ]
           }
         },
         {
@@ -755,7 +845,20 @@
       "user_name": "ren",
       "defs": [
         {
-          "$ref": "s10"
+          "name": "ask_music",
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
         }
       ]
     },
@@ -785,7 +888,20 @@
           }
         },
         {
-          "$ref": "s10"
+          "name": "ask_music",
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
         },
         {
           "name": "ask_zoologist",
@@ -814,7 +930,20 @@
       "user_name": "ren",
       "defs": [
         {
-          "$ref": "s10"
+          "name": "ask_music",
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
         }
       ]
     },
@@ -827,7 +956,20 @@
       "user_name": "ren",
       "defs": [
         {
-          "$ref": "s10"
+          "name": "ask_music",
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
         }
       ]
     },
@@ -924,7 +1066,20 @@
       "user_name": "ren",
       "defs": [
         {
-          "$ref": "s10"
+          "name": "ask_music",
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
         },
         {
           "name": "ask_musicology",
@@ -998,7 +1153,20 @@
           }
         },
         {
-          "$ref": "s10"
+          "name": "ask_music",
+          "description": "Ask qifei's music assistant about ren's taste.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Natural-language request for this sub-agent."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
         },
         {
           "name": "ask_musicology",
@@ -1418,43 +1586,6 @@
         "type": "object"
       },
       "name": "delete"
-    },
-    "s9": {
-      "properties": {
-        "caption": {
-          "description": "Optional caption to send with the generated image.",
-          "type": "string"
-        },
-        "prompt": {
-          "description": "Text prompt for image generation.",
-          "type": "string"
-        },
-        "size": {
-          "default": "1024x1024",
-          "description": "Image dimensions (e.g. '1024x1024').",
-          "type": "string"
-        }
-      },
-      "required": [
-        "prompt"
-      ],
-      "type": "object"
-    },
-    "s10": {
-      "description": "Ask qifei's music assistant about ren's taste.",
-      "input_schema": {
-        "properties": {
-          "query": {
-            "description": "Natural-language request for this sub-agent.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "query"
-        ],
-        "type": "object"
-      },
-      "name": "ask_music"
     }
   }
 }

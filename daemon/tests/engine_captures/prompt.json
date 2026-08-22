@@ -404,7 +404,7 @@
             "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "images": [],
             "content_blocks": {
-              "$ref": "s0"
+              "$ref": "s1"
             },
             "timestamp": "2026-04-04T12:00:00-04:00"
           },
@@ -414,7 +414,7 @@
             "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "images": [],
             "content_blocks": {
-              "$ref": "s0"
+              "$ref": "s1"
             },
             "timestamp": "2026-04-04T12:01:00-04:00"
           },
@@ -424,7 +424,7 @@
             "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "images": [],
             "content_blocks": {
-              "$ref": "s0"
+              "$ref": "s1"
             },
             "timestamp": "2026-04-04T12:02:00-04:00"
           },
@@ -434,7 +434,7 @@
             "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "images": [],
             "content_blocks": {
-              "$ref": "s0"
+              "$ref": "s1"
             },
             "timestamp": "2026-04-04T12:03:00-04:00"
           },
@@ -444,7 +444,7 @@
             "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "images": [],
             "content_blocks": {
-              "$ref": "s0"
+              "$ref": "s1"
             },
             "timestamp": "2026-04-04T12:04:00-04:00"
           },
@@ -454,7 +454,7 @@
             "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "images": [],
             "content_blocks": {
-              "$ref": "s0"
+              "$ref": "s1"
             },
             "timestamp": "2026-04-04T12:05:00-04:00"
           },
@@ -464,7 +464,7 @@
             "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "images": [],
             "content_blocks": {
-              "$ref": "s0"
+              "$ref": "s1"
             },
             "timestamp": "2026-04-04T12:06:00-04:00"
           },
@@ -474,7 +474,7 @@
             "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "images": [],
             "content_blocks": {
-              "$ref": "s0"
+              "$ref": "s1"
             },
             "timestamp": "2026-04-04T12:07:00-04:00"
           }
@@ -1085,47 +1085,9 @@
         "user_definition": null,
         "memory_index": null,
         "has_prior_context": false,
-        "messages": [
-          {
-            "content": "morning",
-            "content_blocks": [
-              {
-                "text": "morning",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T09:00:00-04:00-morning",
-            "role": "user",
-            "timestamp": "2026-04-04T09:00:00-04:00"
-          },
-          {
-            "content": "hi",
-            "content_blocks": [
-              {
-                "text": "hi",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T09:01:00-04:00-hi",
-            "role": "assistant",
-            "timestamp": "2026-04-04T09:01:00-04:00"
-          },
-          {
-            "content": "back",
-            "content_blocks": [
-              {
-                "text": "back",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T15:30:00-04:00-back",
-            "role": "user",
-            "timestamp": "2026-04-04T15:30:00-04:00"
-          }
-        ],
+        "messages": {
+          "$ref": "s0"
+        },
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "auto"
@@ -1142,47 +1104,9 @@
         "user_definition": null,
         "memory_index": null,
         "has_prior_context": false,
-        "messages": [
-          {
-            "content": "morning",
-            "content_blocks": [
-              {
-                "text": "morning",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T09:00:00-04:00-morning",
-            "role": "user",
-            "timestamp": "2026-04-04T09:00:00-04:00"
-          },
-          {
-            "content": "hi",
-            "content_blocks": [
-              {
-                "text": "hi",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T09:01:00-04:00-hi",
-            "role": "assistant",
-            "timestamp": "2026-04-04T09:01:00-04:00"
-          },
-          {
-            "content": "back",
-            "content_blocks": [
-              {
-                "text": "back",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T15:30:00-04:00-back",
-            "role": "user",
-            "timestamp": "2026-04-04T15:30:00-04:00"
-          }
-        ],
+        "messages": {
+          "$ref": "s0"
+        },
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "never"
@@ -1199,47 +1123,9 @@
         "user_definition": null,
         "memory_index": null,
         "has_prior_context": false,
-        "messages": [
-          {
-            "content": "morning",
-            "content_blocks": [
-              {
-                "text": "morning",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T09:00:00-04:00-morning",
-            "role": "user",
-            "timestamp": "2026-04-04T09:00:00-04:00"
-          },
-          {
-            "content": "hi",
-            "content_blocks": [
-              {
-                "text": "hi",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T09:01:00-04:00-hi",
-            "role": "assistant",
-            "timestamp": "2026-04-04T09:01:00-04:00"
-          },
-          {
-            "content": "back",
-            "content_blocks": [
-              {
-                "text": "back",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "msg_id": "m-2026-04-04T15:30:00-04:00-back",
-            "role": "user",
-            "timestamp": "2026-04-04T15:30:00-04:00"
-          }
-        ],
+        "messages": {
+          "$ref": "s0"
+        },
         "max_context_tokens": null,
         "max_output_tokens": null,
         "user_timestamp_mode": "always"
@@ -2007,6 +1893,47 @@
   ],
   "$shared": {
     "s0": [
+      {
+        "content": "morning",
+        "content_blocks": [
+          {
+            "text": "morning",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m-2026-04-04T09:00:00-04:00-morning",
+        "role": "user",
+        "timestamp": "2026-04-04T09:00:00-04:00"
+      },
+      {
+        "content": "hi",
+        "content_blocks": [
+          {
+            "text": "hi",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m-2026-04-04T09:01:00-04:00-hi",
+        "role": "assistant",
+        "timestamp": "2026-04-04T09:01:00-04:00"
+      },
+      {
+        "content": "back",
+        "content_blocks": [
+          {
+            "text": "back",
+            "type": "text"
+          }
+        ],
+        "images": [],
+        "msg_id": "m-2026-04-04T15:30:00-04:00-back",
+        "role": "user",
+        "timestamp": "2026-04-04T15:30:00-04:00"
+      }
+    ],
+    "s1": [
       {
         "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         "type": "text"
