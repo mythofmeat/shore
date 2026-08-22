@@ -120,8 +120,11 @@ describe("prompt rendering", () => {
 });
 
 describe("conversation splitting", () => {
+  const shapes = fx["split_shapes"] as unknown as Record<string, Json[]>;
   for (const [i, rec] of section("splits").entries()) {
-    const messages = (rec.messages as Json[]).map(toConversationMessage);
+    const shape = shapes[rec.name as string];
+    if (shape === undefined) throw new Error(`no split shape named ${String(rec.name)}`);
+    const messages = shape.map(toConversationMessage);
     const keep = rec.keep_turns as number;
     const retain = rec.retain_trailing_autonomous as boolean;
     test(`${rec.name as string} keep=${keep} retain=${retain} [${i}]`, () => {
@@ -538,7 +541,10 @@ async function runPass(pass: Json): Promise<void> {
     );
     const llm = new ScriptedLlm(scriptFor(pass.name as string));
     const mgr = new RecordingMgr("new-conv-id", pass.archive_fails === true);
-    const messages = (pass.messages as Json[]).map(toConversationMessage);
+    const messageSets = fx["pass_message_sets"] as unknown as Record<string, Json[]>;
+    const set = messageSets[pass.messages_ref as string];
+    if (set === undefined) throw new Error(`no message set named ${String(pass.messages_ref)}`);
+    const messages = set.map(toConversationMessage);
 
     expect(await snapshotTree(workspace)).toEqual(
       pass.workspace_before as Record<string, string>,
