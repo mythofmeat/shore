@@ -20,6 +20,9 @@ import {
   type QueryFilter,
 } from "../src/ledger/query.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
+import { recordedValue, recording } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/ledger_captures/ledger_query_cases.json";
 
 interface Case {
   filter: string;
@@ -115,26 +118,31 @@ test("every recorded filter answers the same ten queries", () => {
   const db = seededLedger();
   expect(doc.cases.length).toBeGreaterThan(0);
 
-  for (const c of doc.cases) {
+  for (const [index, c] of doc.cases.entries()) {
     const filter = FILTERS[c.filter];
     expect(filter, `fixture filter "${c.filter}" has no local definition`).toBeDefined();
     const at = (what: string) => `${c.filter}: ${what}`;
 
-    expect(usageTotals(db, required(filter)), at("usage_totals")).toEqual(
-      c.usage_totals as never,
-    );
-    expect(usageSummary(db, required(filter)), at("usage_summary")).toEqual(
-      c.usage_summary as never,
-    );
-    expect(usageSummaryBy(db, required(filter), "call_type"), at("by_call_type")).toEqual(
-      c.by_call_type as never,
-    );
-    expect(usageSummaryBy(db, required(filter), "kind"), at("by_usage_kind")).toEqual(
-      c.by_usage_kind as never,
-    );
-    expect(usageSummaryBy(db, required(filter), "api_key"), at("by_api_key")).toEqual(
-      c.by_api_key as never,
-    );
+    recordedValue(CAPTURE, ["cases", index, "usage_totals"], usageTotals(db, required(filter)));
+    if (!recording) {
+      expect(usageTotals(db, required(filter)), at("usage_totals")).toEqual(c.usage_totals as never);
+    }
+    recordedValue(CAPTURE, ["cases", index, "usage_summary"], usageSummary(db, required(filter)));
+    if (!recording) {
+      expect(usageSummary(db, required(filter)), at("usage_summary")).toEqual(c.usage_summary as never);
+    }
+    recordedValue(CAPTURE, ["cases", index, "by_call_type"], usageSummaryBy(db, required(filter), "call_type"));
+    if (!recording) {
+      expect(usageSummaryBy(db, required(filter), "call_type"), at("by_call_type")).toEqual(c.by_call_type as never);
+    }
+    recordedValue(CAPTURE, ["cases", index, "by_usage_kind"], usageSummaryBy(db, required(filter), "kind"));
+    if (!recording) {
+      expect(usageSummaryBy(db, required(filter), "kind"), at("by_usage_kind")).toEqual(c.by_usage_kind as never);
+    }
+    recordedValue(CAPTURE, ["cases", index, "by_api_key"], usageSummaryBy(db, required(filter), "api_key"));
+    if (!recording) {
+      expect(usageSummaryBy(db, required(filter), "api_key"), at("by_api_key")).toEqual(c.by_api_key as never);
+    }
     expect(modelUsageSummary(db, required(filter)), at("model_usage")).toEqual(
       c.model_usage as never,
     );

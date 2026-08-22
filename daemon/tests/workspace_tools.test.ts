@@ -29,6 +29,9 @@ import {
 } from "../src/tools/workspace";
 import { testTmp } from "./support/tmp.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
+import { recordedValue, recording } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/tools_captures/workspace_tools.json";
 
 const fixture = expandShared<Fixture>(
   JSON.parse(
@@ -183,12 +186,13 @@ function syncOutcome(run: () => void): Outcome {
 }
 
 describe("read", () => {
-  for (const c of fixture.read) {
+  for (const [index, c] of fixture.read.entries()) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree, c.workspace_missing === true);
       const ws = c.workspace_unset === true ? "" : workspace;
       const got = blankDirectorySizes(await outcome(() => handleRead(c.input, ws)));
-
+      recordedValue(CAPTURE, ["read", index, "result"], got);
+      if (recording) return;
       expect(got).toEqual(blankDirectorySizes(c.result));
     });
   }
@@ -228,15 +232,18 @@ function changedPaths(
 }
 
 describe("edit", () => {
-  for (const c of fixture.edit) {
+  for (const [index, c] of fixture.edit.entries()) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree);
       const before = await snapshot(workspace);
       const got = await outcome(() => handleEdit(c.input, workspace));
-      expect(got).toEqual(c.result);
-
       const after = await snapshot(workspace);
-      expect(after).toEqual(c.after);
+      recordedValue(CAPTURE, ["edit", index, "result"], got);
+      recordedValue(CAPTURE, ["edit", index, "after"], after);
+      if (!recording) {
+        expect(got).toEqual(c.result);
+        expect(after).toEqual(c.after);
+      }
 
       const written = "ok" in got ? (got.ok as { path?: string }).path : undefined;
       const touched = changedPaths(before, after);
@@ -425,7 +432,7 @@ async function snapshotTrash(dataDir: string, withDataDir: boolean): Promise<Tre
 }
 
 describe("search", () => {
-  for (const c of fixture.search) {
+  for (const [index, c] of fixture.search.entries()) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree);
       const ws = c.workspace_unset === true ? "" : workspace;
@@ -433,7 +440,10 @@ describe("search", () => {
         c.max_file_bytes === null
           ? undefined
           : { ...DEFAULT_RETRIEVAL_CONFIG, maxFileBytes: c.max_file_bytes };
-      expect(await outcome(() => handleSearch(c.input, ws, config, undefined))).toEqual(c.result);
+      const got = await outcome(() => handleSearch(c.input, ws, config, undefined));
+      recordedValue(CAPTURE, ["search", index, "result"], got);
+      if (recording) return;
+      expect(got).toEqual(c.result);
     });
   }
 });

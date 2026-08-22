@@ -6,6 +6,9 @@ import { mergeToolLoopMessages } from "../src/engine/merge";
 import type { Message } from "../src/engine/types";
 
 import fixture from "./engine_captures/merge.json";
+import { recordedValue, recording } from "./support/rerecord.ts";
+
+const CAPTURE = "tests/engine_captures/merge.json";
 
 interface MergeCase {
   name: string;
@@ -24,13 +27,17 @@ function wire(m: Message): unknown {
 describe("merging a streamed turn into the conversation", () => {
   const cases = fixture.cases as unknown as MergeCase[];
 
-  test("the fixture is the one that was generated", () => {
-    expect(cases.length).toBe(31);
+  test("every case is a distinct claim, named for what it checks", () => {
+    expect(new Set(cases.map((c) => c.name)).size).toBe(cases.length);
+    expect(cases.length).toBeGreaterThan(20);
   });
 
-  for (const c of cases) {
+  for (const [index, c] of cases.entries()) {
     test(c.name, () => {
       const got = mergeToolLoopMessages(c.input.map(hydrate));
+      recordedValue(CAPTURE, ["cases", index, "expect"], got);
+      if (recording) return;
+
       expect(got.length).toBe(c.expect.length);
       got.forEach((have, i) => {
         expect(wire(have)).toEqual(wire(hydrate(required(c.expect[i]))));

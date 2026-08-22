@@ -386,45 +386,7 @@
         "path": "workspace"
       },
       "result": {
-        "ok": {
-          "entries": [
-            {
-              "name": "SOUL.md",
-              "type": "file",
-              "size": 12
-            },
-            {
-              "name": "empty.md",
-              "type": "file",
-              "size": 0
-            },
-            {
-              "name": "memory",
-              "type": "directory",
-              "size": null
-            },
-            {
-              "name": "no-trailing.md",
-              "type": "file",
-              "size": 10
-            },
-            {
-              "name": "notes.md",
-              "type": "file",
-              "size": 39
-            },
-            {
-              "name": "sub",
-              "type": "directory",
-              "size": null
-            },
-            {
-              "name": "unicode.md",
-              "type": "file",
-              "size": 29
-            }
-          ]
-        }
+        "$ref": "s15"
       }
     },
     {
@@ -511,7 +473,7 @@
             {
               "name": ".git",
               "type": "directory",
-              "size": 4096
+              "size": null
             },
             {
               "name": ".gitignore",
@@ -536,7 +498,7 @@
             {
               "name": "dir",
               "type": "directory",
-              "size": 4096
+              "size": null
             },
             {
               "name": "dirlink",
@@ -5933,7 +5895,7 @@
       },
       {
         "name": "memory",
-        "size": 4096,
+        "size": null,
         "type": "directory"
       },
       {
@@ -5948,7 +5910,7 @@
       },
       {
         "name": "sub",
-        "size": 4096,
+        "size": null,
         "type": "directory"
       },
       {
