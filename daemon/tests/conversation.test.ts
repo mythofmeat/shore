@@ -2,7 +2,8 @@ import { required } from "../src/util/required.ts";
 
 import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import rawFixture from "./command_captures/conversation.json" with { type: "json" };
@@ -21,33 +22,20 @@ import {
 } from "../src/commands/conversation.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
-import type { Message } from "../src/engine/types.ts";
+import { mergeToolLoopMessages } from "../src/engine/merge.ts";
+import type { ImageRef, Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
-import { recordedValue, recording } from "./support/rerecord.ts";
-
-const CAPTURE = "tests/command_captures/conversation.json";
 
 interface WireError {
   code: string;
   message: string;
 }
 
-interface RefCase {
-  name: string;
-  note?: string;
-  messages: Message[];
-  ref: string;
-  ok?: string;
-  err?: WireError;
-}
-
 interface Step {
   op: string;
   args: Record<string, unknown>;
   history_pushes: number;
-  ok?: unknown;
   err?: WireError;
-  engine_after?: Message[];
 }
 
 interface Scenario {
@@ -61,7 +49,6 @@ interface Scenario {
   steps: Step[];
 }
 
-const refCases = fixture.resolve_ref as unknown as RefCase[];
 const scenarios = fixture.scenarios as unknown as Scenario[];
 
 function isMessage(v: Record<string, unknown>): boolean {
@@ -141,23 +128,6 @@ function expand(value: unknown, root: string): unknown {
   return JSON.parse(JSON.stringify(value).replaceAll("<tmp>", root)) as unknown;
 }
 
-function contract(value: unknown, root: string): unknown {
-  return JSON.parse(JSON.stringify(value).replaceAll(root, "<tmp>")) as unknown;
-}
-
-function remask(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(remask);
-  if (value === null || typeof value !== "object") return value;
-  const input = value as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  for (const [key, v] of Object.entries(input)) {
-    if (key === "msg_id" && v === STUB_ID) out[key] = "<uuid>";
-    else if (key === "timestamp" && v === STUB_NOW) out[key] = "<local-now>";
-    else out[key] = remask(v);
-  }
-  return out;
-}
-
 async function runStep(engine: ConversationEngine, step: Step): Promise<unknown> {
   const args = step.args;
   switch (step.op) {
@@ -187,22 +157,415 @@ async function runStep(engine: ConversationEngine, step: Step): Promise<unknown>
   }
 }
 
-describe("resolveRef", () => {
-  for (const c of refCases) {
-    test(c.name, () => {
-      if (c.err !== undefined) {
-        let thrown: unknown;
-        try {
-          resolveRef(c.messages, c.ref);
-        } catch (e) {
-          thrown = e;
-        }
-        expect(thrown).toBeInstanceOf(CommandError);
-        expect((thrown as CommandError).code).toBe(c.err.code as never);
-        expect((thrown as CommandError).message).toBe(c.err.message);
-      } else {
-        expect(resolveRef(c.messages, c.ref)).toBe(required(c.ok));
+interface Snapshot {
+  ids: string[];
+  byId: Map<string, string>;
+}
+
+function snapshot(engine: ConversationEngine): Snapshot {
+  const messages = engine.messages();
+  const seen = new Map<string, number>();
+  const byId = new Map<string, string>();
+  for (const msg of messages) {
+    const nth = seen.get(msg.msg_id) ?? 0;
+    seen.set(msg.msg_id, nth + 1);
+    byId.set(nth === 0 ? msg.msg_id : `${msg.msg_id}#${nth}`, JSON.stringify(serdeShape(msg)));
+  }
+  return { ids: messages.map((m) => m.msg_id), byId };
+}
+
+function expectOnlyTheseChanged(
+  before: Snapshot,
+  after: Snapshot,
+  changed: readonly string[],
+  label: string,
+): void {
+  for (const [id, json] of before.byId) {
+    const now = after.byId.get(id);
+    if (now === undefined || changed.includes(id)) continue;
+    expect(now, `${label}: ${id} was not the message this touched`).toBe(json);
+  }
+}
+
+function expectUntouched(before: Snapshot, after: Snapshot, label: string): void {
+  expect(after.ids, `${label}: reading the conversation does not change it`).toEqual(before.ids);
+  expectOnlyTheseChanged(before, after, [], label);
+}
+
+function isToolResultOnly(msg: Message): boolean {
+  return (
+    msg.role === "user" &&
+    msg.content_blocks.length > 0 &&
+    msg.content_blocks.every((b) => b.type === "tool_result")
+  );
+}
+
+function expectImagesEmbedded(images: readonly ImageRef[], want: boolean, label: string): void {
+  for (const img of images) {
+    if (want && !existsSync(img.path)) continue;
+    expect(img.data !== undefined, `${label}: ${img.path} carries its bytes`).toBe(want);
+  }
+}
+
+function expectPage(
+  row: Record<string, unknown>,
+  history: { messages: Message[]; activeStart: number },
+  args: Record<string, unknown>,
+  label: string,
+): void {
+  const page = row["messages"] as Message[];
+  const cursor = row["cursor"] as number;
+  const activeStart = row["active_start"] as number;
+  const role = args["role"];
+
+  expect(row["next_before"], `${label}: the page tells you where to ask for the one before it`).toBe(
+    cursor,
+  );
+  expect(row["has_more_before"], `${label}: there is more before iff this page is not the start`).toBe(
+    cursor > 0,
+  );
+  expect(
+    row["global_active_start"],
+    `${label}: the page says where the live file starts in the whole history`,
+  ).toBe(history.activeStart);
+
+  const turns = history.messages.filter((m) => m.role === "user" && !isToolResultOnly(m)).length;
+  expect(row["total_turns"], `${label}: the total counts typed turns, not this page`).toBe(turns);
+  expect(row["total_messages"], `${label}: the two totals are one number under two names`).toBe(
+    row["total_turns"],
+  );
+
+  expect(
+    activeStart >= 0 && activeStart <= page.length,
+    `${label}: active_start points into the page it came with`,
+  ).toBe(true);
+
+  const positions = new Map<string, number[]>();
+  history.messages.forEach((m, i) => {
+    positions.set(m.msg_id, [...(positions.get(m.msg_id) ?? []), i]);
+  });
+  let previous = cursor - 1;
+  page.forEach((msg, i) => {
+    const at = (positions.get(msg.msg_id) ?? []).find((n) => n > previous);
+    expect(at, `${label}: entry ${i} is a message of this conversation`).toBeDefined();
+    const idx = at as number;
+    expect(idx > previous, `${label}: the page runs forwards from its cursor`).toBe(true);
+    expect(idx >= cursor, `${label}: nothing before the cursor is on the page`).toBe(true);
+    previous = idx;
+
+    if (role === undefined) {
+      expect(idx, `${label}: an unfiltered page is an unbroken run from the cursor`).toBe(cursor + i);
+    } else {
+      expect(msg.role, `${label}: a filtered page holds only that role`).toBe(role as never);
+    }
+
+    expect(
+      i < activeStart,
+      `${label}: entry ${i} is above active_start iff it comes from an archived segment`,
+    ).toBe(idx < history.activeStart);
+
+    const live = i >= activeStart;
+    expectImagesEmbedded(msg.images, live, `${label}: entry ${i}`);
+    for (const alternative of msg.alternatives ?? []) {
+      expectImagesEmbedded(alternative.images, live, `${label}: entry ${i} alternative`);
+    }
+  });
+
+  if (role !== undefined) return;
+
+  const u64 = (v: unknown): number | undefined =>
+    typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : undefined;
+  const count = u64(args["count"]);
+  const wanted = u64(args["turns"]);
+  if (wanted === 0) {
+    expect(page.length, `${label}: asking for no turns asks for no messages`).toBe(0);
+  } else if (wanted === undefined && count !== undefined) {
+    expect(
+      page.length === count || cursor === 0,
+      `${label}: count asks for that many messages, or everything there is`,
+    ).toBe(true);
+  } else {
+    const asked = wanted ?? 64;
+    const users = page.filter((m) => m.role === "user").length;
+    expect(
+      users === asked || cursor === 0,
+      `${label}: turns wins over count, and asks for that many user messages`,
+    ).toBe(true);
+  }
+}
+
+function expectShapeOf(
+  step: Step,
+  result: unknown,
+  engine: ConversationEngine,
+  history: { messages: Message[]; activeStart: number },
+  before: Snapshot,
+  mergedBefore: Message[],
+  label: string,
+): void {
+  const row = result as Record<string, unknown>;
+  const after = snapshot(engine);
+  const merged = mergeToolLoopMessages([...engine.messages()]);
+  const role = step.args["role"];
+
+  switch (step.op) {
+    case "log":
+    case "history_page":
+      expectUntouched(before, after, label);
+      expectPage(row, history, step.args, label);
+      return;
+
+    case "get": {
+      expectUntouched(before, after, label);
+      const visible = merged.filter((m) => role === undefined || m.role === role);
+      const found = visible.find((m) => m.msg_id === row["msg_id"]);
+      expect(found, `${label}: get answers with a message that is in the conversation`).toBeDefined();
+      expect(serdeShape(row), `${label}: get answers with that message, unaltered`).toEqual(
+        serdeShape(found) as never,
+      );
+      expect(
+        resolveRef(visible, String(step.args["ref"])),
+        `${label}: get honours the same ref rules as everything else`,
+      ).toBe(row["msg_id"] as string);
+      return;
+    }
+
+    case "list_alternatives": {
+      expectUntouched(before, after, label);
+      const ref = String(row["ref"]);
+      const msg = required(merged.find((m) => m.msg_id === ref));
+      expect(msg.role, `${label}: only an assistant message has alternates`).toBe("assistant");
+
+      const alts = row["alternatives"] as {
+        index: number;
+        position: number;
+        active: boolean;
+        content: string;
+        images: ImageRef[];
+      }[];
+      expect(row["alt_count"], `${label}: the count is how many were listed`).toBe(alts.length);
+      expect(
+        alts.map((a) => a.content),
+        `${label}: the listed alternates are the message's own`,
+      ).toEqual((msg.alternatives ?? []).map((a) => a.content));
+      alts.forEach((a, i) => {
+        expect(a.index, `${label}: alternate ${i} is numbered from zero`).toBe(i);
+        expect(a.position, `${label}: its position is that index counted from one`).toBe(i + 1);
+        expectImagesEmbedded(a.images, true, `${label}: alternate ${i}`);
+      });
+
+      const stored = row["alt_index"];
+      expect(
+        row["position"],
+        `${label}: a message with no chosen alternate has no position either`,
+      ).toBe(stored === null ? null : (stored as number) + 1);
+
+      if (alts.length === 0) {
+        expect(alts.some((a) => a.active), `${label}: nothing is active when there is nothing`).toBe(
+          false,
+        );
+        return;
       }
+      const active = alts.filter((a) => a.active);
+      expect(active.length, `${label}: exactly one alternate is the live one`).toBe(1);
+      expect(
+        required(active[0]).index,
+        `${label}: a stored index past the end falls back to the last alternate`,
+      ).toBe(Math.min(msg.alt_index ?? 0, alts.length - 1));
+      return;
+    }
+
+    case "edit": {
+      const ref = String(row["ref"]);
+      expect(row["edited"], `${label}: edit says it edited`).toBe(true);
+      expect(
+        ref,
+        `${label}: edit counts tool loops as the one message the log shows`,
+      ).toBe(resolveRef(mergedBefore, String(step.args["ref"])));
+      expect(after.ids, `${label}: editing adds and removes nothing`).toEqual(before.ids);
+      expectOnlyTheseChanged(before, after, [ref], label);
+      expect(
+        required(engine.messages().find((m) => m.msg_id === ref)).content,
+        `${label}: the message now reads as asked`,
+      ).toBe(step.args["content"] as string);
+      return;
+    }
+
+    case "delete": {
+      const deleted = row["deleted"] as string[];
+      expect(new Set(deleted).size, `${label}: nothing is reported deleted twice`).toBe(
+        deleted.length,
+      );
+      for (const id of deleted) {
+        expect(after.byId.has(id), `${label}: ${id} was reported deleted and is gone`).toBe(false);
+      }
+      expect(
+        after.ids,
+        `${label}: what survives keeps the order it had`,
+      ).toEqual(before.ids.filter((id) => after.byId.has(id)));
+      expectOnlyTheseChanged(before, after, [], label);
+
+      const offered = new Set(
+        engine
+          .messages()
+          .flatMap((m) => m.content_blocks)
+          .filter((b) => b.type === "tool_use")
+          .map((b) => b.id),
+      );
+      for (const msg of engine.messages()) {
+        for (const block of msg.content_blocks) {
+          if (block.type !== "tool_result") continue;
+          expect(
+            offered.has(block.tool_use_id),
+            `${label}: no tool result is left without its call`,
+          ).toBe(true);
+        }
+      }
+      return;
+    }
+
+    case "alt": {
+      const ref = String(row["ref"]);
+      expect(after.ids, `${label}: choosing an alternate adds and removes nothing`).toEqual(
+        before.ids,
+      );
+      expectOnlyTheseChanged(before, after, [ref], label);
+
+      const msg = required(engine.messages().find((m) => m.msg_id === ref));
+      const alts = msg.alternatives ?? [];
+      const index = row["alt_index"] as number;
+      expect(row["alt_count"], `${label}: the count is the message's alternates`).toBe(alts.length);
+      expect(
+        index >= 0 && index < alts.length,
+        `${label}: the chosen index is one that exists`,
+      ).toBe(true);
+      expect(row["position"], `${label}: position is the index counted from one`).toBe(index + 1);
+      expect(row["content"], `${label}: it answers with the alternate it chose`).toBe(
+        required(alts[index]).content,
+      );
+      expect(msg.content, `${label}: and the message now reads as that alternate`).toBe(
+        row["content"] as string,
+      );
+      expect(msg.alt_index, `${label}: and remembers which one is live`).toBe(index);
+      return;
+    }
+
+    case "inject_system": {
+      expect(row["injected"], `${label}: inject says it injected`).toBe(true);
+      expect(
+        after.ids.slice(0, before.ids.length),
+        `${label}: the injected message goes on the end, disturbing nothing`,
+      ).toEqual(before.ids);
+      expect(after.ids.length, `${label}: exactly one message was added`).toBe(before.ids.length + 1);
+      expectOnlyTheseChanged(before, after, [], label);
+
+      const text = step.args["text"];
+      const last = required(engine.messages()[after.ids.length - 1]);
+      expect(last.role, `${label}: what was injected is a system message`).toBe("system");
+      expect(last.content, `${label}: carrying the text asked for`).toBe(text as string);
+      expect(last.content_blocks, `${label}: as a single text block`).toEqual([
+        { type: "text", text: text as string },
+      ]);
+      return;
+    }
+
+    default:
+      throw new Error(`${label}: no shape stated for ${step.op}`);
+  }
+}
+
+describe("resolveRef picks a message out of a conversation", () => {
+  function conversation(count: number): Message[] {
+    return Array.from({ length: count }, (_, i) => ({
+      msg_id: `m${i + 1}`,
+      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      content: String.fromCharCode(65 + i),
+      images: [],
+      content_blocks: [{ type: "text" as const, text: String.fromCharCode(65 + i) }],
+      timestamp: "2026-01-01T00:00:00Z",
+    }));
+  }
+
+  const resolves: [note: string, messages: number, ref: string, msgId: string][] = [
+    ["the last message, whatever its role", 3, "last", "m3"],
+    ["latest is a spelling of last", 3, "latest", "m3"],
+    ["-1 is the last", 3, "-1", "m3"],
+    ["and counts backwards from there", 3, "-2", "m2"],
+    ["as far as the first", 3, "-3", "m1"],
+    ["positive indices start at one", 3, "1", "m1"],
+    ["counting forwards", 3, "2", "m2"],
+    ["to the last", 3, "3", "m3"],
+    ["a leading plus is still an index", 3, "+2", "m2"],
+    ["an id that exists is itself", 1, "m1", "m1"],
+    ["an id that does not exist is passed through for the caller to reject", 1, "nope", "nope"],
+    ["something that is not a whole number is an id, not an index", 1, "1.5", "1.5"],
+    ["and needs no messages to be passed through", 0, "m_whatever", "m_whatever"],
+  ];
+
+  const refuses: [note: string, messages: number, ref: string, code: string, message: string][] = [
+    [
+      "zero is neither a first nor a last",
+      3,
+      "0",
+      "invalid_request",
+      "Message index must be non-zero (use 1 for first, -1 for last)",
+    ],
+    [
+      "past the end",
+      1,
+      "99",
+      "not_found",
+      "Message index 99 out of range (conversation has 1 messages)",
+    ],
+    [
+      "past the start",
+      1,
+      "-99",
+      "not_found",
+      "Message index -99 out of range (conversation has 1 messages)",
+    ],
+    [
+      "one before the first",
+      3,
+      "-4",
+      "not_found",
+      "Message index -4 out of range (conversation has 3 messages)",
+    ],
+    [
+      "one past the last",
+      3,
+      "4",
+      "not_found",
+      "Message index 4 out of range (conversation has 3 messages)",
+    ],
+    ["there is no last message of nothing", 0, "last", "not_found", "No messages in conversation"],
+    [
+      "nor a -1",
+      0,
+      "-1",
+      "not_found",
+      "Message index -1 out of range (conversation has 0 messages)",
+    ],
+    ["nor a 1", 0, "1", "not_found", "Message index 1 out of range (conversation has 0 messages)"],
+  ];
+
+  for (const [note, count, ref, msgId] of resolves) {
+    test(`${JSON.stringify(ref)}: ${note}`, () => {
+      expect(resolveRef(conversation(count), ref)).toBe(msgId);
+    });
+  }
+
+  for (const [note, count, ref, code, message] of refuses) {
+    test(`${JSON.stringify(ref)}: ${note}`, () => {
+      let thrown: unknown;
+      try {
+        resolveRef(conversation(count), ref);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(CommandError);
+      expect((thrown as CommandError).code).toBe(code as never);
+      expect((thrown as CommandError).message).toBe(message);
     });
   }
 });
@@ -223,7 +586,7 @@ describe("a message reference shore refuses to resolve", () => {
 });
 
 describe("conversation commands", () => {
-  for (const [scenarioIdx, scenario] of scenarios.entries()) {
+  for (const scenario of scenarios) {
     test(scenario.name, async () => {
       const { engine, pushes, root } = await buildScenario(scenario);
 
@@ -236,9 +599,12 @@ describe("conversation commands", () => {
       );
 
       let seen = pushes();
-      let lastEngineAfter: unknown;
-      for (const [stepIdx, step] of scenario.steps.entries()) {
+      for (const step of scenario.steps) {
         const label = `${step.op} ${JSON.stringify(step.args)}`;
+        const before = snapshot(engine);
+        const mergedBefore = mergeToolLoopMessages([...engine.messages()]);
+        const history = await engine.displayHistory();
+
         let result: unknown;
         let thrown: unknown;
         try {
@@ -251,28 +617,176 @@ describe("conversation commands", () => {
           expect(thrown, label).toBeInstanceOf(CommandError);
           expect((thrown as CommandError).code, label).toBe(step.err.code as never);
           expect((thrown as CommandError).message, label).toBe(step.err.message);
+          expectUntouched(before, snapshot(engine), `${label} — a refused command`);
         } else {
           expect(thrown, label).toBeUndefined();
-          const got = remask(serdeShape(result));
-          recordedValue(CAPTURE, ["scenarios", scenarioIdx, "steps", stepIdx, "ok"], contract(got, root));
-          if (!recording) {
-            expect(got, label).toEqual(remask(expand(step.ok, root)) as never);
-          }
+          expectShapeOf(step, result, engine, history, before, mergedBefore, label);
         }
 
         expect(pushes() - seen, `${label} — history pushes`).toBe(step.history_pushes);
         seen = pushes();
-
-
-        if (step.engine_after !== undefined) {
-          lastEngineAfter = remask(expand(step.engine_after, root));
-        }
-        if (lastEngineAfter !== undefined) {
-          expect(remask(serdeShape(engine.messages())), `${label} — engine after`).toEqual(
-            lastEngineAfter as never,
-          );
-        }
       }
+    });
+  }
+});
+
+describe("log stops at 64 user turns unless told otherwise", () => {
+  async function engineOf(userTurns: number): Promise<ConversationEngine> {
+    const root = await mkdtemp(testTmp("shore-bound-"));
+    const characterDir = join(root, "TestChar");
+    await mkdir(characterDir, { recursive: true });
+    const messages = Array.from({ length: userTurns }, (_, i) => ({
+      msg_id: `m${i + 1}`,
+      role: "user" as const,
+      content: `turn ${i + 1}`,
+      images: [],
+      content_blocks: [{ type: "text" as const, text: `turn ${i + 1}` }],
+      timestamp: "2026-01-01T00:00:00Z",
+    }));
+    await writeFile(
+      join(characterDir, "active.jsonl"),
+      messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
+    );
+    return await ConversationEngine.load("TestChar", root, () => {});
+  }
+
+  test("a longer conversation is cut to the last 64", async () => {
+    const engine = await engineOf(66);
+    const page = (await log(engine, {})) as { messages: Message[]; cursor: number };
+
+    expect(page.messages.length).toBe(64);
+    expect(page.cursor).toBe(2);
+    expect(required(page.messages[0]).content).toBe("turn 3");
+  });
+
+  test("asking for more than there is gives everything, not an error", async () => {
+    const engine = await engineOf(66);
+    for (const turns of [66, 67, 400]) {
+      const page = (await log(engine, { turns })) as { messages: Message[]; cursor: number };
+      expect(page.messages.length, `turns: ${turns}`).toBe(66);
+      expect(page.cursor, `turns: ${turns}`).toBe(0);
+    }
+  });
+
+  test("a conversation shorter than the bound is not padded or truncated", async () => {
+    const engine = await engineOf(5);
+    const page = (await log(engine, {})) as { messages: Message[] };
+    expect(page.messages.length).toBe(5);
+  });
+});
+
+describe("which page an argument asks for", () => {
+  async function engineOf(messages: Message[]): Promise<ConversationEngine> {
+    const root = await mkdtemp(testTmp("shore-args-"));
+    const characterDir = join(root, "TestChar");
+    await mkdir(characterDir, { recursive: true });
+    await writeFile(
+      join(characterDir, "active.jsonl"),
+      messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
+    );
+    return await ConversationEngine.load("TestChar", root, () => {});
+  }
+
+  function alternating(count: number): Message[] {
+    return Array.from({ length: count }, (_, i) => ({
+      msg_id: `m${i + 1}`,
+      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      content: `line ${i + 1}`,
+      images: [],
+      content_blocks: [{ type: "text" as const, text: `line ${i + 1}` }],
+      timestamp: "2026-01-01T00:00:00Z",
+    }));
+  }
+
+  const ids = (page: unknown): string[] =>
+    (page as { messages: Message[] }).messages.map((m) => m.msg_id);
+
+  test("turns wins over count when both are given", async () => {
+    const engine = await engineOf(alternating(12));
+
+    const both = ids(await log(engine, { count: 3, turns: 1 }));
+    expect(both).toEqual(ids(await log(engine, { turns: 1 })));
+    expect(both).not.toEqual(ids(await log(engine, { count: 3 })));
+  });
+
+  test("history_page with no cursor reads the end, the same as log", async () => {
+    const engine = await engineOf(alternating(12));
+
+    const page = await historyPage(engine, { turns: 2 });
+    expect(ids(page)).toEqual(ids(await log(engine, { turns: 2 })));
+    expect(ids(page).length).toBeGreaterThan(0);
+  });
+
+  test("a cursor of zero reads the start, not the end", async () => {
+    const engine = await engineOf(alternating(12));
+
+    expect(ids(await historyPage(engine, { before: 0, count: 4 }))).toEqual([]);
+  });
+});
+
+describe("which alternate an argument selects", () => {
+  async function threeAnswers(): Promise<ConversationEngine> {
+    const root = await mkdtemp(testTmp("shore-alt-"));
+    const characterDir = join(root, "TestChar");
+    await mkdir(characterDir, { recursive: true });
+    const answer = (text: string) => ({
+      content: text,
+      images: [],
+      content_blocks: [{ type: "text", text }],
+      timestamp: "2026-01-01T00:00:00Z",
+    });
+    const messages = [
+      {
+        msg_id: "u1",
+        role: "user",
+        content: "Prompt",
+        images: [],
+        content_blocks: [{ type: "text", text: "Prompt" }],
+        timestamp: "2026-01-01T00:00:00Z",
+      },
+      {
+        msg_id: "a2",
+        role: "assistant",
+        content: "one",
+        images: [],
+        content_blocks: [{ type: "text", text: "one" }],
+        alt_index: 0,
+        alt_count: 3,
+        alternatives: [answer("one"), answer("two"), answer("three")],
+        timestamp: "2026-01-01T00:00:00Z",
+      },
+    ];
+    await writeFile(
+      join(characterDir, "active.jsonl"),
+      messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
+    );
+    return await ConversationEngine.load("TestChar", root, () => {});
+  }
+
+  const cases: [args: Record<string, unknown>, from: number, index: number, note: string][] = [
+    [{ index: 2 }, 0, 2, "an index is zero-based"],
+    [{ position: 2 }, 0, 1, "a position is that index counted from one"],
+    [{ index: 0, position: 3 }, 0, 0, "index wins over position"],
+    [{ index: 2, direction: "first" }, 0, 2, "index wins over direction"],
+    [{ position: 3, direction: "first" }, 0, 2, "position wins over direction"],
+    [{}, 0, 1, "with nothing said, the next one"],
+    [{ direction: "next" }, 0, 1, "next steps forward"],
+    [{ direction: "next" }, 2, 2, "and stops at the last"],
+    [{ direction: "prev" }, 2, 1, "prev steps back"],
+    [{ direction: "previous" }, 2, 1, "previous is a spelling of prev"],
+    [{ direction: "prev" }, 0, 0, "and stops at the first"],
+    [{ direction: "first" }, 2, 0, "first is the first"],
+    [{ direction: "last" }, 0, 2, "last is the last"],
+  ];
+
+  for (const [args, from, index, note] of cases) {
+    test(`${JSON.stringify(args)} from ${from}: ${note}`, async () => {
+      const engine = await threeAnswers();
+      if (from !== 0) await alt(engine, { index: from });
+
+      const chosen = (await alt(engine, args)) as { alt_index: number; content: string };
+      expect(chosen.alt_index).toBe(index);
+      expect(chosen.content).toBe(required(["one", "two", "three"][index]));
     });
   }
 });
@@ -392,6 +906,52 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
     expect(engine.messages().map((m) => m.msg_id)).toEqual(["m_33"]);
     expect(orphanedToolResults(engine.messages())).toEqual([]);
   });
+
+  test("one unknown ref means nothing at all is deleted", async () => {
+    const engine = await engineOver([
+      msg("m_1", "user", [{ type: "text", text: "go" }]),
+      msg("m_2", "assistant", [{ type: "text", text: "done" }]),
+    ]);
+    let thrown: unknown;
+    try {
+      await deleteMessages(engine, { refs: ["m_1", "nope"] });
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(CommandError);
+    expect(engine.messages().map((m) => m.msg_id)).toEqual(["m_1", "m_2"]);
+  });
+
+  test.skipIf(process.getuid?.() === 0)(
+    "a delete that cannot be written is reported, not swallowed",
+    async () => {
+      const root = await mkdtemp(testTmp("shore-readonly-"));
+      const characterDir = join(root, "TestChar");
+      await mkdir(characterDir, { recursive: true });
+      await writeFile(
+        join(characterDir, "active.jsonl"),
+        [msg("m_1", "user", [{ type: "text", text: "go" }]), msg("m_2", "user", [{ type: "text", text: "stay" }])]
+          .map((m) => JSON.stringify(m))
+          .join("\n") + "\n",
+      );
+      const engine = await ConversationEngine.load("TestChar", root, () => {});
+
+      await chmod(characterDir, 0o555);
+      let thrown: unknown;
+      try {
+        await deleteMessages(engine, { refs: ["m_1"] });
+      } catch (e) {
+        thrown = e;
+      } finally {
+        await chmod(characterDir, 0o755);
+      }
+
+      expect(thrown, "a store that refused the write is an error, not a silent success").toBeInstanceOf(
+        CommandError,
+      );
+    },
+  );
 
   test("a tool_result the delete did not orphan is left alone", async () => {
     const engine = await engineOver([

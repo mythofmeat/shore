@@ -1,205 +1,4 @@
 {
-  "resolve_ref": [
-    {
-      "name": "last",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "last",
-      "note": "the last message regardless of role",
-      "ok": "m3"
-    },
-    {
-      "name": "latest",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "latest",
-      "note": "alias for last",
-      "ok": "m3"
-    },
-    {
-      "name": "negative -1",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "-1",
-      "note": "-1 is the last",
-      "ok": "m3"
-    },
-    {
-      "name": "negative -2",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "-2",
-      "ok": "m2"
-    },
-    {
-      "name": "negative -3",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "-3",
-      "note": "reaches the first",
-      "ok": "m1"
-    },
-    {
-      "name": "positive 1",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "1",
-      "note": "positive indices are 1-based",
-      "ok": "m1"
-    },
-    {
-      "name": "positive 2",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "2",
-      "ok": "m2"
-    },
-    {
-      "name": "positive 3",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "3",
-      "ok": "m3"
-    },
-    {
-      "name": "zero",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "0",
-      "note": "0 is neither a valid 1-based nor a valid negative index",
-      "err": {
-        "code": "invalid_request",
-        "message": "Message index must be non-zero (use 1 for first, -1 for last)"
-      }
-    },
-    {
-      "name": "positive out of range",
-      "messages": {
-        "$ref": "s84"
-      },
-      "ref": "99",
-      "err": {
-        "code": "not_found",
-        "message": "Message index 99 out of range (conversation has 1 messages)"
-      }
-    },
-    {
-      "name": "negative out of range",
-      "messages": {
-        "$ref": "s84"
-      },
-      "ref": "-99",
-      "note": "len + n underflows past 0",
-      "err": {
-        "code": "not_found",
-        "message": "Message index -99 out of range (conversation has 1 messages)"
-      }
-    },
-    {
-      "name": "negative exactly out of range",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "-4",
-      "note": "len + n == -1",
-      "err": {
-        "code": "not_found",
-        "message": "Message index -4 out of range (conversation has 3 messages)"
-      }
-    },
-    {
-      "name": "positive exactly out of range",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "4",
-      "note": "index 3 == len",
-      "err": {
-        "code": "not_found",
-        "message": "Message index 4 out of range (conversation has 3 messages)"
-      }
-    },
-    {
-      "name": "literal msg_id",
-      "messages": {
-        "$ref": "s84"
-      },
-      "ref": "m1",
-      "note": "an id that exists",
-      "ok": "m1"
-    },
-    {
-      "name": "literal passthrough of a missing id",
-      "messages": {
-        "$ref": "s84"
-      },
-      "ref": "nope",
-      "note": "resolve_ref does NOT verify the id exists; the caller does",
-      "ok": "nope"
-    },
-    {
-      "name": "non-integer is a literal",
-      "messages": {
-        "$ref": "s84"
-      },
-      "ref": "1.5",
-      "note": "parse::<i64> fails, so it falls through to passthrough",
-      "ok": "1.5"
-    },
-    {
-      "name": "leading-plus integer",
-      "messages": {
-        "$ref": "s5"
-      },
-      "ref": "+2",
-      "note": "parse::<i64> accepts a leading +, so this is index 2, not a literal",
-      "ok": "m2"
-    },
-    {
-      "name": "empty conversation, last",
-      "messages": [],
-      "ref": "last",
-      "err": {
-        "code": "not_found",
-        "message": "No messages in conversation"
-      }
-    },
-    {
-      "name": "empty conversation, -1",
-      "messages": [],
-      "ref": "-1",
-      "err": {
-        "code": "not_found",
-        "message": "Message index -1 out of range (conversation has 0 messages)"
-      }
-    },
-    {
-      "name": "empty conversation, 1",
-      "messages": [],
-      "ref": "1",
-      "note": "index 0 into an empty list",
-      "err": {
-        "code": "not_found",
-        "message": "Message index 1 out of range (conversation has 0 messages)"
-      }
-    },
-    {
-      "name": "empty conversation, literal",
-      "messages": [],
-      "ref": "m_whatever",
-      "note": "passthrough does not need any messages",
-      "ok": "m_whatever"
-    }
-  ],
   "scenarios": [
     {
       "name": "log paging over a flat conversation",
@@ -263,84 +62,49 @@
         {
           "op": "log",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s0"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "count": 2
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s4"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "count": 0
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [],
-            "active_start": 0,
-            "cursor": 4,
-            "next_before": 4,
-            "has_more_before": true,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "count": 99
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s0"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s4"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": 0
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [],
-            "active_start": 0,
-            "cursor": 4,
-            "next_before": 4,
-            "has_more_before": true,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": 99
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s0"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
@@ -348,115 +112,28 @@
             "count": 3,
             "turns": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s4"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "role": "user"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "A",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "A"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "C",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "C"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "role": "assistant"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "B",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "B"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m4",
-                "role": "assistant",
-                "content": "D",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "D"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "role": "system"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
@@ -486,71 +163,35 @@
             "count": 2,
             "role": "user"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "C",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "C"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 2,
-            "next_before": 2,
-            "has_more_before": true,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "count": 1.5
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s0"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "count": -1
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s0"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": 2.5
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s0"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": -1
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s0"
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
@@ -558,10 +199,7 @@
             "count": 2,
             "turns": 1.5
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s4"
-          }
+          "history_pushes": 0
         }
       ],
       "note": "no segments: active_start is 0 and every message is active tail"
@@ -575,34 +213,14 @@
         {
           "op": "log",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "messages": [],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 0,
-            "total_turns": 0
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {
             "before": "active"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 0,
-            "total_turns": 0
-          }
+          "history_pushes": 0
         }
       ]
     },
@@ -665,114 +283,79 @@
         }
       ],
       "files": [],
-      "initial_display_history": {
-        "$ref": "s1"
-      },
+      "initial_display_history": [
+        {
+          "content": "archived one",
+          "content_blocks": [
+            {
+              "text": "archived one",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "archived two",
+          "content_blocks": [
+            {
+              "text": "archived two",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "active three",
+          "content_blocks": [
+            {
+              "text": "active three",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "active four",
+          "content_blocks": [
+            {
+              "text": "active four",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m4",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
       "steps": [
         {
           "op": "log",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "active_start": 2,
-            "cursor": 0,
-            "global_active_start": 2,
-            "has_more_before": false,
-            "messages": {
-              "$ref": "s1"
-            },
-            "next_before": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "count": 3
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "archived two",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived two"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "active three",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active three"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m4",
-                "role": "assistant",
-                "content": "active four",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active four"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 1,
-            "cursor": 1,
-            "next_before": 1,
-            "has_more_before": true,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "count": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m4",
-                "role": "assistant",
-                "content": "active four",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active four"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 3,
-            "next_before": 3,
-            "has_more_before": true,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
@@ -780,132 +363,21 @@
             "count": 3,
             "role": "assistant"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "archived two",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived two"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m4",
-                "role": "assistant",
-                "content": "active four",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active four"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 1,
-            "cursor": 1,
-            "next_before": 1,
-            "has_more_before": true,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "active three",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active three"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m4",
-                "role": "assistant",
-                "content": "active four",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active four"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 2,
-            "next_before": 2,
-            "has_more_before": true,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {
             "before": "active"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "archived one",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived one"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "archived two",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived two"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 2,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
@@ -913,137 +385,28 @@
             "before": "active",
             "turns": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "archived one",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived one"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "archived two",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived two"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 2,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {
             "before": 3
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "archived one",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived one"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "archived two",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived two"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "active three",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active three"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 2,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {
             "before": 0
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {
             "before": 99
           },
-          "history_pushes": 0,
-          "ok": {
-            "active_start": 2,
-            "cursor": 0,
-            "global_active_start": 2,
-            "has_more_before": false,
-            "messages": {
-              "$ref": "s1"
-            },
-            "next_before": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
@@ -1073,123 +436,26 @@
             "before": "active",
             "count": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "archived two",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived two"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 1,
-            "cursor": 1,
-            "next_before": 1,
-            "has_more_before": true,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "active_start": 2,
-            "cursor": 0,
-            "global_active_start": 2,
-            "has_more_before": false,
-            "messages": {
-              "$ref": "s1"
-            },
-            "next_before": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {
             "turns": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "active three",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active three"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m4",
-                "role": "assistant",
-                "content": "active four",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active four"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 2,
-            "next_before": 2,
-            "has_more_before": true,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {
             "count": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m4",
-                "role": "assistant",
-                "content": "active four",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active four"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 3,
-            "next_before": 3,
-            "has_more_before": true,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
@@ -1208,44 +474,7 @@
             "count": 4,
             "role": "assistant"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "archived two",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived two"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m4",
-                "role": "assistant",
-                "content": "active four",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active four"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 1,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
@@ -1253,44 +482,7 @@
             "count": 4,
             "role": "user"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "archived one",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "archived one"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m3",
-                "role": "user",
-                "content": "active three",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active three"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 1,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 2,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         }
       ],
       "note": "two archived, two active: active_start and global_active_start diverge from 0"
@@ -1300,13 +492,53 @@
       "archived": [],
       "active": [
         {
-          "$ref": "s13"
+          "content": "do the thing",
+          "content_blocks": [
+            {
+              "text": "do the thing",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s9"
+          "content": "checking",
+          "content_blocks": [
+            {
+              "text": "checking",
+              "type": "text"
+            },
+            {
+              "id": "t1",
+              "input": {
+                "path": "notes.md"
+              },
+              "name": "read_file",
+              "type": "tool_use"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s10"
+          "content": "file contents",
+          "content_blocks": [
+            {
+              "content": "file contents",
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
           "msg_id": "m4",
@@ -1322,153 +554,145 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s75"
+          "content": "thanks",
+          "content_blocks": [
+            {
+              "text": "thanks",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m5",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s14"
+          "content": "any time",
+          "content_blocks": [
+            {
+              "text": "any time",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m6",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
       "files": [],
       "initial_display_history": [
         {
-          "$ref": "s13"
+          "content": "do the thing",
+          "content_blocks": [
+            {
+              "text": "do the thing",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s6"
+          "content": "checking\ndone",
+          "content_blocks": [
+            {
+              "text": "checking",
+              "type": "text"
+            },
+            {
+              "id": "t1",
+              "input": {
+                "path": "notes.md"
+              },
+              "name": "read_file",
+              "type": "tool_use"
+            },
+            {
+              "content": "file contents",
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
+            },
+            {
+              "text": "done",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m4",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s75"
+          "content": "thanks",
+          "content_blocks": [
+            {
+              "text": "thanks",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m5",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s14"
+          "content": "any time",
+          "content_blocks": [
+            {
+              "text": "any time",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m6",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
       "steps": [
         {
           "op": "log",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s13"
-              },
-              {
-                "$ref": "s6"
-              },
-              {
-                "$ref": "s75"
-              },
-              {
-                "$ref": "s14"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s75"
-              },
-              {
-                "$ref": "s14"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 2,
-            "next_before": 2,
-            "has_more_before": true,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": 2
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s13"
-              },
-              {
-                "$ref": "s6"
-              },
-              {
-                "$ref": "s75"
-              },
-              {
-                "$ref": "s14"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "count": 2
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s75"
-              },
-              {
-                "$ref": "s14"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 2,
-            "next_before": 2,
-            "has_more_before": true,
-            "global_active_start": 0,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
           "args": {
             "ref": "last"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s14"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
           "args": {
             "ref": "2"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s6"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
@@ -1476,10 +700,7 @@
             "ref": "last",
             "role": "user"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s75"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
@@ -1487,13 +708,10 @@
             "ref": "1",
             "role": "assistant"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s6"
-          }
+          "history_pushes": 0
         }
       ],
-      "note": "the merge consumes the tool_result user turn before either counter sees it, so neither `turns` nor `total_turns` counts it — and the merged assistant carries the CLOSING message's msg_id (m4), not the head's (m2)"
+      "note": "the merge consumes the tool_result user turn before either counter sees it, so neither `turns` nor `total_turns` counts it \u2014 and the merged assistant carries the CLOSING message's msg_id (m4), not the head's (m2)"
     },
     {
       "name": "an orphan tool_result at the head of a trimmed history",
@@ -1515,53 +733,73 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s12"
+          "content": "carrying on",
+          "content_blocks": [
+            {
+              "text": "carrying on",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s83"
+          "content": "next",
+          "content_blocks": [
+            {
+              "text": "next",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
       "files": [],
       "initial_display_history": [
         {
-          "$ref": "s12"
+          "content": "carrying on",
+          "content_blocks": [
+            {
+              "text": "carrying on",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s83"
+          "content": "next",
+          "content_blocks": [
+            {
+              "text": "next",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
       "steps": [
         {
           "op": "log",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s12"
-              },
-              {
-                "$ref": "s83"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 1,
-            "total_turns": 1
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
           "args": {
             "ref": "1"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s12"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
@@ -1580,44 +818,7 @@
             "ref": "1",
             "content": "edited"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m2",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "left over from a trimmed loop",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "tool_result",
-                  "tool_use_id": "t0",
-                  "content": "left over from a trimmed loop",
-                  "is_error": false
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "edited",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "edited"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "$ref": "s83"
-            }
-          ]
+          "history_pushes": 1
         }
       ],
       "note": "the merge drops a tool_result whose tool_use was archived away, so the display list is shorter than the store and every index shifts"
@@ -1666,80 +867,14 @@
         {
           "op": "log",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "msg_id": "m1",
-                "role": "user",
-                "content": "go",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "go"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "msg_id": "m2",
-                "role": "assistant",
-                "content": "calling",
-                "images": [],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "calling"
-                  },
-                  {
-                    "type": "tool_use",
-                    "id": "t1",
-                    "name": "read_file",
-                    "input": {
-                      "path": "notes.md"
-                    }
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 1,
-            "total_turns": 1
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
           "args": {
             "ref": "last"
           },
-          "history_pushes": 0,
-          "ok": {
-            "msg_id": "m2",
-            "role": "assistant",
-            "content": "calling",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "calling"
-              },
-              {
-                "type": "tool_use",
-                "id": "t1",
-                "name": "read_file",
-                "input": {
-                  "path": "notes.md"
-                }
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
-          }
+          "history_pushes": 0
         }
       ],
       "note": "the loop opens and immediately ends; the closing branch never runs"
@@ -1748,7 +883,22 @@
       "name": "image data is embedded for the active tail only",
       "archived": [
         {
-          "$ref": "s11"
+          "content": "archived image",
+          "content_blocks": [
+            {
+              "text": "archived image",
+              "type": "text"
+            }
+          ],
+          "images": [
+            {
+              "caption": "old",
+              "path": "<tmp>/pic.bin"
+            }
+          ],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
       "active": [
@@ -1779,7 +929,22 @@
       ],
       "initial_display_history": [
         {
-          "$ref": "s11"
+          "content": "archived image",
+          "content_blocks": [
+            {
+              "text": "archived image",
+              "type": "text"
+            }
+          ],
+          "images": [
+            {
+              "caption": "old",
+              "path": "<tmp>/pic.bin"
+            }
+          ],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
           "msg_id": "m2",
@@ -1806,86 +971,21 @@
           "args": {
             "count": 2
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s11"
-              },
-              {
-                "msg_id": "m2",
-                "role": "user",
-                "content": "active image",
-                "images": [
-                  {
-                    "path": "<tmp>/pic.bin",
-                    "caption": "new",
-                    "data": "aW1hZ2UgYnl0ZXM="
-                  }
-                ],
-                "content_blocks": [
-                  {
-                    "type": "text",
-                    "text": "active image"
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 1,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 1,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "history_page",
           "args": {
             "before": "active"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s11"
-              }
-            ],
-            "active_start": 1,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 1,
-            "total_messages": 2,
-            "total_turns": 2
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
           "args": {
             "ref": "last"
           },
-          "history_pushes": 0,
-          "ok": {
-            "msg_id": "m2",
-            "role": "user",
-            "content": "active image",
-            "images": [
-              {
-                "path": "<tmp>/pic.bin",
-                "caption": "new"
-              }
-            ],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "active image"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
-          }
+          "history_pushes": 0
         },
         {
           "op": "edit",
@@ -1893,31 +993,7 @@
             "ref": "last",
             "content": "still clean"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m2",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "msg_id": "m2",
-              "role": "user",
-              "content": "still clean",
-              "images": [
-                {
-                  "path": "<tmp>/pic.bin",
-                  "caption": "new"
-                }
-              ],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "still clean"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         }
       ],
       "note": "archived scrollback keeps image refs as labels; the active tail carries bytes"
@@ -1953,7 +1029,17 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s16"
+          "content": "last user",
+          "content_blocks": [
+            {
+              "text": "last user",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
           "msg_id": "m4",
@@ -1976,20 +1062,7 @@
           "args": {
             "ref": "last"
           },
-          "history_pushes": 0,
-          "ok": {
-            "msg_id": "m4",
-            "role": "assistant",
-            "content": "last assistant",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "last assistant"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
@@ -1997,10 +1070,7 @@
             "ref": "last",
             "role": "user"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s16"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
@@ -2008,10 +1078,7 @@
             "ref": "-1",
             "role": "user"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s16"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
@@ -2019,30 +1086,14 @@
             "ref": "1",
             "role": "assistant"
           },
-          "history_pushes": 0,
-          "ok": {
-            "msg_id": "m2",
-            "role": "assistant",
-            "content": "first assistant",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first assistant"
-              }
-            ],
-            "timestamp": "2026-01-01T00:00:00Z"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
           "args": {
             "ref": "m3"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s16"
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
@@ -2140,39 +1191,7 @@
             "ref": "m1",
             "content": "Edited by id"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m1",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "Edited by id",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by id"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Second",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Second"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "edit",
@@ -2180,39 +1199,7 @@
             "ref": "last",
             "content": "Edited by last"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m2",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "Edited by id",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by id"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by last",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by last"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "edit",
@@ -2220,39 +1207,7 @@
             "ref": "-1",
             "content": "Edited by -1"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m2",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "Edited by id",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by id"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by -1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by -1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "edit",
@@ -2260,39 +1215,7 @@
             "ref": "1",
             "content": "Edited by 1"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m1",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "Edited by 1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by 1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by -1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by -1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "edit",
@@ -2300,39 +1223,7 @@
             "ref": "1",
             "content": ""
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m1",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": ""
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "Edited by -1",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Edited by -1"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "edit",
@@ -2397,13 +1288,53 @@
       "archived": [],
       "active": [
         {
-          "$ref": "s13"
+          "content": "do the thing",
+          "content_blocks": [
+            {
+              "text": "do the thing",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s9"
+          "content": "checking",
+          "content_blocks": [
+            {
+              "text": "checking",
+              "type": "text"
+            },
+            {
+              "id": "t1",
+              "input": {
+                "path": "notes.md"
+              },
+              "name": "read_file",
+              "type": "tool_use"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s10"
+          "content": "file contents",
+          "content_blocks": [
+            {
+              "content": "file contents",
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
           "msg_id": "m4",
@@ -2422,10 +1353,48 @@
       "files": [],
       "initial_display_history": [
         {
-          "$ref": "s13"
+          "content": "do the thing",
+          "content_blocks": [
+            {
+              "text": "do the thing",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s6"
+          "content": "checking\ndone",
+          "content_blocks": [
+            {
+              "text": "checking",
+              "type": "text"
+            },
+            {
+              "id": "t1",
+              "input": {
+                "path": "notes.md"
+              },
+              "name": "read_file",
+              "type": "tool_use"
+            },
+            {
+              "content": "file contents",
+              "is_error": false,
+              "tool_use_id": "t1",
+              "type": "tool_result"
+            },
+            {
+              "text": "done",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m4",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
       "steps": [
@@ -2435,35 +1404,7 @@
             "ref": "2",
             "content": "merged edit"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m4",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "$ref": "s13"
-            },
-            {
-              "$ref": "s9"
-            },
-            {
-              "$ref": "s10"
-            },
-            {
-              "msg_id": "m4",
-              "role": "assistant",
-              "content": "merged edit",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "merged edit"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "edit",
@@ -2471,38 +1412,10 @@
             "ref": "last",
             "content": "merged last"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "m4",
-            "edited": true
-          },
-          "engine_after": [
-            {
-              "$ref": "s13"
-            },
-            {
-              "$ref": "s9"
-            },
-            {
-              "$ref": "s10"
-            },
-            {
-              "msg_id": "m4",
-              "role": "assistant",
-              "content": "merged last",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "merged last"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         }
       ],
-      "note": "the merge folds the tool loop into one assistant turn, so `2` is the merged assistant — and the edit lands on the CLOSING message m4, because that is the msg_id the merged message carries. m2, the message that opened the loop, is unreachable by relative ref"
+      "note": "the merge folds the tool loop into one assistant turn, so `2` is the merged assistant \u2014 and the edit lands on the CLOSING message m4, because that is the msg_id the merged message carries. m2, the message that opened the loop, is unreachable by relative ref"
     },
     {
       "name": "delete",
@@ -2570,93 +1483,14 @@
               "m1"
             ]
           },
-          "history_pushes": 1,
-          "ok": {
-            "deleted": [
-              "m1"
-            ]
-          },
-          "engine_after": [
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "B",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "B"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "C",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "C"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m4",
-              "role": "assistant",
-              "content": "D",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "D"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "delete",
           "args": {
             "refs": "last"
           },
-          "history_pushes": 1,
-          "ok": {
-            "deleted": [
-              "m4"
-            ]
-          },
-          "engine_after": [
-            {
-              "msg_id": "m2",
-              "role": "assistant",
-              "content": "B",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "B"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "C",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "C"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "delete",
@@ -2666,26 +1500,11 @@
               "nope"
             ]
           },
-          "history_pushes": 1,
+          "history_pushes": 0,
           "err": {
             "code": "not_found",
             "message": "message not found: nope"
-          },
-          "engine_after": [
-            {
-              "msg_id": "m3",
-              "role": "user",
-              "content": "C",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "C"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "delete",
@@ -2714,10 +1533,7 @@
           "args": {
             "refs": []
           },
-          "history_pushes": 0,
-          "ok": {
-            "deleted": []
-          }
+          "history_pushes": 0
         },
         {
           "op": "delete",
@@ -2740,18 +1556,56 @@
           "history_pushes": 0,
           "err": {
             "code": "not_found",
-            "message": "Message index 99 out of range (conversation has 1 messages)"
+            "message": "Message index 99 out of range (conversation has 2 messages)"
           }
         }
       ],
-      "note": "refs resolve first, then delete runs in order — a failure mid-list keeps the deletions that already happened"
+      "note": "refs resolve first, then delete runs in order \u2014 a failure mid-list keeps the deletions that already happened"
     },
     {
       "name": "delete resolves every ref before deleting any",
       "archived": [],
-      "active": {
-        "$ref": "s5"
-      },
+      "active": [
+        {
+          "content": "A",
+          "content_blocks": [
+            {
+              "text": "A",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "B",
+          "content_blocks": [
+            {
+              "text": "B",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "assistant",
+          "timestamp": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "C",
+          "content_blocks": [
+            {
+              "text": "C",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m3",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
       "files": [],
       "steps": [
         {
@@ -2762,16 +1616,7 @@
               "-2"
             ]
           },
-          "history_pushes": 2,
-          "ok": {
-            "deleted": [
-              "m3",
-              "m2"
-            ]
-          },
-          "engine_after": {
-            "$ref": "s84"
-          }
+          "history_pushes": 2
         }
       ],
       "note": "both refs are relative; the second resolves against the pre-delete list, so `last` and `-2` name two different messages rather than shifting"
@@ -2838,30 +1683,21 @@
         {
           "op": "list_alternatives",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s8"
-          }
+          "history_pushes": 0
         },
         {
           "op": "list_alternatives",
           "args": {
             "ref": "a2"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s8"
-          }
+          "history_pushes": 0
         },
         {
           "op": "list_alternatives",
           "args": {
             "ref": "last"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s8"
-          }
+          "history_pushes": 0
         },
         {
           "op": "list_alternatives",
@@ -2890,113 +1726,49 @@
           "args": {
             "direction": "prev"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "First answer"
-          },
-          "engine_after": {
-            "$ref": "s3"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "direction": "prev"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "First answer"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "direction": "next"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s2"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "direction": "next"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "direction": "first"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "First answer"
-          },
-          "engine_after": {
-            "$ref": "s3"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "direction": "last"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s2"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "direction": "previous"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "First answer"
-          },
-          "engine_after": {
-            "$ref": "s3"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
@@ -3012,51 +1784,21 @@
         {
           "op": "alt",
           "args": {},
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s2"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "index": 0
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "First answer"
-          },
-          "engine_after": {
-            "$ref": "s3"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "index": 1
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s2"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
@@ -3074,34 +1816,14 @@
           "args": {
             "position": 1
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "First answer"
-          },
-          "engine_after": {
-            "$ref": "s3"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "position": 2
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s2"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
@@ -3132,17 +1854,7 @@
             "position": 2,
             "direction": "last"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "First answer"
-          },
-          "engine_after": {
-            "$ref": "s3"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
@@ -3150,59 +1862,28 @@
             "position": 1,
             "direction": "last"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "First answer"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "index": 0.5
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          },
-          "engine_after": {
-            "$ref": "s2"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "index": -1
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
           "args": {
             "position": 1.5
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "content": "Second answer"
-          }
+          "history_pushes": 1
         },
         {
           "op": "alt",
@@ -3219,10 +1900,7 @@
         {
           "op": "list_alternatives",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s8"
-          }
+          "history_pushes": 0
         }
       ]
     },
@@ -3314,59 +1992,21 @@
         {
           "op": "list_alternatives",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "ref": "a2",
-            "alt_index": null,
-            "position": null,
-            "alt_count": 0,
-            "alternatives": []
-          }
+          "history_pushes": 0
         },
         {
           "op": "list_alternatives",
           "args": {
             "ref": "last"
           },
-          "history_pushes": 0,
-          "ok": {
-            "ref": "a2",
-            "alt_index": null,
-            "position": null,
-            "alt_count": 0,
-            "alternatives": []
-          }
+          "history_pushes": 0
         },
         {
           "op": "list_alternatives",
           "args": {
             "ref": "a1"
           },
-          "history_pushes": 0,
-          "ok": {
-            "ref": "a1",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "alternatives": [
-              {
-                "index": 0,
-                "position": 1,
-                "active": false,
-                "content": "old A",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "index": 1,
-                "position": 2,
-                "active": true,
-                "content": "old B",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ]
-          }
+          "history_pushes": 0
         },
         {
           "op": "alt",
@@ -3377,87 +2017,7 @@
           "err": {
             "code": "invalid_request",
             "message": "message a2 has no alternate responses"
-          },
-          "engine_after": [
-            {
-              "msg_id": "u1",
-              "role": "user",
-              "content": "first",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "first"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "a1",
-              "role": "assistant",
-              "content": "old B",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "old B"
-                }
-              ],
-              "alt_index": 1,
-              "alt_count": 2,
-              "alternatives": [
-                {
-                  "content": "old A",
-                  "images": [],
-                  "content_blocks": [
-                    {
-                      "type": "text",
-                      "text": "old A"
-                    }
-                  ],
-                  "timestamp": "2026-01-01T00:00:00Z"
-                },
-                {
-                  "content": "old B",
-                  "images": [],
-                  "content_blocks": [
-                    {
-                      "type": "text",
-                      "text": "old B"
-                    }
-                  ],
-                  "timestamp": "2026-01-01T00:00:01Z"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "u2",
-              "role": "user",
-              "content": "second",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "second"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "a2",
-              "role": "assistant",
-              "content": "newest, no alternates",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "newest, no alternates"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "alt",
@@ -3465,1188 +2025,10 @@
             "ref": "a1",
             "direction": "prev"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a1",
-            "alt_index": 0,
-            "position": 1,
-            "alt_count": 2,
-            "content": "old A"
-          },
-          "engine_after": [
-            {
-              "msg_id": "u1",
-              "role": "user",
-              "content": "first",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "first"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "a1",
-              "role": "assistant",
-              "content": "old A",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "old A"
-                }
-              ],
-              "alt_index": 0,
-              "alt_count": 2,
-              "alternatives": [
-                {
-                  "content": "old A",
-                  "images": [],
-                  "content_blocks": [
-                    {
-                      "type": "text",
-                      "text": "old A"
-                    }
-                  ],
-                  "timestamp": "2026-01-01T00:00:00Z"
-                },
-                {
-                  "content": "old B",
-                  "images": [],
-                  "content_blocks": [
-                    {
-                      "type": "text",
-                      "text": "old B"
-                    }
-                  ],
-                  "timestamp": "2026-01-01T00:00:01Z"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "u2",
-              "role": "user",
-              "content": "second",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "second"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "a2",
-              "role": "assistant",
-              "content": "newest, no alternates",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "newest, no alternates"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          "history_pushes": 1
         }
       ],
-      "note": "the newest assistant is what an absent ref means, and it is not the one with alternates — so a scan that ran forwards would land on the wrong message and succeed"
-    },
-    {
-      "name": "the default log bound is 64 user turns",
-      "archived": [],
-      "active": [
-        {
-          "content": "turn 1",
-          "content_blocks": [
-            {
-              "text": "turn 1",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m1",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "$ref": "s74"
-        },
-        {
-          "$ref": "s80"
-        },
-        {
-          "$ref": "s77"
-        },
-        {
-          "$ref": "s76"
-        },
-        {
-          "$ref": "s78"
-        },
-        {
-          "$ref": "s81"
-        },
-        {
-          "$ref": "s82"
-        },
-        {
-          "$ref": "s79"
-        },
-        {
-          "$ref": "s27"
-        },
-        {
-          "$ref": "s33"
-        },
-        {
-          "$ref": "s30"
-        },
-        {
-          "$ref": "s23"
-        },
-        {
-          "$ref": "s32"
-        },
-        {
-          "$ref": "s65"
-        },
-        {
-          "$ref": "s62"
-        },
-        {
-          "$ref": "s52"
-        },
-        {
-          "$ref": "s45"
-        },
-        {
-          "$ref": "s64"
-        },
-        {
-          "$ref": "s31"
-        },
-        {
-          "$ref": "s57"
-        },
-        {
-          "$ref": "s21"
-        },
-        {
-          "$ref": "s44"
-        },
-        {
-          "$ref": "s18"
-        },
-        {
-          "$ref": "s39"
-        },
-        {
-          "$ref": "s60"
-        },
-        {
-          "$ref": "s47"
-        },
-        {
-          "$ref": "s63"
-        },
-        {
-          "$ref": "s58"
-        },
-        {
-          "$ref": "s22"
-        },
-        {
-          "$ref": "s69"
-        },
-        {
-          "$ref": "s71"
-        },
-        {
-          "$ref": "s56"
-        },
-        {
-          "$ref": "s46"
-        },
-        {
-          "$ref": "s38"
-        },
-        {
-          "$ref": "s48"
-        },
-        {
-          "$ref": "s20"
-        },
-        {
-          "$ref": "s36"
-        },
-        {
-          "$ref": "s67"
-        },
-        {
-          "$ref": "s72"
-        },
-        {
-          "$ref": "s35"
-        },
-        {
-          "$ref": "s73"
-        },
-        {
-          "$ref": "s34"
-        },
-        {
-          "$ref": "s59"
-        },
-        {
-          "$ref": "s28"
-        },
-        {
-          "$ref": "s70"
-        },
-        {
-          "$ref": "s25"
-        },
-        {
-          "$ref": "s61"
-        },
-        {
-          "$ref": "s50"
-        },
-        {
-          "$ref": "s53"
-        },
-        {
-          "$ref": "s51"
-        },
-        {
-          "$ref": "s26"
-        },
-        {
-          "$ref": "s17"
-        },
-        {
-          "$ref": "s19"
-        },
-        {
-          "$ref": "s37"
-        },
-        {
-          "$ref": "s66"
-        },
-        {
-          "$ref": "s68"
-        },
-        {
-          "$ref": "s41"
-        },
-        {
-          "$ref": "s54"
-        },
-        {
-          "$ref": "s40"
-        },
-        {
-          "$ref": "s55"
-        },
-        {
-          "$ref": "s24"
-        },
-        {
-          "$ref": "s42"
-        },
-        {
-          "$ref": "s49"
-        },
-        {
-          "$ref": "s43"
-        },
-        {
-          "$ref": "s29"
-        }
-      ],
-      "files": [],
-      "steps": [
-        {
-          "op": "log",
-          "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s80"
-              },
-              {
-                "$ref": "s77"
-              },
-              {
-                "$ref": "s76"
-              },
-              {
-                "$ref": "s78"
-              },
-              {
-                "$ref": "s81"
-              },
-              {
-                "$ref": "s82"
-              },
-              {
-                "$ref": "s79"
-              },
-              {
-                "$ref": "s27"
-              },
-              {
-                "$ref": "s33"
-              },
-              {
-                "$ref": "s30"
-              },
-              {
-                "$ref": "s23"
-              },
-              {
-                "$ref": "s32"
-              },
-              {
-                "$ref": "s65"
-              },
-              {
-                "$ref": "s62"
-              },
-              {
-                "$ref": "s52"
-              },
-              {
-                "$ref": "s45"
-              },
-              {
-                "$ref": "s64"
-              },
-              {
-                "$ref": "s31"
-              },
-              {
-                "$ref": "s57"
-              },
-              {
-                "$ref": "s21"
-              },
-              {
-                "$ref": "s44"
-              },
-              {
-                "$ref": "s18"
-              },
-              {
-                "$ref": "s39"
-              },
-              {
-                "$ref": "s60"
-              },
-              {
-                "$ref": "s47"
-              },
-              {
-                "$ref": "s63"
-              },
-              {
-                "$ref": "s58"
-              },
-              {
-                "$ref": "s22"
-              },
-              {
-                "$ref": "s69"
-              },
-              {
-                "$ref": "s71"
-              },
-              {
-                "$ref": "s56"
-              },
-              {
-                "$ref": "s46"
-              },
-              {
-                "$ref": "s38"
-              },
-              {
-                "$ref": "s48"
-              },
-              {
-                "$ref": "s20"
-              },
-              {
-                "$ref": "s36"
-              },
-              {
-                "$ref": "s67"
-              },
-              {
-                "$ref": "s72"
-              },
-              {
-                "$ref": "s35"
-              },
-              {
-                "$ref": "s73"
-              },
-              {
-                "$ref": "s34"
-              },
-              {
-                "$ref": "s59"
-              },
-              {
-                "$ref": "s28"
-              },
-              {
-                "$ref": "s70"
-              },
-              {
-                "$ref": "s25"
-              },
-              {
-                "$ref": "s61"
-              },
-              {
-                "$ref": "s50"
-              },
-              {
-                "$ref": "s53"
-              },
-              {
-                "$ref": "s51"
-              },
-              {
-                "$ref": "s26"
-              },
-              {
-                "$ref": "s17"
-              },
-              {
-                "$ref": "s19"
-              },
-              {
-                "$ref": "s37"
-              },
-              {
-                "$ref": "s66"
-              },
-              {
-                "$ref": "s68"
-              },
-              {
-                "$ref": "s41"
-              },
-              {
-                "$ref": "s54"
-              },
-              {
-                "$ref": "s40"
-              },
-              {
-                "$ref": "s55"
-              },
-              {
-                "$ref": "s24"
-              },
-              {
-                "$ref": "s42"
-              },
-              {
-                "$ref": "s49"
-              },
-              {
-                "$ref": "s43"
-              },
-              {
-                "$ref": "s29"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 2,
-            "next_before": 2,
-            "has_more_before": true,
-            "global_active_start": 0,
-            "total_messages": 66,
-            "total_turns": 66
-          }
-        },
-        {
-          "op": "log",
-          "args": {
-            "turns": 65
-          },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s74"
-              },
-              {
-                "$ref": "s80"
-              },
-              {
-                "$ref": "s77"
-              },
-              {
-                "$ref": "s76"
-              },
-              {
-                "$ref": "s78"
-              },
-              {
-                "$ref": "s81"
-              },
-              {
-                "$ref": "s82"
-              },
-              {
-                "$ref": "s79"
-              },
-              {
-                "$ref": "s27"
-              },
-              {
-                "$ref": "s33"
-              },
-              {
-                "$ref": "s30"
-              },
-              {
-                "$ref": "s23"
-              },
-              {
-                "$ref": "s32"
-              },
-              {
-                "$ref": "s65"
-              },
-              {
-                "$ref": "s62"
-              },
-              {
-                "$ref": "s52"
-              },
-              {
-                "$ref": "s45"
-              },
-              {
-                "$ref": "s64"
-              },
-              {
-                "$ref": "s31"
-              },
-              {
-                "$ref": "s57"
-              },
-              {
-                "$ref": "s21"
-              },
-              {
-                "$ref": "s44"
-              },
-              {
-                "$ref": "s18"
-              },
-              {
-                "$ref": "s39"
-              },
-              {
-                "$ref": "s60"
-              },
-              {
-                "$ref": "s47"
-              },
-              {
-                "$ref": "s63"
-              },
-              {
-                "$ref": "s58"
-              },
-              {
-                "$ref": "s22"
-              },
-              {
-                "$ref": "s69"
-              },
-              {
-                "$ref": "s71"
-              },
-              {
-                "$ref": "s56"
-              },
-              {
-                "$ref": "s46"
-              },
-              {
-                "$ref": "s38"
-              },
-              {
-                "$ref": "s48"
-              },
-              {
-                "$ref": "s20"
-              },
-              {
-                "$ref": "s36"
-              },
-              {
-                "$ref": "s67"
-              },
-              {
-                "$ref": "s72"
-              },
-              {
-                "$ref": "s35"
-              },
-              {
-                "$ref": "s73"
-              },
-              {
-                "$ref": "s34"
-              },
-              {
-                "$ref": "s59"
-              },
-              {
-                "$ref": "s28"
-              },
-              {
-                "$ref": "s70"
-              },
-              {
-                "$ref": "s25"
-              },
-              {
-                "$ref": "s61"
-              },
-              {
-                "$ref": "s50"
-              },
-              {
-                "$ref": "s53"
-              },
-              {
-                "$ref": "s51"
-              },
-              {
-                "$ref": "s26"
-              },
-              {
-                "$ref": "s17"
-              },
-              {
-                "$ref": "s19"
-              },
-              {
-                "$ref": "s37"
-              },
-              {
-                "$ref": "s66"
-              },
-              {
-                "$ref": "s68"
-              },
-              {
-                "$ref": "s41"
-              },
-              {
-                "$ref": "s54"
-              },
-              {
-                "$ref": "s40"
-              },
-              {
-                "$ref": "s55"
-              },
-              {
-                "$ref": "s24"
-              },
-              {
-                "$ref": "s42"
-              },
-              {
-                "$ref": "s49"
-              },
-              {
-                "$ref": "s43"
-              },
-              {
-                "$ref": "s29"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 1,
-            "next_before": 1,
-            "has_more_before": true,
-            "global_active_start": 0,
-            "total_messages": 66,
-            "total_turns": 66
-          }
-        },
-        {
-          "op": "log",
-          "args": {
-            "turns": 66
-          },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "content": "turn 1",
-                "content_blocks": [
-                  {
-                    "text": "turn 1",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "m1",
-                "role": "user",
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "$ref": "s74"
-              },
-              {
-                "$ref": "s80"
-              },
-              {
-                "$ref": "s77"
-              },
-              {
-                "$ref": "s76"
-              },
-              {
-                "$ref": "s78"
-              },
-              {
-                "$ref": "s81"
-              },
-              {
-                "$ref": "s82"
-              },
-              {
-                "$ref": "s79"
-              },
-              {
-                "$ref": "s27"
-              },
-              {
-                "$ref": "s33"
-              },
-              {
-                "$ref": "s30"
-              },
-              {
-                "$ref": "s23"
-              },
-              {
-                "$ref": "s32"
-              },
-              {
-                "$ref": "s65"
-              },
-              {
-                "$ref": "s62"
-              },
-              {
-                "$ref": "s52"
-              },
-              {
-                "$ref": "s45"
-              },
-              {
-                "$ref": "s64"
-              },
-              {
-                "$ref": "s31"
-              },
-              {
-                "$ref": "s57"
-              },
-              {
-                "$ref": "s21"
-              },
-              {
-                "$ref": "s44"
-              },
-              {
-                "$ref": "s18"
-              },
-              {
-                "$ref": "s39"
-              },
-              {
-                "$ref": "s60"
-              },
-              {
-                "$ref": "s47"
-              },
-              {
-                "$ref": "s63"
-              },
-              {
-                "$ref": "s58"
-              },
-              {
-                "$ref": "s22"
-              },
-              {
-                "$ref": "s69"
-              },
-              {
-                "$ref": "s71"
-              },
-              {
-                "$ref": "s56"
-              },
-              {
-                "$ref": "s46"
-              },
-              {
-                "$ref": "s38"
-              },
-              {
-                "$ref": "s48"
-              },
-              {
-                "$ref": "s20"
-              },
-              {
-                "$ref": "s36"
-              },
-              {
-                "$ref": "s67"
-              },
-              {
-                "$ref": "s72"
-              },
-              {
-                "$ref": "s35"
-              },
-              {
-                "$ref": "s73"
-              },
-              {
-                "$ref": "s34"
-              },
-              {
-                "$ref": "s59"
-              },
-              {
-                "$ref": "s28"
-              },
-              {
-                "$ref": "s70"
-              },
-              {
-                "$ref": "s25"
-              },
-              {
-                "$ref": "s61"
-              },
-              {
-                "$ref": "s50"
-              },
-              {
-                "$ref": "s53"
-              },
-              {
-                "$ref": "s51"
-              },
-              {
-                "$ref": "s26"
-              },
-              {
-                "$ref": "s17"
-              },
-              {
-                "$ref": "s19"
-              },
-              {
-                "$ref": "s37"
-              },
-              {
-                "$ref": "s66"
-              },
-              {
-                "$ref": "s68"
-              },
-              {
-                "$ref": "s41"
-              },
-              {
-                "$ref": "s54"
-              },
-              {
-                "$ref": "s40"
-              },
-              {
-                "$ref": "s55"
-              },
-              {
-                "$ref": "s24"
-              },
-              {
-                "$ref": "s42"
-              },
-              {
-                "$ref": "s49"
-              },
-              {
-                "$ref": "s43"
-              },
-              {
-                "$ref": "s29"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 66,
-            "total_turns": 66
-          }
-        },
-        {
-          "op": "log",
-          "args": {
-            "turns": 67
-          },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "content": "turn 1",
-                "content_blocks": [
-                  {
-                    "text": "turn 1",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "m1",
-                "role": "user",
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "$ref": "s74"
-              },
-              {
-                "$ref": "s80"
-              },
-              {
-                "$ref": "s77"
-              },
-              {
-                "$ref": "s76"
-              },
-              {
-                "$ref": "s78"
-              },
-              {
-                "$ref": "s81"
-              },
-              {
-                "$ref": "s82"
-              },
-              {
-                "$ref": "s79"
-              },
-              {
-                "$ref": "s27"
-              },
-              {
-                "$ref": "s33"
-              },
-              {
-                "$ref": "s30"
-              },
-              {
-                "$ref": "s23"
-              },
-              {
-                "$ref": "s32"
-              },
-              {
-                "$ref": "s65"
-              },
-              {
-                "$ref": "s62"
-              },
-              {
-                "$ref": "s52"
-              },
-              {
-                "$ref": "s45"
-              },
-              {
-                "$ref": "s64"
-              },
-              {
-                "$ref": "s31"
-              },
-              {
-                "$ref": "s57"
-              },
-              {
-                "$ref": "s21"
-              },
-              {
-                "$ref": "s44"
-              },
-              {
-                "$ref": "s18"
-              },
-              {
-                "$ref": "s39"
-              },
-              {
-                "$ref": "s60"
-              },
-              {
-                "$ref": "s47"
-              },
-              {
-                "$ref": "s63"
-              },
-              {
-                "$ref": "s58"
-              },
-              {
-                "$ref": "s22"
-              },
-              {
-                "$ref": "s69"
-              },
-              {
-                "$ref": "s71"
-              },
-              {
-                "$ref": "s56"
-              },
-              {
-                "$ref": "s46"
-              },
-              {
-                "$ref": "s38"
-              },
-              {
-                "$ref": "s48"
-              },
-              {
-                "$ref": "s20"
-              },
-              {
-                "$ref": "s36"
-              },
-              {
-                "$ref": "s67"
-              },
-              {
-                "$ref": "s72"
-              },
-              {
-                "$ref": "s35"
-              },
-              {
-                "$ref": "s73"
-              },
-              {
-                "$ref": "s34"
-              },
-              {
-                "$ref": "s59"
-              },
-              {
-                "$ref": "s28"
-              },
-              {
-                "$ref": "s70"
-              },
-              {
-                "$ref": "s25"
-              },
-              {
-                "$ref": "s61"
-              },
-              {
-                "$ref": "s50"
-              },
-              {
-                "$ref": "s53"
-              },
-              {
-                "$ref": "s51"
-              },
-              {
-                "$ref": "s26"
-              },
-              {
-                "$ref": "s17"
-              },
-              {
-                "$ref": "s19"
-              },
-              {
-                "$ref": "s37"
-              },
-              {
-                "$ref": "s66"
-              },
-              {
-                "$ref": "s68"
-              },
-              {
-                "$ref": "s41"
-              },
-              {
-                "$ref": "s54"
-              },
-              {
-                "$ref": "s40"
-              },
-              {
-                "$ref": "s55"
-              },
-              {
-                "$ref": "s24"
-              },
-              {
-                "$ref": "s42"
-              },
-              {
-                "$ref": "s49"
-              },
-              {
-                "$ref": "s43"
-              },
-              {
-                "$ref": "s29"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 66,
-            "total_turns": 66
-          }
-        }
-      ],
-      "note": "66 user messages, so the unbounded default and the 64-turn default differ; nothing smaller than this can tell them apart"
+      "note": "the newest assistant is what an absent ref means, and it is not the one with alternates \u2014 so a scan that ran forwards would land on the wrong message and succeed"
     },
     {
       "name": "alternatives with an out-of-range stored alt_index",
@@ -4678,9 +2060,41 @@
           ],
           "alt_index": 7,
           "alt_count": 3,
-          "alternatives": {
-            "$ref": "s7"
-          },
+          "alternatives": [
+            {
+              "content": "one",
+              "content_blocks": [
+                {
+                  "text": "one",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:00Z"
+            },
+            {
+              "content": "two",
+              "content_blocks": [
+                {
+                  "text": "two",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:01Z"
+            },
+            {
+              "content": "three",
+              "content_blocks": [
+                {
+                  "text": "three",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:02Z"
+            }
+          ],
           "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
@@ -4712,9 +2126,41 @@
           ],
           "alt_index": 2,
           "alt_count": 3,
-          "alternatives": {
-            "$ref": "s7"
-          },
+          "alternatives": [
+            {
+              "content": "one",
+              "content_blocks": [
+                {
+                  "text": "one",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:00Z"
+            },
+            {
+              "content": "two",
+              "content_blocks": [
+                {
+                  "text": "two",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:01Z"
+            },
+            {
+              "content": "three",
+              "content_blocks": [
+                {
+                  "text": "three",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:02Z"
+            }
+          ],
           "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
@@ -4745,9 +2191,41 @@
           ],
           "alt_index": 2,
           "alt_count": 3,
-          "alternatives": {
-            "$ref": "s7"
-          },
+          "alternatives": [
+            {
+              "content": "one",
+              "content_blocks": [
+                {
+                  "text": "one",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:00Z"
+            },
+            {
+              "content": "two",
+              "content_blocks": [
+                {
+                  "text": "two",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:01Z"
+            },
+            {
+              "content": "three",
+              "content_blocks": [
+                {
+                  "text": "three",
+                  "type": "text"
+                }
+              ],
+              "images": [],
+              "timestamp": "2026-01-01T00:00:02Z"
+            }
+          ],
           "timestamp": "2026-01-01T00:00:00Z"
         }
       ],
@@ -4755,86 +2233,14 @@
         {
           "op": "list_alternatives",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 2,
-            "position": 3,
-            "alt_count": 3,
-            "alternatives": [
-              {
-                "index": 0,
-                "position": 1,
-                "active": false,
-                "content": "one",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "index": 1,
-                "position": 2,
-                "active": false,
-                "content": "two",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:01Z"
-              },
-              {
-                "index": 2,
-                "position": 3,
-                "active": true,
-                "content": "three",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:02Z"
-              }
-            ]
-          }
+          "history_pushes": 0
         },
         {
           "op": "alt",
           "args": {
             "direction": "prev"
           },
-          "history_pushes": 1,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 3,
-            "content": "two"
-          },
-          "engine_after": [
-            {
-              "msg_id": "u1",
-              "role": "user",
-              "content": "Prompt",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Prompt"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "a2",
-              "role": "assistant",
-              "content": "two",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "two"
-                }
-              ],
-              "alt_index": 1,
-              "alt_count": 3,
-              "alternatives": {
-                "$ref": "s7"
-              },
-              "timestamp": "2026-01-01T00:00:01Z"
-            }
-          ]
+          "history_pushes": 1
         }
       ],
       "note": "alt_index is clamped to count-1 before `prev`/`next` move from it"
@@ -4875,14 +2281,7 @@
         {
           "op": "list_alternatives",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "ref": "a2",
-            "alt_index": null,
-            "position": null,
-            "alt_count": 0,
-            "alternatives": []
-          }
+          "history_pushes": 0
         },
         {
           "op": "alt",
@@ -4893,35 +2292,7 @@
           "err": {
             "code": "invalid_request",
             "message": "message a2 has no alternate responses"
-          },
-          "engine_after": [
-            {
-              "msg_id": "u1",
-              "role": "user",
-              "content": "Prompt",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Prompt"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "a2",
-              "role": "assistant",
-              "content": "Only answer",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Only answer"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "alt",
@@ -4974,22 +2345,7 @@
           "err": {
             "code": "not_found",
             "message": "No assistant messages in conversation"
-          },
-          "engine_after": [
-            {
-              "msg_id": "u1",
-              "role": "user",
-              "content": "Prompt",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Prompt"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            }
-          ]
+          }
         },
         {
           "op": "list_alternatives",
@@ -5076,37 +2432,7 @@
         {
           "op": "list_alternatives",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "ref": "a2",
-            "alt_index": 1,
-            "position": 2,
-            "alt_count": 2,
-            "alternatives": [
-              {
-                "index": 0,
-                "position": 1,
-                "active": false,
-                "content": "First",
-                "images": [
-                  {
-                    "path": "<tmp>/pic.bin",
-                    "caption": "alt one",
-                    "data": "aW1hZ2UgYnl0ZXM="
-                  }
-                ],
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "index": 1,
-                "position": 2,
-                "active": true,
-                "content": "Second",
-                "images": [],
-                "timestamp": "2026-01-01T00:00:01Z"
-              }
-            ]
-          }
+          "history_pushes": 0
         }
       ],
       "note": "list_alternatives embeds data into each alternative's images, unlike archived scrollback"
@@ -5114,9 +2440,21 @@
     {
       "name": "inject_system",
       "archived": [],
-      "active": {
-        "$ref": "s84"
-      },
+      "active": [
+        {
+          "content": "A",
+          "content_blocks": [
+            {
+              "text": "A",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m1",
+          "role": "user",
+          "timestamp": "2026-01-01T00:00:00Z"
+        }
+      ],
       "files": [],
       "steps": [
         {
@@ -5124,38 +2462,7 @@
           "args": {
             "text": "Stop using actions"
           },
-          "history_pushes": 1,
-          "ok": {
-            "injected": true
-          },
-          "engine_after": [
-            {
-              "msg_id": "m1",
-              "role": "user",
-              "content": "A",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "A"
-                }
-              ],
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "msg_id": "<uuid>",
-              "role": "system",
-              "content": "Stop using actions",
-              "images": [],
-              "content_blocks": [
-                {
-                  "type": "text",
-                  "text": "Stop using actions"
-                }
-              ],
-              "timestamp": "<local-now>"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "inject_system",
@@ -5171,51 +2478,7 @@
           "args": {
             "text": ""
           },
-          "history_pushes": 1,
-          "ok": {
-            "injected": true
-          },
-          "engine_after": [
-            {
-              "content": "A",
-              "content_blocks": [
-                {
-                  "text": "A",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "msg_id": "m1",
-              "role": "user",
-              "timestamp": "2026-01-01T00:00:00Z"
-            },
-            {
-              "content": "Stop using actions",
-              "content_blocks": [
-                {
-                  "text": "Stop using actions",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "msg_id": "<uuid>",
-              "role": "system",
-              "timestamp": "<local-now>"
-            },
-            {
-              "content": "",
-              "content_blocks": [
-                {
-                  "text": "",
-                  "type": "text"
-                }
-              ],
-              "images": [],
-              "msg_id": "<uuid>",
-              "role": "system",
-              "timestamp": "<local-now>"
-            }
-          ]
+          "history_pushes": 1
         },
         {
           "op": "inject_system",
@@ -5231,57 +2494,7 @@
         {
           "op": "log",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "content": "A",
-                "content_blocks": [
-                  {
-                    "text": "A",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "m1",
-                "role": "user",
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "content": "Stop using actions",
-                "content_blocks": [
-                  {
-                    "text": "Stop using actions",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "<uuid>",
-                "role": "system",
-                "timestamp": "<local-now>"
-              },
-              {
-                "content": "",
-                "content_blocks": [
-                  {
-                    "text": "",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "<uuid>",
-                "role": "system",
-                "timestamp": "<local-now>"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 1,
-            "total_turns": 1
-          }
+          "history_pushes": 0
         }
       ],
       "note": "msg_id and timestamp are generated; the fixture records them as markers"
@@ -5304,7 +2517,17 @@
           "timestamp": "2026-01-01T00:00:00Z"
         },
         {
-          "$ref": "s15"
+          "content": "be brief",
+          "content_blocks": [
+            {
+              "text": "be brief",
+              "type": "text"
+            }
+          ],
+          "images": [],
+          "msg_id": "m2",
+          "role": "system",
+          "timestamp": "2026-01-01T00:00:00Z"
         },
         {
           "content": "ok",
@@ -5325,115 +2548,21 @@
         {
           "op": "log",
           "args": {},
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "content": "A",
-                "content_blocks": [
-                  {
-                    "text": "A",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "m1",
-                "role": "user",
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "$ref": "s15"
-              },
-              {
-                "content": "ok",
-                "content_blocks": [
-                  {
-                    "text": "ok",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "m3",
-                "role": "assistant",
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 1,
-            "total_turns": 1
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "role": "system"
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "$ref": "s15"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 1,
-            "total_turns": 1
-          }
+          "history_pushes": 0
         },
         {
           "op": "log",
           "args": {
             "turns": 1
           },
-          "history_pushes": 0,
-          "ok": {
-            "messages": [
-              {
-                "content": "A",
-                "content_blocks": [
-                  {
-                    "text": "A",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "m1",
-                "role": "user",
-                "timestamp": "2026-01-01T00:00:00Z"
-              },
-              {
-                "$ref": "s15"
-              },
-              {
-                "content": "ok",
-                "content_blocks": [
-                  {
-                    "text": "ok",
-                    "type": "text"
-                  }
-                ],
-                "images": [],
-                "msg_id": "m3",
-                "role": "assistant",
-                "timestamp": "2026-01-01T00:00:00Z"
-              }
-            ],
-            "active_start": 0,
-            "cursor": 0,
-            "next_before": 0,
-            "has_more_before": false,
-            "global_active_start": 0,
-            "total_messages": 1,
-            "total_turns": 1
-          }
+          "history_pushes": 0
         },
         {
           "op": "get",
@@ -5441,1413 +2570,10 @@
             "ref": "last",
             "role": "system"
           },
-          "history_pushes": 0,
-          "ok": {
-            "$ref": "s15"
-          }
+          "history_pushes": 0
         }
       ],
       "note": "role filtering and turn counting both have to see it"
     }
-  ],
-  "$shared": {
-    "s0": {
-      "active_start": 0,
-      "cursor": 0,
-      "global_active_start": 0,
-      "has_more_before": false,
-      "messages": [
-        {
-          "content": "A",
-          "content_blocks": [
-            {
-              "text": "A",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m1",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "content": "B",
-          "content_blocks": [
-            {
-              "text": "B",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m2",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "content": "C",
-          "content_blocks": [
-            {
-              "text": "C",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m3",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "content": "D",
-          "content_blocks": [
-            {
-              "text": "D",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m4",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
-      "next_before": 0,
-      "total_messages": 2,
-      "total_turns": 2
-    },
-    "s1": [
-      {
-        "content": "archived one",
-        "content_blocks": [
-          {
-            "text": "archived one",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "archived two",
-        "content_blocks": [
-          {
-            "text": "archived two",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m2",
-        "role": "assistant",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "active three",
-        "content_blocks": [
-          {
-            "text": "active three",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m3",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "active four",
-        "content_blocks": [
-          {
-            "text": "active four",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m4",
-        "role": "assistant",
-        "timestamp": "2026-01-01T00:00:00Z"
-      }
-    ],
-    "s2": [
-      {
-        "content": "Prompt",
-        "content_blocks": [
-          {
-            "text": "Prompt",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "u1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "alt_count": 2,
-        "alt_index": 1,
-        "alternatives": [
-          {
-            "content": "First answer",
-            "content_blocks": [
-              {
-                "text": "First answer",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "timestamp": "2026-01-01T00:00:00Z"
-          },
-          {
-            "content": "Second answer",
-            "content_blocks": [
-              {
-                "text": "Second answer",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "timestamp": "2026-01-01T00:00:01Z"
-          }
-        ],
-        "content": "Second answer",
-        "content_blocks": [
-          {
-            "text": "Second answer",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "a2",
-        "role": "assistant",
-        "timestamp": "2026-01-01T00:00:01Z"
-      }
-    ],
-    "s3": [
-      {
-        "content": "Prompt",
-        "content_blocks": [
-          {
-            "text": "Prompt",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "u1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "alt_count": 2,
-        "alt_index": 0,
-        "alternatives": [
-          {
-            "content": "First answer",
-            "content_blocks": [
-              {
-                "text": "First answer",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "timestamp": "2026-01-01T00:00:00Z"
-          },
-          {
-            "content": "Second answer",
-            "content_blocks": [
-              {
-                "text": "Second answer",
-                "type": "text"
-              }
-            ],
-            "images": [],
-            "timestamp": "2026-01-01T00:00:01Z"
-          }
-        ],
-        "content": "First answer",
-        "content_blocks": [
-          {
-            "text": "First answer",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "a2",
-        "role": "assistant",
-        "timestamp": "2026-01-01T00:00:00Z"
-      }
-    ],
-    "s4": {
-      "active_start": 0,
-      "cursor": 2,
-      "global_active_start": 0,
-      "has_more_before": true,
-      "messages": [
-        {
-          "content": "C",
-          "content_blocks": [
-            {
-              "text": "C",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m3",
-          "role": "user",
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "content": "D",
-          "content_blocks": [
-            {
-              "text": "D",
-              "type": "text"
-            }
-          ],
-          "images": [],
-          "msg_id": "m4",
-          "role": "assistant",
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-      ],
-      "next_before": 2,
-      "total_messages": 2,
-      "total_turns": 2
-    },
-    "s5": [
-      {
-        "content": "A",
-        "content_blocks": [
-          {
-            "text": "A",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "B",
-        "content_blocks": [
-          {
-            "text": "B",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m2",
-        "role": "assistant",
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "C",
-        "content_blocks": [
-          {
-            "text": "C",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m3",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      }
-    ],
-    "s6": {
-      "content": "checking\ndone",
-      "content_blocks": [
-        {
-          "text": "checking",
-          "type": "text"
-        },
-        {
-          "id": "t1",
-          "input": {
-            "path": "notes.md"
-          },
-          "name": "read_file",
-          "type": "tool_use"
-        },
-        {
-          "content": "file contents",
-          "is_error": false,
-          "tool_use_id": "t1",
-          "type": "tool_result"
-        },
-        {
-          "text": "done",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m4",
-      "role": "assistant",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s7": [
-      {
-        "content": "one",
-        "content_blocks": [
-          {
-            "text": "one",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "timestamp": "2026-01-01T00:00:00Z"
-      },
-      {
-        "content": "two",
-        "content_blocks": [
-          {
-            "text": "two",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "timestamp": "2026-01-01T00:00:01Z"
-      },
-      {
-        "content": "three",
-        "content_blocks": [
-          {
-            "text": "three",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "timestamp": "2026-01-01T00:00:02Z"
-      }
-    ],
-    "s8": {
-      "alt_count": 2,
-      "alt_index": 1,
-      "alternatives": [
-        {
-          "active": false,
-          "content": "First answer",
-          "images": [],
-          "index": 0,
-          "position": 1,
-          "timestamp": "2026-01-01T00:00:00Z"
-        },
-        {
-          "active": true,
-          "content": "Second answer",
-          "images": [],
-          "index": 1,
-          "position": 2,
-          "timestamp": "2026-01-01T00:00:01Z"
-        }
-      ],
-      "position": 2,
-      "ref": "a2"
-    },
-    "s9": {
-      "content": "checking",
-      "content_blocks": [
-        {
-          "text": "checking",
-          "type": "text"
-        },
-        {
-          "id": "t1",
-          "input": {
-            "path": "notes.md"
-          },
-          "name": "read_file",
-          "type": "tool_use"
-        }
-      ],
-      "images": [],
-      "msg_id": "m2",
-      "role": "assistant",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s10": {
-      "content": "file contents",
-      "content_blocks": [
-        {
-          "content": "file contents",
-          "is_error": false,
-          "tool_use_id": "t1",
-          "type": "tool_result"
-        }
-      ],
-      "images": [],
-      "msg_id": "m3",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s11": {
-      "content": "archived image",
-      "content_blocks": [
-        {
-          "text": "archived image",
-          "type": "text"
-        }
-      ],
-      "images": [
-        {
-          "caption": "old",
-          "path": "<tmp>/pic.bin"
-        }
-      ],
-      "msg_id": "m1",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s12": {
-      "content": "carrying on",
-      "content_blocks": [
-        {
-          "text": "carrying on",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m2",
-      "role": "assistant",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s13": {
-      "content": "do the thing",
-      "content_blocks": [
-        {
-          "text": "do the thing",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m1",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s14": {
-      "content": "any time",
-      "content_blocks": [
-        {
-          "text": "any time",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m6",
-      "role": "assistant",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s15": {
-      "content": "be brief",
-      "content_blocks": [
-        {
-          "text": "be brief",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m2",
-      "role": "system",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s16": {
-      "content": "last user",
-      "content_blocks": [
-        {
-          "text": "last user",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m3",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s17": {
-      "content": "turn 53",
-      "content_blocks": [
-        {
-          "text": "turn 53",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m53",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s18": {
-      "content": "turn 24",
-      "content_blocks": [
-        {
-          "text": "turn 24",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m24",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s19": {
-      "content": "turn 54",
-      "content_blocks": [
-        {
-          "text": "turn 54",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m54",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s20": {
-      "content": "turn 37",
-      "content_blocks": [
-        {
-          "text": "turn 37",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m37",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s21": {
-      "content": "turn 22",
-      "content_blocks": [
-        {
-          "text": "turn 22",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m22",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s22": {
-      "content": "turn 30",
-      "content_blocks": [
-        {
-          "text": "turn 30",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m30",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s23": {
-      "content": "turn 13",
-      "content_blocks": [
-        {
-          "text": "turn 13",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m13",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s24": {
-      "content": "turn 62",
-      "content_blocks": [
-        {
-          "text": "turn 62",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m62",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s25": {
-      "content": "turn 47",
-      "content_blocks": [
-        {
-          "text": "turn 47",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m47",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s26": {
-      "content": "turn 52",
-      "content_blocks": [
-        {
-          "text": "turn 52",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m52",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s27": {
-      "content": "turn 10",
-      "content_blocks": [
-        {
-          "text": "turn 10",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m10",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s28": {
-      "content": "turn 45",
-      "content_blocks": [
-        {
-          "text": "turn 45",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m45",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s29": {
-      "content": "turn 66",
-      "content_blocks": [
-        {
-          "text": "turn 66",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m66",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s30": {
-      "content": "turn 12",
-      "content_blocks": [
-        {
-          "text": "turn 12",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m12",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s31": {
-      "content": "turn 20",
-      "content_blocks": [
-        {
-          "text": "turn 20",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m20",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s32": {
-      "content": "turn 14",
-      "content_blocks": [
-        {
-          "text": "turn 14",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m14",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s33": {
-      "content": "turn 11",
-      "content_blocks": [
-        {
-          "text": "turn 11",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m11",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s34": {
-      "content": "turn 43",
-      "content_blocks": [
-        {
-          "text": "turn 43",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m43",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s35": {
-      "content": "turn 41",
-      "content_blocks": [
-        {
-          "text": "turn 41",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m41",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s36": {
-      "content": "turn 38",
-      "content_blocks": [
-        {
-          "text": "turn 38",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m38",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s37": {
-      "content": "turn 55",
-      "content_blocks": [
-        {
-          "text": "turn 55",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m55",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s38": {
-      "content": "turn 35",
-      "content_blocks": [
-        {
-          "text": "turn 35",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m35",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s39": {
-      "content": "turn 25",
-      "content_blocks": [
-        {
-          "text": "turn 25",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m25",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s40": {
-      "content": "turn 60",
-      "content_blocks": [
-        {
-          "text": "turn 60",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m60",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s41": {
-      "content": "turn 58",
-      "content_blocks": [
-        {
-          "text": "turn 58",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m58",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s42": {
-      "content": "turn 63",
-      "content_blocks": [
-        {
-          "text": "turn 63",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m63",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s43": {
-      "content": "turn 65",
-      "content_blocks": [
-        {
-          "text": "turn 65",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m65",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s44": {
-      "content": "turn 23",
-      "content_blocks": [
-        {
-          "text": "turn 23",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m23",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s45": {
-      "content": "turn 18",
-      "content_blocks": [
-        {
-          "text": "turn 18",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m18",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s46": {
-      "content": "turn 34",
-      "content_blocks": [
-        {
-          "text": "turn 34",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m34",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s47": {
-      "content": "turn 27",
-      "content_blocks": [
-        {
-          "text": "turn 27",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m27",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s48": {
-      "content": "turn 36",
-      "content_blocks": [
-        {
-          "text": "turn 36",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m36",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s49": {
-      "content": "turn 64",
-      "content_blocks": [
-        {
-          "text": "turn 64",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m64",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s50": {
-      "content": "turn 49",
-      "content_blocks": [
-        {
-          "text": "turn 49",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m49",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s51": {
-      "content": "turn 51",
-      "content_blocks": [
-        {
-          "text": "turn 51",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m51",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s52": {
-      "content": "turn 17",
-      "content_blocks": [
-        {
-          "text": "turn 17",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m17",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s53": {
-      "content": "turn 50",
-      "content_blocks": [
-        {
-          "text": "turn 50",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m50",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s54": {
-      "content": "turn 59",
-      "content_blocks": [
-        {
-          "text": "turn 59",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m59",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s55": {
-      "content": "turn 61",
-      "content_blocks": [
-        {
-          "text": "turn 61",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m61",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s56": {
-      "content": "turn 33",
-      "content_blocks": [
-        {
-          "text": "turn 33",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m33",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s57": {
-      "content": "turn 21",
-      "content_blocks": [
-        {
-          "text": "turn 21",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m21",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s58": {
-      "content": "turn 29",
-      "content_blocks": [
-        {
-          "text": "turn 29",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m29",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s59": {
-      "content": "turn 44",
-      "content_blocks": [
-        {
-          "text": "turn 44",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m44",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s60": {
-      "content": "turn 26",
-      "content_blocks": [
-        {
-          "text": "turn 26",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m26",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s61": {
-      "content": "turn 48",
-      "content_blocks": [
-        {
-          "text": "turn 48",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m48",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s62": {
-      "content": "turn 16",
-      "content_blocks": [
-        {
-          "text": "turn 16",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m16",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s63": {
-      "content": "turn 28",
-      "content_blocks": [
-        {
-          "text": "turn 28",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m28",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s64": {
-      "content": "turn 19",
-      "content_blocks": [
-        {
-          "text": "turn 19",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m19",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s65": {
-      "content": "turn 15",
-      "content_blocks": [
-        {
-          "text": "turn 15",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m15",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s66": {
-      "content": "turn 56",
-      "content_blocks": [
-        {
-          "text": "turn 56",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m56",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s67": {
-      "content": "turn 39",
-      "content_blocks": [
-        {
-          "text": "turn 39",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m39",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s68": {
-      "content": "turn 57",
-      "content_blocks": [
-        {
-          "text": "turn 57",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m57",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s69": {
-      "content": "turn 31",
-      "content_blocks": [
-        {
-          "text": "turn 31",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m31",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s70": {
-      "content": "turn 46",
-      "content_blocks": [
-        {
-          "text": "turn 46",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m46",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s71": {
-      "content": "turn 32",
-      "content_blocks": [
-        {
-          "text": "turn 32",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m32",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s72": {
-      "content": "turn 40",
-      "content_blocks": [
-        {
-          "text": "turn 40",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m40",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s73": {
-      "content": "turn 42",
-      "content_blocks": [
-        {
-          "text": "turn 42",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m42",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s74": {
-      "content": "turn 2",
-      "content_blocks": [
-        {
-          "text": "turn 2",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m2",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s75": {
-      "content": "thanks",
-      "content_blocks": [
-        {
-          "text": "thanks",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m5",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s76": {
-      "content": "turn 5",
-      "content_blocks": [
-        {
-          "text": "turn 5",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m5",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s77": {
-      "content": "turn 4",
-      "content_blocks": [
-        {
-          "text": "turn 4",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m4",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s78": {
-      "content": "turn 6",
-      "content_blocks": [
-        {
-          "text": "turn 6",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m6",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s79": {
-      "content": "turn 9",
-      "content_blocks": [
-        {
-          "text": "turn 9",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m9",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s80": {
-      "content": "turn 3",
-      "content_blocks": [
-        {
-          "text": "turn 3",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m3",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s81": {
-      "content": "turn 7",
-      "content_blocks": [
-        {
-          "text": "turn 7",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m7",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s82": {
-      "content": "turn 8",
-      "content_blocks": [
-        {
-          "text": "turn 8",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m8",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s83": {
-      "content": "next",
-      "content_blocks": [
-        {
-          "text": "next",
-          "type": "text"
-        }
-      ],
-      "images": [],
-      "msg_id": "m3",
-      "role": "user",
-      "timestamp": "2026-01-01T00:00:00Z"
-    },
-    "s84": [
-      {
-        "content": "A",
-        "content_blocks": [
-          {
-            "text": "A",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "m1",
-        "role": "user",
-        "timestamp": "2026-01-01T00:00:00Z"
-      }
-    ]
-  }
+  ]
 }
