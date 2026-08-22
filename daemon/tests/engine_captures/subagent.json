@@ -1983,56 +1983,6 @@
     "date_nonempty": true,
     "time_nonempty": true
   },
-  "registry": [
-    {
-      "name": "generate_image",
-      "description": "Generate an image from a text description via a separate image-generation model, save it to your images directory, and send it to {{user}}. Be specific about subject, mood, and composition."
-    },
-    {
-      "name": "web_search",
-      "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up \u2014 searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough."
-    },
-    {
-      "name": "fetch_url",
-      "description": "Fetch and read the content of a web page, returning its text. Use when a `web_search` result looks relevant and you need the full context, when {{user}} pastes or mentions a URL you should actually read, or when you want to follow a specific page you already have in mind. Best paired with `web_search` to find candidate URLs first. Returns plain text; complex interactive pages, paywalled content, or heavily JS-rendered sites may return limited or no content."
-    },
-    {
-      "name": "activity_heatmap",
-      "description": "View {{user}}'s activity heatmap \u2014 when they typically message you. Use when you want to understand their rhythm: whether now is an unusual time for them to be talking to you, when they're most likely to be around, or whether they've been more or less active lately. Two breakdowns come back over the same window: `hours` gives all 24 hours of the day with a density and a classification (peak/trough/normal), and `weekdays` gives the seven days of the week with a message count and density. Densities are shares of the window, so each breakdown sums to 1. Hours are {{user}}'s own local clock, not UTC \u2014 an hour classified `peak` is one they are reliably awake and talking in, however late it looks. Also returns the message count in the window, the total on record, sessions per day, and an engagement score. The `days` parameter sets the window and defaults to 30; up to 90 days are retained, and asking for more than that returns what exists."
-    },
-    {
-      "name": "roll_dice",
-      "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome \u2014 decisions, games, random prompts, divination-as-play \u2014 not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die."
-    },
-    {
-      "name": "read",
-      "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders \u2014 `search` is for fuzzy content matching, this is for exact lookups and for reading what you found."
-    },
-    {
-      "name": "edit",
-      "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) \u2014 that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once \u2014 add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`."
-    },
-    {
-      "name": "search",
-      "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename \u2014 use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context."
-    },
-    {
-      "name": "delete",
-      "description": "Move a file to a trash folder. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories."
-    },
-    {
-      "name": "git",
-      "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) \u2014 the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. `args` holds only what comes after the subcommand, so `git log --oneline -8` is `subcommand: \"log\"` with `args: [\"--oneline\", \"-8\"]`; repeating the subcommand there is refused. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused \u2014 `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote \u2014 `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours."
-    },
-    {
-      "name": "search_chat_logs",
-      "description": "Search your own conversation history, including compacted older segments and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns matching messages with role, timestamp, source, minting model (when recorded), and an excerpt.\n\nOnly the visible chat text is searched \u2014 your private thinking and tool-call/tool-result payloads are never matched or returned, so this behaves like searching the actual conversation. `query` matches on individual words, not the phrase as a whole: a message matches if it contains *any* of the query terms, and messages containing more of the terms (or the exact phrase) rank higher \u2014 so natural-language queries like \"cache bug overnight\" work and you don't need to reduce them to a single keyword. Keyword results are ranked by relevance blended with recency (recent matches surface above older ones of similar relevance); time-range-only queries are returned oldest-first. `searched_messages` reports the total number of stored messages examined for the query (the full corpus), not the number returned. Excerpts are clipped to `excerpt_chars` (default 360, max 2000) \u2014 raise it when you need full quotes, or follow up with another `search_chat_logs` for adjacent terms/time windows or `search`/`read` against memory to get the full picture.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those \u2014 so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period."
-    },
-    {
-      "name": "model_history",
-      "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running \u2014 for example when auditing personality drift across model switches \u2014 or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted \u2014 these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents \u2014 not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording \u2014 history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded)."
-    }
-  ],
   "tool_subsets": [
     {
       "allowed": [],

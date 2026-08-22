@@ -14,6 +14,7 @@ import {
   templateVars,
   type RegisteredTool,
 } from "../src/tools/subagent";
+import { ALL_TOOLS } from "../src/tools/registry";
 import {
   PathError,
   normalizePromptVisiblePath,
@@ -382,7 +383,11 @@ describe("messageDisplayText", () => {
   });
 });
 
-const registry = fixture.registry as RegisteredTool[];
+const registry: RegisteredTool[] = ALL_TOOLS.map((t) => ({
+  name: t.name,
+  description: t.description,
+  parameters: t.parameters,
+}));
 
 const MCP_TOOLS = ["mcp__hue__off", "mcp__hue__on", "mcp__nanoleaf__scene"];
 
