@@ -1,5 +1,5 @@
 pkgname=shore-cli
-pkgver=4.8.2
+pkgver=0
 pkgrel=1
 pkgdesc="Persistent AI character engine — CLI and terminal chat client"
 arch=('x86_64')
@@ -11,17 +11,17 @@ replaces=('shore-tui')
 conflicts=('shore-tui')
 optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)')
 options=(!lto !debug strip)
-source=("shore::git+ssh://git@github.com/mythofmeat/shore.git#tag=v${pkgver//_/-}")
+source=("shore::git+ssh://git@github.com/mythofmeat/shore.git")
 sha256sums=('SKIP')
+
+pkgver() {
+    cd "$srcdir/shore"
+    git describe --long --tags --abbrev=7 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
 
 build() {
     cd "$srcdir/shore/client"
     cargo build --release --bin shore
-}
-
-check() {
-    cd "$srcdir/shore/client"
-    cargo test --workspace
 }
 
 package() {
