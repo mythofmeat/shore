@@ -99,6 +99,43 @@ describe("what a tick asks to say", () => {
     expect(result.sendMessageText).toBe("on reflection, this");
   });
 
+  test("a throwing round stops the loop and hands the reason back", async () => {
+    const boom = new Error("The engine is currently overloaded, please try again later");
+    const w = world([response([text("<sendMessage>a draft</sendMessage>")])], {
+      generate: async () => {
+        throw boom;
+      },
+    });
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.failedRound).toBe(0);
+    expect(result.failure).toBe(boom);
+  });
+
+  test("a throw on a later round keeps what earlier rounds produced", async () => {
+    const boom = new Error("budget stop");
+    let round = 0;
+    const w = world([], {
+      generate: async () => {
+        round += 1;
+        if (round === 1) {
+          return response(
+            [text("<sendMessage>found it</sendMessage>"), toolUse("t1", "read", { path: "a.md" })],
+            "tool_use",
+          );
+        }
+        throw boom;
+      },
+    });
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.failedRound).toBe(1);
+    expect(result.failure).toBe(boom);
+    expect(result.sendMessageText).toBe("found it");
+  });
+
   test("a later round's message replaces an earlier round's", async () => {
     const w = world([
       response(

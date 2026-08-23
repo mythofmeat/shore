@@ -70,6 +70,43 @@ export function describeLlmError(error: LlmError): string {
   }
 }
 
+export function errorChain(e: unknown): Error[] {
+  const out: Error[] = [];
+  let current = e;
+  while (current instanceof Error) {
+    out.push(current);
+    current = current.cause;
+  }
+  return out;
+}
+
+export interface BudgetStop {
+  message: string;
+  summary: string | undefined;
+  resetAt: string | undefined;
+}
+
+export function budgetStopIn(e: unknown): BudgetStop | undefined {
+  const chain = errorChain(e);
+  const blocked = chain.find((part) => part.name === "BudgetBlocked");
+  if (blocked === undefined) return undefined;
+
+  let resetAt: string | undefined;
+  for (const part of chain) {
+    const value = (part as Error & { resetAt?: unknown }).resetAt;
+    if (typeof value === "string") {
+      resetAt = value;
+      break;
+    }
+  }
+  const summary = (blocked as Error & { summary?: unknown }).summary;
+  return {
+    message: blocked.message,
+    summary: typeof summary === "string" ? summary : undefined,
+    resetAt,
+  };
+}
+
 function messageOf(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "string") return err;

@@ -17,6 +17,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
+import { BudgetBlocked } from "../src/llm/generate.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -231,6 +232,87 @@ describe("delivering what a tick asked to say", () => {
     expect(notes[0]?.detail).toContain("round 0");
   });
 
+  test("a budget stop is a pause naming the budget, not a call failure", async () => {
+    const notes: { kind: string; detail: string }[] = [];
+
+    await persistHeartbeatMessage(
+      "ada",
+      request(),
+      {
+        sendMessageText: undefined,
+        images: [],
+        failedRound: 0,
+        failure: BudgetBlocked.from({
+          budget_name: "brainwife",
+          action: "pause_heartbeat",
+          current_cost: 1.371,
+          cost_limit: 2.08,
+          period: "day",
+          reset_at: "2026-08-23T07:00:00+00:00",
+          scope: "pace",
+          warn_threshold: 0.65,
+          message: "the long form nobody wants in a log line",
+          summary:
+            'budget "brainwife" day pace reached 65% ($1.37/$2.08); resets 2026-08-23 05:00 PM',
+        }),
+      },
+      { engine: async () => recordingEngine([]) },
+      (kind, detail) => notes.push({ kind, detail }),
+    );
+
+    expect(notes.length).toBe(1);
+    expect(notes[0]?.kind).toBe("budget_paused");
+    expect(notes[0]?.detail).toBe(
+      'Heartbeat paused on round 0 — budget "brainwife" day pace reached 65% ' +
+        "($1.37/$2.08); resets 2026-08-23 05:00 PM",
+    );
+  });
+
+  test("a budget stop wrapped by the retry chain is still read as a pause", async () => {
+    const notes: { kind: string; detail: string }[] = [];
+
+    await persistHeartbeatMessage(
+      "ada",
+      request(),
+      {
+        sendMessageText: undefined,
+        images: [],
+        failedRound: 3,
+        failure: new Error("Failed after 3 attempts", {
+          cause: new BudgetBlocked('Shore usage budget "brainwife" is over limit', "budget"),
+        }),
+      },
+      { engine: async () => recordingEngine([]) },
+      (kind, detail) => notes.push({ kind, detail }),
+    );
+
+    expect(notes[0]?.kind).toBe("budget_paused");
+    expect(notes[0]?.detail).toContain("round 3");
+    expect(notes[0]?.detail).toContain('usage budget "brainwife"');
+  });
+
+  test("a provider failure names the provider's reason instead of deferring to the trace", async () => {
+    const notes: { kind: string; detail: string }[] = [];
+
+    await persistHeartbeatMessage(
+      "ada",
+      request(),
+      {
+        sendMessageText: undefined,
+        images: [],
+        failedRound: 2,
+        failure: new Error("The engine is currently overloaded, please try again later"),
+      },
+      { engine: async () => recordingEngine([]) },
+      (kind, detail) => notes.push({ kind, detail }),
+    );
+
+    expect(notes.length).toBe(1);
+    expect(notes[0]?.kind).toBe("call_failed");
+    expect(notes[0]?.detail).toContain("round 2");
+    expect(notes[0]?.detail).toContain("engine is currently overloaded");
+  });
+
   test("an empty <sendMessage> is still a message, not a skip", async () => {
     const notes: { kind: string; detail: string }[] = [];
     const appended: Message[] = [];
@@ -381,13 +463,22 @@ describe("running a tick", () => {
           return response([{ type: "text", text: "HEARTBEAT_OK" }]);
         },
         budgetBlockFor: () =>
-          ({ budget_name: "monthly", action: "pause_heartbeat" }) as never,
+          ({
+            budget_name: "monthly",
+            action: "pause_heartbeat",
+            summary: 'budget "monthly" reached 80% ($9.00/$10.00); resets 2026-09-01 12:00 AM',
+          }) as never,
       }),
     );
 
     expect(generated).toBe(0);
     expect(result.events).toEqual([
-      { kind: "budget_paused", detail: 'Tick skipped — usage budget "monthly"' },
+      {
+        kind: "budget_paused",
+        detail:
+          'Heartbeat paused before round 0 — budget "monthly" reached 80% ' +
+          "($9.00/$10.00); resets 2026-09-01 12:00 AM",
+      },
     ]);
     expect(result.failed).toBeUndefined();
   });
@@ -455,7 +546,12 @@ describe("running a tick", () => {
 
     expect(generated).toBe(0);
     expect(result.events).toEqual([
-      { kind: "budget_paused", detail: 'Tick skipped — usage budget "monthly"' },
+      {
+        kind: "budget_paused",
+        detail:
+          'Heartbeat paused before round 0 — budget "monthly" reached 80% ' +
+          "($9.00/$10.00); resets 2026-09-01 12:00 AM",
+      },
     ]);
   });
 

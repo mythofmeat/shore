@@ -239,6 +239,7 @@ export interface BudgetBlock {
   projected_cost?: number;
   warn_threshold?: number;
   message: string;
+  summary: string;
 }
 
 export type BudgetScope = "budget" | "pace";
@@ -254,7 +255,7 @@ export interface EnforceOptions extends BudgetOptions {
   projectedCost?: number;
 }
 
-function blockMessage(block: Omit<BudgetBlock, "message">): string {
+function blockMessage(block: Omit<BudgetBlock, "message" | "summary">): string {
   const threshold = block.warn_threshold;
   if (threshold !== undefined) {
     const window =
@@ -905,6 +906,7 @@ export function enforceBudgetForCall(
       );
       continue;
     }
+    const zone = zoneFor(status.timezone, opts.localZone);
     const projected = opts.projectedCost ?? 0;
     const overWithProjection = status.current_cost + projected >= status.cost_limit;
 
@@ -921,7 +923,7 @@ export function enforceBudgetForCall(
         reset_at: status.reset_at,
         scope: "budget",
         ...(projected > 0 ? { projected_cost: projected } : {}),
-      });
+      }, zone);
     }
     const pace = status.pace;
     if (
@@ -938,7 +940,7 @@ export function enforceBudgetForCall(
         reset_at: pace.window_end,
         scope: "pace",
         ...(projected > 0 ? { projected_cost: projected } : {}),
-      });
+      }, zone);
     }
 
     const warnAction = budgetWarnAction(budget);
@@ -961,7 +963,7 @@ export function enforceBudgetForCall(
         scope: "budget",
         warn_threshold: crossedBudget,
         ...(projected > 0 ? { projected_cost: projected } : {}),
-      });
+      }, zone);
     }
 
     const paceWarn = paceWarnAction(budget);
@@ -984,7 +986,7 @@ export function enforceBudgetForCall(
         scope: "pace",
         warn_threshold: crossedPace,
         ...(projected > 0 ? { projected_cost: projected } : {}),
-      });
+      }, zone);
     }
   }
 
@@ -1004,8 +1006,32 @@ function highestCrossed(
   return highest;
 }
 
-function withMessage(block: Omit<BudgetBlock, "message">): BudgetBlock {
-  return { ...block, message: blockMessage(block) };
+function withMessage(block: Omit<BudgetBlock, "message" | "summary">, zone: string): BudgetBlock {
+  return { ...block, message: blockMessage(block), summary: blockSummary(block, zone) };
+}
+
+function blockSummary(block: Omit<BudgetBlock, "message" | "summary">, zone: string): string {
+  const spent = `$${formatFixed(block.current_cost, 2)}/$${formatFixed(block.cost_limit, 2)}`;
+  const resets = `resets ${formatLocalAmPm(block.reset_at, zone)}`;
+  const paced = block.scope === "pace" ? `${block.period} pace ` : "";
+  const name = `budget "${block.budget_name}"`;
+
+  const threshold = block.warn_threshold;
+  if (threshold !== undefined) {
+    return `${name} ${paced}reached ${formatFixed(threshold * 100, 0)}% (${spent}); ${resets}`;
+  }
+
+  const projected = block.projected_cost;
+  if (projected !== undefined && projected > 0) {
+    return (
+      `${name} ${paced}would be spent by this tool loop ` +
+      `(${spent} plus up to $${formatFixed(projected, 2)}); ${resets}`
+    );
+  }
+
+  return block.scope === "pace"
+    ? `${name} ${block.period} pace is spent (${spent}); ${resets}`
+    : `${name} is over its ${periodDebug(block.period).toLowerCase()} limit (${spent}); ${resets}`;
 }
 
 function budgetMatchesCall(

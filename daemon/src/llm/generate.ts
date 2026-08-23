@@ -18,18 +18,24 @@ import {
 import { consumeStream, type FrameSink, type StreamResult } from "./stream.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
 import { rustJoin } from "../config/dirs.ts";
-import { usageConfigView } from "../ledger/budget.ts";
+import { usageConfigView, type BudgetBlock } from "../ledger/budget.ts";
 
 export class BudgetBlocked extends Error {
   readonly kind = "budget_blocked" as const;
   readonly scope: string | undefined;
   readonly resetAt: string | undefined;
+  readonly summary: string | undefined;
 
-  constructor(message: string, scope?: string, resetAt?: string) {
+  constructor(message: string, scope?: string, resetAt?: string, summary?: string) {
     super(message);
     this.name = "BudgetBlocked";
     this.scope = scope;
     this.resetAt = resetAt;
+    this.summary = summary;
+  }
+
+  static from(block: BudgetBlock): BudgetBlocked {
+    return new BudgetBlocked(block.message, block.scope, block.reset_at, block.summary);
   }
 }
 
@@ -111,7 +117,7 @@ async function callProvider(
   ensureCallContext(request, deps);
 
   const blocked = budgetBlockFor(request);
-  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+  if (blocked) throw BudgetBlocked.from(blocked);
   const attempt = beginCallAttempt(request.context, request);
 
   const clock = deps.now ?? Date.now;
@@ -226,7 +232,7 @@ export async function generateViaStream(
     if (request.context !== undefined) request.context.api_key_name = candidate.name;
 
     const blocked = budgetBlockFor(request);
-    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+    if (blocked) throw BudgetBlocked.from(blocked);
     const started = beginCallAttempt(request.context, request);
 
     const outcome = await consumeStream(

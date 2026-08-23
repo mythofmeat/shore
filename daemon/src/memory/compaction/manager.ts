@@ -9,6 +9,7 @@ import { pushAssistantTurn } from "../../llm/request";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
 import { runToolLoop, type ToolLoopDriver, type ToolUseEvent } from "../../engine/tool_loop";
 import { hitTokenCeiling } from "../../llm/finish_reason.ts";
+import { budgetStopIn } from "../../llm/errors.ts";
 import { retainedTurns as retentionForBudget } from "./retention.ts";
 import type { ContentBlock } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
@@ -965,25 +966,11 @@ function pausedOutcome(
 }
 
 function pauseReason(e: unknown): CompactionPauseReason {
-  return errorChain(e).some((part) => part.name === "BudgetBlocked") ? "budget" : "provider";
+  return budgetStopIn(e) === undefined ? "provider" : "budget";
 }
 
 function budgetResetAt(e: unknown): string | undefined {
-  for (const part of errorChain(e)) {
-    const resetAt = (part as Error & { resetAt?: unknown }).resetAt;
-    if (typeof resetAt === "string") return resetAt;
-  }
-  return undefined;
-}
-
-function errorChain(e: unknown): Error[] {
-  const out: Error[] = [];
-  let current = e;
-  while (current instanceof Error) {
-    out.push(current);
-    current = current.cause;
-  }
-  return out;
+  return budgetStopIn(e)?.resetAt;
 }
 
 async function currentActiveContent(opts: CompactOptions): Promise<string> {

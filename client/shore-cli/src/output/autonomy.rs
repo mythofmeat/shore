@@ -264,7 +264,7 @@ pub(crate) fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json:
             "message_skipped" => Tone::Muted,
             "dormant" | "call_failed" => COLOR_ERROR,
             "dormant_ping" => Tone::Thinking,
-            "timeout" => Tone::Warn,
+            "timeout" | "budget_paused" => Tone::Warn,
             _ => Tone::Heading,
         };
         paint(out, Tone::Muted, &format!("    {time_str:<16}"));

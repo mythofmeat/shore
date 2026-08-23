@@ -171,6 +171,65 @@ describe("warn_action", () => {
   });
 });
 
+describe("the short summary a log line can carry", () => {
+  test("a budget warning names the budget, the percent, the spend and the reset", () => {
+    const db = ledgerSpending(8.5);
+    const config = budget({ warn_at: [0.8], warn_action: "block" }) as UsageConfig;
+    const block = enforceBudgetForCall(db, config, call("message"), NOW, opts);
+    expect(block?.summary).toBe(
+      'budget "b" reached 80% ($8.50/$10.00); resets 2026-04-01 12:00 AM',
+    );
+  });
+
+  test("a pace warning says which window is pacing", () => {
+    const db = ledgerSpending(0.28);
+    const config = budget({
+      period: "month",
+      pace_period: "day",
+      reset_day_of_month: 5,
+      reset_hour: 0,
+      pace_warn_at: [0.8],
+      pace_warn_action: "block",
+      warn_at: [],
+      limit: "warn",
+    }) as UsageConfig;
+    const block = enforceBudgetForCall(db, config, call("message"), NOW, opts);
+    expect(block?.summary).toBe(
+      'budget "b" day pace reached 80% ($0.28/$0.32); resets 2026-03-06 12:00 AM',
+    );
+  });
+
+  test("over the limit reads as over the limit, with no percent", () => {
+    const db = ledgerSpending(11);
+    const config = budget({ warn_at: [], limit: "block" }) as UsageConfig;
+    const block = enforceBudgetForCall(db, config, call("message"), NOW, opts);
+    expect(block?.summary).toBe(
+      'budget "b" is over its month limit ($11.00/$10.00); resets 2026-04-01 12:00 AM',
+    );
+  });
+
+  test("a refusal before the loop starts says what the projection would spend", () => {
+    const db = ledgerSpending(9);
+    const config = budget({ warn_at: [], limit: "block" }) as UsageConfig;
+    const block = enforceBudgetForCall(db, config, call("message"), NOW, {
+      ...opts,
+      projectedCost: 2,
+    });
+    expect(block?.summary).toBe(
+      'budget "b" would be spent by this tool loop ($9.00/$10.00 plus up to $2.00); ' +
+        "resets 2026-04-01 12:00 AM",
+    );
+  });
+
+  test("the long message stays long, so nothing else loses detail", () => {
+    const db = ledgerSpending(8.5);
+    const config = budget({ warn_at: [0.8], warn_action: "block" }) as UsageConfig;
+    const block = enforceBudgetForCall(db, config, call("message"), NOW, opts);
+    expect(block?.message).toContain("past its 80% warning threshold");
+    expect(block?.summary.length ?? 0).toBeLessThan(block?.message.length ?? 0);
+  });
+});
+
 describe("pace_warn_action", () => {
   const paced = (fields: Record<string, unknown>): unknown =>
     budget({

@@ -142,7 +142,7 @@ MUTANTS = [
     ("call: the budget gate is skipped",
      G,
      "  const blocked = budgetBlockFor(request);\n"
-     "  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);",
+     "  if (blocked) throw BudgetBlocked.from(blocked);",
      "  void budgetBlockFor;"),
     ("call: a successful call is not recorded",
      G,

@@ -402,7 +402,7 @@ async function streamTurn(
     };
 
     const blocked = budgetBlockFor(call);
-    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+    if (blocked) throw BudgetBlocked.from(blocked);
     const initialAttempt = call.context?.ledger === undefined
       ? undefined
       : beginCallAttempt(call.context, call);
@@ -437,7 +437,7 @@ async function streamTurn(
         };
         const nextBlock = budgetBlockFor(continued);
         if (nextBlock) {
-          throw new BudgetBlocked(nextBlock.message, nextBlock.scope, nextBlock.reset_at);
+          throw BudgetBlocked.from(nextBlock);
         }
         return beginCallAttempt(continued.context, continued);
       },

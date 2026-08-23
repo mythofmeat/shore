@@ -12,6 +12,8 @@ import type { AutonomyActionResult } from "./runner.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { Message } from "../engine/types.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
+import { budgetStopIn, describeError } from "../llm/errors.ts";
+import { truncateSummary } from "../notifications.ts";
 import type { BudgetBlock } from "../ledger/budget.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 
@@ -39,6 +41,35 @@ function shortPreview(text: string): string {
   return Array.from(text).slice(0, 80).join("");
 }
 
+function noteTickFailure(
+  character: string,
+  loop: HeartbeatLoopResult,
+  note: (kind: HeartbeatEventKind, detail: string) => void,
+): void {
+  const round = loop.failedRound ?? 0;
+
+  const stop = budgetStopIn(loop.failure);
+  if (stop !== undefined) {
+    shoreLog.info(`shore: heartbeat for ${character} paused on round ${round}: ${stop.message}`);
+    note("budget_paused", `Heartbeat paused on round ${round} — ${stop.summary ?? stop.message}`);
+    return;
+  }
+
+  if (loop.failure === undefined) {
+    shoreLog.error(`shore: heartbeat call for ${character} failed on round ${round}`);
+    note(
+      "call_failed",
+      `Model call failed on round ${round} — tick ended early ` +
+        `(shore trace calls for the provider's reason)`,
+    );
+    return;
+  }
+
+  const reason = truncateSummary(describeError(loop.failure), 200);
+  shoreLog.error(`shore: heartbeat call for ${character} failed on round ${round}: ${reason}`);
+  note("call_failed", `Model call failed on round ${round} — ${reason}`);
+}
+
 export async function persistHeartbeatMessage(
   character: string,
   request: SidecarRequest,
@@ -47,11 +78,7 @@ export async function persistHeartbeatMessage(
   note: (kind: HeartbeatEventKind, detail: string) => void,
 ): Promise<void> {
   if (loop.failedRound !== undefined) {
-    note(
-      "call_failed",
-      `Model call failed on round ${loop.failedRound} — tick ended early ` +
-        `(shore trace calls for the provider's reason)`,
-    );
+    noteTickFailure(character, loop, note);
     if (loop.sendMessageText === undefined && loop.images.length === 0) return;
   } else if (loop.sendMessageText === undefined && loop.images.length === 0) {
     note("message_skipped", "Tick completed — no message sent");
@@ -120,7 +147,7 @@ export async function runHeartbeatTick(
 
   const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(prepared.request);
   if (blocked !== undefined) {
-    note("budget_paused", `Tick skipped — usage budget "${blocked.budget_name}"`);
+    note("budget_paused", `Heartbeat paused before round 0 — ${blocked.summary}`);
     return { events };
   }
 

@@ -586,7 +586,7 @@ pub(crate) fn write_heartbeat_log<W: Write>(out: &mut W, data: &serde_json::Valu
             "message_skipped" => Tone::Muted,
             "tool_use" => Tone::Active,
             "dormant" | "call_failed" => COLOR_ERROR,
-            "recap_missing" => Tone::Warn,
+            "recap_missing" | "budget_paused" => Tone::Warn,
             _ => Tone::Heading,
         };
 

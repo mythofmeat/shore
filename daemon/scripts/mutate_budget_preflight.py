@@ -102,8 +102,8 @@ MUTANTS = [
      "        cost_limit: status.cost_limit,"),
     ("reporting: a pre-flight refusal claims the budget is already over limit",
      BUDGET,
-     "  if (projected !== undefined && projected > 0) {",
-     "  if (false) {"),
+     "  if (projected !== undefined && projected > 0) {\n    const limit =",
+     "  if (false) {\n    const limit ="),
 
     # --- the mean -------------------------------------------------------------
     ("mean: free rows counted, so a subscription history projects nothing",

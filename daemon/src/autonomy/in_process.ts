@@ -56,23 +56,16 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         cache: this.#deps.cache,
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
 
-      generate: async (request, iteration, callType) => {
+      generate: async (request, _iteration, callType) => {
         labelAccountedCall(request, config, character, callType);
-        try {
-          const { response, fallbacks } = await generate(request, this.#generateDeps(config));
-          for (const event of fallbacks) {
-            shoreLog.warn(
-              `shore: heartbeat for ${character} rotated ${event.from.name} → ` +
-                `${event.to?.name ?? "(none)"}: ${event.reason}`,
-            );
-          }
-          return response;
-        } catch (e) {
-          shoreLog.error(
-            `shore: heartbeat call for ${character} failed on round ${iteration}: ${String(e)}`,
+        const { response, fallbacks } = await generate(request, this.#generateDeps(config));
+        for (const event of fallbacks) {
+          shoreLog.warn(
+            `shore: heartbeat for ${character} rotated ${event.from.name} → ` +
+              `${event.to?.name ?? "(none)"}: ${event.reason}`,
           );
-          return undefined;
         }
+        return response;
       },
 
       dispatch: async (name, input, toolUseId) => {

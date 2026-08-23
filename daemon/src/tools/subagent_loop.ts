@@ -217,7 +217,7 @@ export async function runSubagent(
   const blocked = budgetBlockFor(request);
   if (blocked) {
     await trace({ error: blocked.message });
-    throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+    throw BudgetBlocked.from(blocked);
   }
   const initialAttempt = beginCallAttempt(request.context, request);
   let outcome;
@@ -231,7 +231,7 @@ export async function runSubagent(
         const next = { ...continued, context: { ...required(continued.context), call_type: callType } };
         const nextBlock = budgetBlockFor(next);
         if (nextBlock) {
-          throw new BudgetBlocked(nextBlock.message, nextBlock.scope, nextBlock.reset_at);
+          throw BudgetBlocked.from(nextBlock);
         }
         return beginCallAttempt(next.context, next);
       },

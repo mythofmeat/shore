@@ -218,7 +218,7 @@ MUTANTS = [
     ("gate: a chat turn is not budget-checked at all",
      GEN,
      "    const blocked = budgetBlockFor(call);\n"
-     "    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);",
+     "    if (blocked) throw BudgetBlocked.from(blocked);",
      "    void budgetBlockFor;"),
     ("gate: the check is hoisted above the rotation, before the key is known",
      GEN,
