@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -eu
-srcdir="$(dirname "${BASH_SOURCE[0]}")/../"
+cd "$(dirname "${BASH_SOURCE[0]}")"
+srcdir="$(git rev-parse --show-toplevel)"
 
 build() {
     cd "$srcdir/client"
