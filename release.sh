@@ -10,18 +10,12 @@ fi
 version=${version#v}
 
 root=$(CDPATH= cd -- "$(git rev-parse --show-toplevel)" && pwd)
-tap="$root/../homebrew-tap"
-arch="$root/../arch-repo"
 
-if [ ! -f "$tap/Formula/shore.rb" ]; then
-    echo "no homebrew tap checkout at $tap" >&2
-    exit 1
-fi
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
 
-if [ ! -x "$arch/publish.sh" ]; then
-    echo "no arch repo checkout at $arch" >&2
-    exit 1
-fi
+git clone --quiet git@github.com:mythofmeat/homebrew-tap.git "$work/tap"
+git clone --quiet git@github.com:mythofmeat/arch-repo.git "$work/arch"
 
 sed -i "s/^version = \".*\"\$/version = \"$version\"/" "$root/client/Cargo.toml"
 sed -i "s/^pkgver=.*/pkgver=$(printf '%s' "$version" | tr - _)/" "$root/contrib/arch/PKGBUILD"
@@ -32,20 +26,28 @@ if ! git -C "$root" diff --quiet HEAD -- $versioned; then
     git -C "$root" commit -m "chore(release): $version" -- $versioned
 fi
 
-git -C "$root" tag "v$version"
+head=$(git -C "$root" rev-parse HEAD)
+if tagged=$(git -C "$root" rev-parse -q --verify "refs/tags/v$version^{commit}"); then
+    if [ "$tagged" != "$head" ]; then
+        echo "v$version already tags $tagged, not $head" >&2
+        exit 1
+    fi
+else
+    git -C "$root" tag "v$version"
+fi
 git -C "$root" push origin HEAD "v$version"
 
-revision=$(git -C "$root" rev-parse "v$version^{commit}")
+(cd "$root/contrib/arch" && makepkg --force --clean --cleanbuild --nocheck)
+
 sed -i \
     -e "s/^  version \".*\"\$/  version \"$version\"/" \
     -e "s/tag: *\".*\"/tag:      \"v$version\"/" \
-    -e "s/revision: *\".*\"/revision: \"$revision\"/" \
-    "$tap/Formula/shore.rb"
-git -C "$tap" commit -m "shore $version" -- Formula/shore.rb
-git -C "$tap" push origin main
+    -e "s/revision: *\".*\"/revision: \"$head\"/" \
+    "$work/tap/Formula/shore.rb"
+git -C "$work/tap" commit -m "shore $version" -- Formula/shore.rb
+git -C "$work/tap" push origin main
 
-(cd "$root/contrib/arch" && makepkg --clean --cleanbuild --nocheck)
-"$arch/publish.sh" "$root/contrib/arch"/shore-cli-*.pkg.tar.zst
+"$work/arch/publish.sh" "$root/contrib/arch"/shore-cli-*.pkg.tar.zst
 rm -f "$root/contrib/arch"/*.pkg.tar.zst
 
-echo "released $version at $revision"
+echo "released $version at $head"

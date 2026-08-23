@@ -1,62 +1,32 @@
-pkgbase=shore
-pkgname=('shore-cli' 'shore-daemon')
+pkgname=shore-cli
 pkgver=0.0.0
 pkgrel=1
-pkgdesc="Persistent AI character engine"
+pkgdesc="Persistent AI character engine — CLI and terminal chat client"
 arch=('x86_64')
 url="https://github.com/mythofmeat/shore"
 license=('MIT' 'Apache-2.0')
-makedepends=('rust' 'bun' 'git')
+depends=('gcc-libs' 'glibc')
+makedepends=('rust' 'git')
+replaces=('shore-tui')
+conflicts=('shore-tui')
+optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)')
 options=(!lto !debug strip)
-
-setup() {
-    cd "$srcdir/../../.."
-}
+source=("shore::git+ssh://git@github.com/mythofmeat/shore.git#tag=v${pkgver//_/-}")
+sha256sums=('SKIP')
 
 build() {
-    setup 
-    ( 
-        cd "./client/"
-        cargo build --release --bin shore
-    )
-    (
-        cd "./daemon"
-        bun install
-        bun run build
-    )
+    cd "$srcdir/shore/client"
+    cargo build --release --bin shore
 }
 
 check() {
-    setup 
-    (
-        cd "./client"
-        cargo test --workspace
-    )
-    (
-        cd "./daemon"
-        bun test
-    )
+    cd "$srcdir/shore/client"
+    cargo test --workspace
 }
 
-_install_licenses() {
-    setup
-    install -Dm644 "./LICENSE-MIT" \
-        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
-    install -Dm644 "./LICENSE-APACHE-2.0" \
-        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE-2.0"
-}
+package() {
+    cd "$srcdir/shore"
 
-package_shore-cli() {
-    pkgdesc="Persistent AI character engine — CLI and terminal chat client"
-    depends=('gcc-libs' 'glibc')
-    replaces=('shore-tui')
-    conflicts=('shore-tui')
-    optdepends=(
-        'shore-daemon: the daemon this client talks to'
-        'wl-clipboard: ctrl+v image paste from clipboard (Wayland)'
-    )
-
-    setup
     install -Dm755 "./client/target/release/shore" "$pkgdir/usr/bin/shore"
 
     install -dm755 "$pkgdir/usr/share/fish/vendor_completions.d"
@@ -69,22 +39,8 @@ package_shore-cli() {
     "./client/target/release/shore" completions zsh \
         > "$pkgdir/usr/share/zsh/site-functions/_shore"
 
-    _install_licenses
-}
-
-package_shore-daemon() {
-    pkgdesc="Persistent AI character engine — daemon"
-    depends=('gcc-libs' 'glibc' 'git')
-    options=(!strip)
-    optdepends=('shore-cli: CLI and terminal chat client')
-
-    setup
-    install -Dm755 "./daemon/dist/shore-daemon" \
-        "$pkgdir/usr/bin/shore-daemon"
-
-    install -Dm755 "./contrib/systemd/shore-daemon.service" \
-        "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
-    chmod 644 "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
-
-    _install_licenses
+    install -Dm644 "./LICENSE-MIT" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+    install -Dm644 "./LICENSE-APACHE-2.0" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE-2.0"
 }
