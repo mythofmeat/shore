@@ -44,8 +44,6 @@ run "cargo-fmt" \
     cargo fmt --all --check
 run "cargo-clippy" \
     cargo clippy --workspace --all-targets
-run "cargo-build" \
-    cargo build --workspace
 
 if [ -n "$failed" ]; then
     printf '\nfailed:%s\n' "$failed"
