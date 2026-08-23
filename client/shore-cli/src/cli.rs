@@ -6,7 +6,7 @@ const LEADING_HEADING: &str = "Options — must come before the command";
 #[derive(Parser, Debug)]
 #[command(
     name = "shore",
-    version,
+    version = env!("SHORE_VERSION"),
     about = "Shore chat client",
     disable_help_subcommand = true
 )]
