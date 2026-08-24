@@ -3,7 +3,7 @@
 
 A heartbeat's conversation is thrown away when the tick ends. Only two things
 survive it: what the character wrote to disk with a workspace tool, and whatever
-it asked to say. So every mutant here still completes a tick — the model is
+it asked to say, along with the reasoning behind it. So every mutant here still completes a tick — the model is
 called, tools run, nothing throws — and what changes is whether those two things
 make it out.
 
@@ -13,7 +13,10 @@ Three groups.
 that asked to speak and was not heard looks identical to one that had nothing to
 say: the tick logs "no message sent" and the user is never told their character
 tried. The tag is last-wins, a tool call beats a tag in the same round, and both
-are read off responses that do not finish on `tool_use`.
+are read off responses that do not finish on `tool_use`. The reasoning from the
+round that produced the message rides out with it: an autonomous turn stored
+without it is a reasoning-free assistant turn in every later chat request, which
+is what makes a reasoning model stop thinking for the rest of the conversation.
 
 **The budget.** Reaching the round cap buys a grace window rather than ending the
 loop, and only the wall clock is allowed to cut that window short. A loop that
@@ -45,31 +48,58 @@ MUTANTS = [
     # --- the send-message sink ------------------------------------------------
     ("send: the tag is first-wins, so a reconsidered message never replaces the draft",
      L,
-     "    const tagged = extractSendMessage(responseText(resp));\n"
-     "    if (tagged !== undefined) sendMessageText = tagged;",
-     "    const tagged = extractSendMessage(responseText(resp));\n"
-     "    if (tagged !== undefined && sendMessageText === undefined) sendMessageText = tagged;"),
+     "    if (tagged !== undefined) {\n"
+     "      sendMessageText = tagged;\n"
+     "      messageThinking = thinking;\n"
+     "    }",
+     "    if (tagged !== undefined && sendMessageText === undefined) {\n"
+     "      sendMessageText = tagged;\n"
+     "      messageThinking = thinking;\n"
+     "    }"),
     ("send: a sendMessage tool call is only read when the round dispatches tools",
      L,
-     "    sendMessageText = captureToolSendMessage(toolUses) ?? sendMessageText;",
-     "    if (hasTools) sendMessageText = captureToolSendMessage(toolUses) ?? sendMessageText;"),
+     "    const fromTool = captureToolSendMessage(toolUses);\n"
+     "    if (fromTool !== undefined) {",
+     "    const fromTool = hasTools ? captureToolSendMessage(toolUses) : undefined;\n"
+     "    if (fromTool !== undefined) {"),
     ("send: the tag wins over the tool call in the same round",
      L,
-     "    sendMessageText = captureToolSendMessage(toolUses) ?? sendMessageText;",
-     "    sendMessageText = sendMessageText ?? captureToolSendMessage(toolUses);"),
+     "    if (fromTool !== undefined) {",
+     "    if (fromTool !== undefined && sendMessageText === undefined) {"),
     ("send: the tool-call sink is dropped entirely",
      L,
-     "    sendMessageText = captureToolSendMessage(toolUses) ?? sendMessageText;",
+     "    const fromTool = captureToolSendMessage(toolUses);\n"
+     "    if (fromTool !== undefined) {\n"
+     "      sendMessageText = fromTool;\n"
+     "      messageThinking = thinking;\n"
+     "    }",
      "    void toolUses;"),
     ("send: the tag sink is dropped entirely",
      L,
      "    const tagged = extractSendMessage(responseText(resp));\n"
-     "    if (tagged !== undefined) sendMessageText = tagged;",
+     "    if (tagged !== undefined) {\n"
+     "      sendMessageText = tagged;\n"
+     "      messageThinking = thinking;\n"
+     "    }",
      "    void resp;"),
     ("send: `content` is ignored when a response carries no blocks",
      L,
      "  if (resp.content_blocks.length === 0) return resp.content;",
      "  if (resp.content_blocks.length === 0) return \"\";"),
+    # --- the reasoning that goes with the message -----------------------------
+    ("thinking: the message's reasoning never leaves the loop",
+     L,
+     "  return { sendMessageText, images, thinking: messageThinking, failedRound, failure };",
+     "  return { sendMessageText, images, thinking: [], failedRound, failure };"),
+    ("thinking: the last round's reasoning is paired with the message instead of its own",
+     L,
+     "    const thinking = thinkingOf(resp.content_blocks);",
+     "    const thinking = thinkingOf(resp.content_blocks);\n"
+     "    messageThinking = thinking;"),
+    ("thinking: an image-only tick loses the reasoning that chose the image",
+     L,
+     "      if (round.images.length > 0 && sendMessageText === undefined) messageThinking = thinking;",
+     "      void thinking;"),
     ("images: a generated image is dropped instead of riding out on the message",
      L,
      "        const ref = generatedImageRef(result.value);\n"

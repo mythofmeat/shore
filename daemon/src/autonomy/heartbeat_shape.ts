@@ -1,13 +1,9 @@
 import heartbeatTemplateRaw from "../../prompts/autonomy/heartbeat.md" with { type: "text" };
 
 import { renderTemplate } from "../engine/prompt.ts";
+import type { ContentBlock } from "../engine/types.ts";
 
 export type WireRole = "user" | "assistant" | "system";
-
-export interface WireTextBlock {
-  type: "text";
-  text: string;
-}
 
 export interface WireMessageLike {
   role: WireRole;
@@ -123,7 +119,7 @@ export interface AutonomousMessageShape {
   role: "assistant";
   origin: "autonomous";
   content: string;
-  contentBlocks: WireTextBlock[];
+  contentBlocks: ContentBlock[];
   images: ImageRef[];
   providerKey: string | undefined;
   model: string | undefined;
@@ -134,8 +130,10 @@ export function buildAutonomousMessage(
   images: ImageRef[],
   providerKey: string | undefined,
   model: string | undefined,
+  thinking: readonly ContentBlock[] = [],
 ): AutonomousMessageShape {
-  const contentBlocks: WireTextBlock[] = text.length === 0 ? [] : [{ type: "text", text }];
+  const contentBlocks: ContentBlock[] = [...thinking];
+  if (text.length > 0) contentBlocks.push({ type: "text", text });
   return {
     role: "assistant",
     origin: "autonomous",
@@ -147,8 +145,8 @@ export function buildAutonomousMessage(
   };
 }
 
-function deriveContentFromBlocks(blocks: readonly WireTextBlock[]): string {
-  return blocks.map((block) => block.text).join("");
+function deriveContentFromBlocks(blocks: readonly ContentBlock[]): string {
+  return blocks.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
 }
 
 export const DEFAULT_HEARTBEAT_TEMPLATE = heartbeatTemplateRaw.trimEnd();

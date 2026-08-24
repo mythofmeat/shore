@@ -41,6 +41,10 @@ function toolUse(id: string, name: string, input: unknown): ContentBlock {
   return { type: "tool_use", id, name, input };
 }
 
+function thinking(t: string): ContentBlock {
+  return { type: "thinking", thinking: t };
+}
+
 interface World {
   notes: string[];
   dispatched: { name: string; input: unknown }[];
@@ -524,5 +528,71 @@ describe("the tools the loop answers itself", () => {
       "t2",
       "t3",
     ]);
+  });
+});
+
+describe("the reasoning behind what a tick says", () => {
+  test("the message round's thinking comes back out of the loop", async () => {
+    const w = world([
+      response([thinking("ren has been quiet since morning"), text("<sendMessage>hey you</sendMessage>")]),
+    ]);
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.thinking).toEqual([thinking("ren has been quiet since morning")]);
+  });
+
+  test("a later message round's thinking replaces an earlier round's", async () => {
+    const w = world([
+      response(
+        [thinking("first pass"), text("<sendMessage>draft</sendMessage>"), toolUse("t1", "read", {})],
+        "tool_use",
+      ),
+      response([thinking("second pass"), text("<sendMessage>final</sendMessage>")]),
+    ]);
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.sendMessageText).toBe("final");
+    expect(result.thinking).toEqual([thinking("second pass")]);
+  });
+
+  test("a trailing round of pure housekeeping does not steal the message's reasoning", async () => {
+    const w = world([
+      response(
+        [thinking("why i am saying this"), text("<sendMessage>said it</sendMessage>"), toolUse("t1", "write", {})],
+        "tool_use",
+      ),
+      response([thinking("now tidying up"), text("filed away")]),
+    ]);
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.sendMessageText).toBe("said it");
+    expect(result.thinking).toEqual([thinking("why i am saying this")]);
+  });
+
+  test("a tick that only produced an image still carries its reasoning", async () => {
+    const w = world(
+      [
+        response([thinking("she would like this one"), toolUse("t1", "generate_image", {})], "tool_use"),
+        response([text("done")]),
+      ],
+      {},
+      () => ({ output: "ok", isError: false, value: { path: "images/x.png" } }),
+    );
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.images).toHaveLength(1);
+    expect(result.thinking).toEqual([thinking("she would like this one")]);
+  });
+
+  test("a round with no reasoning yields no thinking", async () => {
+    const w = world([response([text("<sendMessage>plain</sendMessage>")])]);
+
+    const result = await runHeartbeatToolLoop(request(), w.deps);
+
+    expect(result.thinking).toEqual([]);
   });
 });

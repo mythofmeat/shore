@@ -95,6 +95,7 @@ export async function persistHeartbeatMessage(
     loop.images,
     request.provider_key,
     request.model === "" ? undefined : request.model,
+    loop.thinking ?? [],
   );
   const msg: Message = {
     msg_id: (deps.newId ?? (() => `m_${crypto.randomUUID()}`))(),

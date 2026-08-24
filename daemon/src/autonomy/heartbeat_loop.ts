@@ -53,8 +53,13 @@ export interface HeartbeatLoopDeps {
 export interface HeartbeatLoopResult {
   sendMessageText: string | undefined;
   images: ImageRef[];
+  thinking?: ContentBlock[];
   failedRound?: number | undefined;
   failure?: unknown;
+}
+
+function thinkingOf(blocks: readonly ContentBlock[]): ContentBlock[] {
+  return blocks.filter((b) => b.type === "thinking" || b.type === "redacted_thinking");
 }
 
 function toolUsesOf(blocks: readonly ContentBlock[]): ToolUse[] {
@@ -127,6 +132,7 @@ export async function runHeartbeatToolLoop(
   );
 
   let sendMessageText: string | undefined;
+  let messageThinking: ContentBlock[] = [];
   let failedRound: number | undefined;
   let failure: unknown;
   const images: ImageRef[] = [];
@@ -163,8 +169,12 @@ export async function runHeartbeatToolLoop(
       break;
     }
 
+    const thinking = thinkingOf(resp.content_blocks);
     const tagged = extractSendMessage(responseText(resp));
-    if (tagged !== undefined) sendMessageText = tagged;
+    if (tagged !== undefined) {
+      sendMessageText = tagged;
+      messageThinking = thinking;
+    }
 
     request.messages.push({
       role: "assistant",
@@ -176,12 +186,17 @@ export async function runHeartbeatToolLoop(
     const toolUses = toolUsesOf(resp.content_blocks);
     const hasTools = toolUses.length > 0 && resp.finish_reason === "tool_use";
 
-    sendMessageText = captureToolSendMessage(toolUses) ?? sendMessageText;
+    const fromTool = captureToolSendMessage(toolUses);
+    if (fromTool !== undefined) {
+      sendMessageText = fromTool;
+      messageThinking = thinking;
+    }
 
     let captured: CapturedTool[] = [];
     if (hasTools) {
       const round = await dispatchHeartbeatTools(toolUses, deps);
       request.messages.push({ role: "user", content: round.results });
+      if (round.images.length > 0 && sendMessageText === undefined) messageThinking = thinking;
       images.push(...round.images);
       captured = round.captured;
     }
@@ -191,5 +206,5 @@ export async function runHeartbeatToolLoop(
     if (!hasTools) break;
   }
 
-  return { sendMessageText, images, failedRound, failure };
+  return { sendMessageText, images, thinking: messageThinking, failedRound, failure };
 }

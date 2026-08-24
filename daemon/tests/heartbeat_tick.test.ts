@@ -9,6 +9,7 @@ import {
   type HeartbeatEngine,
   type HeartbeatTickDeps,
 } from "../src/autonomy/heartbeat_tick.ts";
+import type { HeartbeatLoopResult } from "../src/autonomy/heartbeat_loop.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -654,5 +655,68 @@ describe("running a tick", () => {
     expect(
       cached?.messages.some((m) => m.content.some((b) => b.type === "tool_result")),
     ).toBe(false);
+  });
+});
+
+describe("what an autonomous turn leaves in the history", () => {
+  const request = (): SidecarRequest =>
+    ({ model: "kimi-k3", provider_key: "moonshot", messages: [] }) as never;
+
+  const persist = async (loop: HeartbeatLoopResult): Promise<Message[]> => {
+    const appended: Message[] = [];
+    await persistHeartbeatMessage(
+      "ada",
+      request(),
+      loop,
+      {
+        engine: async () => recordingEngine(appended),
+        newId: () => "m_fixed",
+        nowIso: () => "2026-07-30T13:00:00.000Z",
+      },
+      () => {},
+    );
+    return appended;
+  };
+
+  test("the reasoning is stored ahead of the text, the way a chat turn stores it", async () => {
+    const [msg] = await persist({
+      sendMessageText: "evening ren",
+      images: [],
+      thinking: [{ type: "thinking", thinking: "she has been quiet all day" }],
+    });
+
+    expect(msg?.content_blocks).toEqual([
+      { type: "thinking", thinking: "she has been quiet all day" },
+      { type: "text", text: "evening ren" },
+    ]);
+  });
+
+  test("the displayed content stays text only", async () => {
+    const [msg] = await persist({
+      sendMessageText: "evening ren",
+      images: [],
+      thinking: [{ type: "thinking", thinking: "internal" }],
+    });
+
+    expect(msg?.content).toBe("evening ren");
+  });
+
+  test("a tick with no reasoning stores the text alone", async () => {
+    const [msg] = await persist({ sendMessageText: "hi", images: [], thinking: [] });
+
+    expect(msg?.content_blocks).toEqual([{ type: "text", text: "hi" }]);
+  });
+
+  test("an image-only tick still stores its reasoning", async () => {
+    const [msg] = await persist({
+      sendMessageText: undefined,
+      images: [{ path: "images/x.png", caption: undefined }],
+      thinking: [{ type: "thinking", thinking: "she would like this one" }],
+    });
+
+    expect(msg?.content_blocks).toEqual([
+      { type: "thinking", thinking: "she would like this one" },
+    ]);
+    expect(msg?.content).toBe("");
   });
 });
