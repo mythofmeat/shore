@@ -204,10 +204,21 @@ export function buildCall(
 
   const routing = req.provider_options?.openrouter_provider;
   if (routing && typeof routing === "object") {
-    chatRequest.provider = routing;
+    chatRequest.provider = camelizeKeys(routing) as ChatRequest["provider"];
   }
 
   return { client, chatRequest };
+}
+
+export function camelizeKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(camelizeKeys);
+  if (value === null || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+    out[key.replace(/_([a-z0-9])/g, (_match, char: string) => char.toUpperCase())] =
+      camelizeKeys(inner);
+  }
+  return out;
 }
 
 function toTools(tools: ToolDefinition[] | undefined): ChatFunctionTool[] {
@@ -292,16 +303,16 @@ export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
     }
   }
   if (parts.length > 0) {
-    out.push({ role: "user", content: parts } as ChatMessages);
+    out.push({ role: "user", content: parts });
   }
   return out;
 }
 
 type TextPart = { type: "text"; text: string };
-type ImagePart = { type: "image_url"; image_url: { url: string } };
+type ImagePart = { type: "image_url"; imageUrl: { url: string } };
 
 function imageUrlPart(resolved: ResolvedImage): ImagePart {
-  return { type: "image_url", image_url: { url: `data:${resolved.mediaType};base64,${resolved.base64}` } };
+  return { type: "image_url", imageUrl: { url: `data:${resolved.mediaType};base64,${resolved.base64}` } };
 }
 
 function imagesToParts(images: ImageRef[] | undefined): Array<TextPart | ImagePart> {

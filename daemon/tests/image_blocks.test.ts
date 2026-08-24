@@ -36,7 +36,7 @@ describe("inlined image blocks reach the wire", () => {
     const msgs = turnToOpenRouter(imageTurn()) as unknown as Array<Record<string, unknown>>;
     expect(msgs).toHaveLength(1);
     expect(msgs[0]?.["content"]).toEqual([
-      { type: "image_url", image_url: { url: DATA_URL } },
+      { type: "image_url", imageUrl: { url: DATA_URL } },
       { type: "text", text: "what is this?" },
     ]);
   });
