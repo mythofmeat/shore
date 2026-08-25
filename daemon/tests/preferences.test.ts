@@ -10,6 +10,7 @@ import rawFixture from "./config_captures/preferences.json" with { type: "json" 
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { catalogFromSections, defaultSdk, type ResolvedModel } from "../src/config/models.ts";
+import { ConfigDuration } from "../src/config/duration.ts";
 import {
   ProviderRegistry,
   ProviderRegistryError,
@@ -527,6 +528,82 @@ describe("resolveSamplerSettings", () => {
     ).toBeUndefined();
     const ok = prefsFrom("[defaults.sampler]\nmax_tool_iterations = 1\n");
     expect(resolveSamplerSettings(ok, undefined, "p", "m", undefined).maxToolIterations).toBe(1);
+  });
+
+  test("the registry carries a model's keepalive ceiling into effective settings", () => {
+    const cacheKeepaliveMax = ConfigDuration.parse("12h");
+    expect("ok" in cacheKeepaliveMax).toBe(true);
+    if (!("ok" in cacheKeepaliveMax)) return;
+    const model: ResolvedModel = {
+      name: "ceiling",
+      qualifiedName: "openai:ceiling",
+      category: "chat",
+      providerKey: "openai",
+      sdk: "openai",
+      modelId: "ceiling",
+      cacheKeepaliveMax: cacheKeepaliveMax.ok,
+    };
+
+    expect(
+      resolveSamplerSettings(emptyPreferences(), undefined, "openai", "ceiling", model)
+        .cacheKeepaliveMax?.toString(),
+    ).toBe("12h");
+  });
+
+  test("explicit discovered claims drop unsupported persisted sampler values", () => {
+    const global = emptyPreferences();
+    global.defaults.sampler = {
+      temperature: 0.7,
+      topP: 0.9,
+      reasoningEffort: "medium",
+    };
+    const model: ResolvedModel = {
+      name: "narrow",
+      qualifiedName: "openrouter:narrow",
+      category: "chat",
+      providerKey: "openrouter",
+      sdk: "openrouter",
+      modelId: "narrow",
+      support: {
+        supported_parameters: [],
+        effort: { supported: true, levels: ["low"] },
+      },
+    };
+    const resolved = resolveSamplerSettings(global, undefined, "openrouter", "narrow", model);
+    expect(resolved.temperature).toBeUndefined();
+    expect(resolved.topP).toBeUndefined();
+    expect(resolved.reasoningEffort).toBeUndefined();
+  });
+
+  test("missing discovered metadata leaves persisted sampler values permissive", () => {
+    const global = emptyPreferences();
+    global.defaults.sampler = { temperature: 0.7, topP: 0.9, reasoningEffort: "future" };
+    const model: ResolvedModel = {
+      name: "unknown",
+      qualifiedName: "openrouter:unknown",
+      category: "chat",
+      providerKey: "openrouter",
+      sdk: "openrouter",
+      modelId: "unknown",
+    };
+    expect(resolveSamplerSettings(global, undefined, "openrouter", "unknown", model))
+      .toMatchObject(global.defaults.sampler);
+  });
+
+  test("an explicit thinking denial drops a persisted budget", () => {
+    const global = emptyPreferences();
+    global.defaults.sampler = { budgetTokens: 2048 };
+    const model: ResolvedModel = {
+      name: "no-thinking",
+      qualifiedName: "gemini:no-thinking",
+      category: "chat",
+      providerKey: "gemini",
+      sdk: "gemini",
+      modelId: "no-thinking",
+      support: { thinking: { enabled: false } },
+    };
+    expect(resolveSamplerSettings(global, undefined, "gemini", "no-thinking", model).budgetTokens)
+      .toBeUndefined();
   });
 
   test("applySamplerOverlay never mutates the catalog entry", () => {

@@ -12,7 +12,7 @@ import type {
 } from "@openrouter/sdk/models";
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { REASONING_OFF } from "../capabilities.ts";
+import { REASONING_OFF } from "../types.ts";
 import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,

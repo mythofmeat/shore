@@ -7,6 +7,7 @@ import type {
   MessageCreateParams,
   MessageCreateParamsStreaming,
   MessageParam,
+  OutputConfig,
   RawMessageStreamEvent,
   TextBlockParam,
   Tool,
@@ -35,7 +36,6 @@ import {
 import { recordExtraThinkingDrops, replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
-import { ANTHROPIC_NAMED_EFFORT } from "../capabilities.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
@@ -686,12 +686,6 @@ function imagesToAnthropicBlocks(images: ImageRef[] | undefined): ContentBlockPa
   return out;
 }
 
-type NamedEffort = (typeof ANTHROPIC_NAMED_EFFORT)[number];
-
-function isEffortValue(s: string | undefined): s is NamedEffort {
-  return s !== undefined && (ANTHROPIC_NAMED_EFFORT as readonly string[]).includes(s);
-}
-
 function clampEnabledBudget(requested: number, maxTokens: number): number | undefined {
   const ceiling = maxTokens - 1;
   if (ceiling < 1024) return undefined;
@@ -707,9 +701,11 @@ export function buildThinkingParams(
   model: string,
   maxTokens: number,
   display: ThinkingDisplay = "summarized",
-): { thinking?: ThinkingParam; outputConfig?: { effort: NamedEffort } } {
+): { thinking?: ThinkingParam; outputConfig?: { effort: NonNullable<OutputConfig["effort"]> } } {
   const effort = opts.reasoning_effort;
-  const namedEffort = isEffortValue(effort) ? effort : undefined;
+  const namedEffort = effort !== undefined && effort !== "adaptive" && effort !== "off"
+    ? effort as NonNullable<OutputConfig["effort"]>
+    : undefined;
   const wantsAdaptive = effort === "adaptive" || namedEffort !== undefined;
 
   const budget = opts.budget_tokens;

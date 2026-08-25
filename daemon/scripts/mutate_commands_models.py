@@ -35,7 +35,7 @@ first entry" agreed. Four hand-written cases separate them.
 beddae67 deleted the model-id rule table, and #130 deleted the parameter it
 left behind, so applicability now answers from the sdk and the capabilities
 alone. The live input is
-`ModelCapabilities`, which reaches the table only from a discovery cache; the
+`DiscoveredModelSupport`, which reaches the table only from a discovery cache; the
 recorded caches carried neither `supported_parameters` nor `effort_levels`, so
 both the applicability table and the effort domain answered the same with and
 without them. The setup shape accepts both now, and two cases pin them. Fourteen of the fifteen
@@ -327,13 +327,13 @@ MUTANTS = [
      '  if (scope !== "character" && scope !== "global") {',
      "  if (false as boolean) {"),
     ("set: the capability check never runs",
-     "  const failure = capabilityCheck(model.sdk, key, value, model.capabilities);\n"
+     "  const failure = capabilityCheck(model.sdk, key, value, model.support);\n"
      "  if (failure !== undefined) throw failure;",
      "  void capabilityCheck;"),
     ("set: the capability check runs against the active model, not the target",
-     "  const failure = capabilityCheck(model.sdk, key, value, model.capabilities);",
+     "  const failure = capabilityCheck(model.sdk, key, value, model.support);",
      "  const active = resolveActiveModel(ctx);\n"
-     "  const failure = capabilityCheck(active.sdk, key, value, active.capabilities);"),
+     "  const failure = capabilityCheck(active.sdk, key, value, active.support);"),
     ("set: a character scope does not require a character",
      '  const character = scope === "character" ? requireCharacter(ctx) : undefined;',
      '  const character = scope === "character" ? ctx.characterName : undefined;'),
@@ -382,12 +382,9 @@ MUTANTS = [
     ("settings: reports the ten info scopes rather than fourteen",
      "    scopes: scopesJson(scopes, SETTINGS_SCOPE_FIELDS),",
      "    scopes: scopesJson(scopes, INFO_SCOPE_FIELDS),"),
-    ("settings: the applicability table ignores the model's capabilities",
-     "    applicability: keyApplicability(model.sdk, model.capabilities),",
-     '    applicability: keyApplicability(model.sdk, undefined),'),
-    ("settings: the effort domain ignores the model's capabilities",
-     "    reasoning_effort_domain: reasoningDomain(model.sdk, model.capabilities),",
-     "    reasoning_effort_domain: reasoningDomain(model.sdk, undefined),"),
+    ("settings: the schema ignores discovered model support",
+     "    setting_schema: settingSchema(model.sdk, model.support),",
+     "    setting_schema: settingSchema(model.sdk, undefined),"),
 
     # --- sub-agent pins (#117) ----------------------------------------------
     ("sub-agent pin: a named sub-agent writes the shared default",

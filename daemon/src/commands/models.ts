@@ -35,7 +35,7 @@ import {
   type SamplerSettings,
 } from "../config/preferences.ts";
 import type { SubagentConfig } from "../config/app.ts";
-import { reasoningDomain } from "../llm/capabilities.ts";
+import { SETTING_STORAGE_FIELDS, samplerToWire, settingSchema } from "../llm/settings.ts";
 import { missingModelMessage } from "../tools/subagent.ts";
 import type { Env } from "../config/dirs.ts";
 import {
@@ -44,7 +44,7 @@ import {
   type ConfigContext,
   type ConfigRuntime,
 } from "./config.ts";
-import { applySamplerValue, capabilityCheck, keyApplicability } from "./model_settings.ts";
+import { applySamplerValue, capabilityCheck } from "./model_settings.ts";
 import { internalError, invalidRequest, notFound, type CommandError } from "./errors.ts";
 
 export type Args = Record<string, unknown>;
@@ -399,36 +399,7 @@ function scopesJson(
 }
 
 function samplerJson(sampler: SamplerSettings): Record<string, unknown> {
-  const wire = samplerToWire(sampler);
-  const out: Record<string, unknown> = {};
-  for (const key of SAMPLER_KEYS) out[key] = wire[key] ?? null;
-  return out;
-}
-
-function samplerToWire(s: SamplerSettings): Record<string, unknown> {
-  const keepalive = s.cacheKeepalive;
-  return {
-    temperature: s.temperature,
-    top_p: s.topP,
-    reasoning_effort: s.reasoningEffort,
-    budget_tokens: s.budgetTokens,
-    max_output_tokens: s.maxOutputTokens,
-    cache_ttl: s.cacheTtl,
-    cache_keepalive:
-      keepalive === undefined
-        ? undefined
-        : keepalive.kind === "off"
-          ? "off"
-          : keepalive.interval.toString(),
-    cache_keepalive_max: s.cacheKeepaliveMax?.toString(),
-    sdk: s.sdk,
-    replay_prior_thinking: s.replayPriorThinking,
-    max_tool_iterations: s.maxToolIterations,
-    openrouter_provider: s.openrouterProvider,
-    gemini_generation: s.geminiGeneration,
-    zai_clear_thinking: s.zaiClearThinking,
-    zai_subscription: s.zaiSubscription,
-  };
+  return samplerToWire(sampler, true);
 }
 
 function targetedRole(args: Args): boolean {
@@ -706,7 +677,7 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
 
   const target = settingTarget(ctx, args);
   const model = target.model;
-  const failure = capabilityCheck(model.sdk, key, value, model.capabilities);
+  const failure = capabilityCheck(model.sdk, key, value, model.support);
   if (failure !== undefined) throw failure;
 
   const character = scope === "character" ? requireCharacter(ctx) : undefined;
@@ -805,13 +776,9 @@ function saveGlobal(ctx: ModelsContext, prefs: ModelPreferences): void {
   }
 }
 
-const SETTINGS_SCOPE_FIELDS = [
-  ...INFO_SCOPE_FIELDS,
-  ["openrouter_provider", "openrouterProvider"],
-  ["gemini_generation", "geminiGeneration"],
-  ["zai_clear_thinking", "zaiClearThinking"],
-  ["zai_subscription", "zaiSubscription"],
-] as const satisfies readonly (readonly [string, keyof SamplerSettings])[];
+const SETTINGS_SCOPE_FIELDS = SETTING_STORAGE_FIELDS.map(
+  ([field, key]) => [key, field] as const,
+);
 
 interface OverviewSetting {
   key: string;
@@ -1039,8 +1006,7 @@ export function modelSettings(ctx: ModelsContext, args: Args): unknown {
     effective_sampler: samplerJson(sampler),
     saved_global: saved(global),
     saved_character: saved(charPrefs),
-    applicability: keyApplicability(model.sdk, model.capabilities),
-    reasoning_effort_domain: reasoningDomain(model.sdk, model.capabilities),
+    setting_schema: settingSchema(model.sdk, model.support),
     scopes: scopesJson(scopes, SETTINGS_SCOPE_FIELDS),
   };
 }

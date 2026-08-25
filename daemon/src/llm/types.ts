@@ -12,6 +12,23 @@ export type Sdk =
   | "deepseek"
   | "moonshot";
 
+export const SDK_VARIANTS: readonly Sdk[] = [
+  "anthropic",
+  "openai",
+  "openrouter",
+  "gemini",
+  "zai",
+  "deepseek",
+  "moonshot",
+];
+
+export function sdkFromWire(s: string): Sdk | undefined {
+  if (s === "moonshotai") return "moonshot";
+  return (SDK_VARIANTS as readonly string[]).includes(s) ? (s as Sdk) : undefined;
+}
+
+export const REASONING_OFF = "off";
+
 export interface WireMessage {
   role: "user" | "assistant" | "system";
   content: ContentBlock[];

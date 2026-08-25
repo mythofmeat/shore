@@ -81,33 +81,57 @@ pub(crate) struct EffectiveSamplerField {
     pub scope: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum SettingKind {
+    Number,
+    U32,
+    Boolean,
+    String,
+    Duration,
+    DurationOrOff,
+    JsonObject,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SettingEditorSchema {
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SettingSchemaEntry {
+    pub key: String,
+    pub kind: SettingKind,
+    pub applicability: String,
+    pub suggestions: Vec<String>,
+    pub allow_custom: bool,
+    pub editor: Option<SettingEditorSchema>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct EffectiveSamplerSnapshot {
     pub model: Option<String>,
     pub provider: Option<String>,
     pub model_id: Option<String>,
-    pub temperature: EffectiveSamplerField,
-    pub top_p: EffectiveSamplerField,
-    pub reasoning_effort: EffectiveSamplerField,
-    pub budget_tokens: EffectiveSamplerField,
-    pub max_output_tokens: EffectiveSamplerField,
-    pub cache_ttl: EffectiveSamplerField,
-    pub cache_keepalive: EffectiveSamplerField,
-    pub sdk: EffectiveSamplerField,
-    pub replay_prior_thinking: EffectiveSamplerField,
-    pub max_tool_iterations: EffectiveSamplerField,
-    pub openrouter_provider: EffectiveSamplerField,
-    pub gemini_generation: EffectiveSamplerField,
-    pub zai_clear_thinking: EffectiveSamplerField,
-    pub zai_subscription: EffectiveSamplerField,
-    pub applicability: std::collections::BTreeMap<String, String>,
-    pub reasoning_effort_domain: Vec<String>,
+    pub fields: std::collections::BTreeMap<String, EffectiveSamplerField>,
+    pub setting_schema: Vec<SettingSchemaEntry>,
 }
 
 impl EffectiveSamplerSnapshot {
     pub(crate) fn from_model_settings(data: &serde_json::Value) -> Option<Self> {
         let sampler = data.get("effective_sampler")?;
         let scopes = data.get("scopes");
+        let schema = data.get("setting_schema")?.as_array()?;
+        let setting_schema: Vec<SettingSchemaEntry> =
+            schema.iter().filter_map(Self::schema_entry).collect();
+        if setting_schema.len() != schema.len() {
+            return None;
+        }
+        let fields = setting_schema
+            .iter()
+            .map(|entry| (entry.key.clone(), Self::field(sampler, scopes, &entry.key)))
+            .collect();
         Some(Self {
             model: data
                 .get("model")
@@ -121,46 +145,46 @@ impl EffectiveSamplerSnapshot {
                 .get("model_id")
                 .and_then(|v| v.as_str())
                 .map(str::to_owned),
-            temperature: Self::field(sampler, scopes, "temperature"),
-            top_p: Self::field(sampler, scopes, "top_p"),
-            reasoning_effort: Self::field(sampler, scopes, "reasoning_effort"),
-            budget_tokens: Self::field(sampler, scopes, "budget_tokens"),
-            max_output_tokens: Self::field(sampler, scopes, "max_output_tokens"),
-            cache_ttl: Self::field(sampler, scopes, "cache_ttl"),
-            cache_keepalive: Self::field(sampler, scopes, "cache_keepalive"),
-            sdk: Self::field(sampler, scopes, "sdk"),
-            replay_prior_thinking: Self::field(sampler, scopes, "replay_prior_thinking"),
-            max_tool_iterations: Self::field(sampler, scopes, "max_tool_iterations"),
-            openrouter_provider: Self::field(sampler, scopes, "openrouter_provider"),
-            gemini_generation: Self::field(sampler, scopes, "gemini_generation"),
-            zai_clear_thinking: Self::field(sampler, scopes, "zai_clear_thinking"),
-            zai_subscription: Self::field(sampler, scopes, "zai_subscription"),
-            applicability: data
-                .get("applicability")
-                .and_then(|v| v.as_object())
-                .map(|obj| {
-                    obj.iter()
-                        .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_owned())))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            reasoning_effort_domain: data
-                .get("reasoning_effort_domain")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default(),
+            fields,
+            setting_schema,
         })
     }
 
-    pub(crate) fn key_honored(&self, key: &str) -> bool {
-        match self.applicability.get(key).map(String::as_str) {
-            Some(label) => label == "honored" || label == "always",
-            None => true,
-        }
+    fn schema_entry(value: &serde_json::Value) -> Option<SettingSchemaEntry> {
+        let kind = match value.get("kind")?.as_str()? {
+            "number" => SettingKind::Number,
+            "u32" => SettingKind::U32,
+            "boolean" => SettingKind::Boolean,
+            "string" => SettingKind::String,
+            "duration" => SettingKind::Duration,
+            "duration_or_off" => SettingKind::DurationOrOff,
+            "json_object" => SettingKind::JsonObject,
+            _ => return None,
+        };
+        let editor = value.get("editor").and_then(|editor| {
+            (editor.get("kind")?.as_str()? == "slider").then_some(SettingEditorSchema {
+                min: editor.get("min")?.as_f64()?,
+                max: editor.get("max")?.as_f64()?,
+                step: editor.get("step")?.as_f64()?,
+            })
+        });
+        Some(SettingSchemaEntry {
+            key: value.get("key")?.as_str()?.to_owned(),
+            kind,
+            applicability: value.get("applicability")?.as_str()?.to_owned(),
+            suggestions: value
+                .get("suggestions")?
+                .as_array()?
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_owned))
+                .collect(),
+            allow_custom: value.get("allow_custom")?.as_bool()?,
+            editor,
+        })
+    }
+
+    pub(crate) fn schema(&self, key: &str) -> Option<&SettingSchemaEntry> {
+        self.setting_schema.iter().find(|entry| entry.key == key)
     }
 
     fn field(
@@ -193,23 +217,7 @@ impl EffectiveSamplerSnapshot {
     }
 
     pub(crate) fn field_for_key(&self, key: &str) -> Option<&EffectiveSamplerField> {
-        match key {
-            "temperature" => Some(&self.temperature),
-            "top_p" => Some(&self.top_p),
-            "reasoning_effort" => Some(&self.reasoning_effort),
-            "budget_tokens" => Some(&self.budget_tokens),
-            "max_output_tokens" => Some(&self.max_output_tokens),
-            "cache_ttl" => Some(&self.cache_ttl),
-            "cache_keepalive" => Some(&self.cache_keepalive),
-            "sdk" => Some(&self.sdk),
-            "replay_prior_thinking" => Some(&self.replay_prior_thinking),
-            "max_tool_iterations" => Some(&self.max_tool_iterations),
-            "openrouter_provider" => Some(&self.openrouter_provider),
-            "gemini_generation" => Some(&self.gemini_generation),
-            "zai_clear_thinking" => Some(&self.zai_clear_thinking),
-            "zai_subscription" => Some(&self.zai_subscription),
-            _ => None,
-        }
+        self.fields.get(key)
     }
 
     pub(crate) fn display_value(&self, key: &str) -> Option<&str> {
@@ -1034,7 +1042,7 @@ impl App {
             &self.completion.mode,
             PaletteMode::Submenu(s)
                 if s.parent == "config" || s.parent == "setting" || s.parent.starts_with("setting:")
-        ) || matches!(&self.completion.mode, PaletteMode::ValueEditor(s) if Self::is_setting_key(&s.key))
+        ) || matches!(&self.completion.mode, PaletteMode::ValueEditor(_))
     }
 
     pub(crate) fn selected_row_is_view_option(&self) -> bool {
@@ -1180,48 +1188,26 @@ impl App {
         self.completion.descriptions.get(candidate).cloned()
     }
 
-    const SETTING_KEYS: &'static [&'static str] = &[
-        "temperature",
-        "top_p",
-        "reasoning_effort",
-        "budget_tokens",
-        "max_output_tokens",
-        "cache_ttl",
-        "cache_keepalive",
-        "sdk",
-        "replay_prior_thinking",
-        "max_tool_iterations",
-        "openrouter_provider",
-        "gemini_generation",
-        "zai_clear_thinking",
-        "zai_subscription",
-    ];
-
-    const SDK_VARIANTS: &'static [&'static str] = &[
-        "anthropic",
-        "openai",
-        "openrouter",
-        "gemini",
-        "zai",
-        "deepseek",
-        "moonshot",
-        "reset",
-    ];
-
-    fn is_setting_key(key: &str) -> bool {
-        Self::SETTING_KEYS.contains(&key)
+    fn is_setting_key(&self, key: &str) -> bool {
+        self.effective_sampler
+            .as_ref()
+            .and_then(|snapshot| snapshot.schema(key))
+            .is_some()
     }
 
-    fn visible_setting_keys(&self) -> Vec<&'static str> {
-        Self::SETTING_KEYS
-            .iter()
-            .copied()
-            .filter(|key| {
-                self.effective_sampler
-                    .as_ref()
-                    .is_none_or(|snapshot| snapshot.key_honored(key))
+    fn visible_setting_keys(&self) -> Vec<&str> {
+        self.effective_sampler
+            .as_ref()
+            .map_or_else(Vec::new, |snapshot| {
+                snapshot
+                    .setting_schema
+                    .iter()
+                    .filter(|entry| {
+                        entry.applicability == "always" || entry.applicability == "honored"
+                    })
+                    .map(|entry| entry.key.as_str())
+                    .collect()
             })
-            .collect()
     }
 
     const VIEW_KEYS: &'static [&'static str] = &[
@@ -1484,36 +1470,31 @@ impl App {
             .unwrap_or(fallback)
     }
 
+    #[expect(
+        clippy::float_arithmetic,
+        reason = "choosing a neutral initial point for a daemon-defined floating-point slider requires arithmetic"
+    )]
     fn slider_kind_for_setting(&self, key: &str) -> Option<ValueEditorKind> {
-        match key {
-            "temperature" => Some(ValueEditorKind::Slider {
-                min: 0.0,
-                max: 2.0,
-                step: 0.1,
-                current: Self::quantize_slider_value(
-                    0.0,
-                    2.0,
-                    0.1,
-                    self.current_slider_value("temperature", 1.0),
-                ),
-                typed: None,
-                dirty: false,
-            }),
-            "top_p" => Some(ValueEditorKind::Slider {
-                min: 0.0,
-                max: 1.0,
-                step: 0.05,
-                current: Self::quantize_slider_value(
-                    0.0,
-                    1.0,
-                    0.05,
-                    self.current_slider_value("top_p", 0.95),
-                ),
-                typed: None,
-                dirty: false,
-            }),
-            _ => None,
-        }
+        let editor = self
+            .effective_sampler
+            .as_ref()?
+            .schema(key)?
+            .editor
+            .as_ref()?;
+        let fallback = editor.min + (editor.max - editor.min) / 2.0;
+        Some(ValueEditorKind::Slider {
+            min: editor.min,
+            max: editor.max,
+            step: editor.step,
+            current: Self::quantize_slider_value(
+                editor.min,
+                editor.max,
+                editor.step,
+                self.current_slider_value(key, fallback),
+            ),
+            typed: None,
+            dirty: false,
+        })
     }
 
     fn refresh_value_editor_from_effective_sampler(&mut self) {
@@ -1594,6 +1575,28 @@ impl App {
             .into_iter()
             .map(crate::cli::PaletteValue::plain)
             .collect();
+        self.palette_catalog.setting_values = self.effective_sampler.as_ref().map_or_else(
+            std::collections::BTreeMap::new,
+            |snapshot| {
+                snapshot
+                    .setting_schema
+                    .iter()
+                    .filter(|entry| {
+                        entry.applicability == "always" || entry.applicability == "honored"
+                    })
+                    .map(|entry| {
+                        (
+                            entry.key.clone(),
+                            entry
+                                .suggestions
+                                .iter()
+                                .map(crate::cli::PaletteValue::plain)
+                                .collect(),
+                        )
+                    })
+                    .collect()
+            },
+        );
         let mut message_refs = ["last", "-1", "-2", "-3"]
             .into_iter()
             .map(crate::cli::PaletteValue::plain)
@@ -1735,99 +1738,18 @@ impl App {
                 }
                 self.completion.candidates = candidates;
             }
-            "setting:reasoning_effort" => {
-                let domain: Vec<&str> = self
-                    .effective_sampler
-                    .as_ref()
-                    .filter(|s| !s.reasoning_effort_domain.is_empty())
-                    .map_or_else(
-                        || vec!["low", "medium", "high", "xhigh", "max"],
-                        |s| {
-                            s.reasoning_effort_domain
-                                .iter()
-                                .map(String::as_str)
-                                .collect()
-                        },
-                    );
-                let mut presets = domain;
-                presets.push("off");
-                presets.push("reset");
-                self.completion.candidates = Self::filtered_presets(&presets, &filter);
-            }
-            "setting:replay_prior_thinking" => {
-                self.completion.candidates =
-                    Self::filtered_presets(&["all", "none", "reset"], &filter);
-            }
-            "setting:zai_clear_thinking" | "setting:zai_subscription" => {
-                self.completion.candidates =
-                    Self::filtered_presets(&["true", "false", "reset"], &filter);
-            }
-            "setting:gemini_generation" => {
-                let mut candidates = Self::filtered_presets(&["1", "2", "3", "reset"], &filter);
-                if raw_filter.parse::<u32>().is_ok() {
-                    candidates.push(format!("Custom: {raw_filter}"));
-                }
-                self.completion.candidates = candidates;
-            }
-            "setting:openrouter_provider" => {
-                let mut candidates = Self::filtered_presets(&["reset"], &filter);
-                if !raw_filter.is_empty() && !raw_filter.eq_ignore_ascii_case("reset") {
-                    candidates.push(format!("Custom: {raw_filter}"));
-                }
-                self.completion.candidates = candidates;
-            }
-            "setting:cache_ttl" => {
-                let mut candidates = Self::filtered_presets(&["5m", "1h", "reset"], &filter);
-                if !raw_filter.is_empty() && !raw_filter.eq_ignore_ascii_case("off") {
-                    candidates.push(format!("Custom: {raw_filter}"));
-                }
-                self.completion.candidates = candidates;
-            }
-            "setting:cache_keepalive" => {
-                let mut candidates = Self::filtered_presets(&["off", "55m", "reset"], &filter);
-                if !raw_filter.is_empty()
-                    && !raw_filter.eq_ignore_ascii_case("off")
-                    && !raw_filter.eq_ignore_ascii_case("reset")
-                {
-                    candidates.push(format!("Custom: {raw_filter}"));
-                }
-                self.completion.candidates = candidates;
-            }
-            "setting:max_output_tokens" => {
-                let mut candidates =
-                    Self::filtered_presets(&["16384", "32768", "65536", "reset"], &filter);
-                if raw_filter.parse::<u32>().is_ok() {
-                    candidates.push(format!("Custom: {raw_filter}"));
-                }
-                self.completion.candidates = candidates;
-            }
-            "setting:budget_tokens" => {
-                let mut candidates = Self::filtered_presets(
-                    &["1024", "2048", "4096", "8192", "16384", "32768", "reset"],
-                    &filter,
-                );
-                if raw_filter.parse::<u32>().is_ok() {
-                    candidates.push(format!("Custom: {raw_filter}"));
-                }
-                self.completion.candidates = candidates;
-            }
-            "setting:max_tool_iterations" => {
-                let mut candidates =
-                    Self::filtered_presets(&["8", "16", "32", "64", "reset"], &filter);
-                if raw_filter.parse::<u32>().is_ok() {
-                    candidates.push(format!("Custom: {raw_filter}"));
-                }
-                self.completion.candidates = candidates;
-            }
-            "setting:sdk" => {
-                self.completion.candidates = Self::filtered_presets(Self::SDK_VARIANTS, &filter);
-            }
             "setting:reset" => {
-                self.completion.candidates = Self::SETTING_KEYS
-                    .iter()
+                self.completion.candidates = self
+                    .visible_setting_keys()
+                    .into_iter()
                     .filter(|key| filter.is_empty() || key.starts_with(&filter))
-                    .map(|key| (*key).to_owned())
+                    .map(str::to_owned)
                     .collect();
+            }
+            setting_parent if setting_parent.starts_with("setting:") => {
+                let key = setting_parent.strip_prefix("setting:").unwrap_or_default();
+                self.completion.candidates =
+                    self.setting_value_candidates(key, raw_filter, &filter);
             }
             "view" => {
                 self.completion.candidates = Self::VIEW_KEYS
@@ -1851,13 +1773,19 @@ impl App {
                         rows.push(format!("{label} = {shown}"));
                     }
                 }
-                let matching_settings: Vec<&'static str> = self
+                let matching_settings: Vec<String> = self
                     .visible_setting_keys()
                     .into_iter()
                     .filter(|key| filter.is_empty() || key.starts_with(&filter))
+                    .map(str::to_owned)
                     .collect();
                 match self.setting_editor_blocked_row() {
-                    Some(blocked) if !matching_settings.is_empty() => rows.push(blocked.to_owned()),
+                    Some(blocked)
+                        if !matching_settings.is_empty()
+                            || (self.sampler_settings_loading && filter.is_empty()) =>
+                    {
+                        rows.push(blocked.to_owned());
+                    }
                     Some(_) => {}
                     None => {
                         rows.extend(
@@ -1907,12 +1835,44 @@ impl App {
         };
     }
 
-    fn filtered_presets(presets: &[&str], filter: &str) -> Vec<String> {
-        presets
+    fn setting_value_candidates(&self, key: &str, raw: &str, filter: &str) -> Vec<String> {
+        let Some(schema) = self
+            .effective_sampler
+            .as_ref()
+            .and_then(|snapshot| snapshot.schema(key))
+        else {
+            return Vec::new();
+        };
+        let mut candidates: Vec<String> = schema
+            .suggestions
             .iter()
-            .filter(|preset| filter.is_empty() || preset.starts_with(filter))
-            .map(|preset| (*preset).to_owned())
-            .collect()
+            .filter(|suggestion| filter.is_empty() || suggestion.starts_with(filter))
+            .cloned()
+            .collect();
+        if filter.is_empty() || "reset".starts_with(filter) {
+            candidates.push("reset".into());
+        }
+        let custom_is_typed = match schema.kind {
+            SettingKind::Number => raw.parse::<f64>().is_ok(),
+            SettingKind::U32 => raw.parse::<u32>().is_ok(),
+            SettingKind::JsonObject => {
+                serde_json::from_str::<serde_json::Value>(raw).is_ok_and(|value| value.is_object())
+            }
+            SettingKind::Boolean => false,
+            SettingKind::String | SettingKind::DurationOrOff => !raw.trim().is_empty(),
+            SettingKind::Duration => !raw.trim().is_empty() && !raw.eq_ignore_ascii_case("off"),
+        };
+        if schema.allow_custom
+            && custom_is_typed
+            && !raw.eq_ignore_ascii_case("reset")
+            && !schema
+                .suggestions
+                .iter()
+                .any(|suggestion| suggestion == raw)
+        {
+            candidates.push(format!("Custom: {raw}"));
+        }
+        candidates
     }
 
     pub(crate) fn enter_submenu(&mut self, parent: &str) {
@@ -2039,7 +1999,7 @@ impl App {
             PaletteMode::ValueEditor(state) => state.clone(),
             PaletteMode::Top | PaletteMode::Submenu(_) => return None,
         };
-        if Self::is_setting_key(&state.key) && !self.setting_editors_ready() {
+        if self.is_setting_key(&state.key) && !self.setting_editors_ready() {
             return None;
         }
         let value = match state.kind {
@@ -2233,23 +2193,32 @@ mod tests {
     fn visible_setting_keys_honors_daemon_applicability() {
         let snapshot = EffectiveSamplerSnapshot::from_model_settings(&serde_json::json!({
             "effective_sampler": { "temperature": 0.7 },
-            "reasoning_effort_domain": ["minimal", "low", "medium", "high", "xhigh"],
-            "applicability": {
-                "temperature": "honored",
-                "reasoning_effort": "honored",
-                "sdk": "always",
-                "replay_prior_thinking": "always",
-                "budget_tokens": "ignored",
-                "zai_clear_thinking": "rejected",
-                "cache_keepalive": "honored",
-                "max_tool_iterations": "always",
-            },
+            "setting_schema": [
+                {"key":"temperature","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true},
+                {"key":"reasoning_effort","kind":"string","applicability":"honored","suggestions":["minimal","low","medium","high","xhigh"],"allow_custom":true},
+                {"key":"sdk","kind":"string","applicability":"always","suggestions":[],"allow_custom":false},
+                {"key":"replay_prior_thinking","kind":"string","applicability":"always","suggestions":[],"allow_custom":false},
+                {"key":"budget_tokens","kind":"u32","applicability":"ignored","suggestions":[],"allow_custom":true},
+                {"key":"zai_clear_thinking","kind":"boolean","applicability":"rejected","suggestions":[],"allow_custom":false},
+                {"key":"cache_keepalive","kind":"duration_or_off","applicability":"honored","suggestions":[],"allow_custom":true},
+                {"key":"cache_keepalive_max","kind":"duration","applicability":"always","suggestions":[],"allow_custom":true},
+                {"key":"max_tool_iterations","kind":"u32","applicability":"always","suggestions":[],"allow_custom":true},
+                {"key":"supports_images","kind":"boolean","applicability":"always","suggestions":["true","false"],"allow_custom":false}
+            ]
         }))
         .expect("snapshot");
 
         assert_eq!(
-            snapshot.reasoning_effort_domain,
-            vec!["minimal", "low", "medium", "high", "xhigh"]
+            snapshot
+                .schema("reasoning_effort")
+                .map(|entry| entry.suggestions.clone()),
+            Some(vec![
+                "minimal".into(),
+                "low".into(),
+                "medium".into(),
+                "high".into(),
+                "xhigh".into()
+            ])
         );
 
         let app = App {
@@ -2260,17 +2229,46 @@ mod tests {
 
         assert!(visible.contains(&"temperature"));
         assert!(visible.contains(&"sdk"));
-        assert!(visible.contains(&"openrouter_provider"));
         assert!(visible.contains(&"cache_keepalive"));
+        assert!(visible.contains(&"cache_keepalive_max"));
         assert!(visible.contains(&"max_tool_iterations"));
+        assert!(visible.contains(&"supports_images"));
         assert!(!visible.contains(&"budget_tokens"));
         assert!(!visible.contains(&"zai_clear_thinking"));
     }
 
     #[test]
-    fn visible_setting_keys_shows_all_without_snapshot() {
+    fn visible_setting_keys_requires_a_daemon_schema() {
         let app = App::default();
-        assert_eq!(app.visible_setting_keys(), App::SETTING_KEYS.to_vec());
+        assert!(app.visible_setting_keys().is_empty());
+    }
+
+    #[test]
+    fn open_reasoning_schema_offers_typed_custom_values_and_reset() {
+        let snapshot = EffectiveSamplerSnapshot::from_model_settings(&serde_json::json!({
+            "effective_sampler": {},
+            "setting_schema": [{
+                "key":"reasoning_effort",
+                "kind":"string",
+                "applicability":"honored",
+                "suggestions":["low","high"],
+                "allow_custom":true
+            }]
+        }))
+        .expect("snapshot");
+        let app = App {
+            effective_sampler: Some(snapshot),
+            ..App::default()
+        };
+
+        assert_eq!(
+            app.setting_value_candidates("reasoning_effort", "turbo", "turbo"),
+            vec!["Custom: turbo"]
+        );
+        assert!(
+            app.setting_value_candidates("reasoning_effort", "", "")
+                .contains(&"reset".into())
+        );
     }
 
     #[test]

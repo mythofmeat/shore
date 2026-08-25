@@ -123,7 +123,7 @@ async function buildContext(setup: Setup): Promise<ModelsContext> {
       `[${d.provider}.discovery]\nenabled = true\nignore = [${hidden.join(", ")}]\n`;
 
     const cache = {
-      version: 1,
+      version: 2,
       provider_key: d.provider,
       fetched_at: "2026-07-01T00:00:00Z",
       models: d.models.map((m) => ({
@@ -133,10 +133,14 @@ async function buildContext(setup: Setup): Promise<ModelsContext> {
         discovered_at: "2026-07-01T00:00:00Z",
         context_length: 250_000,
         max_output_tokens: 32_000,
-        ...(m.supported_parameters === undefined
-          ? {}
-          : { supported_parameters: m.supported_parameters }),
-        ...(m.effort_levels === undefined ? {} : { effort_levels: m.effort_levels }),
+        support: {
+          ...(m.supported_parameters === undefined
+            ? {}
+            : { supported_parameters: m.supported_parameters }),
+          ...(m.effort_levels === undefined
+            ? {}
+            : { effort: { supported: true, levels: m.effort_levels } }),
+        },
       })),
     };
     const path = cachePath(dirs.cache, d.provider);
@@ -312,17 +316,26 @@ function expectShapeOf(op: string, result: unknown, label: string): void {
     }
 
     case "model_settings": {
-      const applicability = row["applicability"] as Record<string, string> | undefined;
+      const schema = row["setting_schema"] as Array<Record<string, unknown>> | undefined;
       const sampler = row["effective_sampler"] as Record<string, unknown> | undefined;
-      expect(applicability, `${label}: every setting says whether it applies`).toBeDefined();
+      expect(schema, `${label}: every setting carries its daemon schema`).toBeDefined();
       expect(sampler, `${label}: and what it currently resolves to`).toBeDefined();
 
-      for (const [field, verdict] of Object.entries(applicability ?? {})) {
-        expect(["honored", "ignored", "always"], `${label}: ${field}`).toContain(verdict);
+      const applicability = new Map(
+        (schema ?? []).flatMap((entry) => {
+          const key = entry["key"];
+          const verdict = entry["applicability"];
+          return typeof key === "string" && typeof verdict === "string"
+            ? [[key, verdict] as const]
+            : [];
+        }),
+      );
+      for (const [field, verdict] of applicability) {
+        expect(["honored", "ignored", "rejected", "always"], `${label}: ${field}`).toContain(verdict);
       }
       for (const field of Object.keys(sampler ?? {})) {
         expect(
-          Object.hasOwn(applicability ?? {}, field) || field === "reasoning_effort_domain",
+          applicability.has(field),
           `${label}: ${field} resolves to a value, so it must say whether it applies`,
         ).toBe(true);
       }
@@ -813,16 +826,27 @@ describe("a discovered model's capabilities reach the settings table", () => {
   test("supported_parameters decides which samplers are honored", async () => {
     const ctx = await discovered();
     const shown = modelSettings(ctx, { name: "vendor/narrow" }) as Record<string, unknown>;
-    const applicability = shown["applicability"] as Record<string, string>;
+    const schema = shown["setting_schema"] as Array<Record<string, unknown>>;
+    const applicability = new Map(
+      schema.flatMap((entry) => {
+        const key = entry["key"];
+        const verdict = entry["applicability"];
+        return typeof key === "string" && typeof verdict === "string"
+          ? [[key, verdict] as const]
+          : [];
+      }),
+    );
 
-    expect(applicability["top_p"]).toBe("honored");
-    expect(applicability["temperature"]).toBe("rejected");
+    expect(applicability.get("top_p")).toBe("honored");
+    expect(applicability.get("temperature")).toBe("rejected");
   });
 
   test("effort_levels narrows the reasoning effort domain", async () => {
     const ctx = await discovered();
     const shown = modelSettings(ctx, { name: "vendor/narrow" }) as Record<string, unknown>;
 
-    expect(shown["reasoning_effort_domain"]).toEqual(["low", "high"]);
+    const schema = shown["setting_schema"] as Array<Record<string, unknown>>;
+    expect(schema.find((entry) => entry["key"] === "reasoning_effort")?.["suggestions"])
+      .toEqual(["low", "high", "off"]);
   });
 });

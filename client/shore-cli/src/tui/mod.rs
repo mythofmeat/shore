@@ -2422,11 +2422,20 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 "model_settings" => {
                     let pending_response = app.sampler_settings_rid_matches(co.rid.as_deref());
                     let sampler_snapshot = EffectiveSamplerSnapshot::from_model_settings(&co.data);
+                    let incompatible = co.data.get("effective_sampler").is_some()
+                        && co.data.get("setting_schema").is_none();
                     if pending_response {
                         app.finish_sampler_settings_refresh();
                         if let Some(snapshot) = sampler_snapshot {
                             app.note_active_model_from_snapshot(&snapshot);
                             app.effective_sampler = Some(snapshot);
+                        } else {
+                            if incompatible {
+                                app.effective_sampler = None;
+                                app.set_error(
+                                    "client and daemon must be upgraded together to edit model settings",
+                                );
+                            }
                         }
                     } else {
                         if co.rid.is_none()
@@ -3923,6 +3932,14 @@ mod redraw_tests {
                         "max_output_tokens": 4096,
                         "cache_ttl": "1h"
                     },
+                    "setting_schema": [
+                        {"key":"temperature","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true},
+                        {"key":"top_p","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true},
+                        {"key":"reasoning_effort","kind":"string","applicability":"honored","suggestions":["medium"],"allow_custom":true},
+                        {"key":"budget_tokens","kind":"u32","applicability":"honored","suggestions":[],"allow_custom":true},
+                        {"key":"max_output_tokens","kind":"u32","applicability":"always","suggestions":[],"allow_custom":true},
+                        {"key":"cache_ttl","kind":"duration","applicability":"honored","suggestions":["1h"],"allow_custom":true}
+                    ],
                     "scopes": {
                         "temperature": "character_model",
                         "top_p": "static_default",
@@ -4086,6 +4103,7 @@ mod redraw_tests {
                     "effective_sampler": {
                         "temperature": 0.7
                     },
+                    "setting_schema": [{"key":"temperature","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true}],
                     "scopes": {
                         "temperature": "character_model"
                     }
@@ -4129,6 +4147,30 @@ mod redraw_tests {
     }
 
     #[test]
+    fn a_legacy_model_settings_response_requires_a_lockstep_upgrade() {
+        let mut app = App::default();
+        let rid = app.begin_sampler_settings_refresh();
+
+        let effect = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(rid),
+                name: "model_settings".into(),
+                data: serde_json::json!({"effective_sampler":{"temperature":0.7}}),
+            }),
+        );
+
+        assert_eq!(effect.redraw, RedrawEffect::Immediate);
+        assert!(!app.sampler_settings_loading);
+        assert!(app.effective_sampler.is_none());
+        assert!(
+            app.error_log
+                .iter()
+                .any(|entry| entry.contains("client and daemon must be upgraded together"))
+        );
+    }
+
+    #[test]
     fn pending_model_settings_response_is_trusted_even_for_drifted_model_label() {
         let mut app = App::default();
         app.set_active_model(Some("chat.test.current"));
@@ -4144,6 +4186,7 @@ mod redraw_tests {
                     "effective_sampler": {
                         "temperature": 0.7
                     },
+                    "setting_schema": [{"key":"temperature","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true}],
                     "scopes": {
                         "temperature": "character_model"
                     }
@@ -4168,10 +4211,13 @@ mod redraw_tests {
         app.set_active_model(Some("chat.test.current"));
         app.effective_sampler = Some(EffectiveSamplerSnapshot {
             model: Some("chat.test.current".into()),
-            temperature: app::EffectiveSamplerField {
-                value: Some("0.5".into()),
-                scope: Some("character_model".into()),
-            },
+            fields: std::collections::BTreeMap::from([(
+                "temperature".into(),
+                app::EffectiveSamplerField {
+                    value: Some("0.5".into()),
+                    scope: Some("character_model".into()),
+                },
+            )]),
             ..EffectiveSamplerSnapshot::default()
         });
         let rid = app.begin_sampler_settings_refresh();
@@ -4184,6 +4230,7 @@ mod redraw_tests {
                 data: serde_json::json!({
                     "model": "chat.test.other",
                     "effective_sampler": { "temperature": 0.9 },
+                    "setting_schema": [{"key":"temperature","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true}],
                     "scopes": { "temperature": "character_model" }
                 }),
             }),
@@ -4206,10 +4253,13 @@ mod redraw_tests {
         app.set_active_model(Some("chat.test.current"));
         app.effective_sampler = Some(EffectiveSamplerSnapshot {
             model: Some("chat.test.current".into()),
-            temperature: app::EffectiveSamplerField {
-                value: Some("0.5".into()),
-                scope: Some("character_model".into()),
-            },
+            fields: std::collections::BTreeMap::from([(
+                "temperature".into(),
+                app::EffectiveSamplerField {
+                    value: Some("0.5".into()),
+                    scope: Some("character_model".into()),
+                },
+            )]),
             ..EffectiveSamplerSnapshot::default()
         });
 
@@ -4221,6 +4271,7 @@ mod redraw_tests {
                 data: serde_json::json!({
                     "model": "chat.test.previous",
                     "effective_sampler": { "temperature": 0.9 },
+                    "setting_schema": [{"key":"temperature","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true}],
                     "scopes": { "temperature": "character_model" }
                 }),
             }),
@@ -4254,6 +4305,7 @@ mod redraw_tests {
                     "effective_sampler": {
                         "temperature": 0.7
                     },
+                    "setting_schema": [{"key":"temperature","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true}],
                     "scopes": {
                         "temperature": "character_model"
                     }

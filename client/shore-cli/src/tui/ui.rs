@@ -3259,6 +3259,24 @@ pub(crate) mod scenario_tests {
                     "max_output_tokens": 4096,
                     "cache_ttl": "1h"
                 },
+                "setting_schema": [
+                    {"key":"temperature","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true,"editor":{"kind":"slider","min":0.0,"max":2.0,"step":0.1}},
+                    {"key":"top_p","kind":"number","applicability":"honored","suggestions":[],"allow_custom":true,"editor":{"kind":"slider","min":0.0,"max":1.0,"step":0.05}},
+                    {"key":"reasoning_effort","kind":"string","applicability":"honored","suggestions":["low","medium","high","xhigh","max","off"],"allow_custom":true},
+                    {"key":"budget_tokens","kind":"u32","applicability":"honored","suggestions":["1024","2048","4096"],"allow_custom":true},
+                    {"key":"max_output_tokens","kind":"u32","applicability":"always","suggestions":["16384","32768","65536"],"allow_custom":true},
+                    {"key":"cache_ttl","kind":"duration","applicability":"honored","suggestions":["5m","1h"],"allow_custom":true},
+                    {"key":"cache_keepalive","kind":"duration_or_off","applicability":"always","suggestions":["off","55m"],"allow_custom":true},
+                    {"key":"cache_keepalive_max","kind":"duration","applicability":"always","suggestions":["90m","12h"],"allow_custom":true},
+                    {"key":"sdk","kind":"string","applicability":"always","suggestions":["anthropic","openai","openrouter","gemini","zai","deepseek","moonshot"],"allow_custom":false},
+                    {"key":"replay_prior_thinking","kind":"string","applicability":"always","suggestions":["all","none"],"allow_custom":false},
+                    {"key":"max_tool_iterations","kind":"u32","applicability":"always","suggestions":["8","16","32","64"],"allow_custom":true},
+                    {"key":"openrouter_provider","kind":"json_object","applicability":"ignored","suggestions":[],"allow_custom":true},
+                    {"key":"gemini_generation","kind":"u32","applicability":"ignored","suggestions":["1","2","3"],"allow_custom":true},
+                    {"key":"zai_clear_thinking","kind":"boolean","applicability":"ignored","suggestions":["true","false"],"allow_custom":false},
+                    {"key":"zai_subscription","kind":"boolean","applicability":"ignored","suggestions":["true","false"],"allow_custom":false},
+                    {"key":"supports_images","kind":"boolean","applicability":"always","suggestions":["true","false"],"allow_custom":false}
+                ],
                 "scopes": {
                     "temperature": "character_model",
                     "top_p": "static_default",
@@ -4369,7 +4387,7 @@ pub(crate) mod scenario_tests {
         h.type_str("1.25");
         let action = h.press_action(KeyCode::Enter);
 
-        assert_set_model_setting(action, "temperature", &serde_json::json!(1.25));
+        assert_set_model_setting(action, "temperature", &serde_json::json!("1.25"));
     }
 
     #[test]
@@ -4397,7 +4415,7 @@ pub(crate) mod scenario_tests {
         assert!(matches!(h.app.completion.mode, PaletteMode::ValueEditor(_)));
         let action = h.press_action(KeyCode::Enter);
 
-        assert_set_model_setting(action, "temperature", &serde_json::json!(0.7));
+        assert_set_model_setting(action, "temperature", &serde_json::json!("0.7"));
     }
 
     #[test]
@@ -4513,26 +4531,24 @@ pub(crate) mod scenario_tests {
         h.app.input.mode = InputMode::Normal;
 
         open_setting_menu_with_snapshot(&mut h);
+        let daemon_values = h
+            .app
+            .effective_sampler
+            .as_ref()
+            .and_then(|snapshot| snapshot.schema("sdk"))
+            .map(|schema| schema.suggestions.clone())
+            .unwrap_or_default();
         h.type_str("sdk");
         h.press(KeyCode::Enter);
 
-        for sdk in [
-            "anthropic",
-            "openai",
-            "openrouter",
-            "gemini",
-            "zai",
-            "deepseek",
-            "moonshot",
-        ] {
+        for sdk in daemon_values {
             assert!(
                 h.app
                     .completion
                     .candidates
                     .iter()
-                    .any(|candidate| candidate == sdk),
-                "sdk picker is missing {sdk}; it must list every variant in SDK_VARIANTS \
-                 in daemon/src/config/models.ts"
+                    .any(|candidate| candidate == &sdk),
+                "sdk picker is missing {sdk}; it must list every value from the daemon schema"
             );
         }
     }
@@ -4814,8 +4830,8 @@ pub(crate) mod scenario_tests {
         h.type_str("temp");
         let settings = h.render("filtered to a setting while it loads");
         assert!(
-            settings.contains("loading sampler settings"),
-            "temperature is still coming, so say so: {settings}"
+            !settings.contains("temperature"),
+            "the client must not invent a setting key before the daemon schema arrives: {settings}"
         );
     }
 

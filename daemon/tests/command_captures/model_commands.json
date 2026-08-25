@@ -1036,10 +1036,6 @@
           "args": {
             "key": "reasoning_effort",
             "value": "banana"
-          },
-          "err": {
-            "code": "invalid_request",
-            "message": "`reasoning_effort` value \"banana\" is out of domain; allowed: adaptive, low, medium, high, xhigh, max"
           }
         },
         {

@@ -322,7 +322,7 @@
       },
       "caches_after": {
         "alpha": {
-          "version": 1,
+          "version": 2,
           "provider_key": "alpha",
           "fetched_at": "<utc-now>",
           "base_url": "<upstream>",
@@ -427,7 +427,7 @@
       },
       "caches_after": {
         "anthropic": {
-          "version": 1,
+          "version": 2,
           "provider_key": "anthropic",
           "fetched_at": "<utc-now>",
           "base_url": "<upstream>",
@@ -459,7 +459,7 @@
       },
       "caches_after": {
         "anth": {
-          "version": 1,
+          "version": 2,
           "provider_key": "anth",
           "fetched_at": "<utc-now>",
           "base_url": "<upstream>",
@@ -545,7 +545,7 @@
       },
       "caches_after": {
         "good": {
-          "version": 1,
+          "version": 2,
           "provider_key": "good",
           "fetched_at": "<utc-now>",
           "base_url": "<upstream>",

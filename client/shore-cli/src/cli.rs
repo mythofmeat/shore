@@ -813,6 +813,8 @@ pub(crate) enum CompleteKind {
     /// Sampler keys `shore model setting` accepts, with how the target model
     /// treats each one
     SettingKeys,
+    /// Preset values advertised for the named model setting
+    SettingValues,
     /// Dotted config keys that `shore config set` accepts, with their types
     ConfigKeys,
     /// Every dotted config key, settable or not, for `shore config get`
@@ -1430,6 +1432,7 @@ pub(crate) struct PaletteCatalog {
     pub tools: Vec<PaletteValue>,
     pub subagents: Vec<PaletteValue>,
     pub setting_keys: Vec<PaletteValue>,
+    pub setting_values: std::collections::BTreeMap<String, Vec<PaletteValue>>,
     pub message_refs: Vec<PaletteValue>,
     pub config_keys: Vec<PaletteValue>,
     pub config_sections: Vec<PaletteValue>,
@@ -1511,29 +1514,8 @@ fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
             .then(|| words.get(2).cloned())
             .flatten()
         })
-        .map_or_else(Vec::new, |key| {
-            let values: &[&str] = match key.as_str() {
-                "reasoning_effort" => &["low", "medium", "high", "xhigh", "max", "off"],
-                "replay_prior_thinking" => &["all", "none"],
-                "zai_clear_thinking" | "zai_subscription" => &["true", "false"],
-                "sdk" => &[
-                    "anthropic",
-                    "openai",
-                    "openrouter",
-                    "gemini",
-                    "zai",
-                    "deepseek",
-                    "moonshot",
-                ],
-                "cache_ttl" => &["5m", "1h"],
-                "cache_keepalive" => &["off", "55m"],
-                "budget_tokens" => &["1024", "2048", "4096", "8192", "16384", "32768"],
-                "max_output_tokens" => &["16384", "32768", "65536"],
-                "max_tool_iterations" => &["8", "16", "32", "64"],
-                _ => &[],
-            };
-            values.iter().copied().map(PaletteValue::plain).collect()
-        });
+        .and_then(|key| catalog.setting_values.get(&key).cloned())
+        .unwrap_or_default();
 
     let model_values = catalog.models.clone();
     let subagent_values = catalog.subagents.clone();
@@ -1945,6 +1927,7 @@ function __shore_setting_key\n\
     return 1\n\
 end\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting; and not __shore_setting_key\" -f -a \"(shore complete setting-keys 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting; and __shore_setting_key\" -f -a \"(shore complete setting-values (__shore_setting_key) 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info\" -l subagent -r -f -a \"(shore complete subagents 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
 \n\
@@ -1966,36 +1949,8 @@ complete -c shore -n \"__fish_shore_using_subcommand config; and __fish_seen_sub
 complete -c shore -n \"__fish_shore_using_subcommand config; and __fish_seen_subcommand_from set; and __shore_config_key\" -f -a \"(shore complete config-values (__shore_config_key) 2>/dev/null)\"\n"
 }
 
-fn parse_setting_value(key: &str, raw: &str) -> serde_json::Value {
-    use serde_json::Value;
-    let trimmed = raw.trim();
-    match key {
-        "replay_prior_thinking" | "zai_clear_thinking" | "zai_subscription" => {
-            match trimmed.to_ascii_lowercase().as_str() {
-                "true" | "yes" | "on" => Value::Bool(true),
-                "false" | "no" | "off" => Value::Bool(false),
-                _ => Value::String(trimmed.to_owned()),
-            }
-        }
-        "temperature" | "top_p" => trimmed
-            .parse::<f64>()
-            .ok()
-            .and_then(serde_json::Number::from_f64)
-            .map_or_else(|| Value::String(trimmed.to_owned()), Value::Number),
-        "budget_tokens" | "max_output_tokens" | "gemini_generation" | "max_tool_iterations" => {
-            trimmed.parse::<u64>().map_or_else(
-                |_| Value::String(trimmed.to_owned()),
-                |n| Value::Number(n.into()),
-            )
-        }
-        "reasoning_effort" => match trimmed.to_ascii_lowercase().as_str() {
-            "off" | "none" | "disable" | "disabled" | "unset" | "" => Value::String("off".into()),
-            _ => Value::String(trimmed.to_owned()),
-        },
-        "openrouter_provider" => serde_json::from_str::<Value>(trimmed)
-            .unwrap_or_else(|_| Value::String(trimmed.to_owned())),
-        _ => Value::String(trimmed.to_owned()),
-    }
+fn parse_setting_value(_key: &str, raw: &str) -> serde_json::Value {
+    serde_json::Value::String(raw.trim().to_owned())
 }
 
 pub(crate) fn alt_command_to_swp(
@@ -2589,6 +2544,10 @@ mod tests {
             tools: vec![PaletteValue::plain("read")],
             subagents: vec![PaletteValue::plain("librarian")],
             setting_keys: vec![PaletteValue::plain("temperature")],
+            setting_values: std::collections::BTreeMap::from([(
+                "temperature".into(),
+                vec![PaletteValue::plain("0.125")],
+            )]),
             config_keys: vec![PaletteValue::plain("defaults.stream")],
             config_sections: vec![PaletteValue::plain("defaults")],
             config_schema: Some(serde_json::json!({
@@ -2614,6 +2573,10 @@ mod tests {
         assert!(
             palette_replacements("config set defaults.stream ", &catalog)
                 .contains(&"config set defaults.stream true".into())
+        );
+        assert!(
+            palette_replacements("model setting temperature ", &catalog)
+                .contains(&"model setting temperature 0.125".into())
         );
         assert!(!palette_replacements("model --", &catalog).contains(&"model --help".into()));
     }
@@ -4061,7 +4024,7 @@ mod tests {
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "key"), "temperature");
-        assert_eq!(arg(&args, "value"), 0.8);
+        assert_eq!(arg(&args, "value"), "0.8");
         assert_eq!(arg(&args, "scope"), "character");
     }
 
@@ -4171,7 +4134,7 @@ mod tests {
         let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "key"), "temperature");
-        assert_eq!(arg(&args, "value"), 0.5);
+        assert_eq!(arg(&args, "value"), "0.5");
         assert_eq!(arg(&args, "background_task"), "all");
         assert_eq!(arg(&args, "scope"), "character");
     }
@@ -4214,7 +4177,7 @@ mod tests {
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "subagent"), "librarian");
         assert_eq!(arg(&args, "key"), "temperature");
-        assert_eq!(arg(&args, "value"), 0.25);
+        assert_eq!(arg(&args, "value"), "0.25");
     }
 
     #[test]
@@ -4291,7 +4254,7 @@ mod tests {
     }
 
     #[test]
-    fn model_setting_reasoning_disable_synonyms_normalize_to_off() {
+    fn model_setting_reasoning_aliases_are_sent_raw_for_the_daemon_to_normalize() {
         for synonym in ["none", "DISABLE", "Disabled", "unset", ""] {
             let cmd = CliCommand::Model {
                 subcommand: Some(ModelCommand::Setting {
@@ -4309,22 +4272,22 @@ mod tests {
                 json: false,
             };
             let (_, args) = to_swp_command(&cmd, None).unwrap();
-            assert_eq!(arg(&args, "value"), "off", "synonym {synonym:?}");
+            assert_eq!(arg(&args, "value"), synonym, "alias {synonym:?}");
         }
     }
 
     #[test]
-    fn parse_setting_value_coerces_vendor_knobs() {
+    fn parse_setting_value_leaves_all_coercion_to_the_daemon() {
         use serde_json::json;
         assert_eq!(
             parse_setting_value("zai_clear_thinking", "false"),
-            json!(false)
+            json!("false")
         );
-        assert_eq!(parse_setting_value("zai_subscription", "yes"), json!(true));
-        assert_eq!(parse_setting_value("gemini_generation", "3"), json!(3));
+        assert_eq!(parse_setting_value("zai_subscription", "yes"), json!("yes"));
+        assert_eq!(parse_setting_value("gemini_generation", "3"), json!("3"));
         assert_eq!(
             parse_setting_value("openrouter_provider", r#"{"order":["Anthropic"]}"#),
-            json!({"order": ["Anthropic"]})
+            json!(r#"{"order":["Anthropic"]}"#)
         );
         assert_eq!(
             parse_setting_value("openrouter_provider", "Anthropic"),
@@ -4450,6 +4413,12 @@ mod tests {
             line.contains(" -f "),
             "keys must not fall back to files: {line}"
         );
+        let values = footer
+            .lines()
+            .find(|candidate| candidate.contains("shore complete setting-values"))
+            .expect("footer must shell out to `shore complete setting-values`");
+        assert!(values.contains("(__shore_setting_key)"));
+        assert!(!values.contains("not __shore_setting_key"));
     }
 
     #[test]
@@ -4496,7 +4465,7 @@ mod tests {
         let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "subagent"), "all");
-        assert_eq!(arg(&args, "value"), 0.3);
+        assert_eq!(arg(&args, "value"), "0.3");
     }
 
     #[test]

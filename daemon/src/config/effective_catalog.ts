@@ -249,7 +249,8 @@ function buildResolvedFromProvider(
     modelId,
     sdkFallback,
     fields,
-    disc,
+    disc?.support,
+    disc?.supports_images,
   );
 }
 

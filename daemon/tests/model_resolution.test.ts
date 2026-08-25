@@ -5,15 +5,14 @@ import rawFixture from "./config_captures/model_resolution.json" with { type: "j
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { ConfigDuration } from "../src/config/duration.ts";
-import {
-  fieldFromKey,
-  type Sdk,
-} from "../src/llm/capabilities.ts";
+import type { Sdk } from "../src/llm/types.ts";
+import { settingDefinition } from "../src/llm/settings.ts";
 import {
   CatalogError,
   catalogFromSections,
   chatModelNames,
   defaultSdk,
+  effectiveSupportsImages,
   findModel,
   firstChatModel,
   hardcodedProviderDefaults,
@@ -266,16 +265,36 @@ describe("Sdk", () => {
   });
 });
 
+describe("image support", () => {
+  test("a user override wins over discovered support in either direction", () => {
+    const model = resolvedModelFromParts(
+      "image-override",
+      "openai:image-override",
+      "chat",
+      "openai",
+      "image-override",
+      "openai",
+      { supportsImages: false },
+      undefined,
+      true,
+    );
+    expect(effectiveSupportsImages(model)).toBe(false);
+    model.supportsImages = true;
+    model.discoveredSupportsImages = false;
+    expect(effectiveSupportsImages(model)).toBe(true);
+  });
+});
+
 describe("Field keys", () => {
   test("every field's key is its own name", () => {
     for (const row of fx.field_keys) expect(row.field).toBe(row.key);
   });
 
-  for (const row of fx.field_from_key) {
-    test(`fieldFromKey ${JSON.stringify(row.key)}`, () => {
-      expect<string | null>(fieldFromKey(row.key) ?? null).toBe(row.field);
-    });
-  }
+  test("setting keys resolve through the registry", () => {
+    expect(settingDefinition("temperature")?.key).toBe("temperature");
+    expect(settingDefinition("max_tool_iterations")?.key).toBe("max_tool_iterations");
+    expect(settingDefinition("not_a_field")).toBeUndefined();
+  });
 });
 
 describe("hardcodedProviderDefaults", () => {

@@ -24,6 +24,11 @@ import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ProviderRegistry } from "./providers.ts";
 import { resolveBackgroundModelName, type DefaultsConfig } from "./app.ts";
+import {
+  SETTING_STORAGE_FIELDS,
+  settingApplicability,
+  validateSetting,
+} from "../llm/settings.ts";
 
 const PREFERENCES_DIR = "preferences";
 const PREFERENCES_FILE = "models.toml";
@@ -71,24 +76,7 @@ export interface SamplerSettings {
   supportsImages?: boolean;
 }
 
-const SAMPLER_FIELDS = [
-  ["temperature", "temperature"],
-  ["topP", "top_p"],
-  ["reasoningEffort", "reasoning_effort"],
-  ["budgetTokens", "budget_tokens"],
-  ["maxOutputTokens", "max_output_tokens"],
-  ["cacheTtl", "cache_ttl"],
-  ["cacheKeepalive", "cache_keepalive"],
-  ["cacheKeepaliveMax", "cache_keepalive_max"],
-  ["sdk", "sdk"],
-  ["replayPriorThinking", "replay_prior_thinking"],
-  ["maxToolIterations", "max_tool_iterations"],
-  ["openrouterProvider", "openrouter_provider"],
-  ["geminiGeneration", "gemini_generation"],
-  ["zaiClearThinking", "zai_clear_thinking"],
-  ["zaiSubscription", "zai_subscription"],
-  ["supportsImages", "supports_images"],
-] as const satisfies readonly (readonly [keyof SamplerSettings, string])[];
+const SAMPLER_FIELDS = SETTING_STORAGE_FIELDS;
 
 export const SAMPLER_KEYS: readonly string[] = SAMPLER_FIELDS.map(([, key]) => key);
 
@@ -114,25 +102,10 @@ export function samplerIsEmpty(settings: SamplerSettings): boolean {
 }
 
 function samplerFromResolvedModel(model: ResolvedModel): SamplerSettings {
-  const out: SamplerSettings = { sdk: model.sdk };
-  const copy = [
-    ["temperature", "temperature"],
-    ["topP", "topP"],
-    ["reasoningEffort", "reasoningEffort"],
-    ["budgetTokens", "budgetTokens"],
-    ["maxOutputTokens", "maxOutputTokens"],
-    ["cacheTtl", "cacheTtl"],
-    ["cacheKeepalive", "cacheKeepalive"],
-    ["replayPriorThinking", "replayPriorThinking"],
-    ["maxToolIterations", "maxToolIterations"],
-    ["openrouterProvider", "openrouterProvider"],
-    ["geminiGeneration", "geminiGeneration"],
-    ["zaiClearThinking", "zaiClearThinking"],
-    ["zaiSubscription", "zaiSubscription"],
-    ["supportsImages", "supportsImages"],
-  ] as const satisfies readonly (readonly [keyof SamplerSettings, keyof ResolvedModel])[];
-  for (const [field, source] of copy) {
-    const value = model[source];
+  const out: SamplerSettings = {};
+  const source: SamplerSettings = model;
+  for (const [field] of SAMPLER_FIELDS) {
+    const value = source[field];
     if (value !== undefined) (out as Record<string, unknown>)[field] = value;
   }
   return out;
@@ -340,7 +313,32 @@ function settingsFromLayers(
   for (const layer of layers) {
     applyOverlay(effective, sanitizePersistedOverlay(layer.sampler));
   }
-  return effective;
+  return sanitizeForModel(effective, staticDefault);
+}
+
+function sanitizeForModel(
+  sampler: SamplerSettings,
+  model: ResolvedModel | undefined,
+  warn = true,
+): SamplerSettings {
+  if (model === undefined) return sampler;
+  const cleaned: SamplerSettings = { ...sampler };
+  for (const [field, key] of SETTING_STORAGE_FIELDS) {
+    const value = cleaned[field];
+    if (value === undefined) continue;
+    const rejected = settingApplicability(model.sdk, key, model.support) === "rejected";
+    const closedReasoning = key === "reasoning_effort" &&
+      validateSetting(model.sdk, key, value, model.support) !== undefined;
+    if (!rejected && !closedReasoning) continue;
+    if (warn) {
+      shoreLog.warn(
+        `shore: dropping \`${key}\` for model ${model.modelId} (sdk ${model.sdk}): the ` +
+          "provider reports that this model does not accept it",
+      );
+    }
+    delete cleaned[field];
+  }
+  return cleaned;
 }
 
 export function resolveSamplerSettings(
@@ -473,6 +471,13 @@ function scopesFromLayers(
   }
   for (const layer of layers) {
     note(sanitizePersistedOverlay(layer.sampler), layer.scope);
+  }
+  const effective: SamplerSettings =
+    staticDefault === undefined ? {} : samplerFromResolvedModel(staticDefault);
+  for (const layer of layers) applyOverlay(effective, sanitizePersistedOverlay(layer.sampler));
+  const sanitized = sanitizeForModel(effective, staticDefault, false);
+  for (const [field] of SETTING_STORAGE_FIELDS) {
+    if (sanitized[field] === undefined) delete scopes[field];
   }
   return scopes;
 }

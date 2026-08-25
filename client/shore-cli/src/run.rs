@@ -1035,12 +1035,20 @@ async fn handle_complete_query(
         return Ok(());
     }
 
-    if kind == CompleteKind::SettingKeys {
+    if kind == CompleteKind::SettingKeys || kind == CompleteKind::SettingValues {
         let _ignored = conn
             .send_command("model_settings", serde_json::json!({}))
             .await?;
         let data = recv_command_data(&mut conn).await?;
-        print_setting_key_completions(&data);
+        if kind == CompleteKind::SettingKeys {
+            print_setting_key_completions(&data);
+        } else {
+            if let Some(key) = arg {
+                for value in setting_value_completions(&data, key) {
+                    cli_out!("{value}");
+                }
+            }
+        }
         return Ok(());
     }
 
@@ -1065,6 +1073,7 @@ async fn handle_complete_query(
         CompleteKind::Subagents => ("tools", &["subagents"][..]),
         CompleteKind::Models
         | CompleteKind::SettingKeys
+        | CompleteKind::SettingValues
         | CompleteKind::ConfigKeys
         | CompleteKind::ConfigSections
         | CompleteKind::ConfigValues => {
@@ -1109,9 +1118,9 @@ fn json_strings(value: Option<&serde_json::Value>) -> Vec<String> {
 }
 
 pub(crate) fn setting_key_completions(data: &serde_json::Value) -> Vec<String> {
-    let Some(applicability) = data
-        .get("applicability")
-        .and_then(serde_json::Value::as_object)
+    let Some(schema) = data
+        .get("setting_schema")
+        .and_then(serde_json::Value::as_array)
     else {
         return Vec::new();
     };
@@ -1120,9 +1129,15 @@ pub(crate) fn setting_key_completions(data: &serde_json::Value) -> Vec<String> {
         .and_then(serde_json::Value::as_object);
 
     let mut out = Vec::new();
-    for (key, raw) in applicability {
-        let verdict = raw.as_str().unwrap_or("always");
-        if verdict == "rejected" {
+    for entry in schema {
+        let Some(key) = entry.get("key").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let verdict = entry
+            .get("applicability")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("rejected");
+        if verdict != "always" && verdict != "honored" {
             continue;
         }
         let current = effective
@@ -1138,6 +1153,31 @@ pub(crate) fn setting_key_completions(data: &serde_json::Value) -> Vec<String> {
         out.push(format!("{key}\t{described}"));
     }
     out
+}
+
+pub(crate) fn setting_value_completions(data: &serde_json::Value, key: &str) -> Vec<String> {
+    data.get("setting_schema")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|schema| {
+            schema.iter().find(|entry| {
+                let matches_key = entry.get("key").and_then(serde_json::Value::as_str) == Some(key);
+                let applicable = entry
+                    .get("applicability")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|value| value == "always" || value == "honored");
+                matches_key && applicable
+            })
+        })
+        .and_then(|entry| entry.get("suggestions"))
+        .and_then(serde_json::Value::as_array)
+        .map(|suggestions| {
+            suggestions
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn render_setting_value(value: &serde_json::Value) -> String {
@@ -2410,7 +2450,10 @@ mod tests {
     #[test]
     fn setting_keys_carry_the_effective_value_as_the_description() {
         let lines = super::setting_key_completions(&serde_json::json!({
-            "applicability": { "temperature": "honored", "top_p": "honored" },
+            "setting_schema": [
+                {"key":"temperature","applicability":"honored"},
+                {"key":"top_p","applicability":"honored"}
+            ],
             "effective_sampler": { "temperature": 0.8, "top_p": null },
         }));
         assert!(lines.contains(&"temperature\t0.8".to_owned()), "{lines:?}");
@@ -2418,27 +2461,45 @@ mod tests {
     }
 
     #[test]
+    fn setting_values_come_from_the_daemon_suggestions() {
+        let values = super::setting_value_completions(
+            &serde_json::json!({
+                "setting_schema": [{
+                    "key":"reasoning_effort",
+                    "applicability":"honored",
+                    "suggestions":["low","provider-future-value"]
+                }]
+            }),
+            "reasoning_effort",
+        );
+        assert_eq!(values, ["low", "provider-future-value"]);
+    }
+
+    #[test]
     fn a_key_the_model_rejects_is_not_offered() {
         let lines = super::setting_key_completions(&serde_json::json!({
-            "applicability": { "temperature": "rejected", "top_p": "honored" },
+            "setting_schema": [
+                {"key":"temperature","applicability":"rejected"},
+                {"key":"top_p","applicability":"honored"}
+            ],
             "effective_sampler": {},
         }));
         assert_eq!(lines, vec!["top_p\tunset".to_owned()]);
     }
 
     #[test]
-    fn a_key_the_model_ignores_is_offered_but_flagged() {
+    fn a_key_the_model_ignores_is_hidden() {
         let lines = super::setting_key_completions(&serde_json::json!({
-            "applicability": { "top_p": "ignored" },
+            "setting_schema": [{"key":"top_p","applicability":"ignored"}],
             "effective_sampler": { "top_p": 0.9 },
         }));
-        assert_eq!(lines, vec!["top_p\t0.9 (ignored by this model)".to_owned()]);
+        assert!(lines.is_empty());
     }
 
     #[test]
     fn a_string_setting_is_described_without_json_quotes() {
         let lines = super::setting_key_completions(&serde_json::json!({
-            "applicability": { "reasoning_effort": "honored" },
+            "setting_schema": [{"key":"reasoning_effort","applicability":"honored"}],
             "effective_sampler": { "reasoning_effort": "high" },
         }));
         assert_eq!(lines, vec!["reasoning_effort\thigh".to_owned()]);

@@ -26,7 +26,7 @@ import type {
 import { systemToText, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
-import { REASONING_OFF } from "../capabilities.ts";
+import { REASONING_OFF } from "../types.ts";
 
 export class VercelProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {

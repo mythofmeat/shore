@@ -436,6 +436,16 @@ describe("thinking params per model", () => {
     }
   });
 
+  test("a custom named effort reaches output_config instead of being gated by suggestions", () => {
+    const r = buildThinkingParams(
+      { reasoning_effort: "provider-future-value" },
+      "anthropic/claude-opus-future",
+      8192,
+    );
+    expect(r.thinking).toEqual({ type: "adaptive", display: "summarized" });
+    expect(r.outputConfig?.effort as string).toBe("provider-future-value");
+  });
+
   test("an explicit budget is the only way to get enabled thinking", () => {
     const r = buildThinkingParams({ budget_tokens: 8192 }, "anthropic/claude-haiku-4.5", 32000);
     expect(r.thinking).toEqual({ type: "enabled", budget_tokens: 8192 });

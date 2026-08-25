@@ -204,16 +204,24 @@ pub(crate) fn write_model_settings<W: Write>(out: &mut W, data: &Value) {
         return;
     }
     section(out, "model settings", Some(text(data, "model")));
+    let Some(schema) = data.get("setting_schema").and_then(Value::as_array) else {
+        empty(
+            out,
+            "client and daemon must be upgraded together to edit model settings",
+        );
+        return;
+    };
     let Some(effective) = data.get("effective_sampler").and_then(Value::as_object) else {
         empty(out, "no settings available");
         return;
     };
-    let applicability = data.get("applicability");
     let honored = |key: &str| -> bool {
-        applicability
-            .and_then(|a| a.get(key))
+        schema
+            .iter()
+            .find(|entry| entry.get("key").and_then(Value::as_str) == Some(key))
+            .and_then(|entry| entry.get("applicability"))
             .and_then(Value::as_str)
-            .is_none_or(|state| state != "ignored")
+            .is_some_and(|state| state == "always" || state == "honored")
     };
     let mut table = Table::new(
         &["setting", "value", "from"],
@@ -697,12 +705,29 @@ mod tests {
     }
 
     #[test]
+    fn a_legacy_settings_response_requires_a_lockstep_upgrade() {
+        let data = json!({
+            "model": "openai:legacy",
+            "effective_sampler": {"temperature": 1}
+        });
+        let out = render(|buffer| write_model_settings(buffer, &data));
+        assert!(
+            out.contains("client and daemon must be upgraded together"),
+            "{out}"
+        );
+    }
+
+    #[test]
     fn naming_one_setting_shows_only_that_one() {
         set_color_enabled(false);
         let data = json!({
             "model": "deepseek:deepseek-v4-pro",
             "key": "temperature",
             "effective_sampler": {"temperature": 1, "reasoning_effort": "max"},
+            "setting_schema": [
+                {"key":"temperature","applicability":"honored"},
+                {"key":"reasoning_effort","applicability":"honored"}
+            ],
             "saved_character": {"reasoning_effort": "max", "temperature": 1},
             "saved_global": null
         });
@@ -721,6 +746,10 @@ mod tests {
             "model": "deepseek:deepseek-v4-pro",
             "key": "top_p",
             "effective_sampler": {"temperature": 1, "top_p": null},
+            "setting_schema": [
+                {"key":"temperature","applicability":"honored"},
+                {"key":"top_p","applicability":"honored"}
+            ],
             "saved_character": null,
             "saved_global": null
         });
@@ -733,6 +762,10 @@ mod tests {
         let data = json!({
             "model": "deepseek:deepseek-v4-pro",
             "effective_sampler": {"temperature": 1, "reasoning_effort": "max"},
+            "setting_schema": [
+                {"key":"temperature","applicability":"honored"},
+                {"key":"reasoning_effort","applicability":"honored"}
+            ],
             "saved_character": {"reasoning_effort": "max"},
             "saved_global": null
         });
@@ -750,7 +783,10 @@ mod tests {
         let data = json!({
             "model": "anthropic:claude-opus-5",
             "effective_sampler": {"temperature": 1, "zai_subscription": "pro"},
-            "applicability": {"temperature": "honored", "zai_subscription": "ignored"},
+            "setting_schema": [
+                {"key":"temperature","applicability":"honored"},
+                {"key":"zai_subscription","applicability":"ignored"}
+            ],
             "saved_character": {"zai_subscription": "pro"},
             "saved_global": null
         });

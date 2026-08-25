@@ -414,15 +414,14 @@
         "kind": "command_output",
         "name": "model_settings",
         "data_keys": [
-          "applicability",
           "effective_sampler",
           "model",
           "model_id",
           "provider",
-          "reasoning_effort_domain",
           "saved_character",
           "saved_global",
-          "scopes"
+          "scopes",
+          "setting_schema"
         ],
         "data_shape": {
           "model": "string",
@@ -431,9 +430,8 @@
           "effective_sampler": "object",
           "saved_global": "null",
           "saved_character": "null",
-          "applicability": "object",
-          "reasoning_effort_domain": "array[6]",
-          "scopes": "object"
+          "scopes": "object",
+          "setting_schema": "array[16]"
         }
       }
     },

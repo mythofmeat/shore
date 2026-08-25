@@ -150,8 +150,32 @@ describe("turning a provider's catalog entry into a model", () => {
   test("records a capability the provider denies as false, not as absent", () => {
     const off = entry({ id: "m", supported_parameters: [] });
     expect(off?.supports_tools).toBe(false);
+    expect(off?.support?.supported_parameters).toEqual([]);
     const on = entry({ id: "m", supported_parameters: ["tools"] });
     expect(on?.supports_tools).toBe(true);
+  });
+
+  test("normalizes effort and thinking support without losing false flags or empty levels", () => {
+    expect(entry({
+      id: "m",
+      capabilities: {
+        effort: { supported: false },
+        thinking: { supported: false },
+      },
+    })?.support).toEqual({
+      effort: { supported: false, levels: [] },
+      thinking: { adaptive: false, enabled: false },
+    });
+    expect(entry({
+      id: "m",
+      capabilities: {
+        effort: { supported: true, low: { supported: true }, high: { supported: true } },
+        thinking: { types: { adaptive: { supported: true }, enabled: { supported: false } } },
+      },
+    })?.support).toEqual({
+      effort: { supported: true, levels: ["low", "high"] },
+      thinking: { adaptive: true, enabled: false },
+    });
   });
 
   test("takes the sdk from the per-model rule, not the provider default", () => {
@@ -250,6 +274,11 @@ describe("writing the cache", () => {
         display_name: "Model A",
         sdk: "openai",
         discovered_at: NOW,
+        support: {
+          supported_parameters: [],
+          effort: { supported: false, levels: [] },
+          thinking: { adaptive: false, enabled: true },
+        },
       },
       { provider_key: "openrouter", model_id: "b", sdk: "openai", discovered_at: NOW },
     ] as DiscoveredModel[],
@@ -266,6 +295,33 @@ describe("writing the cache", () => {
     const path = cachePath(dir, "openrouter");
     await writeCache(path, full);
     expect(await readCache(path)).toEqual(full);
+  });
+
+  test("version-1 caches reconstruct normalized support from raw provider metadata", async () => {
+    const dir = await scratch();
+    const path = cachePath(dir, "openrouter");
+    await mkdir(join(dir, "providers", "openrouter"), { recursive: true });
+    await writeFile(path, JSON.stringify({
+      version: 1,
+      provider_key: "openrouter",
+      fetched_at: NOW,
+      models: [{
+        provider_key: "openrouter",
+        model_id: "legacy",
+        sdk: "openrouter",
+        raw_provider_metadata: {
+          id: "legacy",
+          supported_parameters: [],
+          capabilities: { effort: { supported: false }, thinking: { supported: false } },
+        },
+        discovered_at: NOW,
+      }],
+    }));
+    expect((await readCache(path))?.models[0]?.support).toEqual({
+      supported_parameters: [],
+      effort: { supported: false, levels: [] },
+      thinking: { adaptive: false, enabled: false },
+    });
   });
 
   test("creates the parent directories it needs", async () => {

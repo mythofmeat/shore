@@ -1,12 +1,8 @@
 import { shoreLog } from "../log.ts";
 
-import {
-  applicability,
-  defaultValue,
-  type Field,
-  type ModelCapabilities,
-  type Sdk,
-} from "../llm/capabilities.ts";
+import { settingApplicability, validateSetting } from "../llm/settings.ts";
+import type { DiscoveredModelSupport } from "../llm/discovery.ts";
+import { SDK_VARIANTS, sdkFromWire, type Sdk } from "../llm/types.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import {
   parseCacheKeepalive,
@@ -25,21 +21,7 @@ import type { ThinkingReplay } from "../llm/types.ts";
 import type { ResolvedModel as RequestResolvedModel } from "../llm/request.ts";
 
 export type { Sdk };
-
-export const SDK_VARIANTS: readonly Sdk[] = [
-  "anthropic",
-  "openai",
-  "openrouter",
-  "gemini",
-  "zai",
-  "deepseek",
-  "moonshot",
-];
-
-export function sdkFromWire(s: string): Sdk | undefined {
-  if (s === "moonshotai") return "moonshot";
-  return (SDK_VARIANTS as readonly string[]).includes(s) ? (s as Sdk) : undefined;
-}
+export { SDK_VARIANTS, sdkFromWire };
 
 function deserializeSdk(raw: string): ParseResult<Sdk> {
   if (raw === "zhipuai") {
@@ -155,7 +137,8 @@ export interface ResolvedModel {
   zaiSubscription?: boolean;
   replayPriorThinking?: ThinkingReplay;
   maxToolIterations?: number;
-  capabilities?: ModelCapabilities;
+  support?: DiscoveredModelSupport;
+  discoveredSupportsImages?: boolean;
   supportsImages?: boolean;
 }
 
@@ -195,7 +178,7 @@ export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
 }
 
 export function effectiveSupportsImages(model: ResolvedModel): boolean | undefined {
-  return model.supportsImages ?? model.capabilities?.supports_images;
+  return model.supportsImages ?? model.discoveredSupportsImages;
 }
 
 function opt<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
@@ -215,7 +198,8 @@ export function resolvedModelFromParts(
   modelId: string,
   sdkFallback: Sdk,
   fields: ModelConfigFields,
-  capabilities?: ModelCapabilities,
+  support?: DiscoveredModelSupport,
+  discoveredSupportsImages?: boolean,
 ): ResolvedModel {
   const merged: ModelConfigFields = { ...fields };
 
@@ -223,23 +207,15 @@ export function resolvedModelFromParts(
     merged.sdk ?? (modelId.startsWith("anthropic/") ? "anthropic" : sdkFallback);
 
   if (merged.cacheTtl === undefined) {
-    const fallbackTtl = defaultValue(sdk, "cache_ttl");
-    if (fallbackTtl !== undefined) merged.cacheTtl = fallbackTtl;
+    if (sdk === "anthropic") merged.cacheTtl = "1h";
   }
 
-  if (merged.cacheKeepalive === undefined) {
-    const raw = defaultValue(sdk, "cache_keepalive");
-    if (raw !== undefined) {
-      const parsed = parseCacheKeepalive(raw);
-      if ("ok" in parsed) merged.cacheKeepalive = parsed.ok;
-    }
-  }
+  stripRejectedSampler(sdk, modelId, "temperature", merged, "temperature", undefined, support);
+  stripRejectedSampler(sdk, modelId, "top_p", merged, "topP", undefined, support);
+  stripRejectedSampler(sdk, modelId, "budget_tokens", merged, "budgetTokens", undefined, support);
+  stripRejectedSampler(sdk, modelId, "reasoning_effort", merged, "reasoningEffort", undefined, support);
 
-  stripRejectedSampler(sdk, modelId, "temperature", merged, "temperature", undefined, capabilities);
-  stripRejectedSampler(sdk, modelId, "top_p", merged, "topP", undefined, capabilities);
-  stripRejectedSampler(sdk, modelId, "budget_tokens", merged, "budgetTokens", undefined, capabilities);
-
-  warnIgnoredFields(sdk, modelId, merged, capabilities);
+  warnIgnoredFields(sdk, modelId, merged, support);
 
   const resolved: ResolvedModel = {
     name,
@@ -260,7 +236,8 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "cacheTtl", merged.cacheTtl);
   assignIfPresent(resolved, "cacheKeepalive", merged.cacheKeepalive);
   assignIfPresent(resolved, "cacheKeepaliveMax", merged.cacheKeepaliveMax);
-  assignIfPresent(resolved, "capabilities", capabilities);
+  assignIfPresent(resolved, "support", support);
+  assignIfPresent(resolved, "discoveredSupportsImages", discoveredSupportsImages);
   assignIfPresent(resolved, "openrouterProvider", merged.openrouterProvider);
   assignIfPresent(resolved, "geminiGeneration", merged.geminiGeneration);
   assignIfPresent(resolved, "zaiClearThinking", merged.zaiClearThinking);
@@ -280,17 +257,21 @@ function assignIfPresent<K extends keyof ResolvedModel>(
 function stripRejectedSampler(
   sdk: Sdk,
   modelId: string,
-  field: Field,
+  settingKey: string,
   fields: ModelConfigFields,
-  key: "temperature" | "topP" | "budgetTokens",
-  silentDefault: number | undefined,
-  capabilities: ModelCapabilities | undefined,
+  key: "temperature" | "topP" | "budgetTokens" | "reasoningEffort",
+  silentDefault: number | string | undefined,
+  support: DiscoveredModelSupport | undefined,
 ): void {
-  if (fields[key] === undefined) return;
-  if (applicability(sdk, field, capabilities) !== "rejected") return;
+  const value = fields[key];
+  if (value === undefined) return;
+  const rejected = settingApplicability(sdk, settingKey, support) === "rejected";
+  const closedReasoning = settingKey === "reasoning_effort" &&
+    validateSetting(sdk, settingKey, value, support) !== undefined;
+  if (!rejected && !closedReasoning) return;
   if (fields[key] !== silentDefault) {
     shoreLog.warn(
-      `shore: dropping \`${field}\` for model ${modelId} (sdk ${sdk}): the ` +
+      `shore: dropping \`${settingKey}\` for model ${modelId} (sdk ${sdk}): the ` +
         `provider reports that this model does not accept it`,
     );
   }
@@ -301,9 +282,9 @@ function warnIgnoredFields(
   sdk: Sdk,
   modelId: string,
   fields: ModelConfigFields,
-  capabilities?: ModelCapabilities,
+  support?: DiscoveredModelSupport,
 ): void {
-  const checks: readonly [Field, boolean][] = [
+  const checks: readonly [string, boolean][] = [
     ["cache_ttl", fields.cacheTtl !== undefined],
     ["openrouter_provider", fields.openrouterProvider !== undefined],
     ["gemini_generation", fields.geminiGeneration !== undefined],
@@ -311,7 +292,7 @@ function warnIgnoredFields(
     ["zai_subscription", fields.zaiSubscription !== undefined],
   ];
   for (const [field, present] of checks) {
-    if (present && applicability(sdk, field, capabilities) === "ignored") {
+    if (present && settingApplicability(sdk, field, support) === "ignored") {
       shoreLog.warn(
         `shore: ignoring \`${field}\` for model ${modelId}: the \`${sdk}\` sdk does not honor it`,
       );

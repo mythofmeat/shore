@@ -2,6 +2,7 @@ import {
   GoogleGenAI,
   HarmBlockThreshold,
   HarmCategory,
+  ThinkingLevel,
   type Content,
   type FunctionDeclaration,
   type GenerateContentConfig,
@@ -13,7 +14,6 @@ import {
   type Tool,
 } from "@google/genai";
 
-import { geminiLevelName } from "../capabilities.ts";
 import { resolveImageBlock, omissionNotice } from "../images.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type {
@@ -105,6 +105,11 @@ function buildGeminiConfig(req: SidecarRequest, signal?: AbortSignal): GenerateC
   if (systemInstruction !== undefined) config.systemInstruction = systemInstruction;
 
   return config;
+}
+
+function geminiLevelName(effort: string): ThinkingLevel | undefined {
+  const wanted = effort.toLowerCase();
+  return Object.values(ThinkingLevel).find((level) => level.toLowerCase() === wanted);
 }
 
 export async function* geminiStreamEvents(

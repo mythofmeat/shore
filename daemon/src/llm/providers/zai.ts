@@ -21,7 +21,7 @@ import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { turnToOpenAI } from "./openai.ts";
 import { parseToolArgs } from "../tool_args.ts";
-import { REASONING_OFF } from "../capabilities.ts";
+import { REASONING_OFF } from "../types.ts";
 
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
 export const ZAI_CODING_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
