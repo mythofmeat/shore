@@ -10,7 +10,7 @@
         "@anthropic-ai/sdk": "^0.120.0",
         "@google/genai": "^2.18.0",
         "@modelcontextprotocol/sdk": "^1.30.0",
-        "@openrouter/sdk": "^1.2.62",
+        "@openrouter/sdk": "^1.2.65",
         "ai": "^7.0.79",
         "matrix-js-sdk": "^42.2.0",
         "openai": "^7.5.0",
@@ -43,11 +43,11 @@
 
     "@hono/node-server": ["@hono/node-server@2.1.1", "", { "peerDependencies": { "hono": "^4" } }, "sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg=="],
 
-    "@matrix-org/matrix-sdk-crypto-wasm": ["@matrix-org/matrix-sdk-crypto-wasm@18.5.0", "", {}, "sha512-E826Hy1rG26LanPjtSsOiVRcVoHfSgPgj2r2Xsb5RPScpaKi9XJADQ0u3dNjRCitZPX4oyLNl1FDd5AfDlmIwQ=="],
+    "@matrix-org/matrix-sdk-crypto-wasm": ["@matrix-org/matrix-sdk-crypto-wasm@18.6.0", "", {}, "sha512-P3v8849O/1+c1CYDQ1X6L1p6UpakYAav1L4wTNvwLA54n9wNpadpw8sLZoxhaG4ftlmNzxFztjRYwDvx56d11w=="],
 
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.30.0", "", { "dependencies": { "@hono/node-server": "^1.19.9 || ^2.0.5", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "content-type": "^1.0.5", "cors": "^2.8.5", "cross-spawn": "^7.0.5", "eventsource": "^3.0.2", "eventsource-parser": "^3.0.0", "express": "^5.2.1", "express-rate-limit": "^8.2.1", "hono": "^4.11.4", "jose": "^6.1.3", "json-schema-typed": "^8.0.2", "pkce-challenge": "^5.0.0", "raw-body": "^3.0.0", "zod": "^3.25 || ^4.0", "zod-to-json-schema": "^3.25.1" }, "peerDependencies": { "@cfworker/json-schema": "^4.1.1" }, "optionalPeers": ["@cfworker/json-schema"] }, "sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA=="],
 
-    "@openrouter/sdk": ["@openrouter/sdk@1.2.62", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-Tmvicb75ByxyU0UGwI427MT2KOwX8UDyEDkMB6iIeoQNWcZG3k5gcVzYm243w7j7uJ+HPgEab7wz+il1qb/gVg=="],
+    "@openrouter/sdk": ["@openrouter/sdk@1.2.65", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-I2GxlDy1dqpIFlUOcEKztI1ndtuI7qNFa8b3eUlGYKmvDEHtxauc4214mPC8zI+uoGa3zi2+LXEKrK7M6s8Bbw=="],
 
     "@oxlint-tsgolint/darwin-arm64": ["@oxlint-tsgolint/darwin-arm64@7.0.2001", "", { "os": "darwin", "cpu": "arm64" }, "sha512-CUJEdbSZ54+Xy9OXqOhWLTKZKV0BBiV7C2i/ygyVmXtkUNXx5YCzN8DpSSshTAKktoL7S+tnQ/ftFG/i7X896w=="],
 
@@ -335,7 +335,7 @@
 
     "matrix-js-sdk": ["matrix-js-sdk@42.2.0", "", { "dependencies": { "@babel/runtime": "^8.0.0", "@matrix-org/matrix-sdk-crypto-wasm": "^18.4.0", "another-json": "^0.2.0", "bs58": "^6.0.0", "content-type": "^2.0.0", "loglevel": "^1.9.2", "matrix-events-sdk": "0.0.1", "matrix-widget-api": "^1.18.0", "p-retry": "8", "sdp-transform": "^3.0.0", "unhomoglyph": "^1.0.6" } }, "sha512-XlW++tv4BvWE3WrC9K0yZE5CMfZZnKFoZQkYZPxmtb5n/F4sZo6t7G7u59Llx455xGxnrdx1FxFd3tmhkGH8Mw=="],
 
-    "matrix-widget-api": ["matrix-widget-api@1.18.0", "", { "dependencies": { "@types/events": "^3.0.0", "events": "^3.2.0" } }, "sha512-4T2f2koWmx05p1BLcT/9YGGGPSXpPT+PA4Oap/5fjhXsWPxMGJiGL97YpANMYLKsnE1sScYFeuyxIgdc1Qo+Ew=="],
+    "matrix-widget-api": ["matrix-widget-api@1.19.0", "", { "dependencies": { "@types/events": "^3.0.0", "events": "^3.2.0" } }, "sha512-Qe7L6G1mQJphBC47/Bzp5ljPIK1UARgLiuGgS+/KmEs/eaNHkQ3+ArD0/0kvMV+d6kCGAZ9OKRqsnuPjizI+tw=="],
 
     "media-typer": ["media-typer@1.1.1", "", {}, "sha512-yz3xRaG20c6/BOzvYoDaGtPmGscs7YivItZEEqe6GbwNfHuxu9YNmvnEkMzKldAGY4/80pRcQRZSEnhquk9XuQ=="],
 
