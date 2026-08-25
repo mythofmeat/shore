@@ -1,0 +1,35 @@
+name: update Homebrew tap
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: ${{ !contains(github.ref_name, '-') && !contains(github.ref_name, '+') }}
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE: shore
+      GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Notify tap
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Ignoring non-stable tag $GITHUB_REF_NAME"
+            exit 0
+          fi
+          revision="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          gh api --method POST repos/mythofmeat/homebrew-tap/dispatches \
+            -f event_type=homebrew-tag \
+            -F "client_payload[package]=$PACKAGE" \
+            -F "client_payload[tag]=$GITHUB_REF_NAME" \
+            -F "client_payload[revision]=$revision"
+
