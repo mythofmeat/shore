@@ -68,13 +68,7 @@ const ZAI_EFFORT = [
   "max",
 ] as const satisfies readonly ZhipuReasoningEffort[];
 
-const DEEPSEEK_EFFORT = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-] as const satisfies readonly DeepSeekEffort[];
+const DEEPSEEK_EFFORT = ["low", "high", "max"] as const satisfies readonly DeepSeekEffort[];
 
 const MOONSHOT_EFFORT = ["low", "high", "max"] as const satisfies readonly MoonshotEffort[];
 
