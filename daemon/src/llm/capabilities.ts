@@ -41,14 +41,17 @@ type OpenAiEffort = NonNullable<OpenAiReasoningEffort>;
 type DeepSeekEffort = NonNullable<DeepSeekLanguageModelOptions["reasoningEffort"]>;
 type MoonshotEffort = NonNullable<MoonshotAIProviderOptions["reasoningEffort"]>;
 
-const ANTHROPIC_EFFORT = [
-  "adaptive",
+export const ANTHROPIC_NAMED_EFFORT = [
   "low",
   "medium",
   "high",
   "xhigh",
   "max",
-] as const;
+] as const satisfies readonly AnthropicEffort[];
+
+const ANTHROPIC_ADAPTIVE = "adaptive";
+
+const ANTHROPIC_EFFORT = [ANTHROPIC_ADAPTIVE, ...ANTHROPIC_NAMED_EFFORT] as const;
 
 const OPENAI_EFFORT = [
   "minimal",
@@ -73,7 +76,7 @@ const DEEPSEEK_EFFORT = ["low", "high", "max"] as const satisfies readonly DeepS
 const MOONSHOT_EFFORT = ["low", "high", "max"] as const satisfies readonly MoonshotEffort[];
 
 export type EffortDomainsMatchTheSdks = [
-  MustBeExhaustive<UnlistedBy<(typeof ANTHROPIC_EFFORT)[number], AnthropicEffort>>,
+  MustBeExhaustive<UnlistedBy<(typeof ANTHROPIC_EFFORT)[number], AnthropicEffort | typeof ANTHROPIC_ADAPTIVE>>,
   MustBeExhaustive<UnlistedBy<(typeof OPENAI_EFFORT)[number], OpenAiEffort>>,
   MustBeExhaustive<UnlistedBy<(typeof ZAI_EFFORT)[number], ZhipuReasoningEffort>>,
   MustBeExhaustive<UnlistedBy<(typeof DEEPSEEK_EFFORT)[number], DeepSeekEffort>>,

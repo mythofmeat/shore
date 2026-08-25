@@ -35,6 +35,7 @@ import {
 import { recordExtraThinkingDrops, replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
+import { ANTHROPIC_NAMED_EFFORT } from "../capabilities.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
@@ -685,11 +686,10 @@ function imagesToAnthropicBlocks(images: ImageRef[] | undefined): ContentBlockPa
   return out;
 }
 
-const NAMED_EFFORT_VALUES = ["max", "xhigh", "high", "medium", "low"] as const;
-type NamedEffort = (typeof NAMED_EFFORT_VALUES)[number];
+type NamedEffort = (typeof ANTHROPIC_NAMED_EFFORT)[number];
 
 function isEffortValue(s: string | undefined): s is NamedEffort {
-  return s !== undefined && (NAMED_EFFORT_VALUES as readonly string[]).includes(s);
+  return s !== undefined && (ANTHROPIC_NAMED_EFFORT as readonly string[]).includes(s);
 }
 
 function clampEnabledBudget(requested: number, maxTokens: number): number | undefined {
