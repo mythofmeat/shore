@@ -16,7 +16,7 @@ jobs:
       PACKAGE: shore
       GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -32,4 +32,3 @@ jobs:
             -F "client_payload[package]=$PACKAGE" \
             -F "client_payload[tag]=$GITHUB_REF_NAME" \
             -F "client_payload[revision]=$revision"
-
