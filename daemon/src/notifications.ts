@@ -21,12 +21,12 @@ export function truncateSummary(s: string, max: number): string {
   return `${DECODER.decode(bytes.subarray(0, end))}…`;
 }
 
-export function shellEscape(s: string): string {
-  return s.replaceAll("'", "'\\''").replaceAll("`", "").replaceAll("$(", "(");
-}
+const PLACEHOLDER = /\{(title|body)\}/g;
 
-export function renderCommandTemplate(template: string, title: string, body: string): string {
-  return template.replaceAll("{title}", shellEscape(title)).replaceAll("{body}", shellEscape(body));
+export function expandArgv(argv: readonly string[], title: string, body: string): string[] {
+  const fill = (arg: string) =>
+    arg.replaceAll(PLACEHOLDER, (_, name) => (name === "title" ? title : body));
+  return argv.map((arg, i) => (i === 0 ? arg : fill(arg)));
 }
 
 export function ntfyUrl(config: NtfyConfig): string {
@@ -40,7 +40,7 @@ const SUMMARY_MAX_BYTES = 200;
 export interface NotificationSink {
   notifySend(title: string, body: string): Promise<void>;
   ntfy(config: NtfyConfig, title: string, body: string): Promise<void>;
-  command(template: string, title: string, body: string): Promise<void>;
+  command(argv: readonly string[], title: string, body: string): Promise<void>;
 }
 
 export const realSink: NotificationSink = {
@@ -66,14 +66,16 @@ export const realSink: NotificationSink = {
     if (!resp.ok) throw new Error(`ntfy returned ${resp.status}`);
   },
 
-  async command(template, title, body) {
-    if (template === "") throw new Error("notification command template is not configured");
-    const proc = Bun.spawn(["sh", "-c", renderCommandTemplate(template, title, body)], {
+  async command(argv, title, body) {
+    const exe = argv[0];
+    if (exe === undefined) throw new Error("notification command is not configured");
+    const proc = Bun.spawn(expandArgv(argv, title, body), {
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",
     });
-    await proc.exited;
+    const code = await proc.exited;
+    if (code !== 0) throw new Error(`notification command ${exe} exited ${code}`);
   },
 };
 
@@ -119,7 +121,7 @@ export class NotificationService {
       case "ntfy":
         return this.#sink.ntfy(this.#config.ntfy, title, body);
       case "command":
-        return this.#sink.command(this.#config.command.template, title, body);
+        return this.#sink.command(this.#config.command, title, body);
     }
   }
 }

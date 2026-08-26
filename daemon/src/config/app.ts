@@ -822,15 +822,16 @@ const NTFY: StructSpec<NtfyConfig> = {
   fields: { url: readString, topic: readString, token: readString },
 };
 
-export interface CommandNotifyConfig {
-  template: string;
-}
+const NOTIFY_COMMAND_WAS_A_SHELL_TEMPLATE =
+  "`notifications.command` is an argv list — `command = [\"notifier\", \"--title\", \"{title}\", \"--body\", \"{body}\"]`; notification content never reaches a shell";
 
-const COMMAND_NOTIFY: StructSpec<CommandNotifyConfig> = {
-  name: "CommandNotifyConfig",
-  make: () => ({ template: "" }),
-  fields: { template: readString },
-};
+const readNotifyCommand: Reader<string[]> = typed(
+  (v) =>
+    typeof v === "string" || (isTable(v) && "template" in v)
+      ? { err: NOTIFY_COMMAND_WAS_A_SHELL_TEMPLATE }
+      : readStringSeq(v),
+  { kind: "list", item: { kind: "string" } },
+);
 
 export interface NotificationEventsConfig {
   autonomous_message: boolean;
@@ -867,7 +868,7 @@ export interface NotificationsConfig {
   enabled: boolean;
   backend: NotificationBackend;
   ntfy: NtfyConfig;
-  command: CommandNotifyConfig;
+  command: string[];
   generation_threshold: ConfigDuration;
   events: NotificationEventsConfig;
 }
@@ -876,7 +877,7 @@ export const defaultNotificationsConfig = (): NotificationsConfig => ({
   enabled: false,
   backend: "notify_send",
   ntfy: defaultNtfyConfig(),
-  command: { template: "" },
+  command: [],
   generation_threshold: ConfigDuration.fromSecs(0),
   events: defaultNotificationEvents(),
 });
@@ -888,7 +889,7 @@ const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
     enabled: readBool,
     backend: readEnum(NOTIFICATION_BACKENDS),
     ntfy: struct(NTFY),
-    command: struct(COMMAND_NOTIFY),
+    command: readNotifyCommand,
     generation_threshold: readDuration,
     events: struct(NOTIFICATION_EVENTS),
   },

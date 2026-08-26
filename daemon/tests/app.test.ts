@@ -1015,10 +1015,10 @@ describe("a config.toml sets what it says and nothing else", () => {
   });
 
   test("the notifications command backend", () => {
-    const cfg = parsed("[notifications]\nenabled = true\nbackend = \"command\"\n\n[notifications.command]\ntemplate = \"echo '{title}: {body}'\"\n");
+    const cfg = parsed("[notifications]\nenabled = true\nbackend = \"command\"\ncommand = [\"notifier\", \"--title\", \"{title}\", \"--body\", \"{body}\"]\n");
     expect(at(cfg, "notifications.enabled"), "notifications.enabled").toEqual(true);
     expect(at(cfg, "notifications.backend"), "notifications.backend").toEqual("command");
-    expect(at(cfg, "notifications.command.template"), "notifications.command.template").toEqual("echo '{title}: {body}'");
+    expect(at(cfg, "notifications.command"), "notifications.command").toEqual(["notifier", "--title", "{title}", "--body", "{body}"]);
   });
 
 
@@ -1259,10 +1259,6 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
 
   test("an unknown key in a one-field struct", () => {
     expect(rejected("[memory.thinking]\nbogus = 1\n")).toContain("bogus");
-  });
-
-  test("an unknown key in the other one-field struct", () => {
-    expect(rejected("[notifications.command]\nbogus = 1\n")).toContain("bogus");
   });
 
   test("an unknown key sorting before a bad type is reported on both paths", () => {
