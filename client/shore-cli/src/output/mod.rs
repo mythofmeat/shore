@@ -3,6 +3,7 @@ pub(crate) mod catalog;
 pub(crate) mod commands;
 pub(crate) mod config;
 pub(crate) mod history;
+pub(crate) mod reasoning;
 pub(crate) mod spinner;
 pub(crate) mod status;
 pub(crate) mod styling;
@@ -13,6 +14,7 @@ pub(crate) mod vocab;
 pub(crate) mod workspace;
 
 pub(crate) use commands::*;
+pub(crate) use reasoning::{reflow_reasoning, settled_reasoning};
 pub(crate) use spinner::*;
 pub(crate) use styling::*;
 pub(crate) use transcript::*;

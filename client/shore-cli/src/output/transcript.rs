@@ -9,8 +9,8 @@ use super::styling::{
 use super::vocab::{COLOR_ERROR, Tone, indent_to, paint};
 use super::{
     COLOR_RESULT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK, SIGIL_THINKING, SIGIL_TOOL,
-    parse_timestamp, primary_tool_arg, print_dim_line, process_wrap_width, term_width,
-    write_channel_rule, write_process_body, write_section_header, write_sigil_header,
+    parse_timestamp, primary_tool_arg, print_dim_line, process_wrap_width, reflow_reasoning,
+    term_width, write_channel_rule, write_process_body, write_section_header, write_sigil_header,
     write_thinking_content_line,
 };
 
@@ -129,7 +129,7 @@ fn count_user_turn_values(messages: &[serde_json::Value]) -> usize {
 fn write_thinking(out: &mut impl Write, thinking: &str) {
     write_sigil_header(out, SIGIL_THINKING, "Thinking", COLOR_THINKING);
     let width = process_wrap_width();
-    for line in thinking.lines() {
+    for line in reflow_reasoning(thinking).lines() {
         write_thinking_content_line(out, line, width);
     }
 }
@@ -741,6 +741,22 @@ mod tests {
         assert_eq!(
             output,
             " \u{2502} \u{25cc} Thinking\n \u{2502}   line one\n \u{2502}   line two\n"
+        );
+    }
+
+    #[test]
+    fn a_stored_token_stream_block_reads_back_as_prose() {
+        set_color_enabled(false);
+        let blocks = vec![serde_json::json!({
+            "type": "thinking",
+            "thinking": "He's\n wrapping\n up\n,\n budget\n dying\n.\n Keep\n it\n SHORT\n."
+        })];
+        let mut buf = Vec::new();
+        render_message_content(&mut buf, Some(&blocks), "", false, LogFilter::all());
+        let output = String::from_utf8(buf).unwrap();
+        assert_eq!(
+            output,
+            " \u{2502} \u{25cc} Thinking\n \u{2502}   He's wrapping up, budget dying. Keep it SHORT.\n"
         );
     }
 

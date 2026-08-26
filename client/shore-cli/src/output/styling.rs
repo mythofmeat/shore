@@ -14,8 +14,8 @@ use super::vocab::{COLOR_ERROR, Tone, paint, paint_on_stderr};
 use super::{
     COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, MAX_TOOL_OUTPUT, SIGIL_ERROR,
     SIGIL_OK, SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL, abbreviate_model, primary_tool_arg,
-    process_wrap_width, write_channel_rule, write_process_body, write_sigil_header,
-    write_thinking_content_line,
+    process_wrap_width, settled_reasoning, write_channel_rule, write_process_body,
+    write_sigil_header, write_thinking_content_line,
 };
 use crate::terminal_images;
 
@@ -28,7 +28,8 @@ struct ChunkState {
     has_emitted: bool,
     at_line_start: bool,
     last_was_process: bool,
-    thinking_line: String,
+    thinking_raw: String,
+    thinking_written: usize,
 }
 
 impl ChunkState {
@@ -37,7 +38,8 @@ impl ChunkState {
         has_emitted: false,
         at_line_start: true,
         last_was_process: false,
-        thinking_line: String::new(),
+        thinking_raw: String::new(),
+        thinking_written: 0,
     };
 }
 
@@ -85,13 +87,36 @@ pub(crate) fn print_chunk(chunk: &StreamChunk) {
     let _ignored = out.flush();
 }
 
-fn flush_thinking(out: &mut impl Write, state: &mut ChunkState) {
-    if state.thinking_line.is_empty() {
+fn write_reasoning(out: &mut impl Write, state: &mut ChunkState, settled: &str, upto: usize) {
+    if settled.is_empty() {
         return;
     }
-    let line = std::mem::take(&mut state.thinking_line);
-    write_thinking_content_line(out, &line, process_wrap_width());
-    state.at_line_start = true;
+    let width = process_wrap_width();
+    for (index, line) in settled.split('\n').enumerate() {
+        if index < state.thinking_written || index >= upto {
+            continue;
+        }
+        write_thinking_content_line(out, line, width);
+        state.thinking_written = index.saturating_add(1);
+        state.at_line_start = true;
+    }
+}
+
+fn stream_thinking(out: &mut impl Write, state: &mut ChunkState, text: &str) {
+    state.thinking_raw.push_str(text);
+    let settled = settled_reasoning(&state.thinking_raw);
+    let decided = settled.split('\n').count().saturating_sub(1);
+    write_reasoning(out, state, &settled, decided);
+}
+
+fn flush_thinking(out: &mut impl Write, state: &mut ChunkState) {
+    if state.thinking_raw.is_empty() {
+        return;
+    }
+    let settled = settled_reasoning(&state.thinking_raw);
+    write_reasoning(out, state, &settled, usize::MAX);
+    state.thinking_raw.clear();
+    state.thinking_written = 0;
 }
 
 fn print_chunk_to(out: &mut impl Write, state: &mut ChunkState, chunk: &StreamChunk) {
@@ -116,16 +141,7 @@ fn print_chunk_to(out: &mut impl Write, state: &mut ChunkState, chunk: &StreamCh
     }
 
     if is_thinking {
-        let width = process_wrap_width();
-        for ch in chunk.text.chars() {
-            if ch == '\n' {
-                let line = std::mem::take(&mut state.thinking_line);
-                write_thinking_content_line(out, &line, width);
-                state.at_line_start = true;
-            } else {
-                state.thinking_line.push(ch);
-            }
-        }
+        stream_thinking(out, state, &chunk.text);
     } else {
         let _ignored = write!(out, "{}", chunk.text);
         state.at_line_start = chunk.text.ends_with('\n');
@@ -173,16 +189,7 @@ pub(crate) fn print_subagent_chunk(chunk: &StreamChunk) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
-    let width = process_wrap_width();
-    for ch in chunk.text.chars() {
-        if ch == '\n' {
-            let line = std::mem::take(&mut state.thinking_line);
-            write_thinking_content_line(&mut out, &line, width);
-            state.at_line_start = true;
-        } else {
-            state.thinking_line.push(ch);
-        }
-    }
+    stream_thinking(&mut out, &mut state, &chunk.text);
     state.was_thinking = true;
     let _ignored = out.flush();
 }
@@ -517,6 +524,80 @@ mod tests {
         _ = stdout.write_all(&buf);
         _ = stdout.write_all(b"\n----- end -----\n");
         _ = stdout.flush();
+    }
+
+    #[test]
+    fn streaming_thinking_reflows_a_newline_per_token_upstream() {
+        set_color_enabled(false);
+        let mut state = ChunkState::default();
+        let mut buf = Vec::new();
+        for delta in [
+            "He",
+            "'s",
+            "\n",
+            " wrapping",
+            "\n",
+            " up",
+            ",\n",
+            " budget",
+            "\n",
+            " dying",
+            ".\n",
+            " Keep",
+            "\n",
+            " it",
+            "\n",
+            " SHORT",
+            ".",
+        ] {
+            print_chunk_to(&mut buf, &mut state, &chunk("thinking", delta));
+        }
+        flush_thinking(&mut buf, &mut state);
+        let output = String::from_utf8(buf).unwrap();
+        assert_eq!(
+            output,
+            " \u{2502} \u{25cc} Thinking\n \u{2502}   He's wrapping up, budget dying. Keep it SHORT.\n"
+        );
+    }
+
+    #[test]
+    fn streaming_thinking_holds_a_line_until_the_break_is_settled() {
+        set_color_enabled(false);
+        let mut state = ChunkState::default();
+        let mut buf = Vec::new();
+        print_chunk_to(&mut buf, &mut state, &chunk("thinking", "first thought"));
+        print_chunk_to(&mut buf, &mut state, &chunk("thinking", "\n"));
+        assert_eq!(
+            String::from_utf8(buf.clone()).unwrap(),
+            " \u{2502} \u{25cc} Thinking\n",
+            "a break nothing follows yet is not a line break yet"
+        );
+        print_chunk_to(&mut buf, &mut state, &chunk("thinking", "Second thought"));
+        flush_thinking(&mut buf, &mut state);
+        assert_eq!(
+            String::from_utf8(buf).unwrap(),
+            " \u{2502} \u{25cc} Thinking\n \u{2502}   first thought\n \u{2502}   Second thought\n"
+        );
+    }
+
+    #[test]
+    fn streaming_thinking_keeps_a_paragraph_break_the_model_wrote() {
+        set_color_enabled(false);
+        let mut state = ChunkState::default();
+        let mut buf = Vec::new();
+        print_chunk_to(&mut buf, &mut state, &chunk("thinking", "Weighing it up."));
+        print_chunk_to(&mut buf, &mut state, &chunk("thinking", "\n\n"));
+        print_chunk_to(
+            &mut buf,
+            &mut state,
+            &chunk("thinking", "So: keep it short."),
+        );
+        flush_thinking(&mut buf, &mut state);
+        let output = String::from_utf8(buf).unwrap();
+        assert_eq!(
+            output,
+            " \u{2502} \u{25cc} Thinking\n \u{2502}   Weighing it up.\n \u{2502}\n \u{2502}   So: keep it short.\n"
+        );
     }
 
     #[test]
