@@ -37,11 +37,21 @@ export interface McpTool {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  repeatable: boolean;
 }
 
 export class McpError extends Error {}
 
 export class McpTransportError extends McpError {}
+
+export class McpCancelled extends McpError {
+  readonly repeatable: boolean;
+
+  constructor(message: string, repeatable: boolean) {
+    super(message);
+    this.repeatable = repeatable;
+  }
+}
 
 export function childEnvironment(
   configured: Record<string, string>,
@@ -111,10 +121,17 @@ export class McpClient {
       name: tool.name,
       description: tool.description ?? "",
       input_schema: tool.inputSchema as Record<string, unknown>,
+      repeatable:
+        tool.annotations?.readOnlyHint === true || tool.annotations?.idempotentHint === true,
     }));
   }
 
-  async call(tool: string, args: unknown): Promise<unknown> {
+  async call(
+    tool: string,
+    args: unknown,
+    signal?: AbortSignal,
+    repeatable = false,
+  ): Promise<unknown> {
     let argumentsMap: Record<string, unknown> | undefined;
     if (args === null || args === undefined) {
       argumentsMap = undefined;
@@ -128,11 +145,23 @@ export class McpClient {
 
     let result: Awaited<ReturnType<Client["callTool"]>>;
     try {
-      result = await this.client.callTool({
-        name: tool,
-        ...(argumentsMap === undefined ? {} : { arguments: argumentsMap }),
-      });
+      result = await this.client.callTool(
+        {
+          name: tool,
+          ...(argumentsMap === undefined ? {} : { arguments: argumentsMap }),
+        },
+        undefined,
+        signal === undefined ? undefined : { signal },
+      );
     } catch (e) {
+      if (signal?.aborted === true) {
+        throw new McpCancelled(
+          `MCP tool '${tool}' on '${this.serverName}' was asked to stop. MCP cancellation ` +
+            `is a notification the server never acknowledges, so whether it stopped is ` +
+            `not observable from here.`,
+          repeatable,
+        );
+      }
       throw new McpTransportError(`MCP request to '${this.serverName}': ${String(e)}`);
     }
 

@@ -5,7 +5,7 @@ import {
   type McpServerConfigView,
   type Sleep,
 } from "../src/tools/mcp_registry.ts";
-import { McpError, McpTransportError } from "../src/mcp/client.ts";
+import { McpCancelled, McpError, McpTransportError } from "../src/mcp/client.ts";
 import type { McpClient, McpServerSpec } from "../src/mcp/client.ts";
 
 const PLUGINS = "/plugins";
@@ -182,8 +182,11 @@ function revivableServer(options: { tools?: string[] } = {}) {
             input_schema: {},
           })),
         ),
-      call: (tool: string) => {
+      call: (tool: string, _args: unknown, signal?: AbortSignal) => {
         state.calls += 1;
+        if (signal?.aborted === true) {
+          return Promise.reject(new McpCancelled(`MCP tool '${tool}' was asked to stop`, false));
+        }
         if (dead) return Promise.reject(new McpTransportError(`MCP request to '${spec.name}'`));
         return Promise.resolve(`${tool} ran`);
       },
@@ -276,6 +279,26 @@ describe("a connection that dies mid-session is rebuilt", () => {
     hue.killConnection();
     expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
     expect(hue.state.shutdowns).toBe(1);
+  });
+
+  test("a cancelled call leaves the healthy connection alone", async () => {
+    const hue = revivableServer({ tools: ["set_light"] });
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+
+    const cancelled = new AbortController();
+    cancelled.abort();
+    expect(registry.call("mcp__hue__set_light", {}, cancelled.signal)).rejects.toThrow(
+      McpCancelled,
+    );
+
+    expect(hue.state.connects).toBe(1);
+    expect(hue.state.shutdowns).toBe(0);
+    expect(registry.call("mcp__hue__set_light", {})).resolves.toBe("set_light ran");
   });
 
   test("concurrent calls to a dead server share one reconnect", async () => {

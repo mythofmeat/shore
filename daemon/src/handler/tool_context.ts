@@ -92,7 +92,10 @@ export async function buildToolContext(
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(mcp === undefined
       ? {}
-      : { mcpCall: (name: string, input: unknown) => mcp.call(name, input) }),
+      : {
+          mcpCall: (name: string, input: unknown, signal?: AbortSignal) =>
+            mcp.call(name, input, signal),
+        }),
   };
 
   if (subagentsConfigured && deps.runSubagent !== undefined) {

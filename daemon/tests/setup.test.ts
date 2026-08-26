@@ -317,6 +317,7 @@ describe("buildGenerationRequest", () => {
           full_name: `mcp__${t.server}__${t.tool}`,
           description: `${t.tool} tool`,
           input_schema: { type: "object" },
+          repeatable: false,
         })),
       );
 

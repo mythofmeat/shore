@@ -39,6 +39,7 @@ function toolDef(server: string, tool: string): McpToolDef {
     input_schema: { type: "object" },
     server,
     tool,
+    repeatable: false,
   };
 }
 

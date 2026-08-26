@@ -13,6 +13,7 @@ export interface McpToolDef {
   input_schema: Record<string, unknown>;
   server: string;
   tool: string;
+  repeatable: boolean;
 }
 
 export interface McpServerConfigView {
@@ -141,6 +142,7 @@ async function connectOne(
       input_schema: tool.input_schema,
       server: name,
       tool: tool.name,
+      repeatable: tool.repeatable,
     }));
     return { kind: "connected", name, client, tools, attempts };
   } catch (e) {
@@ -266,13 +268,13 @@ export class McpRegistry {
     return this.tools.filter((t) => patterns.some((p) => toolPatternMatches(p, t.full_name)));
   }
 
-  async call(fullName: string, args: unknown): Promise<unknown> {
+  async call(fullName: string, args: unknown, signal?: AbortSignal): Promise<unknown> {
     const def = this.tools.find((t) => t.full_name === fullName);
     if (def === undefined) throw new InvalidArgs(`${fullName}: not yet implemented`);
     const client = this.clients.get(def.server);
     if (client === undefined) throw new InvalidArgs(`${fullName}: not yet implemented`);
     try {
-      return await client.call(def.tool, args);
+      return await client.call(def.tool, args, signal, def.repeatable);
     } catch (e) {
       if (!(e instanceof McpTransportError)) throw e;
       await this.reviveClient(def.server);
