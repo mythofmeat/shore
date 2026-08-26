@@ -23,7 +23,7 @@ import type {
   TurnMessage,
   Usage,
   } from "../types.ts";
-import { systemToText, toolResultText, toTurn } from "../types.ts";
+import { systemToText, toolResultImages, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { REASONING_OFF } from "../types.ts";
@@ -246,7 +246,23 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
   > = [];
   for (const img of imageParts(turn.images)) userParts.push(img);
   for (const b of turn.content) {
-    if (b.type === "text") {
+    if (b.type === "tool_result") {
+      for (const image of toolResultImages(b.content)) {
+        const resolution = resolveImageBlock(image.source);
+        if ("omitted" in resolution) {
+          userParts.push({
+            type: "text",
+            text: omissionNotice("a tool result image", resolution.omitted),
+          });
+        } else {
+          userParts.push({
+            type: "image",
+            image: resolution.image.base64,
+            mediaType: resolution.image.mediaType,
+          });
+        }
+      }
+    } else if (b.type === "text") {
       userParts.push({ type: "text", text: b.text });
     } else if (b.type === "image") {
       const resolution = resolveImageBlock(b.source);

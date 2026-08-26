@@ -20,7 +20,7 @@ import type {
   TurnMessage,
   Usage,
   } from "../types.ts";
-import { systemToText, toolResultText, toTurn } from "../types.ts";
+import { systemToText, toolResultImages, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { parseToolArgs } from "../tool_args.ts";
@@ -265,6 +265,14 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
         content: toolResultText(b.content),
       };
       out.push(toolMsg);
+      for (const image of toolResultImages(b.content)) {
+        const resolution = resolveImageBlock(image.source);
+        if ("omitted" in resolution) {
+          parts.push({ type: "text", text: omissionNotice("a tool result image", resolution.omitted) });
+        } else {
+          parts.push(imageUrlPart(resolution.image));
+        }
+      }
     } else if (b.type === "text") {
       parts.push({ type: "text", text: b.text });
     } else if (b.type === "image") {

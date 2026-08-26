@@ -111,7 +111,7 @@ MUTANTS = [
     # --- the rendering --------------------------------------------------------
     ("render: a string result is serialized like everything else",
      R,
-     '    return { output: typeof value === "string" ? value : (JSON.stringify(value) ?? ""), isError: false };',
+     "    return { output: renderToolValue(value), isError: false };",
      '    return { output: JSON.stringify(value) ?? "", isError: false };'),
     ("render: a failure is stringified rather than read for its message",
      R,

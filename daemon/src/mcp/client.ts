@@ -4,6 +4,15 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
+import {
+  base64Bytes,
+  carryToolMedia,
+  deepEqual,
+  renderPayload,
+  type ToolMediaItem,
+  type ToolResultPayload,
+} from "../tools/media.ts";
+
 export type Transport =
   | {
       kind: "stdio";
@@ -130,7 +139,7 @@ export class McpClient {
     if (result.isError === true) {
       throw new McpError(`MCP tool '${tool}' returned an error: ${flattenText(result)}`);
     }
-    return flattenResult(result);
+    return carryToolMedia(interpretResult(result));
   }
 
   async shutdown(): Promise<void> {
@@ -142,22 +151,137 @@ export class McpClient {
   }
 }
 
-export function flattenResult(result: Record<string, unknown>): unknown {
-  if (result["structuredContent"] !== undefined) return result["structuredContent"];
-  return flattenText(result);
+const IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+export function interpretResult(result: Record<string, unknown>): ToolResultPayload {
+  const blocks: unknown[] = Array.isArray(result["content"]) ? result["content"] : [];
+  const texts: string[] = [];
+  const media: ToolMediaItem[] = [];
+  const extra: string[] = [];
+
+  for (const block of blocks) {
+    if (typeof block !== "object" || block === null) continue;
+    const b = block as Record<string, unknown>;
+    switch (b["type"]) {
+      case "text":
+        if (typeof b["text"] === "string") texts.push(b["text"]);
+        break;
+      case "image":
+        absorbBinary(b["data"], b["mimeType"], "image", media, extra);
+        break;
+      case "audio":
+        absorbBinary(b["data"], b["mimeType"], "audio", media, extra);
+        break;
+      case "resource":
+        absorbResource(b, media, extra);
+        break;
+      case "resource_link":
+        extra.push(describeLink(b));
+        break;
+      default:
+        extra.push(`[${describeType(b["type"])} content omitted: shore cannot render it]`);
+        break;
+    }
+  }
+
+  const structured = result["structuredContent"];
+  if (structured === undefined) return { value: texts.join("\n"), media, extra };
+
+  const distinct = texts.filter((t) => !mirrorsStructured(t, structured));
+  return { value: structured, media, extra: [...distinct, ...extra] };
 }
 
 export function flattenText(result: Record<string, unknown>): string {
-  const content = result["content"];
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter(
-      (block): block is { type: "text"; text: string } =>
-        typeof block === "object" &&
-        block !== null &&
-        (block as { type?: unknown }).type === "text" &&
-        typeof (block as { text?: unknown }).text === "string",
-    )
-    .map((block) => block.text)
-    .join("\n");
+  return renderPayload(interpretResult(result));
+}
+
+function absorbBinary(
+  data: unknown,
+  mimeType: unknown,
+  kind: "image" | "audio",
+  media: ToolMediaItem[],
+  extra: string[],
+): void {
+  const mime = typeof mimeType === "string" ? mimeType.toLowerCase() : "";
+  if (typeof data !== "string" || data === "") {
+    extra.push(`[${kind} omitted: the server sent no ${kind} data]`);
+    return;
+  }
+  if (kind === "audio") {
+    extra.push(
+      `[audio omitted: ${describeMime(mime)}, ${describeSize(data)} — ` +
+        `shore cannot send audio to a model]`,
+    );
+    return;
+  }
+  if (!IMAGE_MIME.has(mime)) {
+    extra.push(`[image omitted: ${describeMime(mime)} is not a supported format]`);
+    return;
+  }
+  media.push({ mime_type: mime, data, label: `${mime}, ${describeSize(data)}` });
+}
+
+function absorbResource(
+  block: Record<string, unknown>,
+  media: ToolMediaItem[],
+  extra: string[],
+): void {
+  const nested = block["resource"];
+  const r = (
+    typeof nested === "object" && nested !== null ? nested : block
+  ) as Record<string, unknown>;
+  const uri = typeof r["uri"] === "string" && r["uri"] !== "" ? r["uri"] : "an unnamed resource";
+  const mime = typeof r["mimeType"] === "string" ? r["mimeType"].toLowerCase() : "";
+
+  if (typeof r["text"] === "string") {
+    extra.push(`[resource ${uri}]\n${r["text"]}`);
+    return;
+  }
+
+  const blob = r["blob"];
+  if (typeof blob === "string" && blob !== "") {
+    if (IMAGE_MIME.has(mime)) {
+      media.push({ mime_type: mime, data: blob, label: `${uri} (${mime}, ${describeSize(blob)})` });
+      return;
+    }
+    extra.push(
+      `[resource ${uri} omitted: ${describeMime(mime)}, ${describeSize(blob)} — ` +
+        `shore cannot render it]`,
+    );
+    return;
+  }
+
+  extra.push(`[resource ${uri} omitted: it carried no text or data]`);
+}
+
+function describeLink(block: Record<string, unknown>): string {
+  const uri = typeof block["uri"] === "string" && block["uri"] !== "" ? block["uri"] : "an unnamed resource";
+  const name = typeof block["name"] === "string" && block["name"] !== "" ? `${block["name"]}: ` : "";
+  const mime = typeof block["mimeType"] === "string" && block["mimeType"] !== "" ? ` (${block["mimeType"]})` : "";
+  return `[resource link: ${name}${uri}${mime}]`;
+}
+
+function describeType(type: unknown): string {
+  return typeof type === "string" && type !== "" ? type : "unlabelled";
+}
+
+function describeMime(mime: string): string {
+  return mime === "" ? "an unlabelled type" : mime;
+}
+
+function describeSize(data: string): string {
+  const bytes = base64Bytes(data);
+  if (bytes < 1024) return `${String(bytes)} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function mirrorsStructured(text: string, structured: unknown): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  return deepEqual(parsed, structured);
 }

@@ -26,7 +26,7 @@ import type {
   Usage,
   WireMessage,
 } from "../types.ts";
-import { EMPTY_TOOL_SCHEMA } from "../types.ts";
+import { EMPTY_TOOL_SCHEMA, toolResultImages, toolResultText } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 
 type GeminiSchema = NonNullable<FunctionDeclaration["parameters"]>;
@@ -261,7 +261,19 @@ function translateParts(content: WireMessage["content"], toolIdToName: Map<strin
         break;
       case "tool_result": {
         const name = toolIdToName.get(block.tool_use_id) ?? block.tool_use_id;
-        parts.push({ functionResponse: { name, response: { result: block.content } } });
+        const images = toolResultImages(block.content);
+        const result = images.length === 0 ? block.content : toolResultText(block.content);
+        parts.push({ functionResponse: { name, response: { result } } });
+        for (const image of images) {
+          const resolution = resolveImageBlock(image.source);
+          if ("omitted" in resolution) {
+            parts.push({ text: omissionNotice("a tool result image", resolution.omitted) });
+          } else {
+            parts.push({
+              inlineData: { mimeType: resolution.image.mediaType, data: resolution.image.base64 },
+            });
+          }
+        }
         break;
       }
       case "image": {
