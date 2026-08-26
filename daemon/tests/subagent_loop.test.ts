@@ -61,6 +61,7 @@ async function configWith(
   roots.push(root);
   const app = defaultAppConfig();
   app.defaults.model = "cheap";
+  app.advanced.max_retries = 0;
   for (const [name, s] of Object.entries(subagents)) app.subagents.set(name, s);
   over(app);
   return {

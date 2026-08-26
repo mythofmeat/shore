@@ -133,6 +133,12 @@
             "rid": "r-1",
             "msg_id": "<minted_id>",
             "content": "hi there",
+            "terminal_content_blocks": [
+              {
+                "type": "text",
+                "text": "hi there"
+              }
+            ],
             "metadata": {
               "tokens": {
                 "input": 120,
@@ -343,6 +349,12 @@
             "rid": "r-2",
             "msg_id": "<minted_id>",
             "content": "second answer",
+            "terminal_content_blocks": [
+              {
+                "type": "text",
+                "text": "second answer"
+              }
+            ],
             "metadata": {
               "tokens": {
                 "input": 120,
@@ -784,6 +796,12 @@
             "type": "stream_end",
             "msg_id": "<minted_id>",
             "content": "answer",
+            "terminal_content_blocks": [
+              {
+                "type": "text",
+                "text": "answer"
+              }
+            ],
             "metadata": {
               "tokens": {
                 "input": 120,
@@ -1005,6 +1023,12 @@
             "rid": "r-tool",
             "msg_id": "<minted_id>",
             "content": "it is late",
+            "terminal_content_blocks": [
+              {
+                "type": "text",
+                "text": "it is late"
+              }
+            ],
             "metadata": {
               "tokens": {
                 "input": 120,
@@ -1250,6 +1274,12 @@
             "rid": "r-4",
             "msg_id": "<minted_id>",
             "content": "no tools here",
+            "terminal_content_blocks": [
+              {
+                "type": "text",
+                "text": "no tools here"
+              }
+            ],
             "metadata": {
               "tokens": {
                 "input": 120,

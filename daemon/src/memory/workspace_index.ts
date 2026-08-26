@@ -127,6 +127,7 @@ export async function hybridSearch(options: HybridSearchOptions): Promise<Hybrid
         existing,
         retrievalConfig,
         (hash) => store.hasVector(embedder.modelId, hash),
+        { forceRefresh: true },
       );
       store.deleteFiles(refreshed.removed);
       store.putFiles(refreshed.rows);
@@ -165,6 +166,7 @@ export interface BackgroundIndexOptions {
   embedder: Embedder;
   indexPath: string;
   maxBatchItems?: number;
+  forceRefresh?: boolean;
 }
 
 export interface BackgroundIndexOutcome {
@@ -194,6 +196,7 @@ export async function indexPendingBatch(
         existing,
         retrievalConfig,
         (hash) => store.hasVector(embedder.modelId, hash),
+        { forceRefresh: options.forceRefresh ?? false },
       );
       store.deleteFiles(refreshed.removed);
       store.putFiles(refreshed.rows);
@@ -296,7 +299,9 @@ export async function refreshIndexEntries(
   existing: Map<string, FileRow>,
   retrievalConfig: RetrievalConfig,
   hasVector: (hash: string) => boolean,
+  options?: { forceRefresh?: boolean },
 ): Promise<RefreshOutcome> {
+  const forceRefresh = options?.forceRefresh ?? true;
   const stale: StaleEntry[] = [];
   const staleDocs: string[] = [];
   const rows: FileRow[] = [];
@@ -307,6 +312,21 @@ export async function refreshIndexEntries(
     if (file.skipReason === "oversize") {
       skippedBinaryOrLarge += 1;
       pushIfChanged(rows, existing, skipRow(file, retrievalConfig, "oversize"));
+      continue;
+    }
+
+    const before = existing.get(file.displayPath);
+    if (
+      !forceRefresh &&
+      before !== undefined &&
+      before.size === file.size &&
+      before.modified_at_secs === file.modifiedAtSecs &&
+      before.embed_chars === retrievalConfig.maxEmbedCharsPerFile &&
+      before.reason === undefined &&
+      before.document_hash !== "" &&
+      hasVector(before.document_hash)
+    ) {
+      pushIfChanged(rows, existing, { ...before, embedded: true });
       continue;
     }
 

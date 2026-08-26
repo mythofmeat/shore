@@ -1,4 +1,5 @@
 import type { ContentBlock } from "../engine/types.ts";
+import type { ContentBlock as WireContentBlock } from "../protocol/ContentBlock.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { LlmError } from "./errors.ts";
 import type { StreamEvent, Timing, Usage } from "./types.ts";
@@ -216,6 +217,7 @@ export function emitStreamEnd(
     rid: options.rid ?? null,
     msg_id: options.msgId ?? null,
     content: result.content,
+    terminal_content_blocks: terminalBlocksForWire(result.content_blocks),
     metadata: {
       tokens: {
         input: result.usage.input_tokens,
@@ -234,4 +236,35 @@ export function emitStreamEnd(
   };
   if (options.revision !== undefined) frame.revision = options.revision;
   sink(frame);
+}
+
+function terminalBlocksForWire(blocks: readonly ContentBlock[]): WireContentBlock[] {
+  return blocks.flatMap((block): WireContentBlock[] => {
+    switch (block.type) {
+      case "text":
+        return [{ type: "text", text: block.text }];
+      case "thinking":
+        return [{
+          type: "thinking",
+          thinking: block.thinking,
+          ...(block.signature === undefined ? {} : { signature: block.signature }),
+        }];
+      case "tool_use":
+        return [{ type: "tool_use", id: block.id, name: block.name, input: block.input }];
+      case "redacted_thinking":
+        return [{ type: "redacted_thinking", data: block.data }];
+      case "tool_result":
+        return [{
+          type: "tool_result",
+          tool_use_id: block.tool_use_id,
+          content:
+            typeof block.content === "string"
+              ? block.content
+              : (JSON.stringify(block.content) ?? ""),
+          is_error: block.is_error ?? false,
+        }];
+      case "image":
+        return [];
+    }
+  });
 }

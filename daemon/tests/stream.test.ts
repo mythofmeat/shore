@@ -697,6 +697,25 @@ describe("emit_stream_end", () => {
     });
     expect(Object.hasOwn(frames[0] as object, "revision")).toBe(false);
   });
+
+  test("carries authoritative terminal blocks so clients can repair a damaged stream", () => {
+    const frames: ServerMessage[] = [];
+    const result = fixtureResult(required((f["stream_end"] as Row[])[0])["result"] as Row);
+    result.content_blocks = [
+      { type: "thinking", thinking: "checked", signature: "sig" },
+      { type: "text", text: "complete answer" },
+    ];
+
+    emitStreamEnd((message) => frames.push(message), result, { isFinal: true });
+
+    expect(frames[0]).toMatchObject({
+      type: "stream_end",
+      terminal_content_blocks: [
+        { type: "thinking", thinking: "checked", signature: "sig" },
+        { type: "text", text: "complete answer" },
+      ],
+    });
+  });
 });
 
 function fixtureResult(row: Row): StreamResult {

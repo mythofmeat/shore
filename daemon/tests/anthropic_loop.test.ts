@@ -84,6 +84,7 @@ describe("breakpoints follow a growing conversation", () => {
 type Turn =
   | { kind: "tool"; id: string; name: string; input: unknown }
   | { kind: "text"; text: string };
+type Reply = Turn | { kind: "error"; status: number };
 
 interface FakeAnthropic {
   url: string;
@@ -145,7 +146,7 @@ function sseForTurn(turn: Turn): string {
   return out;
 }
 
-function fakeAnthropic(turns: Turn[]): FakeAnthropic {
+function fakeAnthropic(turns: Reply[]): FakeAnthropic {
   const requests: Array<Record<string, unknown>> = [];
   let next = 0;
   const server = Bun.serve({
@@ -153,6 +154,12 @@ function fakeAnthropic(turns: Turn[]): FakeAnthropic {
     async fetch(incomingRequest) {
       requests.push((await incomingRequest.json()) as Record<string, unknown>);
       const turn = turns[next++] ?? { kind: "text" as const, text: "(exhausted)" };
+      if (turn.kind === "error") {
+        return new Response(JSON.stringify({ error: { message: "rate limited" } }), {
+          status: turn.status,
+          headers: { "content-type": "application/json" },
+        });
+      }
       return new Response(sseForTurn(turn), {
         headers: { "content-type": "text/event-stream" },
       });
@@ -224,6 +231,30 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 }
 
 describe("driving a tool loop", () => {
+  test("a continuation gets a fresh retry budget and does not rerun the tool", async () => {
+    const anthropic = fakeAnthropic([
+      { kind: "error", status: 429 },
+      { kind: "error", status: 429 },
+      { kind: "tool", id: "tu_1", name: "read", input: {} },
+      { kind: "error", status: 429 },
+      { kind: "text", text: "done" },
+    ]);
+    const tools = fakePhase("hello");
+    stops.push(() => anthropic.stop());
+
+    const events = await collect(
+      anthropicToolLoopEvents(request(anthropic), tools.phase, undefined, Date.now, {
+        settings: { maxRetries: 2, backoffBaseMs: 1 },
+        sleep: async () => {},
+        random: () => 0,
+      }),
+    );
+
+    expect(anthropic.requests).toHaveLength(5);
+    expect(tools.runs).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({ type: "done", content: "done" });
+  });
+
   test("runs the tool, continues, and reports one flat stream", async () => {
     const anthropic = fakeAnthropic([
       { kind: "tool", id: "tu_1", name: "read", input: { path: "/tmp/x" } },

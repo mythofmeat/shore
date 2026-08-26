@@ -72,6 +72,7 @@ async function world(): Promise<LoadedConfig> {
 
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
+  app.advanced.max_retries = 0;
   const models = emptyCatalog();
   models.chat.set("chat.fixture", MODEL);
 

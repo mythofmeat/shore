@@ -697,6 +697,31 @@ describe("deciding an indexed file needs re-embedding", () => {
 });
 
 describe("refreshIndexEntries", () => {
+  test("the background fast path does not read and decode an unchanged embedded file", async () => {
+    const ws = join(root, "workspace-fast-path");
+    await mkdir(ws, { recursive: true });
+    await writeAt(join(ws, "note.md"), Buffer.from("stable"), 1_700_000_000);
+    const config = configOf(required(fixture.refresh_index_entries[0]).config);
+
+    const firstCandidates = await enumerateFiles(ws, config);
+    const first = await refreshIndexEntries(firstCandidates, new Map(), config, () => false);
+    const row = required(first.stale[0]).row;
+    const existing = new Map([[row.display_path, { ...row, embedded: true }]]);
+    const secondCandidates = await enumerateFiles(ws, config);
+
+    const second = await refreshIndexEntries(
+      secondCandidates,
+      existing,
+      config,
+      (hash) => hash === row.document_hash,
+      { forceRefresh: false },
+    );
+
+    expect(second.stale).toEqual([]);
+    expect(second.rows).toEqual([]);
+    expect(required(secondCandidates[0]).content).toBeUndefined();
+  });
+
   for (const c of fixture.refresh_index_entries) {
     test(c.name, async () => {
       const ws = join(root, "workspace");

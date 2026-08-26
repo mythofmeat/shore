@@ -1,6 +1,7 @@
 import { required } from "../util/required.ts";
 
 import { shoreLog } from "../log.ts";
+import { watch, type FSWatcher } from "node:fs";
 
 import type { Embedder } from "../llm/embed.ts";
 import { indexPendingBatch, type RetrievalConfig } from "./workspace_index.ts";
@@ -20,6 +21,9 @@ export interface WorkspaceIndexServiceOptions {
   batchPauseMs?: number;
   timerIntervalMs?: number;
   maxBatchItems?: number;
+  quietRescanMs?: number;
+  fullRescanMs?: number;
+  watchWorkspace?: boolean;
 }
 
 export interface WorkspaceIndexProgress {
@@ -41,6 +45,11 @@ interface Entry extends WorkspaceIndexRegistration {
   files: number;
   lastError: string | undefined;
   sweptAt: number | undefined;
+  dirty: boolean;
+  changeVersion: number;
+  fullSweepAt: number;
+  forceRefresh: boolean;
+  watcher: FSWatcher | undefined;
 }
 
 export class WorkspaceIndexService {
@@ -50,6 +59,9 @@ export class WorkspaceIndexService {
   readonly #batchPauseMs: number;
   readonly #timerIntervalMs: number;
   readonly #maxBatchItems: number | undefined;
+  readonly #quietRescanMs: number;
+  readonly #fullRescanMs: number;
+  readonly #watchWorkspace: boolean;
   #idleSince: number;
   #lastPicked: string | undefined;
   #foreground = 0;
@@ -63,6 +75,9 @@ export class WorkspaceIndexService {
     this.#batchPauseMs = options.batchPauseMs ?? 1_000;
     this.#timerIntervalMs = options.timerIntervalMs ?? 1_000;
     this.#maxBatchItems = options.maxBatchItems;
+    this.#quietRescanMs = options.quietRescanMs ?? 5 * 60_000;
+    this.#fullRescanMs = options.fullRescanMs ?? 60 * 60_000;
+    this.#watchWorkspace = options.watchWorkspace ?? true;
     this.#idleSince = this.#now();
   }
 
@@ -72,20 +87,44 @@ export class WorkspaceIndexService {
       previous?.embedder?.identity !== registration.embedder?.identity ||
       previous?.embedder?.modelId !== registration.embedder?.modelId ||
       previous?.embedder?.dimensions !== registration.embedder?.dimensions;
-    this.#entries.set(registration.character, {
+    const workspaceChanged = previous?.workspaceDir !== registration.workspaceDir;
+    const configurationChanged =
+      workspaceChanged ||
+      previous?.indexPath !== registration.indexPath ||
+      JSON.stringify(previous?.retrievalConfig) !== JSON.stringify(registration.retrievalConfig);
+    if (workspaceChanged) previous?.watcher?.close();
+    const entry: Entry = {
       ...registration,
       retryAt: identityChanged ? 0 : (previous?.retryAt ?? 0),
       failures: identityChanged ? 0 : (previous?.failures ?? 0),
-      nextBatchAt: previous?.nextBatchAt ?? 0,
+      nextBatchAt: identityChanged || configurationChanged ? 0 : (previous?.nextBatchAt ?? 0),
       pending: previous?.pending ?? 0,
       files: previous?.files ?? 0,
       lastError: identityChanged ? undefined : previous?.lastError,
       sweptAt: previous?.sweptAt,
-    });
+      dirty: identityChanged || configurationChanged || (previous?.dirty ?? true),
+      changeVersion: previous?.changeVersion ?? 0,
+      fullSweepAt: identityChanged || configurationChanged ? 0 : (previous?.fullSweepAt ?? 0),
+      forceRefresh:
+        identityChanged || configurationChanged || (previous?.forceRefresh ?? true),
+      watcher: workspaceChanged ? undefined : previous?.watcher,
+    };
+    this.#entries.set(registration.character, entry);
+    entry.watcher ??= this.#startWatcher(registration.character, registration.workspaceDir);
   }
 
   unregister(character: string): void {
+    this.#entries.get(character)?.watcher?.close();
     this.#entries.delete(character);
+  }
+
+  markDirty(character: string, forceRefresh = false): void {
+    const entry = this.#entries.get(character);
+    if (entry === undefined) return;
+    entry.dirty = true;
+    entry.changeVersion += 1;
+    if (forceRefresh) entry.forceRefresh = true;
+    entry.nextBatchAt = 0;
   }
 
   registeredCharacters(): string[] {
@@ -141,7 +180,25 @@ export class WorkspaceIndexService {
     this.#closed = true;
     if (this.#timer !== undefined) clearInterval(this.#timer);
     this.#timer = undefined;
+    for (const entry of this.#entries.values()) entry.watcher?.close();
     await this.#running;
+  }
+
+  #startWatcher(character: string, workspaceDir: string): FSWatcher | undefined {
+    if (!this.#watchWorkspace || workspaceDir === "") return undefined;
+    try {
+      const watcher = watch(workspaceDir, { recursive: true }, () =>
+        this.markDirty(character, true),
+      );
+      watcher.unref?.();
+      watcher.on("error", (error) => {
+        shoreLog.warn(`shore: workspace index watcher failed for ${character}: ${String(error)}`);
+      });
+      return watcher;
+    } catch (error) {
+      shoreLog.warn(`shore: workspace index watcher could not start for ${character}: ${String(error)}`);
+      return undefined;
+    }
   }
 
   async #runOnce(): Promise<void> {
@@ -153,14 +210,21 @@ export class WorkspaceIndexService {
     for (let step = 1; step <= characters.length; step += 1) {
       const name = required(characters[(after + step) % characters.length]);
       const entry = required(this.#entries.get(name));
-      if (entry.embedder === undefined || now < entry.retryAt || now < entry.nextBatchAt) continue;
+      const forceRefresh = entry.forceRefresh || now >= entry.fullSweepAt;
+      if (
+        entry.embedder === undefined ||
+        now < entry.retryAt ||
+        (!forceRefresh && now < entry.nextBatchAt && (entry.pending > 0 || !entry.dirty))
+      ) continue;
       this.#lastPicked = name;
+      const changeVersion = entry.changeVersion;
       try {
         const outcome = await indexPendingBatch({
           workspaceDir: entry.workspaceDir,
           retrievalConfig: entry.retrievalConfig,
           embedder: entry.embedder,
           indexPath: entry.indexPath,
+          forceRefresh,
           ...(this.#maxBatchItems === undefined ? {} : { maxBatchItems: this.#maxBatchItems }),
         });
         entry.failures = 0;
@@ -169,7 +233,11 @@ export class WorkspaceIndexService {
         entry.pending = outcome.pending;
         entry.files = outcome.files;
         entry.sweptAt = this.#now();
-        entry.nextBatchAt = this.#now() + this.#batchPauseMs;
+        if (forceRefresh) entry.fullSweepAt = this.#now() + this.#fullRescanMs;
+        if (entry.changeVersion === changeVersion) entry.forceRefresh = false;
+        entry.dirty = outcome.pending > 0 || entry.changeVersion !== changeVersion;
+        entry.nextBatchAt =
+          this.#now() + (entry.dirty ? this.#batchPauseMs : this.#quietRescanMs);
       } catch (error) {
         entry.failures += 1;
         entry.lastError = error instanceof Error ? error.message : String(error);

@@ -975,6 +975,7 @@
             "msg_id": "m_seed_a",
             "revision": 0,
             "content": "answer",
+            "terminal_content_blocks": [],
             "metadata": {
               "tokens": {
                 "input": 0,
@@ -1008,6 +1009,7 @@
             "rid": "r-2",
             "revision": 0,
             "content": "answer",
+            "terminal_content_blocks": [],
             "metadata": {
               "tokens": {
                 "input": 0,
@@ -1055,6 +1057,7 @@
             "msg_id": "m_seed_a",
             "revision": 0,
             "content": "answer",
+            "terminal_content_blocks": [],
             "metadata": {
               "tokens": {
                 "input": 0,

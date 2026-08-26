@@ -726,6 +726,24 @@ impl App {
         self.stream.reset();
     }
 
+    pub(crate) fn fail_stream(&mut self) {
+        let remove_empty = match self.entries.last_mut() {
+            Some(ConversationEntry::Turn(turn)) if turn.is_streaming() => {
+                if turn.blocks.is_empty() {
+                    true
+                } else {
+                    turn.state = TurnState::Complete;
+                    false
+                }
+            }
+            Some(_) | None => false,
+        };
+        if remove_empty {
+            let _ = self.entries.pop();
+        }
+        self.stream.reset();
+    }
+
     pub(crate) fn begin_regen_optimistic(&mut self) {
         self.stream.reset();
         self.stream.active = true;

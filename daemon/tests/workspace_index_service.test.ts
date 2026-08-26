@@ -139,7 +139,13 @@ describe("indexPendingBatch", () => {
 
 describe("WorkspaceIndexService", () => {
   function serviceAt(now: () => number, options = {}): WorkspaceIndexService {
-    return new WorkspaceIndexService({ now, idleDelayMs: 1000, batchPauseMs: 500, ...options });
+    return new WorkspaceIndexService({
+      now,
+      idleDelayMs: 1000,
+      batchPauseMs: 500,
+      watchWorkspace: false,
+      ...options,
+    });
   }
 
   test("nothing runs until the daemon has been idle long enough", async () => {
@@ -217,7 +223,7 @@ describe("WorkspaceIndexService", () => {
     expect(second.documents).toBeGreaterThan(0);
   });
 
-  test("a swept character waits out the batch pause before it is rescanned", async () => {
+  test("a clean character stays quiet until the slow rescan", async () => {
     let clock = 10_000;
     const service = serviceAt(() => clock, { maxBatchItems: 8 });
     service.register({
@@ -240,7 +246,63 @@ describe("WorkspaceIndexService", () => {
 
     clock += 1000;
     await service.runOnce();
+    expect(required(service.progress("Yuna")).sweptAt).toBe(swept.sweptAt);
+
+    clock += 5 * 60_000;
+    await service.runOnce();
     expect(required(service.progress("Yuna")).sweptAt).toBe(clock);
+  });
+
+  test("a filesystem notification wakes a clean character immediately", async () => {
+    let clock = 10_000;
+    const service = serviceAt(() => clock, { maxBatchItems: 8 });
+    service.register({
+      character: "Yuna",
+      workspaceDir: await workspaceOf(2),
+      indexPath: join(root, "dirty.db"),
+      retrievalConfig: CONFIG,
+      embedder: new CountingEmbedder(),
+    });
+
+    clock += 2000;
+    await service.runOnce();
+    const firstSweep = required(service.progress("Yuna")).sweptAt;
+
+    clock += 100;
+    service.markDirty("Yuna");
+    await service.runOnce();
+
+    expect(required(service.progress("Yuna")).sweptAt).toBe(clock);
+    expect(required(service.progress("Yuna")).sweptAt).not.toBe(firstSweep);
+  });
+
+  test("the periodic integrity sweep catches a same-size same-mtime rewrite", async () => {
+    let clock = 10_000;
+    const service = serviceAt(() => clock, { maxBatchItems: 8, fullRescanMs: 10_000 });
+    const workspaceDir = await workspaceOf(1);
+    const embedder = new CountingEmbedder();
+    service.register({
+      character: "Yuna",
+      workspaceDir,
+      indexPath: join(root, "integrity.db"),
+      retrievalConfig: CONFIG,
+      embedder,
+    });
+
+    clock += 2000;
+    await service.runOnce();
+    expect(embedder.documents).toBe(1);
+
+    await writeFile(join(workspaceDir, "f000.md"), "other value 0");
+    await utimes(join(workspaceDir, "f000.md"), 1000, 1000);
+    clock += 100;
+    service.markDirty("Yuna");
+    await service.runOnce();
+    expect(embedder.documents).toBe(1);
+
+    clock += 10_000;
+    await service.runOnce();
+    expect(embedder.documents).toBe(2);
   });
 
   test("a character with no embedder reports why instead of waiting forever", async () => {

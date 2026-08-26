@@ -28,9 +28,14 @@ import {
   resolveKeyCandidates,
   type KeyCandidate,
 } from "../llm/credentials.ts";
-import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
 import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
-import { genericToolLoopEvents } from "../llm/providers/generic_loop.ts";
+import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
+import {
+  genericToolLoopEvents,
+  type ModelCallRetryOptions,
+} from "../llm/providers/generic_loop.ts";
+import { shouldRetryError } from "../llm/retry.ts";
+import { describeError } from "../llm/errors.ts";
 import { BudgetBlocked } from "../llm/generate.ts";
 import { consumeStream, type StreamResult } from "../llm/stream.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
@@ -143,6 +148,7 @@ export interface GenerationDeps {
   env?: NodeJS.ProcessEnv;
   log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
+    warn?: (msg: string, fields?: Record<string, unknown>) => void;
     error?: (msg: string, fields?: Record<string, unknown>) => void;
   };
 }
@@ -174,9 +180,61 @@ function droppedHistoryImages(
   return stripped;
 }
 
+export class OrderedDelivery {
+  #tail: Promise<void> = Promise.resolve();
+  #failure: unknown;
+  #failed = false;
+
+  constructor(private readonly target: GenerationParams["send"]) {}
+
+  readonly send: GenerationParams["send"] = (message) => {
+    const dispatched = this.#tail.then(() => this.target(message));
+    this.#tail = dispatched.catch((error: unknown) => {
+      if (!this.#failed) this.#failure = error;
+      this.#failed = true;
+    });
+    return this.#tail;
+  };
+
+  async flush(): Promise<void> {
+    await this.#tail;
+    if (this.#failed) {
+      throw new Error("failed to deliver one or more generation frames", {
+        cause: this.#failure,
+      });
+    }
+  }
+}
+
 export async function runGeneration(
   deps: GenerationDeps,
   params: GenerationParams,
+): Promise<void> {
+  const delivery = new OrderedDelivery(params.send);
+  let generationFailure: unknown;
+  let generationFailed = false;
+  try {
+    await runGenerationCore(deps, { ...params, send: delivery.send }, () => delivery.flush());
+  } catch (error) {
+    generationFailure = error;
+    generationFailed = true;
+  }
+
+  try {
+    await delivery.flush();
+  } catch (error) {
+    deps.log?.error?.("generation frame delivery failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    if (!generationFailed) throw error;
+  }
+  if (generationFailed) throw generationFailure;
+}
+
+async function runGenerationCore(
+  deps: GenerationDeps,
+  params: GenerationParams,
+  flushFrames: () => Promise<void>,
 ): Promise<void> {
   const now = deps.now ?? defaultNow;
   const newMessageId = deps.newMessageId ?? defaultMessageId;
@@ -299,6 +357,7 @@ export async function runGeneration(
   });
 
   emitPostPersistStreamEnd(turnCtx, engine, params.rid ?? undefined, result);
+  await flushFrames();
 
   await maybeCompact(
     turnCtx,
@@ -341,15 +400,16 @@ export function turnEvents(
   call: SidecarRequest,
   phase: ToolPhase | undefined,
   signal: AbortSignal,
+  retry?: ModelCallRetryOptions,
 ): AsyncIterable<StreamEvent> {
   if (phase === undefined) return provider.stream(call, signal);
   if (deps.loopEvents !== undefined) return deps.loopEvents(provider, call, phase, signal);
   if (call.sdk === "anthropic") {
     return capturedEvents(deps.callStore, call, () =>
-      anthropicToolLoopEvents(call, phase, signal),
+      anthropicToolLoopEvents(call, phase, signal, Date.now, retry),
     );
   }
-  return genericToolLoopEvents(provider, call, phase, signal);
+  return genericToolLoopEvents(provider, call, phase, signal, Date.now, retry);
 }
 
 async function streamTurn(
@@ -363,6 +423,18 @@ async function streamTurn(
   }
 
   const toolsOn = anyEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;
+  let replaySafe = true;
+  const send = (message: ServerMessage): void => {
+    if (
+      message.type === "stream_chunk" ||
+      message.type === "tool_call" ||
+      message.type === "tool_result" ||
+      message.type === "send_image"
+    ) {
+      replaySafe = false;
+    }
+    params.send(message);
+  };
 
   const toolCtx = toolsOn
     ? await buildToolContext(
@@ -371,7 +443,7 @@ async function streamTurn(
         charName,
         deps.tools?.(charName, {
           conversation: params.conversation,
-          send: params.send,
+          send,
           ...(params.rid === undefined ? {} : { rid: params.rid }),
           now: params.now,
           newMessageId: params.newMessageId,
@@ -383,6 +455,17 @@ async function streamTurn(
   const retry = {
     maxRetries: config.app.advanced.max_retries ?? DEFAULT_MAX_RETRIES,
     backoffBaseMs: config.app.advanced.retry_backoff?.asMillis() ?? DEFAULT_BACKOFF_BASE_MS,
+  };
+  const callRetry: ModelCallRetryOptions = {
+    settings: retry,
+    sleep: deps.sleep ?? realSleep,
+    onRetry: (error, attemptIndex, delayMs) => {
+      deps.log?.warn?.("retrying provider model call", {
+        attempt: attemptIndex + 1,
+        delay_ms: delayMs,
+        error: describeError(error),
+      });
+    },
   };
 
   let intermediate: Message[] = [];
@@ -412,7 +495,7 @@ async function streamTurn(
         ? undefined
         : toolPhase(
             {
-              sendDirect: params.send,
+              sendDirect: send,
               ctx: toolCtx,
               limits: toolLimits(config),
               ...(params.rid === undefined ? {} : { rid: params.rid }),
@@ -423,7 +506,14 @@ async function streamTurn(
             messages,
           );
 
-    const events = turnEvents(deps, provider, call, phase, params.signal);
+    const events = turnEvents(
+      deps,
+      provider,
+      call,
+      phase,
+      params.signal,
+      phase === undefined ? undefined : callRetry,
+    );
 
     const outcome = await consumeStream(recordingStream(
       call.context,
@@ -443,7 +533,7 @@ async function streamTurn(
       },
     ), {
       regen: params.regen,
-      sink: params.send,
+      sink: send,
       ...(params.rid === undefined ? {} : { rid: params.rid }),
     });
     if ("err" in outcome) throw outcome.err;
@@ -462,16 +552,30 @@ async function streamTurn(
     resolved.providerKey,
     candidates,
     (candidate) => readCandidateEnv(candidate, deps.env ?? process.env),
-    (apiKey, candidate) =>
-      streamWithRetry(
+    (apiKey, candidate) => {
+      if (toolsOn) return attempt(apiKey, candidate);
+      return streamWithRetry(
         () => attempt(apiKey, candidate),
         retry,
-        undefined,
+        (error, attemptIndex, maxRetries) =>
+          replaySafe &&
+          shouldRetryError(error, attemptIndex, { max_retries: maxRetries }).decision === "retry",
         deps.sleep ?? realSleep,
-        { signal: params.signal },
-      ),
+        {
+          signal: params.signal,
+          onRetry: (error, attemptIndex, delayMs) => {
+            deps.log?.warn?.("retrying provider stream", {
+              attempt: attemptIndex + 1,
+              delay_ms: delayMs,
+              error: describeError(error),
+            });
+          },
+        },
+      );
+    },
     {
       record: (event) => recordKeyFallback(deps, params, event),
+      canFallback: () => replaySafe,
     },
   );
 

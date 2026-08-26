@@ -214,8 +214,8 @@ MUTANTS = [
     # --- the handler ----------------------------------------------------------
     ("leases: one map is shared by every handler, so a lease names another daemon's session",
      D,
-     "    leases: new StreamLeases(),",
-     "    leases: ((globalThis as Record<string, unknown>)[\"__leases\"] ??= new StreamLeases()) as StreamLeases,"),
+     "    leases: new StreamLeases(a.log),",
+     "    leases: ((globalThis as Record<string, unknown>)[\"__leases\"] ??= new StreamLeases(a.log)) as StreamLeases,"),
     ("resolve: `null` is asked for as a character named that rather than as an absence",
      D,
      "        return { name: registry.resolveCharacter(selected ?? undefined) };",

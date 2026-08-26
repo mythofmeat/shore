@@ -123,11 +123,13 @@ MUTANTS = [
     # --- the fanout -----------------------------------------------------------
     ("fanout: the lease holder never receives anything",
      LEASE,
-     "      if (spectatorSend !== undefined) await sendQuietly(spectatorSend, msg);\n",
+     "      if (spectatorSend !== undefined) {\n"
+     "        void sendObserved(spectatorSend, msg, this.log, \"spectator\");\n"
+     "      }\n",
      ""),
     ("fanout: the issuer never receives anything",
      LEASE,
-     "      await sendQuietly(issuerSend, msg);\n",
+     "      await issuerSend(msg);\n",
      ""),
     ("fanout: the recipients are re-resolved on every frame",
      LEASE,
@@ -137,12 +139,16 @@ MUTANTS = [
      "      const spectatorSend = this.spectator(character, issuerSession, router, now);\n"),
     ("fanout: a dead lease holder aborts the generation",
      LEASE,
-     "      if (spectatorSend !== undefined) await sendQuietly(spectatorSend, msg);",
-     "      if (spectatorSend !== undefined) await spectatorSend(msg);"),
-    ("fanout: a dead issuer aborts the generation",
+     "      if (spectatorSend !== undefined) {\n"
+     "        void sendObserved(spectatorSend, msg, this.log, \"spectator\");\n"
+     "      }",
+     "      if (spectatorSend !== undefined) {\n"
+     "        await spectatorSend(msg);\n"
+     "      }"),
+    ("fanout: a dead issuer is silently ignored",
      LEASE,
-     "      await sendQuietly(issuerSend, msg);",
-     "      await issuerSend(msg);"),
+     "      await issuerSend(msg);",
+     "      await sendObserved(issuerSend, msg, this.log, \"issuer\");"),
 
     # --- the router method the lease resolves through -------------------------
     ("router: any connected session answers for any session id",

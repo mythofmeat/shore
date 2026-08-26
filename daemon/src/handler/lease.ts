@@ -12,8 +12,14 @@ export interface LeaseRouter {
   senderFor(sessionId: number): DirectSender | undefined;
 }
 
+interface LeaseLogger {
+  error?: (msg: string, fields?: Record<string, unknown>) => void;
+}
+
 export class StreamLeases {
   readonly #leases = new Map<string, Lease>();
+
+  constructor(private readonly log?: LeaseLogger) {}
 
   observe(character: string, sessionId: number, kind: RequestKind, now = Date.now()): void {
     if (kind !== "message") return;
@@ -47,8 +53,10 @@ export class StreamLeases {
   ): DirectSender {
     const spectatorSend = this.spectator(character, issuerSession, router, now);
     return async (msg: ServerMessage) => {
-      if (spectatorSend !== undefined) await sendQuietly(spectatorSend, msg);
-      await sendQuietly(issuerSend, msg);
+      if (spectatorSend !== undefined) {
+        void sendObserved(spectatorSend, msg, this.log, "spectator");
+      }
+      await issuerSend(msg);
     };
   }
 
@@ -57,9 +65,19 @@ export class StreamLeases {
   }
 }
 
-async function sendQuietly(send: DirectSender, msg: ServerMessage): Promise<void> {
+async function sendObserved(
+  send: DirectSender,
+  msg: ServerMessage,
+  log: LeaseLogger | undefined,
+  recipient: string,
+): Promise<void> {
   try {
     await send(msg);
-  } catch {
+  } catch (error) {
+    log?.error?.("failed to deliver stream frame", {
+      recipient,
+      frame_type: msg.type,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }

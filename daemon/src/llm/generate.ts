@@ -19,6 +19,7 @@ import { consumeStream, type FrameSink, type StreamResult } from "./stream.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
 import { rustJoin } from "../config/dirs.ts";
 import { usageConfigView, type BudgetBlock } from "../ledger/budget.ts";
+import { shouldRetryError } from "./retry.ts";
 
 export class BudgetBlocked extends Error {
   readonly kind = "budget_blocked" as const;
@@ -224,7 +225,12 @@ export async function generateViaStream(
     resolved.apiKeyEnv,
   );
 
-  const sink: FrameSink = options.sink ?? (() => {});
+  let retrySafe = true;
+  const downstream: FrameSink = options.sink ?? (() => {});
+  const sink: FrameSink = (message) => {
+    if (message.type === "stream_chunk" || message.type === "tool_call") retrySafe = false;
+    downstream(message);
+  };
   const fallbacks: FallbackEvent[] = [];
 
   const attempt = async (apiKey: string, candidate: KeyCandidate): Promise<GenerateResponse> => {
@@ -256,11 +262,16 @@ export async function generateViaStream(
       streamWithRetry(
         () => attempt(apiKey, candidate),
         deps.retry ?? DEFAULT_RETRY,
-        undefined,
+        (error, attemptIndex, maxRetries) =>
+          retrySafe &&
+          shouldRetryError(error, attemptIndex, { max_retries: maxRetries }).decision === "retry",
         deps.sleep,
         options.signal === undefined ? {} : { signal: options.signal },
       ),
-    { record: (event) => fallbacks.push(event) },
+    {
+      record: (event) => fallbacks.push(event),
+      canFallback: () => retrySafe,
+    },
   );
 
   return { response, fallbacks };

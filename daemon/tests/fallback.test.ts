@@ -8,6 +8,7 @@ import {
   DEFAULT_MAX_RETRIES,
   llmHttpStatus,
   missingKeyReason,
+  retryDelayMs,
   sanitizeReason,
   streamWithCredentialFallback,
   streamWithRetry,
@@ -122,9 +123,17 @@ describe("backoff", () => {
     expect(backoffDelayMs(500, 64)).toBe(backoffDelayMs(500, 128));
   });
 
-  test("the shipped defaults are a real schedule, not zero", () => {
-    expect(DEFAULT_MAX_RETRIES).toBeGreaterThan(0);
-    expect(DEFAULT_BACKOFF_BASE_MS).toBeGreaterThan(0);
+  test("the shipped defaults wait through a minute-long transient outage", () => {
+    const settings = {
+      maxRetries: DEFAULT_MAX_RETRIES,
+      backoffBaseMs: DEFAULT_BACKOFF_BASE_MS,
+    };
+    const total = Array.from({ length: DEFAULT_MAX_RETRIES }, (_, attempt) =>
+      retryDelayMs(settings, attempt, { random: () => 0 }),
+    ).reduce((sum, delay) => sum + delay, 0);
+
+    expect(DEFAULT_MAX_RETRIES).toBe(5);
+    expect(total).toBe(60_000);
   });
 });
 

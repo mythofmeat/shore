@@ -25,7 +25,8 @@ type Turn =
       text?: string;
     } & Reasoning)
   | ({ kind: "text"; text: string } & Reasoning)
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  | { kind: "partial_error"; text: string; message: string };
 
 const USAGE = {
   input_tokens: 10,
@@ -47,6 +48,17 @@ class FakeProvider implements SidecarProvider {
     yield { type: "start", model: req.model };
 
     if (turn.kind === "error") {
+      yield {
+        type: "error",
+        message: turn.message,
+        usage: USAGE,
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      };
+      return;
+    }
+
+    if (turn.kind === "partial_error") {
+      yield { type: "text", text: turn.text };
       yield {
         type: "error",
         message: turn.message,
@@ -160,6 +172,51 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 const typesOf = (events: StreamEvent[]) => events.map((e) => e.type);
 
 describe("driving a tool loop for a non-Anthropic dialect", () => {
+  test("each model call gets a fresh retry budget without replaying a completed tool", async () => {
+    const provider = new FakeProvider([
+      { kind: "error", message: "initial 429" },
+      { kind: "error", message: "initial 429 again" },
+      { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
+      { kind: "error", message: "continuation 429" },
+      { kind: "text", text: "done" },
+    ]);
+    const tools = fakePhase({ output: () => "hello" });
+
+    const events = await collect(
+      genericToolLoopEvents(provider, request(), tools.phase, undefined, Date.now, {
+        settings: { maxRetries: 2, backoffBaseMs: 1 },
+        sleep: async () => {},
+        random: () => 0,
+      }),
+    );
+
+    expect(provider.requests).toHaveLength(5);
+    expect(tools.runs).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({ type: "done", content: "done" });
+  });
+
+  test("does not splice a retried response onto content already shown to the user", async () => {
+    const provider = new FakeProvider([
+      { kind: "partial_error", text: "partial", message: "connection reset" },
+      { kind: "text", text: "replacement" },
+    ]);
+    const tools = fakePhase();
+
+    const events = await collect(
+      genericToolLoopEvents(provider, request(), tools.phase, undefined, Date.now, {
+        settings: { maxRetries: 5, backoffBaseMs: 1 },
+        sleep: async () => {},
+        random: () => 0,
+      }),
+    );
+
+    expect(provider.requests).toHaveLength(1);
+    expect(events.filter((event) => event.type === "text")).toEqual([
+      { type: "text", text: "partial" },
+    ]);
+    expect(events.at(-1)?.type).toBe("error");
+  });
+
   test("runs the tool, continues, and reports one flat stream", async () => {
     const tools = fakePhase();
     const provider = new FakeProvider([

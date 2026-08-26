@@ -64,6 +64,7 @@ function harness(
   const leases = new StreamLeases();
   const started: GenerationParams[] = [];
   const notifications: Array<{ title: string; body: string }> = [];
+  const errors: Array<{ message: string; fields: Record<string, unknown> | undefined }> = [];
 
   const handler = new MessageHandler({
     router,
@@ -79,9 +80,10 @@ function harness(
         params.signal.addEventListener("abort", () => resolve(), { once: true });
       });
     },
+    log: { error: (message, fields) => errors.push({ message, fields }) },
   });
 
-  return { handler, router, leases, frames, started, notifications };
+  return { handler, router, leases, frames, started, notifications, errors };
 }
 
 function meta(
@@ -465,11 +467,22 @@ describe("a generation that throws", () => {
   });
 
   test("reports anything else as internal_error", async () => {
-    const frame = await failWith(new Error("provider hung up"));
+    const h = harness(["Alice"], 1, () => Promise.reject(new Error("provider hung up")));
+    await h.handler.handleRouted({
+      kind: "engine",
+      msg: message(null, "hello", true),
+      meta: meta("Alice", 1, null, "message"),
+    });
+    await h.handler.drain();
+    const frame = h.frames.get(1)?.find((candidate) => candidate.type === "error");
     expect(frame).toMatchObject({
       type: "error",
       code: "internal_error",
       message: "provider hung up",
+    });
+    expect(h.errors).toContainEqual({
+      message: "error processing engine message",
+      fields: { error: "provider hung up" },
     });
   });
 });

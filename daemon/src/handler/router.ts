@@ -239,7 +239,13 @@ export class MessageHandler {
         if (controller.signal.aborted) return;
         const message = describeError(error);
         this.#deps.log?.error?.("error processing engine message", { error: message });
-        await send(withRid({ type: "error", code: generationErrorCode(error), message }, rid));
+        try {
+          await send(withRid({ type: "error", code: generationErrorCode(error), message }, rid));
+        } catch (sendError) {
+          this.#deps.log?.error?.("failed to deliver generation error", {
+            error: sendError instanceof Error ? sendError.message : String(sendError),
+          });
+        }
         this.#deps.notifier.notify("error", `Shore - ${charName}`, message);
       })
       .finally(() => {

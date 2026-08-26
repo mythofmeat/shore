@@ -5,8 +5,15 @@ import {
   type ToolUseEvent,
 } from "../../engine/tool_loop.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
-import { describeError } from "../errors.ts";
+import { describeError, isLlmError, type LlmError } from "../errors.ts";
 import { isAbortError } from "../abort.ts";
+import {
+  retryAfterHint,
+  streamWithRetry,
+  type RetrySettings,
+  type Sleep,
+} from "../fallback.ts";
+import { shouldRetryError } from "../retry.ts";
 import type {
   SidecarProvider,
   SidecarRequest,
@@ -20,6 +27,13 @@ import { pushAssistantBlocks } from "../request.ts";
 interface ProviderTurn {
   blocks: ContentBlock[];
   finishReason: string;
+}
+
+export interface ModelCallRetryOptions {
+  settings: RetrySettings;
+  sleep?: Sleep;
+  random?: () => number;
+  onRetry?: (error: LlmError, attempt: number, delayMs: number) => void;
 }
 
 function emptyUsage(): Usage {
@@ -178,6 +192,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
     private readonly channel: EventChannel,
     private readonly abort: AbortController,
     private readonly now: () => number,
+    private readonly retry: ModelCallRetryOptions | undefined,
     startedAt: number,
   ) {
     this.callStartedAt = startedAt;
@@ -194,45 +209,98 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
   }
 
   async callModel(): Promise<ProviderTurn> {
-    const builder = new TurnBuilder();
-    let callFirstTokenAt = 0;
+    let visibleOutput = false;
+    let finalFailureUsage: Usage | undefined;
 
-    for await (const event of this.provider.stream(this.req, this.abort.signal)) {
-      builder.accept(event);
-      if (event.type === "start" || event.type === "done") continue;
-      if (event.type === "error") {
-        this.usage = addUsage(this.usage, event.usage);
-        throw new Error(event.message);
+    const once = async (): Promise<{
+      turn: ProviderTurn;
+      usage: Usage;
+      text: string;
+      firstAt: number;
+    }> => {
+      const builder = new TurnBuilder();
+      let callFirstTokenAt = 0;
+
+      for await (const event of this.provider.stream(this.req, this.abort.signal)) {
+        builder.accept(event);
+        if (event.type === "start" || event.type === "done") continue;
+        if (event.type === "error") {
+          finalFailureUsage = event.usage;
+          if (event.aborted === true) {
+            throw { kind: "aborted", message: event.message } satisfies LlmError;
+          }
+          throw {
+            kind: "stream_errored",
+            message: event.message,
+            usage: event.usage,
+            timing: event.timing,
+            ...(event.retry_after_ms === undefined
+              ? {}
+              : { retry_after_ms: event.retry_after_ms }),
+          } satisfies LlmError;
+        }
+        if (marksFirstToken(event)) {
+          visibleOutput = true;
+          if (this.firstTokenAt === 0) this.firstTokenAt = this.now();
+          if (callFirstTokenAt === 0) callFirstTokenAt = this.now();
+        }
+        await this.channel.send(event);
       }
-      if (marksFirstToken(event)) {
-        if (this.firstTokenAt === 0) this.firstTokenAt = this.now();
-        if (callFirstTokenAt === 0) callFirstTokenAt = this.now();
-      }
-      await this.channel.send(event);
+
+      const blocks = builder.blocks();
+      return {
+        turn: { blocks, finishReason: builder.finishReason },
+        usage: builder.usage,
+        text: builder.textSoFar(),
+        firstAt: callFirstTokenAt,
+      };
+    };
+
+    let completed;
+    try {
+      completed = this.retry === undefined
+        ? await once()
+        : await streamWithRetry(
+            once,
+            this.retry.settings,
+            (error, attempt, maxRetries) =>
+              !visibleOutput &&
+              shouldRetryError(error, attempt, { max_retries: maxRetries }).decision === "retry",
+            this.retry.sleep,
+            {
+              signal: this.abort.signal,
+              ...(this.retry.random === undefined ? {} : { random: this.retry.random }),
+              ...(this.retry.onRetry === undefined ? {} : { onRetry: this.retry.onRetry }),
+            },
+          );
+    } catch (error) {
+      if (finalFailureUsage !== undefined) this.usage = addUsage(this.usage, finalFailureUsage);
+      throw error;
     }
 
     const callEnd = this.now();
-    this.usage = addUsage(this.usage, builder.usage);
-    this.text += builder.textSoFar();
-    const blocks = builder.blocks();
-    this.terminalBlocks = blocks;
-    this.terminalFinishReason = builder.finishReason;
+    this.usage = addUsage(this.usage, completed.usage);
+    this.text += completed.text;
+    this.terminalBlocks = completed.turn.blocks;
+    this.terminalFinishReason = completed.turn.finishReason;
 
     await this.channel.send({
       type: "call_complete",
-      usage: builder.usage,
+      usage: completed.usage,
       timing: {
         total_ms: callEnd - this.callStartedAt,
         time_to_first_token_ms:
-          callFirstTokenAt === 0 ? callEnd - this.callStartedAt : callFirstTokenAt - this.callStartedAt,
+          completed.firstAt === 0
+            ? callEnd - this.callStartedAt
+            : completed.firstAt - this.callStartedAt,
       },
-      finish_reason: builder.finishReason,
+      finish_reason: completed.turn.finishReason,
       continuation: this.completedCalls > 0,
     });
     this.completedCalls += 1;
     this.callStartedAt = callEnd;
 
-    return { blocks, finishReason: builder.finishReason };
+    return completed.turn;
   }
 
   async dispatch(turn: ProviderTurn, uses: ToolUseEvent[]): Promise<void> {
@@ -266,6 +334,7 @@ export async function* genericToolLoopEvents(
   tools: ToolPhase,
   signal?: AbortSignal,
   now: () => number = Date.now,
+  retry?: ModelCallRetryOptions,
 ): AsyncIterable<StreamEvent> {
   const startedAt = now();
 
@@ -274,7 +343,7 @@ export async function* genericToolLoopEvents(
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
 
   const channel = new EventChannel();
-  const driver = new ProviderLoopDriver(provider, req, tools, channel, abort, now, startedAt);
+  const driver = new ProviderLoopDriver(provider, req, tools, channel, abort, now, retry, startedAt);
 
   let failure: unknown;
   const running = (async () => {
@@ -307,12 +376,17 @@ export async function* genericToolLoopEvents(
   };
 
   if (failure !== undefined) {
+    const retryAfterMs = retryAfterHint(failure);
     yield {
       type: "error",
-      message: describeError(failure),
+      message:
+        isLlmError(failure) && failure.kind === "stream_errored"
+          ? failure.message
+          : describeError(failure),
       usage: driver.usage,
       timing: timing(),
       ...(isAbortError(failure) || signal?.aborted === true ? { aborted: true } : {}),
+      ...(retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs }),
     };
     return;
   }

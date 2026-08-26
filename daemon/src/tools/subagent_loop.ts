@@ -14,13 +14,18 @@ import { resolvedReplayPriorThinking, toRequestModel } from "../config/models.ts
 import { renderTemplate } from "../engine/prompt.ts";
 import type { Message } from "../engine/types.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
-import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
 import { genericToolLoopEvents } from "../llm/providers/generic_loop.ts";
 import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
+import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
+import {
+  DEFAULT_BACKOFF_BASE_MS,
+  DEFAULT_MAX_RETRIES,
+} from "../llm/fallback.ts";
 import { beginCallAttempt, recordingStream } from "../ledger/record.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { BudgetBlocked } from "../llm/generate.ts";
+import { describeError } from "../llm/errors.ts";
 import { buildRequestWithProviderKeys } from "../llm/request.ts";
 import { consumeStream } from "../llm/stream.ts";
 import type {
@@ -207,12 +212,25 @@ export async function runSubagent(
     }
   };
 
+  const retry = {
+    settings: {
+      maxRetries: config.app.advanced.max_retries ?? DEFAULT_MAX_RETRIES,
+      backoffBaseMs:
+        config.app.advanced.retry_backoff?.asMillis() ?? DEFAULT_BACKOFF_BASE_MS,
+    },
+    onRetry: (error: unknown, attemptIndex: number, delayMs: number) => {
+      shoreLog.warn(
+        `shore: retrying subagent '${name}' model call after attempt ${String(attemptIndex + 1)} ` +
+          `in ${String(delayMs)}ms: ${describeError(error)}`,
+      );
+    },
+  };
   const events: AsyncIterable<StreamEvent> =
     request.sdk === "anthropic" || provider === undefined
       ? capturedEvents(deps.callStore, request, () =>
-          anthropicToolLoopEvents(request, phase, signal),
+          anthropicToolLoopEvents(request, phase, signal, Date.now, retry),
         )
-      : genericToolLoopEvents(provider, request, phase, signal);
+      : genericToolLoopEvents(provider, request, phase, signal, Date.now, retry);
 
   const blocked = budgetBlockFor(request);
   if (blocked) {

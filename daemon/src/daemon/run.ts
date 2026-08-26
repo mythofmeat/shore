@@ -329,6 +329,7 @@ if (import.meta.main) {
       log: {
         info: (msg, fields) => shoreLog.error(format("INFO", msg, fields)),
         warn: (msg, fields) => shoreLog.error(format("WARN", msg, fields)),
+        error: (msg, fields) => shoreLog.error(format("ERROR", msg, fields)),
       },
     });
   } catch (e) {

@@ -5,8 +5,8 @@ import { retryAfterMsFromError } from "./retry_after";
 import type { KeyCandidate } from "./credentials";
 import { describeError, toLlmError, type LlmError } from "./errors";
 
-export const DEFAULT_MAX_RETRIES = 2;
-export const DEFAULT_BACKOFF_BASE_MS = 500;
+export const DEFAULT_MAX_RETRIES = 5;
+export const DEFAULT_BACKOFF_BASE_MS = 2_000;
 export const DEFAULT_BACKOFF_MAX_MS = 30_000;
 export const DEFAULT_JITTER_FRACTION = 0.25;
 
@@ -159,6 +159,7 @@ export async function sleepUnlessAborted(
 export interface RetryContext {
   signal?: AbortSignal;
   random?: () => number;
+  onRetry?: (error: LlmError, attempt: number, delayMs: number) => void;
 }
 
 export async function streamWithRetry<T>(
@@ -182,6 +183,7 @@ export async function streamWithRetry<T>(
         ...(hint === undefined ? {} : { retryAfterMs: hint }),
         ...(context.random === undefined ? {} : { random: context.random }),
       });
+      context.onRetry?.(error, attemptIndex, delay);
       await sleepUnlessAborted(sleep, delay, context.signal);
       attemptIndex += 1;
     }
@@ -210,6 +212,7 @@ export interface FallbackEvent {
 
 export interface FallbackHooks {
   record: (event: FallbackEvent) => void;
+  canFallback?: () => boolean;
 }
 
 export async function streamWithCredentialFallback<T>(
@@ -241,7 +244,7 @@ export async function streamWithCredentialFallback<T>(
     } catch (raw) {
       const error = toLlmError(raw);
       const kind = classifyCredentialFailure(providerKey, error);
-      if (!shouldRotate(kind)) {
+      if (!shouldRotate(kind) || hooks.canFallback?.() === false) {
         throw raw;
       }
       record(hooks, providerKey, candidate, next, kind, llmHttpStatus(error), sanitizeReason(error));

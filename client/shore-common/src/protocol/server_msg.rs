@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::error::ErrorCode;
-use crate::protocol::types::{CharacterInfo, Message, StreamMetadata};
+use crate::protocol::types::{CharacterInfo, ContentBlock, Message, StreamMetadata};
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
@@ -107,6 +107,8 @@ pub struct StreamEnd {
     #[ts(type = "number")]
     pub revision: Option<u64>,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_content_blocks: Option<Vec<ContentBlock>>,
     pub metadata: StreamMetadata,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub finish_reason: String,

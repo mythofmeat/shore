@@ -190,7 +190,7 @@ describe("the fanout", () => {
     expect(leases.spectator("Alice", 1, real, T0)).toBeUndefined();
   });
 
-  test("a dead issuer does not stop the generation either", async () => {
+  test("a dead issuer is reported to the generation", async () => {
     const leases = new StreamLeases();
     const sessions = router(1, 2);
     leases.observe("Alice", 2, "message", T0);
@@ -198,7 +198,26 @@ describe("the fanout", () => {
 
     const send = leases.fanout("Alice", 1, required(sessions.senderFor(1)), sessions, T0);
 
-    await send(probe("chunk"));
+    expect(send(probe("chunk"))).rejects.toThrow("session 1 is gone");
     expect(sessions.names(2)).toEqual(["chunk"]);
+  });
+
+  test("a dead spectator is logged without blocking the issuer", async () => {
+    const failures: Record<string, unknown>[] = [];
+    const leases = new StreamLeases({
+      error: (_message, fields) => failures.push(fields ?? {}),
+    });
+    const sessions = router(1, 2);
+    leases.observe("Alice", 2, "message", T0);
+    sessions.breaks(2);
+
+    const send = leases.fanout("Alice", 1, required(sessions.senderFor(1)), sessions, T0);
+    await send(probe("chunk"));
+    await Promise.resolve();
+
+    expect(sessions.names(1)).toEqual(["chunk"]);
+    expect(failures).toEqual([
+      { recipient: "spectator", frame_type: "command_output", error: "session 2 is gone" },
+    ]);
   });
 });

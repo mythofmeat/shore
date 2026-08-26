@@ -234,7 +234,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
   const dispatchCommand = makeDispatchCommand(buildCommandPathDeps(a));
   return {
     router: a.router,
-    leases: new StreamLeases(),
+    leases: new StreamLeases(a.log),
     registry: handlerRegistry(a.runtime.registry),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta) => {

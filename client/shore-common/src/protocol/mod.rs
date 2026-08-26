@@ -266,6 +266,9 @@ mod tests {
             msg_id: None,
             revision: None,
             content: "full response".into(),
+            terminal_content_blocks: Some(vec![ContentBlock::Text {
+                text: "full response".into(),
+            }]),
             metadata: StreamMetadata {
                 tokens: TokenCounts {
                     input: 1234,
@@ -287,6 +290,10 @@ mod tests {
         assert_eq!(field(&json, "rid"), "msg_01");
         assert!(json.get("msg_id").is_none());
         assert!(json.get("revision").is_none());
+        assert_eq!(
+            field(&json, "terminal_content_blocks"),
+            &serde_json::json!([{"type": "text", "text": "full response"}])
+        );
         let metadata = field(&json, "metadata");
         let tokens = field(metadata, "tokens");
         let timing = field(metadata, "timing");

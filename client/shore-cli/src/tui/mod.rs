@@ -1962,6 +1962,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.stream.phase = "responding".into();
                 app.stream.tool_name = None;
             }
+            app.stream.rid.clone_from(&start.rid);
             RedrawEffect::Immediate
         }
 
@@ -2016,10 +2017,22 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         turn.msg_id.clone_from(&end.msg_id);
                     }
                     if final_phase {
-                        if !end.content.is_empty()
-                            && !turn.blocks.iter().any(|b| matches!(b, Block::Text(_)))
-                        {
-                            turn.blocks.push(Block::Text(end.content.clone()));
+                        if let Some(terminal) = &end.terminal_content_blocks {
+                            let tool_names = tool_name_map(terminal);
+                            let authoritative = blocks_from_content(terminal, &tool_names);
+                            let replace_from = turn
+                                .blocks
+                                .iter()
+                                .rposition(|block| matches!(block, Block::ToolResult { .. }))
+                                .map_or(0, |position| position.saturating_add(1));
+                            turn.blocks.truncate(replace_from);
+                            turn.blocks.extend(authoritative);
+                        } else {
+                            if !end.content.is_empty()
+                                && !turn.blocks.iter().any(|b| matches!(b, Block::Text(_)))
+                            {
+                                turn.blocks.push(Block::Text(end.content.clone()));
+                            }
                         }
                         turn.state = TurnState::Complete;
                     }
@@ -2590,6 +2603,15 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::Error(err) => {
+            let generation_error = app.stream.active
+                && match (app.stream.rid.as_deref(), err.rid.as_deref()) {
+                    (Some(active), Some(received)) => active == received,
+                    (None, None) => true,
+                    (Some(_), None) | (None, Some(_)) => false,
+                };
+            if generation_error {
+                app.fail_stream();
+            }
             app.compaction = None;
             if app.alt_picker.is_some() {
                 app.cancel_alt_picker();
@@ -2963,6 +2985,7 @@ mod redraw_tests {
                 rid: None,
                 msg_id: None,
                 revision: None,
+                terminal_content_blocks: None,
                 content: String::new(),
                 metadata: metadata(),
                 finish_reason: "stop".into(),
@@ -4369,6 +4392,7 @@ mod redraw_tests {
                 rid: None,
                 msg_id: None,
                 revision: None,
+                terminal_content_blocks: None,
                 content: "done".into(),
                 metadata: metadata(),
                 finish_reason: "end_turn".into(),
@@ -4377,6 +4401,93 @@ mod redraw_tests {
         );
 
         assert_eq!(effect.redraw, RedrawEffect::ImmediateFull);
+    }
+
+    #[test]
+    fn generation_error_finishes_the_real_stream_and_preserves_partial_text() {
+        let mut app = App::default();
+        app.stream.active = true;
+        app.stream_append_text("partial answer");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::Error(CommandError {
+                rid: None,
+                code: ErrorCode::ProviderError,
+                message: "rate limited".into(),
+            }),
+        );
+
+        assert!(!app.stream.active);
+        let turn = app
+            .entries
+            .last()
+            .and_then(ConversationEntry::as_turn)
+            .expect("partial assistant turn is retained");
+        assert!(!turn.is_streaming());
+        assert_eq!(turn.joined_text(), "partial answer");
+        assert!(
+            app.error_log
+                .last()
+                .is_some_and(|line| line.contains("rate limited"))
+        );
+    }
+
+    #[test]
+    fn unrelated_command_error_does_not_finish_an_active_generation() {
+        let mut app = App::default();
+        app.stream.active = true;
+        app.stream_append_text("still running");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::Error(CommandError {
+                rid: Some("palette_1".into()),
+                code: ErrorCode::InternalError,
+                message: "command failed".into(),
+            }),
+        );
+
+        assert!(app.stream.active);
+        assert!(
+            app.entries
+                .last()
+                .and_then(ConversationEntry::as_turn)
+                .is_some_and(Turn::is_streaming)
+        );
+    }
+
+    #[test]
+    fn final_terminal_blocks_replace_corrupted_stream_chunks() {
+        let mut app = App::default();
+        app.stream.active = true;
+        app.stream_append_text("garbled answr");
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
+                task_id: None,
+                rid: None,
+                msg_id: Some("m_1".into()),
+                revision: Some(1),
+                terminal_content_blocks: Some(vec![ContentBlock::Text {
+                    text: "complete answer".into(),
+                }]),
+                content: "complete answer".into(),
+                metadata: metadata(),
+                finish_reason: "end_turn".into(),
+                is_final: true,
+            }),
+        );
+
+        let turn = app
+            .entries
+            .last()
+            .and_then(ConversationEntry::as_turn)
+            .expect("assistant turn");
+        assert_eq!(turn.joined_text(), "complete answer");
+        assert!(!turn.is_streaming());
     }
 
     #[test]
@@ -4390,6 +4501,7 @@ mod redraw_tests {
                 rid: None,
                 msg_id: None,
                 revision: None,
+                terminal_content_blocks: None,
                 content: String::new(),
                 metadata: metadata(),
                 finish_reason: "tool_use".into(),
@@ -4480,6 +4592,7 @@ mod redraw_tests {
                 rid: None,
                 msg_id: Some("m_target".into()),
                 revision: Some(7),
+                terminal_content_blocks: None,
                 content: "target".into(),
                 metadata: target_meta.clone(),
                 finish_reason: "end_turn".into(),
@@ -4524,6 +4637,7 @@ mod redraw_tests {
                 rid: None,
                 msg_id: Some("m_missing_from_history".into()),
                 revision: Some(8),
+                terminal_content_blocks: None,
                 content: "new response".into(),
                 metadata: metadata(),
                 finish_reason: "end_turn".into(),

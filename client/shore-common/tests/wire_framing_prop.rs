@@ -387,6 +387,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
                         msg_id,
                         revision,
                         content,
+                        terminal_content_blocks: None,
                         metadata,
                         finish_reason,
                         is_final,

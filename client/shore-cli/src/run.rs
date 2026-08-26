@@ -1936,6 +1936,7 @@ mod tests {
                 rid: None,
                 msg_id: None,
                 revision: None,
+                terminal_content_blocks: None,
                 content: text.into(),
                 metadata: StreamMetadata {
                     tokens: TokenCounts {
@@ -2109,6 +2110,7 @@ mod tests {
                 rid: None,
                 msg_id: None,
                 revision: None,
+                terminal_content_blocks: None,
                 content: "Here's the answer.".into(),
                 metadata: StreamMetadata {
                     tokens: TokenCounts {
