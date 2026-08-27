@@ -2635,7 +2635,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             let context =
                 palette_command.map_or_else(String::new, |command| format!(":{command}: "));
-            app.set_error(format!("{context}error: {:?} - {}", err.code, err.message));
+            let rendered = format!("{context}error: {:?} - {}", err.code, err.message);
+            if generation_error {
+                app.set_critical_error(rendered);
+            } else {
+                app.set_error(rendered);
+            }
             RedrawEffect::Immediate
         }
 

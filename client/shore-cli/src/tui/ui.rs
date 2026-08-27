@@ -147,6 +147,12 @@ fn draw_notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .saturating_sub(box_w)
         .saturating_sub(margin);
 
+    let dismiss_hint = if matches!(app.input.mode, InputMode::Insert) {
+        "esc esc to dismiss"
+    } else {
+        "esc to dismiss"
+    };
+
     let mut next_top = area.y;
     for notif in app.notifications.iter().rev() {
         let (icon, color) = match notif.level {
@@ -178,7 +184,7 @@ fn draw_notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {
         }
 
         let style = Style::default().fg(color);
-        let lines: Vec<Line<'static>> = wrapped
+        let mut lines: Vec<Line<'static>> = wrapped
             .into_iter()
             .enumerate()
             .map(|(i, text)| {
@@ -193,6 +199,16 @@ fn draw_notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {
             })
             .collect();
 
+        if notif.sticky {
+            lines.push(Line::from(vec![
+                Span::raw("   "),
+                Span::styled(
+                    dismiss_hint.to_owned(),
+                    Style::default().fg(color).add_modifier(Modifier::DIM),
+                ),
+            ]));
+        }
+
         let box_h = usize_to_u16(lines.len()).saturating_add(2);
         if next_top.saturating_add(box_h) > area.y.saturating_add(area.height) {
             break;
@@ -200,10 +216,24 @@ fn draw_notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {
         let box_y = next_top;
         let rect = Rect::new(box_x, box_y, box_w, box_h);
 
-        let block = Block::default()
+        let mut block = Block::default()
             .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(style);
+            .border_type(if notif.sticky {
+                BorderType::Double
+            } else {
+                BorderType::Rounded
+            })
+            .border_style(if notif.sticky {
+                style.add_modifier(Modifier::BOLD)
+            } else {
+                style
+            });
+        if notif.sticky {
+            block = block.title(Span::styled(
+                " generation failed ",
+                style.add_modifier(Modifier::BOLD),
+            ));
+        }
         frame.render_widget(Clear, rect);
         frame.render_widget(Paragraph::new(lines).block(block), rect);
 
@@ -7174,6 +7204,126 @@ pub(crate) mod scenario_tests {
         assert!(
             !f.contains("Starting to respond"),
             "partial stream text gone after reset"
+        );
+    }
+
+    #[test]
+    fn scenario_generation_error_is_sticky_and_needs_esc_esc() {
+        use crate::tui::app::NOTIFICATION_TTL;
+        use shore_common::protocol::error::ErrorCode;
+        use shore_common::protocol::server_msg::Error as ProtoError;
+
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.entries.push(ConversationEntry::user(
+            "are you there".into(),
+            vec![],
+            "t1".into(),
+        ));
+        h.stream_start();
+
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::Error(ProtoError {
+                rid: None,
+                code: ErrorCode::ProviderError,
+                message: "insufficient balance".into(),
+            }),
+        );
+
+        let notif = h.app.notifications.last().expect("notification");
+        assert!(notif.sticky, "a generation-killing error must be sticky");
+
+        let created = notif.created;
+        assert!(
+            !h.app.expire_notifications(created + NOTIFICATION_TTL * 100),
+            "sticky notification must not expire on its own"
+        );
+        assert_eq!(h.app.notifications.len(), 1);
+
+        let f = h.render("sticky generation error");
+        assert!(f.contains("generation failed"), "critical title visible");
+        assert!(f.contains("ProviderError"), "cause visible");
+        assert!(
+            f.contains("esc esc to dismiss"),
+            "gesture stated in insert mode"
+        );
+
+        assert_eq!(h.app.input.mode, crate::tui::app::InputMode::Insert);
+        h.press(KeyCode::Esc);
+        assert_eq!(h.app.input.mode, crate::tui::app::InputMode::Normal);
+        assert_eq!(
+            h.app.notifications.len(),
+            1,
+            "first esc only leaves insert mode"
+        );
+
+        let normal_frame = h.render("sticky error in normal mode");
+        assert!(
+            normal_frame.contains("esc to dismiss") && !normal_frame.contains("esc esc to dismiss"),
+            "hint tracks the mode the next esc will act in"
+        );
+
+        h.press(KeyCode::Esc);
+        assert!(
+            h.app.notifications.is_empty(),
+            "second esc dismisses the critical notification"
+        );
+    }
+
+    #[test]
+    fn scenario_non_generation_error_stays_transient() {
+        use crate::tui::app::NOTIFICATION_TTL;
+        use shore_common::protocol::error::ErrorCode;
+        use shore_common::protocol::server_msg::Error as ProtoError;
+
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::Error(ProtoError {
+                rid: None,
+                code: ErrorCode::InvalidRequest,
+                message: "no such character".into(),
+            }),
+        );
+
+        let notif = h.app.notifications.last().expect("notification");
+        assert!(!notif.sticky, "an idle-time error stays a plain toast");
+        let created = notif.created;
+        assert!(h.app.expire_notifications(created + NOTIFICATION_TTL));
+        assert!(h.app.notifications.is_empty());
+    }
+
+    #[test]
+    fn scenario_sticky_error_survives_a_flood_of_toasts() {
+        use shore_common::protocol::error::ErrorCode;
+        use shore_common::protocol::server_msg::Error as ProtoError;
+
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.stream_start();
+
+        let _ = crate::tui::handle_server_message(
+            &mut h.app,
+            ServerMessage::Error(ProtoError {
+                rid: None,
+                code: ErrorCode::ProviderError,
+                message: "insufficient balance".into(),
+            }),
+        );
+
+        for i in 0..8 {
+            h.app.set_status(format!("chatter {i}"));
+        }
+
+        assert!(
+            h.app
+                .notifications
+                .iter()
+                .any(|n| n.sticky && n.content.contains("insufficient balance")),
+            "later toasts must not evict the critical error"
         );
     }
 

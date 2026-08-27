@@ -11,6 +11,7 @@ pub(crate) struct Notification {
     pub level: NotificationLevel,
     pub count: u32,
     pub created: std::time::Instant,
+    pub sticky: bool,
 }
 
 pub(crate) const NOTIFICATION_TTL: std::time::Duration = std::time::Duration::from_secs(5);

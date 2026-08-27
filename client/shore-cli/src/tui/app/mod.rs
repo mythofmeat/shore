@@ -865,11 +865,31 @@ impl App {
         self.notify(NotificationLevel::Error, message);
     }
 
+    pub(crate) fn set_critical_error(&mut self, msg: impl Into<String>) {
+        let message = msg.into();
+        tracing::error!("{message}");
+        if self.error_log.len() >= MAX_ERROR_LOG {
+            let _ = self.error_log.remove(0);
+        }
+        self.error_log.push(message.clone());
+        self.push_notification(NotificationLevel::Error, message, true);
+    }
+
     pub(crate) fn notify(&mut self, level: NotificationLevel, msg: impl Into<String>) {
+        self.push_notification(level, msg, false);
+    }
+
+    fn push_notification(
+        &mut self,
+        level: NotificationLevel,
+        msg: impl Into<String>,
+        sticky: bool,
+    ) {
         let message = msg.into();
         if let Some(last) = self.notifications.last_mut()
             && last.content == message
             && last.level == level
+            && last.sticky == sticky
         {
             last.count = last.count.saturating_add(1);
             last.created = std::time::Instant::now();
@@ -880,17 +900,22 @@ impl App {
             level,
             count: 1,
             created: std::time::Instant::now(),
+            sticky,
         });
-        if self.notifications.len() > MAX_NOTIFICATIONS {
-            let overflow = self.notifications.len().saturating_sub(MAX_NOTIFICATIONS);
-            drop(self.notifications.drain(0..overflow));
+        while self.notifications.len() > MAX_NOTIFICATIONS {
+            let evict = self
+                .notifications
+                .iter()
+                .position(|n| !n.sticky)
+                .unwrap_or(0);
+            let _ = self.notifications.remove(evict);
         }
     }
 
     pub(crate) fn expire_notifications(&mut self, now: std::time::Instant) -> bool {
         let before = self.notifications.len();
         self.notifications
-            .retain(|n| now.duration_since(n.created) < NOTIFICATION_TTL);
+            .retain(|n| n.sticky || now.duration_since(n.created) < NOTIFICATION_TTL);
         self.notifications.len() != before
     }
 
