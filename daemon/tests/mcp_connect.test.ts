@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   McpRegistry,
+  mcpRecoveryDelayMs,
   type McpServerConfigView,
+  type RecoveryWait,
   type Sleep,
 } from "../src/tools/mcp_registry.ts";
 import { McpCancelled, McpError, McpTransportError } from "../src/mcp/client.ts";
@@ -102,6 +104,7 @@ describe("HTTP servers are retried", () => {
     expect(h.delays).toEqual([200, 500, 1000, 2000, 4000]);
     expect(registry.connectedServers()).toBe(0);
     expect(registry.allTools()).toEqual([]);
+    await registry.shutdown();
   });
 
   test("one unreachable server does not cost the reachable ones their tools", async () => {
@@ -110,17 +113,19 @@ describe("HTTP servers are retried", () => {
 
     expect(registry.connectedServers()).toBe(1);
     expect(registry.allTools().map((t) => t.full_name)).toEqual(["mcp__hue__set_light"]);
+    await registry.shutdown();
   });
 });
 
-describe("stdio servers are not retried", () => {
-  test("a child that fails to spawn gets exactly one attempt", async () => {
+describe("stdio servers do not delay startup", () => {
+  test("a child that fails to spawn gets one startup attempt before background recovery", async () => {
     const h = harness({ failures: { hue: 1 } });
     const registry = await build({ hue: stdioServer() }, h);
 
     expect(h.attemptsFor("hue")).toBe(1);
     expect(h.delays).toEqual([]);
     expect(registry.connectedServers()).toBe(0);
+    await registry.shutdown();
   });
 
   test("a stdio server alongside a retrying HTTP one is unaffected", async () => {
@@ -130,13 +135,14 @@ describe("stdio servers are not retried", () => {
     expect(h.attemptsFor("child")).toBe(1);
     expect(h.attemptsFor("remote")).toBe(3);
     expect(registry.connectedServers()).toBe(1);
+    await registry.shutdown();
   });
 });
 
 describe("servers are brought up concurrently", () => {
   test("N unavailable servers cost one backoff window, not N", async () => {
     const h = harness({ failures: { a: 99, b: 99, c: 99 } });
-    await build({ a: httpServer(), b: httpServer(), c: httpServer() }, h);
+    const registry = await build({ a: httpServer(), b: httpServer(), c: httpServer() }, h);
 
     expect(h.attempts.slice(0, 3).sort()).toEqual(["a", "b", "c"]);
     expect(h.attempts).toHaveLength(18);
@@ -144,6 +150,7 @@ describe("servers are brought up concurrently", () => {
     const window = 200 + 500 + 1000 + 2000 + 4000;
     expect(h.delays.reduce((a, b) => a + b, 0)).toBe(window * 3);
     expect(Math.max(...h.delays)).toBe(4000);
+    await registry.shutdown();
   });
 
   test("the surface is sorted by name, not by who answered first", async () => {
@@ -157,6 +164,7 @@ describe("servers are brought up concurrently", () => {
       "mcp__alpha__a_tool",
       "mcp__zulu__z_tool",
     ]);
+    await registry.shutdown();
   });
 });
 
@@ -218,6 +226,253 @@ function revivableServer(options: { tools?: string[] } = {}) {
 }
 
 const noSleep: Sleep = () => Promise.resolve();
+
+async function eventually(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await Promise.resolve();
+  }
+  expect(predicate()).toBe(true);
+}
+
+function recoveryClock(start = 1_000_000): {
+  wait: RecoveryWait;
+  now: () => number;
+  pending: () => readonly number[];
+  releaseNext: () => Promise<void>;
+} {
+  let now = start;
+  const waits: Array<{ ms: number; resolve: () => void }> = [];
+  return {
+    now: () => now,
+    pending: () => waits.map((wait) => wait.ms),
+    wait: (ms, signal) =>
+      new Promise((resolve) => {
+        const finish = (): void => {
+          signal.removeEventListener("abort", finish);
+          resolve();
+        };
+        signal.addEventListener("abort", finish, { once: true });
+        waits.push({ ms, resolve: finish });
+      }),
+    releaseNext: async () => {
+      await eventually(() => waits.length > 0);
+      const next = waits.shift();
+      if (next === undefined) throw new Error("no recovery wait to release");
+      now += next.ms;
+      next.resolve();
+      await Promise.resolve();
+    },
+  };
+}
+
+describe("background recovery", () => {
+  test("an unavailable startup server rejoins without a config change", async () => {
+    const hue = revivableServer({ tools: ["set_light", "scene"] });
+    hue.state.listening = false;
+    const clock = recoveryClock();
+    const changed: string[] = [];
+    const publishedSurfaces: string[][] = [];
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+      {
+        recoveryWait: clock.wait,
+        now: clock.now,
+        random: () => 0.5,
+        onToolsChanged: (current, server) => {
+          changed.push(server);
+          publishedSurfaces.push(current.allTools().map((tool) => tool.full_name));
+        },
+      },
+    );
+
+    expect(registry.allTools()).toEqual([]);
+    expect(registry.serverStatus()).toEqual([
+      {
+        name: "hue",
+        transport: "http",
+        state: "unavailable",
+        connected_tools: 0,
+        last_error: "Error: ECONNREFUSED hue",
+        next_retry_at: 1_001_000,
+      },
+    ]);
+    expect(clock.pending()).toEqual([1000]);
+
+    hue.state.listening = true;
+    await clock.releaseNext();
+    await eventually(() => registry.connectedServers() === 1);
+
+    expect(registry.allTools().map((tool) => tool.full_name)).toEqual([
+      "mcp__hue__scene",
+      "mcp__hue__set_light",
+    ]);
+    expect(changed).toEqual(["hue"]);
+    expect(publishedSurfaces).toEqual([
+      ["mcp__hue__scene", "mcp__hue__set_light"],
+    ]);
+    expect(registry.serverStatus()[0]).toMatchObject({
+      state: "connected",
+      connected_tools: 2,
+      last_error: null,
+      next_retry_at: null,
+    });
+    await registry.shutdown();
+  });
+
+  test("a tools/list failure is retried with a fresh client", async () => {
+    const clock = recoveryClock();
+    let listHealthy = false;
+    let connects = 0;
+    let shutdowns = 0;
+    const connect = (spec: McpServerSpec): Promise<McpClient> => {
+      connects += 1;
+      return Promise.resolve({
+        server: spec.name,
+        listTools: () =>
+          listHealthy
+            ? Promise.resolve([
+                {
+                  server: spec.name,
+                  name: "ping",
+                  description: "ping",
+                  input_schema: {},
+                },
+              ])
+            : Promise.reject(new Error("tools are warming up")),
+        call: () => Promise.resolve("pong"),
+        shutdown: () => {
+          shutdowns += 1;
+          return Promise.resolve();
+        },
+      } as unknown as McpClient);
+    };
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      connect,
+      noSleep,
+      { recoveryWait: clock.wait, now: clock.now, random: () => 0.5 },
+    );
+
+    expect(connects).toBe(1);
+    expect(shutdowns).toBe(1);
+    listHealthy = true;
+    await clock.releaseNext();
+    await eventually(() => registry.connectedServers() === 1);
+
+    expect(connects).toBe(2);
+    expect(registry.allTools().map((tool) => tool.full_name)).toEqual(["mcp__hue__ping"]);
+    await registry.shutdown();
+    expect(shutdowns).toBe(2);
+  });
+
+  test("repeated failures advance the background backoff until recovery", async () => {
+    const hue = revivableServer();
+    hue.state.listening = false;
+    const clock = recoveryClock();
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+      { recoveryWait: clock.wait, now: clock.now, random: () => 0.5 },
+    );
+
+    expect(clock.pending()).toEqual([1000]);
+    await clock.releaseNext();
+    await eventually(() => clock.pending().length > 0);
+    expect(clock.pending()).toEqual([2000]);
+    await clock.releaseNext();
+    await eventually(() => clock.pending().length > 0);
+    expect(clock.pending()).toEqual([4000]);
+
+    hue.state.listening = true;
+    await clock.releaseNext();
+    await eventually(() => registry.connectedServers() === 1);
+    expect(registry.serverStatus()[0]?.state).toBe("connected");
+    await registry.shutdown();
+  });
+
+  test("shutdown cancels a scheduled retry", async () => {
+    const hue = revivableServer();
+    hue.state.listening = false;
+    const clock = recoveryClock();
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+      { recoveryWait: clock.wait, now: clock.now, random: () => 0.5 },
+    );
+    const attempts = hue.state.connects;
+
+    await registry.shutdown();
+    hue.state.listening = true;
+    await Promise.resolve();
+
+    expect(hue.state.connects).toBe(attempts);
+    expect(registry.serverStatus()[0]?.next_retry_at).toBeNull();
+  });
+
+  test("shutdown joins a recovery connection already in flight", async () => {
+    const clock = recoveryClock();
+    let connects = 0;
+    let finishConnect!: (client: McpClient) => void;
+    const pendingConnect = new Promise<McpClient>((resolve) => {
+      finishConnect = resolve;
+    });
+    let shutdowns = 0;
+    const recovered = {
+      server: "hue",
+      listTools: () => Promise.resolve([]),
+      call: () => Promise.resolve(null),
+      shutdown: () => {
+        shutdowns += 1;
+        return Promise.resolve();
+      },
+    } as unknown as McpClient;
+    const connect = (): Promise<McpClient> => {
+      connects += 1;
+      return connects <= 6 ? Promise.reject(new Error("offline")) : pendingConnect;
+    };
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      connect,
+      noSleep,
+      { recoveryWait: clock.wait, now: clock.now, random: () => 0.5 },
+    );
+
+    await clock.releaseNext();
+    await eventually(() => connects === 7);
+    expect(registry.serverStatus()[0]).toMatchObject({
+      state: "retrying",
+      next_retry_at: null,
+    });
+    let stopped = false;
+    const shutdown = registry.shutdown().then(() => {
+      stopped = true;
+    });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+
+    finishConnect(recovered);
+    await shutdown;
+    expect(shutdowns).toBe(1);
+    expect(registry.connectedServers()).toBe(0);
+  });
+
+  test("the exponential schedule is jittered and strictly capped", () => {
+    expect(mcpRecoveryDelayMs(0, () => 0.5)).toBe(1000);
+    expect(mcpRecoveryDelayMs(1, () => 0.5)).toBe(2000);
+    expect(mcpRecoveryDelayMs(99, () => 0)).toBe(48_000);
+    expect(mcpRecoveryDelayMs(99, () => 1)).toBe(60_000);
+  });
+});
 
 describe("a connection that dies mid-session is rebuilt", () => {
   test("the failed call reports the failure, and the next call works", async () => {
@@ -338,6 +593,7 @@ describe("a connection that dies mid-session is rebuilt", () => {
     hue.state.listening = true;
     expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
     expect(registry.call("mcp__hue__ping", {})).resolves.toBe("ping ran");
+    await registry.shutdown();
   });
 
   test("a tool that returns an error does not touch the connection", async () => {
@@ -360,7 +616,7 @@ describe("a connection that dies mid-session is rebuilt", () => {
     expect(connects).toBe(1);
   });
 
-  test("a stdio server is not revived", async () => {
+  test("a stdio server is left for background recovery rather than retried inline", async () => {
     const hue = revivableServer();
     const registry = await McpRegistry.fromConfig(
       { hue: stdioServer() },
@@ -372,6 +628,8 @@ describe("a connection that dies mid-session is rebuilt", () => {
     hue.killConnection();
     expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
     expect(hue.state.connects).toBe(1);
+    expect(registry.serverStatus()[0]).toMatchObject({ state: "unavailable" });
+    await registry.shutdown();
   });
 
   test("a registry being shut down does not adopt a late reconnect", async () => {
@@ -391,16 +649,17 @@ describe("a connection that dies mid-session is rebuilt", () => {
   });
 });
 
-describe("the pre-existing skips are unchanged", () => {
+describe("invalid entries and initial list failures", () => {
   test("an entry with neither command nor url is skipped without connecting", async () => {
     const h = harness();
     const registry = await build({ hue: {} }, h);
 
     expect(h.attempts).toEqual([]);
     expect(registry.connectedServers()).toBe(0);
+    await registry.shutdown();
   });
 
-  test("a server that connects but fails tools/list is shut down", async () => {
+  test("a server that fails tools/list is shut down before background recovery", async () => {
     const shutdowns = { count: 0 };
     const connect = (spec: McpServerSpec): Promise<McpClient> =>
       Promise.resolve({
@@ -417,5 +676,6 @@ describe("the pre-existing skips are unchanged", () => {
 
     expect(shutdowns.count).toBe(1);
     expect(registry.connectedServers()).toBe(0);
+    await registry.shutdown();
   });
 });

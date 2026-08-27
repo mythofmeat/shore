@@ -342,6 +342,56 @@ describe("status", () => {
       expect(withoutVolatile(result)).toEqual(withoutVolatile(row.ok));
     });
   }
+
+  test("MCP lifecycle state is exposed as a status section", async () => {
+    const ctx = await build("fresh");
+    const result = (await status({
+      ...ctx,
+      mcpServers: [
+        {
+          name: "hue",
+          transport: "http",
+          state: "unavailable",
+          connected_tools: 0,
+          last_error: "connection refused",
+          next_retry_at: Date.UTC(2026, 7, 27, 1, 2, 3),
+        },
+        {
+          name: "music",
+          transport: "stdio",
+          state: "connected",
+          connected_tools: 4,
+          last_error: null,
+          next_retry_at: null,
+        },
+      ],
+    })) as Record<string, unknown>;
+
+    expect(result["mcp"]).toEqual({
+      configured: 2,
+      connected: 1,
+      unavailable: 1,
+      servers: [
+        {
+          name: "hue",
+          transport: "http",
+          state: "unavailable",
+          connected_tools: 0,
+          last_error: "connection refused",
+          next_retry_at: "2026-08-27T01:02:03+00:00",
+        },
+        {
+          name: "music",
+          transport: "stdio",
+          state: "connected",
+          connected_tools: 4,
+          last_error: null,
+          next_retry_at: null,
+        },
+      ],
+    });
+    expect(result["sections"]).toContain("mcp");
+  });
 });
 
 interface ArgCase {

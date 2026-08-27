@@ -5,6 +5,7 @@ import type { HourClassification } from "../autonomy/activity.ts";
 import type { ShoreDirs } from "../config/dirs.ts";
 import type { Diagnostics } from "../diagnostics.ts";
 import type { ConversationTokens } from "../ledger/conversation_spend.ts";
+import type { McpServerStatus } from "../tools/mcp_registry.ts";
 import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
 import { invalidRequest } from "./errors.ts";
 import { historyIndexSection, type HistoryIndexSource } from "./history_index.ts";
@@ -29,6 +30,7 @@ export interface StatusContext {
   localNow: () => number;
   workspaceIndex?: WorkspaceIndexSource | undefined;
   historyIndex?: HistoryIndexSource | undefined;
+  mcpServers?: readonly McpServerStatus[] | undefined;
 }
 
 function countArg(args: Args, fallback: number): number {
@@ -67,6 +69,23 @@ export function autonomyWire(autonomy: AutonomyStatus, now: number): Json {
   };
 }
 
+export function mcpWire(servers: readonly McpServerStatus[]): Json {
+  return {
+    configured: servers.length,
+    connected: servers.filter((server) => server.state === "connected").length,
+    unavailable: servers.filter((server) => server.state !== "connected").length,
+    servers: servers.map((server) => ({
+      name: server.name,
+      transport: server.transport,
+      state: server.state,
+      connected_tools: server.connected_tools,
+      last_error: server.last_error,
+      next_retry_at:
+        server.next_retry_at === null ? null : rfc3339(server.next_retry_at),
+    })),
+  };
+}
+
 function activityWire(stats: ActivitySource, recorded: number): Json {
   return {
     hour_histogram: stats.hourHistogram,
@@ -99,6 +118,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
 
   const tokens = ctx.conversationTokens;
   const halt = ctx.autonomy.keepaliveHalt();
+  const mcp = ctx.mcpServers === undefined ? undefined : mcpWire(ctx.mcpServers);
   const sections = {
     tokens: {
       input: tokens.input,
@@ -110,6 +130,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
     activity: report === undefined ? null : activityWire(report.stats, report.messageCount),
     index: await workspaceIndexSection(ctx.workspaceIndex, ctx.characterName),
     history_index: await historyIndexSection(ctx.historyIndex, ctx.characterName),
+    ...(mcp === undefined ? {} : { mcp }),
   };
   return {
     character: ctx.characterName,

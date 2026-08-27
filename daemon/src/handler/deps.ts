@@ -374,6 +374,13 @@ async function reconnectMcpIfChanged(a: CommandAssembly, config: LoadedConfig): 
       servers,
       pluginsDir(config.dirs.data),
       a.runtime.connectMcp,
+      undefined,
+      {
+        onToolsChanged: async (registry) => {
+          if (a.runtime.mcp.current !== registry) return;
+          await a.runtime.refreshMcpCaches(registry);
+        },
+      },
     );
   } catch (e) {
     shoreLog.error(`shore: [mcp] reload failed, keeping the running servers: ${String(e)}`);
@@ -534,6 +541,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       tools: (charName, turn) => chatToolDeps(a, charName, turn),
       mcpTools: () => runtime.mcp.current.allTools(),
     },
+    mcpStatus: () => runtime.mcp.current.serverStatus(),
     workspaceIndex: {
       indexPathFor: (character) => {
         if (!runtime.registry.hasCharacter(character)) return undefined;
