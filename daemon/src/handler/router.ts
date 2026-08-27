@@ -112,16 +112,16 @@ export function sanitiseRid(rid: string | null | undefined): string | null {
   return rid;
 }
 
-interface SessionState {
-  abort?: () => void;
-}
-
 export class MessageHandler {
   readonly #deps: MessageHandlerDeps;
-  readonly #sessions = new Map<number, SessionState>();
+  readonly #sessions = new Map<number, () => void>();
 
   constructor(deps: MessageHandlerDeps) {
     this.#deps = deps;
+  }
+
+  get sessionStateCount(): number {
+    return this.#sessions.size;
   }
 
   async run(routes: AsyncIterable<RoutedMessage>): Promise<void> {
@@ -213,15 +213,15 @@ export class MessageHandler {
       this.#deps.router,
     );
 
-    const state = this.#session(meta.session.sessionId);
-    if (state.abort !== undefined) {
+    const previousAbort = this.#sessions.get(meta.session.sessionId);
+    if (previousAbort !== undefined) {
       this.#deps.log?.info?.("aborting previous generation (superseded by new request)");
-      state.abort();
+      previousAbort();
     }
 
     const controller = new AbortController();
     const abort = () => controller.abort();
-    state.abort = abort;
+    this.#sessions.set(meta.session.sessionId, abort);
 
     const params: GenerationParams = {
       meta,
@@ -249,8 +249,8 @@ export class MessageHandler {
         this.#deps.notifier.notify("error", `Shore - ${charName}`, message);
       })
       .finally(() => {
-        if (this.#sessions.get(meta.session.sessionId)?.abort === abort) {
-          delete state.abort;
+        if (this.#sessions.get(meta.session.sessionId) === abort) {
+          this.#sessions.delete(meta.session.sessionId);
         }
       });
 
@@ -263,11 +263,11 @@ export class MessageHandler {
     rid: string | null,
     reason: string,
   ): Promise<void> {
-    const state = this.#sessions.get(sessionId);
-    if (state?.abort === undefined) return;
+    const abort = this.#sessions.get(sessionId);
+    if (abort === undefined) return;
     this.#deps.log?.info?.("cancelling active generation", { reason });
-    state.abort();
-    delete state.abort;
+    abort();
+    this.#sessions.delete(sessionId);
     await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));
   }
 
@@ -278,12 +278,4 @@ export class MessageHandler {
   }
 
   readonly #inFlight = new Set<Promise<void>>();
-
-  #session(sessionId: number): SessionState {
-    const existing = this.#sessions.get(sessionId);
-    if (existing !== undefined) return existing;
-    const created: SessionState = {};
-    this.#sessions.set(sessionId, created);
-    return created;
-  }
 }
