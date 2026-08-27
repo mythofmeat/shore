@@ -2,7 +2,7 @@ import { required } from "../util/required.ts";
 
 import { shoreLog } from "../log.ts";
 
-import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { rustTrim } from "../memory/lines.ts";
@@ -46,6 +46,40 @@ export interface AltSelection {
   alt_count: number;
   content: string;
 }
+
+export interface MessageStoreIo {
+  backup(path: string): Promise<void>;
+  mkdir(path: string): Promise<void>;
+  writeFile(path: string, contents: string): Promise<void>;
+  rename(from: string, to: string): Promise<void>;
+  remove(path: string): Promise<void>;
+  tempPath(dir: string): string;
+}
+
+const messageStoreIo: MessageStoreIo = {
+  backup: async (path) => {
+    await backupBeforeWrite(path);
+  },
+  mkdir: async (path) => {
+    await mkdir(path, { recursive: true });
+  },
+  writeFile: async (path, contents) => {
+    await writeFile(path, contents, "utf8");
+  },
+  rename,
+  remove: async (path) => {
+    await rm(path, { force: true });
+  },
+  tempPath: (dir) => join(dir, `.${crypto.randomUUID()}.tmp`),
+};
+
+interface Mutation<T> {
+  changed: boolean;
+  result: T;
+}
+
+const changed = <T>(result: T): Mutation<T> => ({ changed: true, result });
+const unchanged = <T>(result: T): Mutation<T> => ({ changed: false, result });
 
 function toolResultBlockText(blocks: ContentBlock[]): string {
   return blocks
@@ -243,29 +277,35 @@ function messageFromAlternative(template: Message, index: number): Message | und
 export class MessageStore {
   #messages: Message[];
   readonly #path: string;
+  readonly #io: MessageStoreIo;
+  #mutationTail: Promise<void> = Promise.resolve();
   #quarantined = 0;
   #altDefects: readonly AlternativeDefect[] = [];
 
-  private constructor(path: string, messages: Message[]) {
+  private constructor(path: string, messages: Message[], io: MessageStoreIo) {
     this.#path = path;
     this.#messages = messages;
+    this.#io = io;
   }
 
-  static create(path: string): MessageStore {
-    return new MessageStore(path, []);
+  static create(path: string, io: MessageStoreIo = messageStoreIo): MessageStore {
+    return new MessageStore(path, [], io);
   }
 
-  static async load(path: string): Promise<MessageStore> {
-    return (await MessageStore.loadWithRaw(path)).store;
+  static async load(path: string, io: MessageStoreIo = messageStoreIo): Promise<MessageStore> {
+    return (await MessageStore.loadWithRaw(path, io)).store;
   }
 
-  static async loadWithRaw(path: string): Promise<{ store: MessageStore; raw: string }> {
+  static async loadWithRaw(
+    path: string,
+    io: MessageStoreIo = messageStoreIo,
+  ): Promise<{ store: MessageStore; raw: string }> {
     let raw: string;
     try {
       raw = await readFile(path, "utf8");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-        return { store: new MessageStore(path, []), raw: "" };
+        return { store: new MessageStore(path, [], io), raw: "" };
       }
       throw e;
     }
@@ -297,7 +337,7 @@ export class MessageStore {
     const report = describeAlternativeDefects(path, defects);
     if (report !== undefined) shoreLog.warn(report);
 
-    const store = new MessageStore(path, messages);
+    const store = new MessageStore(path, messages, io);
     store.#quarantined = unreadable.length;
     store.#altDefects = defects;
     return { store, raw };
@@ -339,59 +379,71 @@ export class MessageStore {
   }
 
   async clear(): Promise<void> {
-    this.#messages = [];
-    await this.#persist();
+    await this.#mutate((messages) => {
+      messages.length = 0;
+      return changed(undefined);
+    });
   }
 
   async append(msg: Message): Promise<void> {
-    this.#messages.push(msg);
-    await this.#persist();
+    const candidate = structuredClone(msg);
+    await this.#mutate((messages) => {
+      messages.push(candidate);
+      return changed(undefined);
+    });
   }
 
   async insertByTimestamp(msg: Message): Promise<void> {
-    const at = Date.parse(msg.timestamp);
-    let pos: number;
-    if (Number.isNaN(at)) {
-      pos = this.#messages.length;
-    } else {
-      pos = 0;
-      for (let i = this.#messages.length - 1; i >= 0; i--) {
-        const existing = Date.parse(required(this.#messages[i]).timestamp);
-        if (Number.isNaN(existing) || existing <= at) {
-          pos = i + 1;
-          break;
+    const candidate = structuredClone(msg);
+    await this.#mutate((messages) => {
+      const at = Date.parse(candidate.timestamp);
+      let pos: number;
+      if (Number.isNaN(at)) {
+        pos = messages.length;
+      } else {
+        pos = 0;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const existing = Date.parse(required(messages[i]).timestamp);
+          if (Number.isNaN(existing) || existing <= at) {
+            pos = i + 1;
+            break;
+          }
         }
       }
-    }
-    this.#messages.splice(pos, 0, msg);
-    await this.#persist();
+      messages.splice(pos, 0, candidate);
+      return changed(undefined);
+    });
   }
 
   async edit(msgId: string, newContent: string): Promise<void> {
-    const msg = this.#messages.find((m) => m.msg_id === msgId);
-    if (msg === undefined) throw new MessageNotFound(msgId);
-    msg.content = newContent;
-    msg.content_blocks = [{ type: "text", text: newContent }];
-    await this.#persist();
+    await this.#mutate((messages) => {
+      const msg = messages.find((m) => m.msg_id === msgId);
+      if (msg === undefined) throw new MessageNotFound(msgId);
+      msg.content = newContent;
+      msg.content_blocks = [{ type: "text", text: newContent }];
+      return changed(undefined);
+    });
   }
 
   async truncateAfterLastUserTurn(): Promise<number> {
-    const keep = this.#keepIndex();
-    const removed = this.#messages.length - keep;
-    if (removed > 0) {
-      this.#messages.length = keep;
-      await this.#persist();
-    }
-    return removed;
+    return await this.#mutate((messages) => {
+      const keep = this.#keepIndex(messages);
+      const removed = messages.length - keep;
+      if (removed === 0) return unchanged(0);
+      messages.length = keep;
+      return changed(removed);
+    });
   }
 
   async replaceAfterLastUserTurn(newMessages: Message[]): Promise<number> {
-    const keep = this.#keepIndex();
-    const removed = this.#messages.length - keep;
-    this.#messages.length = keep;
-    this.#messages.push(...newMessages);
-    await this.#persist();
-    return removed;
+    const replacements = structuredClone(newMessages);
+    return await this.#mutate((messages) => {
+      const keep = this.#keepIndex(messages);
+      const removed = messages.length - keep;
+      messages.length = keep;
+      messages.push(...replacements);
+      return changed(removed);
+    });
   }
 
   async delete(msgId: string): Promise<void> {
@@ -400,31 +452,36 @@ export class MessageStore {
 
   async deleteAll(msgIds: readonly string[]): Promise<void> {
     const doomed = new Set(msgIds);
-    for (const msgId of doomed) {
-      if (!this.#messages.some((m) => m.msg_id === msgId)) throw new MessageNotFound(msgId);
-    }
-    const kept = withoutOrphanToolResults(this.#messages.filter((m) => !doomed.has(m.msg_id)));
-    this.#messages.length = 0;
-    this.#messages.push(...kept);
-    await this.#persist();
+    await this.#mutate((messages) => {
+      for (const msgId of doomed) {
+        if (!messages.some((m) => m.msg_id === msgId)) throw new MessageNotFound(msgId);
+      }
+      const kept = withoutOrphanToolResults(messages.filter((m) => !doomed.has(m.msg_id)));
+      messages.length = 0;
+      messages.push(...kept);
+      return changed(undefined);
+    });
   }
 
   async setAlt(msgId: string, index: number, count: number): Promise<void> {
-    const msg = this.#messages.find((m) => m.msg_id === msgId);
-    if (msg === undefined) throw new MessageNotFound(msgId);
-    msg.alt_index = index;
-    msg.alt_count = count;
-    await this.#persist();
+    await this.#mutate((messages) => {
+      const msg = messages.find((m) => m.msg_id === msgId);
+      if (msg === undefined) throw new MessageNotFound(msgId);
+      msg.alt_index = index;
+      msg.alt_count = count;
+      return changed(undefined);
+    });
   }
 
   async addAltCandidate(msgId: string): Promise<number> {
-    const msg = this.#messages.find((m) => m.msg_id === msgId);
-    if (msg === undefined) throw new MessageNotFound(msgId);
-    const next = (msg.alt_count ?? 1) + 1;
-    msg.alt_count = next;
-    msg.alt_index = next - 1;
-    await this.#persist();
-    return next;
+    return await this.#mutate((messages) => {
+      const msg = messages.find((m) => m.msg_id === msgId);
+      if (msg === undefined) throw new MessageNotFound(msgId);
+      const next = (msg.alt_count ?? 1) + 1;
+      msg.alt_count = next;
+      msg.alt_index = next - 1;
+      return changed(next);
+    });
   }
 
   pendingRegenAlt(): PendingAlt | undefined {
@@ -467,66 +524,98 @@ export class MessageStore {
   }
 
   async selectAlt(msgId: string, index: number): Promise<AltSelection> {
-    const merged = mergeToolLoopMessages([...this.#messages]);
-    const target = merged.find((m) => m.msg_id === msgId);
-    if (target === undefined) throw new MessageNotFound(msgId);
+    return await this.#mutate((messages) => {
+      const merged = mergeToolLoopMessages([...messages]);
+      const target = merged.find((m) => m.msg_id === msgId);
+      if (target === undefined) throw new MessageNotFound(msgId);
 
-    const altCount = target.alternatives?.length ?? 0;
-    if (altCount === 0) {
-      throw new InvalidAlt(`message ${msgId} has no alternate responses`);
-    }
-    const outOfRange = (): InvalidAlt =>
-      new InvalidAlt(
-        `alternate index ${index + 1} out of range (message has ${altCount} alternate response(s))`,
-      );
-    if (index >= altCount) throw outOfRange();
+      const altCount = target.alternatives?.length ?? 0;
+      if (altCount === 0) {
+        throw new InvalidAlt(`message ${msgId} has no alternate responses`);
+      }
+      const outOfRange = (): InvalidAlt =>
+        new InvalidAlt(
+          `alternate index ${index + 1} out of range (message has ${altCount} alternate response(s))`,
+        );
+      if (index >= altCount) throw outOfRange();
 
-    if ((target.alt_index ?? 0) === index) {
-      return { msg_id: target.msg_id, alt_index: index, alt_count: altCount, content: target.content };
-    }
+      if ((target.alt_index ?? 0) === index) {
+        return unchanged({
+          msg_id: target.msg_id,
+          alt_index: index,
+          alt_count: altCount,
+          content: target.content,
+        });
+      }
 
-    const selected = messageFromAlternative(target, index);
-    if (selected === undefined) throw outOfRange();
+      const selected = messageFromAlternative(target, index);
+      if (selected === undefined) throw outOfRange();
 
-    const keep = this.#keepIndex();
-    const tailMerged = mergeToolLoopMessages(this.#messages.slice(keep));
-    const isCurrentTail =
-      [...tailMerged].reverse().find((m) => m.role === "assistant")?.msg_id === msgId;
+      const keep = this.#keepIndex(messages);
+      const tailMerged = mergeToolLoopMessages(messages.slice(keep));
+      const isCurrentTail =
+        [...tailMerged].reverse().find((m) => m.role === "assistant")?.msg_id === msgId;
 
-    if (isCurrentTail) {
-      this.#messages.length = keep;
-      this.#messages.push(selected);
-    } else {
-      const idx = this.#messages.findIndex((m) => m.msg_id === msgId);
-      if (idx === -1) throw new MessageNotFound(msgId);
-      this.#messages[idx] = selected;
-    }
+      if (isCurrentTail) {
+        messages.length = keep;
+        messages.push(selected);
+      } else {
+        const idx = messages.findIndex((m) => m.msg_id === msgId);
+        if (idx === -1) throw new MessageNotFound(msgId);
+        messages[idx] = selected;
+      }
 
-    await this.#persist();
-    return {
-      msg_id: selected.msg_id,
-      alt_index: index,
-      alt_count: altCount,
-      content: selected.content,
-    };
+      return changed({
+        msg_id: selected.msg_id,
+        alt_index: index,
+        alt_count: altCount,
+        content: selected.content,
+      });
+    });
   }
 
-  #keepIndex(): number {
-    for (let i = this.#messages.length - 1; i >= 0; i--) {
-      if (isRealUserTurn(required(this.#messages[i]))) return i + 1;
+  #keepIndex(messages: readonly Message[] = this.#messages): number {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (isRealUserTurn(required(messages[i]))) return i + 1;
     }
     return 0;
   }
 
-  async #persist(): Promise<void> {
-    await backupBeforeWrite(this.#path);
+  async #mutate<T>(mutation: (messages: Message[]) => Mutation<T>): Promise<T> {
+    const predecessor = this.#mutationTail;
+    const gate = Promise.withResolvers<void>();
+    this.#mutationTail = gate.promise;
+    await predecessor;
+    try {
+      const nextMessages = structuredClone(this.#messages);
+      const { changed: didChange, result } = mutation(nextMessages);
+      if (!didChange) return result;
+      await this.#persist(nextMessages);
+      this.#messages = nextMessages;
+      return result;
+    } finally {
+      gate.resolve();
+    }
+  }
+
+  async #persist(messages: readonly Message[]): Promise<void> {
+    await this.#io.backup(this.#path);
     let buf = "";
-    for (const msg of this.#messages) buf += `${serializeForStorage(msg)}\n`;
+    for (const msg of messages) buf += `${serializeForStorage(msg)}\n`;
 
     const dir = dirname(this.#path);
-    await mkdir(dir, { recursive: true });
-    const tmp = join(dir, `.${crypto.randomUUID()}.tmp`);
-    await writeFile(tmp, buf, "utf8");
-    await rename(tmp, this.#path);
+    await this.#io.mkdir(dir);
+    const tmp = this.#io.tempPath(dir);
+    try {
+      await this.#io.writeFile(tmp, buf);
+      await this.#io.rename(tmp, this.#path);
+    } catch (error) {
+      await this.#io.remove(tmp).catch((cleanupError: unknown) => {
+        shoreLog.warn(
+          `shore: could not remove failed message-store write ${tmp}: ${String(cleanupError)}`,
+        );
+      });
+      throw error;
+    }
   }
 }
