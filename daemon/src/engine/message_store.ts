@@ -81,6 +81,21 @@ interface Mutation<T> {
 const changed = <T>(result: T): Mutation<T> => ({ changed: true, result });
 const unchanged = <T>(result: T): Mutation<T> => ({ changed: false, result });
 
+function editAssistantText(blocks: ContentBlock[], newContent: string): ContentBlock[] {
+  const edited: ContentBlock[] = [];
+  let replaced = false;
+  for (const block of blocks) {
+    if (block.type !== "text") {
+      edited.push(block);
+    } else if (!replaced) {
+      edited.push({ type: "text", text: newContent });
+      replaced = true;
+    }
+  }
+  if (!replaced) edited.push({ type: "text", text: newContent });
+  return edited;
+}
+
 function toolResultBlockText(blocks: ContentBlock[]): string {
   return blocks
     .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
@@ -420,7 +435,10 @@ export class MessageStore {
       const msg = messages.find((m) => m.msg_id === msgId);
       if (msg === undefined) throw new MessageNotFound(msgId);
       msg.content = newContent;
-      msg.content_blocks = [{ type: "text", text: newContent }];
+      msg.content_blocks =
+        msg.role === "assistant"
+          ? editAssistantText(msg.content_blocks, newContent)
+          : [{ type: "text", text: newContent }];
       return changed(undefined);
     });
   }

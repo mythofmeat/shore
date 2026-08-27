@@ -137,3 +137,51 @@ describe("thinking survives regeneration", () => {
     });
   });
 });
+
+describe("thinking survives editing", () => {
+  test("an assistant edit replaces only text, in memory and on disk", async () => {
+    await inTemp(async (path) => {
+      const redacted: ContentBlock = { type: "redacted_thinking", data: "opaque" };
+      const store = MessageStore.create(path);
+      await store.append(
+        assistant(
+          [
+            THINKING,
+            { type: "text", text: "first half" },
+            redacted,
+            { type: "text", text: "second half" },
+          ],
+          "first half\nsecond half",
+        ),
+      );
+
+      await store.edit("m_1", "edited answer");
+
+      const expected: ContentBlock[] = [
+        THINKING,
+        { type: "text", text: "edited answer" },
+        redacted,
+      ];
+      expect(required(store.messages()[0]).content_blocks).toEqual(expected);
+      expect(required(store.messages()[0]).content).toBe("edited answer");
+
+      const reloaded = await MessageStore.load(path);
+      expect(required(reloaded.messages()[0]).content_blocks).toEqual(expected);
+      expect(required(reloaded.messages()[0]).content).toBe("edited answer");
+    });
+  });
+
+  test("an assistant response with no text gains text without losing thinking", async () => {
+    await inTemp(async (path) => {
+      const store = MessageStore.create(path);
+      await store.append(assistant([THINKING], ""));
+
+      await store.edit("m_1", "added answer");
+
+      expect(required(store.messages()[0]).content_blocks).toEqual([
+        THINKING,
+        { type: "text", text: "added answer" },
+      ]);
+    });
+  });
+});

@@ -804,6 +804,40 @@ describe("injectSystem generates a uuid and a local timestamp", () => {
   });
 });
 
+describe("editing an assistant message", () => {
+  test("the command preserves its thinking block and signature", async () => {
+    const thinking = {
+      type: "thinking" as const,
+      thinking: "weighing the answer",
+      signature: "sig-preserved",
+    };
+    const scenario: Scenario = {
+      name: "assistant edit preserves thinking",
+      archived: [],
+      active: [
+        {
+          msg_id: "m1",
+          role: "assistant",
+          content: "before",
+          images: [],
+          content_blocks: [thinking, { type: "text", text: "before" }],
+          timestamp: "2026-01-01T00:00:00Z",
+        },
+      ],
+      files: [],
+      steps: [],
+    };
+    const { engine } = await buildScenario(scenario);
+
+    await edit(engine, { ref: "last", content: "after" });
+
+    expect(required(engine.messages()[0]).content_blocks).toEqual([
+      thinking,
+      { type: "text", text: "after" },
+    ]);
+  });
+});
+
 describe("deleting a tool loop leaves nothing the API will reject", () => {
   function msg(msg_id: string, role: Message["role"], blocks: Message["content_blocks"]): Message {
     return {
