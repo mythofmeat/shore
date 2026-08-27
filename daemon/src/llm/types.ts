@@ -146,6 +146,7 @@ export type StreamEvent =
       finish_reason: string;
       content_blocks?: unknown[];
       usage: Usage;
+      context_usage?: Usage;
       timing: Timing;
     }
   | {

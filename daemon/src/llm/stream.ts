@@ -22,6 +22,7 @@ export interface StreamResult {
   model: string;
   finish_reason: string;
   usage: Usage;
+  context_usage?: Usage;
   timing: Timing;
   tool_uses: ToolUseEvent[];
   content_blocks: ContentBlock[];
@@ -138,6 +139,9 @@ export class StreamAccumulator {
         const result = this.finish(event.content, event.finish_reason, event.usage, event.timing);
         if (event.content_blocks !== undefined) {
           result.content_blocks = event.content_blocks as ContentBlock[];
+        }
+        if (event.context_usage !== undefined) {
+          result.context_usage = event.context_usage;
         }
         return { kind: "done", result };
       }

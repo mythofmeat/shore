@@ -176,6 +176,7 @@ class TurnBuilder {
 
 class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
   usage: Usage = emptyUsage();
+  lastCallUsage: Usage = emptyUsage();
   text = "";
   terminalBlocks: ContentBlock[] = [];
   terminalFinishReason = "end_turn";
@@ -280,6 +281,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
 
     const callEnd = this.now();
     this.usage = addUsage(this.usage, completed.usage);
+    this.lastCallUsage = completed.usage;
     this.text += completed.text;
     this.terminalBlocks = completed.turn.blocks;
     this.terminalFinishReason = completed.turn.finishReason;
@@ -397,6 +399,7 @@ export async function* genericToolLoopEvents(
     finish_reason: driver.terminalFinishReason,
     content_blocks: driver.terminalBlocks,
     usage: driver.usage,
+    context_usage: driver.lastCallUsage,
     timing: timing(),
   };
 }

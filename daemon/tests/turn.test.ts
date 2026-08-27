@@ -16,8 +16,10 @@ import {
   contextTokensFor,
   emitPostPersistStreamEnd,
   ensureAndBackfillAutonomy,
+  maybeCompact,
   type TurnAutonomy,
   type TurnContext,
+  type TurnEngine,
 } from "../src/handler/turn.ts";
 
 const MINTED_ID = "m_00000000-0000-4000-8000-000000000000";
@@ -299,6 +301,74 @@ describe("contextTokensFor", () => {
       expect(contextTokensFor(usage as Usage)).toBe(c.output.context_tokens);
     });
   }
+});
+
+describe("maybeCompact measures the context, not the turn's billed total", () => {
+  const usage = (input: number, cacheRead: number): Usage => ({
+    input_tokens: input,
+    output_tokens: 500,
+    cache_read_tokens: cacheRead,
+    cache_creation_tokens: 0,
+  });
+
+  function probe(result: StreamResult): Promise<number> {
+    let seen = -1;
+    const ctx = {
+      emitEvent: () => {},
+      sendDirect: () => {},
+      now: () => MINTED_TS,
+      newMessageId: () => MINTED_ID,
+      autonomy: {
+        ensureState: () => true,
+        needsActivityBackfill: () => false,
+        backfillActivity: () => {},
+        onUserMessage: () => {},
+        shouldCompactNow: (_c: string, _t: number, contextTokens: number) => {
+          seen = contextTokens;
+          return false;
+        },
+        onCompactionComplete: () => {},
+        onCompactionFailed: () => {},
+      },
+    } as unknown as TurnContext;
+    const engine = { turnCount: () => 5 } as unknown as TurnEngine;
+    const runner = {
+      run: () => {
+        throw new Error("compaction must not run");
+      },
+      applyDeferredEdits: async () => {},
+    };
+
+    return maybeCompact(
+      ctx,
+      engine,
+      "ada",
+      {} as unknown as LoadedConfig,
+      "/nonexistent",
+      result,
+      undefined,
+      runner,
+    ).then(() => seen);
+  }
+
+  const base: Omit<StreamResult, "usage" | "context_usage"> = {
+    content: "answer",
+    model: "test-model",
+    finish_reason: "end_turn",
+    timing: { total_ms: 1, time_to_first_token_ms: 1 },
+    tool_uses: [],
+    content_blocks: [],
+  };
+
+  test("an eight-round tool loop reports the last prompt, not the sum of all eight", async () => {
+    expect(
+      await probe({ ...base, usage: usage(64_000, 228_660), context_usage: usage(1_775, 41_984) }),
+    ).toBe(43_759);
+  });
+
+  test("a turn without a tool loop still reports its own usage", async () => {
+    expect(await probe({ ...base, usage: usage(1_016, 14_848) })).toBe(15_864);
+  });
 });
 
 describe("emitPostPersistStreamEnd", () => {

@@ -242,6 +242,25 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
     expect(done.usage.output_tokens).toBe(USAGE.output_tokens * 2);
   });
 
+  test("done reports the last call's prompt separately from the summed usage", async () => {
+    const tools = fakePhase();
+    const provider = new FakeProvider([
+      { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
+      { kind: "tools", calls: [{ id: "tu_2", name: "read", input: {} }] },
+      { kind: "text", text: "done" },
+    ]);
+
+    const events = await collect(genericToolLoopEvents(provider, request(), tools.phase));
+    const done = events.at(-1);
+    if (done?.type !== "done") throw new Error("unreachable");
+
+    expect(done.usage.input_tokens).toBe(USAGE.input_tokens * 3);
+    expect(done.usage.cache_read_tokens).toBe(USAGE.cache_read_tokens * 3);
+    expect(done.context_usage?.input_tokens).toBe(USAGE.input_tokens);
+    expect(done.context_usage?.cache_read_tokens).toBe(USAGE.cache_read_tokens);
+    expect(done.context_usage?.cache_creation_tokens).toBe(USAGE.cache_creation_tokens);
+  });
+
   test("every call gets its own row, and only the first is not a continuation", async () => {
     const tools = fakePhase();
     const provider = new FakeProvider([

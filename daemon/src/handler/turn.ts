@@ -203,7 +203,7 @@ export async function maybeCompact(
   runner: CompactionRunner,
 ): Promise<boolean> {
   const turnCount = engine.turnCount();
-  const contextTokens = contextTokensFor(result.usage);
+  const contextTokens = contextTokensFor(result.context_usage ?? result.usage);
   if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens)) return false;
 
   await runInlineCompaction(ctx, engine, charName, config, dataDir, rid, runner);
