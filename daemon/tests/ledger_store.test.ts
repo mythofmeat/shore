@@ -138,9 +138,9 @@ describe("writing rows the daemon's schema accepts", () => {
   test("a provider configured as a subscription records at zero, and one unconfigured does not", () => {
     const { path, cleanup } = freshLedger();
     try {
-      setSubscriptionProviders(["zai"]);
+      setSubscriptionProviders(["zai-sub"]);
       const ledger = Ledger.open(path);
-      const flat = ledger.record(call({ provider: "zai", model: "glm-5.1" }));
+      const flat = ledger.record(call({ provider: "zai-sub", model: "glm-5.1" }));
       const billed = ledger.record(call({ provider: "opencode-go", model: "kimi-k3" }));
       ledger.close();
 

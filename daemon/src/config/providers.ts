@@ -8,6 +8,11 @@ import {
 } from "./models.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
+import {
+  ZAI_API_PROVIDER,
+  ZAI_SUB_BASE_URL,
+  ZAI_SUB_PROVIDER,
+} from "../llm/providers/zai_config.ts";
 
 export type ProviderRegistryErrorKind =
   | "parse_entry"
@@ -15,6 +20,7 @@ export type ProviderRegistryErrorKind =
   | "missing_key_field"
   | "duplicate_key_name"
   | "removed_provider"
+  | "derived_provider"
   | "transport_in_defaults";
 
 export class ProviderRegistryError extends Error {
@@ -56,11 +62,24 @@ export class ProviderRegistryError extends Error {
     );
   }
 
-  static removedProvider(): ProviderRegistryError {
+  static removedProvider(provider = "claude_code"): ProviderRegistryError {
+    const message = provider === "zai"
+      ? `[providers.zai] was split into [providers.${ZAI_API_PROVIDER}] and the derived ` +
+        `[providers.${ZAI_SUB_PROVIDER}]; rename the configured provider to ` +
+        `\`${ZAI_API_PROVIDER}\` and select \`${ZAI_SUB_PROVIDER}:<model_id>\` for Coding Plan traffic`
+      : `[providers.claude_code] is no longer supported — the Claude Code transport ` +
+        `was removed; drop this section from your config`;
     return new ProviderRegistryError(
       "removed_provider",
-      `[providers.claude_code] is no longer supported — the Claude Code transport ` +
-        `was removed; drop this section from your config`,
+      message,
+    );
+  }
+
+  static derivedProvider(provider: string, source: string): ProviderRegistryError {
+    return new ProviderRegistryError(
+      "derived_provider",
+      `[providers.${provider}] is derived from [providers.${source}] and cannot be configured ` +
+        `separately; configure ${source} once, then select ${provider}:<model_id>`,
     );
   }
 
@@ -130,6 +149,7 @@ export interface ProviderEntry extends ProviderRegistryEntry {
   keys: ProviderKeyEntry[];
   discovery: ProviderDiscovery;
   defaults: ModelConfigFields;
+  catalogSource?: string;
 }
 
 export const DEFAULT_SUBSCRIPTION_PROVIDERS: readonly string[] = ["opencode-go", "opencode"];
@@ -173,9 +193,16 @@ export class ProviderRegistry {
 
     const providers = new Map<string, ProviderEntry>();
     for (const name of sortedKeys(section)) {
-      if (name === "claude_code") throw ProviderRegistryError.removedProvider();
+      if (name === "claude_code" || name === "zai") {
+        throw ProviderRegistryError.removedProvider(name);
+      }
+      if (name === ZAI_SUB_PROVIDER) {
+        throw ProviderRegistryError.derivedProvider(ZAI_SUB_PROVIDER, ZAI_API_PROVIDER);
+      }
       providers.set(name, parseEntry(name, section[name]));
     }
+    const zaiApi = providers.get(ZAI_API_PROVIDER);
+    if (zaiApi !== undefined) providers.set(ZAI_SUB_PROVIDER, derivedZaiSubscription(zaiApi));
     return new ProviderRegistry(
       new Map([...providers].sort((a, b) => compareByCodePoint(a[0], b[0]))),
     );
@@ -210,6 +237,22 @@ export class ProviderRegistry {
   subscriptionSettings(): [string, boolean][] {
     return this.entries().map(([name, e]) => [name, e.subscription]);
   }
+}
+
+function derivedZaiSubscription(source: ProviderEntry): ProviderEntry {
+  return {
+    ...source,
+    subscription: true,
+    baseUrl: ZAI_SUB_BASE_URL,
+    keys: source.keys.map((key) => ({ ...key })),
+    discovery: { enabled: source.discovery.enabled, ignore: [...source.discovery.ignore] },
+    defaults: { ...source.defaults },
+    catalogSource: ZAI_API_PROVIDER,
+  };
+}
+
+export function providerCatalogSource(providerKey: string, entry: ProviderEntry): string {
+  return entry.catalogSource ?? providerKey;
 }
 
 function isTable(value: unknown): value is Record<string, unknown> {

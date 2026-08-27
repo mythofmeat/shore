@@ -22,9 +22,7 @@ import { replayableMessages } from "../replay.ts";
 import { turnToOpenAI } from "./openai.ts";
 import { parseToolArgs } from "../tool_args.ts";
 import { REASONING_OFF } from "../types.ts";
-
-export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
-export const ZAI_CODING_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
+import { ZAI_API_BASE_URL } from "./zai_config.ts";
 
 export type ZaiChatCompletionCreateParams = Omit<
   ChatCompletionCreateParams,
@@ -57,11 +55,7 @@ export class ZaiProvider implements SidecarProvider {
 }
 
 export function resolveZaiBaseUrl(req: SidecarRequest): string {
-  const base = req.base_url ? trimTrailingSlash(req.base_url) : ZAI_BASE_URL;
-  if (req.provider_options?.zai_subscription === true && base === ZAI_BASE_URL) {
-    return ZAI_CODING_BASE_URL;
-  }
-  return base;
+  return req.base_url ? trimTrailingSlash(req.base_url) : ZAI_API_BASE_URL;
 }
 
 function buildZaiCall(

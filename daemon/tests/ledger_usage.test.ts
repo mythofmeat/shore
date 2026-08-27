@@ -174,11 +174,11 @@ test("the backfill leaves already-costed rows alone unless forced", async () => 
 
 test("the backfill zeroes a subscription provider's rows rather than hunting for a price", async () => {
   const ledger = ledgerWith([
-    { provider: "zai", model: "glm-5.1" },
+    { provider: "zai-sub", model: "glm-5.1" },
     { provider: "openai", model: "gpt-nonexistent" },
   ]);
   const fetched = stubCatalog();
-  setSubscriptionProviders(["zai"]);
+  setSubscriptionProviders(["zai-sub"]);
 
   try {
     const result = await backfillLedgerCosts(ledger);

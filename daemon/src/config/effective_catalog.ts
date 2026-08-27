@@ -11,7 +11,7 @@ import {
   type Sdk,
 } from "./models.ts";
 import { CatalogError } from "./models.ts";
-import { isVisible, type ProviderEntry } from "./providers.ts";
+import { isVisible, providerCatalogSource, type ProviderEntry } from "./providers.ts";
 import type { LoadedConfigView } from "./preferences.ts";
 import { cachePath, readCacheSync, type DiscoveredModel } from "../llm/discovery.ts";
 
@@ -96,7 +96,7 @@ export function findEffectiveModel(
     }
     if (!entry.discovery.enabled) continue;
 
-    const disc = readProviderDiscovery(cacheDir, providerKey, name);
+    const disc = readProviderDiscovery(cacheDir, providerKey, entry, name);
     if (disc === undefined) continue;
     hits.push({
       provider: providerKey,
@@ -132,7 +132,9 @@ export function listEffectiveModels(
 
   for (const [providerKey, entry] of config.providers.entries()) {
     if (!entry.enabled || !entry.discovery.enabled) continue;
-    const cache = readCacheSync(cachePath(cacheDir, providerKey));
+    const cache = readCacheSync(
+      cachePath(cacheDir, providerCatalogSource(providerKey, entry)),
+    );
     if (cache === undefined) continue;
 
     const discovered = [...cache.models].sort((a, b) => compareBytes(a.model_id, b.model_id));
@@ -159,9 +161,10 @@ function compareBytes(a: string, b: string): number {
 function readProviderDiscovery(
   cacheDir: string,
   providerKey: string,
+  entry: ProviderEntry,
   modelId: string,
 ): DiscoveredModel | undefined {
-  const cache = readCacheSync(cachePath(cacheDir, providerKey));
+  const cache = readCacheSync(cachePath(cacheDir, providerCatalogSource(providerKey, entry)));
   return cache?.models.find((m) => m.model_id === modelId);
 }
 
@@ -183,7 +186,7 @@ function resolveProviderPrefixed(
   if (staticMatch !== undefined) return staticMatch;
 
   if (entry.discovery.enabled) {
-    const disc = readProviderDiscovery(cacheDir, provider, modelId);
+    const disc = readProviderDiscovery(cacheDir, provider, entry, modelId);
     if (disc !== undefined) {
       if (!isVisible(entry.discovery, disc.model_id) && !includeHidden) {
         return EffectiveCatalogError.hidden(name, provider);
@@ -224,7 +227,9 @@ function buildResolvedFromProvider(
     (disc === undefined ? undefined : sdkFromWire(disc.sdk)) ??
     defaultSdk(providerKey);
 
-  const baseUrl = entry.baseUrl ?? disc?.base_url ?? providerDefaults.baseUrl;
+  const baseUrl = entry.catalogSource === undefined
+    ? entry.baseUrl ?? disc?.base_url ?? providerDefaults.baseUrl
+    : entry.baseUrl ?? providerDefaults.baseUrl ?? disc?.base_url;
   const maxContextTokens = asU32(disc?.context_length) ?? providerDefaults.maxContextTokens;
   const maxOutputTokens = asU32(disc?.max_output_tokens) ?? providerDefaults.maxOutputTokens;
 

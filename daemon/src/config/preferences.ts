@@ -29,6 +29,7 @@ import {
   settingApplicability,
   validateSetting,
 } from "../llm/settings.ts";
+import { ZAI_SUBSCRIPTION_SETTING_MIGRATION } from "../llm/providers/zai_config.ts";
 
 const PREFERENCES_DIR = "preferences";
 const PREFERENCES_FILE = "models.toml";
@@ -72,7 +73,6 @@ export interface SamplerSettings {
   openrouterProvider?: unknown;
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
-  zaiSubscription?: boolean;
   supportsImages?: boolean;
 }
 
@@ -674,7 +674,6 @@ export function applySamplerOverlay(
     ["openrouterProvider", "openrouterProvider"],
     ["geminiGeneration", "geminiGeneration"],
     ["zaiClearThinking", "zaiClearThinking"],
-    ["zaiSubscription", "zaiSubscription"],
     ["supportsImages", "supportsImages"],
   ] as const satisfies readonly (readonly [keyof SamplerSettings, keyof ResolvedModel])[];
 
@@ -884,6 +883,9 @@ function unknownField(table: Record<string, unknown>, known: readonly string[]):
 }
 
 function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings> {
+  if (Object.hasOwn(table, "zai_subscription")) {
+    return { err: ZAI_SUBSCRIPTION_SETTING_MIGRATION };
+  }
   const unknown = unknownField(table, SAMPLER_KEYS);
   if (unknown !== undefined) return { err: unknown };
 
@@ -929,7 +931,6 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
 
   const booleans = [
     ["zaiClearThinking", "zai_clear_thinking"],
-    ["zaiSubscription", "zai_subscription"],
     ["supportsImages", "supports_images"],
   ] as const;
   for (const [field, key] of booleans) {

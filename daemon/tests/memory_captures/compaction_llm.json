@@ -37,7 +37,11 @@
       "base_url": "https://open.bigmodel.cn/api/paas/v4"
     },
     {
-      "provider_key": "zai",
+      "provider_key": "zai-api",
+      "base_url": null
+    },
+    {
+      "provider_key": "zai-sub",
       "base_url": null
     },
     {

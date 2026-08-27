@@ -1103,8 +1103,8 @@ pub(crate) enum ModelCommand {
     /// moonshot, which forces a wire shape on a discovered model whose
     /// provider catalog labelled it wrong.
     ///
-    /// The vendor knobs openrouter_provider, gemini_generation,
-    /// zai_clear_thinking and zai_subscription are settable per model too. A
+    /// The vendor knobs openrouter_provider, gemini_generation and
+    /// zai_clear_thinking are settable per model too. A
     /// model only lists the knobs its own sdk honors.
     Setting {
         /// Setting key (temperature, top_p, reasoning_effort, sdk, ...)
@@ -4283,7 +4283,6 @@ mod tests {
             parse_setting_value("zai_clear_thinking", "false"),
             json!("false")
         );
-        assert_eq!(parse_setting_value("zai_subscription", "yes"), json!("yes"));
         assert_eq!(parse_setting_value("gemini_generation", "3"), json!("3"));
         assert_eq!(
             parse_setting_value("openrouter_provider", r#"{"order":["Anthropic"]}"#),

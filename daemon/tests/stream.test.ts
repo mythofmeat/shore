@@ -1190,16 +1190,16 @@ describe("persist_and_notify", () => {
     };
     await persistAndNotify(ctx, engine, {
       charName: "Alice",
-      resolvedProviderKey: "zai",
+      resolvedProviderKey: "zai-api",
       result: { ...resultWith("done", [{ type: "text", text: "done" }]), model: "glm-5.3" },
-      request: { model: "glm-5.3", provider_key: "zai", messages: [] },
+      request: { model: "glm-5.3", provider_key: "zai-api", messages: [] },
       keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [assistantTurn, toolResult],
       wallClockMs: 1,
     });
 
     const stored = engine.messages.find((m) => m.msg_id === "m_tool");
-    expect(stored?.provider_key).toBe("zai");
+    expect(stored?.provider_key).toBe("zai-api");
     expect(stored?.model).toBe("glm-5.3");
     const result = engine.messages.find((m) => m.msg_id === "m_result");
     expect(result?.provider_key).toBeUndefined();

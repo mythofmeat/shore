@@ -106,8 +106,7 @@
         ]
       },
       "gemini_generation": 3,
-      "zai_clear_thinking": false,
-      "zai_subscription": true
+      "zai_clear_thinking": false
     }
   },
   "reasoning_carrier": {

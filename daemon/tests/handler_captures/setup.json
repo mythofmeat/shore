@@ -44,8 +44,7 @@
           "max_tool_iterations": null,
           "openrouter_provider": null,
           "gemini_generation": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
+          "zai_clear_thinking": null
         }
       },
       "result": {
@@ -69,7 +68,6 @@
           "openrouter_provider": null,
           "gemini_generation": null,
           "zai_clear_thinking": null,
-          "zai_subscription": null,
           "replay_prior_thinking": null,
           "max_tool_iterations": null
         }
@@ -108,7 +106,6 @@
           "openrouter_provider": null,
           "gemini_generation": null,
           "zai_clear_thinking": null,
-          "zai_subscription": null,
           "replay_prior_thinking": null,
           "max_tool_iterations": null
         }
@@ -135,8 +132,7 @@
           "max_tool_iterations": null,
           "openrouter_provider": null,
           "gemini_generation": null,
-          "zai_clear_thinking": null,
-          "zai_subscription": null
+          "zai_clear_thinking": null
         }
       },
       "result": {
@@ -160,7 +156,6 @@
           "openrouter_provider": null,
           "gemini_generation": null,
           "zai_clear_thinking": null,
-          "zai_subscription": null,
           "replay_prior_thinking": null,
           "max_tool_iterations": null
         }
@@ -215,7 +210,6 @@
           "openrouter_provider": null,
           "gemini_generation": null,
           "zai_clear_thinking": null,
-          "zai_subscription": null,
           "replay_prior_thinking": null,
           "max_tool_iterations": null
         }
@@ -282,7 +276,6 @@
           "openrouter_provider": null,
           "gemini_generation": null,
           "zai_clear_thinking": null,
-          "zai_subscription": null,
           "replay_prior_thinking": null,
           "max_tool_iterations": null
         }
@@ -333,7 +326,6 @@
           "openrouter_provider": null,
           "gemini_generation": null,
           "zai_clear_thinking": null,
-          "zai_subscription": null,
           "replay_prior_thinking": null,
           "max_tool_iterations": null
         }
@@ -875,8 +867,7 @@
       "sdk": "anthropic",
       "temperature": 0.5,
       "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
+      "zai_clear_thinking": null
     },
     "s2": [
       {
@@ -904,8 +895,7 @@
       "sdk": null,
       "temperature": null,
       "top_p": null,
-      "zai_clear_thinking": null,
-      "zai_subscription": null
+      "zai_clear_thinking": null
     },
     "s4": [
       {

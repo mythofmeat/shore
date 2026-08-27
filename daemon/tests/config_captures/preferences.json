@@ -17,8 +17,7 @@
         "sdk": null,
         "temperature": null,
         "top_p": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "zai_clear_thinking": null
       },
       "discovery": {
         "enabled": false,
@@ -312,38 +311,38 @@
       "matches": false
     },
     {
-      "pattern": "\u00e9*",
-      "input": "\u00e9a",
+      "pattern": "é*",
+      "input": "éa",
       "matches": true
     },
     {
-      "pattern": "*\u00e9",
-      "input": "a\u00e9",
+      "pattern": "*é",
+      "input": "aé",
       "matches": true
     },
     {
       "pattern": "*",
-      "input": "\ud83c\udfb5",
+      "input": "🎵",
       "matches": true
     },
     {
-      "pattern": "\ud83c\udfb5*",
-      "input": "\ud83c\udfb5drum",
+      "pattern": "🎵*",
+      "input": "🎵drum",
       "matches": true
     },
     {
-      "pattern": "a*\ud83c\udfb5",
-      "input": "a\ud83c\udfb5",
+      "pattern": "a*🎵",
+      "input": "a🎵",
       "matches": true
     },
     {
       "pattern": "ab*",
-      "input": "\u00e9",
+      "input": "é",
       "matches": false
     },
     {
-      "pattern": "\ud83c\udfb5*\ud83c\udfb5",
-      "input": "\ud83c\udfb5",
+      "pattern": "🎵*🎵",
+      "input": "🎵",
       "matches": false
     },
     {
@@ -507,8 +506,7 @@
               "cache_keepalive": null,
               "openrouter_provider": null,
               "gemini_generation": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
+              "zai_clear_thinking": null
             }
           }
         }
@@ -557,8 +555,7 @@
               "sdk": null,
               "temperature": null,
               "top_p": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
+              "zai_clear_thinking": null
             }
           }
         }
@@ -594,8 +591,7 @@
               "sdk": null,
               "temperature": null,
               "top_p": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
+              "zai_clear_thinking": null
             }
           }
         }
@@ -633,8 +629,7 @@
               "sdk": null,
               "temperature": null,
               "top_p": null,
-              "zai_clear_thinking": null,
-              "zai_subscription": null
+              "zai_clear_thinking": null
             }
           }
         }
@@ -655,7 +650,7 @@
     {
       "name": "removed_provider",
       "toml": "[claude_code]\n",
-      "err": "[providers.claude_code] is no longer supported \u2014 the Claude Code transport was removed; drop this section from your config"
+      "err": "[providers.claude_code] is no longer supported — the Claude Code transport was removed; drop this section from your config"
     },
     {
       "name": "conflicting_key_forms",
@@ -918,7 +913,7 @@
     {
       "name": "unknown_sampler_field",
       "toml": "[defaults.sampler]\nnope = 1\n",
-      "err": "failed to parse /tmp/.tmpslDvo3/unknown_sampler_field.toml: TOML parse error at line 2, column 1\n  |\n2 | nope = 1\n  | ^^^^\nunknown field `nope`, expected one of `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `max_output_tokens`, `cache_ttl`, `cache_keepalive`, `cache_keepalive_max`, `sdk`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `zai_subscription`, `supports_images`\n"
+      "err": "failed to parse /tmp/.tmpslDvo3/unknown_sampler_field.toml: TOML parse error at line 2, column 1\n  |\n2 | nope = 1\n  | ^^^^\nunknown field `nope`, expected one of `temperature`, `top_p`, `reasoning_effort`, `budget_tokens`, `max_output_tokens`, `cache_ttl`, `cache_keepalive`, `cache_keepalive_max`, `sdk`, `replay_prior_thinking`, `max_tool_iterations`, `openrouter_provider`, `gemini_generation`, `zai_clear_thinking`, `supports_images`\n"
     },
     {
       "name": "unknown_selected_field",
@@ -960,8 +955,7 @@
         "sdk": null,
         "temperature": null,
         "top_p": null,
-        "zai_clear_thinking": null,
-        "zai_subscription": null
+        "zai_clear_thinking": null
       }
     },
     "models": {}
@@ -1648,19 +1642,20 @@
     {
       "name": "defaults_can_override_sdk_via_merge",
       "chat_toml": "",
-      "providers_toml": "[zai]\n[zai.discovery]\nenabled = true\n",
+      "providers_toml": "[zai-api]\n[zai-api.discovery]\nenabled = true\n",
       "caches": [],
       "lookups": [
         {
-          "name": "zai:glm-5",
+          "name": "zai-api:glm-5",
           "include_hidden": false,
           "resolved": {
             "name": "glm-5",
-            "qualified_name": "zai:glm-5",
+            "qualified_name": "zai-api:glm-5",
             "category": "chat",
-            "provider_key": "zai",
+            "provider_key": "zai-api",
             "sdk": "zai",
             "model_id": "glm-5",
+            "base_url": "https://api.z.ai/api/paas/v4",
             "max_context_tokens": 200000,
             "max_output_tokens": 32768,
             "zai_clear_thinking": false

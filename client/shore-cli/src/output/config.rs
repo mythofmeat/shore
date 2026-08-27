@@ -819,8 +819,8 @@ mod tests {
             &[
                 ("set", json!("defaults.model")),
                 ("value", json!("anthropic:claude-opus-4-5")),
-                ("previous", json!("zai:glm-4.6")),
-                ("masked_by_preference", json!("zai:glm-4.6")),
+                ("previous", json!("zai-sub:glm-4.6")),
+                ("masked_by_preference", json!("zai-sub:glm-4.6")),
             ],
         );
         write_set(&mut buf, "defaults.model", &moved);

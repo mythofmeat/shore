@@ -22,6 +22,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { catalogFromSections, emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { cachePath } from "../src/llm/discovery.ts";
+import { ZAI_SUB_BASE_URL } from "../src/llm/providers/zai_config.ts";
 import { testTmp } from "./support/tmp.ts";
 
 interface WireError {
@@ -361,6 +362,26 @@ describe("listProviders", () => {
       () => listProviders(world.ctx),
     );
   });
+
+  test("zai-sub reports the zai-api catalog and its own endpoint", async () => {
+    const world = await build(
+      `[zai-api]\napi_key_env = "${KEY_SET}"\n[zai-api.discovery]\nenabled = true\n`,
+      "",
+      [["zai-api", cacheJson("zai-api", [["glm-5.3-flash", "z-ai"]])]],
+    );
+    const listed = listProviders(world.ctx) as { providers: Record<string, unknown>[] };
+    const sub = required(listed.providers.find((provider) => provider["name"] === "zai-sub"));
+    expect(sub["base_url"]).toBe(ZAI_SUB_BASE_URL);
+    expect(sub["catalog_source"]).toBe("zai-api");
+    expect((sub["cache"] as Record<string, unknown>)["models"]).toBe(1);
+
+    const models = listProviderModels(world.ctx, { provider: "zai-sub" }) as Record<
+      string,
+      unknown
+    >;
+    expect(models["catalog_source"]).toBe("zai-api");
+    expect((models["discovered"] as unknown[])).toHaveLength(1);
+  });
 });
 
 describe("listProviderModels", () => {
@@ -424,6 +445,17 @@ describe("refreshProviderModels guards", () => {
       );
     });
   }
+
+  test("a mirrored provider directs refreshes to its catalog source", async () => {
+    const world = await build(
+      `[zai-api]\napi_key_env = "${KEY_SET}"\n[zai-api.discovery]\nenabled = true\n`,
+      "",
+      [],
+    );
+    expect(
+      refreshProviderModels(world.ctx, { provider: "zai-sub" }),
+    ).rejects.toThrow("mirrors the model catalog from \"zai-api\"");
+  });
 });
 
 describe("refreshProviderModels over the wire", () => {

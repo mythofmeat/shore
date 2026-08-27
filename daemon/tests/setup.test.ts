@@ -51,7 +51,6 @@ interface WireModel {
   openrouter_provider: unknown;
   gemini_generation: number | null;
   zai_clear_thinking: boolean | null;
-  zai_subscription: boolean | null;
   replay_prior_thinking: string | null;
   max_tool_iterations: number | null;
 }
@@ -135,7 +134,6 @@ function toModel(w: WireModel): ResolvedModel {
     ...opt("openrouterProvider", w.openrouter_provider),
     ...opt("geminiGeneration", w.gemini_generation),
     ...opt("zaiClearThinking", w.zai_clear_thinking),
-    ...opt("zaiSubscription", w.zai_subscription),
     ...opt("replayPriorThinking", w.replay_prior_thinking as ResolvedModel["replayPriorThinking"]),
     ...opt("maxToolIterations", w.max_tool_iterations),
     ...(() => {
@@ -171,7 +169,6 @@ function fromModel(m: ResolvedModel): WireModel {
     openrouter_provider: m.openrouterProvider ?? null,
     gemini_generation: m.geminiGeneration ?? null,
     zai_clear_thinking: m.zaiClearThinking ?? null,
-    zai_subscription: m.zaiSubscription ?? null,
     replay_prior_thinking: m.replayPriorThinking ?? null,
     max_tool_iterations: m.maxToolIterations ?? null,
   };

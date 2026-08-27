@@ -1,4 +1,5 @@
 import { toLlmError } from "./errors";
+import { isZaiProvider } from "./providers/zai_config";
 
 export const CREDENTIAL_FAILURE_KINDS = [
   "missing_key",
@@ -149,14 +150,12 @@ export function defaultApiKeyEnv(providerKey: string): string {
       return "MOONSHOT_API_KEY";
     case "xai":
       return "XAI_API_KEY";
-    case "zai":
-      return "ZAI_API_KEY";
     case "nanogpt":
       return "NANOGPT_API_KEY";
     case "opencode-go":
       return "OPENCODE_API_KEY";
     default:
-      return "LLM_API_KEY";
+      return isZaiProvider(providerKey) ? "ZAI_API_KEY" : "LLM_API_KEY";
   }
 }
 

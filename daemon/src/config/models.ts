@@ -19,6 +19,14 @@ export {
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ResolvedModel as RequestResolvedModel } from "../llm/request.ts";
+import {
+  isZaiProvider,
+  ZAI_API_BASE_URL,
+  ZAI_SUB_BASE_URL,
+  ZAI_API_PROVIDER,
+  ZAI_SUB_PROVIDER,
+  ZAI_SUBSCRIPTION_SETTING_MIGRATION,
+} from "../llm/providers/zai_config.ts";
 
 export type { Sdk };
 export { SDK_VARIANTS, sdkFromWire };
@@ -59,7 +67,6 @@ export interface ModelConfigFields {
   openrouterProvider?: unknown;
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
-  zaiSubscription?: boolean;
   supportsImages?: boolean;
 }
 
@@ -79,7 +86,6 @@ const FIELD_KEYS = [
   "openrouterProvider",
   "geminiGeneration",
   "zaiClearThinking",
-  "zaiSubscription",
   "supportsImages",
 ] as const satisfies readonly (keyof ModelConfigFields)[];
 
@@ -134,7 +140,6 @@ export interface ResolvedModel {
   openrouterProvider?: unknown;
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
-  zaiSubscription?: boolean;
   replayPriorThinking?: ThinkingReplay;
   maxToolIterations?: number;
   support?: DiscoveredModelSupport;
@@ -171,7 +176,6 @@ export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
     ...opt("openrouter_provider", model.openrouterProvider),
     ...opt("gemini_generation", model.geminiGeneration),
     ...opt("zai_clear_thinking", model.zaiClearThinking),
-    ...opt("zai_subscription", model.zaiSubscription),
     ...opt("max_tool_iterations", model.maxToolIterations),
     ...opt("supports_images", effectiveSupportsImages(model)),
   };
@@ -241,7 +245,6 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "openrouterProvider", merged.openrouterProvider);
   assignIfPresent(resolved, "geminiGeneration", merged.geminiGeneration);
   assignIfPresent(resolved, "zaiClearThinking", merged.zaiClearThinking);
-  assignIfPresent(resolved, "zaiSubscription", merged.zaiSubscription);
   assignIfPresent(resolved, "supportsImages", merged.supportsImages);
   return resolved;
 }
@@ -289,7 +292,6 @@ function warnIgnoredFields(
     ["openrouter_provider", fields.openrouterProvider !== undefined],
     ["gemini_generation", fields.geminiGeneration !== undefined],
     ["zai_clear_thinking", fields.zaiClearThinking !== undefined],
-    ["zai_subscription", fields.zaiSubscription !== undefined],
   ];
   for (const [field, present] of checks) {
     if (present && settingApplicability(sdk, field, support) === "ignored") {
@@ -648,9 +650,25 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
           baseUrl: "https://open.bigmodel.cn/api/paas/v4",
         },
       };
-    case "zai":
+    case ZAI_API_PROVIDER:
       return {
-        fields: { ...base, sdk: "zai", apiKeyEnv: "ZAI_API_KEY", zaiClearThinking: false },
+        fields: {
+          ...base,
+          sdk: "zai",
+          apiKeyEnv: "ZAI_API_KEY",
+          baseUrl: ZAI_API_BASE_URL,
+          zaiClearThinking: false,
+        },
+      };
+    case ZAI_SUB_PROVIDER:
+      return {
+        fields: {
+          ...base,
+          sdk: "zai",
+          apiKeyEnv: "ZAI_API_KEY",
+          baseUrl: ZAI_SUB_BASE_URL,
+          zaiClearThinking: false,
+        },
       };
     case "nanogpt":
       return {
@@ -682,15 +700,13 @@ export function defaultSdk(providerKey: string): Sdk {
       return "openrouter";
     case "gemini":
       return "gemini";
-    case "zai":
-      return "zai";
     case "deepseek":
       return "deepseek";
     case "moonshot":
     case "moonshotai":
       return "moonshot";
     default:
-      return "openai";
+      return isZaiProvider(providerKey) ? "zai" : "openai";
   }
 }
 
@@ -752,6 +768,9 @@ function readF64(table: Record<string, unknown>, key: string): ParseResult<numbe
 }
 
 export function readModelConfigFields(table: Record<string, unknown>): ParseResult<ModelConfigFields> {
+  if (Object.hasOwn(table, "zai_subscription")) {
+    return { err: ZAI_SUBSCRIPTION_SETTING_MIGRATION };
+  }
   const out: ModelConfigFields = {};
 
   const sdkRaw = readString(table, "sdk");
@@ -798,7 +817,6 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
 
   const bools: [keyof ModelConfigFields, string][] = [
     ["zaiClearThinking", "zai_clear_thinking"],
-    ["zaiSubscription", "zai_subscription"],
     ["supportsImages", "supports_images"],
   ];
   for (const [field, key] of bools) {
@@ -911,7 +929,6 @@ export function resolvedModelToWire(model: ResolvedModel): Record<string, unknow
     openrouter_provider: or(model.openrouterProvider),
     gemini_generation: or(model.geminiGeneration),
     zai_clear_thinking: or(model.zaiClearThinking),
-    zai_subscription: or(model.zaiSubscription),
     replay_prior_thinking: or(model.replayPriorThinking),
     max_tool_iterations: or(model.maxToolIterations),
     supports_images: or(effectiveSupportsImages(model)),

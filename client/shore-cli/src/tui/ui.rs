@@ -3251,7 +3251,6 @@ pub(crate) mod scenario_tests {
                     {"key":"openrouter_provider","kind":"json_object","applicability":"ignored","suggestions":[],"allow_custom":true},
                     {"key":"gemini_generation","kind":"u32","applicability":"ignored","suggestions":["1","2","3"],"allow_custom":true},
                     {"key":"zai_clear_thinking","kind":"boolean","applicability":"ignored","suggestions":["true","false"],"allow_custom":false},
-                    {"key":"zai_subscription","kind":"boolean","applicability":"ignored","suggestions":["true","false"],"allow_custom":false},
                     {"key":"supports_images","kind":"boolean","applicability":"always","suggestions":["true","false"],"allow_custom":false}
                 ],
                 "scopes": {

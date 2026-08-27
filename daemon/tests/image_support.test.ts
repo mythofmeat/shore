@@ -97,7 +97,7 @@ describe("what shore remembers after a refusal", () => {
     expect(
       imageSupportFor({ providerKey: "opencode-go", modelId: "kimi-k3" }, cache),
     ).toBeUndefined();
-    expect(imageSupportFor({ providerKey: "zai", modelId: "glm-5.3" }, cache)).toBeUndefined();
+    expect(imageSupportFor({ providerKey: "zai-api", modelId: "glm-5.3" }, cache)).toBeUndefined();
   });
 
   test("it lands outside models.json so a discovery refresh cannot wipe it", () => {
@@ -140,7 +140,7 @@ describe("which answer wins", () => {
 
   test("a declaration of false is honored with nothing learned", () => {
     expect(
-      imageSupportFor({ declared: false, providerKey: "zai", modelId: "glm-5.3" }, scratch()),
+      imageSupportFor({ declared: false, providerKey: "zai-api", modelId: "glm-5.3" }, scratch()),
     ).toBe(false);
   });
 

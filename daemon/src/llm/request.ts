@@ -13,6 +13,12 @@ import type {
 } from "./types";
 import type { ContentBlock } from "../engine/types";
 import { rustTrim } from "../memory/lines";
+import {
+  ZAI_API_BASE_URL,
+  ZAI_API_PROVIDER,
+  ZAI_SUB_BASE_URL,
+  ZAI_SUB_PROVIDER,
+} from "./providers/zai_config";
 
 const DEFAULT_MAX_TOKENS = 32768;
 
@@ -37,7 +43,6 @@ export interface ResolvedModel {
   openrouter_provider?: unknown;
   gemini_generation?: number;
   zai_clear_thinking?: boolean;
-  zai_subscription?: boolean;
   max_tool_iterations?: number;
   supports_images?: boolean;
 }
@@ -74,8 +79,10 @@ export function defaultBaseUrl(providerKey: string): string | undefined {
       return "https://api.moonshot.ai/v1";
     case "xai":
       return "https://api.x.ai/v1";
-    case "zai":
-      return "https://api.z.ai/api/paas/v4";
+    case ZAI_API_PROVIDER:
+      return ZAI_API_BASE_URL;
+    case ZAI_SUB_PROVIDER:
+      return ZAI_SUB_BASE_URL;
     case "opencode-go":
       return "https://opencode.ai/zen/go/v1";
     default:
@@ -127,9 +134,6 @@ export function providerOptionsFor(model: ResolvedModel): ProviderOptions | unde
       : {}),
     ...(model.zai_clear_thinking !== undefined
       ? { zai_clear_thinking: model.zai_clear_thinking }
-      : {}),
-    ...(model.zai_subscription !== undefined
-      ? { zai_subscription: model.zai_subscription }
       : {}),
   };
 

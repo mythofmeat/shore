@@ -146,7 +146,6 @@ describe("scalar mirrors carry exactly the declared fields", () => {
         "openrouter_provider",
         "gemini_generation",
         "zai_clear_thinking",
-        "zai_subscription",
       ],
       "ProviderOptions",
     );

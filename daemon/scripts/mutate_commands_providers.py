@@ -241,15 +241,19 @@ MUTANTS = [
      "  if (entry === undefined && !knownInStatic) {",
      "  if (entry === undefined) {"),
     ("models: an unknown provider answers empty rather than erroring",
-     "    throw notFound(`provider ${JSON.stringify(provider)} is not configured`);\n  }\n\n  const cache",
+     "  if (entry === undefined && !knownInStatic) {\n"
+     "    throw notFound(`provider ${JSON.stringify(provider)} is not configured`);\n"
+     "  }",
+     "  if (entry === undefined && !knownInStatic) {\n"
      "    return { provider, discovered: [], hidden: [], static: [], include_hidden: includeHidden,\n"
-     "      cache: { fetched_at: null, model_count: 0 } };\n  }\n\n  const cache"),
+     "      cache: { fetched_at: null, model_count: 0 } };\n"
+     "  }"),
     ("models: hidden entries are dropped instead of split out",
      "    if (visible || includeHidden) discovered.push(discoveredToJson(m, learned));\n"
      "    else hidden.push(discoveredToJson(m, learned));",
      "    if (visible || includeHidden) discovered.push(discoveredToJson(m, learned));"),
     ("models: learned image support is not carried onto the rows",
-     "  const learned = readLearnedImageSupport(ctx.config.dirs.cache, provider);",
+     "  const learned = readLearnedImageSupport(ctx.config.dirs.cache, catalogSource);",
      "  const learned = undefined;"),
     ("models: the ignore rules are not applied",
      "    const visible = entry === undefined || isVisible(entry.discovery, m.model_id);",

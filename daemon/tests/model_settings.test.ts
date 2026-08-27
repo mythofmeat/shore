@@ -31,7 +31,6 @@ const EXPECTED_KEYS = [
   "openrouter_provider",
   "gemini_generation",
   "zai_clear_thinking",
-  "zai_subscription",
   "supports_images",
 ] as const;
 
@@ -39,8 +38,8 @@ describe("the canonical setting registry", () => {
   test("owns all fields exactly once and in stable wire order", () => {
     expect(SAMPLER_KEYS).toEqual([...EXPECTED_KEYS]);
     expect(SETTING_DEFINITIONS.map((definition) => definition.key)).toEqual([...EXPECTED_KEYS]);
-    expect(new Set(SETTING_STORAGE_FIELDS.map(([field]) => field)).size).toBe(16);
-    expect(new Set(SETTING_STORAGE_FIELDS.map(([, key]) => key)).size).toBe(16);
+    expect(new Set(SETTING_STORAGE_FIELDS.map(([field]) => field)).size).toBe(15);
+    expect(new Set(SETTING_STORAGE_FIELDS.map(([, key]) => key)).size).toBe(15);
   });
 
   test("emits a complete typed schema for every sdk", () => {
@@ -76,7 +75,6 @@ describe("authoritative coercion", () => {
       ["gemini_generation", "3"],
       ["max_tool_iterations", "8"],
       ["zai_clear_thinking", "YES"],
-      ["zai_subscription", false],
       ["supports_images", "off"],
     ] as const) applySamplerValue(sampler, key, value);
 
@@ -88,7 +86,6 @@ describe("authoritative coercion", () => {
       gemini_generation: 3,
       max_tool_iterations: 8,
       zai_clear_thinking: true,
-      zai_subscription: false,
       supports_images: false,
     });
   });
@@ -149,7 +146,6 @@ describe("applicability", () => {
       ["openrouter_provider", "openrouter"],
       ["gemini_generation", "gemini"],
       ["zai_clear_thinking", "zai"],
-      ["zai_subscription", "zai"],
     ] as const) {
       for (const sdk of SDK_VARIANTS) {
         const entry = settingSchema(sdk).find((candidate) => candidate.key === key);

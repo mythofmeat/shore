@@ -289,7 +289,6 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   { key: "openrouter_provider", field: "openrouterProvider", kind: "json_object", suggestions: [], allowCustom: true, applicability: vendor("openrouter"), parse: parseJsonObject },
   { key: "gemini_generation", field: "geminiGeneration", kind: "u32", suggestions: ["1", "2", "3"], allowCustom: true, applicability: vendor("gemini"), parse: parseU32("gemini_generation") },
   { key: "zai_clear_thinking", field: "zaiClearThinking", kind: "boolean", suggestions: ["true", "false"], allowCustom: false, applicability: vendor("zai"), parse: parseBoolean("zai_clear_thinking") },
-  { key: "zai_subscription", field: "zaiSubscription", kind: "boolean", suggestions: ["true", "false"], allowCustom: false, applicability: vendor("zai"), parse: parseBoolean("zai_subscription") },
   { key: "supports_images", field: "supportsImages", kind: "boolean", suggestions: ["true", "false"], allowCustom: false, applicability: always, parse: parseBoolean("supports_images") },
 ];
 

@@ -973,7 +973,8 @@ describe("hardcodedProviderBaseUrl", () => {
       "deepseek",
       "nanogpt",
       "openai",
-      "zai",
+      "zai-api",
+      "zai-sub",
       "zhipuai",
     ]);
   });

@@ -81,7 +81,6 @@ export interface ProviderOptions {
   openrouter_provider?: unknown;
   gemini_generation?: number;
   zai_clear_thinking?: boolean;
-  zai_subscription?: boolean;
   thinking_display?: "summarized" | "omitted";
 }
 

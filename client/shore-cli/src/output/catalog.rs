@@ -782,18 +782,18 @@ mod tests {
     fn a_setting_the_sdk_ignores_is_not_offered_as_if_it_worked() {
         let data = json!({
             "model": "anthropic:claude-opus-5",
-            "effective_sampler": {"temperature": 1, "zai_subscription": "pro"},
+            "effective_sampler": {"temperature": 1, "gemini_generation": 3},
             "setting_schema": [
                 {"key":"temperature","applicability":"honored"},
-                {"key":"zai_subscription","applicability":"ignored"}
+                {"key":"gemini_generation","applicability":"ignored"}
             ],
-            "saved_character": {"zai_subscription": "pro"},
+            "saved_character": {"gemini_generation": 3},
             "saved_global": null
         });
         let out = render(|b| write_model_settings(b, &data));
         assert!(out.contains("temperature"), "{out}");
         assert!(
-            !out.contains("zai_subscription"),
+            !out.contains("gemini_generation"),
             "a knob this sdk ignores must not sit in the table: {out}"
         );
         assert!(

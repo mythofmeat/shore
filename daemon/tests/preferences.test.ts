@@ -55,6 +55,10 @@ import {
   findEffectiveModel,
   listEffectiveModels,
 } from "../src/config/effective_catalog.ts";
+import {
+  ZAI_API_BASE_URL,
+  ZAI_SUB_BASE_URL,
+} from "../src/llm/providers/zai_config.ts";
 
 interface GlobRow {
   pattern: string;
@@ -167,7 +171,6 @@ function samplerToWire(s: SamplerSettings): Record<string, unknown> {
     openrouter_provider: s.openrouterProvider ?? null,
     gemini_generation: s.geminiGeneration ?? null,
     zai_clear_thinking: s.zaiClearThinking ?? null,
-    zai_subscription: s.zaiSubscription ?? null,
   };
 }
 
@@ -192,7 +195,6 @@ function modelToWire(m: ResolvedModel): Record<string, unknown> {
     openrouter_provider: m.openrouterProvider ?? null,
     gemini_generation: m.geminiGeneration ?? null,
     zai_clear_thinking: m.zaiClearThinking ?? null,
-    zai_subscription: m.zaiSubscription ?? null,
     replay_prior_thinking: m.replayPriorThinking ?? null,
     max_tool_iterations: m.maxToolIterations ?? null,
   };
@@ -263,7 +265,6 @@ const SCOPE_TOML_KEYS: Record<string, string> = {
   openrouterProvider: "openrouter_provider",
   geminiGeneration: "gemini_generation",
   zaiClearThinking: "zai_clear_thinking",
-  zaiSubscription: "zai_subscription",
 };
 
 function prefsFrom(text: string): ModelPreferences {
@@ -392,6 +393,37 @@ describe("ProviderRegistry.fromSection", () => {
     expect(entry.discovery.enabled).toBe(false);
   });
 
+  test("zai-api derives a subscription provider with shared configuration", () => {
+    const registry = ProviderRegistry.fromSection(
+      Bun.TOML.parse(`
+[zai-api]
+api_key_env = "ZAI_API_KEY"
+
+[zai-api.discovery]
+enabled = true
+ignore = ["glm-old"]
+`) as never,
+    );
+
+    const api = registry.get("zai-api") as ProviderEntry;
+    const sub = registry.get("zai-sub") as ProviderEntry;
+    expect(registry.entries().map(([name]) => name)).toEqual(["zai-api", "zai-sub"]);
+    expect(sub.catalogSource).toBe("zai-api");
+    expect(sub.subscription).toBe(true);
+    expect(sub.baseUrl).toBe(ZAI_SUB_BASE_URL);
+    expect(sub.keys).toEqual(api.keys);
+    expect(sub.keys).not.toBe(api.keys);
+    expect(sub.discovery).toEqual(api.discovery);
+    expect(sub.discovery).not.toBe(api.discovery);
+  });
+
+  test("the derived and removed Z.ai provider names cannot be configured", () => {
+    const legacy = () => ProviderRegistry.fromSection({ zai: {} });
+    expect(catchError(ProviderRegistryError, legacy).message).toContain("zai-api");
+    const derived = () => ProviderRegistry.fromSection({ "zai-sub": {} });
+    expect(catchError(ProviderRegistryError, derived).message).toContain("derived");
+  });
+
   test("the compact key form becomes a synthetic `default` key", () => {
     const registry = ProviderRegistry.fromSection(
       Bun.TOML.parse('[p]\napi_key_env = "MY_KEY"\n') as never,
@@ -447,6 +479,14 @@ describe("loadPreferences", () => {
   test("a missing file is empty defaults, not an error", () => {
     const prefs = loadPreferences(join(tempRoot(), "nope.toml"));
     expect(prefsToWire(prefs)).toEqual(fx.missing_file_is_empty);
+  });
+
+  test("the removed Z.ai endpoint toggle has an actionable migration error", () => {
+    const root = tempRoot();
+    const path = join(root, "models.toml");
+    writeFileSync(path, "[defaults.sampler]\nzai_subscription = true\n");
+    const error = catchError(PreferenceError, () => loadPreferences(path));
+    expect(error.message).toContain("select `zai-sub:<model_id>`");
   });
 
   test("an empty file still serializes the whole schema", () => {
@@ -713,6 +753,45 @@ describe("findEffectiveModel", () => {
       );
     });
   }
+
+  test("zai-sub resolves the zai-api catalog through the coding endpoint", () => {
+    const root = tempRoot();
+    const cacheDir = join(root, "cache");
+    const providerDir = join(cacheDir, "providers", "zai-api");
+    mkdirSync(providerDir, { recursive: true });
+    writeFileSync(
+      join(providerDir, "models.json"),
+      JSON.stringify({
+        version: 2,
+        provider_key: "zai-api",
+        fetched_at: "2026-08-27T00:00:00Z",
+        base_url: ZAI_API_BASE_URL,
+        models: [
+          {
+            provider_key: "zai-api",
+            model_id: "glm-5.3-flash",
+            sdk: "openai",
+            base_url: ZAI_API_BASE_URL,
+            discovered_at: "2026-08-27T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    const config = buildConfig(
+      "",
+      "[zai-api]\napi_key_env = \"ZAI_API_KEY\"\n[zai-api.discovery]\nenabled = true\n",
+      root,
+    );
+
+    const api = findEffectiveModel(config, cacheDir, "zai-api:glm-5.3-flash", false);
+    const sub = findEffectiveModel(config, cacheDir, "zai-sub:glm-5.3-flash", false);
+    expect(api.providerKey).toBe("zai-api");
+    expect(api.baseUrl).toBe(ZAI_API_BASE_URL);
+    expect(sub.providerKey).toBe("zai-sub");
+    expect(sub.qualifiedName).toBe("zai-sub:glm-5.3-flash");
+    expect(sub.sdk).toBe("zai");
+    expect(sub.baseUrl).toBe(ZAI_SUB_BASE_URL);
+  });
 
   test("a disabled provider hides its static entries too", () => {
     const root = tempRoot();

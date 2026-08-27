@@ -36,6 +36,7 @@ import {
 } from "../config/preferences.ts";
 import type { SubagentConfig } from "../config/app.ts";
 import { SETTING_STORAGE_FIELDS, samplerToWire, settingSchema } from "../llm/settings.ts";
+import { ZAI_SUBSCRIPTION_SETTING_MIGRATION } from "../llm/providers/zai_config.ts";
 import { missingModelMessage } from "../tools/subagent.ts";
 import type { Env } from "../config/dirs.ts";
 import {
@@ -665,6 +666,7 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
   const rawKey = asStr(args["key"]);
   if (rawKey === undefined) throw invalidRequest("missing key");
   const key = rawKey.trim();
+  if (key === "zai_subscription") throw invalidRequest(ZAI_SUBSCRIPTION_SETTING_MIGRATION);
   if (!SAMPLER_KEYS.includes(key)) {
     throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(", ")}`);
   }
@@ -942,6 +944,7 @@ function requestedKey(ctx: ModelsContext, args: Args): string | undefined {
   const raw = asName(args["key"]);
   if (raw === undefined) return undefined;
   const key = raw.trim();
+  if (key === "zai_subscription") throw invalidRequest(ZAI_SUBSCRIPTION_SETTING_MIGRATION);
   if (SAMPLER_KEYS.includes(key)) return key;
   if (ctx.config.app.subagents.has(key)) {
     throw invalidRequest(

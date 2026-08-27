@@ -194,7 +194,6 @@ function samplerWire(s: SamplerSettings): Record<string, unknown> {
     openrouter_provider: s.openrouterProvider ?? null,
     gemini_generation: s.geminiGeneration ?? null,
     zai_clear_thinking: s.zaiClearThinking ?? null,
-    zai_subscription: s.zaiSubscription ?? null,
   };
 }
 
@@ -610,6 +609,18 @@ describe("targeting a sub-agent's own settings", () => {
     expect(caught).toBeInstanceOf(CommandError);
     expect(caught?.message).toContain("ghost");
     expect(caught?.message).toContain("librarian");
+  });
+
+  test("the removed Z.ai endpoint toggle points at the provider split", async () => {
+    const ctx = await buildContext(setup());
+    let caught: CommandError | undefined;
+    try {
+      setModelSetting(ctx, { key: "zai_subscription", value: true });
+    } catch (e) {
+      caught = e as CommandError;
+    }
+    expect(caught).toBeInstanceOf(CommandError);
+    expect(caught?.message).toContain("select `zai-sub:<model_id>`");
   });
 
   test("--global writes the sub-agent slot in the global file", async () => {

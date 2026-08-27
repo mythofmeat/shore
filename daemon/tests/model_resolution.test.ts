@@ -150,7 +150,6 @@ function toWire(model: ResolvedModel): Record<string, unknown> {
     openrouter_provider: model.openrouterProvider ?? null,
     gemini_generation: model.geminiGeneration ?? null,
     zai_clear_thinking: model.zaiClearThinking ?? null,
-    zai_subscription: model.zaiSubscription ?? null,
     replay_prior_thinking: model.replayPriorThinking ?? null,
     max_tool_iterations: model.maxToolIterations ?? null,
   };
@@ -173,7 +172,6 @@ function fieldsToWire(fields: ModelConfigFields): Record<string, unknown> {
     openrouter_provider: fields.openrouterProvider ?? null,
     gemini_generation: fields.geminiGeneration ?? null,
     zai_clear_thinking: fields.zaiClearThinking ?? null,
-    zai_subscription: fields.zaiSubscription ?? null,
   };
 }
 
@@ -436,6 +434,11 @@ describe("field merging", () => {
   test("a false boolean is a value, not an absence", () => {
     const merged = orFallback({ zaiClearThinking: false }, { zaiClearThinking: true });
     expect(merged.zaiClearThinking).toBe(false);
+  });
+
+  test("the removed Z.ai endpoint toggle points at the provider split", () => {
+    const read = readModelConfigFields({ zai_subscription: true });
+    expect("err" in read ? read.err : null).toContain("select `zai-sub:<model_id>`");
   });
 });
 

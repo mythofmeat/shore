@@ -31,16 +31,30 @@ const plain = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
 
 describe("what a provider is reached at by default", () => {
   test("each supported provider has its own endpoint and key variable", () => {
-    for (const key of ["anthropic", "openai", "openrouter", "deepseek", "xai", "zai"]) {
+    for (const key of [
+      "anthropic",
+      "openai",
+      "openrouter",
+      "deepseek",
+      "xai",
+      "zai-api",
+      "zai-sub",
+    ]) {
       expect(defaultBaseUrl(key), key).toMatch(/^https:\/\//);
       expect(defaultApiKeyEnv(key), key).toMatch(/_API_KEY$/);
     }
   });
 
   test("no two providers share an endpoint, so one cannot be reached as another", () => {
-    const urls = ["anthropic", "openai", "openrouter", "deepseek", "xai", "zai"].map((k) =>
-      defaultBaseUrl(k),
-    );
+    const urls = [
+      "anthropic",
+      "openai",
+      "openrouter",
+      "deepseek",
+      "xai",
+      "zai-api",
+      "zai-sub",
+    ].map((k) => defaultBaseUrl(k));
     expect(new Set(urls).size).toBe(urls.length);
   });
 
@@ -64,7 +78,15 @@ describe("which providers need prior reasoning replayed back to them", () => {
   });
 
   test("and no others, so nobody else pays to resend thinking", () => {
-    for (const key of ["anthropic", "openai", "openrouter", "zai", "xai", "unknown"]) {
+    for (const key of [
+      "anthropic",
+      "openai",
+      "openrouter",
+      "zai-api",
+      "zai-sub",
+      "xai",
+      "unknown",
+    ]) {
       expect(requiresReasoningReplay(key), key).toBe(false);
     }
   });

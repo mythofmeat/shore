@@ -310,8 +310,7 @@
           "supports_images",
           "temperature",
           "top_p",
-          "zai_clear_thinking",
-          "zai_subscription"
+          "zai_clear_thinking"
         ],
         "data_shape": {
           "name": "string",
@@ -334,7 +333,6 @@
           "openrouter_provider": "null",
           "gemini_generation": "null",
           "zai_clear_thinking": "null",
-          "zai_subscription": "null",
           "replay_prior_thinking": "null",
           "max_tool_iterations": "number:4",
           "effective_sampler": "object",
@@ -431,7 +429,7 @@
           "saved_global": "null",
           "saved_character": "null",
           "scopes": "object",
-          "setting_schema": "array[16]"
+          "setting_schema": "array[15]"
         }
       }
     },

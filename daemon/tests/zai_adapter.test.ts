@@ -5,11 +5,13 @@ import {
   buildZaiMessages,
   buildZaiParams,
   resolveZaiBaseUrl,
-  ZAI_BASE_URL,
-  ZAI_CODING_BASE_URL,
   zaiGenerateResponse,
   zaiStreamEvents,
 } from "../src/llm/providers/zai.ts";
+import {
+  ZAI_API_BASE_URL,
+  ZAI_SUB_BASE_URL,
+} from "../src/llm/providers/zai_config.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 
 function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
@@ -17,7 +19,7 @@ function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
     sdk: "zai",
     model: "glm-5.1",
     api_key: "k",
-    provider_key: "zai",
+    provider_key: "zai-api",
     messages: [],
     max_tokens: 4096,
     replay_prior_thinking: "all",
@@ -48,33 +50,16 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 }
 
 describe("request construction", () => {
-  test("resolves default, subscription, and explicit base URLs", () => {
-    expect(resolveZaiBaseUrl(req())).toBe(ZAI_BASE_URL);
-    expect(resolveZaiBaseUrl(req({ provider_options: { zai_subscription: true } }))).toBe(
-      ZAI_CODING_BASE_URL,
-    );
+  test("resolves the provider-supplied endpoint and an explicit override", () => {
+    expect(resolveZaiBaseUrl(req())).toBe(ZAI_API_BASE_URL);
+    expect(resolveZaiBaseUrl(req({ base_url: ZAI_SUB_BASE_URL }))).toBe(ZAI_SUB_BASE_URL);
     expect(
       resolveZaiBaseUrl(
         req({
           base_url: "https://custom.example/v4/",
-          provider_options: { zai_subscription: true },
         }),
       ),
     ).toBe("https://custom.example/v4");
-  });
-
-  test("a subscription key reaches the coding endpoint even when discovery stamped the standard base URL", () => {
-    expect(
-      resolveZaiBaseUrl(
-        req({
-          base_url: "https://api.z.ai/api/paas/v4",
-          provider_options: { zai_subscription: true },
-        }),
-      ),
-    ).toBe(ZAI_CODING_BASE_URL);
-    expect(
-      resolveZaiBaseUrl(req({ base_url: "https://api.z.ai/api/paas/v4" })),
-    ).toBe(ZAI_BASE_URL);
   });
 
   test("builds Z.ai params with thinking controls, tools, sampling, and usage streaming", () => {
@@ -200,7 +185,7 @@ describe("request construction", () => {
         messages: [
           {
             role: "assistant",
-            provider_key: "zai",
+            provider_key: "zai-api",
             model: "glm-5.1",
             content: [
               { type: "thinking", thinking: "step 1\nstep 2", reasoning_content: "step 1\nstep 2" },

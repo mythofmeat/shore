@@ -617,7 +617,7 @@ mod tests {
     fn the_dashboard_consolidates_live_status() {
         let data = json!({
             "character": "qifei",
-            "active_model": "zai:glm-5.3",
+            "active_model": "zai-sub:glm-5.3",
             "turn_count": 5,
             "context_tokens": 23_400,
             "tokens": {"input": 288_106, "output": 71_483, "cache_read": 1_131_904, "cache_write": 0},
