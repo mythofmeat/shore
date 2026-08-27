@@ -24,7 +24,7 @@ Four things the mutants attack:
 A mutant is KILLED if `bun test tests/router.test.ts` fails with it
 applied.
 
-This is **29/30**, from 21/28 on the first pass.
+This is **31/32**, from 21/28 on the first pass.
 
 The first pass is the reason this file exists. Two of the seven survivors were
 not fixture holes but **bugs in the port**, and neither would have shown up as a
@@ -140,8 +140,10 @@ MUTANTS = [
 
     # ── the cancel frame ────────────────────────────────────────────────
     ("a cancel with nothing running still sends a frame",
-     "    if (state?.abort === undefined) return;",
-     "    if (state?.abort === undefined) {\n"
+     "    const abort = this.#sessions.get(sessionId);\n"
+     "    if (abort === undefined) return;",
+     "    const abort = this.#sessions.get(sessionId);\n"
+     "    if (abort === undefined) {\n"
      "      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));\n"
      "      return;\n"
      "    }"),
@@ -149,11 +151,25 @@ MUTANTS = [
      "    await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));",
      "    void rid;"),
     ("a cancel does not abort what it announces",
-     "    state.abort();\n    delete state.abort;",
-     "    delete state.abort;"),
+     "    abort();\n    this.#sessions.delete(sessionId);",
+     "    this.#sessions.delete(sessionId);"),
     ("a finished generation clears a later launch's abort handle",
-     "        if (this.#sessions.get(meta.session.sessionId)?.abort === abort) {",
-     "        if (this.#sessions.get(meta.session.sessionId)?.abort === state.abort) {"),
+     "        if (this.#sessions.get(meta.session.sessionId) === abort) {",
+     "        if (\n"
+     "          this.#sessions.get(meta.session.sessionId) ===\n"
+     "          this.#sessions.get(meta.session.sessionId)\n"
+     "        ) {"),
+    ("a completed generation retains its session state",
+     "        if (this.#sessions.get(meta.session.sessionId) === abort) {\n"
+     "          this.#sessions.delete(meta.session.sessionId);\n"
+     "        }",
+     "        void abort;"),
+    ("a cancelled generation retains its session state",
+     "    abort();\n"
+     "    this.#sessions.delete(sessionId);\n"
+     "    await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));",
+     "    abort();\n"
+     "    await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));"),
     ("the generation is never told it was cancelled",
      "      signal: controller.signal,",
      "      signal: new AbortController().signal,"),
@@ -169,15 +185,16 @@ MUTANTS = [
 
     # ── superseding ─────────────────────────────────────────────────────
     ("a second request does not abort the first",
-     "    if (state.abort !== undefined) {\n"
+     "    if (previousAbort !== undefined) {\n"
      '      this.#deps.log?.info?.("aborting previous generation (superseded by new request)");\n'
-     "      state.abort();\n"
+     "      previousAbort();\n"
      "    }",
-     "    void state;"),
+     "    void previousAbort;"),
     ("superseding also sends a cancelled stream_end",
-     "    const abort = () => controller.abort();\n    state.abort = abort;",
      "    const abort = () => controller.abort();\n"
-     "    state.abort = abort;\n"
+     "    this.#sessions.set(meta.session.sessionId, abort);",
+     "    const abort = () => controller.abort();\n"
+     "    this.#sessions.set(meta.session.sessionId, abort);\n"
      "    void this.#deps.router.sendToSession(\n"
      "      meta.session.sessionId,\n"
      "      cancelledStreamEnd(rid),\n"

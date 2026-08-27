@@ -44,21 +44,7 @@ function harness(
   const router = new SessionRouter();
   const frames = new Map<number, ServerMessage[]>();
   for (let id = 1; id <= sessions; id += 1) {
-    const received: ServerMessage[] = [];
-    frames.set(id, received);
-    router.registerSession(
-      {
-        id,
-        clientType: "test-client",
-        clientName: `test-${id}`,
-        capabilities: ["streaming"],
-        character: null,
-      },
-      (msg) => {
-        received.push(msg);
-        return Promise.resolve();
-      },
-    );
+    registerTestSession(router, frames, id);
   }
 
   const leases = new StreamLeases();
@@ -84,6 +70,28 @@ function harness(
   });
 
   return { handler, router, leases, frames, started, notifications, errors };
+}
+
+function registerTestSession(
+  router: SessionRouter,
+  frames: Map<number, ServerMessage[]>,
+  id: number,
+): void {
+  const received: ServerMessage[] = [];
+  frames.set(id, received);
+  router.registerSession(
+    {
+      id,
+      clientType: "test-client",
+      clientName: `test-${id}`,
+      capabilities: ["streaming"],
+      character: null,
+    },
+    (msg) => {
+      received.push(msg);
+      return Promise.resolve();
+    },
+  );
 }
 
 function meta(
@@ -374,6 +382,106 @@ describe("what a generation is handed", () => {
       meta: meta("Alice", 1, "r3", "cancel"),
     });
     expect(second?.signal.aborted).toBe(true);
+  });
+});
+
+describe("session state lifecycle", () => {
+  test("a completed generation releases its session state", async () => {
+    let finish: (() => void) | undefined;
+    const h = harness(
+      ["Alice"],
+      1,
+      () => new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+
+    await h.handler.handleRouted({
+      kind: "engine",
+      msg: message("r1", "hi", false),
+      meta: meta("Alice", 1, "r1", "message"),
+    });
+    expect(h.handler.sessionStateCount).toBe(1);
+
+    finish?.();
+    await h.handler.drain();
+    expect(h.handler.sessionStateCount).toBe(0);
+  });
+
+  test("cancelling releases session state while the generation settles", async () => {
+    let finish: (() => void) | undefined;
+    const h = harness(
+      ["Alice"],
+      1,
+      () => new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await h.handler.handleRouted({
+      kind: "engine",
+      msg: message("r1", "hi", false),
+      meta: meta("Alice", 1, "r1", "message"),
+    });
+    expect(h.handler.sessionStateCount).toBe(1);
+
+    await h.handler.handleRouted({
+      kind: "engine",
+      msg: { type: "cancel" },
+      meta: meta("Alice", 1, "r2", "cancel"),
+    });
+    expect(h.handler.sessionStateCount).toBe(0);
+    finish?.();
+    await h.handler.drain();
+  });
+
+  test("an older generation settling cannot erase its replacement", async () => {
+    const finishes: Array<() => void> = [];
+    const h = harness(
+      ["Alice"],
+      1,
+      () => new Promise<void>((resolve) => {
+        finishes.push(resolve);
+      }),
+    );
+
+    await h.handler.handleRouted({
+      kind: "engine",
+      msg: message("r1", "first", false),
+      meta: meta("Alice", 1, "r1", "message"),
+    });
+    await h.handler.handleRouted({
+      kind: "engine",
+      msg: message("r2", "second", false),
+      meta: meta("Alice", 1, "r2", "message"),
+    });
+
+    finishes[0]?.();
+    await Promise.resolve();
+    expect(h.handler.sessionStateCount).toBe(1);
+
+    finishes[1]?.();
+    await h.handler.drain();
+    expect(h.handler.sessionStateCount).toBe(0);
+  });
+
+  test("repeated connect, generate, and disconnect cycles stay bounded", async () => {
+    const h = harness(["Alice"], 0);
+
+    for (let id = 1; id <= 100; id += 1) {
+      registerTestSession(h.router, h.frames, id);
+      await h.handler.handleRouted({
+        kind: "engine",
+        msg: message(`r${id}`, "hi", false),
+        meta: meta("Alice", id, `r${id}`, "message"),
+      });
+      expect(h.handler.sessionStateCount).toBe(1);
+
+      const { allGone } = h.router.unregisterSession(id);
+      expect(allGone).toBe(true);
+      await h.handler.handleRouted({ kind: "all_clients_disconnected" });
+      await h.handler.drain();
+      expect(h.handler.sessionStateCount).toBe(0);
+    }
   });
 });
 
