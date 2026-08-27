@@ -27,6 +27,7 @@ import { systemToText, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { parseToolArgs } from "../tool_args.ts";
+import { appendReasoningDetails } from "../reasoning_details.ts";
 
 export class OpenRouterProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -116,7 +117,9 @@ export async function* openRouterStreamEvents(
         sawThinking = true;
         yield { type: "thinking", text: delta.reasoning };
       }
-      if (Array.isArray(delta?.reasoningDetails)) reasoningDetails.push(...delta.reasoningDetails);
+      if (Array.isArray(delta?.reasoningDetails)) {
+        appendReasoningDetails(reasoningDetails, delta.reasoningDetails);
+      }
 
       if (typeof delta?.content === "string" && delta.content.length > 0) {
         yield* flushSignature();

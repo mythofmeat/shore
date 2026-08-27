@@ -60,6 +60,33 @@ describe("openRouterStreamEvents", () => {
     expect(types(out)).toEqual(["start", "thinking", "reasoning_details", "tool_use", "done"]);
   });
 
+  test("reasoning detail deltas become one replayable logical block", async () => {
+    const details = [
+      { type: "reasoning.text", text: "ok", format: "unknown", index: 0 },
+      { type: "reasoning.text", text: "\n\n\n", format: "unknown", index: 0 },
+      { type: "reasoning.text", text: " i", format: "unknown", index: 0 },
+    ];
+    const chunks = [
+      { choices: [{ index: 0, delta: { reasoning: "ok", reasoningDetails: [details[0]] }, finishReason: null }] },
+      { choices: [{ index: 0, delta: { reasoning: "\n\n\n", reasoningDetails: [details[1]] }, finishReason: null }] },
+      { choices: [{ index: 0, delta: { reasoning: " i", reasoningDetails: [details[2]] }, finishReason: null }] },
+      { choices: [{ index: 0, delta: { content: "answer" }, finishReason: "stop" }] },
+    ];
+
+    const out = await collect(openRouterStreamEvents("moonshotai/kimi-k3", gen(chunks), fakeClock()));
+    const carrier = out.find((event) => event.type === "reasoning_details");
+
+    expect(carrier).toEqual({
+      type: "reasoning_details",
+      details: [{ type: "reasoning.text", text: "ok\n\n\n i", format: "unknown", index: 0 }],
+    });
+    expect(out.filter((event) => event.type === "thinking")).toEqual([
+      { type: "thinking", text: "ok" },
+      { type: "thinking", text: "\n\n\n" },
+      { type: "thinking", text: " i" },
+    ]);
+  });
+
   test("no thinking → no orphan carrier", async () => {
     const chunks = [{ choices: [{ index: 0, delta: { content: "hi" }, finishReason: "stop" }] }];
     const out = await collect(openRouterStreamEvents("openai/gpt-5.1", gen(chunks), fakeClock()));
