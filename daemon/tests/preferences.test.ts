@@ -393,35 +393,32 @@ describe("ProviderRegistry.fromSection", () => {
     expect(entry.discovery.enabled).toBe(false);
   });
 
-  test("zai-api derives a subscription provider with shared configuration", () => {
+  test("the Coding Plan endpoint is configured on its own and bills as a subscription", () => {
     const registry = ProviderRegistry.fromSection(
       Bun.TOML.parse(`
-[zai-api]
+[zai-sub]
 api_key_env = "ZAI_API_KEY"
 
-[zai-api.discovery]
+[zai-sub.discovery]
 enabled = true
-ignore = ["glm-old"]
+ignore = ["glm-4.5"]
 `) as never,
     );
 
-    const api = registry.get("zai-api") as ProviderEntry;
+    expect(registry.entries().map(([name]) => name)).toEqual(["zai-sub"]);
     const sub = registry.get("zai-sub") as ProviderEntry;
-    expect(registry.entries().map(([name]) => name)).toEqual(["zai-api", "zai-sub"]);
-    expect(sub.catalogSource).toBe("zai-api");
     expect(sub.subscription).toBe(true);
-    expect(sub.baseUrl).toBe(ZAI_SUB_BASE_URL);
-    expect(sub.keys).toEqual(api.keys);
-    expect(sub.keys).not.toBe(api.keys);
-    expect(sub.discovery).toEqual(api.discovery);
-    expect(sub.discovery).not.toBe(api.discovery);
+    expect(sub.discovery).toEqual({ enabled: true, ignore: ["glm-4.5"] });
+    expect(sub.keys).toEqual([
+      { name: "default", env: "ZAI_API_KEY", enabled: true, warnOnFallback: false },
+    ]);
   });
 
-  test("the derived and removed Z.ai provider names cannot be configured", () => {
+  test("the removed Z.ai provider name names both replacements", () => {
     const legacy = () => ProviderRegistry.fromSection({ zai: {} });
-    expect(catchError(ProviderRegistryError, legacy).message).toContain("zai-api");
-    const derived = () => ProviderRegistry.fromSection({ "zai-sub": {} });
-    expect(catchError(ProviderRegistryError, derived).message).toContain("derived");
+    const message = catchError(ProviderRegistryError, legacy).message;
+    expect(message).toContain("zai-api");
+    expect(message).toContain("zai-sub");
   });
 
   test("the compact key form becomes a synthetic `default` key", () => {
@@ -754,39 +751,43 @@ describe("findEffectiveModel", () => {
     });
   }
 
-  test("zai-sub resolves the zai-api catalog through the coding endpoint", () => {
+  test("each Z.ai endpoint resolves its own catalog", () => {
     const root = tempRoot();
     const cacheDir = join(root, "cache");
-    const providerDir = join(cacheDir, "providers", "zai-api");
-    mkdirSync(providerDir, { recursive: true });
-    writeFileSync(
-      join(providerDir, "models.json"),
-      JSON.stringify({
-        version: 2,
-        provider_key: "zai-api",
-        fetched_at: "2026-08-27T00:00:00Z",
-        base_url: ZAI_API_BASE_URL,
-        models: [
-          {
-            provider_key: "zai-api",
-            model_id: "glm-5.3-flash",
-            sdk: "openai",
-            base_url: ZAI_API_BASE_URL,
-            discovered_at: "2026-08-27T00:00:00Z",
-          },
-        ],
-      }),
-    );
-    const config = buildConfig(
-      "",
-      "[zai-api]\napi_key_env = \"ZAI_API_KEY\"\n[zai-api.discovery]\nenabled = true\n",
-      root,
-    );
+    let providers = "";
+    for (const [provider, baseUrl] of [
+      ["zai-api", ZAI_API_BASE_URL],
+      ["zai-sub", ZAI_SUB_BASE_URL],
+    ] as const) {
+      const providerDir = join(cacheDir, "providers", provider);
+      mkdirSync(providerDir, { recursive: true });
+      writeFileSync(
+        join(providerDir, "models.json"),
+        JSON.stringify({
+          version: 2,
+          provider_key: provider,
+          fetched_at: "2026-08-27T00:00:00Z",
+          base_url: baseUrl,
+          models: [
+            {
+              provider_key: provider,
+              model_id: "glm-5.3-flash",
+              sdk: "openai",
+              base_url: baseUrl,
+              discovered_at: "2026-08-27T00:00:00Z",
+            },
+          ],
+        }),
+      );
+      providers += `[${provider}]\napi_key_env = "ZAI_API_KEY"\n[${provider}.discovery]\nenabled = true\n`;
+    }
+    const config = buildConfig("", providers, root);
 
     const api = findEffectiveModel(config, cacheDir, "zai-api:glm-5.3-flash", false);
     const sub = findEffectiveModel(config, cacheDir, "zai-sub:glm-5.3-flash", false);
     expect(api.providerKey).toBe("zai-api");
     expect(api.baseUrl).toBe(ZAI_API_BASE_URL);
+    expect(api.sdk).toBe("zai");
     expect(sub.providerKey).toBe("zai-sub");
     expect(sub.qualifiedName).toBe("zai-sub:glm-5.3-flash");
     expect(sub.sdk).toBe("zai");

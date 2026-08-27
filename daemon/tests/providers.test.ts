@@ -363,23 +363,23 @@ describe("listProviders", () => {
     );
   });
 
-  test("zai-sub reports the zai-api catalog and its own endpoint", async () => {
+  test("zai-sub stands alone on the Coding Plan endpoint", async () => {
     const world = await build(
-      `[zai-api]\napi_key_env = "${KEY_SET}"\n[zai-api.discovery]\nenabled = true\n`,
+      `[zai-sub]\napi_key_env = "${KEY_SET}"\n[zai-sub.discovery]\nenabled = true\n`,
       "",
-      [["zai-api", cacheJson("zai-api", [["glm-5.3-flash", "z-ai"]])]],
+      [["zai-sub", cacheJson("zai-sub", [["glm-5.3-flash", "z-ai"]])]],
     );
     const listed = listProviders(world.ctx) as { providers: Record<string, unknown>[] };
+    expect(listed.providers.map((provider) => provider["name"])).toEqual(["zai-sub"]);
     const sub = required(listed.providers.find((provider) => provider["name"] === "zai-sub"));
     expect(sub["base_url"]).toBe(ZAI_SUB_BASE_URL);
-    expect(sub["catalog_source"]).toBe("zai-api");
+    expect(sub["sdk"]).toBe("zai");
     expect((sub["cache"] as Record<string, unknown>)["models"]).toBe(1);
 
     const models = listProviderModels(world.ctx, { provider: "zai-sub" }) as Record<
       string,
       unknown
     >;
-    expect(models["catalog_source"]).toBe("zai-api");
     expect((models["discovered"] as unknown[])).toHaveLength(1);
   });
 });
@@ -445,17 +445,6 @@ describe("refreshProviderModels guards", () => {
       );
     });
   }
-
-  test("a mirrored provider directs refreshes to its catalog source", async () => {
-    const world = await build(
-      `[zai-api]\napi_key_env = "${KEY_SET}"\n[zai-api.discovery]\nenabled = true\n`,
-      "",
-      [],
-    );
-    expect(
-      refreshProviderModels(world.ctx, { provider: "zai-sub" }),
-    ).rejects.toThrow("mirrors the model catalog from \"zai-api\"");
-  });
 });
 
 describe("refreshProviderModels over the wire", () => {

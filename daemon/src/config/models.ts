@@ -21,8 +21,7 @@ import type { ThinkingReplay } from "../llm/types.ts";
 import type { ResolvedModel as RequestResolvedModel } from "../llm/request.ts";
 import {
   isZaiProvider,
-  ZAI_API_BASE_URL,
-  ZAI_SUB_BASE_URL,
+  zaiBaseUrl,
   ZAI_API_PROVIDER,
   ZAI_SUB_PROVIDER,
   ZAI_SUBSCRIPTION_SETTING_MIGRATION,
@@ -651,22 +650,13 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
         },
       };
     case ZAI_API_PROVIDER:
-      return {
-        fields: {
-          ...base,
-          sdk: "zai",
-          apiKeyEnv: "ZAI_API_KEY",
-          baseUrl: ZAI_API_BASE_URL,
-          zaiClearThinking: false,
-        },
-      };
     case ZAI_SUB_PROVIDER:
       return {
         fields: {
           ...base,
           sdk: "zai",
           apiKeyEnv: "ZAI_API_KEY",
-          baseUrl: ZAI_SUB_BASE_URL,
+          baseUrl: zaiBaseUrl(providerKey),
           zaiClearThinking: false,
         },
       };

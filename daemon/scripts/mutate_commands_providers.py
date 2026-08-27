@@ -253,7 +253,7 @@ MUTANTS = [
      "    else hidden.push(discoveredToJson(m, learned));",
      "    if (visible || includeHidden) discovered.push(discoveredToJson(m, learned));"),
     ("models: learned image support is not carried onto the rows",
-     "  const learned = readLearnedImageSupport(ctx.config.dirs.cache, catalogSource);",
+     "  const learned = readLearnedImageSupport(ctx.config.dirs.cache, provider);",
      "  const learned = undefined;"),
     ("models: the ignore rules are not applied",
      "    const visible = entry === undefined || isVisible(entry.discovery, m.model_id);",

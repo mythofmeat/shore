@@ -47,7 +47,6 @@ export async function refreshPass(options: AutoDiscoveryOptions): Promise<void> 
 
   for (const [name, entry] of config.providers.entries()) {
     if (!entry.enabled || !entry.discovery.enabled) continue;
-    if (entry.catalogSource !== undefined) continue;
 
     const cache = await readCache(cachePath(cacheDir, name));
     if (cache !== undefined && !isStale(cache)) continue;

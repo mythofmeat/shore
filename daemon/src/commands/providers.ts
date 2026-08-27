@@ -14,12 +14,7 @@ import { readLearnedImageSupport } from "../llm/image_support.ts";
 import { toRfc3339 } from "../ledger/zoned.ts";
 import { defaultSdk } from "../config/models.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import {
-  enabledKeys,
-  isVisible,
-  providerCatalogSource,
-  type ProviderEntry,
-} from "../config/providers.ts";
+import { enabledKeys, isVisible, type ProviderEntry } from "../config/providers.ts";
 import { internalError, invalidRequest, notFound, providerError } from "./errors.ts";
 
 export type Args = Record<string, unknown>;
@@ -43,8 +38,7 @@ const envSet = (name: string): boolean => (process.env[name]?.trim() ?? "") !== 
 
 export function listProviders(ctx: ProvidersContext): unknown {
   const providers = ctx.config.providers.entries().map(([name, entry]) => {
-    const catalogSource = providerCatalogSource(name, entry);
-    const cache = readCacheSync(cachePath(ctx.config.dirs.cache, catalogSource));
+    const cache = readCacheSync(cachePath(ctx.config.dirs.cache, name));
     const hidden =
       cache === undefined
         ? 0
@@ -56,7 +50,6 @@ export function listProviders(ctx: ProvidersContext): unknown {
       sdk: entry.sdk ?? defaultSdk(name),
       base_url: entry.baseUrl ?? defaultBaseUrl(name) ?? null,
       discovery_enabled: entry.discovery.enabled,
-      ...(catalogSource === name ? {} : { catalog_source: catalogSource }),
       keys: entry.keys.map((k) => ({
         name: k.name,
         enabled: k.enabled,
@@ -95,12 +88,6 @@ export async function refreshOne(
   if (!entry.enabled) throw invalidRequest(`provider ${JSON.stringify(provider)} is disabled`);
   if (!entry.discovery.enabled) {
     throw invalidRequest(`provider ${JSON.stringify(provider)} has discovery disabled`);
-  }
-  if (entry.catalogSource !== undefined) {
-    throw invalidRequest(
-      `provider ${JSON.stringify(provider)} mirrors the model catalog from ` +
-        `${JSON.stringify(entry.catalogSource)}; refresh that provider instead`,
-    );
   }
 
   const baseUrl = entry.baseUrl ?? defaultBaseUrl(provider);
@@ -176,10 +163,6 @@ export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<u
       skipped.push({ provider: name, reason: "discovery disabled" });
       continue;
     }
-    if (entry.catalogSource !== undefined) {
-      skipped.push({ provider: name, reason: `catalog mirrors ${entry.catalogSource}` });
-      continue;
-    }
 
     try {
       const outcome = await refreshOne(ctx.config, ctx.config.dirs.cache, name, ctx.fetchImpl);
@@ -227,9 +210,8 @@ export function listProviderModels(ctx: ProvidersContext, args: Args): unknown {
     throw notFound(`provider ${JSON.stringify(provider)} is not configured`);
   }
 
-  const catalogSource = entry === undefined ? provider : providerCatalogSource(provider, entry);
-  const cache = readCacheSync(cachePath(ctx.config.dirs.cache, catalogSource));
-  const learned = readLearnedImageSupport(ctx.config.dirs.cache, catalogSource);
+  const cache = readCacheSync(cachePath(ctx.config.dirs.cache, provider));
+  const learned = readLearnedImageSupport(ctx.config.dirs.cache, provider);
   const discovered: unknown[] = [];
   const hidden: unknown[] = [];
   for (const m of cache?.models ?? []) {
@@ -251,7 +233,6 @@ export function listProviderModels(ctx: ProvidersContext, args: Args): unknown {
 
   return {
     provider,
-    ...(catalogSource === provider ? {} : { catalog_source: catalogSource }),
     discovered,
     hidden,
     static: staticModels,

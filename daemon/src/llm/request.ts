@@ -13,12 +13,7 @@ import type {
 } from "./types";
 import type { ContentBlock } from "../engine/types";
 import { rustTrim } from "../memory/lines";
-import {
-  ZAI_API_BASE_URL,
-  ZAI_API_PROVIDER,
-  ZAI_SUB_BASE_URL,
-  ZAI_SUB_PROVIDER,
-} from "./providers/zai_config";
+import { zaiBaseUrl, ZAI_API_PROVIDER, ZAI_SUB_PROVIDER } from "./providers/zai_config";
 
 const DEFAULT_MAX_TOKENS = 32768;
 
@@ -80,9 +75,8 @@ export function defaultBaseUrl(providerKey: string): string | undefined {
     case "xai":
       return "https://api.x.ai/v1";
     case ZAI_API_PROVIDER:
-      return ZAI_API_BASE_URL;
     case ZAI_SUB_PROVIDER:
-      return ZAI_SUB_BASE_URL;
+      return zaiBaseUrl(providerKey);
     case "opencode-go":
       return "https://opencode.ai/zen/go/v1";
     default:
