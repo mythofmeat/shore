@@ -8,7 +8,11 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { toolLimitsFrom } from "../tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../tools/execute.ts";
 import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA, templateVars } from "../tools/registry.ts";
-import { schemasFrom } from "../tools/validate.ts";
+import {
+  CompiledToolSchema,
+  compileToolSchema,
+  type ToolSchemas,
+} from "../tools/validate.ts";
 import { renderTemplate } from "../engine/prompt.ts";
 import { invalidRequest } from "./errors.ts";
 import type { Args } from "./navigation.ts";
@@ -43,7 +47,7 @@ export type ToolKind = "builtin" | "subagent" | "mcp";
 
 export interface ResolvedTool {
   kind: ToolKind;
-  schema: Record<string, unknown> | undefined;
+  schema: CompiledToolSchema | undefined;
   enabled: boolean;
 }
 
@@ -100,7 +104,7 @@ export function resolveTool(
     }
     return {
       kind: "subagent",
-      schema: SUBAGENT_INPUT_SCHEMA,
+      schema: compileToolSchema(name, SUBAGENT_INPUT_SCHEMA),
       enabled: subagentEnabled(cfg, agent),
     };
   }
@@ -110,21 +114,30 @@ export function resolveTool(
     if (def === undefined) {
       throw invalidRequest(unknownMcpTool(name, mcpTools));
     }
-    return { kind: "mcp", schema: def.input_schema, enabled: toolEnabled(cfg, name) };
+    return {
+      kind: "mcp",
+      schema: compileToolSchema(name, def.input_schema),
+      enabled: toolEnabled(cfg, name),
+    };
   }
 
   const def = ALL_TOOLS.find((t) => t.name === name);
   if (def === undefined) {
     throw invalidRequest(unknownBuiltin(name));
   }
-  return { kind: "builtin", schema: def.parameters, enabled: toolEnabled(cfg, name) };
+  return {
+    kind: "builtin",
+    schema: compileToolSchema(name, def.parameters),
+    enabled: toolEnabled(cfg, name),
+  };
 }
 
 export function coercePairs(
   pairs: Record<string, string>,
-  schema: Record<string, unknown> | undefined,
+  schema: CompiledToolSchema | Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  const properties = isPlainObject(schema?.["properties"]) ? schema["properties"] : {};
+  const document = schema instanceof CompiledToolSchema ? schema.schema : schema;
+  const properties = isPlainObject(document?.["properties"]) ? document["properties"] : {};
   const out: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(pairs)) {
@@ -188,7 +201,7 @@ export function describeTool(character: string, ctx: RunToolContext, args: Args)
       "subagent",
       subagentEnabled(cfg, agent),
       renderTemplate(sub.description, vars),
-      SUBAGENT_INPUT_SCHEMA,
+      compileToolSchema(tool, SUBAGENT_INPUT_SCHEMA).schema,
     );
   }
 
@@ -196,7 +209,12 @@ export function describeTool(character: string, ctx: RunToolContext, args: Args)
     const mcpTools = ctx.mcpTools();
     const def = mcpTools.find((t) => t.full_name === tool);
     if (def === undefined) throw invalidRequest(unknownMcpTool(tool, mcpTools));
-    return seen("mcp", toolEnabled(cfg, tool), def.description ?? "", def.input_schema);
+    return seen(
+      "mcp",
+      toolEnabled(cfg, tool),
+      def.description ?? "",
+      compileToolSchema(tool, def.input_schema).schema,
+    );
   }
 
   const def = ALL_TOOLS.find((t) => t.name === tool);
@@ -205,7 +223,7 @@ export function describeTool(character: string, ctx: RunToolContext, args: Args)
     "builtin",
     toolEnabled(cfg, tool),
     renderTemplate(def.description, vars),
-    def.parameters,
+    compileToolSchema(tool, def.parameters).schema,
   );
 }
 
@@ -247,11 +265,9 @@ export async function runTool(
     limits: toolLimitsFrom(ctx.config.app.tools, ctx.config.app.subagents),
     now,
     newMessageId,
-    schemas: schemasFrom(
-      resolved.schema === undefined
-        ? []
-        : [{ name: request.tool, input_schema: resolved.schema }],
-    ),
+    ...(resolved.schema === undefined
+      ? {}
+      : { schemas: new Map([[request.tool, resolved.schema]]) satisfies ToolSchemas }),
   };
 
   const run = await runToolUse({ id: toolUseId, name: request.tool, input }, exec, []);

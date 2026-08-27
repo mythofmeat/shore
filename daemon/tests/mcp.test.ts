@@ -228,6 +228,30 @@ describe("toToolDef", () => {
   });
 });
 
+describe("MCP schema registration", () => {
+  test("an invalid tool is omitted without hiding valid tools from the same server", () => {
+    const valid = toolDef("mixed", "valid");
+    const invalid = {
+      ...toolDef("mixed", "invalid"),
+      input_schema: { type: "object", unsupportedFutureKeyword: true },
+    };
+
+    const mixed = McpRegistry.fromTools([valid, invalid]);
+    expect(mixed.allTools().map((tool) => tool.full_name)).toEqual([valid.full_name]);
+  });
+
+  test("a duplicate tool cannot replace the first registered contract", () => {
+    const first = toolDef("duplicate", "query");
+    const duplicate = {
+      ...first,
+      input_schema: { type: "object", required: ["different"] },
+    };
+    const tools = McpRegistry.fromTools([first, duplicate]).allTools();
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.input_schema).toBe(first.input_schema);
+  });
+});
+
 describe("call routing", () => {
   test("an unknown name is reported, not dispatched", async () => {
     expect(registry.call("mcp__nope__x", {})).rejects.toThrow("not yet implemented");
