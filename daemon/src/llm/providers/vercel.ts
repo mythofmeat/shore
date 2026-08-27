@@ -119,6 +119,7 @@ export function buildCall(req: SidecarRequest, signal?: AbortSignal): VercelCall
     model: buildModel(req),
     messages: buildMessages(req),
     maxOutputTokens: req.max_tokens,
+    maxRetries: 0,
     allowSystemInMessages: true,
   };
   const instructions = systemToText(req.system);

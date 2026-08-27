@@ -141,6 +141,19 @@ describe("SDK errors are read for their status code", () => {
     });
   });
 
+  test("Moonshot's permanent quota 429 fails without retrying", () => {
+    const body = JSON.stringify({
+      error: {
+        message: "Your account is suspended due to insufficient balance",
+        type: "exceeded_current_quota_error",
+      },
+    });
+    const error = new ApiCallError(429, body);
+
+    expect(classifyCredentialFailure("moonshotai", error)).toBe("quota_exhausted");
+    expect(shouldRetryError(error, 0, { max_retries: 2 })).toEqual({ decision: "fail" });
+  });
+
   test("a 401 still rotates the key rather than retrying it", () => {
     const kind = classifyCredentialFailure("moonshotai", new ApiCallError(401, "bad key"));
     expect(kind).toBe("invalid_key");

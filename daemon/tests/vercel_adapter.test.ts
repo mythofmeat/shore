@@ -74,6 +74,13 @@ describe("buildProviderOptions", () => {
   });
 });
 
+describe("buildCall retry ownership", () => {
+  test("leaves retries to shore's body-aware policy", () => {
+    expect(buildCall(req("moonshot")).maxRetries).toBe(0);
+    expect(buildCall(req("deepseek")).maxRetries).toBe(0);
+  });
+});
+
 describe("turnToVercel", () => {
   const names = new Map<string, string>([["tc_1", "search"]]);
   const conv = (t: TurnMessage) => turnToVercel(t, names);
