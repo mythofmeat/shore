@@ -137,120 +137,6 @@
       "output": "e\u0301\u2026"
     }
   ],
-  "shell_escape": [
-    {
-      "input": "",
-      "output": ""
-    },
-    {
-      "input": "plain text",
-      "output": "plain text"
-    },
-    {
-      "input": "Alice's message",
-      "output": "Alice'\\''s message"
-    },
-    {
-      "input": "it's Bob's turn, isn't it",
-      "output": "it'\\''s Bob'\\''s turn, isn'\\''t it"
-    },
-    {
-      "input": "`whoami`",
-      "output": "whoami"
-    },
-    {
-      "input": "``",
-      "output": ""
-    },
-    {
-      "input": "$(whoami)",
-      "output": "(whoami)"
-    },
-    {
-      "input": "$(whoami) and $(id)",
-      "output": "(whoami) and (id)"
-    },
-    {
-      "input": "$ ( not a substitution",
-      "output": "$ ( not a substitution"
-    },
-    {
-      "input": "${HOME}",
-      "output": "${HOME}"
-    },
-    {
-      "input": "$(echo `id`) 'quoted'",
-      "output": "(echo id) '\\''quoted'\\''"
-    },
-    {
-      "input": "; rm -rf / & echo done | cat > out",
-      "output": "; rm -rf / & echo done | cat > out"
-    },
-    {
-      "input": "line one\nline two",
-      "output": "line one\nline two"
-    },
-    {
-      "input": "back\\slash",
-      "output": "back\\slash"
-    },
-    {
-      "input": "$`(",
-      "output": "("
-    },
-    {
-      "input": "'$('",
-      "output": "'\\''('\\''"
-    },
-    {
-      "input": "\ud83c\udfb5 unicode \ud83c\udfb5",
-      "output": "\ud83c\udfb5 unicode \ud83c\udfb5"
-    }
-  ],
-  "command_template": [
-    {
-      "template": "echo '{title}: {body}'",
-      "title": "Shore \u2014 Test",
-      "body": "hello world",
-      "rendered": "echo 'Shore \u2014 Test: hello world'"
-    },
-    {
-      "template": "echo '{title}'",
-      "title": "Alice's",
-      "body": "unused",
-      "rendered": "echo 'Alice'\\''s'"
-    },
-    {
-      "template": "notify {body}",
-      "title": "t",
-      "body": "$(id)",
-      "rendered": "notify (id)"
-    },
-    {
-      "template": "echo hi",
-      "title": "t",
-      "body": "b",
-      "rendered": "echo hi"
-    },
-    {
-      "template": "echo '{body}' '{body}' '{title}'",
-      "title": "T",
-      "body": "B",
-      "rendered": "echo 'B' 'B' 'T'"
-    },
-    {
-      "template": "echo '{title}'",
-      "title": "{body}",
-      "body": "SUBSTITUTED",
-      "rendered": "echo 'SUBSTITUTED'"
-    },
-    {
-      "template": "echo '{body}'",
-      "title": "T",
-      "body": "{title}",
-      "rendered": "echo '{title}'"
-    }
-  ],
   "gating": [
     {
       "name": "defaults",
@@ -763,18 +649,25 @@
       "err": "invalid type: integer `5`, expected a string"
     },
     {
-      "name": "command_template",
-      "toml": "[command]\ntemplate = \"echo {body}\"\n",
+      "name": "command_shell_template_string",
+      "toml": "command = \"echo {body}\"\n",
+      "err": "`notifications.command` is an argv list — `command = [\"notifier\", \"--title\", \"{title}\", \"--body\", \"{body}\"]`; notification content never reaches a shell"
+    },
+    {
+      "name": "command_argv",
+      "toml": "command = [\"notifier\", \"--body\", \"{body}\"]\n",
       "ok": {
-        "command": {
-          "template": "echo {body}"
-        }
+        "command": [
+          "notifier",
+          "--body",
+          "{body}"
+        ]
       }
     },
     {
-      "name": "command_unknown",
-      "toml": "[command]\nshell = \"zsh\"\n",
-      "err": "unknown field `shell`, expected `template`"
+      "name": "command_shell_template_table",
+      "toml": "[command]\ntemplate = \"echo {body}\"\n",
+      "err": "`notifications.command` is an argv list — `command = [\"notifier\", \"--title\", \"{title}\", \"--body\", \"{body}\"]`; notification content never reaches a shell"
     },
     {
       "name": "threshold_secs",

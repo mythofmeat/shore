@@ -113,11 +113,12 @@ MUTANTS = [
      "          throw e;"),
     ("tools: a generated image is never seen, because the value is not returned",
      P,
-     "            output: typeof value === \"string\" ? value : (JSON.stringify(value) ?? \"\"),\n"
-     "            isError: false,\n"
-     "            value,",
-     "            output: typeof value === \"string\" ? value : (JSON.stringify(value) ?? \"\"),\n"
-     "            isError: false,"),
+     "          return { output: renderToolValue(value), isError: false, value };",
+     "          return { output: renderToolValue(value), isError: false };"),
+    ("tools: a tool's media payload reaches the tick as its own wrapper",
+     P,
+     "          return { output: renderToolValue(value), isError: false, value };",
+     '          return { output: JSON.stringify(value) ?? "", isError: false, value };'),
 
     # --- the transcript -------------------------------------------------------
     ("transcript: redacted thinking vanishes instead of leaving a placeholder",

@@ -18,6 +18,8 @@ export class McpHolder {
   }
 
   callView(): Pick<McpRegistry, "call"> {
-    return { call: (fullName, args) => this.#registry.call(fullName, args) };
+    return {
+      call: (fullName, args, signal) => this.#registry.call(fullName, args, signal),
+    };
   }
 }

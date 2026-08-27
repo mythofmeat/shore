@@ -12,8 +12,8 @@ import {
 } from "../src/tools/mcp_registry.ts";
 import {
   childEnvironment,
-  flattenResult,
   flattenText,
+  interpretResult,
   type McpClient,
 } from "../src/mcp/client.ts";
 
@@ -39,6 +39,7 @@ function toolDef(server: string, tool: string): McpToolDef {
     input_schema: { type: "object" },
     server,
     tool,
+    repeatable: false,
   };
 }
 
@@ -314,45 +315,152 @@ describe("childEnvironment", () => {
   });
 });
 
-describe("result flattening", () => {
-  test("structured content wins when present", () => {
-    expect(
-      flattenResult({ structuredContent: { ok: true }, content: [{ type: "text", text: "x" }] }),
-    ).toEqual({ ok: true });
+describe("result interpretation", () => {
+  test("structured content wins, and its mirrored text is not repeated", () => {
+    const mirrored = interpretResult({
+      structuredContent: { ok: true },
+      content: [{ type: "text", text: JSON.stringify({ ok: true }) }],
+    });
+    expect(mirrored.value).toEqual({ ok: true });
+    expect(mirrored.extra).toEqual([]);
+    expect(mirrored.media).toEqual([]);
+  });
+
+  test("structured content keeps text that says something different", () => {
+    const both = interpretResult({
+      structuredContent: { ok: true },
+      content: [{ type: "text", text: "the deploy finished" }],
+    });
+    expect(both.value).toEqual({ ok: true });
+    expect(both.extra).toEqual(["the deploy finished"]);
+  });
+
+  test("a mirror with reordered keys is still recognised as a mirror", () => {
+    const reordered = interpretResult({
+      structuredContent: { a: 1, b: 2 },
+      content: [{ type: "text", text: '{"b":2,"a":1}' }],
+    });
+    expect(reordered.extra).toEqual([]);
   });
 
   test("text blocks are joined with newlines", () => {
     expect(
-      flattenResult({
+      interpretResult({
         content: [
           { type: "text", text: "a" },
           { type: "text", text: "b" },
         ],
-      }),
+      }).value,
     ).toBe("a\nb");
   });
 
-  test("non-text blocks are dropped", () => {
-    expect(
-      flattenText({
-        content: [
-          { type: "image", data: "…", mimeType: "image/png" },
-          { type: "text", text: "caption" },
-        ],
-      }),
-    ).toBe("caption");
-    expect(flattenText({ content: [{ type: "image", data: "…" }] })).toBe("");
+  test("an image-only result is media, never an empty success", () => {
+    const result = interpretResult({
+      content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
+    });
+    expect(result.value).toBe("");
+    expect(result.media).toEqual([
+      { mime_type: "image/png", data: "aGVsbG8=", label: "image/png, 5 bytes" },
+    ]);
+    expect(flattenText({ content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }] }))
+      .toBe("[image/png, 5 bytes returned, not included here]");
   });
 
-  test("a non-text block carrying text is still dropped", () => {
+  test("mixed text and image keeps both", () => {
+    const result = interpretResult({
+      content: [
+        { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+        { type: "text", text: "caption" },
+      ],
+    });
+    expect(result.value).toBe("caption");
+    expect(result.media).toHaveLength(1);
+  });
+
+  test("an unsupported image format is an explicit omission", () => {
+    const result = interpretResult({
+      content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/tiff" }],
+    });
+    expect(result.media).toEqual([]);
+    expect(result.extra).toEqual(["[image omitted: image/tiff is not a supported format]"]);
+  });
+
+  test("audio is named and sized rather than dropped", () => {
+    const result = interpretResult({
+      content: [{ type: "audio", data: "aGVsbG8=", mimeType: "audio/wav" }],
+    });
+    expect(result.media).toEqual([]);
+    expect(result.extra).toEqual([
+      "[audio omitted: audio/wav, 5 bytes \u2014 shore cannot send audio to a model]",
+    ]);
+  });
+
+  test("an embedded text resource is inlined", () => {
+    const nested = interpretResult({
+      content: [
+        { type: "resource", resource: { uri: "file:///x", text: "internal resource body" } },
+        { type: "text", text: "the answer" },
+      ],
+    });
+    expect(nested.value).toBe("the answer");
+    expect(nested.extra).toEqual(["[resource file:///x]\ninternal resource body"]);
+  });
+
+  test("a flat resource shape is inlined too", () => {
     expect(
-      flattenText({
+      interpretResult({
+        content: [{ type: "resource", text: "internal resource body", uri: "file:///x" }],
+      }).extra,
+    ).toEqual(["[resource file:///x]\ninternal resource body"]);
+  });
+
+  test("an embedded image resource becomes media", () => {
+    const result = interpretResult({
+      content: [
+        {
+          type: "resource",
+          resource: { uri: "file:///shot.png", mimeType: "image/png", blob: "aGVsbG8=" },
+        },
+      ],
+    });
+    expect(result.media).toEqual([
+      {
+        mime_type: "image/png",
+        data: "aGVsbG8=",
+        label: "file:///shot.png (image/png, 5 bytes)",
+      },
+    ]);
+  });
+
+  test("a binary resource shore cannot render is named, not dropped", () => {
+    expect(
+      interpretResult({
         content: [
-          { type: "resource", text: "internal resource body", uri: "file:///x" },
-          { type: "text", text: "the answer" },
+          {
+            type: "resource",
+            resource: { uri: "file:///a.zip", mimeType: "application/zip", blob: "aGVsbG8=" },
+          },
         ],
-      }),
-    ).toBe("the answer");
+      }).extra,
+    ).toEqual([
+      "[resource file:///a.zip omitted: application/zip, 5 bytes \u2014 shore cannot render it]",
+    ]);
+  });
+
+  test("a resource link is described", () => {
+    expect(
+      interpretResult({
+        content: [
+          { type: "resource_link", uri: "file:///r", name: "notes", mimeType: "text/plain" },
+        ],
+      }).extra,
+    ).toEqual(["[resource link: notes: file:///r (text/plain)]"]);
+  });
+
+  test("an unknown block type is reported rather than silently dropped", () => {
+    expect(
+      interpretResult({ content: [{ type: "hologram", frames: 3 }] }).extra,
+    ).toEqual(["[hologram content omitted: shore cannot render it]"]);
   });
 
   test("a missing or non-array content is empty, not a throw", () => {
@@ -361,6 +469,6 @@ describe("result flattening", () => {
   });
 
   test("a null structured content is still structured", () => {
-    expect(flattenResult({ structuredContent: null, content: [] })).toBe(null);
+    expect(interpretResult({ structuredContent: null, content: [] }).value).toBe(null);
   });
 });

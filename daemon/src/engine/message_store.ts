@@ -47,6 +47,13 @@ export interface AltSelection {
   content: string;
 }
 
+function toolResultBlockText(blocks: ContentBlock[]): string {
+  return blocks
+    .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+}
+
 export function deriveContentFromBlocks(
   blocks: ContentBlock[],
   includeToolResults: boolean,
@@ -57,7 +64,7 @@ export function deriveContentFromBlocks(
       const t = rustTrim(b.text);
       if (t !== "") parts.push(t);
     } else if (b.type === "tool_result" && includeToolResults) {
-      const raw = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
+      const raw = typeof b.content === "string" ? b.content : toolResultBlockText(b.content);
       const t = rustTrim(raw);
       if (t !== "") parts.push(t);
     }

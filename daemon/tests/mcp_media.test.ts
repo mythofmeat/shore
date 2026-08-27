@@ -1,0 +1,344 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { interpretResult } from "../src/mcp/client.ts";
+import { carryToolMedia, toolMediaOf } from "../src/tools/media.ts";
+import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
+import type { ToolContext, ToolLimitsView } from "../src/tools/dispatch.ts";
+import type { ContentBlock } from "../src/engine/types.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
+import { runnableTools } from "../src/llm/providers/anthropic_tools.ts";
+import { turnToOpenAI } from "../src/llm/providers/openai.ts";
+import { turnToVercel } from "../src/llm/providers/vercel.ts";
+import { translateMessages } from "../src/llm/providers/gemini.ts";
+import { countImageBlocks, stripImageBlocks } from "../src/llm/image_support.ts";
+import { buildLlmMessages } from "../src/handler/wire_messages.ts";
+import { normalizeMessage } from "../src/engine/message_store.ts";
+
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+const LIMITS: ToolLimitsView = { max_result_chars: 0, timeout_ms: 0 };
+
+function imageResult(count: number, data = PNG): Record<string, unknown> {
+  return {
+    content: Array.from({ length: count }, () => ({
+      type: "image",
+      data,
+      mimeType: "image/png",
+    })),
+  };
+}
+
+async function runMcpTool(
+  raw: Record<string, unknown>,
+): Promise<{ block: ContentBlock; frames: ServerMessage[]; saved: string[] }> {
+  const imageDir = await mkdtemp(join(tmpdir(), "shore-mcp-media-"));
+  const frames: ServerMessage[] = [];
+  const ctx: ToolContext = {
+    imageDir,
+    workspaceDir: "",
+    characterDataDir: "",
+    characterName: "",
+    configDir: "",
+    searchConfig: {
+      api_key_env: "TAVILY_API_KEY",
+      result_limit: 5,
+      search_depth: "basic",
+      include_answer: true,
+    },
+    retrievalConfig: {
+      maxFileBytes: 0,
+      maxIndexedFiles: 0,
+      maxTotalIndexedBytes: 0,
+      maxEmbedCharsPerFile: 0,
+      binary: "skip",
+    },
+    retrievalMode: "auto",
+    mcpCall: () => Promise.resolve(carryToolMedia(interpretResult(raw))),
+  };
+  const exec: ToolExecution = {
+    sendDirect: (m) => frames.push(m),
+    ctx,
+    limits: LIMITS,
+    now: () => "2026-01-01T00:00:00-05:00",
+    newMessageId: () => "m_test",
+    monotonicMs: () => 0,
+  };
+
+  const run = await runToolUse({ id: "toolu_1", name: "mcp__srv__shot", input: {} }, exec, []);
+  let saved: string[] = [];
+  try {
+    saved = (await readdir(join(imageDir, "tools"))).sort();
+  } catch {
+    saved = [];
+  }
+  await rm(imageDir, { recursive: true, force: true });
+  return { block: run.block, frames, saved };
+}
+
+function toolResult(block: ContentBlock): Extract<ContentBlock, { type: "tool_result" }> {
+  if (block.type !== "tool_result") throw new Error(`expected a tool_result, got ${block.type}`);
+  return block;
+}
+
+function blocksOf(block: ContentBlock): ContentBlock[] {
+  const content = toolResult(block).content;
+  if (typeof content === "string") throw new Error(`expected content blocks, got ${content}`);
+  return content;
+}
+
+function textOf(block: ContentBlock): string {
+  const content = toolResult(block).content;
+  if (typeof content === "string") return content;
+  return content
+    .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+}
+
+describe("mcp media reaches the model", () => {
+  test("an image-only result is an image block, never an empty success", async () => {
+    const { block, frames, saved } = await runMcpTool(imageResult(1));
+
+    const images = blocksOf(block).filter((b) => b.type === "image");
+    expect(images).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: PNG } },
+    ]);
+    expect(textOf(block)).toContain("image/png");
+    expect(textOf(block)).not.toBe("");
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toEndWith(".png");
+    expect(frames.filter((f) => f.type === "send_image")).toHaveLength(1);
+  });
+
+  test("text alongside an image keeps both", async () => {
+    const { block } = await runMcpTool({
+      content: [
+        { type: "text", text: "here is the screenshot" },
+        { type: "image", data: PNG, mimeType: "image/png" },
+      ],
+    });
+
+    expect(textOf(block)).toStartWith("here is the screenshot");
+    expect(blocksOf(block).filter((b) => b.type === "image")).toHaveLength(1);
+  });
+
+  test("audio is described rather than delivered as an empty string", async () => {
+    const { block, saved } = await runMcpTool({
+      content: [{ type: "audio", data: "aGVsbG8=", mimeType: "audio/wav" }],
+    });
+
+    expect(toolResult(block).content).toContain("audio omitted");
+    expect(toolResult(block).content).toContain("audio/wav");
+    expect(saved).toEqual([]);
+  });
+
+  test("only the first two images are sent, and the rest say why", async () => {
+    const { block, saved } = await runMcpTool(imageResult(3));
+
+    expect(blocksOf(block).filter((b) => b.type === "image")).toHaveLength(2);
+    expect(textOf(block)).toContain("at most 2 images are sent per tool result");
+    expect(saved).toHaveLength(3);
+  });
+
+  test("an image over the inline limit is saved but not sent", async () => {
+    const oversized = "A".repeat(1_400_004);
+    const { block, saved } = await runMcpTool(imageResult(1, oversized));
+
+    expect(toolResult(block).content).toContain("over the 1048576-byte inline limit");
+    expect(typeof toolResult(block).content).toBe("string");
+    expect(saved).toHaveLength(1);
+  });
+
+  test("an unreadable image directory degrades to a note, not a thrown tool", async () => {
+    const frames: ServerMessage[] = [];
+    const ctx: ToolContext = {
+      imageDir: "/proc/shore-cannot-write-here",
+      workspaceDir: "",
+      characterDataDir: "",
+      characterName: "",
+      configDir: "",
+      searchConfig: {
+        api_key_env: "TAVILY_API_KEY",
+        result_limit: 5,
+        search_depth: "basic",
+        include_answer: true,
+      },
+      retrievalConfig: {
+        maxFileBytes: 0,
+        maxIndexedFiles: 0,
+        maxTotalIndexedBytes: 0,
+        maxEmbedCharsPerFile: 0,
+        binary: "skip",
+      },
+      retrievalMode: "auto",
+      mcpCall: () => Promise.resolve(carryToolMedia(interpretResult(imageResult(1)))),
+    };
+    const run = await runToolUse(
+      { id: "toolu_1", name: "mcp__srv__shot", input: {} },
+      {
+        sendDirect: (m) => frames.push(m),
+        ctx,
+        limits: LIMITS,
+        now: () => "2026-01-01T00:00:00-05:00",
+        newMessageId: () => "m_test",
+        monotonicMs: () => 0,
+      },
+      [],
+    );
+
+    expect(run.isError).toBe(false);
+    expect(toolResult(run.block).content).toContain("could not be saved");
+    expect(frames.filter((f) => f.type === "send_image")).toHaveLength(0);
+  });
+
+  test("a text-only result still carries a plain string, with no media wrapper", async () => {
+    const { block, saved } = await runMcpTool({ content: [{ type: "text", text: "plain" }] });
+
+    expect(toolResult(block).content).toBe("plain");
+    expect(saved).toEqual([]);
+    expect(toolMediaOf(carryToolMedia({ value: "plain", media: [], extra: [] }))).toBeUndefined();
+  });
+
+  test("structured content is not repeated by its own mirrored text", async () => {
+    const { block } = await runMcpTool({
+      structuredContent: { ok: true },
+      content: [{ type: "text", text: '{"ok":true}' }],
+    });
+
+    expect(toolResult(block).content).toBe('{"ok":true}');
+  });
+});
+
+const IMAGE_TOOL_RESULT: ContentBlock = {
+  type: "tool_result",
+  tool_use_id: "toolu_1",
+  content: [
+    { type: "text", text: "the screenshot" },
+    { type: "image", source: { type: "base64", media_type: "image/png", data: PNG } },
+  ],
+};
+
+describe("providers deliver tool result images", () => {
+  test("openai lifts the image into the user turn that follows the tool message", () => {
+    const out = turnToOpenAI({ role: "user", content: [IMAGE_TOOL_RESULT] });
+
+    expect(out[0]).toEqual({
+      role: "tool",
+      tool_call_id: "toolu_1",
+      content: "the screenshot",
+    });
+    expect(out[1]).toEqual({
+      role: "user",
+      content: [{ type: "image_url", image_url: { url: `data:image/png;base64,${PNG}` } }],
+    });
+  });
+
+  test("vercel lifts the image into the user turn that follows the tool message", () => {
+    const out = turnToVercel(
+      { role: "user", content: [IMAGE_TOOL_RESULT] },
+      new Map([["toolu_1", "shot"]]),
+    );
+
+    expect(out[0]?.role).toBe("tool");
+    expect(out[1]).toEqual({
+      role: "user",
+      content: [{ type: "image", image: PNG, mediaType: "image/png" }],
+    });
+  });
+
+  test("gemini sends inline data beside a text function response", () => {
+    const parts = translateMessages([{ role: "user", content: [IMAGE_TOOL_RESULT] }])[0]?.parts;
+
+    expect(parts?.[0]).toEqual({
+      functionResponse: { name: "toolu_1", response: { result: "the screenshot" } },
+    });
+    expect(parts?.[1]).toEqual({ inlineData: { mimeType: "image/png", data: PNG } });
+  });
+});
+
+describe("the anthropic tool runner returns content blocks", () => {
+  test("an image tool result becomes text plus an image param", async () => {
+    const phase = {
+      messages: [],
+      runTool: () => Promise.resolve(IMAGE_TOOL_RESULT),
+      recordTurn: () => undefined,
+    };
+    const [tool] = runnableTools(
+      [{ name: "mcp__srv__shot", description: "", input_schema: { type: "object" } }],
+      phase,
+      () => undefined,
+    );
+
+    expect(await tool?.run({}, { toolUse: { id: "toolu_1" } } as never)).toEqual([
+      { type: "text", text: "the screenshot" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: PNG } },
+    ]);
+  });
+
+  test("a plain string result is still returned as a string", async () => {
+    const phase = {
+      messages: [],
+      runTool: () =>
+        Promise.resolve({
+          type: "tool_result" as const,
+          tool_use_id: "toolu_1",
+          content: "plain",
+        }),
+      recordTurn: () => undefined,
+    };
+    const [tool] = runnableTools(
+      [{ name: "mcp__srv__shot", description: "", input_schema: { type: "object" } }],
+      phase,
+      () => undefined,
+    );
+
+    expect(await tool?.run({}, { toolUse: { id: "toolu_1" } } as never)).toBe("plain");
+  });
+});
+
+describe("a stored tool result image survives the next turn", () => {
+  test("assembly replays the nested image, and does not dump it into content", async () => {
+    const stored = normalizeMessage({
+      msg_id: "m_1",
+      role: "user",
+      content: "",
+      images: [],
+      content_blocks: [IMAGE_TOOL_RESULT],
+      timestamp: "2026-01-01T00:00:00-05:00",
+    });
+
+    expect(stored.content).toBe("the screenshot");
+
+    const { messages } = await buildLlmMessages(
+      { system: [], messages: [{ ...stored, images: [] }] },
+      "tool_pair",
+    );
+
+    expect(messages[0]?.content).toEqual([IMAGE_TOOL_RESULT]);
+  });
+});
+
+describe("text-only models drop tool result images explicitly", () => {
+  test("a nested image is counted and stripped with a notice", () => {
+    const messages = [{ role: "user" as const, content: [IMAGE_TOOL_RESULT] }];
+    expect(countImageBlocks(messages)).toBe(1);
+
+    const outcome = stripImageBlocks(messages, "kimi/k3 does not accept images");
+    expect(outcome.stripped).toBe(1);
+
+    const content = outcome.messages[0]?.content[0];
+    expect(content?.type).toBe("tool_result");
+    const nested = content?.type === "tool_result" ? content.content : [];
+    expect(nested).toEqual([
+      { type: "text", text: "the screenshot" },
+      {
+        type: "text",
+        text: "[image omitted: a tool result image — kimi/k3 does not accept images]",
+      },
+    ]);
+  });
+});

@@ -35,6 +35,7 @@ import { handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
 import { compact, tryBeginCompaction } from "./manager.ts";
 import { DEFAULT_COMPACT_PROMPT, DEFAULT_COMPACT_SYSTEM } from "./prompts.ts";
+import { renderToolValue } from "../../tools/media.ts";
 import {
   CompactionError,
   CompactionPaused,
@@ -227,7 +228,7 @@ export async function renderToolOutcome(
 ): Promise<{ output: string; isError: boolean }> {
   try {
     const value = await call();
-    return { output: typeof value === "string" ? value : (JSON.stringify(value) ?? ""), isError: false };
+    return { output: renderToolValue(value), isError: false };
   } catch (e) {
     return { output: e instanceof Error ? e.message : String(e), isError: true };
   }

@@ -22,6 +22,7 @@ import { buildToolContext } from "../handler/tool_context.ts";
 import { dispatchTool } from "../tools/dispatch.ts";
 import type { CallStore } from "../call_store.ts";
 import { recordTranscript } from "../transcript_capture.ts";
+import { renderToolValue } from "../tools/media.ts";
 
 export interface InProcessExecutorDeps {
   registry: CharacterRegistry;
@@ -75,11 +76,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
             ...toolCtx,
             ...(toolUseId === undefined ? {} : { toolUseId }),
           });
-          return {
-            output: typeof value === "string" ? value : (JSON.stringify(value) ?? ""),
-            isError: false,
-            value,
-          };
+          return { output: renderToolValue(value), isError: false, value };
         } catch (e) {
           return { output: e instanceof Error ? e.message : String(e), isError: true };
         }

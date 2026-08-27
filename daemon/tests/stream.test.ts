@@ -1,6 +1,9 @@
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import rawStreamFixture from "./handler_captures/stream.json" with { type: "json" };
 import { expandShared } from "./support/shared_subtrees.ts";
@@ -41,8 +44,7 @@ import {
 import {
   NotificationService,
   ntfyUrl,
-  renderCommandTemplate,
-  shellEscape,
+  expandArgv,
   truncateSummary,
   type NotificationEvent,
   type NotificationSink,
@@ -70,32 +72,83 @@ describe("truncate_summary", () => {
   });
 });
 
-describe("shell_escape", () => {
-  for (const c of f["shell_escape"] as Row[]) {
-    const input = c["input"] as string;
-    test(JSON.stringify(input), () => {
-      expect(shellEscape(input)).toBe(c["output"] as string);
+describe("expand_argv", () => {
+  test("each placeholder becomes exactly one argv element", () => {
+    expect(expandArgv(["notifier", "--title", "{title}", "--body", "{body}"], "T", "B")).toEqual([
+      "notifier",
+      "--title",
+      "T",
+      "--body",
+      "B",
+    ]);
+  });
+
+  test("every occurrence expands, not just the first", () => {
+    expect(expandArgv(["n", "{body} {body} {title}"], "T", "B")).toEqual(["n", "B B T"]);
+  });
+
+  test("an argument with no placeholder is passed through untouched", () => {
+    expect(expandArgv(["n", "--quiet"], "T", "B")).toEqual(["n", "--quiet"]);
+  });
+
+  test("the executable is never templated", () => {
+    expect(expandArgv(["{title}", "{title}"], "/bin/sh", "b")).toEqual(["{title}", "/bin/sh"]);
+  });
+
+  test("an empty argv stays empty", () => {
+    expect(expandArgv([], "T", "B")).toEqual([]);
+  });
+
+  for (const hostile of [
+    "; rm -rf / & id | cat > out",
+    "$(whoami)",
+    "`whoami`",
+    "${HOME}",
+    "'quoted' \"double\"",
+    "line one\nline two",
+    "back\\slash",
+  ]) {
+    test(`${JSON.stringify(hostile)} arrives as one literal argument`, () => {
+      expect(expandArgv(["n", "{body}"], "t", hostile)).toEqual(["n", hostile]);
     });
   }
 
-  test("every occurrence is replaced, not just the first", () => {
-    expect(shellEscape("`a`b`")).toBe("ab");
-    expect(shellEscape("'a'b'")).toBe("'\\''a'\\''b'\\''");
-  });
-
-  test("shell operators survive — the template supplies the quoting", () => {
-    expect(shellEscape("; rm -rf / & id | cat")).toBe("; rm -rf / & id | cat");
+  test("expanded content is not rescanned for placeholders", () => {
+    expect(expandArgv(["n", "{title}", "{body}"], "{body}", "SUBSTITUTED")).toEqual([
+      "n",
+      "{body}",
+      "SUBSTITUTED",
+    ]);
   });
 });
 
-describe("command_template", () => {
-  for (const c of f["command_template"] as Row[]) {
-    test(c["template"] as string, () => {
-      expect(
-        renderCommandTemplate(c["template"] as string, c["title"] as string, c["body"] as string),
-      ).toBe(c["rendered"] as string);
-    });
-  }
+describe("the command sink spawns argv directly", () => {
+  test("hostile content reaches the process as argv, unexecuted", async () => {
+    const { realSink } = await import("../src/notifications.ts");
+    const dir = await mkdtemp(join(tmpdir(), "shore-notify-"));
+    const pwned = join(dir, "pwned");
+    const hostile = `; touch ${pwned} & echo $(id) \`whoami\` > ${pwned}`;
+    const marker = join(dir, "argv.json");
+    const probe = join(dir, "probe.ts");
+    await Bun.write(
+      probe,
+      `await Bun.write(${JSON.stringify(marker)}, JSON.stringify(Bun.argv.slice(2)))\n`,
+    );
+    await realSink.command(["bun", probe, "{title}", "{body}"], "T", hostile);
+    expect(await Bun.file(marker).json()).toEqual(["T", hostile]);
+    expect(await Bun.file(pwned).exists()).toBe(false);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("an empty command is refused before anything is spawned", async () => {
+    const { realSink } = await import("../src/notifications.ts");
+    expect(realSink.command([], "t", "b")).rejects.toThrow("notification command is not configured");
+  });
+
+  test("a non-zero exit is surfaced, not swallowed", async () => {
+    const { realSink } = await import("../src/notifications.ts");
+    expect(realSink.command(["false"], "t", "b")).rejects.toThrow("exited 1");
+  });
 });
 
 function configWith(overrides: Partial<NotificationsConfig>): NotificationsConfig {
@@ -186,8 +239,8 @@ function recordingSink(sent: string[]): NotificationSink {
       sent.push(`ntfy:${title}:${body}`);
       return Promise.resolve();
     },
-    command: (template, title, body) => {
-      sent.push(`command:${title}:${body}:${template}`);
+    command: (argv, title, body) => {
+      sent.push(`command:${title}:${body}:${argv.join(" ")}`);
       return Promise.resolve();
     },
   };
@@ -251,7 +304,7 @@ function configToFixtureShape(config: NotificationsConfig): Row {
     enabled: config.enabled,
     backend: config.backend,
     ntfy: { url: config.ntfy.url, topic: config.ntfy.topic, token: config.ntfy.token },
-    command: { template: config.command.template },
+    command: [...config.command],
     generation_threshold_ms: config.generation_threshold.asMillisExact().toString(),
     events: { ...config.events },
   };
@@ -298,7 +351,7 @@ describe("[notifications] parsing", () => {
       enabled: false,
       backend: "notify_send",
       ntfy: { url: "https://ntfy.sh", topic: "", token: "" },
-      command: { template: "" },
+      command: [],
       generation_threshold_ms: "0",
       events: {
         autonomous_message: true,

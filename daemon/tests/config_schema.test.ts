@@ -266,11 +266,11 @@ enabled_tools = [
   });
 
   test("a value containing a bracket does not confuse the scanner", () => {
-    const tricky = '[notifications.command]\ntemplate = "notify [shore] #1"\n';
-    const out = setTomlValue(tricky, ["notifications", "command", "template"], '"hi"');
+    const tricky = '[notifications.ntfy]\ntopic = "notify [shore] #1"\n';
+    const out = setTomlValue(tricky, ["notifications", "ntfy", "topic"], '"hi"');
     expect(out.action).toBe("replaced");
     expect(Bun.TOML.parse(out.text)).toMatchObject({
-      notifications: { command: { template: "hi" } },
+      notifications: { ntfy: { topic: "hi" } },
     });
   });
 });

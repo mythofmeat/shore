@@ -649,6 +649,15 @@ describe("sub-agent deadlines", () => {
 });
 
 describe("dispatch deadline", () => {
+  async function rejection(work: Promise<unknown>): Promise<string> {
+    try {
+      await work;
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+    return "the call somehow succeeded";
+  }
+
   function hangingContext(): ToolContext {
     return bareContext({
       mcpCall: (_name, _input) =>
@@ -658,16 +667,74 @@ describe("dispatch deadline", () => {
     });
   }
 
+  function stoppingContext(): ToolContext {
+    return bareContext({
+      mcpCall: (_name, _input, signal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => {
+            reject(new Error("server acknowledged the cancel"));
+          });
+        }),
+    });
+  }
+
   test("a tool that outruns its deadline fails as a tool, not a transport error", async () => {
     expect(
-      dispatchWithinDeadline("mcp__slow__thing", {}, hangingContext(), 50),
-    ).rejects.toThrow("timed out after 0s and was cancelled");
+      await rejection(dispatchWithinDeadline("mcp__slow__thing", {}, stoppingContext(), 50, 50)),
+    ).toBe("timed out after 0s and was cancelled");
   });
 
   test("the reported seconds floor the millisecond deadline", async () => {
     expect(
-      dispatchWithinDeadline("mcp__slow__thing", {}, hangingContext(), 1_500),
-    ).rejects.toThrow("timed out after 1s and was cancelled");
+      await rejection(dispatchWithinDeadline("mcp__slow__thing", {}, stoppingContext(), 1_500, 50)),
+    ).toBe("timed out after 1s and was cancelled");
+  });
+
+  test("a tool that never confirms it stopped is reported as still possibly running", async () => {
+    expect(
+      await rejection(dispatchWithinDeadline("mcp__slow__thing", {}, hangingContext(), 50, 50)),
+    ).toContain("it may still be running");
+  });
+
+  test("an unconfirmed timeout tells the model not to repeat the call blindly", async () => {
+    expect(
+      await rejection(dispatchWithinDeadline("mcp__slow__thing", {}, hangingContext(), 50, 50)),
+    ).toContain("Do not repeat this call");
+  });
+
+  test("shore waits past the deadline for the cancel to land before reporting", async () => {
+    let cancelledAt: number | undefined;
+    const ctx = bareContext({
+      mcpCall: (_name, _input, signal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => {
+            setTimeout(() => {
+              cancelledAt = Date.now();
+              reject(new Error("stopped late"));
+            }, 60);
+          });
+        }),
+    });
+    const started = Date.now();
+    expect(
+      await rejection(dispatchWithinDeadline("mcp__slow__thing", {}, ctx, 50, 500)),
+    ).toContain("and was cancelled");
+    expect(cancelledAt).toBeDefined();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(100);
+  });
+
+  test("work that completes while being cancelled is returned, not thrown away", async () => {
+    const ctx = bareContext({
+      mcpCall: (_name, _input, signal) =>
+        new Promise((resolve) => {
+          signal?.addEventListener("abort", () => {
+            setTimeout(() => resolve("the side effect already happened"), 10);
+          });
+        }),
+    });
+    expect(await dispatchWithinDeadline("mcp__slow__thing", {}, ctx, 50, 500)).toBe(
+      "the side effect already happened",
+    );
   });
 
   test("no deadline means the call is not raced at all", async () => {
@@ -691,7 +758,7 @@ describe("dispatch deadline", () => {
           });
         }),
     });
-    expect(dispatchWithinDeadline("mcp__slow__thing", {}, ctx, 50)).rejects.toThrow();
+    await rejection(dispatchWithinDeadline("mcp__slow__thing", {}, ctx, 50, 50));
     expect(aborted).toBe(true);
   });
 
@@ -733,7 +800,7 @@ describe("dispatch deadline", () => {
           signal?.addEventListener("abort", () => reject(new Error("aborted late")));
         }),
     });
-    expect(dispatchWithinDeadline("mcp__x__y", {}, ctx, 5_000)).rejects.toThrow(
+    expect(await rejection(dispatchWithinDeadline("mcp__x__y", {}, ctx, 5_000))).toBe(
       "aborted by caller",
     );
     expect(aborted).toBe(true);

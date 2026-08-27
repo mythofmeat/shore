@@ -5,7 +5,7 @@ Covers `src/tools/execute.ts` — the frames a running tool emits, the cap on
 what the model reads, the diagnostics row, and the generated-image side
 channel.
 
-Four things the mutants attack:
+Five things the mutants attack:
 
 - **The result string.** That a string value goes through verbatim and
   everything else is serialized, that a failure reports `ToolError`'s `Display`
@@ -23,11 +23,18 @@ Four things the mutants attack:
   `is_error`), that the ref lands on the last *assistant* turn rather than the
   last message, that the bytes go on the frame and not on the stored ref, and
   that an unreadable path costs the bytes rather than the frame.
+- **Tool media (#156).** That a media payload is unwrapped rather than passed
+  through as its own wrapper, that its extra lines and attachment notes reach
+  the model, that the two inline caps (count and size) are applied, that the
+  bytes are written to disk and announced on `send_image`, that a save failure
+  degrades to a note rather than a bogus attachment, and that the server's
+  media type survives onto the block. Every one of these is a silent failure if
+  it breaks: the tool succeeds and the model reads something incomplete.
 
-A mutant is KILLED if `bun test tests/execute.test.ts` fails with it
-applied.
+A mutant is KILLED if `bun test tests/execute.test.ts tests/mcp_media.test.ts`
+fails with it applied.
 
-This is **36/39**, from 33/39 on the first pass.
+This is **40/42**, from 33/39 on the first pass.
 
 The three that lived the first time were the shape #12 keeps naming — the case
 existed and nothing in it was load-bearing:
@@ -46,13 +53,9 @@ existed and nothing in it was load-bearing:
   attach, so no frame changed places. It now relocates past everything the tool
   does, and dies on the `generate_image` group's frame order.
 
-Three survivors remain, all equivalent, and all kept in the list so a later
+Two survivors remain, both equivalent, and both kept in the list so a later
 reader does not "fix" them:
 
-- **`JSON.stringify(value) ?? ""` losing its fallback.** `dispatchTool` never
-  resolves to `undefined` — every handler returns a value or throws — so the
-  `??` arm is unreachable from here. Kept because it is what
-  `unwrap_or_default()` said, and because the type is `unknown`.
 - **The success gate on the image attach.** `!isError` and "there is a value"
   are the same condition: `okValue` is assigned only on the success path, so a
   failed tool reaches `attachGeneratedImage` with `undefined` and returns at the
@@ -77,14 +80,18 @@ EXECUTE = "src/tools/execute.ts"
 MUTANTS = [
     # ── the result string ───────────────────────────────────────────────
     ("a string result is serialized like everything else",
-     'rawOutput = typeof value === "string" ? value : (JSON.stringify(value) ?? "");',
-     'rawOutput = JSON.stringify(value) ?? "";'),
+     'rawOutput = joinLines([payloadText(okValue), ...(payload?.extra ?? [])]);',
+     'rawOutput = joinLines([JSON.stringify(okValue) ?? "", ...(payload?.extra ?? [])]);'),
     ("a non-string result is stringified rather than serialized",
-     'rawOutput = typeof value === "string" ? value : (JSON.stringify(value) ?? "");',
-     'rawOutput = typeof value === "string" ? value : String(value);'),
-    ("the JSON.stringify fallback is dropped (EQUIVALENT — dispatch never resolves undefined)",
-     'rawOutput = typeof value === "string" ? value : (JSON.stringify(value) ?? "");',
-     'rawOutput = typeof value === "string" ? value : (JSON.stringify(value) as string);'),
+     'rawOutput = joinLines([payloadText(okValue), ...(payload?.extra ?? [])]);',
+     'rawOutput = joinLines([typeof okValue === "string" ? okValue : String(okValue),\n'
+     '      ...(payload?.extra ?? [])]);'),
+    ("a media payload is read as its own wrapper rather than unwrapped",
+     "    okValue = payload === undefined ? value : payload.value;",
+     "    okValue = value;"),
+    ("the media payload's extra lines never reach the model",
+     'rawOutput = joinLines([payloadText(okValue), ...(payload?.extra ?? [])]);',
+     'rawOutput = payloadText(okValue);'),
     ("a failure reports String(e), keeping the `Error: ` prefix",
      "rawOutput = e instanceof Error ? e.message : String(e);",
      "rawOutput = String(e);"),
@@ -103,14 +110,11 @@ MUTANTS = [
      "  const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));",
      "  const windowed = windowToolResult(rawOutput, exec.limits.max_result_chars);"),
     ("the block carries the uncapped result",
-     'block: { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError },',
-     'block: { type: "tool_result", tool_use_id: toolUse.id, content: rawOutput, is_error: isError },'),
+     "      content: toolResultContent(output, attached.blocks),",
+     "      content: toolResultContent(rawOutput, attached.blocks),"),
     ("the frame carries the uncapped result",
      "  emitToolResult(exec, toolUse, output, isError);",
      "  emitToolResult(exec, toolUse, rawOutput, isError);"),
-    ("the block carries the uncapped result, so the next turn resends it in full",
-     "    block: { type: \"tool_result\", tool_use_id: toolUse.id, content: output, is_error: isError },",
-     "    block: { type: \"tool_result\", tool_use_id: toolUse.id, content: rawOutput, is_error: isError },"),
     ("the deadline is ignored",
      "      timeoutFor(exec.limits, toolUse.name),",
      "      undefined,"),
@@ -160,11 +164,37 @@ MUTANTS = [
      "    output,\n    is_error: isError,",
      "    output,\n    is_error: false,"),
     ("the returned block defaults is_error to false",
-     'content: output, is_error: isError },',
-     'content: output, is_error: false },'),
+     "      content: toolResultContent(output, attached.blocks),\n      is_error: isError,",
+     "      content: toolResultContent(output, attached.blocks),\n      is_error: false,"),
     ("the returned block echoes the tool name as the tool_use_id",
-     'block: { type: "tool_result", tool_use_id: toolUse.id, content: output,',
-     'block: { type: "tool_result", tool_use_id: toolUse.name, content: output,'),
+     "      tool_use_id: toolUse.id,\n      content: toolResultContent(output, attached.blocks),",
+     "      tool_use_id: toolUse.name,\n      content: toolResultContent(output, attached.blocks),"),
+
+    # ── tool media ──────────────────────────────────────────────────────
+    ("the tool result drops the media it attached",
+     "      content: toolResultContent(output, attached.blocks),",
+     "      content: output,"),
+    ("the attachment notes never reach the model",
+     "  const output = joinLines([windowed.output, ...attached.notes]);",
+     "  const output = windowed.output;"),
+    ("the count cap on inlined images is not applied",
+     "  if (alreadyInlined >= MAX_INLINE_TOOL_IMAGES) {",
+     "  if (false) {"),
+    ("the size cap on inlined images is not applied",
+     "  if (bytes > MAX_INLINE_TOOL_IMAGE_BYTES) {",
+     "  if (false) {"),
+    ("attached media is never written to disk",
+     "    await writeFile(target, Buffer.from(item.data, \"base64\"));",
+     "    await Promise.resolve();"),
+    ("a media file that could not be saved is attached anyway",
+     "    if (saved === undefined) {",
+     "    if (false) {"),
+    ("the client is never told about a tool's image",
+     '    exec.sendDirect({\n      type: "send_image",',
+     '    ((_: unknown) => {})({\n      type: "send_image",'),
+    ("an attached image loses the media type the server gave it",
+     "      source: { type: \"base64\", media_type: item.mime_type, data: item.data },",
+     "      source: { type: \"base64\", media_type: \"application/octet-stream\", data: item.data },"),
 
     # ── the diagnostics row ─────────────────────────────────────────────
 
@@ -219,7 +249,9 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/execute.test.ts"], src=ROOT / EXECUTE)
+    return _run_mutants(
+        MUTANTS, ["tests/execute.test.ts", "tests/mcp_media.test.ts"], src=ROOT / EXECUTE
+    )
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ import {
   type ToolInput,
 } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
+import { McpCancelled } from "../mcp/client.ts";
 import type { SubagentConfig, ToolsConfig } from "../config/app.ts";
 import type { Embedder } from "../llm/embed.ts";
 import type { RetrievalConfig } from "../memory/workspace_index.ts";
@@ -318,34 +319,95 @@ export function truncateToolResult(output: string, maxChars: number): string {
   return windowToolResult(output, maxChars).output;
 }
 
+export const CANCEL_GRACE_MS = 2_000;
+
+const STILL_RUNNING = Symbol("still running");
+
+type Settled = { readonly ok: unknown } | { readonly err: unknown };
+
+function settled(work: Promise<unknown>): Promise<Settled> {
+  return work.then(
+    (ok) => ({ ok }),
+    (err: unknown) => ({ err }),
+  );
+}
+
+async function waitFor(
+  work: Promise<Settled>,
+  ms: number,
+): Promise<Settled | typeof STILL_RUNNING> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<typeof STILL_RUNNING>((resolve) => {
+    timer = setTimeout(() => resolve(STILL_RUNNING), ms);
+  });
+  try {
+    return await Promise.race([work, expiry]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function unwrap(outcome: Settled): unknown {
+  if ("err" in outcome) throw outcome.err;
+  return outcome.ok;
+}
+
+function drain(work: Promise<Settled>, name: string): void {
+  void work.then((late) => {
+    shoreLog.warn(
+      "err" in late
+        ? `Tool that outran its deadline has finally stopped: ${name}: ${String(late.err)}`
+        : `Tool that outran its deadline finished after shore stopped waiting for it, ` +
+          `so its work took effect: ${name}`,
+    );
+  });
+}
+
 export async function dispatchWithinDeadline(
   name: string,
   input: unknown,
   ctx: ToolContext,
   deadlineMs: number | undefined,
+  graceMs: number = CANCEL_GRACE_MS,
 ): Promise<unknown> {
   if (deadlineMs === undefined) return await dispatchTool(name, input, ctx);
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), deadlineMs);
   const signal =
     ctx.signal === undefined
       ? controller.signal
       : AbortSignal.any([ctx.signal, controller.signal]);
 
-  try {
-    return await Promise.race([
-      dispatchTool(name, input, { ...ctx, signal }),
-      new Promise<never>((_resolve, reject) => {
-        controller.signal.addEventListener("abort", () => {
-          shoreLog.warn(`Tool exceeded its deadline and was cancelled: ${name}`);
-          reject(new ToolTimedOut(Math.floor(deadlineMs / 1000)));
-        });
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
+  const work = settled(dispatchTool(name, input, { ...ctx, signal }));
+
+  const onTime = await waitFor(work, deadlineMs);
+  if (onTime !== STILL_RUNNING) return unwrap(onTime);
+
+  shoreLog.warn(`Tool exceeded its deadline; asking it to stop: ${name}`);
+  controller.abort();
+
+  const seconds = Math.floor(deadlineMs / 1000);
+  const stopping = await waitFor(work, graceMs);
+  if (stopping === STILL_RUNNING) {
+    shoreLog.warn(
+      `Tool did not confirm it stopped within ${String(graceMs)}ms; ` +
+        `reporting an unconfirmed timeout: ${name}`,
+    );
+    drain(work, name);
+    throw new ToolTimedOut(seconds, false);
   }
+  if ("ok" in stopping) {
+    shoreLog.warn(`Tool finished as it was being cancelled; keeping its result: ${name}`);
+    return stopping.ok;
+  }
+  if (stopping.err instanceof McpCancelled && !stopping.err.repeatable) {
+    shoreLog.warn(
+      `Tool was asked to stop but MCP cannot confirm that it did; ` +
+        `reporting an unconfirmed timeout: ${name}`,
+    );
+    throw new ToolTimedOut(seconds, false);
+  }
+  throw new ToolTimedOut(seconds, true);
 }
 
 export { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut };

@@ -46,6 +46,13 @@ export function toolResultText(content: string | ContentBlock[]): string {
     .join("\n\n");
 }
 
+export function toolResultImages(
+  content: string | ContentBlock[],
+): Array<Extract<ContentBlock, { type: "image" }>> {
+  if (typeof content === "string") return [];
+  return content.filter((b): b is Extract<ContentBlock, { type: "image" }> => b.type === "image");
+}
+
 export interface SystemBlock {
   text: string;
   label: string;

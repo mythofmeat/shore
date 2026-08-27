@@ -19,6 +19,8 @@ import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/l
 import { Ledger } from "../src/ledger/store.ts";
 import { testTmp } from "./support/tmp.ts";
 import { eventsForResponse } from "./support/stream.ts";
+import { interpretResult } from "../src/mcp/client.ts";
+import { carryToolMedia } from "../src/tools/media.ts";
 
 afterAll(restoreTestEnv);
 
@@ -200,6 +202,48 @@ describe("running a heartbeat", () => {
 
     expect(seen.map((r) => r.context?.call_type)).toEqual(["heartbeat", "heartbeat_tool_loop"]);
     expect(seen.every((r) => r.context?.character === "ada")).toBe(true);
+  });
+
+  test("a tool's media payload is described, not serialized as an empty object", async () => {
+    const config = await world();
+    const seen: SidecarRequest[] = [];
+    const executor = new InProcessAutonomyExecutor({
+      registry: registryFor(config),
+      cache: new LastRequestCache(),
+      tools: {
+        mcpRegistry: {
+          call: () =>
+            Promise.resolve(
+              carryToolMedia(
+                interpretResult({
+                  content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
+                }),
+              ),
+            ),
+        },
+      },
+      providers: {
+        anthropic: scriptedProvider(
+          [
+            response(
+              [{ type: "tool_use", id: "t1", name: "mcp__srv__shot", input: {} }],
+              "tool_use",
+            ),
+            response([{ type: "text", text: "done" }]),
+          ],
+          seen,
+        ),
+      },
+    });
+
+    await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+    const results = (seen[1]?.messages ?? [])
+      .flatMap((m) => m.content)
+      .filter((b) => b.type === "tool_result");
+    expect(results.map((b) => b.content)).toEqual([
+      "[image/png, 5 bytes returned, not included here]",
+    ]);
   });
 
   test("set_next_wake goes to the runner's clock and quotes what it got", async () => {

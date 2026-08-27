@@ -20,8 +20,17 @@ export class NotImplemented extends Error {
 }
 
 export class ToolTimedOut extends Error {
-  constructor(seconds: number) {
-    super(`timed out after ${seconds}s and was cancelled`);
+  readonly stopped: boolean;
+
+  constructor(seconds: number, stopped: boolean) {
+    super(
+      stopped
+        ? `timed out after ${seconds}s and was cancelled`
+        : `timed out after ${seconds}s. Shore asked it to stop and it has not confirmed ` +
+          `that it did, so it may still be running and may still take effect. Do not ` +
+          `repeat this call until you have checked whether the first one already ran.`,
+    );
     this.name = "ToolTimedOut";
+    this.stopped = stopped;
   }
 }

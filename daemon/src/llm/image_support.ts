@@ -124,6 +124,9 @@ export function countImageBlocks(messages: readonly WireMessage[]): number {
   for (const message of messages) {
     for (const block of message.content) {
       if (block.type === "image") total += 1;
+      else if (block.type === "tool_result" && Array.isArray(block.content)) {
+        total += block.content.filter((b) => b.type === "image").length;
+      }
     }
   }
   return total;
@@ -134,17 +137,34 @@ export interface StripOutcome {
   stripped: number;
 }
 
+function carriesImage(block: ContentBlock): boolean {
+  if (block.type === "image") return true;
+  return (
+    block.type === "tool_result" &&
+    Array.isArray(block.content) &&
+    block.content.some((b) => b.type === "image")
+  );
+}
+
 export function stripImageBlocks(
   messages: readonly WireMessage[],
   reason: string,
 ): StripOutcome {
   let stripped = 0;
+  const notice = (label: string): ContentBlock => {
+    stripped += 1;
+    return { type: "text", text: omissionNotice(label, reason) };
+  };
+
   const out = messages.map((message) => {
-    if (!message.content.some((b) => b.type === "image")) return message;
+    if (!message.content.some(carriesImage)) return message;
     const content: ContentBlock[] = message.content.map((block) => {
-      if (block.type !== "image") return block;
-      stripped += 1;
-      return { type: "text", text: omissionNotice("an attached image", reason) };
+      if (block.type === "image") return notice("an attached image");
+      if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
+      return {
+        ...block,
+        content: block.content.map((b) => (b.type === "image" ? notice("a tool result image") : b)),
+      };
     });
     return { ...message, content };
   });
