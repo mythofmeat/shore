@@ -1,6 +1,7 @@
 import { renderTemplate, stripOneTrailingNewline } from "../engine/prompt.ts";
 import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
+import { schemasFrom } from "./validate.ts";
 
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
 import rollDiceDesc from "../../prompts/tools/basic/roll_dice.md" with { type: "text" };
@@ -317,6 +318,10 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     category: "other",
   },
 ]);
+
+export const BUILTIN_TOOL_SCHEMAS = schemasFrom(
+  ALL_TOOLS.map((tool) => ({ name: tool.name, input_schema: tool.parameters })),
+);
 
 export function toolPatternMatches(pattern: string, name: string): boolean {
   return pattern.endsWith("*")

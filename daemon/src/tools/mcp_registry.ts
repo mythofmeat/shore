@@ -6,6 +6,7 @@ import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 import { McpTransportError } from "../mcp/client.ts";
 import type { McpClient, McpServerSpec, Transport } from "../mcp/client.ts";
+import { compileToolSchema } from "./validate.ts";
 
 export interface McpToolDef {
   full_name: string;
@@ -165,14 +166,35 @@ function listedTools(
   name: string,
   tools: Awaited<ReturnType<McpClient["listTools"]>>,
 ): McpToolDef[] {
-  return tools.map((tool) => ({
-    full_name: `mcp__${name}__${tool.name}`,
-    description: tool.description,
-    input_schema: tool.input_schema,
-    server: name,
-    tool: tool.name,
-    repeatable: tool.repeatable,
-  }));
+  return acceptedTools(
+    tools.map((tool) => ({
+      full_name: `mcp__${name}__${tool.name}`,
+      description: tool.description,
+      input_schema: tool.input_schema,
+      server: name,
+      tool: tool.name,
+      repeatable: tool.repeatable,
+    })),
+  );
+}
+
+function acceptedTools(tools: readonly McpToolDef[]): McpToolDef[] {
+  const accepted: McpToolDef[] = [];
+  const names = new Set<string>();
+  for (const tool of tools) {
+    if (names.has(tool.full_name)) {
+      shoreLog.warn(`shore: rejecting duplicate MCP tool ${tool.full_name}`);
+      continue;
+    }
+    try {
+      compileToolSchema(tool.full_name, tool.input_schema);
+      names.add(tool.full_name);
+      accepted.push(tool);
+    } catch (error) {
+      shoreLog.warn(`shore: rejecting ${tool.full_name}: ${String(error)}`);
+    }
+  }
+  return accepted;
 }
 
 async function connectOne(
@@ -277,11 +299,12 @@ export class McpRegistry {
     clients: Map<string, McpClient> = new Map(),
     source: Record<string, McpServerConfigView> = {},
   ): McpRegistry {
+    const registeredTools = acceptedTools(tools);
     const servers = new Map<string, ServerLifecycle>();
     const names = new Set([
       ...Object.keys(source),
       ...clients.keys(),
-      ...tools.map((tool) => tool.server),
+      ...registeredTools.map((tool) => tool.server),
     ]);
     for (const name of names) {
       const client = clients.get(name);
@@ -290,12 +313,12 @@ export class McpRegistry {
         spec: undefined,
         state: client === undefined ? "unavailable" : "connected",
         client,
-        tools: tools.filter((tool) => tool.server === name),
+        tools: registeredTools.filter((tool) => tool.server === name),
         lastError: undefined,
         nextRetryAt: undefined,
       });
     }
-    return new McpRegistry(clients, tools, source, servers);
+    return new McpRegistry(clients, registeredTools, source, servers);
   }
 
   static async fromConfig(

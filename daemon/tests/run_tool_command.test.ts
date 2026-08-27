@@ -18,6 +18,7 @@ import {
 } from "../src/commands/run_tool.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
+import { compileToolSchema } from "../src/tools/validate.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const READ_SCHEMA = {
@@ -249,6 +250,14 @@ describe("coercePairs", () => {
     ).toEqual({ path: "notes.md", offset: 3, recursive: true, globs: ["*.md"] });
   });
 
+  test("the shorthand reads types from the same compiled contract used at dispatch", () => {
+    const compiled = compileToolSchema("read", READ_SCHEMA);
+    expect(coercePairs({ offset: "3", recursive: "false" }, compiled)).toEqual({
+      offset: 3,
+      recursive: false,
+    });
+  });
+
   test("an id-looking string stays a string when the schema says string", () => {
     expect(coercePairs({ path: "12345" }, READ_SCHEMA)).toEqual({ path: "12345" });
   });
@@ -301,6 +310,19 @@ describe("runTool", () => {
     expect(result["rejected"]).toBe(true);
     expect(String(result["output"])).toContain("`notation`");
     expect(String(result["output"])).toContain("Nothing was executed");
+  });
+
+  test("an explicit value with the wrong type is refused by the shared schema", async () => {
+    const { ctx } = await world({ enabledTools: ["read"] });
+    const result = (await runTool("ada", ctx, {
+      tool: "read",
+      input: { path: 42 },
+    })) as Record<string, unknown>;
+
+    expect(result["ok"]).toBe(false);
+    expect(result["rejected"]).toBe(true);
+    expect(String(result["output"])).toContain("`path`");
+    expect(String(result["output"])).toContain("string");
   });
 
   test("a result past the window is truncated like a real turn, and --raw keeps the rest", async () => {
