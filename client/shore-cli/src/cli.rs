@@ -86,8 +86,10 @@ pub(crate) enum FlagProblem {
     NeedsEquals(&'static str, String),
 }
 
-const TARGET_TAKES_EQUALS: [(&str, &[&str]); 1] =
-    [("--background", &["all", "heartbeat", "compaction"])];
+const TARGET_TAKES_EQUALS: [(&str, &[&str]); 2] = [
+    ("--background", &["all", "heartbeat", "compaction"]),
+    ("--subagent", &["all"]),
+];
 
 fn target_taking_equals(spelled: &str) -> Option<&'static str> {
     TARGET_TAKES_EQUALS
@@ -100,6 +102,66 @@ fn separated_target_value(flag: &str, token: &str) -> bool {
     TARGET_TAKES_EQUALS
         .iter()
         .any(|&(named, values)| named == flag && values.contains(&token))
+}
+
+fn separated_model_target(argv: &[String]) -> Option<FlagProblem> {
+    let verb_index = argv.windows(2).position(|pair| {
+        matches!(
+            pair,
+            [command, verb]
+                if command == "model"
+                    && matches!(verb.as_str(), "use" | "info" | "setting" | "reset")
+        )
+    })?;
+    let verb = argv.get(verb_index.checked_add(1)?)?.as_str();
+    let args = argv.get(verb_index.checked_add(2)?..)?;
+    let mut separated = Vec::new();
+
+    for pair in args.windows(2) {
+        let [flag_token, value] = pair else {
+            continue;
+        };
+        let Some(flag) = target_taking_equals(flag_token) else {
+            continue;
+        };
+        if value.starts_with('-') {
+            continue;
+        }
+        if separated_target_value(flag, value) {
+            return Some(FlagProblem::NeedsEquals(flag, value.clone()));
+        }
+        separated.push((flag, value));
+    }
+
+    let mut skip_value = false;
+    let mut positional_count: usize = 0;
+    for token in args {
+        if skip_value {
+            skip_value = false;
+            continue;
+        }
+        if token == "--model" {
+            skip_value = true;
+            continue;
+        }
+        if !token.starts_with('-') {
+            positional_count = positional_count.checked_add(1)?;
+        }
+    }
+    let max_positionals = match verb {
+        "use" | "info" => 1,
+        "setting" if args.iter().any(|arg| arg == "--reset") => 1,
+        "setting" => 2,
+        "reset" => 0,
+        _ => return None,
+    };
+    if positional_count <= max_positionals {
+        return None;
+    }
+    separated
+        .into_iter()
+        .next()
+        .map(|(flag, value)| FlagProblem::NeedsEquals(flag, value.clone()))
 }
 
 fn leading_flag_named(spelled: &str) -> Option<&'static str> {
@@ -121,30 +183,27 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
+    let collected_argv = argv
+        .into_iter()
+        .map(|arg| arg.as_ref().to_owned())
+        .collect::<Vec<_>>();
+    if let Some(problem) = separated_model_target(&collected_argv) {
+        return Some(problem);
+    }
     let mut words: Vec<String> = Vec::new();
     let mut flags: Vec<String> = Vec::new();
     let mut flagged = false;
     let mut expecting_value = false;
-    let mut bare_target: Option<&'static str> = None;
 
-    for raw in argv.into_iter().skip(1) {
-        let token = raw.as_ref();
+    for token in collected_argv.iter().skip(1).map(String::as_str) {
         if token == "--" {
             break;
-        }
-        if let Some(flag) = bare_target.take()
-            && separated_target_value(flag, token)
-        {
-            return Some(FlagProblem::NeedsEquals(flag, token.to_owned()));
         }
         if expecting_value {
             expecting_value = false;
             continue;
         }
         let spelled = token.split('=').next().unwrap_or(token);
-        if spelled == token {
-            bare_target = target_taking_equals(spelled);
-        }
         if let Some(problem) = retired_flag_named(spelled) {
             return Some(problem);
         }
@@ -1005,7 +1064,7 @@ pub(crate) struct ModelTarget {
     #[arg(long)]
     pub(crate) chat: bool,
 
-    /// Background tasks: bare for every one of them, or =compaction / =heartbeat
+    /// Background tasks: bare means all; naming one requires =compaction or =heartbeat
     #[arg(
         long,
         value_enum,
@@ -1016,7 +1075,7 @@ pub(crate) struct ModelTarget {
     )]
     pub(crate) background: Option<BackgroundTarget>,
 
-    /// Sub-agents: bare for every one of them, or =<name> for one
+    /// Sub-agents: bare means all; naming one requires --subagent=<name>
     #[arg(
         long,
         num_args = 0..=1,
@@ -1746,7 +1805,14 @@ pub(crate) fn palette_command_needs_more_input(input: &str) -> Result<bool, Stri
     let Some(words) = shlex::split(input) else {
         return Err("unclosed quote in command".to_owned());
     };
-    let argv = std::iter::once("shore".to_owned()).chain(words);
+    let argv = std::iter::once("shore".to_owned())
+        .chain(words)
+        .collect::<Vec<_>>();
+    if let Some(problem) = flag_problem(&argv)
+        && let Some(message) = target_problem_message(&problem)
+    {
+        return Err(message);
+    }
     match Cli::try_parse_from(argv) {
         Ok(parsed) => {
             if parsed.command.is_some() {
@@ -1772,9 +1838,25 @@ pub(crate) fn parse_palette_command(input: &str) -> Result<CliCommand, String> {
     let Some(words) = shlex::split(input) else {
         return Err("unclosed quote in command".to_owned());
     };
-    let argv = std::iter::once("shore".to_owned()).chain(words);
+    let argv = std::iter::once("shore".to_owned())
+        .chain(words)
+        .collect::<Vec<_>>();
+    if let Some(problem) = flag_problem(&argv)
+        && let Some(message) = target_problem_message(&problem)
+    {
+        return Err(message);
+    }
     let parsed = Cli::try_parse_from(argv).map_err(|error| error.to_string())?;
     parsed.command.ok_or_else(|| "missing command".to_owned())
+}
+
+fn target_problem_message(problem: &FlagProblem) -> Option<String> {
+    let FlagProblem::NeedsEquals(flag, value) = problem else {
+        return None;
+    };
+    Some(format!(
+        "{flag} takes its value with an =; write {flag}={value}. Bare {flag} means all of them"
+    ))
 }
 
 #[expect(
@@ -1857,7 +1939,21 @@ const NOISE_COMMANDS: [&str; 3] = ["complete", "view", "ui"];
 
 pub(crate) fn suppress_noise_completions(shell: Shell, script: &str) -> String {
     let mut out = String::with_capacity(script.len());
+    let mut skipping_fish_target = false;
     for line in script.lines() {
+        if skipping_fish_target {
+            if line.matches('"').count() % 2 == 1 {
+                skipping_fish_target = false;
+            }
+            continue;
+        }
+        let fish_optional_target = shell == Shell::Fish
+            && line.contains("__fish_shore_using_subcommand model")
+            && (line.contains(" -l background ") || line.contains(" -l subagent "));
+        if fish_optional_target {
+            skipping_fish_target = line.matches('"').count() % 2 == 1;
+            continue;
+        }
         if line.contains(INTERNAL_HELPER_HELP)
             || line.contains(SUPERSEDED_HELP)
             || line.contains(TUI_ONLY_HELP)
@@ -1928,7 +2024,9 @@ function __shore_setting_key\n\
 end\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting; and not __shore_setting_key\" -f -a \"(shore complete setting-keys 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting; and __shore_setting_key\" -f -a \"(shore complete setting-values (__shore_setting_key) 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info\" -l subagent -r -f -a \"(shore complete subagents 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info; and string match -q -- '--b*' (commandline -ct)\" -f -a \"--background --background=all --background=heartbeat --background=compaction\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info; and string match -q -- '--s*' (commandline -ct)\" -f -a \"--subagent\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info; and string match -q -- '--s*' (commandline -ct)\" -f -a \"(shore complete subagents 2>/dev/null | string replace -r -- '^' '--subagent=')\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
 \n\
 function __shore_config_key\n\
@@ -2532,6 +2630,17 @@ mod tests {
         for canonical in ["msg", "model", "character"] {
             assert!(offered.iter().any(|candidate| candidate == canonical));
         }
+    }
+
+    #[test]
+    fn palette_rejects_a_spaced_model_target_before_it_can_reach_the_daemon() {
+        let error = parse_palette_command("model setting --subagent all zai_subscription true")
+            .expect_err("the palette must apply the same target grammar as the CLI");
+        assert!(error.contains("--subagent=all"), "{error}");
+
+        let incomplete = palette_command_needs_more_input("model reset --subagent memory")
+            .expect_err("a spaced target is an error, not an incomplete command");
+        assert!(incomplete.contains("--subagent=memory"), "{incomplete}");
     }
 
     #[test]
@@ -4108,6 +4217,83 @@ mod tests {
     }
 
     #[test]
+    fn model_targets_cover_bare_named_and_explicit_all_for_every_verb() {
+        for args in [
+            &["model", "use", "--subagent", "opus"][..],
+            &["model", "info", "--subagent"][..],
+            &["model", "setting", "--subagent", "temperature", "0.3"][..],
+            &["model", "reset", "--subagent"][..],
+            &["model", "use", "--background", "opus"][..],
+            &["model", "info", "--background"][..],
+            &["model", "setting", "--background", "temperature", "0.3"][..],
+            &["model", "reset", "--background"][..],
+            &["model", "use", "--subagent=memory", "opus"][..],
+            &["model", "info", "--subagent=memory"][..],
+            &["model", "setting", "--subagent=memory", "temperature"][..],
+            &["model", "reset", "--subagent=memory"][..],
+            &["model", "use", "--background=heartbeat", "opus"][..],
+            &["model", "info", "--background=heartbeat"][..],
+            &["model", "setting", "--background=heartbeat", "temperature"][..],
+            &["model", "reset", "--background=heartbeat"][..],
+            &["model", "use", "--subagent=all", "opus"][..],
+            &["model", "info", "--subagent=all"][..],
+            &["model", "setting", "--subagent=all", "temperature"][..],
+            &["model", "reset", "--subagent=all"][..],
+            &["model", "use", "--background=all", "opus"][..],
+            &["model", "info", "--background=all"][..],
+            &["model", "setting", "--background=all", "temperature"][..],
+            &["model", "reset", "--background=all"][..],
+        ] {
+            assert_eq!(misplaced(args), None, "{args:?}");
+            assert!(
+                Cli::try_parse_from(with_program_name(args)).is_ok(),
+                "{args:?} should parse"
+            );
+        }
+    }
+
+    #[test]
+    fn spaced_model_targets_are_rejected_for_every_verb() {
+        for (flag, value) in [("--subagent", "all"), ("--background", "heartbeat")] {
+            for args in [
+                vec!["model", "use", flag, value, "opus"],
+                vec!["model", "info", flag, value],
+                vec!["model", "setting", flag, value, "temperature", "0.3"],
+                vec!["model", "reset", flag, value],
+            ] {
+                assert_eq!(
+                    misplaced(&args),
+                    Some(FlagProblem::NeedsEquals(flag, value.to_owned())),
+                    "{args:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_unknown_spaced_subagent_is_caught_when_it_overflows_the_verb() {
+        for args in [
+            &["model", "use", "--subagent", "memory", "opus"][..],
+            &["model", "info", "--subagent", "memory", "opus"][..],
+            &[
+                "model",
+                "setting",
+                "--subagent",
+                "memory",
+                "temperature",
+                "0.3",
+            ][..],
+            &["model", "reset", "--subagent", "memory"][..],
+        ] {
+            assert_eq!(
+                misplaced(args),
+                Some(FlagProblem::NeedsEquals("--subagent", "memory".to_owned())),
+                "{args:?}"
+            );
+        }
+    }
+
+    #[test]
     fn model_reset_background_threads_the_task() {
         let cli = parse(&["model", "reset", "--background=all"]);
         let (name, args) = to_swp_command(parsed_command(&cli), None).unwrap();
@@ -4423,29 +4609,24 @@ mod tests {
     #[test]
     fn fish_footer_completes_the_setting_target_flags() {
         let footer = fish_dynamic_completions_footer();
-        for (flag, kind) in [("subagent", "subagents"), ("model", "models")] {
-            let line = footer
-                .lines()
-                .find(|l| {
-                    l.contains("__fish_shore_using_subcommand model")
-                        && l.contains(&format!(" -l {flag} "))
-                })
-                .unwrap_or_else(|| panic!("footer must complete `--{flag}` under `model`"));
-            assert!(
-                line.contains(&format!("shore complete {kind}")),
-                "`--{flag}` must complete from `{kind}`: {line}"
-            );
-        }
+        let subagents = footer
+            .lines()
+            .find(|line| line.contains("string replace") && line.contains("--subagent="))
+            .expect("footer must complete named sub-agents as --subagent=<name>");
+        assert!(subagents.contains("shore complete subagents"));
+        let models = footer
+            .lines()
+            .find(|line| line.contains(" -l model "))
+            .expect("footer must complete --model values");
+        assert!(models.contains("shore complete models"));
     }
 
     #[test]
     fn the_subagent_flag_completes_under_every_verb_that_takes_a_target() {
         let line = fish_dynamic_completions_footer()
             .lines()
-            .find(|l| {
-                l.contains("__fish_shore_using_subcommand model") && l.contains(" -l subagent ")
-            })
-            .expect("footer must complete `--subagent` under `model`");
+            .find(|line| line.contains("string replace") && line.contains("--subagent="))
+            .expect("footer must complete `--subagent=<name>` under `model`");
         for verb in ["use", "setting", "reset", "info"] {
             assert!(
                 line.contains(&format!(" {verb}")),
@@ -4453,9 +4634,34 @@ mod tests {
             );
         }
         assert!(
-            !line.contains("-a \"all ("),
+            !line.contains("--subagent=all"),
             "bare `--subagent` already means all, so `all` is not a name to offer: {line}"
         );
+    }
+
+    #[test]
+    fn fish_offers_model_targets_only_in_the_equals_spelling() {
+        let footer = fish_dynamic_completions_footer();
+        let (_, generated) = generated_for(Shell::Fish);
+        for flag in ["background", "subagent"] {
+            assert!(
+                !generated.lines().any(|line| {
+                    line.contains("__fish_shore_using_subcommand model")
+                        && line.contains(&format!(" -l {flag} "))
+                }),
+                "fish must not describe --{flag} as taking a spaced argument"
+            );
+        }
+        for spelling in [
+            "--background",
+            "--background=all",
+            "--background=heartbeat",
+            "--background=compaction",
+            "--subagent",
+            "--subagent=",
+        ] {
+            assert!(footer.contains(spelling), "missing {spelling}: {footer}");
+        }
     }
 
     #[test]
