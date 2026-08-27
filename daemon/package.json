@@ -16,15 +16,15 @@
     "postinstall": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^3.0.32",
-    "@ai-sdk/moonshotai": "^3.0.38",
-    "@anthropic-ai/sdk": "^0.120.0",
+    "@ai-sdk/deepseek": "^3.0.35",
+    "@ai-sdk/moonshotai": "^3.0.41",
+    "@anthropic-ai/sdk": "^0.121.0",
     "@google/genai": "^2.19.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openrouter/sdk": "^1.2.71",
-    "ai": "^7.0.79",
+    "@openrouter/sdk": "^1.2.75",
+    "ai": "^7.0.83",
     "matrix-js-sdk": "^42.2.0",
-    "openai": "^7.5.0",
+    "openai": "^7.7.0",
     "zhipu-ai-provider": "^0.4.0"
   },
   "devDependencies": {
