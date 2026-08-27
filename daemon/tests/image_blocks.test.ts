@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import { translateMessages } from "../src/llm/providers/gemini.ts";
 import { turnToOpenAI } from "../src/llm/providers/openai.ts";
-import { turnToOpenRouter } from "../src/llm/providers/openrouter.ts";
 import { turnToVercel } from "../src/llm/providers/vercel.ts";
 import { buildZaiMessages } from "../src/llm/providers/zai.ts";
 import type { SidecarRequest, TurnMessage } from "../src/llm/types.ts";
@@ -32,11 +31,15 @@ describe("inlined image blocks reach the wire", () => {
     ]);
   });
 
-  test("openrouter: image block → image_url part, before the text", () => {
-    const msgs = turnToOpenRouter(imageTurn()) as unknown as Array<Record<string, unknown>>;
+  test("openrouter: image block → AI SDK image part, before the text", () => {
+    const msgs = turnToVercel(
+      imageTurn(),
+      new Map(),
+      "openrouter",
+    ) as unknown as Array<Record<string, unknown>>;
     expect(msgs).toHaveLength(1);
     expect(msgs[0]?.["content"]).toEqual([
-      { type: "image_url", imageUrl: { url: DATA_URL } },
+      { type: "image", image: PNG_B64, mediaType: "image/png" },
       { type: "text", text: "what is this?" },
     ]);
   });

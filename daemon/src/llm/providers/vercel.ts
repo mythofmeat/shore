@@ -1,10 +1,15 @@
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createMoonshotAI } from "@ai-sdk/moonshotai";
 import {
+  createOpenRouter,
+  type OpenRouterChatSettings,
+} from "@openrouter/ai-sdk-provider";
+import {
   generateText,
   jsonSchema,
   streamText,
   tool,
+  type JSONValue,
   type LanguageModel,
   type LanguageModelUsage,
   type ModelMessage,
@@ -29,6 +34,8 @@ import { replayableMessages } from "../replay.ts";
 import { REASONING_OFF } from "../types.ts";
 
 export class VercelProvider implements SidecarProvider {
+  constructor(private readonly customFetch?: typeof fetch) {}
+
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
     const startedAt = Date.now();
     let firstTokenAt = 0;
@@ -36,12 +43,14 @@ export class VercelProvider implements SidecarProvider {
       if (firstTokenAt === 0) firstTokenAt = Date.now();
     };
 
-    const result = streamText(buildCall(req, signal));
+    const result = streamText(buildCall(req, signal, this.customFetch));
     yield { type: "start", model: req.model };
 
     let textAccum = "";
     let finishReason = "stop";
     let usage: Usage = emptyUsage();
+    let carrierEmitted = false;
+    let finalProviderMetadata: unknown;
 
     for await (const part of result.stream) {
       switch (part.type) {
@@ -51,6 +60,14 @@ export class VercelProvider implements SidecarProvider {
             yield { type: "thinking", text: part.text };
           }
           break;
+        case "reasoning-end": {
+          const details = openRouterReasoningDetails(part.providerMetadata);
+          if (!carrierEmitted && details !== undefined) {
+            carrierEmitted = true;
+            yield { type: "reasoning_details", details };
+          }
+          break;
+        }
         case "text-delta":
           if (part.text.length > 0) {
             markFirst();
@@ -58,14 +75,32 @@ export class VercelProvider implements SidecarProvider {
             yield { type: "text", text: part.text };
           }
           break;
-        case "tool-call":
+        case "tool-call": {
+          const details = openRouterReasoningDetails(part.providerMetadata);
+          if (!carrierEmitted && details !== undefined) {
+            carrierEmitted = true;
+            yield { type: "reasoning_details", details };
+          }
           markFirst();
           yield { type: "tool_use", id: part.toolCallId, name: part.toolName, input: part.input };
           break;
-        case "finish":
+        }
+        case "finish-step": {
+          finalProviderMetadata = part.providerMetadata;
+          const details = openRouterReasoningDetails(finalProviderMetadata);
+          if (!carrierEmitted && details !== undefined) {
+            carrierEmitted = true;
+            yield { type: "reasoning_details", details };
+          }
           finishReason = part.finishReason;
-          usage = toUsage(part.totalUsage);
+          usage = toUsage(part.usage, finalProviderMetadata);
           break;
+        }
+        case "finish": {
+          finishReason = part.finishReason;
+          usage = toUsage(part.totalUsage, finalProviderMetadata);
+          break;
+        }
         case "error":
           throw part.error;
         default:
@@ -88,12 +123,24 @@ export class VercelProvider implements SidecarProvider {
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
-    const result = await generateText(buildCall(req, signal) as Parameters<typeof generateText>[0]);
+    const result = await generateText(
+      buildCall(req, signal, this.customFetch) as Parameters<typeof generateText>[0],
+    );
 
     const content_blocks: ContentBlock[] = [];
     const reasoningText = result.finalStep.reasoningText;
-    if (typeof reasoningText === "string" && reasoningText.length > 0) {
-      content_blocks.push({ type: "thinking", thinking: reasoningText });
+    const reasoningDetails = openRouterReasoningDetails(result.finalStep.providerMetadata);
+    if (
+      (typeof reasoningText === "string" && reasoningText.length > 0) ||
+      reasoningDetails !== undefined
+    ) {
+      content_blocks.push({
+        type: "thinking",
+        thinking: reasoningText ?? "",
+        ...(reasoningDetails !== undefined
+          ? { reasoning_details: reasoningDetails }
+          : {}),
+      });
     }
     if (result.text) content_blocks.push({ type: "text", text: result.text });
     for (const tc of result.toolCalls) {
@@ -105,7 +152,7 @@ export class VercelProvider implements SidecarProvider {
       content: result.text,
       content_blocks,
       finish_reason: mapFinishReason(result.finishReason),
-      usage: toUsage(result.usage),
+      usage: toUsage(result.usage, result.finalStep.providerMetadata),
       timing: { total_ms: total, time_to_first_token_ms: total },
       model: req.model,
     };
@@ -114,9 +161,13 @@ export class VercelProvider implements SidecarProvider {
 
 type VercelCall = Parameters<typeof streamText>[0];
 
-export function buildCall(req: SidecarRequest, signal?: AbortSignal): VercelCall {
+export function buildCall(
+  req: SidecarRequest,
+  signal?: AbortSignal,
+  customFetch?: typeof fetch,
+): VercelCall {
   const call: VercelCall = {
-    model: buildModel(req),
+    model: buildModel(req, customFetch),
     messages: buildMessages(req),
     maxOutputTokens: req.max_tokens,
     maxRetries: 0,
@@ -134,19 +185,26 @@ export function buildCall(req: SidecarRequest, signal?: AbortSignal): VercelCall
   return call;
 }
 
-function buildModel(req: SidecarRequest): LanguageModel {
+function buildModel(req: SidecarRequest, customFetch?: typeof fetch): LanguageModel {
   const settings = {
     apiKey: req.api_key,
     ...(req.base_url ? { baseURL: req.base_url } : {}),
+    ...(customFetch ? { fetch: customFetch } : {}),
   };
-  return req.sdk === "deepseek"
-    ? createDeepSeek(settings)(req.model)
-    : createMoonshotAI(settings)(req.model);
+  if (req.sdk === "openrouter") {
+    return createOpenRouter({ ...settings, compatibility: "strict" }).chat(
+      req.model,
+      buildOpenRouterSettings(req),
+    );
+  }
+  if (req.sdk === "deepseek") return createDeepSeek(settings)(req.model);
+  return createMoonshotAI(settings)(req.model);
 }
 
 type ProviderOptionsValue = NonNullable<VercelCall["providerOptions"]>;
 
 export function buildProviderOptions(req: SidecarRequest): ProviderOptionsValue | undefined {
+  if (req.sdk === "openrouter") return undefined;
   const opts = req.provider_options ?? {};
   const inner: Record<string, unknown> = {};
 
@@ -166,6 +224,37 @@ export function buildProviderOptions(req: SidecarRequest): ProviderOptionsValue 
   return { [key]: inner } as ProviderOptionsValue;
 }
 
+export function buildOpenRouterSettings(req: SidecarRequest): OpenRouterChatSettings {
+  const settings: OpenRouterChatSettings = {};
+  const opts = req.provider_options ?? {};
+  const effort = opts.reasoning_effort;
+  const budget = opts.budget_tokens;
+
+  if (opts.thinking_enabled === false || effort === REASONING_OFF) {
+    settings.reasoning = { effort: "none" };
+  } else if (typeof effort === "string" && effort.length > 0) {
+    settings.reasoning = { effort } as NonNullable<OpenRouterChatSettings["reasoning"]>;
+  } else if (typeof budget === "number" && budget > 0) {
+    settings.reasoning = { max_tokens: budget };
+  }
+
+  const routing = opts.openrouter_provider;
+  if (routing !== null && typeof routing === "object" && !Array.isArray(routing)) {
+    settings.provider = snakeCaseKeys(routing) as NonNullable<OpenRouterChatSettings["provider"]>;
+  }
+  return settings;
+}
+
+function snakeCaseKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(snakeCaseKeys);
+  if (value === null || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+    out[key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)] = snakeCaseKeys(inner);
+  }
+  return out;
+}
+
 function buildTools(tools: ToolDefinition[] | undefined): ToolSet | undefined {
   if (!tools || tools.length === 0) return undefined;
   const out: Record<string, Tool> = {};
@@ -183,7 +272,7 @@ function buildMessages(req: SidecarRequest): ModelMessage[] {
   const toolNames = new Map<string, string>();
   for (const turn of replayableMessages(req)) {
     const norm = toTurn(turn);
-    messages.push(...turnToVercel(norm, toolNames));
+    messages.push(...turnToVercel(norm, toolNames, req.sdk));
     for (const b of norm.content) {
       if (b.type === "tool_use") toolNames.set(b.id, b.name);
     }
@@ -198,7 +287,11 @@ function textOf(turn: TurnMessage): string {
     .join("");
 }
 
-export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>): ModelMessage[] {
+export function turnToVercel(
+  turn: TurnMessage,
+  toolNames: Map<string, string>,
+  sdk?: SidecarRequest["sdk"],
+): ModelMessage[] {
   if (turn.role === "system") {
     return [{ role: "system", content: textOf(turn) }];
   }
@@ -212,7 +305,7 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
     const thinking = turn.content.find(
       (b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking",
     );
-    if (thinking && thinking.thinking.length > 0) {
+    if (sdk !== "openrouter" && thinking && thinking.thinking.length > 0) {
       parts.push({ type: "reasoning", text: thinking.thinking });
     }
     const text = textOf(turn);
@@ -222,7 +315,15 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
         parts.push({ type: "tool-call", toolCallId: b.id, toolName: b.name, input: b.input ?? {} });
       }
     }
-    return parts.length > 0 ? [{ role: "assistant", content: parts }] : [];
+    const reasoningDetails = thinking?.reasoning_details;
+    if (parts.length === 0 && (sdk !== "openrouter" || reasoningDetails === undefined)) return [];
+    const message: ModelMessage = { role: "assistant", content: parts };
+    if (sdk === "openrouter" && reasoningDetails !== undefined) {
+      message.providerOptions = {
+        openrouter: { reasoning_details: reasoningDetails as JSONValue },
+      };
+    }
+    return [message];
   }
 
   const out: ModelMessage[] = [];
@@ -313,15 +414,38 @@ function emptyUsage(): Usage {
   return { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
 }
 
-export function toUsage(u: LanguageModelUsage | undefined): Usage {
+export function toUsage(u: LanguageModelUsage | undefined, providerMetadata?: unknown): Usage {
   const cacheRead = u?.inputTokenDetails?.cacheReadTokens ?? 0;
   const cacheWrite = u?.inputTokenDetails?.cacheWriteTokens ?? 0;
-  return {
+  const usage: Usage = {
     input_tokens: Math.max(0, (u?.inputTokens ?? 0) - cacheRead - cacheWrite),
     output_tokens: u?.outputTokens ?? 0,
     cache_read_tokens: cacheRead,
     cache_creation_tokens: cacheWrite,
   };
+  const cost = openRouterCost(providerMetadata);
+  if (cost !== undefined) usage.total_cost_usd = cost;
+  return usage;
+}
+
+function openRouterReasoningDetails(providerMetadata: unknown): unknown[] | undefined {
+  const openrouter = openRouterMetadata(providerMetadata);
+  return Array.isArray(openrouter?.reasoning_details) ? openrouter.reasoning_details : undefined;
+}
+
+function openRouterCost(providerMetadata: unknown): number | undefined {
+  const usage = openRouterMetadata(providerMetadata)?.usage;
+  if (usage === null || typeof usage !== "object" || Array.isArray(usage)) return undefined;
+  const cost = (usage as Record<string, unknown>).cost;
+  return typeof cost === "number" ? cost : undefined;
+}
+
+function openRouterMetadata(providerMetadata: unknown): Record<string, unknown> | undefined {
+  if (providerMetadata === null || typeof providerMetadata !== "object") return undefined;
+  const openrouter = (providerMetadata as Record<string, unknown>).openrouter;
+  return openrouter !== null && typeof openrouter === "object" && !Array.isArray(openrouter)
+    ? (openrouter as Record<string, unknown>)
+    : undefined;
 }
 
 function mapFinishReason(finish: string): string {

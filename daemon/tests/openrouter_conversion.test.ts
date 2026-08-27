@@ -1,164 +1,202 @@
 import { describe, expect, test } from "bun:test";
 
-import { ChatMessages$outboundSchema, ChatRequest$outboundSchema } from "@openrouter/sdk/models";
-
-import { buildCall, turnToOpenRouter } from "../src/llm/providers/openrouter.ts";
+import {
+  buildOpenRouterSettings,
+  turnToVercel,
+  VercelProvider,
+} from "../src/llm/providers/vercel.ts";
 import type { SidecarRequest, TurnMessage } from "../src/llm/types.ts";
 
 type Rec = Record<string, unknown>;
-const conv = (t: TurnMessage) => turnToOpenRouter(t) as unknown as Rec[];
 
-describe("turnToOpenRouter", () => {
-  test("assistant text + tool_use → content + toolCalls; no reasoning leaked", () => {
-    const [m] = conv({
-      role: "assistant",
-      content: [
-        { type: "thinking", thinking: "secret chain of thought" },
-        { type: "text", text: "let me check" },
-        { type: "tool_use", id: "tu_1", name: "search", input: { q: "x" } },
-      ],
-    });
-    expect(m?.role).toBe("assistant");
-    expect(m?.content).toBe("let me check");
-    const calls = m?.toolCalls as Rec[] | undefined;
-    expect(calls?.[0]).toMatchObject({
-      id: "tu_1",
-      type: "function",
-      function: { name: "search", arguments: '{"q":"x"}' },
-    });
-    expect(m).not.toHaveProperty("reasoning");
-    expect(m).not.toHaveProperty("reasoningDetails");
-  });
+function req(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
+  return {
+    sdk: "openrouter",
+    provider_key: "openrouter",
+    model: "moonshotai/kimi-k3",
+    api_key: "sk-test",
+    messages: [],
+    max_tokens: 1024,
+    replay_prior_thinking: "all",
+    ...overrides,
+  };
+}
 
-  test("thinking block with reasoning_details → replays them verbatim", () => {
-    const details = [{ type: "reasoning.text", text: "prior", id: "r1", format: "unknown" }];
-    const [m] = conv({
+describe("OpenRouter AI SDK message conversion", () => {
+  const names = new Map<string, string>([["tc_1", "search"]]);
+  const conv = (turn: TurnMessage) => turnToVercel(turn, names, "openrouter") as unknown as Rec[];
+
+  test("reasoning_details travel as provider metadata without replaying display text", () => {
+    const details = [{ type: "reasoning.text", text: "prior", format: "unknown", index: 0 }];
+    const [message] = conv({
       role: "assistant",
       content: [
         { type: "thinking", thinking: "prior", reasoning_details: details },
-        { type: "tool_use", id: "tu_2", name: "f", input: {} },
+        { type: "text", text: "let me check" },
+        { type: "tool_use", id: "tc_1", name: "search", input: { q: "x" } },
       ],
     });
-    expect(m?.reasoningDetails).toEqual(details);
+
+    expect(message?.content).toEqual([
+      { type: "text", text: "let me check" },
+      { type: "tool-call", toolCallId: "tc_1", toolName: "search", input: { q: "x" } },
+    ]);
+    expect(message?.providerOptions).toEqual({ openrouter: { reasoning_details: details } });
+    expect(JSON.stringify(message)).not.toContain('"type":"reasoning"');
   });
 
-  test("thinking block carrying only an Anthropic signature → no replay", () => {
-    const [m] = conv({
+  test("an explicit empty reasoning_details array remains present", () => {
+    const [message] = conv({
       role: "assistant",
-      content: [
-        { type: "thinking", thinking: "x", signature: "Ev0BCkYIB...opaque-anthropic-sig" },
-        { type: "text", text: "hi" },
-      ],
+      content: [{ type: "thinking", thinking: "", reasoning_details: [] }],
     });
-    expect(m).not.toHaveProperty("reasoningDetails");
+    expect(message?.providerOptions).toEqual({ openrouter: { reasoning_details: [] } });
   });
 
-  test("user tool_result → role:tool with toolCallId", () => {
-    const msgs = conv({
-      role: "user",
-      content: [{ type: "tool_result", tool_use_id: "tu_1", content: "found 5 results" }],
-    });
-    expect(msgs[0]).toEqual({ role: "tool", toolCallId: "tu_1", content: "found 5 results" });
-  });
-
-  test("user text → single role:user message", () => {
-    const msgs = conv({ role: "user", content: [{ type: "text", text: "hello" }] });
-    expect(msgs).toHaveLength(1);
-    expect(msgs[0]?.role).toBe("user");
-    expect(msgs[0]?.content).toEqual([{ type: "text", text: "hello" }]);
-  });
-
-  test("inline system turn passes through raw (no wrapper)", () => {
-    const msgs = conv({ role: "system", content: [{ type: "text", text: "be brief" }] });
-    expect(msgs[0]).toEqual({ role: "system", content: "be brief" });
-  });
-});
-
-describe("the OpenRouter SDK accepts what turnToOpenRouter builds", () => {
-  const PNG_B64 = "iVBORw0KGgo=";
-  const DATA_URL = `data:image/png;base64,${PNG_B64}`;
-
-  const turns: TurnMessage[] = [
-    { role: "system", content: [{ type: "text", text: "be brief" }] },
-    {
-      role: "assistant",
-      content: [
-        { type: "thinking", thinking: "hm", reasoning_details: [] },
-        { type: "text", text: "let me look" },
-        { type: "tool_use", id: "tu_1", name: "search", input: { q: "x" } },
-      ],
-    },
-    { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_1", content: "5 hits" }] },
-    {
-      role: "user",
-      content: [
-        { type: "image", source: { type: "base64", media_type: "image/png", data: PNG_B64 } },
-        { type: "text", text: "what is this?" },
-      ],
-    },
-  ];
-
-  test("every converted message passes the schema the SDK validates against", () => {
-    for (const turn of turns) {
-      for (const msg of turnToOpenRouter(turn)) {
-        expect(() => ChatMessages$outboundSchema.parse(msg)).not.toThrow();
-      }
-    }
-  });
-
-  test("an image part serializes to the snake_case wire shape", () => {
-    const [msg] = turnToOpenRouter(turns[3] as TurnMessage);
-    expect(ChatMessages$outboundSchema.parse(msg)).toEqual({
-      role: "user",
-      content: [
-        { type: "image_url", image_url: { url: DATA_URL } },
-        { type: "text", text: "what is this?" },
-      ],
-    });
-  });
-});
-
-describe("openrouter_provider routing reaches the wire", () => {
-  const routed = (routing: unknown) => {
-    const req = {
-      model: "anthropic/claude-opus-4",
-      max_tokens: 256,
-      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-      provider_options: { openrouter_provider: routing },
-    } as unknown as SidecarRequest;
-    const { chatRequest } = buildCall(req, true);
-    return ChatRequest$outboundSchema.parse(chatRequest).provider as Record<string, unknown>;
-  };
-
-  test("snake_case keys from config survive instead of being silently dropped", () => {
+  test("tool results retain the tool name required by the AI SDK", () => {
     expect(
-      routed({
-        order: ["anthropic"],
-        allow_fallbacks: false,
-        require_parameters: true,
-        data_collection: "deny",
-        max_price: { prompt: "10", completion: "20" },
+      conv({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tc_1", content: "found 5" }],
       }),
+    ).toEqual([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "tc_1",
+            toolName: "search",
+            output: { type: "text", value: "found 5" },
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("OpenRouter model settings", () => {
+  test("routing accepts config snake_case and camelCase keys", () => {
+    expect(
+      buildOpenRouterSettings(
+        req({
+          provider_options: {
+            openrouter_provider: {
+              order: ["DigitalOcean"],
+              allowFallbacks: false,
+              require_parameters: true,
+              maxPrice: { prompt: "10", completion: "20" },
+            },
+          },
+        }),
+      ).provider,
     ).toEqual({
-      order: ["anthropic"],
+      order: ["DigitalOcean"],
       allow_fallbacks: false,
       require_parameters: true,
-      data_collection: "deny",
       max_price: { prompt: "10", completion: "20" },
     });
   });
 
-  test("camelCase keys are accepted too", () => {
-    expect(routed({ allowFallbacks: false, requireParameters: true })).toEqual({
-      allow_fallbacks: false,
-      require_parameters: true,
-    });
+  test("a token budget is used when no named effort overrides it", () => {
+    expect(
+      buildOpenRouterSettings(req({ provider_options: { budget_tokens: 4096 } })).reasoning,
+    ).toEqual({ max_tokens: 4096 });
   });
+});
 
-  test("values are left alone", () => {
-    expect(routed({ order: ["z_ai", "deep_infra"], sort: { by: "throughput" } })).toEqual({
-      order: ["z_ai", "deep_infra"],
-      sort: { by: "throughput" },
+describe("official provider request wire shape", () => {
+  test("stored reasoning is round-tripped by the provider", async () => {
+    let body: Rec | undefined;
+    const mockFetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      if (typeof init?.body !== "string") throw new Error("expected a JSON request body");
+      body = JSON.parse(init.body) as Rec;
+      return new Response(
+        JSON.stringify({
+          id: "gen_1",
+          provider: "DigitalOcean",
+          model: "moonshotai/kimi-k3",
+          object: "chat.completion",
+          created: 1,
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "done" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 2,
+            total_tokens: 14,
+            cost: 0.001,
+            prompt_tokens_details: { cached_tokens: 8 },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const details = [
+      { type: "reasoning.text", text: "prior", format: "unknown", index: 0 },
+    ];
+    const provider = new VercelProvider(mockFetch);
+    const response = await provider.generate(
+      req({
+        system: [{ label: "character", text: "be brief" }],
+        provider_options: {
+          reasoning_effort: "high",
+          openrouter_provider: { order: ["DigitalOcean"], allow_fallbacks: false },
+        },
+        tools: [{ name: "search", description: "Search", input_schema: { type: "object" } }],
+        messages: [
+          { role: "user", content: [{ type: "text", text: "look this up" }] },
+          {
+            role: "assistant",
+            provider_key: "openrouter",
+            model: "moonshotai/kimi-k3",
+            content: [
+              { type: "thinking", thinking: "prior", reasoning_details: details },
+              { type: "tool_use", id: "tc_1", name: "search", input: { z: 1, a: 2 } },
+            ],
+          },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "tc_1", content: "found" }],
+          },
+        ],
+      }),
+    );
+
+    expect(body?.model).toBe("moonshotai/kimi-k3");
+    expect(body?.reasoning).toEqual({ effort: "high" });
+    expect(body?.provider).toEqual({ order: ["DigitalOcean"], allow_fallbacks: false });
+    const messages = body?.messages as Rec[];
+    const assistant = messages.find((message) => message.role === "assistant");
+    const toolResult = messages.find((message) => message.role === "tool");
+    expect(assistant).toMatchObject({
+      content: null,
+      reasoning_details: details,
+      tool_calls: [
+        {
+          id: "tc_1",
+          type: "function",
+          function: { name: "search", arguments: '{"a":2,"z":1}' },
+        },
+      ],
+    });
+    expect(assistant).not.toHaveProperty("reasoning");
+    expect(toolResult).toMatchObject({
+      role: "tool",
+      tool_call_id: "tc_1",
+      name: "search",
+      content: "found",
+    });
+    expect(response.usage).toMatchObject({
+      input_tokens: 4,
+      cache_read_tokens: 8,
+      output_tokens: 2,
+      total_cost_usd: 0.001,
     });
   });
 });

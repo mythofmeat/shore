@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { buildGeminiParams } from "../src/llm/providers/gemini.ts";
-import { buildCall } from "../src/llm/providers/openrouter.ts";
+import { buildCall } from "../src/llm/providers/vercel.ts";
 import { buildAnthropicParams } from "../src/llm/providers/anthropic.ts";
 import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 
@@ -75,31 +75,29 @@ describe("no adapter puts a foreign signature on the wire", () => {
   });
 
   test("openrouter refuses another model's reasoning_details", () => {
-    const { chatRequest } = buildCall(
+    const call = buildCall(
       req({
         sdk: "openrouter",
         provider_key: "openrouter",
         model: "anthropic/claude-opus-5",
         messages: [minted("openrouter", "anthropic/claude-sonnet-5", openrouterCarried)],
       }),
-      false,
     );
 
-    expect(JSON.stringify(chatRequest.messages)).not.toContain("SONNET");
+    expect(JSON.stringify(call.messages)).not.toContain("SONNET");
   });
 
   test("openrouter replays the same model's reasoning_details", () => {
-    const { chatRequest } = buildCall(
+    const call = buildCall(
       req({
         sdk: "openrouter",
         provider_key: "openrouter",
         model: "anthropic/claude-sonnet-5",
         messages: [minted("openrouter", "anthropic/claude-sonnet-5", openrouterCarried)],
       }),
-      false,
     );
 
-    expect(JSON.stringify(chatRequest.messages)).toContain("SONNET");
+    expect(JSON.stringify(call.messages)).toContain("SONNET");
   });
 
   test("anthropic refuses a signature minted by another anthropic model", () => {

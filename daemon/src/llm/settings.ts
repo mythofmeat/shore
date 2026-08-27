@@ -2,7 +2,6 @@ import type { DeepSeekLanguageModelOptions } from "@ai-sdk/deepseek";
 import type { MoonshotAIProviderOptions } from "@ai-sdk/moonshotai";
 import { ThinkingLevel } from "@google/genai";
 import type { OutputConfig } from "@anthropic-ai/sdk/resources/messages";
-import { ChatRequestEffort } from "@openrouter/sdk/models";
 import type { ReasoningEffort as OpenAiReasoningEffort } from "openai/resources/shared";
 import type { ZhipuReasoningEffort } from "zhipu-ai-provider";
 
@@ -200,7 +199,7 @@ const OPENAI_EFFORT = ["minimal", "low", "medium", "high", "xhigh", "max"] as co
 const ZAI_EFFORT = ["minimal", "low", "medium", "high", "xhigh", "max"] as const satisfies readonly ZhipuReasoningEffort[];
 const DEEPSEEK_EFFORT = ["low", "high", "max"] as const satisfies readonly DeepSeekEffort[];
 const MOONSHOT_EFFORT = ["low", "high", "max"] as const satisfies readonly MoonshotEffort[];
-const OPENROUTER_EFFORT = Object.values(ChatRequestEffort).filter((v) => v !== "none");
+const OPENROUTER_EFFORT = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
 const GEMINI_EFFORT = Object.values(ThinkingLevel)
   .map((v) => v.toLowerCase())
   .filter((v) => !v.startsWith("thinking_level_"));

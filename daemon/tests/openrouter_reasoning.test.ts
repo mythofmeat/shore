@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { buildCall } from "../src/llm/providers/openrouter.ts";
+import { buildOpenRouterSettings } from "../src/llm/providers/vercel.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 
 function req(provider_options?: Record<string, unknown>): SidecarRequest {
@@ -17,7 +17,7 @@ function req(provider_options?: Record<string, unknown>): SidecarRequest {
 
 type Reasoning = { effort?: string } | undefined;
 const reasoningOf = (opts?: Record<string, unknown>): Reasoning =>
-  buildCall(req(opts), false).chatRequest.reasoning as Reasoning;
+  buildOpenRouterSettings(req(opts)).reasoning as Reasoning;
 
 test("thinking_enabled=false → reasoning.effort = 'none' (hard disable)", () => {
   expect(reasoningOf({ thinking_enabled: false })).toEqual({ effort: "none" });
