@@ -33,7 +33,11 @@ import { installWireCapture } from "./llm/wire_capture.ts";
 import { prefixFingerprint } from "./cache/keepalive.ts";
 import { McpClient, type McpServerSpec } from "./mcp/client.ts";
 import { NotificationService } from "./notifications.ts";
-import { McpRegistry, type McpServerConfigView } from "./tools/mcp_registry.ts";
+import {
+  McpRegistry,
+  type McpRegistryOptions,
+  type McpServerConfigView,
+} from "./tools/mcp_registry.ts";
 import { McpHolder } from "./tools/mcp_holder.ts";
 import { resolveEmbedder } from "./memory/retrieval.ts";
 import { historyIndexPath } from "./memory/history_index.ts";
@@ -54,6 +58,7 @@ export interface RuntimeOptions {
   onHistory?: HistoryListener | undefined;
   emit?: ((character: string, revision: number, msg: Message) => void) | undefined;
   connectMcp?: ((spec: McpServerSpec) => Promise<McpClient>) | undefined;
+  mcpRegistryOptions?: Omit<McpRegistryOptions, "onToolsChanged"> | undefined;
   diagnostics?: Diagnostics | undefined;
 }
 
@@ -72,6 +77,7 @@ export interface ShoreRuntime {
   readonly historyIndex: HistoryIndexService;
   readonly workspaceIndex: WorkspaceIndexService;
   refreshHistoryIndexes(): Promise<void>;
+  refreshMcpCaches(registry: McpRegistry): Promise<void>;
   shutdown(): Promise<void>;
 }
 
@@ -172,7 +178,17 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   const cache = new LastRequestCache(keepalive);
 
   const connectMcp = options.connectMcp ?? McpClient.connect;
-  const mcp = new McpHolder(await connectMcpRegistry(config, connectMcp));
+  const refreshMcpCaches = async (mcpRegistry: McpRegistry): Promise<void> => {
+    await refreshMcpPromptCaches(cache, registry, config.dirs.data, mcpRegistry);
+  };
+  const mcp = new McpHolder(
+    await connectMcpRegistry(
+      config,
+      connectMcp,
+      refreshMcpCaches,
+      options.mcpRegistryOptions,
+    ),
+  );
 
   const autonomy = new AutonomyService(
     new InProcessAutonomyExecutor({
@@ -217,6 +233,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     historyIndex,
     workspaceIndex,
     refreshHistoryIndexes,
+    refreshMcpCaches,
     async shutdown() {
       await historyIndex.shutdown();
       await workspaceIndex.shutdown();
@@ -326,12 +343,34 @@ export function mcpConfigView(config: LoadedConfig): Record<string, McpServerCon
 async function connectMcpRegistry(
   config: LoadedConfig,
   connect: (spec: McpServerSpec) => Promise<McpClient>,
+  onToolsChanged: (registry: McpRegistry, server: string) => Promise<void>,
+  options: Omit<McpRegistryOptions, "onToolsChanged"> = {},
 ): Promise<McpRegistry> {
   return await McpRegistry.fromConfig(
     mcpConfigView(config),
     pluginsDir(config.dirs.data),
     connect,
+    undefined,
+    { ...options, onToolsChanged },
   );
+}
+
+export async function refreshMcpPromptCaches(
+  cache: Pick<LastRequestCache, "cachedCharacters" | "invalidate" | "reprimeFromDisk">,
+  registry: Pick<CharacterRegistry, "effectiveConfig">,
+  dataDir: string,
+  mcpRegistry: Pick<McpRegistry, "toolDefsFiltered">,
+): Promise<void> {
+  for (const character of cache.cachedCharacters()) {
+    cache.invalidate(character, "mcp_recovery");
+    try {
+      await cache.reprimeFromDisk(character, dataDir, registry.effectiveConfig(character), {
+        mcpRegistry,
+      });
+    } catch (e) {
+      shoreLog.warn(`shore: mcp recovery cache refresh failed for ${character}: ${String(e)}`);
+    }
+  }
 }
 
 export interface SubagentToolDeps {

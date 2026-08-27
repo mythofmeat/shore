@@ -81,6 +81,27 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
     if pending > 0 {
         rows.add_toned("pending edits", &pending.to_string(), Tone::Warn);
     }
+    if let Some(mcp) = data.get("mcp") {
+        let configured = number(mcp, "configured");
+        let connected = number(mcp, "connected");
+        let unavailable = number(mcp, "unavailable");
+        if configured > 0 {
+            let summary = if unavailable == 0 {
+                format!("{connected}/{configured} servers connected")
+            } else {
+                format!("{connected}/{configured} connected · {unavailable} unavailable")
+            };
+            rows.add_toned(
+                "mcp",
+                &summary,
+                if unavailable == 0 {
+                    Tone::Plain
+                } else {
+                    Tone::Warn
+                },
+            );
+        }
+    }
     rows.write(out);
 
     if let Some(halt) = data.get("keepalive_halted").filter(|h| !h.is_null()) {
@@ -147,8 +168,52 @@ fn not_started(name: &str) -> &'static str {
         "activity" => "nothing recorded yet \u{00b7} activity is learned from your messages",
         "index" => "no workspace configured for this character",
         "history_index" => "no history index for this character",
+        "mcp" => "no MCP servers configured",
         _ => "not started",
     }
+}
+
+fn write_mcp_section<W: Write>(out: &mut W, value: &Value) {
+    section(out, "mcp", None);
+    let Some(servers) = value.get("servers").and_then(Value::as_array) else {
+        empty(out, "no MCP servers configured");
+        return;
+    };
+    if servers.is_empty() {
+        empty(out, "no MCP servers configured");
+        return;
+    }
+    let mut rows = Rows::new();
+    for server in servers {
+        let name = text(server, "name");
+        let state = text(server, "state");
+        let transport = text(server, "transport");
+        let tools = number(server, "connected_tools");
+        let mut detail = if transport.is_empty() {
+            state.to_owned()
+        } else {
+            format!("{state} · {transport}")
+        };
+        if state == "connected" {
+            detail.push_str(&format!(" · {tools} tools"));
+        }
+        if let Some(next) = server.get("next_retry_at").and_then(Value::as_str) {
+            detail.push_str(&format!(" · retry {next}"));
+        }
+        if let Some(error) = server.get("last_error").and_then(Value::as_str) {
+            detail.push_str(&format!(" · {error}"));
+        }
+        rows.add_toned(
+            name,
+            &detail,
+            if state == "connected" {
+                Tone::Plain
+            } else {
+                Tone::Warn
+            },
+        );
+    }
+    rows.write(out);
 }
 
 pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> bool {
@@ -175,6 +240,10 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
     }
     if name == "history_index" {
         super::history::write_history_section(out, value);
+        return true;
+    }
+    if name == "mcp" {
+        write_mcp_section(out, value);
         return true;
     }
     section(out, name, None);
@@ -430,6 +499,52 @@ mod tests {
             "a section must not print raw json: {rows}"
         );
         assert!(rows.contains("8042"), "{rows}");
+    }
+
+    #[test]
+    fn mcp_status_names_each_server_and_its_recovery_state() {
+        set_color_enabled(false);
+        let data = json!({
+            "mcp": {
+                "configured": 2,
+                "connected": 1,
+                "unavailable": 1,
+                "servers": [
+                    {
+                        "name": "hue", "transport": "http", "state": "unavailable",
+                        "connected_tools": 0, "last_error": "connection refused",
+                        "next_retry_at": "2026-08-27T01:02:03+00:00"
+                    },
+                    {
+                        "name": "music", "transport": "stdio", "state": "connected",
+                        "connected_tools": 4, "last_error": null, "next_retry_at": null
+                    }
+                ]
+            }
+        });
+        let mut buf = Vec::new();
+        assert!(write_section(&mut buf, &data, "mcp"));
+        let out = String::from_utf8(buf).unwrap_or_default();
+        assert!(out.contains("hue"), "{out}");
+        assert!(out.contains("unavailable"), "{out}");
+        assert!(out.contains("connection refused"), "{out}");
+        assert!(out.contains("music"), "{out}");
+        assert!(out.contains("4 tools"), "{out}");
+    }
+
+    #[test]
+    fn the_dashboard_warns_when_an_mcp_server_is_unavailable() {
+        let mut data = payload();
+        if let Some(map) = data.as_object_mut() {
+            drop(map.insert(
+                "mcp".to_owned(),
+                json!({"configured": 2, "connected": 1, "unavailable": 1, "servers": []}),
+            ));
+        }
+        let out = render(&data);
+        assert!(out.contains("mcp"), "{out}");
+        assert!(out.contains("1/2 connected"), "{out}");
+        assert!(out.contains("1 unavailable"), "{out}");
     }
 
     #[test]

@@ -11,7 +11,8 @@ export type InvalidationReason =
   | "idle_compaction"
   | "deep_idle_archive"
   | "prompt_reload"
-  | "mcp_reload";
+  | "mcp_reload"
+  | "mcp_recovery";
 
 const UNARMED: KeepaliveArming = { intervalMs: undefined, maxSecs: undefined };
 

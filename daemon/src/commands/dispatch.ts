@@ -70,6 +70,7 @@ import { conversationTokens } from "../ledger/conversation_spend.ts";
 import { estimateHistoryTokens } from "../engine/prompt.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
 import type { WorkspaceIndexSource } from "./workspace_index.ts";
+import type { McpServerStatus } from "../tools/mcp_registry.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { clear, segments } from "./segments.ts";
 
@@ -98,6 +99,7 @@ export interface CommandDeps {
   runTool?: Pick<RunToolContext, "tools" | "mcpTools">;
   workspaceIndex?: WorkspaceIndexSource;
   historyIndex?: HistoryIndexSource;
+  mcpStatus?: () => readonly McpServerStatus[];
 }
 
 const CHARACTERLESS = new Set([
@@ -346,6 +348,7 @@ function statusContext(
       deps.historyIndex === undefined
         ? undefined
         : { ...deps.historyIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
+    ...(deps.mcpStatus === undefined ? {} : { mcpServers: deps.mcpStatus() }),
   };
 }
 

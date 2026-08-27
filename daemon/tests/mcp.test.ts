@@ -233,10 +233,8 @@ describe("call routing", () => {
     expect(registry.call("mcp__nope__x", {})).rejects.toThrow("not yet implemented");
   });
 
-  test("a known name with no live client is reported the same way", async () => {
-    expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(
-      "not yet implemented",
-    );
+  test("a known name with no live client is reported as unavailable", async () => {
+    expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow("is unavailable");
   });
 
   test("a name with `__` inside both halves routes to the right tool", async () => {

@@ -15,6 +15,8 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider } from "../src/llm/types.ts";
+import type { McpClient } from "../src/mcp/client.ts";
+import type { RecoveryWait } from "../src/tools/mcp_registry.ts";
 
 async function dirsUnder(prefix: string): Promise<{ root: string; config: LoadedConfig }> {
   const root = await mkdtemp(join(tmpdir(), prefix));
@@ -264,6 +266,82 @@ describe("MCP configuration crosses the two shapes intact", () => {
         },
       });
 
+      await runtime.shutdown();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a recovered tool surface invalidates cached prompt bodies", async () => {
+    const { root, config } = await dirsUnder("shore-runtime-mcp-recovery-");
+    try {
+      const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+      await mkdir(workspace, { recursive: true });
+      await writeFile(join(workspace, "SOUL.md"), "# ada");
+      config.app.mcp.set("hue", {
+        command: "hue-server",
+        args: [],
+        env: new Map(),
+        cwd: undefined,
+        url: undefined,
+        headers: new Map(),
+      });
+      config.app.tools.enabled_tools = ["mcp__hue__*"];
+
+      let healthy = false;
+      let releaseRetry!: () => void;
+      const recoveryWait: RecoveryWait = (_ms, signal) =>
+        new Promise((resolve) => {
+          const finish = (): void => {
+            signal.removeEventListener("abort", finish);
+            resolve();
+          };
+          releaseRetry = finish;
+          signal.addEventListener("abort", finish, { once: true });
+        });
+      const connect = (spec: { name: string }): Promise<McpClient> => {
+        if (!healthy) return Promise.reject(new Error("hue is starting"));
+        return Promise.resolve({
+          server: spec.name,
+          listTools: () =>
+            Promise.resolve([
+              {
+                server: spec.name,
+                name: "set_light",
+                description: "set a light",
+                input_schema: {},
+              },
+            ]),
+          call: () => Promise.resolve(null),
+          shutdown: () => Promise.resolve(),
+        } as unknown as McpClient);
+      };
+      const runtime = await createRuntime({
+        config,
+        providers: {},
+        connectMcp: connect,
+        mcpRegistryOptions: {
+          recoveryWait,
+          random: () => 0.5,
+        },
+      });
+      runtime.cache.set("ada", {
+        model: "fixture",
+        sdk: "anthropic",
+        messages: [],
+      } as never);
+      expect(runtime.cache.get("ada")).toBeDefined();
+
+      healthy = true;
+      releaseRetry();
+      for (let attempt = 0; attempt < 100 && runtime.mcp.current.connectedServers() === 0; attempt += 1) {
+        await Promise.resolve();
+      }
+
+      expect(runtime.mcp.current.allTools().map((tool) => tool.full_name)).toEqual([
+        "mcp__hue__set_light",
+      ]);
+      expect(runtime.cache.get("ada")).toBeUndefined();
       await runtime.shutdown();
     } finally {
       await rm(root, { recursive: true, force: true });
