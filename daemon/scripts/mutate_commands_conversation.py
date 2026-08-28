@@ -72,8 +72,16 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src/commands/conversation.ts"
 
+# `#155` moved the paging arithmetic into the engine, behind two paths: the
+# storage-native one that reads a bounded range out of SQLite, and the fallback
+# that still materialises the whole conversation. The command keeps argument
+# decoding, the role filter and the payload shape, so mutants that reach into
+# the engine name it with the four-part `(label, path, find, replace)` shape.
+ENGINE = ROOT / "src/engine/conversation.ts"
+
 # (label, find, replace) — or (label, [(find, replace), ...]) for a mutant that
-# only becomes visible when several places change together.
+# only becomes visible when several places change together. A mutant against a
+# source other than SRC is `(label, path, find, replace)`.
 MUTANTS = [
     # --- argument readers --------------------------------------------------
     ("asStr: a number counts as a string",
@@ -161,48 +169,121 @@ MUTANTS = [
      "    for (let i = messages.length - 1; i >= 0; i -= 1) {",
      "    for (let i = 0; i < messages.length; i += 1) {"),
 
-    # --- paging arithmetic -------------------------------------------------
+    # --- paging arithmetic, fallback path ----------------------------------
+    # `historyPageStart` walks a conversation that is already fully in memory.
+    ("historyPageStart: zero turns returns the whole page",
+     ENGINE,
+     "  if (limit.value === 0) return end;",
+     "  if (limit.value === 0) return 0;"),
+    ("historyPageStart: the boundary is exclusive of the turn's own message",
+     ENGINE,
+     "    if (seen >= limit.value) return index;",
+     "    if (seen >= limit.value) return index + 1;"),
+    ("historyPageStart: off by one on the turn count",
+     ENGINE,
+     "    if (seen >= limit.value) return index;",
+     "    if (seen > limit.value) return index;"),
+    ("historyPageStart: the scan starts at the end bound itself",
+     ENGINE,
+     "  for (let index = end - 1; index >= 0; index -= 1) {",
+     "  for (let index = end; index >= 0; index -= 1) {"),
+    ("historyPageStart: assistant turns are counted too",
+     ENGINE,
+     '    if (requiredMessage(messages, index).role !== "user") continue;\n',
+     ""),
+    ("historyPageStart: a count page is not clamped at the start of the list",
+     ENGINE,
+     '  if (limit.kind === "count") return Math.max(0, end - limit.value);',
+     '  if (limit.kind === "count") return end - limit.value;'),
+
+    # --- paging arithmetic, storage-native path ----------------------------
+    # `#pageStartByTurns` spends the turn budget on the in-memory tail first and
+    # asks storage for whatever is left, so the hand-off is the interesting part.
     ("pageStartByTurns: zero turns returns the whole page",
-     "  if (turns === 0) return end;",
-     "  if (turns === 0) return 0;"),
+     ENGINE,
+     "    if (turns === 0) return end;",
+     "    if (turns === 0) return 0;"),
     ("pageStartByTurns: the boundary is exclusive of the turn's own message",
-     "      if (seen >= turns) return idx;",
-     "      if (seen >= turns) return idx + 1;"),
+     ENGINE,
+     "      if (remaining === 0) return globalActiveStart + index;",
+     "      if (remaining === 0) return globalActiveStart + index + 1;"),
     ("pageStartByTurns: off by one on the turn count",
-     "      if (seen >= turns) return idx;",
-     "      if (seen > turns) return idx;"),
+     ENGINE,
+     "      remaining -= 1;\n"
+     "      if (remaining === 0) return globalActiveStart + index;",
+     "      if (remaining === 0) return globalActiveStart + index;\n"
+     "      remaining -= 1;"),
     ("pageStartByTurns: the scan starts at the end bound itself",
-     "  for (let idx = end - 1; idx >= 0; idx -= 1) {",
-     "  for (let idx = end; idx >= 0; idx -= 1) {"),
+     ENGINE,
+     "    for (let index = activeEnd - 1; index >= 0; index -= 1) {",
+     "    for (let index = activeEnd; index >= 0; index -= 1) {"),
     ("pageStartByTurns: assistant turns are counted too",
-     '    if (required(messages[idx]).role === "user") {',
-     "    if (true as boolean) {"),
-    ("pageStartByTurns: the end bound is not clamped to the list (EQUIVALENT — resolveHistoryBefore already clamped it)",
-     "  const end = Math.min(endBound, messages.length);",
-     "  const end = endBound;"),
+     ENGINE,
+     '      if (requiredMessage(active, index).role !== "user") continue;\n',
+     ""),
+    ("pageStartByTurns: storage is asked for the whole budget, not the remainder",
+     ENGINE,
+     "    return this.#segments.displayStartForTurns(Math.min(end, globalActiveStart), remaining);",
+     "    return this.#segments.displayStartForTurns(Math.min(end, globalActiveStart), turns);"),
+    ("pageStartByTurns: the archive hand-off is not clamped to the page end",
+     ENGINE,
+     "    return this.#segments.displayStartForTurns(Math.min(end, globalActiveStart), remaining);",
+     "    return this.#segments.displayStartForTurns(globalActiveStart, remaining);"),
+
+    # --- the archived/active split -----------------------------------------
+    ("page split: the archived range is not clamped to the active boundary (EQUIVALENT — readDisplayRange matches on a half-open display_seq range and the archive holds no row at or past globalActiveStart)",
+     ENGINE,
+     "    const archiveEnd = Math.min(end, globalActiveStart);",
+     "    const archiveEnd = end;"),
+    ("page split: the archived range starts at the raw page start (EQUIVALENT — readDisplayRange returns empty when end <= start, which is the only case the clamp changes)",
+     ENGINE,
+     "    const archiveStart = Math.min(start, globalActiveStart);",
+     "    const archiveStart = start;"),
+    ("page split: the active offset is allowed to go negative",
+     ENGINE,
+     "    const activeStart = Math.max(start - globalActiveStart, 0);",
+     "    const activeStart = start - globalActiveStart;"),
+    ("page split: the fallback active boundary is not rebased on the page",
+     ENGINE,
+     "        activeStart: Math.max(Math.min(history.activeStart, end) - start, 0),",
+     "        activeStart: history.activeStart,"),
+
+    # --- turn totals -------------------------------------------------------
     ("countUserTurns: counts every message",
-     '  return messages.filter((m) => m.role === "user" && !isToolResultOnly(m)).length;',
+     ENGINE,
+     '  return messages.filter((message) => message.role === "user").length;',
      "  return messages.length;"),
     ("countUserTurns: counts assistant turns as well",
-     '  return messages.filter((m) => m.role === "user" && !isToolResultOnly(m)).length;',
-     '  return messages.filter((m) => m.role !== "system").length;'),
-    ("pageStartByArgs: count wins over turns",
-     "  const turns = asU64(args[\"turns\"]);\n"
-     "  if (turns !== undefined) return pageStartByTurns(messages, end, turns);\n"
+     ENGINE,
+     '  return messages.filter((message) => message.role === "user").length;',
+     '  return messages.filter((message) => message.role !== "system").length;'),
+    ("totals: the fallback counts the page, not the conversation",
+     ENGINE,
+     "        totalTurns: countUserTurns(history.messages),",
+     "        totalTurns: countUserTurns(messages),"),
+    ("totals: the storage path forgets the archived turns",
+     ENGINE,
+     "      totalTurns: this.#segments.displayTurnCount() + countUserTurns(active),",
+     "      totalTurns: countUserTurns(active),"),
+
+    # --- the page limit ----------------------------------------------------
+    ("historyPageLimit: count wins over turns",
+     '  const turns = asU64(args["turns"]);\n'
+     '  if (turns !== undefined) return { kind: "turns", value: turns };\n'
      "\n"
-     "  const count = asU64(args[\"count\"]);\n"
-     "  if (count !== undefined) return Math.max(0, end - count);",
-     "  const count = asU64(args[\"count\"]);\n"
-     "  if (count !== undefined) return Math.max(0, end - count);\n"
+     '  const count = asU64(args["count"]);\n'
+     '  if (count !== undefined) return { kind: "count", value: count };',
+     '  const count = asU64(args["count"]);\n'
+     '  if (count !== undefined) return { kind: "count", value: count };\n'
      "\n"
-     "  const turns = asU64(args[\"turns\"]);\n"
-     "  if (turns !== undefined) return pageStartByTurns(messages, end, turns);"),
-    ("pageStartByArgs: count is read as a turn bound",
-     "  if (count !== undefined) return Math.max(0, end - count);",
-     "  if (count !== undefined) return pageStartByTurns(messages, end, count);"),
-    ("pageStartByArgs: the default is unbounded",
-     "  return pageStartByTurns(messages, end, DEFAULT_LOG_TURNS);",
-     "  return 0;"),
+     '  const turns = asU64(args["turns"]);\n'
+     '  if (turns !== undefined) return { kind: "turns", value: turns };'),
+    ("historyPageLimit: count is read as a turn bound",
+     '  if (count !== undefined) return { kind: "count", value: count };',
+     '  if (count !== undefined) return { kind: "turns", value: count };'),
+    ("historyPageLimit: the default is unbounded",
+     '  return { kind: "turns", value: DEFAULT_LOG_TURNS };',
+     '  return { kind: "count", value: Number.MAX_SAFE_INTEGER };'),
     ("pageStartByArgs: the default turn budget is smaller",
      "const DEFAULT_LOG_TURNS = 64;",
      "const DEFAULT_LOG_TURNS = 1;"),
@@ -222,57 +303,43 @@ MUTANTS = [
      "  return role !== undefined && message.role === role;"),
 
     # --- history_page bounds -----------------------------------------------
-    ("before: an absent cursor means the start, not the end",
-     '  if (!("before" in args)) return total;',
-     '  if (!("before" in args)) return 0;'),
-    ('before: "active" is read as a literal cursor',
+    # `resolveHistoryBefore` decodes the cursor; `historyEnd` turns it into an
+    # index. The clamp lives with the latter now, so both are engine mutants.
+    ("historyEnd: an absent cursor means the start, not the end",
+     ENGINE,
+     "  return Math.min(before ?? total, total);",
+     "  return Math.min(before ?? 0, total);"),
+    ('historyEnd: "active" is read as a literal cursor',
+     ENGINE,
      '  if (before === "active") return activeStart;',
      "  if (false as boolean) return activeStart;"),
-    ("before: an out-of-range cursor is not clamped (EQUIVALENT — pageStartByTurns clamps the same bound)",
-     "  return Math.min(index, total);",
-     "  return index;"),
-    ("bounds: BOTH redundant clamps removed at once",
-     [("  return Math.min(index, total);", "  return index;"),
-      ("  const end = Math.min(endBound, messages.length);", "  const end = endBound;")]),
+    ("historyEnd: an out-of-range cursor is not clamped",
+     ENGINE,
+     "  return Math.min(before ?? total, total);",
+     "  return before ?? total;"),
     ("before: a bad cursor falls back instead of erroring",
      "  const index = asU64(before);\n"
      "  if (index === undefined) throw invalidRequest('before must be \"active\" or a message cursor');",
      "  const index = asU64(before);\n"
-     "  if (index === undefined) return total;"),
+     "  if (index === undefined) return undefined;"),
 
     # --- the page payload --------------------------------------------------
-    ("payload: the page is not clamped to the list (EQUIVALENT — the caller clamped it)",
-     "  const start = Math.min(startIdx, messages.length);",
-     "  const start = startIdx;"),
-    ("payload: end is allowed below start (EQUIVALENT — the caller's clamp keeps end above start)",
-     "  const end = Math.max(Math.min(endIdx, messages.length), start);",
-     "  const end = Math.min(endIdx, messages.length);"),
     ("payload: the local active boundary is the global one",
-     "  const archivedEnd = Math.max(Math.min(globalActiveStart, end), start);\n"
-     "  const activePageStart = messages\n"
-     "    .slice(start, archivedEnd)\n"
+     "  const activePageStart = history.messages\n"
+     "    .slice(0, history.activeStart)\n"
      "    .filter((msg) => matchesRole(msg, role)).length;",
-     "  const activePageStart = globalActiveStart;"),
+     "  const activePageStart = history.globalActiveStart;"),
     ("payload: the local boundary is counted before role filtering",
-     "  const activePageStart = messages\n"
-     "    .slice(start, archivedEnd)\n"
+     "  const activePageStart = history.messages\n"
+     "    .slice(0, history.activeStart)\n"
      "    .filter((msg) => matchesRole(msg, role)).length;",
-     "  const activePageStart = messages.slice(start, archivedEnd).length;"),
-    ("payload: the archived end is not clamped to the page end",
-     "  const archivedEnd = Math.max(Math.min(globalActiveStart, end), start);",
-     "  const archivedEnd = Math.max(globalActiveStart, start);"),
-    ("payload: the archived end is not clamped to the page start (EQUIVALENT — the page start already bounds it)",
-     "  const archivedEnd = Math.max(Math.min(globalActiveStart, end), start);",
-     "  const archivedEnd = Math.min(globalActiveStart, end);"),
+     "  const activePageStart = history.messages.slice(0, history.activeStart).length;"),
     ("payload: has_more_before is inclusive of the first page",
-     "    has_more_before: start > 0,",
-     "    has_more_before: start >= 0,"),
-    ("payload: the cursor points at the end of the page",
-     "    cursor: start,\n    next_before: start,",
-     "    cursor: end,\n    next_before: end,"),
-    ("payload: total_turns counts the page, not the conversation",
-     "  const totalTurns = countUserTurns(messages);",
-     "  const totalTurns = countUserTurns(messages.slice(start, end));"),
+     "    has_more_before: history.cursor > 0,",
+     "    has_more_before: history.cursor >= 0,"),
+    ("payload: the cursor points past the page it names",
+     "    cursor: history.cursor,\n    next_before: history.cursor,",
+     "    cursor: history.cursor,\n    next_before: history.cursor + page.length,"),
     ("payload: image bytes are embedded into the whole page",
      "  embedMessagesImageData(page.slice(activePageStart));",
      "  embedMessagesImageData(page);"),

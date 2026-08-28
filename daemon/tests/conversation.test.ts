@@ -1125,3 +1125,164 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
     expect(orphanedToolResults(engine.messages())).toEqual([]);
   });
 });
+
+describe("paging when the legacy import could not finish", () => {
+  const msg = (id: string, role: "user" | "assistant"): Message => ({
+    msg_id: id,
+    role,
+    content: id,
+    images: [],
+    content_blocks: [{ type: "text", text: id }],
+    timestamp: "2026-01-01T00:00:00Z",
+  });
+
+  async function engineWhoseLegacyImportAborted(): Promise<ConversationEngine> {
+    const root = await mkdtemp(testTmp("shore-fallback-page-"));
+    const characterDir = join(root, "TestChar");
+    await mkdir(join(characterDir, "segments"), { recursive: true });
+
+    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
+    store.putSegment(
+      "TestChar",
+      0,
+      {
+        file: "0001.jsonl",
+        message_count: 4,
+        compacted_at: "2026-01-01T00:00:00Z",
+        compaction_id: "compact-1",
+      },
+      [msg("u1", "user"), msg("a1", "assistant"), msg("u2", "user"), msg("a2", "assistant")],
+    );
+    store.close();
+
+    await writeFile(
+      join(characterDir, "compaction.json"),
+      JSON.stringify({
+        segments: [
+          { file: "0001.jsonl", message_count: 4, compacted_at: "2026-01-01T00:00:00Z" },
+          { file: "0002.jsonl", message_count: 2, compacted_at: "2026-01-01T00:00:00Z" },
+        ],
+        total_compacted_messages: 6,
+      }),
+    );
+    await writeFile(join(characterDir, "segments", "0002.jsonl"), "{ not json at all\n");
+    await writeFile(
+      join(characterDir, "active.jsonl"),
+      [msg("u3", "user"), msg("a3", "assistant"), msg("u4", "user"), msg("a4", "assistant")]
+        .map((m) => JSON.stringify(m))
+        .join("\n") + "\n",
+    );
+    return await ConversationEngine.load("TestChar", root, () => {});
+  }
+
+  test("the fallback is the path under test", async () => {
+    const engine = await engineWhoseLegacyImportAborted();
+    const page = await engine.displayHistoryPage(undefined, { kind: "count", value: 100 });
+    expect(page.metrics.storage_native).toBe(false);
+    expect(page.messages.map((m) => m.msg_id)).toEqual(["u1", "a1", "u2", "a2", "u3", "a3", "u4", "a4"]);
+    expect(page.globalActiveStart).toBe(4);
+  });
+
+  test("a turn bound stops on the turn's own message, counting only user turns", async () => {
+    const engine = await engineWhoseLegacyImportAborted();
+    const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 2 });
+
+    expect(page.cursor).toBe(4);
+    expect(page.messages.map((m) => m.msg_id)).toEqual(["u3", "a3", "u4", "a4"]);
+  });
+
+  test("zero turns asks for nothing, not for everything", async () => {
+    const engine = await engineWhoseLegacyImportAborted();
+    const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 0 });
+
+    expect(page.messages).toEqual([]);
+    expect(page.cursor).toBe(8);
+  });
+
+  test("a count larger than the conversation clamps to the start", async () => {
+    const engine = await engineWhoseLegacyImportAborted();
+    const page = await engine.displayHistoryPage(undefined, { kind: "count", value: 100 });
+
+    expect(page.cursor).toBe(0);
+    expect(page.messages).toHaveLength(8);
+  });
+
+  test("the active boundary is rebased on the page, and the totals are not", async () => {
+    const engine = await engineWhoseLegacyImportAborted();
+    const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 2 });
+
+    expect(page.activeStart).toBe(0);
+    expect(page.globalActiveStart).toBe(4);
+    expect(page.totalTurns).toBe(4);
+
+    const whole = await engine.displayHistoryPage(undefined, { kind: "count", value: 100 });
+    expect(whole.activeStart).toBe(4);
+    expect(whole.totalTurns).toBe(4);
+  });
+});
+
+describe("a turn budget spent across the archive boundary", () => {
+  const msg = (id: string, role: "user" | "assistant"): Message => ({
+    msg_id: id,
+    role,
+    content: id,
+    images: [],
+    content_blocks: [{ type: "text", text: id }],
+    timestamp: "2026-01-01T00:00:00Z",
+  });
+
+  async function engineOf(): Promise<ConversationEngine> {
+    const root = await mkdtemp(testTmp("shore-boundary-page-"));
+    const characterDir = join(root, "TestChar");
+    await mkdir(characterDir, { recursive: true });
+
+    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
+    for (const segment of [0, 1]) {
+      store.putSegment(
+        "TestChar",
+        segment,
+        {
+          file: `000${segment + 1}.jsonl`,
+          message_count: 2,
+          compacted_at: "2026-01-01T00:00:00Z",
+          compaction_id: `compact-${segment}`,
+        },
+        [msg(`u${segment}`, "user"), msg(`a${segment}`, "assistant")],
+      );
+    }
+    store.close();
+
+    await writeFile(
+      join(characterDir, "active.jsonl"),
+      [msg("ux", "user"), msg("ax", "assistant")].map((m) => JSON.stringify(m)).join("\n") + "\n",
+    );
+    return await ConversationEngine.load("TestChar", root, () => {});
+  }
+
+  test("storage is asked only for the turns the active tail did not cover", async () => {
+    const engine = await engineOf();
+    const page = await engine.displayHistoryPage(undefined, { kind: "turns", value: 2 });
+
+    expect(page.metrics.storage_native).toBe(true);
+    expect(page.cursor).toBe(2);
+    expect(page.messages.map((m) => m.msg_id)).toEqual(["u1", "a1", "ux", "ax"]);
+    expect(page.activeStart).toBe(2);
+  });
+
+  test("a cursor set before an archived user turn hands off at the cursor, not the boundary", async () => {
+    const engine = await engineOf();
+    const page = await engine.displayHistoryPage(2, { kind: "turns", value: 1 });
+
+    expect(page.cursor).toBe(0);
+    expect(page.messages.map((m) => m.msg_id)).toEqual(["u0", "a0"]);
+  });
+
+  test("a page wholly inside the active tail reads no archive rows", async () => {
+    const engine = await engineOf();
+    const page = await engine.displayHistoryPage(undefined, { kind: "count", value: 1 });
+
+    expect(page.cursor).toBe(5);
+    expect(page.messages.map((m) => m.msg_id)).toEqual(["ax"]);
+    expect(page.activeStart).toBe(0);
+  });
+});
