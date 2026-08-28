@@ -18,7 +18,7 @@
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.35",
     "@ai-sdk/moonshotai": "^3.0.41",
-    "@anthropic-ai/sdk": "^0.121.0",
+    "@anthropic-ai/sdk": "^0.122.0",
     "@google/genai": "^2.19.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
@@ -26,7 +26,7 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "matrix-js-sdk": "^42.2.0",
-    "openai": "^7.7.0",
+    "openai": "^7.8.0",
     "zhipu-ai-provider": "^0.4.0"
   },
   "devDependencies": {
