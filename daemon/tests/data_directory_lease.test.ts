@@ -68,6 +68,35 @@ describe("data-directory ownership", () => {
     }
   });
 
+  test("the lifetime lock wins even when the owner record claims a dead process", async () => {
+    const root = await rootFor("lifetime-lock");
+    try {
+      const data = join(root, "data");
+      const lease = acquireDataDirectoryLease(data, {
+        instanceId: "live-daemon",
+        startedAt: STARTED_AT,
+      });
+      writeFileSync(lease.path, JSON.stringify(owner({ instance_id: "misleading-dead-owner" })));
+
+      expect(() =>
+        acquireDataDirectoryLease(data, {
+          instanceId: "blocked",
+          startedAt: STARTED_AT,
+        })
+      ).toThrow(DataDirectoryOwned);
+      expect(lease.release()).toBe(false);
+
+      const replacement = acquireDataDirectoryLease(data, {
+        instanceId: "after-release",
+        startedAt: STARTED_AT,
+      });
+      expect(replacement.owner.instance_id).toBe("after-release");
+      replacement.release();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("canonical paths make symlink aliases share one owner", async () => {
     const root = await rootFor("alias");
     try {
@@ -118,6 +147,82 @@ describe("data-directory ownership", () => {
         pid: process.pid,
       });
       lease.release();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("an abandoned current-format record with a reused PID is reclaimed", async () => {
+    const root = await rootFor("reused-pid");
+    try {
+      const data = join(root, "data");
+      mkdirSync(data);
+      const path = join(data, DATA_DIRECTORY_LEASE_FILE);
+      writeFileSync(
+        path,
+        JSON.stringify(
+          owner({ version: 2, pid: process.pid, process_start_id: "previous-process" }),
+        ),
+      );
+
+      const lease = acquireDataDirectoryLease(data, {
+        instanceId: "replacement",
+        startedAt: STARTED_AT,
+      });
+
+      expect(lease.owner.instance_id).toBe("replacement");
+      expect(lease.owner.process_start_id).not.toBe("previous-process");
+      lease.release();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a legacy record from a previous process with the reused current PID is reclaimed", async () => {
+    const root = await rootFor("legacy-reused-pid");
+    try {
+      const data = join(root, "data");
+      mkdirSync(data);
+      const path = join(data, DATA_DIRECTORY_LEASE_FILE);
+      writeFileSync(
+        path,
+        JSON.stringify(
+          owner({
+            pid: process.pid,
+            started_at: new Date(performance.timeOrigin - 60_000).toISOString(),
+          }),
+        ),
+      );
+
+      const lease = acquireDataDirectoryLease(data, {
+        instanceId: "replacement",
+        startedAt: new Date().toISOString(),
+      });
+
+      expect(lease.owner.instance_id).toBe("replacement");
+      expect(lease.owner.process_start_id).toBeDefined();
+      lease.release();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a legacy record created by the current process remains owned", async () => {
+    const root = await rootFor("legacy-current-pid");
+    try {
+      const data = join(root, "data");
+      mkdirSync(data);
+      writeFileSync(
+        join(data, DATA_DIRECTORY_LEASE_FILE),
+        JSON.stringify(owner({ pid: process.pid, started_at: new Date().toISOString() })),
+      );
+
+      expect(() =>
+        acquireDataDirectoryLease(data, {
+          instanceId: "blocked",
+          startedAt: new Date().toISOString(),
+        })
+      ).toThrow(DataDirectoryOwned);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

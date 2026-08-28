@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
+
 const DAEMON_DIR = new URL("..", import.meta.url).pathname;
 const TOKEN = "process-test-token";
 const children: Bun.Subprocess<"ignore", "ignore", "pipe">[] = [];
@@ -177,6 +179,37 @@ describe("daemon processes owning data directories", () => {
     expect(await Promise.all([exitWithin(first), exitWithin(second)])).toEqual([0, 0]);
   });
 
+  test("the lifetime lock blocks a process even when the owner record looks stale", async () => {
+    const root = await processRoot("lifetime-lock");
+    const dataDir = join(root, "shared-data");
+    const firstLayout = await processLayout(root, "first", dataDir);
+    const secondLayout = await processLayout(root, "second", dataDir);
+    const first = spawnDaemon(firstLayout, "actual-owner");
+    await waitUntilReady(firstLayout, "actual-owner");
+    await writeFile(
+      join(dataDir, DATA_DIRECTORY_LEASE_FILE),
+      JSON.stringify({
+        version: 1,
+        lease_id: "misleading-lease",
+        instance_id: "misleading-dead-owner",
+        pid: 0x7fff_fffe,
+        started_at: "2026-08-28T12:00:00+10:00",
+        data_dir: dataDir,
+      }),
+    );
+
+    const second = spawnDaemon(secondLayout, "blocked-owner");
+    expect(await exitWithin(second)).toBe(1);
+    expect(await new Response(second.stderr).text()).toContain("misleading-dead-owner");
+
+    first.kill("SIGTERM");
+    expect(await exitWithin(first)).toBe(0);
+    const replacement = spawnDaemon(secondLayout, "replacement-owner");
+    await waitUntilReady(secondLayout, "replacement-owner");
+    replacement.kill("SIGTERM");
+    expect(await exitWithin(replacement)).toBe(0);
+  });
+
   test("an owner killed without cleanup is safely reclaimed", async () => {
     const root = await processRoot("stale");
     const dataDir = join(root, "shared-data");
@@ -190,6 +223,17 @@ describe("daemon processes owning data directories", () => {
 
     const replacement = spawnDaemon(replacementLayout, "recovered-owner");
     await waitUntilReady(replacementLayout, "recovered-owner");
+    replacement.kill("SIGTERM");
+    expect(await exitWithin(replacement)).toBe(0);
+  });
+
+  test("a container restart can reclaim a legacy lease with its reused PID", async () => {
+    const root = await processRoot("reused-pid");
+    const layout = await processLayout(root, "replacement", join(root, "data"));
+    layout.env["SHORE_TEST_REUSED_PID_LEASE"] = "1";
+
+    const replacement = spawnDaemon(layout, "replacement-owner");
+    await waitUntilReady(layout, "replacement-owner");
     replacement.kill("SIGTERM");
     expect(await exitWithin(replacement)).toBe(0);
   });
