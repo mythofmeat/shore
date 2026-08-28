@@ -69,6 +69,8 @@ mode = "inject"
 server = "mem0"
 ```
 
+Watch what it is actually injecting with `shore trace recall`.
+
 Do **not** add `mcp__mem0__*` to any character's `tools`. The daemon calls these
 itself; granting them would put the tools back in the model's hands, which is the
 problem this exists to solve.

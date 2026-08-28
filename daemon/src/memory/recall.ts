@@ -1,6 +1,8 @@
 import type { LoadedConfig } from "../config/loader.ts";
 import type { MemoryRecallEntry } from "../diagnostics.ts";
 import type { Message } from "../engine/types.ts";
+import type { CallStore } from "../call_store.ts";
+import { shoreLog } from "../log.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 const MESSAGE_CHARS = 1_200;
@@ -23,9 +25,12 @@ export interface MemoryRecallRunner {
   run(input: MemoryRecallRun): Promise<string | undefined>;
 }
 
+export const RECALL_TRANSCRIPT_SOURCE = "memory_recall";
+
 export interface MemoryRecallDeps {
   mcpRegistry: Pick<McpRegistry, "call">;
   diagnostics: MemoryRecallDiagnostics;
+  callStore?: Pick<CallStore, "recordTranscript"> | undefined;
   now?: (() => string) | undefined;
   monotonicMs?: (() => number) | undefined;
 }
@@ -70,22 +75,77 @@ export async function runMemoryRecall(
       input.signal,
     );
     const memories = parseRecallResult(raw).slice(0, recall.max_memories);
+    const status = memories.length === 0 ? "no_match" : "recalled";
+    const elapsed = clock() - started;
     deps.diagnostics.memory_recall.push({
       ...base,
-      status: memories.length === 0 ? "no_match" : "recalled",
+      status,
       recalled: memories.length,
-      elapsed_ms: clock() - started,
+      elapsed_ms: elapsed,
+    });
+    keepTranscript(deps, input.character, {
+      status,
+      query,
+      elapsed_ms: elapsed,
+      memories: memories.map((memory) => memory.text),
     });
     return memories.length === 0 ? undefined : formatMemories(memories);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const elapsed = clock() - started;
     deps.diagnostics.memory_recall.push({
       ...base,
       status: "failed",
       recalled: 0,
-      elapsed_ms: clock() - started,
-      error: error instanceof Error ? error.message : String(error),
+      elapsed_ms: elapsed,
+      error: message,
+    });
+    keepTranscript(deps, input.character, {
+      status: "failed",
+      query,
+      elapsed_ms: elapsed,
+      memories: [],
+      error: message,
     });
     return undefined;
+  }
+}
+
+interface RecallTranscript {
+  status: string;
+  query: string;
+  elapsed_ms: number;
+  memories: string[];
+  error?: string;
+}
+
+function keepTranscript(
+  deps: MemoryRecallDeps,
+  character: string,
+  entry: RecallTranscript,
+): void {
+  const store = deps.callStore;
+  if (store === undefined) return;
+  try {
+    store.recordTranscript({
+      ts: new Date(),
+      source: RECALL_TRANSCRIPT_SOURCE,
+      character,
+      call_type: RECALL_TRANSCRIPT_SOURCE,
+      iteration: 0,
+      model: null,
+      provider: null,
+      finish_reason: entry.status,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+      },
+      entry_json: JSON.stringify(entry),
+    });
+  } catch (e) {
+    shoreLog.warn(`shore: failed to record a memory recall transcript: ${String(e)}`);
   }
 }
 

@@ -492,7 +492,58 @@ pub(crate) fn write_trace_transcript<W: Write>(
     };
     let mut prev_date: Option<String> = None;
     for entry in entries {
-        print_transcript_entry(out, entry, &mut prev_date);
+        if source == "memory_recall" {
+            print_recall_entry(out, entry, &mut prev_date);
+        } else {
+            print_transcript_entry(out, entry, &mut prev_date);
+        }
+    }
+}
+
+fn print_recall_entry(
+    out: &mut impl Write,
+    entry: &serde_json::Value,
+    prev_date: &mut Option<String>,
+) {
+    let ts = entry["ts"].as_str().unwrap_or("");
+    let time_str = parse_timestamp(ts).map_or_else(
+        || ts.chars().take(16).collect::<String>(),
+        |dt| {
+            let formatted = format_time(&dt, prev_date.as_deref());
+            *prev_date = Some(dt.format("%Y-%m-%d").to_string());
+            formatted
+        },
+    );
+    let body = &entry["entry"];
+    let status = body["status"].as_str().unwrap_or("?");
+    let elapsed = body["elapsed_ms"].as_u64().unwrap_or(0);
+    let memories = body["memories"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+
+    _ = writeln!(out);
+    _ = write!(out, "{time_str}  {status}");
+    write_dim(out, &format!(" {elapsed}ms"));
+    _ = writeln!(out);
+
+    if let Some(query) = body["query"].as_str() {
+        let flat = query.replace('\n', " ");
+        let trimmed: String = flat.chars().take(160).collect();
+        indent_to(out, 1);
+        write_dim(out, &format!("searched: {trimmed}"));
+        _ = writeln!(out);
+    }
+    for memory in memories {
+        if let Some(text) = memory.as_str() {
+            indent_to(out, 1);
+            _ = writeln!(out, "{text}");
+        }
+    }
+    if let Some(error) = body["error"].as_str() {
+        indent_to(out, 1);
+        write_fg(out, COLOR_ERROR, error);
+        _ = writeln!(out);
     }
 }
 
@@ -1693,6 +1744,66 @@ mod tests {
         _ = stdout.write_all(&buf);
         _ = stdout.write_all(b"----- end -----\n");
         _ = stdout.flush();
+    }
+
+    #[test]
+    fn trace_recall_shows_the_query_and_every_injected_memory() {
+        set_color_enabled(false);
+        let data = serde_json::json!({
+            "enabled": true,
+            "source": "memory_recall",
+            "character": "qifei",
+            "entries": [{
+                "ts": "2026-08-29T10:00:00Z",
+                "entry": {
+                    "status": "recalled",
+                    "query": "remind me how i pick what music to listen to",
+                    "elapsed_ms": 129,
+                    "memories": [
+                        "Ren uses a Python script 'beet-smartplaylist.py' on a systemd timer",
+                        "Ren sorts his library into five tiers"
+                    ]
+                }
+            }]
+        });
+        let mut buf = Vec::new();
+
+        write_trace_transcript(&mut buf, &data, 100);
+        let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
+
+        assert!(rendered.contains("memory_recall transcript"));
+        assert!(rendered.contains("recalled"));
+        assert!(rendered.contains("129ms"));
+        assert!(rendered.contains("searched: remind me how i pick"));
+        assert!(rendered.contains("beet-smartplaylist.py"));
+        assert!(rendered.contains("five tiers"));
+    }
+
+    #[test]
+    fn trace_recall_surfaces_a_failure_instead_of_pretending_it_recalled() {
+        set_color_enabled(false);
+        let data = serde_json::json!({
+            "enabled": true,
+            "source": "memory_recall",
+            "character": "qifei",
+            "entries": [{
+                "ts": "2026-08-29T10:00:00Z",
+                "entry": {
+                    "status": "failed",
+                    "query": "anything",
+                    "elapsed_ms": 12,
+                    "memories": [],
+                    "error": "MCP server 'mem0' is unavailable"
+                }
+            }]
+        });
+        let mut buf = Vec::new();
+
+        write_trace_transcript(&mut buf, &data, 100);
+        let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
+
+        assert!(rendered.contains("failed"));
+        assert!(rendered.contains("MCP server 'mem0' is unavailable"));
     }
 
     #[test]

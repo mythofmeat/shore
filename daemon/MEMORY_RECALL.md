@@ -77,11 +77,24 @@ repeatedly to bring the archive forward piecemeal.
 ## Watching it
 
 ```console
+shore trace recall
+```
+
+Every turn recall ran, newest first: what it searched on, each memory it
+injected, and how long it took. This is the view for "is it working" and for
+judging whether the memories were any good -- the same text the character saw,
+without digging a call id out of `shore trace calls`.
+
+Entries are stored as `memory_recall` transcripts in the call store, beside the
+heartbeat and sub-agent runs, so they inherit its retention and rotation.
+
+```console
 shore trace errors
 ```
 
-The `Memory recall` section reports status, how many memories came back, and how
-long it took. It deliberately carries no recalled text.
+The `Memory recall` section stays terse on purpose: status, how many memories
+came back, elapsed. No recalled text, so a glance at errors never spills the
+contents of her memory.
 
 ## Measured
 

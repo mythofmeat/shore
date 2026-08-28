@@ -94,6 +94,7 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     recall: memoryRecallRunner({
       mcpRegistry: runtime.mcp.callView(),
       diagnostics: a.diagnostics,
+      ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
       ...(a.now === undefined ? {} : { monotonicMs: a.now }),
     }),
     newlyCrossedUsageBudgetWarnings: usageBudgetWarnings(ledgerPath, usage, a.now),
