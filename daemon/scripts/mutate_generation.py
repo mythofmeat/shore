@@ -116,8 +116,8 @@ MUTANTS = [
      "  const resolved = resolveGenerationModel(activeModel, config, {});"),
     ("inputs: a regen sends the whole history, the replaced turn included",
      GEN,
-     "    regen,\n    ...(recalledMemory === undefined",
-     "    regen: false,\n    ...(recalledMemory === undefined"),
+     "    regen,\n    mcpRegistry: deps.mcpRegistry,",
+     "    regen: false,\n    mcpRegistry: deps.mcpRegistry,"),
     ("inputs: the rid is not put on the call labels",
      GEN,
      "    ...(rid === null ? {} : { rid }),\n"

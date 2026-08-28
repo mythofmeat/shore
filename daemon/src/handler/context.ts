@@ -29,7 +29,6 @@ export interface PrepareChatContextParams {
   resolved: ResolvedModel;
   messages: Message[];
   hasPriorContext: boolean;
-  recalledMemory?: string | undefined;
   mcpToolDefs: readonly ToolDefinition[];
   timeZone?: string;
 }
@@ -78,7 +77,6 @@ export async function prepareChatContext(
     user_definition: userDefinition,
     memory_index: memoryIndex,
     has_prior_context: params.hasPriorContext,
-    recalled_memory: params.recalledMemory,
     messages,
     max_context_tokens: resolved.maxContextTokens,
     max_output_tokens: resolved.maxOutputTokens,

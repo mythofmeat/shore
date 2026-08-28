@@ -187,6 +187,41 @@ describe("mem0 ingest service", () => {
     expect(attempts).toBe(2);
   });
 
+  test("holds back a reply that could still be regenerated", async () => {
+    const dir = await world([
+      ...CONVERSATION,
+      message("assistant", "m4", "nice, which switches?", "2026-01-01T10:00:03Z"),
+    ]);
+    const { calls, registry } = recorder();
+    const service = new Mem0IngestService({
+      mcpRegistry: registry,
+      now: () => 1_000_000,
+      idleDelayMs: 0,
+    });
+    service.register({ character: "ada", characterDataDir: dir, server: "mem0" });
+    service.noteMutation("ada");
+
+    await service.runOnce();
+    const sent = calls[0]?.args["messages"] as { content: string }[];
+    expect(sent.map((m) => m.content).join(" ")).not.toContain("which switches");
+    expect(sent).toHaveLength(3);
+  });
+
+  test("ingests nothing from a conversation the user has not spoken in", async () => {
+    const dir = await world([message("assistant", "a1", "you awake?", "2026-01-01T09:00:00Z")]);
+    const { calls, registry } = recorder();
+    const service = new Mem0IngestService({
+      mcpRegistry: registry,
+      now: () => 1_000_000,
+      idleDelayMs: 0,
+    });
+    service.register({ character: "ada", characterDataDir: dir, server: "mem0" });
+    service.noteMutation("ada");
+
+    await service.runOnce();
+    expect(calls).toHaveLength(0);
+  });
+
   test("stays inert until a registry is attached", async () => {
     const dir = await world();
     const service = new Mem0IngestService({ now: () => 1_000_000, idleDelayMs: 0 });

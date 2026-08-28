@@ -25,17 +25,33 @@ is the problem this exists to solve.
 ## The read path
 
 `runGenerationCore` calls recall before it builds the request, using the last
-`recent_messages` messages as the query. What comes back becomes a system block
-labelled `recalled_memory`. That label is in `DYNAMIC_SYSTEM_LABELS`, so
-`withDynamicBlocksLast` sorts it past every stable block and `cacheBoundaryIndex`
-puts the system cache breakpoint in front of it — the block changes every turn
-without invalidating the cached prefix, exactly as `memory_index` already does.
+`recent_messages` messages as the query. What comes back is appended as a single
+`system`-role message at the **tail of the messages array**, after everything
+real, and is never persisted.
 
-The block is never persisted. It exists only in the assembled prompt; nothing is
-written to `active.jsonl`, the archive, or the workspace.
+The placement is a cache decision, not a stylistic one. Anthropic caching is a
+prefix match over `tools -> system -> messages`, so a block that changes every
+turn invalidates everything after it. Putting it in the system prompt would throw
+away the whole message cache on every turn: measured over 687 real calls, 21,028
+tokens per call are served from cache and only 218 are fresh, so that placement
+would have turned about $0.75 of input cost into about $72 a month.
+
+At the tail, every turn before the last is byte-identical, so the frozen-boundary
+breakpoints still hit. Simulating two consecutive turns, the identical content
+prefix is 4 messages with injection against 5 without, and two of the three
+breakpoints written on the first turn are still readable on the second. The cost
+is exactly one message: the adapter folds the block into the preceding user turn,
+so the last-message breakpoint lands on a turn that will not repeat.
+`tests/recalled_memory_injection.test.ts` pins these properties.
+
+A fourth breakpoint on the last real message would recover even that one; there
+is room under the four-marker limit, but it means changing `tsMessageBreakpoints`
+for every provider path, so it is deliberately left alone until the injected
+version has been watched in `shore usage` for a while.
 
 Recall fails open. An unavailable server, a malformed reply, or a timeout logs a
-diagnostics entry and the turn proceeds with no block.
+diagnostics entry and the turn proceeds with no block. Recall does not run on a
+regenerate.
 
 ## The write path
 
@@ -44,6 +60,12 @@ diagnostics entry and the turn proceeds with no block.
 and heartbeat turns. It is idle-gated, yields while a turn is in flight, does one
 batch per tick, backs off on failure, and keeps a per-character cursor in
 `mem0_cursor.json` so a restart resumes rather than re-ingests.
+
+It only ingests as far as the **last user message**. Anything after that can
+still be regenerated, and the cursor is a timestamp, so a regenerated reply would
+otherwise be ingested a second time and mem0 would learn from a response that was
+thrown away. The reply is picked up on the following turn, once the user has
+moved on and it is settled.
 
 ## Backfilling
 

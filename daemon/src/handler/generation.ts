@@ -319,12 +319,14 @@ async function runGenerationCore(
     config,
     resolved,
     regen,
-    ...(recalledMemory === undefined ? {} : { recalledMemory }),
     mcpRegistry: deps.mcpRegistry,
   });
   const request: SidecarRequest = {
     ...built.request,
-    messages: droppedHistoryImages(built.request.messages, imageSupport, resolved),
+    messages: withRecalledMemory(
+      droppedHistoryImages(built.request.messages, imageSupport, resolved),
+      recalledMemory,
+    ),
     context: callContext(deps, config, charName, params.rid, built.keepalive_max_secs, (built.request.provider_options === undefined
         ? {}
         : { options: built.request.provider_options })),
@@ -637,6 +639,30 @@ function recordKeyFallback(
     status: event.status ?? null,
     message: event.warning,
   });
+}
+
+export function withRecalledMemory(
+  messages: readonly WireMessage[],
+  recalled: string | undefined,
+): WireMessage[] {
+  if (recalled === undefined || recalled.trim() === "") return [...messages];
+  return [...messages, {
+    role: "system",
+    content: [{ type: "text", text: recalledMemoryText(recalled) }],
+  }];
+}
+
+function recalledMemoryText(recalled: string): string {
+  return (
+    "<recalled_memory>\n" +
+    "Things you already know that bear on what is being said right now, pulled " +
+    "from your memory of past conversations without you having to go looking. " +
+    "They are notes on the record, not the record itself: use what is relevant, " +
+    "ignore what is not, and ask your memory subagent when you need more than " +
+    "these lines give you.\n\n" +
+    `${recalled}\n` +
+    "</recalled_memory>"
+  );
 }
 
 export function applyIntermediateMessages(

@@ -226,8 +226,7 @@ interface IngestMessage {
 async function activeMessages(characterDataDir: string): Promise<IngestMessage[]> {
   try {
     const { store } = await MessageStore.loadWithRaw(join(characterDataDir, ACTIVE_JSONL_FILE));
-    return store
-      .messages()
+    return settledOnly(store.messages())
       .flatMap((message) => {
         const text = message.content.trim();
         if (text === "" || message.timestamp === undefined) return [];
@@ -237,6 +236,17 @@ async function activeMessages(characterDataDir: string): Promise<IngestMessage[]
   } catch {
     return [];
   }
+}
+
+export function settledOnly<T extends { role: string }>(messages: readonly T[]): T[] {
+  let lastUser = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") {
+      lastUser = index;
+      break;
+    }
+  }
+  return lastUser < 0 ? [] : messages.slice(0, lastUser + 1);
 }
 
 async function readCursor(characterDataDir: string): Promise<string | undefined> {

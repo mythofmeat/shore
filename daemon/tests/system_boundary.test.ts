@@ -84,37 +84,4 @@ describe("the assembled prompt puts its dynamic block at the tail", () => {
     expect(cacheBoundaryIndex(system)).toBe(system.length - 2);
   });
 
-  test("recalled memory joins memory_index past the boundary, so neither is cached", () => {
-    const { system } = assemblePrompt({
-      character_name: "Rhia",
-      display_name: "eshen",
-      has_prior_context: false,
-      messages: [],
-      user_timestamp_mode: "none",
-      memory_index: "- a live note",
-      recalled_memory: "- he already told her about the bicycle",
-      character_definition: "she is patient",
-      user_definition: "he is not",
-      tools_guidance: "use tools sparingly",
-    } as never);
-
-    const tail = labels(system).slice(-2);
-    expect(tail).toEqual(["memory_index", "recalled_memory"]);
-    expect(cacheBoundaryIndex(system)).toBe(system.length - 3);
-    expect(isDynamicSystemBlock("recalled_memory")).toBe(true);
-  });
-
-  test("recall contributes no block when nothing came back", () => {
-    const { system } = assemblePrompt({
-      character_name: "Rhia",
-      display_name: "eshen",
-      has_prior_context: false,
-      messages: [],
-      user_timestamp_mode: "none",
-      memory_index: "- a live note",
-      character_definition: "she is patient",
-    } as never);
-
-    expect(labels(system)).not.toContain("recalled_memory");
-  });
 });

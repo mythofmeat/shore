@@ -54,7 +54,6 @@ export interface PromptParams {
   character_definition?: string | undefined;
   user_definition?: string | undefined;
   memory_index?: string | undefined;
-  recalled_memory?: string | undefined;
   has_prior_context: boolean;
   messages: Message[];
   max_context_tokens?: number | undefined;
@@ -134,22 +133,6 @@ function buildSystemBlocks(params: PromptParams): SystemBlock[] {
         "files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n" +
         `${index}\n` +
         "</memory_index>",
-    });
-  }
-
-  const recalled = present(params.recalled_memory);
-  if (recalled !== undefined) {
-    system.push({
-      label: "recalled_memory",
-      content:
-        "<recalled_memory>\n" +
-        "Things you already know that bear on what is being said right now, pulled " +
-        "from your memory of past conversations without you having to go looking. " +
-        "They are notes on the record, not the record itself: use what is relevant, " +
-        "ignore what is not, and ask your memory subagent when you need more than " +
-        "these lines give you.\n\n" +
-        `${recalled}\n` +
-        "</recalled_memory>",
     });
   }
 
