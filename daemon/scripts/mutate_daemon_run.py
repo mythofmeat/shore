@@ -71,7 +71,7 @@ MUTANTS = [
      "  const instanceId = options.newInstanceId?.() ?? randomUUID();"),
     ("registry: the resolved directories are left off, so a CLI cannot find the ledger",
      R,
-     "    data_dir: loaded.dirs.data,\n    config_dir: loaded.dirs.config,",
+     "    data_dir: dataLease.dataDir,\n    config_dir: loaded.dirs.config,",
      "    data_dir: undefined,\n    config_dir: undefined,"),
     ("registry: the pid is not this process, so the entry prunes itself as dead",
      R,
@@ -95,9 +95,11 @@ MUTANTS = [
     ("order: the instance is registered before the bind, so a failed bind leaves an entry",
      R,
      "  } catch (e) {\n"
+     "    dataLease.release();\n"
      "    throw new StartupError(\n"
      '      "server_run",',
      "  } catch (e) {\n"
+     "    dataLease.release();\n"
      "    new Instances(options.instancesPath).register({\n"
      '      id: "early", pid: process.pid, addr: startup.bindAddr, started_at: "now",\n'
      "    });\n"

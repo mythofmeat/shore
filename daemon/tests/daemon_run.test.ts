@@ -17,6 +17,7 @@ import {
 } from "../src/daemon/run.ts";
 import { ACCESS_TOKEN_ENV } from "../src/connections/matrix/start.ts";
 import { StartupError } from "../src/daemon/startup.ts";
+import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 
@@ -496,6 +497,9 @@ describe("going down", () => {
 
       await client.awaitFrame("shutdown");
       expect(await instances(place)).toEqual([]);
+      expect(
+        existsSync(join(daemon.runtime.config.dirs.data, DATA_DIRECTORY_LEASE_FILE)),
+      ).toBe(false);
     } finally {
       client.close();
       running.length = 0;
@@ -602,6 +606,35 @@ describe("going down", () => {
 });
 
 describe("refusing to start", () => {
+  test("a live daemon already owning the data directory is named", async () => {
+    const place = await layout();
+    const daemon = await start(place, ["--instance-id", "existing-owner"]);
+
+    let caught: unknown;
+    try {
+      await startDaemon({
+        argv: [
+          "--config",
+          place.configPath,
+          "--addr",
+          "127.0.0.1:0",
+          "--instance-id",
+          "blocked-owner",
+        ],
+        env: place.env,
+        providers: {},
+        instancesPath: place.instancesPath,
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect((caught as StartupError).kind).toBe("own_data_directory");
+    expect((caught as StartupError).message).toContain("existing-owner");
+    expect((caught as StartupError).message).toContain(`PID ${process.pid}`);
+    expect((await instances(place)).map((entry) => entry.id)).toEqual([daemon.instanceId]);
+  });
+
   test("a non-loopback bind is now ordinary, because the token is the boundary", async () => {
     const place = await layout(`
 [daemon]

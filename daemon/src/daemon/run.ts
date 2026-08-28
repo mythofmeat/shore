@@ -27,6 +27,7 @@ import { buildHandshakeProvider } from "../swp/handshake.ts";
 import { Server } from "../swp/server.ts";
 import { localRfc3339 } from "../util/time.ts";
 import { startAutoDiscovery } from "./auto_discovery.ts";
+import { acquireDataDirectoryLease } from "./data_directory_lease.ts";
 import { startConfigWatcher } from "./hot_reload.ts";
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
 
@@ -123,6 +124,25 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     });
   }
   const { loaded } = startup;
+  const instanceId = cli.instanceId ?? options.newInstanceId?.() ?? randomUUID();
+  const startedAt = localRfc3339(new Date());
+  let dataLease: ReturnType<typeof acquireDataDirectoryLease>;
+  try {
+    dataLease = acquireDataDirectoryLease(loaded.dirs.data, {
+      instanceId,
+      startedAt,
+    });
+  } catch (e) {
+    throw new StartupError(
+      "own_data_directory",
+      `Failed to claim the Shore data directory ${loaded.dirs.data}: ${String(e)}`,
+    );
+  }
+  log?.info?.("Claimed Shore data directory", {
+    instance_id: instanceId,
+    data_dir: dataLease.dataDir,
+    ownership_path: dataLease.path,
+  });
   const server = new Server({
     addr: startup.bindAddr,
     serverName: "shore-daemon",
@@ -134,6 +154,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   try {
     bound = await server.bind();
   } catch (e) {
+    dataLease.release();
     throw new StartupError(
       "server_run",
       `Failed to start shore-daemon on ${startup.bindAddr}: ${String(e)}`,
@@ -141,20 +162,20 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   }
   const resolvedAddr = formatAddr(bound.host, bound.port);
 
-  const instanceId = cli.instanceId ?? options.newInstanceId?.() ?? randomUUID();
   const instances =
     options.instancesPath === undefined ? new Instances() : new Instances(options.instancesPath);
   const info: InstanceInfo = {
     id: instanceId,
     pid: process.pid,
     addr: resolvedAddr,
-    started_at: localRfc3339(new Date()),
-    data_dir: loaded.dirs.data,
+    started_at: startedAt,
+    data_dir: dataLease.dataDir,
     config_dir: loaded.dirs.config,
   };
   try {
     instances.register(info);
   } catch (e) {
+    dataLease.release();
     throw new StartupError(
       "register_instance",
       `Failed to register daemon instance in ${instances.path}: ${String(e)}`,
@@ -272,6 +293,13 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         instance_id: instanceId,
         registry_path: instances.path,
         error: String(e),
+      });
+    }
+    if (!dataLease.release()) {
+      log?.warn?.("Could not release Shore data-directory ownership", {
+        instance_id: instanceId,
+        data_dir: dataLease.dataDir,
+        ownership_path: dataLease.path,
       });
     }
     log?.info?.("Daemon shut down cleanly");

@@ -36,6 +36,7 @@ export class StartupError extends Error {
     readonly kind:
       | "invalid_config_path"
       | "load_config"
+      | "own_data_directory"
       | "register_instance"
       | "server_run"
       | "token",
