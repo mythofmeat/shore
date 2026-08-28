@@ -1,7 +1,12 @@
 import { required } from "../util/required.ts";
 
+import { shoreLog } from "../log.ts";
 import { mergeToolLoopMessages, turnMsgIds } from "../engine/merge.ts";
-import type { ConversationEngine } from "../engine/conversation.ts";
+import type {
+  ConversationEngine,
+  DisplayHistoryPage,
+  HistoryPageLimit,
+} from "../engine/conversation.ts";
 import type { ImageRef, Message, Role } from "../engine/types.ts";
 import { embedImageData, embedMessagesImageData } from "../engine/wire_images.ts";
 import { localRfc3339 } from "../util/time.ts";
@@ -73,40 +78,14 @@ function resolveAssistantRef(messages: readonly Message[], reference: string | u
   return msgId;
 }
 
-function pageStartByTurns(messages: readonly Message[], endBound: number, turns: number): number {
-  const end = Math.min(endBound, messages.length);
-  if (turns === 0) return end;
-
-  let seen = 0;
-  for (let idx = end - 1; idx >= 0; idx -= 1) {
-    if (required(messages[idx]).role === "user") {
-      seen += 1;
-      if (seen >= turns) return idx;
-    }
-  }
-  return 0;
-}
-
-function countUserTurns(messages: readonly Message[]): number {
-  return messages.filter((m) => m.role === "user" && !isToolResultOnly(m)).length;
-}
-
-function isToolResultOnly(msg: Message): boolean {
-  return (
-    msg.role === "user" &&
-    msg.content_blocks.length > 0 &&
-    msg.content_blocks.every((b) => b.type === "tool_result")
-  );
-}
-
-function pageStartByArgs(messages: readonly Message[], end: number, args: Args): number {
+function historyPageLimit(args: Args): HistoryPageLimit {
   const turns = asU64(args["turns"]);
-  if (turns !== undefined) return pageStartByTurns(messages, end, turns);
+  if (turns !== undefined) return { kind: "turns", value: turns };
 
   const count = asU64(args["count"]);
-  if (count !== undefined) return Math.max(0, end - count);
+  if (count !== undefined) return { kind: "count", value: count };
 
-  return pageStartByTurns(messages, end, DEFAULT_LOG_TURNS);
+  return { kind: "turns", value: DEFAULT_LOG_TURNS };
 }
 
 function roleFilter(args: Args): Role | undefined {
@@ -120,46 +99,45 @@ function matchesRole(message: Message, role: Role | undefined): boolean {
   return role === undefined || message.role === role;
 }
 
-function resolveHistoryBefore(args: Args, activeStart: number, total: number): number {
-  if (!("before" in args)) return total;
+function resolveHistoryBefore(args: Args): number | "active" | undefined {
+  if (!("before" in args)) return undefined;
   const before = args["before"];
-  if (before === "active") return activeStart;
+  if (before === "active") return before;
 
   const index = asU64(before);
   if (index === undefined) throw invalidRequest('before must be "active" or a message cursor');
-  return Math.min(index, total);
+  return index;
 }
 
 function historyPagePayload(
-  messages: readonly Message[],
-  globalActiveStart: number,
-  startIdx: number,
-  endIdx: number,
+  history: DisplayHistoryPage,
   role: Role | undefined,
+  character: string,
 ): Json {
-  const start = Math.min(startIdx, messages.length);
-  const end = Math.max(Math.min(endIdx, messages.length), start);
-  const page = messages
-    .slice(start, end)
+  const page = history.messages
     .filter((msg) => matchesRole(msg, role))
     .map((msg) => structuredClone(msg));
-  const archivedEnd = Math.max(Math.min(globalActiveStart, end), start);
-  const activePageStart = messages
-    .slice(start, archivedEnd)
+  const activePageStart = history.messages
+    .slice(0, history.activeStart)
     .filter((msg) => matchesRole(msg, role)).length;
-  const totalTurns = countUserTurns(messages);
 
   embedMessagesImageData(page.slice(activePageStart));
+  shoreLog.debug(
+    `shore: history page for ${character} (${history.metrics.storage_native ? "durable" : "fallback"}; ` +
+      `segments=${String(history.metrics.segments_read)}, rows=${String(history.metrics.rows_read)}, ` +
+      `decoded_bytes=${String(history.metrics.decoded_body_bytes)}, ` +
+      `page_bytes=${String(history.metrics.page_bytes)})`,
+  );
 
   return {
     messages: page,
     active_start: activePageStart,
-    cursor: start,
-    next_before: start,
-    has_more_before: start > 0,
-    global_active_start: globalActiveStart,
-    total_messages: totalTurns,
-    total_turns: totalTurns,
+    cursor: history.cursor,
+    next_before: history.cursor,
+    has_more_before: history.cursor > 0,
+    global_active_start: history.globalActiveStart,
+    total_messages: history.totalTurns,
+    total_turns: history.totalTurns,
   };
 }
 
@@ -178,21 +156,20 @@ export function get(engine: ConversationEngine, args: Args): Json {
 }
 
 export async function log(engine: ConversationEngine, args: Args): Promise<Json> {
-  const { messages, activeStart } = await engine.displayHistory();
-  const end = messages.length;
-  const start = pageStartByArgs(messages, end, args);
+  const history = await engine.displayHistoryPage(undefined, historyPageLimit(args));
   const role = roleFilter(args);
 
-  return historyPagePayload(messages, activeStart, start, end, role);
+  return historyPagePayload(history, role, engine.characterName);
 }
 
 export async function historyPage(engine: ConversationEngine, args: Args): Promise<Json> {
-  const { messages, activeStart } = await engine.displayHistory();
-  const end = resolveHistoryBefore(args, activeStart, messages.length);
-  const start = pageStartByArgs(messages, end, args);
+  const history = await engine.displayHistoryPage(
+    resolveHistoryBefore(args),
+    historyPageLimit(args),
+  );
   const role = roleFilter(args);
 
-  return historyPagePayload(messages, activeStart, start, end, role);
+  return historyPagePayload(history, role, engine.characterName);
 }
 
 export async function edit(engine: ConversationEngine, args: Args): Promise<Json> {

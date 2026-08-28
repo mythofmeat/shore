@@ -1,8 +1,10 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
+import { mergeToolLoopMessages } from "../src/engine/merge.ts";
 import { SegmentReader } from "../src/engine/segments.ts";
 import type { Message } from "../src/engine/types.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
@@ -17,6 +19,22 @@ function message(id: string, content: string): Message {
     images: [],
     content_blocks: [{ type: "text", text: content }],
     timestamp: "2026-08-13T10:00:00+10:00",
+  };
+}
+
+function toolAssistant(id: string, toolId: string): Message {
+  return {
+    ...message(id, ""),
+    role: "assistant",
+    content_blocks: [{ type: "tool_use", id: toolId, name: "search", input: { q: id } }],
+  };
+}
+
+function toolResult(id: string, toolId: string): Message {
+  return {
+    ...message(id, "result"),
+    role: "user",
+    content_blocks: [{ type: "tool_result", tool_use_id: toolId, content: "result" }],
   };
 }
 
@@ -68,6 +86,8 @@ test("pending compactions are hidden and recover from either side of the active-
 
   const aborted = store.beginCompaction("ada", entry, messages, "before\n", "after\n");
   expect(store.segmentCount("ada")).toBe(0);
+  expect(store.displayMessageCount("ada")).toBe(0);
+  expect(store.displayTurnCount("ada")).toBe(0);
   store.recoverPending("ada", "before\n");
   expect(store.hasSegment("ada", aborted)).toBe(false);
 
@@ -76,6 +96,8 @@ test("pending compactions are hidden and recover from either side of the active-
   store.recoverPending("ada", "after\n");
   expect(store.hasSegment("ada", committed)).toBe(true);
   expect(store.readSegment("ada", committed)).toEqual(messages);
+  expect(store.displayMessageCount("ada")).toBe(1);
+  expect(store.displayTurnCount("ada")).toBe(1);
   store.close();
 });
 
@@ -157,4 +179,96 @@ test("legacy segments import lazily and survive removal of the source files", as
   const durable = await SegmentReader.load(characterDir, { dbPath, character: "ada" });
   expect(await durable.readSegment(0)).toEqual(messages);
   durable.close();
+});
+
+describe("storage-native display paging", () => {
+  test("one display group can cross several archived segments", () => {
+    const store = HistoryStore.openInMemory();
+    const put = (idx: number, messages: Message[]) => {
+      store.putSegment(
+        "ada",
+        idx,
+        {
+          file: HISTORY_DB_FILE,
+          message_count: messages.length,
+          compacted_at: "2026-08-13T10:01:00+10:00",
+        },
+        messages,
+      );
+    };
+    put(0, [message("u1", "hello"), toolAssistant("a1", "t1")]);
+    put(1, [toolResult("r1", "t1"), toolAssistant("a2", "t2")]);
+    put(2, [toolResult("r2", "t2"), message("a3", "done"), message("u2", "next")]);
+
+    expect(store.displayMessageCount("ada")).toBe(3);
+    expect(store.displayTurnCount("ada")).toBe(2);
+    expect(store.displayStartForTurns("ada", 3, 1)).toBe(2);
+    expect(store.displayStartForTurns("ada", 3, 2)).toBe(0);
+
+    const slice = store.readDisplayRange("ada", 1, 2);
+    expect(slice.messages.map((entry) => entry.msg_id)).toEqual(["a1", "r1", "a2", "r2", "a3"]);
+    expect(mergeToolLoopMessages(slice.messages).map((entry) => entry.msg_id)).toEqual(["a3"]);
+    expect(slice.metrics.rows_read).toBe(5);
+    expect(slice.metrics.segments_read).toBe(3);
+    expect(slice.metrics.decoded_body_bytes).toBeGreaterThan(0);
+    store.close();
+  });
+
+  test("a page reads the same bounded rows in a short and a long archive", () => {
+    const measure = (segments: number) => {
+      const store = HistoryStore.openInMemory();
+      for (let idx = 0; idx < segments; idx += 1) {
+        store.putSegment(
+          "ada",
+          idx,
+          {
+            file: HISTORY_DB_FILE,
+            message_count: 2,
+            compacted_at: "2026-08-13T10:01:00+10:00",
+          },
+          [message(`u${String(idx).padStart(4, "0")}`, "prompt"), message(`a${String(idx).padStart(4, "0")}`, "reply")],
+        );
+      }
+      const end = store.displayMessageCount("ada");
+      const slice = store.readDisplayRange("ada", end - 8, end);
+      store.close();
+      return slice.metrics;
+    };
+
+    const short = measure(10);
+    const long = measure(250);
+    expect(short).toEqual(long);
+    expect(long.rows_read).toBe(8);
+    expect(long.segments_read).toBe(4);
+  });
+
+  test("an existing archive receives display metadata when it is upgraded", () => {
+    const path = testTmp(`history-display-migration-${crypto.randomUUID()}.db`);
+    const initial = HistoryStore.open(path);
+    initial.putSegment(
+      "ada",
+      0,
+      {
+        file: HISTORY_DB_FILE,
+        message_count: 3,
+        compacted_at: "2026-08-13T10:01:00+10:00",
+      },
+      [toolAssistant("a1", "t1"), toolResult("r1", "t1"), message("a2", "done")],
+    );
+    initial.close();
+
+    const raw = new Database(path, { readwrite: true });
+    raw.run("DELETE FROM history_metadata WHERE key = 'display_version'");
+    raw.run("UPDATE history_messages SET display_kind = 0, display_seq = NULL, is_user_turn = 0");
+    raw.close();
+
+    const upgraded = HistoryStore.open(path);
+    expect(upgraded.displayMessageCount("ada")).toBe(1);
+    expect(upgraded.readDisplayRange("ada", 0, 1).messages.map((entry) => entry.msg_id)).toEqual([
+      "a1",
+      "r1",
+      "a2",
+    ]);
+    upgraded.close();
+  });
 });

@@ -22,6 +22,7 @@ import {
 } from "../src/commands/conversation.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { mergeToolLoopMessages } from "../src/engine/merge.ts";
 import type { ImageRef, Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -721,6 +722,129 @@ describe("which page an argument asks for", () => {
     const engine = await engineOf(alternating(12));
 
     expect(ids(await historyPage(engine, { before: 0, count: 4 }))).toEqual([]);
+  });
+});
+
+describe("storage-native conversation paging", () => {
+  const archivedMessage = (id: string, role: "user" | "assistant"): Message => ({
+    msg_id: id,
+    role,
+    content: role === "user" ? "prompt" : "reply",
+    images: [],
+    content_blocks: [{ type: "text", text: role === "user" ? "prompt" : "reply" }],
+    timestamp: "2026-01-01T00:00:00Z",
+  });
+  const jsonl = (messages: readonly Message[]) =>
+    messages.map((message) => JSON.stringify(message)).join("\n") + "\n";
+
+  test("every page reads bounded rows independent of lifetime history", async () => {
+    const root = await mkdtemp(testTmp("shore-bounded-history-"));
+    const characterDir = join(root, "TestChar");
+    await mkdir(characterDir, { recursive: true });
+    await writeFile(join(characterDir, "active.jsonl"), "");
+    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
+    const expected: string[] = [];
+    for (let segment = 0; segment < 200; segment += 1) {
+      const suffix = String(segment).padStart(4, "0");
+      const messages = [
+        archivedMessage(`u${suffix}`, "user"),
+        archivedMessage(`a${suffix}`, "assistant"),
+      ];
+      expected.push(...messages.map((message) => message.msg_id));
+      store.putSegment(
+        "TestChar",
+        segment,
+        {
+          file: HISTORY_DB_FILE,
+          message_count: messages.length,
+          compacted_at: "2026-01-01T00:00:00Z",
+        },
+        messages,
+      );
+    }
+    store.close();
+
+    const engine = await ConversationEngine.load("TestChar", root, () => {});
+    const loaded: string[] = [];
+    const decodedSizes = new Set<number>();
+    let before: number | undefined;
+    for (;;) {
+      const page = await engine.displayHistoryPage(before, { kind: "count", value: 8 });
+      expect(page.metrics.storage_native).toBe(true);
+      expect(page.metrics.rows_read).toBeLessThanOrEqual(8);
+      expect(page.metrics.segments_read).toBeLessThanOrEqual(4);
+      if (page.messages.length === 8) decodedSizes.add(page.metrics.decoded_body_bytes);
+      loaded.unshift(...page.messages.map((message) => message.msg_id));
+      if (page.cursor === 0) break;
+      before = page.cursor;
+    }
+
+    expect(loaded).toEqual(expected);
+    expect(decodedSizes.size).toBe(1);
+    engine.segments().close();
+  });
+
+  test("a numeric cursor survives active appends and compaction movement", async () => {
+    const root = await mkdtemp(testTmp("shore-stable-history-"));
+    const characterDir = join(root, "TestChar");
+    await mkdir(characterDir, { recursive: true });
+    const archived = [archivedMessage("u0", "user"), archivedMessage("a0", "assistant")];
+    const active = [
+      archivedMessage("u1", "user"),
+      archivedMessage("a1", "assistant"),
+      archivedMessage("u2", "user"),
+      archivedMessage("a2", "assistant"),
+    ];
+    const dbPath = join(root, HISTORY_DB_FILE);
+    const store = HistoryStore.open(dbPath);
+    store.putSegment(
+      "TestChar",
+      0,
+      {
+        file: HISTORY_DB_FILE,
+        message_count: archived.length,
+        compacted_at: "2026-01-01T00:00:00Z",
+      },
+      archived,
+    );
+    store.close();
+    await writeFile(join(characterDir, "active.jsonl"), jsonl(active));
+
+    const engine = await ConversationEngine.load("TestChar", root, () => {});
+    const before = 4;
+    const original = await engine.displayHistoryPage(before, { kind: "count", value: 2 });
+    expect(original.messages.map((message) => message.msg_id)).toEqual(["u1", "a1"]);
+
+    await engine.appendMessage(archivedMessage("u3", "user"));
+    const afterAppend = await engine.displayHistoryPage(before, { kind: "count", value: 2 });
+    expect(afterAppend.messages).toEqual(original.messages);
+    expect(afterAppend.cursor).toBe(original.cursor);
+
+    const compactionStore = HistoryStore.open(dbPath);
+    compactionStore.putSegment(
+      "TestChar",
+      1,
+      {
+        file: HISTORY_DB_FILE,
+        message_count: 2,
+        compacted_at: "2026-01-01T00:01:00Z",
+      },
+      active.slice(0, 2),
+    );
+    compactionStore.close();
+    await writeFile(
+      join(characterDir, "active.jsonl"),
+      jsonl([...active.slice(2), archivedMessage("u3", "user")]),
+    );
+    await engine.reload();
+
+    const afterCompaction = await engine.displayHistoryPage(before, {
+      kind: "count",
+      value: 2,
+    });
+    expect(afterCompaction.messages).toEqual(original.messages);
+    expect(afterCompaction.cursor).toBe(original.cursor);
+    engine.segments().close();
   });
 });
 

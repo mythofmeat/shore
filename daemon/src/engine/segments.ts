@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import {
   HISTORY_DB_FILE,
   HistoryStore,
+  type HistoryDisplaySlice,
   type SegmentEntry,
   type SegmentRecord,
 } from "./history_store.ts";
@@ -34,6 +35,7 @@ export class SegmentReader {
   readonly #manifest: CompactionManifest;
   readonly #history: HistoryStore | undefined;
   readonly #character: string;
+  readonly #displayPaging: boolean;
 
   private constructor(
     segmentsDir: string,
@@ -45,6 +47,8 @@ export class SegmentReader {
     this.#manifest = manifest;
     this.#history = history;
     this.#character = character;
+    this.#displayPaging =
+      history !== undefined && history.segmentCount(character) >= manifest.segments.length;
   }
 
   static async load(
@@ -107,6 +111,35 @@ export class SegmentReader {
     return historyCount >= this.#manifest.segments.length
       ? (this.#history?.totalMessageCount(this.#character) ?? 0)
       : this.#manifest.total_compacted_messages;
+  }
+
+  supportsDisplayPaging(): boolean {
+    return this.#displayPaging;
+  }
+
+  displayMessageCount(): number {
+    if (!this.supportsDisplayPaging()) throw new Error("durable history paging is unavailable");
+    return this.#history?.displayMessageCount(this.#character) ?? 0;
+  }
+
+  displayTurnCount(): number {
+    if (!this.supportsDisplayPaging()) throw new Error("durable history paging is unavailable");
+    return this.#history?.displayTurnCount(this.#character) ?? 0;
+  }
+
+  displayStartForTurns(end: number, turns: number): number {
+    if (!this.supportsDisplayPaging()) throw new Error("durable history paging is unavailable");
+    return this.#history?.displayStartForTurns(this.#character, end, turns) ?? end;
+  }
+
+  readDisplayRange(start: number, end: number): HistoryDisplaySlice {
+    if (!this.supportsDisplayPaging()) throw new Error("durable history paging is unavailable");
+    return (
+      this.#history?.readDisplayRange(this.#character, start, end) ?? {
+        messages: [],
+        metrics: { segments_read: 0, rows_read: 0, decoded_body_bytes: 0 },
+      }
+    );
   }
 
   archiveDigest(): string {

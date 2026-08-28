@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { chmodSync } from "node:fs";
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
-import { deriveContentFromBlocks, normalizeMessage } from "./message_store.ts";
+import {
+  deriveContentFromBlocks,
+  normalizeMessage,
+} from "./message_store.ts";
 import type {
   ContentBlock,
   ImageRef,
@@ -59,7 +62,10 @@ CREATE TABLE IF NOT EXISTS history_messages (
     alt_index    INTEGER,
     alt_count    INTEGER,
     images       TEXT,
-    blocks_hash  TEXT    NOT NULL
+    blocks_hash  TEXT    NOT NULL,
+    display_kind INTEGER NOT NULL,
+    display_seq  INTEGER,
+    is_user_turn INTEGER NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_history_messages_slot
@@ -74,6 +80,17 @@ CREATE TABLE IF NOT EXISTS history_alternatives (
     images       TEXT,
     blocks_hash  TEXT    NOT NULL,
     PRIMARY KEY (message_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS history_metadata (
+    key   TEXT PRIMARY KEY,
+    value INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS history_character_stats (
+    character     TEXT PRIMARY KEY,
+    display_count INTEGER NOT NULL,
+    turn_count    INTEGER NOT NULL
 );
 `;
 
@@ -107,6 +124,33 @@ interface BodyRow {
   provider_key: string | null;
   model: string | null;
 }
+
+interface MessageRow extends BodyRow {
+  id: number;
+  msg_id: string;
+  role: Message["role"];
+  origin: MessageOrigin | null;
+  alt_index: number | null;
+  alt_count: number | null;
+  segment: number;
+}
+
+export interface HistoryReadMetrics {
+  segments_read: number;
+  rows_read: number;
+  decoded_body_bytes: number;
+}
+
+export interface HistoryDisplaySlice {
+  messages: Message[];
+  metrics: HistoryReadMetrics;
+}
+
+const DISPLAY_OTHER = 0;
+const DISPLAY_ASSISTANT = 1;
+const DISPLAY_TOOL_ASSISTANT = 2;
+const DISPLAY_TOOL_RESULT = 3;
+const DISPLAY_METADATA_VERSION = 2;
 
 export class HistoryStore {
   readonly #db: Database;
@@ -172,12 +216,20 @@ export class HistoryStore {
 
   finishCompaction(character: string, idx: number): void {
     this.#db.transaction(() => {
+      const row = this.#db
+        .query(
+          "SELECT committed FROM history_segments WHERE character = ?1 AND idx = ?2",
+        )
+        .get(character, idx) as { committed: number } | null;
       this.#db
         .query("UPDATE history_segments SET committed = 1 WHERE character = ?1 AND idx = ?2")
         .run(character, idx);
       this.#db
         .query("DELETE FROM history_pending WHERE character = ?1 AND segment = ?2")
         .run(character, idx);
+      if (row?.committed === 0) {
+        this.#updateCharacterStats(character, this.#segmentTurnCount(character, idx));
+      }
     })();
   }
 
@@ -248,6 +300,36 @@ export class HistoryStore {
       )
       .get(character) as { n: number };
     return row.n;
+  }
+
+  displayMessageCount(character: string): number {
+    const row = this.#db
+      .query("SELECT display_count FROM history_character_stats WHERE character = ?1")
+      .get(character) as { display_count: number } | null;
+    return row?.display_count ?? 0;
+  }
+
+  displayTurnCount(character: string): number {
+    const row = this.#db
+      .query("SELECT turn_count FROM history_character_stats WHERE character = ?1")
+      .get(character) as { turn_count: number } | null;
+    return row?.turn_count ?? 0;
+  }
+
+  displayStartForTurns(character: string, end: number, turns: number): number {
+    if (turns <= 0) return end;
+    const row = this.#db
+      .query(
+        `SELECT m.display_seq
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1
+           AND m.display_seq < ?2
+         ORDER BY m.display_seq DESC
+         LIMIT 1 OFFSET ?3`,
+      )
+      .get(character, end, turns - 1) as { display_seq: number } | null;
+    return row?.display_seq ?? 0;
   }
 
   archiveDigest(character: string): string {
@@ -350,7 +432,7 @@ export class HistoryStore {
   readSegment(character: string, idx: number): Message[] {
     const rows = this.#db
       .query(
-        `SELECT id, msg_id, role, timestamp, provider_key, model, origin,
+        `SELECT id, msg_id, role, timestamp, provider_key, model, origin, segment,
                 alt_index, alt_count, images, blocks_hash
          FROM history_messages
          WHERE character = ?1 AND segment = ?2
@@ -360,22 +442,44 @@ export class HistoryStore {
            )
          ORDER BY ordinal`,
       )
-      .all(character, idx) as (BodyRow & {
-      id: number;
-      msg_id: string;
-      role: Message["role"];
-      origin: MessageOrigin | null;
-      alt_index: number | null;
-      alt_count: number | null;
-    })[];
+      .all(character, idx) as MessageRow[];
 
+    return this.#messagesFromRows(rows);
+  }
+
+  readDisplayRange(character: string, start: number, end: number): HistoryDisplaySlice {
+    const metrics: HistoryReadMetrics = {
+      segments_read: 0,
+      rows_read: 0,
+      decoded_body_bytes: 0,
+    };
+    if (end <= start) return { messages: [], metrics };
+
+    const rows = this.#db
+      .query(
+        `SELECT m.id, m.msg_id, m.role, m.timestamp, m.provider_key, m.model, m.origin,
+                m.segment, m.alt_index, m.alt_count, m.images, m.blocks_hash
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND s.committed = 1
+           AND m.display_seq >= ?2 AND m.display_seq < ?3
+         ORDER BY m.segment, m.ordinal`,
+      )
+      .all(character, start, end) as MessageRow[];
+
+    metrics.rows_read = rows.length;
+    metrics.segments_read = new Set(rows.map((row) => row.segment)).size;
+    return { messages: this.#messagesFromRows(rows, metrics), metrics };
+  }
+
+  #messagesFromRows(rows: MessageRow[], metrics?: HistoryReadMetrics): Message[] {
     const altQuery = this.#db.query(
       `SELECT timestamp, provider_key, model, images, blocks_hash
        FROM history_alternatives WHERE message_id = ?1 ORDER BY ordinal`,
     );
 
     return rows.map((row) => {
-      const { blocks, images, content } = this.#body(row);
+      const { blocks, images, content } = this.#body(row, metrics);
       const message: Message = {
         msg_id: row.msg_id,
         role: row.role,
@@ -392,7 +496,7 @@ export class HistoryStore {
 
       const altRows = altQuery.all(row.id) as BodyRow[];
       if (altRows.length > 0) {
-        message.alternatives = altRows.map((alt) => this.#alternative(alt));
+        message.alternatives = altRows.map((alt) => this.#alternative(alt, metrics));
       }
       return normalizeMessage(message);
     });
@@ -400,12 +504,14 @@ export class HistoryStore {
 
   #insertMessage(character: string, segment: number, ordinal: number, message: Message): void {
     const blocksHash = this.#storeBlob(utf8.encode(JSON.stringify(message.content_blocks)));
+    const kind = displayKind(message);
     this.#db
       .query(
         `INSERT INTO history_messages
              (character, segment, ordinal, msg_id, role, timestamp,
-              provider_key, model, origin, alt_index, alt_count, images, blocks_hash)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
+              provider_key, model, origin, alt_index, alt_count, images, blocks_hash,
+              display_kind, display_seq, is_user_turn)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15)`,
       )
       .run(
         character,
@@ -421,6 +527,8 @@ export class HistoryStore {
         message.alt_count ?? null,
         imagesColumn(message.images),
         blocksHash,
+        kind,
+        message.role === "user" && kind !== DISPLAY_TOOL_RESULT ? 1 : 0,
       );
 
     if (message.alternatives === undefined || message.alternatives.length === 0) return;
@@ -451,6 +559,8 @@ export class HistoryStore {
     messages: Message[],
     committed: boolean,
   ): void {
+    const previousTurnCount = this.#committedSegmentTurnCount(character, idx);
+    const normalizedMessages = messages.map((message) => normalizeMessage(message));
     this.#deleteSegment(character, idx);
     this.#db
       .query(
@@ -484,9 +594,16 @@ export class HistoryStore {
         entry.label ?? null,
         entry.note ?? null,
       );
-    messages.forEach((message, ordinal) => {
-      this.#insertMessage(character, idx, ordinal, normalizeMessage(message));
+    normalizedMessages.forEach((message, ordinal) => {
+      this.#insertMessage(character, idx, ordinal, message);
     });
+    reindexDisplayMetadata(this.#db, character, idx);
+    if (committed) {
+      const nextTurnCount = normalizedMessages.filter(
+        (message) => message.role === "user" && displayKind(message) !== DISPLAY_TOOL_RESULT,
+      ).length;
+      this.#updateCharacterStats(character, nextTurnCount - previousTurnCount);
+    }
   }
 
   #deleteSegment(character: string, idx: number): void {
@@ -503,8 +620,67 @@ export class HistoryStore {
       .run(character, idx);
   }
 
-  #alternative(row: BodyRow): MessageAlternative {
-    const body = this.#body(row);
+  #committedSegmentTurnCount(character: string, idx: number): number {
+    const row = this.#db
+      .query(
+        `SELECT COUNT(*) AS n
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND m.segment = ?2 AND s.committed = 1
+           AND m.is_user_turn = 1`,
+      )
+      .get(character, idx) as { n: number };
+    return row.n;
+  }
+
+  #segmentTurnCount(character: string, idx: number): number {
+    const row = this.#db
+      .query(
+        "SELECT COUNT(*) AS n FROM history_messages WHERE character = ?1 AND segment = ?2 AND is_user_turn = 1",
+      )
+      .get(character, idx) as { n: number };
+    return row.n;
+  }
+
+  #updateCharacterStats(character: string, turnDelta: number): void {
+    const display = this.#db
+      .query(
+        `SELECT COALESCE(MAX(m.display_seq) + 1, 0) AS n
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND s.committed = 1`,
+      )
+      .get(character) as { n: number };
+    const current = this.#db
+      .query("SELECT turn_count FROM history_character_stats WHERE character = ?1")
+      .get(character) as { turn_count: number } | null;
+    let turns: number;
+    if (current === null) {
+      const row = this.#db
+        .query(
+          `SELECT COUNT(*) AS n
+           FROM history_messages m
+           JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+           WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1`,
+        )
+        .get(character) as { n: number };
+      turns = row.n;
+    } else {
+      turns = current.turn_count + turnDelta;
+    }
+    this.#db
+      .query(
+        `INSERT INTO history_character_stats (character, display_count, turn_count)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT (character) DO UPDATE SET
+           display_count = excluded.display_count,
+           turn_count = excluded.turn_count`,
+      )
+      .run(character, display.n, turns);
+  }
+
+  #alternative(row: BodyRow, metrics?: HistoryReadMetrics): MessageAlternative {
+    const body = this.#body(row, metrics);
     return {
       content: body.content,
       images: body.images,
@@ -515,9 +691,16 @@ export class HistoryStore {
     };
   }
 
-  #body(row: BodyRow): { blocks: ContentBlock[]; images: ImageRef[]; content: string } {
+  #body(
+    row: BodyRow,
+    metrics?: HistoryReadMetrics,
+  ): { blocks: ContentBlock[]; images: ImageRef[]; content: string } {
     const bytes = this.#loadBlob(row.blocks_hash);
     if (bytes === null) throw new MissingBody(row.blocks_hash);
+    if (metrics !== undefined) {
+      metrics.decoded_body_bytes += bytes.byteLength;
+      if (row.images !== null) metrics.decoded_body_bytes += utf8.encode(row.images).byteLength;
+    }
     const blocks = JSON.parse(decoder.decode(bytes)) as ContentBlock[];
     const images = row.images === null ? [] : (JSON.parse(row.images) as ImageRef[]);
     return { blocks, images, content: deriveContentFromBlocks(blocks, true) };
@@ -587,6 +770,18 @@ function migrate(db: Database): void {
   if (!columns.some((column) => column.name === "note")) {
     db.run("ALTER TABLE history_segments ADD COLUMN note TEXT");
   }
+  const messageColumns = db.query("PRAGMA table_info(history_messages)").all() as {
+    name: string;
+  }[];
+  if (!messageColumns.some((column) => column.name === "display_kind")) {
+    db.run("ALTER TABLE history_messages ADD COLUMN display_kind INTEGER");
+  }
+  if (!messageColumns.some((column) => column.name === "display_seq")) {
+    db.run("ALTER TABLE history_messages ADD COLUMN display_seq INTEGER");
+  }
+  if (!messageColumns.some((column) => column.name === "is_user_turn")) {
+    db.run("ALTER TABLE history_messages ADD COLUMN is_user_turn INTEGER");
+  }
   db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_history_segments_operation
            ON history_segments (character, compaction_id)
            WHERE compaction_id IS NOT NULL`);
@@ -597,6 +792,135 @@ function migrate(db: Database): void {
     db.run(`INSERT OR IGNORE INTO history_blobs (hash, size, compressed, data)
              SELECT hash, size, compressed, data FROM blobs`);
   }
+  const metadata = db
+    .query("SELECT value FROM history_metadata WHERE key = 'display_version'")
+    .get() as { value: number } | null;
+  if (metadata?.value !== DISPLAY_METADATA_VERSION) {
+    db.transaction(() => {
+      const rows = db
+        .query("SELECT id, role, blocks_hash FROM history_messages ORDER BY id")
+        .all() as { id: number; role: Message["role"]; blocks_hash: string }[];
+      const update = db.query(
+        "UPDATE history_messages SET display_kind = ?2, is_user_turn = ?3 WHERE id = ?1",
+      );
+      for (const row of rows) {
+        const blocks = loadBlocks(db, row.blocks_hash);
+        const kind = displayKind({ role: row.role, content_blocks: blocks });
+        const userTurn = row.role === "user" && kind !== DISPLAY_TOOL_RESULT ? 1 : 0;
+        update.run(row.id, kind, userTurn);
+      }
+      const characters = db
+        .query("SELECT DISTINCT character FROM history_segments ORDER BY character")
+        .all() as { character: string }[];
+      for (const { character } of characters) reindexDisplayMetadata(db, character, 0);
+      db.run("DELETE FROM history_character_stats");
+      db.run(
+        `INSERT INTO history_character_stats (character, display_count, turn_count)
+         SELECT s.character,
+                COALESCE(MAX(m.display_seq) + 1, 0),
+                COALESCE(SUM(CASE WHEN m.is_user_turn = 1 THEN 1 ELSE 0 END), 0)
+         FROM history_segments s
+         LEFT JOIN history_messages m ON m.character = s.character AND m.segment = s.idx
+         WHERE s.committed = 1
+         GROUP BY s.character`,
+      );
+      db.query(
+        `INSERT INTO history_metadata (key, value) VALUES ('display_version', ?1)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+      ).run(DISPLAY_METADATA_VERSION);
+    })();
+  }
+  db.run(`CREATE INDEX IF NOT EXISTS idx_history_messages_display
+           ON history_messages (character, display_seq, segment, ordinal)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_history_messages_turn
+           ON history_messages (character, is_user_turn, display_seq)`);
+}
+
+function displayKind(message: Pick<Message, "role" | "content_blocks">): number {
+  if (
+    message.role === "user" &&
+    message.content_blocks.length > 0 &&
+    message.content_blocks.every((block) => block.type === "tool_result")
+  ) {
+    return DISPLAY_TOOL_RESULT;
+  }
+  if (message.role !== "assistant") return DISPLAY_OTHER;
+  return message.content_blocks.some((block) => block.type === "tool_use")
+    ? DISPLAY_TOOL_ASSISTANT
+    : DISPLAY_ASSISTANT;
+}
+
+type DisplayState = "none" | "after_tool_assistant" | "after_tool_result";
+
+function reindexDisplayMetadata(db: Database, character: string, startSegment: number): void {
+  const previous = db
+    .query(
+      `SELECT m.display_kind, m.display_seq
+       FROM history_messages m
+       JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+       WHERE m.character = ?1 AND s.idx < ?2
+       ORDER BY s.idx DESC, m.ordinal DESC LIMIT 1`,
+    )
+    .get(character, startSegment) as { display_kind: number; display_seq: number | null } | null;
+  const maximum = db
+    .query(
+      `SELECT MAX(m.display_seq) AS seq
+       FROM history_messages m
+       JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+       WHERE m.character = ?1 AND s.idx < ?2`,
+    )
+    .get(character, startSegment) as { seq: number | null };
+  let sequence = maximum.seq ?? -1;
+  let state = displayStateAfter(previous);
+  const rows = db
+    .query(
+      `SELECT m.id, m.display_kind
+       FROM history_messages m
+       JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+       WHERE m.character = ?1 AND s.idx >= ?2
+       ORDER BY s.idx, m.ordinal`,
+    )
+    .all(character, startSegment) as { id: number; display_kind: number }[];
+  const update = db.query("UPDATE history_messages SET display_seq = ?2 WHERE id = ?1");
+
+  for (const row of rows) {
+    let displaySequence: number | null;
+    if (row.display_kind === DISPLAY_TOOL_RESULT) {
+      displaySequence = state === "after_tool_assistant" ? sequence : null;
+      state = displaySequence === null ? "none" : "after_tool_result";
+    } else if (row.display_kind === DISPLAY_TOOL_ASSISTANT) {
+      if (state === "none") sequence += 1;
+      displaySequence = sequence;
+      state = "after_tool_assistant";
+    } else if (row.display_kind === DISPLAY_ASSISTANT && state !== "none") {
+      displaySequence = sequence;
+      state = "none";
+    } else {
+      sequence += 1;
+      displaySequence = sequence;
+      state = "none";
+    }
+    update.run(row.id, displaySequence);
+  }
+}
+
+function displayStateAfter(
+  row: { display_kind: number; display_seq: number | null } | null,
+): DisplayState {
+  if (row?.display_seq === null || row === null) return "none";
+  if (row.display_kind === DISPLAY_TOOL_ASSISTANT) return "after_tool_assistant";
+  if (row.display_kind === DISPLAY_TOOL_RESULT) return "after_tool_result";
+  return "none";
+}
+
+function loadBlocks(db: Database, hash: string): ContentBlock[] {
+  const row = db
+    .query("SELECT size, compressed, data FROM history_blobs WHERE hash = ?1")
+    .get(hash) as { size: number; compressed: number; data: Uint8Array } | null;
+  if (row === null) throw new MissingBody(hash);
+  const bytes = row.compressed === 0 ? row.data : zstdDecompressSync(row.data);
+  if (bytes.byteLength !== row.size) throw new MissingBody(hash);
+  return JSON.parse(decoder.decode(bytes)) as ContentBlock[];
 }
 
 export class MissingBody extends Error {
