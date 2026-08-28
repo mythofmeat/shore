@@ -1561,6 +1561,25 @@ pub(crate) fn write_error_log<W: Write>(out: &mut W, data: &serde_json::Value) {
             _ = writeln!(w);
         },
     );
+
+    print_error_log_section(
+        out,
+        "Memory recall",
+        &data["memory_recall"],
+        width,
+        |w, event| {
+            let status = event["status"].as_str().unwrap_or("?");
+            let recalled = event["recalled"].as_u64().unwrap_or(0);
+            let elapsed = event["elapsed_ms"].as_u64().unwrap_or(0);
+
+            _ = write!(w, "{status:<10} {recalled} recalled");
+            write_dim(w, &format!("  {elapsed}ms"));
+            if let Some(error) = event["error"].as_str() {
+                write_fg(w, COLOR_ERROR, &format!("  {error}"));
+            }
+            _ = writeln!(w);
+        },
+    );
 }
 
 fn print_error_log_section<W: Write>(
@@ -1674,6 +1693,34 @@ mod tests {
         _ = stdout.write_all(&buf);
         _ = stdout.write_all(b"----- end -----\n");
         _ = stdout.flush();
+    }
+
+    #[test]
+    fn memory_recall_diagnostics_show_counts_without_recalled_text() {
+        set_color_enabled(false);
+        let data = serde_json::json!({
+            "errors": { "count": 0, "recent": [] },
+            "key_fallbacks": { "count": 0, "recent": [] },
+            "memory_recall": {
+                "count": 1,
+                "recent": [{
+                    "timestamp": "2026-08-28T10:00:00Z",
+                    "character": "poppy",
+                    "status": "recalled",
+                    "recalled": 4,
+                    "elapsed_ms": 118
+                }]
+            }
+        });
+        let mut buf = Vec::new();
+
+        write_error_log(&mut buf, &data);
+        let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
+
+        assert!(rendered.contains("Memory recall"));
+        assert!(rendered.contains("recalled"));
+        assert!(rendered.contains("4 recalled"));
+        assert!(rendered.contains("118ms"));
     }
 
     #[test]

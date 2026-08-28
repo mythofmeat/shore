@@ -77,6 +77,7 @@ export interface BuildGenerationRequestParams {
   config: LoadedConfig;
   resolved: ResolvedModel;
   regen: boolean;
+  recalledMemory?: string | undefined;
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered">;
   timeZone?: string;
 }
@@ -100,6 +101,7 @@ export async function buildGenerationRequest(
     resolved,
     messages,
     hasPriorContext,
+    ...(params.recalledMemory === undefined ? {} : { recalledMemory: params.recalledMemory }),
     mcpToolDefs,
     ...(params.timeZone === undefined ? {} : { timeZone: params.timeZone }),
   });

@@ -7,6 +7,7 @@ import {
   budgetPeriodRank,
   parseAppConfig,
   validateCompaction,
+  validateMemoryRecall,
   type AppConfig,
   type UsageBudgetConfig,
   type UsageConfig,
@@ -442,6 +443,15 @@ function validateConfig(
 
   const compaction = validateCompaction(app.memory.compaction);
   if (compaction !== undefined) throw validationError(compaction);
+  const recall = validateMemoryRecall(app.memory.recall);
+  if (recall !== undefined) throw validationError(recall);
+
+  if (app.memory.recall.mode !== "off" && !app.mcp.has(app.memory.recall.server)) {
+    throw validationError(
+      `memory.recall.server names '${app.memory.recall.server}', which has no ` +
+        "[mcp.<server>] definition",
+    );
+  }
 }
 
 function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {

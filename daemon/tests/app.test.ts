@@ -886,6 +886,17 @@ describe("a config.toml sets what it says and nothing else", () => {
     expect(at(cfg, "memory.retrieval.binary"), "memory.retrieval.binary").toEqual("metadata");
   });
 
+  test("memory.recall and archive-only rotation", () => {
+    const cfg = parsed("[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nmode = \"inject\"\nserver = \"mem0\"\nrecent_messages = 3\nmax_memories = 8\n");
+    expect(at(cfg, "memory.compaction.write_memory")).toBe(false);
+    expect(at(cfg, "memory.recall")).toMatchObject({
+      mode: "inject",
+      server: "mem0",
+      recent_messages: 3,
+      max_memories: 8,
+    });
+  });
+
   test("memory.git_push", () => {
     const cfg = parsed("[memory]\ngit_push = true\n");
     expect(at(cfg, "memory.git_push"), "memory.git_push").toEqual(true);
@@ -1125,6 +1136,10 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
 
   test("an unknown retrieval mode does not parse", () => {
     expect(rejected("[memory.retrieval]\nmode = \"semantic\"\n")).toContain("semantic");
+  });
+
+  test("an unknown recall mode does not parse", () => {
+    expect(rejected("[memory.recall]\nmode = \"shadow\"\n")).toContain("shadow");
   });
 
   test("an unknown binary mode does not parse", () => {
@@ -1548,6 +1563,7 @@ describe("compaction validation", () => {
     test(c.name, () => {
       const compaction = {
         enabled: c.compaction.enabled,
+        write_memory: true,
         idle_trigger: durationFrom(c.compaction.idle_trigger),
         archive_after: durationFrom(c.compaction.archive_after),
         min_turns: c.compaction.min_turns,

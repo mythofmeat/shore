@@ -540,6 +540,7 @@ export function timeoutFor(tools: ToolsConfig, name: string): ConfigDuration | u
 
 export interface CompactionConfig {
   enabled: boolean;
+  write_memory: boolean;
   idle_trigger: ConfigDuration;
   archive_after: ConfigDuration;
   min_turns: number;
@@ -550,6 +551,7 @@ export interface CompactionConfig {
 
 export const defaultCompactionConfig = (): CompactionConfig => ({
   enabled: true,
+  write_memory: true,
   idle_trigger: ConfigDuration.fromSecs(7200),
   archive_after: ConfigDuration.fromSecs(0),
   min_turns: 12,
@@ -563,6 +565,7 @@ const COMPACTION: StructSpec<CompactionConfig> = {
   make: defaultCompactionConfig,
   fields: {
     enabled: readBool,
+    write_memory: readBool,
     idle_trigger: readDuration,
     archive_after: readDuration,
     min_turns: readUsize,
@@ -571,6 +574,55 @@ const COMPACTION: StructSpec<CompactionConfig> = {
     keep_recent_turns: readUsize,
   },
 };
+
+export type MemoryRecallMode = "off" | "inject";
+
+const MEMORY_RECALL_MODES: readonly MemoryRecallMode[] = ["off", "inject"];
+
+export interface MemoryRecallConfig {
+  mode: MemoryRecallMode;
+  server: string;
+  max_memories: number;
+  recent_messages: number;
+}
+
+export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
+  mode: "off",
+  server: "mem0",
+  max_memories: 6,
+  recent_messages: 2,
+});
+
+const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
+  name: "MemoryRecallConfig",
+  make: defaultMemoryRecallConfig,
+  fields: {
+    mode: readEnum(MEMORY_RECALL_MODES),
+    server: readString,
+    max_memories: readUsize,
+    recent_messages: readUsize,
+  },
+};
+
+export function validateMemoryRecall(recall: MemoryRecallConfig): string | undefined {
+  if (recall.mode === "off") return undefined;
+  if (recall.server.trim() === "") {
+    return "memory.recall.server must name an [mcp.<server>] entry when recall is enabled";
+  }
+  if (recall.recent_messages === 0) {
+    return "memory.recall.recent_messages must be greater than 0 when recall is enabled";
+  }
+  if (recall.max_memories === 0) {
+    return "memory.recall.max_memories must be greater than 0 when recall is enabled";
+  }
+  if (recall.recent_messages > 20) {
+    return "memory.recall.recent_messages cannot exceed 20";
+  }
+  if (recall.max_memories > 50) {
+    return "memory.recall.max_memories cannot exceed 50";
+  }
+  return undefined;
+}
 
 function rejectFractionalSeconds(field: string, value: ConfigDuration): string | undefined {
   const millis = value.asMillisExact();
@@ -704,6 +756,7 @@ const RETRIEVAL: StructSpec<RetrievalConfig> = {
 
 export interface MemoryConfig {
   compaction: CompactionConfig;
+  recall: MemoryRecallConfig;
   file_limits: MemoryFileLimitsConfig;
   thinking: ThinkingConfig;
   retrieval: RetrievalConfig;
@@ -734,6 +787,7 @@ const MEMORY_FILE_LIMITS: StructSpec<MemoryFileLimitsConfig> = {
 
 const defaultMemoryConfig = (): MemoryConfig => ({
   compaction: defaultCompactionConfig(),
+  recall: defaultMemoryRecallConfig(),
   file_limits: defaultMemoryFileLimitsConfig(),
   thinking: defaultThinkingConfig(),
   retrieval: defaultRetrievalConfig(),
@@ -745,6 +799,7 @@ const MEMORY: StructSpec<MemoryConfig> = {
   make: defaultMemoryConfig,
   fields: {
     compaction: struct(COMPACTION),
+    recall: struct(MEMORY_RECALL),
     file_limits: struct(MEMORY_FILE_LIMITS),
     thinking: struct(THINKING),
     retrieval: struct(RETRIEVAL),

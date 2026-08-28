@@ -1,4 +1,7 @@
-export const DYNAMIC_SYSTEM_LABELS: ReadonlySet<string> = new Set(["memory_index"]);
+export const DYNAMIC_SYSTEM_LABELS: ReadonlySet<string> = new Set([
+  "memory_index",
+  "recalled_memory",
+]);
 
 export function isDynamicSystemBlock(label: string): boolean {
   return DYNAMIC_SYSTEM_LABELS.has(label);

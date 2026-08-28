@@ -48,6 +48,16 @@ export interface KeyFallbackEntry {
   reason: string;
 }
 
+export interface MemoryRecallEntry {
+  timestamp: string;
+  rid?: string | undefined;
+  character: string;
+  status: "no_query" | "no_match" | "recalled" | "failed";
+  recalled: number;
+  elapsed_ms: number;
+  error?: string | undefined;
+}
+
 const DEFAULT_CAPACITY = 100;
 
 interface Ring {
@@ -58,16 +68,19 @@ interface Ring {
 export interface DiagnosticsJson {
   errors: Ring;
   key_fallbacks: Ring;
+  memory_recall: Ring;
 }
 
 export class Diagnostics {
   readonly errors = new RingBuffer<ErrorEntry>(DEFAULT_CAPACITY);
   readonly key_fallbacks = new RingBuffer<KeyFallbackEntry>(DEFAULT_CAPACITY);
+  readonly memory_recall = new RingBuffer<MemoryRecallEntry>(DEFAULT_CAPACITY);
 
   toJson(lastN: number): DiagnosticsJson {
     return {
       errors: ring(this.errors, lastN),
       key_fallbacks: ring(this.key_fallbacks, lastN),
+      memory_recall: ring(this.memory_recall, lastN),
     };
   }
 }

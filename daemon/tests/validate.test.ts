@@ -485,6 +485,20 @@ describe("a config shore refuses, and what it says", () => {
   test("compaction min_turns not above keep_recent_turns", () => {
     expect(refused("\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("must both be greater than keep_recent_turns (4)");
   });
+  test("injecting recall requires usable limits and a server that exists", () => {
+    expect(refused("\n[memory.recall]\nmode = \"inject\"\nmax_memories = 0\n")).toContain(
+      "memory.recall.max_memories must be greater than 0",
+    );
+    expect(refused("\n[memory.recall]\nmode = \"inject\"\nrecent_messages = 0\n")).toContain(
+      "memory.recall.recent_messages must be greater than 0",
+    );
+    expect(refused("\n[memory.recall]\nmode = \"inject\"\nserver = \"absent\"\n")).toContain(
+      "memory.recall.server names 'absent', which has no [mcp.<server>] definition",
+    );
+  });
+  test("off recall permits zero limits because it performs no work", () => {
+    expect(accepted("\n[memory.recall]\nmode = \"off\"\nrecent_messages = 0\nmax_memories = 0\nserver = \"absent\"\n")).toBeDefined();
+  });
   test("usage check precedes compaction check", () => {
     expect(refused("\n[usage]\ntimezone = \"nope\"\n\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"nope\"");
   });

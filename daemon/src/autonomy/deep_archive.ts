@@ -87,7 +87,7 @@ export async function runDeepIdleArchive(
     return { events: [], deepArchiveDone: true };
   }
 
-  if (plan.arm === "pure") {
+  if (plan.arm === "pure" || !deps.config.app.memory.compaction.write_memory) {
     return await pureArchive(character, deps, loaded.raw, plan.tail, plan.archivable);
   }
   return await compactionArchive(character, deps);

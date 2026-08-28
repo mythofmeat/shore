@@ -80,6 +80,8 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { MAX_HISTORY_MESSAGES } from "../tools/subagent.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
+import type { MemoryRecallRunner } from "../memory/recall.ts";
+import type { MemoryRecallEntry } from "../diagnostics.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {}
 
@@ -105,6 +107,7 @@ export interface GenerationRegistry {
 
 export interface GenerationDiagnostics {
   key_fallbacks: { push: (entry: KeyFallbackEntry) => void };
+  memory_recall?: { push: (entry: MemoryRecallEntry) => void };
 }
 
 export interface KeyFallbackEntry {
@@ -131,6 +134,7 @@ export interface GenerationDeps {
   emitEvent: (message: ServerMessage) => void;
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered" | "call">;
   compaction: CompactionRunner;
+  recall?: MemoryRecallRunner | undefined;
   newlyCrossedUsageBudgetWarnings: PersistContext["newlyCrossedUsageBudgetWarnings"];
   ledgerPath?: string;
   keepaliveMaxSecs?: () => number | undefined;
@@ -287,6 +291,27 @@ async function runGenerationCore(
   await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
   notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
 
+  let recalledMemory: string | undefined;
+  if (
+    !regen &&
+    (body.text !== "" || body.images.length > 0 || body.image_data.length > 0)
+  ) {
+    try {
+      recalledMemory = await deps.recall?.run({
+        config,
+        character: charName,
+        messages: engine.messages(),
+        signal: params.signal,
+        ...(params.rid === null ? {} : { rid: params.rid }),
+      });
+    } catch (error) {
+      deps.log?.warn?.("memory recall failed open", {
+        character: charName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const built = await buildGenerationRequest({
     engine,
     dataDir: deps.dataDir,
@@ -294,6 +319,7 @@ async function runGenerationCore(
     config,
     resolved,
     regen,
+    ...(recalledMemory === undefined ? {} : { recalledMemory }),
     mcpRegistry: deps.mcpRegistry,
   });
   const request: SidecarRequest = {
