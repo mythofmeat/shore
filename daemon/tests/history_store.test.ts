@@ -272,3 +272,48 @@ describe("storage-native display paging", () => {
     upgraded.close();
   });
 });
+
+describe("archive revision", () => {
+  const entry = (idx: number) => ({
+    file: `000${idx}.jsonl`,
+    message_count: 1,
+    compacted_at: "2026-08-13T10:01:00+10:00",
+    compaction_id: `compact-${idx}`,
+  });
+
+  test("the digest tracks archive content without rescanning it", () => {
+    const store = HistoryStore.openInMemory();
+    const empty = store.archiveDigest("ada");
+
+    store.putSegment("ada", 0, entry(0), [message("u1", "hello")]);
+    const afterFirst = store.archiveDigest("ada");
+    expect(afterFirst).not.toBe(empty);
+
+    expect(store.archiveDigest("ada")).toBe(afterFirst);
+
+    store.putSegment("ada", 1, entry(1), [message("u2", "second")]);
+    const afterSecond = store.archiveDigest("ada");
+    expect(afterSecond).not.toBe(afterFirst);
+
+    expect(store.setExcluded("ada", 1, true)).toBe(true);
+    const afterExcluded = store.archiveDigest("ada");
+    expect(afterExcluded).not.toBe(afterSecond);
+
+    expect(store.setLabel("ada", 1, "nickname")).toBe(true);
+    expect(store.archiveDigest("ada")).toBe(afterExcluded);
+
+    store.close();
+  });
+
+  test("one character's writes do not invalidate another's digest", () => {
+    const store = HistoryStore.openInMemory();
+    store.putSegment("ada", 0, entry(0), [message("u1", "hello")]);
+    const ada = store.archiveDigest("ada");
+
+    store.putSegment("bo", 0, entry(0), [message("u1", "unrelated")]);
+    store.putSegment("bo", 1, entry(1), [message("u2", "unrelated again")]);
+    expect(store.archiveDigest("ada")).toBe(ada);
+
+    store.close();
+  });
+});

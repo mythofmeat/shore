@@ -17,6 +17,27 @@ import type {
 
 export const HISTORY_DB_FILE = "history.db";
 
+const bumpRevision = (source: "NEW" | "OLD") =>
+  `INSERT INTO history_archive_revision(character, revision) VALUES (${source}.character, 1)
+     ON CONFLICT(character) DO UPDATE SET revision = revision + 1;`;
+
+const ARCHIVE_REVISION_TRIGGERS = [
+  ["messages_insert", "AFTER INSERT ON history_messages", "NEW"],
+  ["messages_delete", "AFTER DELETE ON history_messages", "OLD"],
+  [
+    "messages_update",
+    "AFTER UPDATE OF segment, ordinal, msg_id, blocks_hash ON history_messages",
+    "NEW",
+  ],
+  ["segments_insert", "AFTER INSERT ON history_segments", "NEW"],
+  ["segments_delete", "AFTER DELETE ON history_segments", "OLD"],
+  ["segments_update", "AFTER UPDATE OF committed, excluded ON history_segments", "NEW"],
+].map(([name, event, source]) =>
+  `CREATE TRIGGER IF NOT EXISTS trg_archive_revision_${name} ${event} BEGIN
+  ${bumpRevision(source as "NEW" | "OLD")}
+END;`
+).join("\n\n");
+
 export const HISTORY_SCHEMA = `
 CREATE TABLE IF NOT EXISTS history_blobs (
     hash       TEXT PRIMARY KEY,
@@ -92,6 +113,12 @@ CREATE TABLE IF NOT EXISTS history_character_stats (
     display_count INTEGER NOT NULL,
     turn_count    INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS history_archive_revision (
+    character TEXT PRIMARY KEY,
+    revision  INTEGER NOT NULL
+);
+${ARCHIVE_REVISION_TRIGGERS}
 `;
 
 export interface SegmentEntry {
@@ -333,33 +360,10 @@ export class HistoryStore {
   }
 
   archiveDigest(character: string): string {
-    const segments = this.#db
-      .query(
-        `SELECT idx, excluded FROM history_segments
-         WHERE character = ?1 AND committed = 1 ORDER BY idx`,
-      )
-      .all(character) as { idx: number; excluded: number }[];
-    const rows = this.#db
-      .query(
-        `SELECT m.segment, m.ordinal, m.msg_id, m.blocks_hash FROM history_messages m
-         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
-         WHERE m.character = ?1 AND s.committed = 1
-         ORDER BY m.segment, m.ordinal`,
-      )
-      .all(character) as {
-      segment: number;
-      ordinal: number;
-      msg_id: string;
-      blocks_hash: string;
-    }[];
-    const digest = createHash("sha256");
-    for (const segment of segments) {
-      digest.update(`segment:${segment.idx}:excluded=${segment.excluded}\n`);
-    }
-    for (const row of rows) {
-      digest.update(`${row.segment}:${row.ordinal}:${row.msg_id}:${row.blocks_hash}\n`);
-    }
-    return `${segments.length}:${rows.length}:${digest.digest("hex")}`;
+    const row = this.#db
+      .query("SELECT revision FROM history_archive_revision WHERE character = ?1")
+      .get(character) as { revision: number } | null;
+    return `rev:${row?.revision ?? 0}`;
   }
 
   entries(character: string): SegmentRecord[] {
@@ -748,6 +752,16 @@ function textHash(text: string): string {
 }
 
 function migrate(db: Database): void {
+  const seeded = db
+    .query("SELECT value FROM history_metadata WHERE key = 'archive_revision_seeded'")
+    .get() as { value: number } | null;
+  if (seeded === null) {
+    db.transaction(() => {
+      db.run(`INSERT OR IGNORE INTO history_archive_revision(character, revision)
+               SELECT character, count(*) FROM history_messages GROUP BY character`);
+      db.run("INSERT INTO history_metadata (key, value) VALUES ('archive_revision_seeded', 1)");
+    })();
+  }
   const columns = db.query("PRAGMA table_info(history_segments)").all() as { name: string }[];
   if (!columns.some((column) => column.name === "compaction_id")) {
     db.run("ALTER TABLE history_segments ADD COLUMN compaction_id TEXT");

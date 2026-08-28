@@ -12,6 +12,7 @@ import {
   chunkVisibleText,
 } from "../src/memory/history_index.ts";
 import { HistoryIndexService } from "../src/memory/history_index_service.ts";
+import { required } from "../src/util/required.ts";
 import { handleSearchHistory } from "../src/tools/history.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -411,6 +412,70 @@ describe("history search index", () => {
     await service.runOnce();
     await service.shutdown();
     expect(seen).toContain("two");
+  });
+
+  test("a settled character backs off instead of rescanning every pause", async () => {
+    const dir = await character([message("u1", "user", "settled corpus", "2026-08-13T00:00:00Z")]);
+    const path = join(dir, HISTORY_SEARCH_DB_FILE);
+    const embedder = new FakeEmbedder();
+    let now = 0;
+    const service = new HistoryIndexService({
+      now: () => now,
+      idleDelayMs: 30_000,
+      batchPauseMs: 1_000,
+      maxBatchPauseMs: 60_000,
+    });
+    service.register({ character: "ada", characterDataDir: dir, indexPath: path, embedder });
+    await service.reconcileAll();
+
+    now = 31_000;
+    await service.runOnce();
+    expect(embedder.calls.length).toBeGreaterThan(0);
+    expect(service.progress("ada")?.nextBatchAt).toBe(32_000);
+
+    const pauses: number[] = [];
+    for (let round = 0; round < 8; round += 1) {
+      now = required(service.progress("ada")?.nextBatchAt);
+      await service.runOnce();
+      pauses.push(required(service.progress("ada")?.nextBatchAt) - now);
+    }
+    await service.shutdown();
+
+    expect(pauses).toEqual([2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000]);
+  });
+
+  test("a mutation cancels the back-off so new history indexes promptly", async () => {
+    const dir = await character([message("u1", "user", "settled corpus", "2026-08-13T00:00:00Z")]);
+    const path = join(dir, HISTORY_SEARCH_DB_FILE);
+    let now = 0;
+    const service = new HistoryIndexService({
+      now: () => now,
+      idleDelayMs: 30_000,
+      batchPauseMs: 1_000,
+      maxBatchPauseMs: 60_000,
+    });
+    service.register({
+      character: "ada",
+      characterDataDir: dir,
+      indexPath: path,
+      embedder: new FakeEmbedder(),
+    });
+    await service.reconcileAll();
+
+    now = 31_000;
+    for (let round = 0; round < 5; round += 1) {
+      now = required(service.progress("ada")?.nextBatchAt) || now;
+      await service.runOnce();
+    }
+    expect(required(service.progress("ada")?.nextBatchAt) - now).toBeGreaterThan(1_000);
+
+    service.noteMutation("ada");
+    expect(service.progress("ada")?.nextBatchAt).toBe(0);
+
+    now += 1;
+    await service.runOnce();
+    expect(required(service.progress("ada")?.nextBatchAt) - now).toBe(2_000);
+    await service.shutdown();
   });
 
   test("chunking is deterministic, overlapped, and bounded around paragraph breaks", () => {

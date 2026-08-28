@@ -16,6 +16,7 @@ export interface HistoryIndexServiceOptions {
   now?: () => number;
   idleDelayMs?: number;
   batchPauseMs?: number;
+  maxBatchPauseMs?: number;
   timerIntervalMs?: number;
 }
 
@@ -26,6 +27,7 @@ export interface HistoryIndexProgress {
   embedder: Embedder | undefined;
   failures: number;
   retryAt: number;
+  nextBatchAt: number;
   lastError: string | undefined;
 }
 
@@ -34,6 +36,7 @@ interface Entry extends HistoryIndexRegistration {
   retryAt: number;
   failures: number;
   nextBatchAt: number;
+  idleRounds: number;
   lastError: string | undefined;
 }
 
@@ -42,6 +45,7 @@ export class HistoryIndexService {
   readonly #now: () => number;
   readonly #idleDelayMs: number;
   readonly #batchPauseMs: number;
+  readonly #maxBatchPauseMs: number;
   readonly #timerIntervalMs: number;
   #idleSince: number;
   #lastPicked: string | undefined;
@@ -54,6 +58,7 @@ export class HistoryIndexService {
     this.#now = options.now ?? (() => Date.now());
     this.#idleDelayMs = options.idleDelayMs ?? 30_000;
     this.#batchPauseMs = options.batchPauseMs ?? 1_000;
+    this.#maxBatchPauseMs = options.maxBatchPauseMs ?? 5 * 60_000;
     this.#timerIntervalMs = options.timerIntervalMs ?? 1_000;
     this.#idleSince = this.#now();
   }
@@ -70,7 +75,8 @@ export class HistoryIndexService {
       dirty: locationChanged || (previous?.dirty ?? true),
       retryAt: identityChanged ? 0 : previous?.retryAt ?? 0,
       failures: identityChanged ? 0 : previous?.failures ?? 0,
-      nextBatchAt: previous?.nextBatchAt ?? 0,
+      nextBatchAt: identityChanged ? 0 : previous?.nextBatchAt ?? 0,
+      idleRounds: identityChanged ? 0 : previous?.idleRounds ?? 0,
       lastError: identityChanged ? undefined : previous?.lastError,
     });
   }
@@ -93,6 +99,7 @@ export class HistoryIndexService {
       embedder: entry.embedder,
       failures: entry.failures,
       retryAt: entry.retryAt,
+      nextBatchAt: entry.nextBatchAt,
       lastError: entry.lastError,
     };
   }
@@ -106,7 +113,10 @@ export class HistoryIndexService {
 
   noteMutation(character: string): void {
     const entry = this.#entries.get(character);
-    if (entry !== undefined) entry.dirty = true;
+    if (entry === undefined) return;
+    entry.dirty = true;
+    entry.idleRounds = 0;
+    entry.nextBatchAt = 0;
   }
 
   beginForeground(): () => void {
@@ -142,6 +152,12 @@ export class HistoryIndexService {
     await this.#running;
   }
 
+  #pauseFor(idleRounds: number): number {
+    if (idleRounds === 0) return this.#batchPauseMs;
+    const grown = this.#batchPauseMs * 2 ** Math.min(idleRounds, 20);
+    return Math.min(grown, this.#maxBatchPauseMs);
+  }
+
   async #runOnce(): Promise<void> {
     for (const entry of this.#entries.values()) {
       if (entry.dirty) await this.#reconcile(entry);
@@ -156,7 +172,7 @@ export class HistoryIndexService {
       if (entry.embedder === undefined || now < entry.retryAt || now < entry.nextBatchAt) continue;
       this.#lastPicked = name;
       try {
-        await withHistoryIndexLock(entry.indexPath, async () => {
+        const embedded = await withHistoryIndexLock(entry.indexPath, async () => {
           const index = HistorySearchIndex.open({
             characterDataDir: entry.characterDataDir,
             path: entry.indexPath,
@@ -171,7 +187,8 @@ export class HistoryIndexService {
         entry.failures = 0;
         entry.retryAt = 0;
         entry.lastError = undefined;
-        entry.nextBatchAt = this.#now() + this.#batchPauseMs;
+        entry.idleRounds = embedded > 0 ? 0 : entry.idleRounds + 1;
+        entry.nextBatchAt = this.#now() + this.#pauseFor(entry.idleRounds);
       } catch (error) {
         entry.failures += 1;
         entry.lastError = error instanceof Error ? error.message : String(error);
