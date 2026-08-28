@@ -334,7 +334,7 @@ async function* scriptedLoop(
   for (const step of steps) {
     if (step["kind"] === "messages") {
       for (const m of step["messages"] as { role: string; content_blocks: ContentBlock[] }[]) {
-        phase.recordTurn(m.role as Message["role"], m.content_blocks);
+        await phase.recordTurn(m.role as Message["role"], m.content_blocks);
       }
     } else {
       await phase.runTool({
@@ -629,6 +629,61 @@ describe("runGeneration", () => {
       }
     });
   }
+});
+
+test("a failed tool loop is durable before the final answer and repaired after restart", async () => {
+  const run = await replayTurn({
+    input: {
+      history: [],
+      body: { text: "look this up", images: [] },
+      regen: false,
+      rid: "r-interrupted-tool",
+      max_retries: 0,
+      subagent: null,
+      tools_enabled: ["*"],
+      tool_steps: [{
+        kind: "messages",
+        messages: [{
+          role: "assistant",
+          content_blocks: [{ type: "tool_use", id: "tool_interrupted", name: "activity", input: {} }],
+        }],
+      }],
+      events: [
+        { type: "start", model: "claude-fixture" },
+        {
+          type: "error",
+          message: "daemon connection dropped",
+          usage: {
+            input_tokens: 10,
+            output_tokens: 1,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+          },
+          timing: { total_ms: 1, time_to_first_token_ms: 1 },
+        },
+      ],
+    },
+    output: {},
+  });
+
+  expect(run.error).toBeDefined();
+  const raw = await Bun.file(characterActiveJsonl(run.dataDir, "ada")).text();
+  const durable = raw.trim().split("\n").map((line) => JSON.parse(line) as Message);
+  expect(durable.map((message) => message.role)).toEqual(["user", "assistant"]);
+  expect(durable[1]?.content_blocks).toEqual([
+    { type: "tool_use", id: "tool_interrupted", name: "activity", input: {} },
+  ]);
+
+  const restarted = await ConversationEngine.load("ada", run.dataDir, undefined);
+  expect(await restarted.recoverInterruptedToolLoop()).toBe(1);
+  const recovered = restarted.messages();
+  expect(recovered.map((message) => message.role)).toEqual(["user", "assistant", "user"]);
+  expect(recovered[2]?.content_blocks).toEqual([{
+    type: "tool_result",
+    tool_use_id: "tool_interrupted",
+    content: "Tool execution was interrupted by a Shore daemon restart before it returned a result.",
+    is_error: true,
+  }]);
 });
 
 test("a sampler preference set for the character reaches the outgoing request", async () => {

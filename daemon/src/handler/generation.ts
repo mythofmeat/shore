@@ -309,6 +309,23 @@ async function runGenerationCore(
       ? []
       : [...engine.messages()].slice(-MAX_HISTORY_MESSAGES);
 
+  let intermediatePersisted = false;
+  const persistIntermediate = async (message: Message): Promise<void> => {
+    const persisted = message.role === "assistant"
+      ? {
+          ...message,
+          provider_key: resolved.providerKey,
+          model: request.model,
+        }
+      : message;
+    if (regen && !intermediatePersisted) {
+      await engine.replaceAfterLastUserTurn([persisted]);
+    } else {
+      await engine.appendMessage(persisted);
+    }
+    intermediatePersisted = true;
+  };
+
   const { result, intermediate } = await streamTurn(deps, {
     config,
     charName,
@@ -321,6 +338,7 @@ async function runGenerationCore(
     signal: params.signal,
     now,
     newMessageId,
+    persistIntermediate,
   }).catch((e: unknown) => {
     if (imageSupport !== false && isImageRejection(e)) {
       recordImageRejection(config.dirs.cache, resolved.providerKey, resolved.modelId);
@@ -352,6 +370,7 @@ async function runGenerationCore(
     keepaliveIntervalMs: built.keepalive_interval_ms,
     keepaliveMaxSecs: built.keepalive_max_secs,
     toolIntermediateMessages: intermediate,
+    replaceGeneratedTail: intermediatePersisted,
     wallClockMs: clock() - startedAt,
     ...(regenAlt === undefined ? {} : { regenAlt }),
   });
@@ -392,6 +411,7 @@ interface StreamTurnParams {
   signal: AbortSignal;
   now: () => string;
   newMessageId: () => string;
+  persistIntermediate: (message: Message) => Promise<void>;
 }
 
 export function turnEvents(
@@ -502,6 +522,7 @@ async function streamTurn(
               now: params.now,
               newMessageId: params.newMessageId,
               schemas: schemasFrom(call.tools),
+              onRecordTurn: params.persistIntermediate,
             },
             messages,
           );

@@ -339,6 +339,47 @@ describe("CharacterRegistry", () => {
   }
 });
 
+test("opening a character seals tool calls interrupted by a daemon restart", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  const dataDir = join(root, "data");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeCharacter(configDir, "Alice", true);
+  mkdirSync(join(dataDir, "Alice"), { recursive: true });
+  writeFileSync(
+    join(dataDir, "Alice", "active.jsonl"),
+    [
+      {
+        msg_id: "u1",
+        role: "user",
+        content_blocks: [{ type: "text", text: "go" }],
+        timestamp: "2026-08-28T00:00:00Z",
+      },
+      {
+        msg_id: "a1",
+        role: "assistant",
+        content_blocks: [{ type: "tool_use", id: "t1", name: "read_file", input: {} }],
+        timestamp: "2026-08-28T00:01:00Z",
+      },
+    ].map((message) => JSON.stringify(message)).join("\n") + "\n",
+  );
+
+  const registry = await CharacterRegistry.create(
+    configDir,
+    dataDir,
+    loadFrom(join(configDir, "config.toml")),
+  );
+  const engine = await registry.getOrCreate("Alice");
+  expect(engine.messages()).toHaveLength(3);
+  expect(engine.messages()[2]?.content_blocks).toEqual([{
+    type: "tool_result",
+    tool_use_id: "t1",
+    content: "Tool execution was interrupted by a Shore daemon restart before it returned a result.",
+    is_error: true,
+  }]);
+});
+
 test("an invalid character overlay fails closed with the rejected field", async () => {
   const root = makeRoot();
   const configDir = join(root, "config");

@@ -307,26 +307,16 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
 
   async dispatch(turn: ProviderTurn, uses: ToolUseEvent[]): Promise<void> {
     pushAssistantBlocks(this.req, turn.blocks);
-
-    this.recordPriorResults();
-    this.tools.recordTurn("assistant", turn.blocks);
+    await this.tools.recordTurn("assistant", turn.blocks);
 
     this.pendingResults = await Promise.all(uses.map((use) => this.tools.runTool(use)));
   }
 
-  appendToolResults(): void {
-    this.req.messages.push({ role: "user", content: this.pendingResults });
-  }
-
-  private recordPriorResults(): void {
-    if (this.pendingResults.length === 0) return;
+  async appendToolResults(): Promise<void> {
     const blocks = this.pendingResults;
     this.pendingResults = [];
-    this.tools.recordTurn("user", blocks);
-  }
-
-  recordFinalResults(): void {
-    this.recordPriorResults();
+    this.req.messages.push({ role: "user", content: blocks });
+    await this.tools.recordTurn("user", blocks);
   }
 }
 
@@ -351,7 +341,6 @@ export async function* genericToolLoopEvents(
   const running = (async () => {
     try {
       await runToolLoop(driver, undefined, req.max_tool_iterations, "close_with_final_turn");
-      driver.recordFinalResults();
     } catch (error) {
       failure = error;
     } finally {

@@ -353,9 +353,9 @@ interface ReportedCase {
 
 describe("record_reported_message", () => {
   for (const c of fixture.record_reported_message as unknown as ReportedCase[]) {
-    test(c.name, () => {
+    test(c.name, async () => {
       const messages: Message[] = [];
-      recordReportedMessage(messages, c.input.role, c.input.blocks, {
+      await recordReportedMessage(messages, c.input.role, c.input.blocks, {
         now: () => MINTED_TS,
         newMessageId: () => MINTED_ID,
       });

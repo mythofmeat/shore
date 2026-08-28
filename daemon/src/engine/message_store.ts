@@ -242,6 +242,31 @@ export function withoutOrphanToolResults(messages: readonly Message[]): Message[
   return kept;
 }
 
+export function unansweredTailToolUseIds(messages: readonly Message[]): string[] {
+  let latestAssistant = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (required(messages[index]).role === "assistant") {
+      latestAssistant = index;
+      break;
+    }
+  }
+  if (latestAssistant < 0) return [];
+
+  const offered = required(messages[latestAssistant]).content_blocks.flatMap((block) =>
+    block.type === "tool_use" ? [block.id] : [],
+  );
+  if (offered.length === 0) return [];
+
+  const answered = new Set(
+    messages.slice(latestAssistant + 1).flatMap((message) =>
+      message.content_blocks.flatMap((block) =>
+        block.type === "tool_result" ? [block.tool_use_id] : [],
+      ),
+    ),
+  );
+  return offered.filter((id) => !answered.has(id));
+}
+
 export function cannotTravelInAlternative(b: ContentBlock): boolean {
   if (b.type === "tool_use" || b.type === "tool_result") return true;
   return b.type === "text" && b.text.trim() === "";
@@ -405,6 +430,29 @@ export class MessageStore {
     await this.#mutate((messages) => {
       messages.push(candidate);
       return changed(undefined);
+    });
+  }
+
+  async recoverInterruptedToolLoop(msgId: string, timestamp: string): Promise<number> {
+    return await this.#mutate((messages) => {
+      const tail = messages.slice(this.#keepIndex(messages));
+      const missing = unansweredTailToolUseIds(tail);
+      if (missing.length === 0) return unchanged(0);
+      const blocks: ContentBlock[] = missing.map((toolUseId) => ({
+        type: "tool_result",
+        tool_use_id: toolUseId,
+        content: "Tool execution was interrupted by a Shore daemon restart before it returned a result.",
+        is_error: true,
+      }));
+      messages.push({
+        msg_id: msgId,
+        role: "user",
+        content: deriveContentFromBlocks(blocks, true),
+        images: [],
+        content_blocks: blocks,
+        timestamp,
+      });
+      return changed(missing.length);
     });
   }
 

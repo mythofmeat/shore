@@ -26,7 +26,7 @@ export interface ToolLoopDriver<Turn> {
 
   dispatch(turn: Turn, uses: ToolUseEvent[]): Promise<void>;
 
-  appendToolResults(): void;
+  appendToolResults(): void | Promise<void>;
 }
 
 export async function runToolLoop<Turn>(
@@ -49,7 +49,7 @@ export async function runToolLoop<Turn>(
     }
 
     await driver.dispatch(turn, uses);
-    driver.appendToolResults();
+    await driver.appendToolResults();
     iteration += 1;
 
     const capReached = maxIterations !== undefined && iteration >= maxIterations;

@@ -7,6 +7,7 @@ import type {
 } from "openai/resources/chat/completions";
 
 import type { ContentBlock } from "../../engine/types.ts";
+import type { LlmError } from "../errors.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -15,7 +16,7 @@ import type {
   ToolDefinition,
   TurnMessage,
   Usage,
-  } from "../types.ts";
+} from "../types.ts";
 import { systemToText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
@@ -218,6 +219,33 @@ export async function* zaiStreamEvents(
   yield* sendStart();
   yield* flushSignature();
 
+  const normalizedFinish = normalizeZaiFinishReason(finishReason);
+  if (normalizedFinish === undefined) {
+    throw {
+      kind: "stream_errored",
+      message:
+        finishReason === undefined
+          ? "Z.ai stream ended without a finish reason"
+          : `Z.ai stream ended with unsupported finish reason '${finishReason}'`,
+      usage,
+      timing: {
+        total_ms: now() - startedAt,
+        time_to_first_token_ms: firstTokenAt === 0 ? now() - startedAt : firstTokenAt - startedAt,
+      },
+    } satisfies LlmError;
+  }
+  if (!hasTokenUsage(usage)) {
+    throw {
+      kind: "stream_errored",
+      message: "Z.ai stream ended with zero token usage",
+      usage,
+      timing: {
+        total_ms: now() - startedAt,
+        time_to_first_token_ms: firstTokenAt === 0 ? now() - startedAt : firstTokenAt - startedAt,
+      },
+    } satisfies LlmError;
+  }
+
   for (const [, tc] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
     markFirst();
     yield { type: "tool_use", id: tc.id, name: tc.name, ...parseToolArgs(tc.argsJson) };
@@ -227,7 +255,7 @@ export async function* zaiStreamEvents(
   yield {
     type: "done",
     content: textAccum,
-    finish_reason: normalizeZaiFinishReason(finishReason),
+    finish_reason: normalizedFinish,
     usage,
     timing: {
       total_ms: total,
@@ -243,6 +271,27 @@ export function zaiGenerateResponse(
 ): GenerateResponse {
   const c = completion as ZaiCompletion;
   const choice = c.choices[0];
+  const normalizedFinish = normalizeZaiFinishReason(choice?.finish_reason);
+  if (normalizedFinish === undefined) {
+    throw {
+      kind: "stream_errored",
+      message:
+        choice?.finish_reason === undefined || choice.finish_reason === null
+          ? "Z.ai response ended without a finish reason"
+          : `Z.ai response ended with unsupported finish reason '${choice.finish_reason}'`,
+      usage: extractUsage(c.usage),
+      timing: { total_ms: totalMs, time_to_first_token_ms: totalMs },
+    } satisfies LlmError;
+  }
+  const usage = extractUsage(c.usage);
+  if (!hasTokenUsage(usage)) {
+    throw {
+      kind: "stream_errored",
+      message: "Z.ai response ended with zero token usage",
+      usage,
+      timing: { total_ms: totalMs, time_to_first_token_ms: totalMs },
+    } satisfies LlmError;
+  }
   const message = choice?.message;
   const contentBlocks: ContentBlock[] = [];
 
@@ -275,8 +324,8 @@ export function zaiGenerateResponse(
   return {
     content: text,
     content_blocks: contentBlocks,
-    finish_reason: normalizeZaiFinishReason(choice?.finish_reason),
-    usage: extractUsage(c.usage),
+    finish_reason: normalizedFinish,
+    usage,
     timing: { total_ms: totalMs, time_to_first_token_ms: totalMs },
     model: typeof c.model === "string" && c.model.length > 0 ? c.model : requestModel,
   };
@@ -357,12 +406,17 @@ function extractUsage(u: RawUsage | undefined): Usage {
   return usage;
 }
 
+function hasTokenUsage(usage: Usage): boolean {
+  return usage.input_tokens + usage.output_tokens + usage.cache_read_tokens +
+      usage.cache_creation_tokens > 0;
+}
+
 function stringifyArguments(args: string | Record<string, unknown>): string {
   return typeof args === "string" ? args : JSON.stringify(args);
 }
 
 
-function normalizeZaiFinishReason(reason: string | null | undefined): string {
+function normalizeZaiFinishReason(reason: string | null | undefined): string | undefined {
   switch (reason) {
     case "stop":
       return "end_turn";
@@ -374,15 +428,14 @@ function normalizeZaiFinishReason(reason: string | null | undefined): string {
     case "content_filter":
     case "sensitive":
       return "content_filter";
-    case "network_error":
-      return "end_turn";
     case "end_turn":
     case "max_tokens":
     case "tool_use":
     case "refusal":
     case "stop_sequence":
       return reason;
+    case "network_error":
     default:
-      return "end_turn";
+      return undefined;
   }
 }

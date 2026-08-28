@@ -158,6 +158,15 @@ describe("history search index", () => {
     expect(await index.embedPending(embedder)).toBe(2);
     index.close();
 
+    const db = new Database(path, { readonly: true });
+    const stored = db.query(
+      "SELECT COUNT(*) AS count, MAX(length(vector)) AS bytes FROM embeddings",
+    ).get() as { count: number; bytes: number };
+    const lsh = db.query("SELECT COUNT(*) AS count FROM embedding_lsh").get() as { count: number };
+    db.close();
+    expect(stored).toEqual({ count: 2, bytes: 2 });
+    expect(lsh.count).toBe(16);
+
     const result = await handleSearchHistory(
       { query: "fruit grove", mode: "hybrid" },
       dir,
@@ -166,6 +175,27 @@ describe("history search index", () => {
     expect(result.results[0]?.msg_id).toBe("u1");
     expect(result.semantic_index.pending_chunks).toBe(0);
     expect(result.mode).toBe("hybrid");
+  });
+
+  test("vector reranking is bounded before vectors leave SQLite", async () => {
+    const dir = await character(Array.from({ length: 2_100 }, (_, index) =>
+      message(
+        `u${String(index)}`,
+        "user",
+        `orchard entry ${String(index)}`,
+        `2026-08-13T00:${String(index % 60).padStart(2, "0")}:00Z`,
+      ),
+    ));
+    const index = HistorySearchIndex.open({ characterDataDir: dir });
+    const embedder = new FakeEmbedder();
+    await index.reconcile();
+    let embedded: number;
+    do {
+      embedded = await index.embedPending(embedder);
+    } while (embedded > 0);
+
+    expect(index.vectorRows([1, 0], embedder)).toHaveLength(2_048);
+    index.close();
   });
 
   test("query embedding failures fall back to complete lexical search", async () => {

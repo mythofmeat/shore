@@ -86,6 +86,77 @@ describe("attach_generated_alt", () => {
   }
 });
 
+describe("interrupted tool-loop recovery", () => {
+  test("persists error results for dangling tool calls exactly once", async () => {
+    await inTemp(async (path) => {
+      const store = MessageStore.create(path);
+      await store.append({
+        msg_id: "u1",
+        role: "user",
+        content: "look it up",
+        images: [],
+        content_blocks: [{ type: "text", text: "look it up" }],
+        timestamp: "2026-08-28T00:00:00Z",
+      });
+      await store.append({
+        msg_id: "a1",
+        role: "assistant",
+        content: "",
+        images: [],
+        content_blocks: [
+          { type: "tool_use", id: "t1", name: "search", input: { query: "one" } },
+          { type: "tool_use", id: "t2", name: "search", input: { query: "two" } },
+        ],
+        timestamp: "2026-08-28T00:01:00Z",
+      });
+
+      expect(await store.recoverInterruptedToolLoop("recovered", "2026-08-28T00:02:00Z")).toBe(2);
+      expect(await store.recoverInterruptedToolLoop("duplicate", "2026-08-28T00:03:00Z")).toBe(0);
+      expect(store.messages()).toHaveLength(3);
+      expect(store.messages()[2]?.content_blocks).toEqual([
+        {
+          type: "tool_result",
+          tool_use_id: "t1",
+          content: "Tool execution was interrupted by a Shore daemon restart before it returned a result.",
+          is_error: true,
+        },
+        {
+          type: "tool_result",
+          tool_use_id: "t2",
+          content: "Tool execution was interrupted by a Shore daemon restart before it returned a result.",
+          is_error: true,
+        },
+      ]);
+      expect((await MessageStore.load(path)).messages()).toHaveLength(3);
+    });
+  });
+
+  test("does nothing once the offered tool has a result", async () => {
+    await inTemp(async (path) => {
+      const store = MessageStore.create(path);
+      await store.append({
+        msg_id: "a1",
+        role: "assistant",
+        content: "",
+        images: [],
+        content_blocks: [{ type: "tool_use", id: "t1", name: "search", input: {} }],
+        timestamp: "2026-08-28T00:01:00Z",
+      });
+      await store.append({
+        msg_id: "r1",
+        role: "user",
+        content: "done",
+        images: [],
+        content_blocks: [{ type: "tool_result", tool_use_id: "t1", content: "done" }],
+        timestamp: "2026-08-28T00:02:00Z",
+      });
+
+      expect(await store.recoverInterruptedToolLoop("recovered", "2026-08-28T00:03:00Z")).toBe(0);
+      expect(store.messages()).toHaveLength(2);
+    });
+  });
+});
+
 describe("operation traces", () => {
   interface Op {
     op: unknown;

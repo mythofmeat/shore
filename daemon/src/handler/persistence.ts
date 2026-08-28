@@ -54,6 +54,7 @@ export interface PersistParams {
   keepaliveIntervalMs: number | undefined;
   keepaliveMaxSecs?: number | undefined;
   toolIntermediateMessages: Message[];
+  replaceGeneratedTail?: boolean;
   wallClockMs: number;
   regenAlt?: PendingAlt;
 }
@@ -94,6 +95,7 @@ export async function persistAndNotify(
     responseEventIds,
     emitEvent: ctx.emitEvent,
     charName,
+    replaceGeneratedTail: params.replaceGeneratedTail === true,
   });
   ctx.autonomy.notifyAssistantMessage(charName, engine.turnCount());
 
@@ -122,12 +124,15 @@ export async function applyGeneratedMessagesToEngine(
     responseEventIds: string[];
     emitEvent: (message: ServerMessage) => void;
     charName: string;
+    replaceGeneratedTail?: boolean;
   },
 ): Promise<void> {
-  const { regenAlt, responseEventIds, emitEvent, charName } = options;
+  const { regenAlt, responseEventIds, emitEvent, charName, replaceGeneratedTail } = options;
 
-  if (regenAlt !== undefined) {
-    MessageStore.attachGeneratedAlt(generatedMessages, regenAlt.alternatives);
+  if (regenAlt !== undefined || replaceGeneratedTail === true) {
+    if (regenAlt !== undefined) {
+      MessageStore.attachGeneratedAlt(generatedMessages, regenAlt.alternatives);
+    }
     const eventMessages = generatedMessages
       .filter((msg) => responseEventIds.includes(msg.msg_id))
       .map((msg) => structuredClone(msg));

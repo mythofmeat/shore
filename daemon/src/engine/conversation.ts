@@ -235,6 +235,18 @@ export class ConversationEngine {
     this.broadcastHistory();
   }
 
+  async recoverInterruptedToolLoop(): Promise<number> {
+    const recovered = await this.#messages.recoverInterruptedToolLoop(
+      `m_${crypto.randomUUID()}`,
+      new Date().toISOString(),
+    );
+    if (recovered > 0) {
+      this.#advanceRevision();
+      this.broadcastHistory();
+    }
+    return recovered;
+  }
+
   async insertMessageByTimestamp(msg: Message): Promise<void> {
     await this.#messages.insertByTimestamp(msg);
     this.#advanceRevision();

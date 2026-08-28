@@ -36,6 +36,7 @@ export interface ToolExecution {
   newMessageId: () => string;
   monotonicMs?: () => number;
   schemas?: ToolSchemas;
+  onRecordTurn?: (message: Message) => void | Promise<void>;
 }
 
 export interface ToolRun {
@@ -298,22 +299,24 @@ export function recordReportedMessage(
   intermediateMessages: Message[],
   role: Role,
   blocks: ContentBlock[],
-  exec: Pick<ToolExecution, "now" | "newMessageId">,
-): void {
-  intermediateMessages.push({
+  exec: Pick<ToolExecution, "now" | "newMessageId" | "onRecordTurn">,
+): void | Promise<void> {
+  const message: Message = {
     msg_id: exec.newMessageId(),
     role,
     content: deriveContentFromBlocks(blocks, true),
     images: [],
     content_blocks: blocks,
     timestamp: exec.now(),
-  });
+  };
+  intermediateMessages.push(message);
+  return exec.onRecordTurn?.(message);
 }
 
 export interface ToolPhase {
   readonly messages: Message[];
   runTool: (toolUse: ToolUseEvent) => Promise<ContentBlock>;
-  recordTurn: (role: Role, blocks: ContentBlock[]) => void;
+  recordTurn: (role: Role, blocks: ContentBlock[]) => void | Promise<void>;
 }
 
 export function toolPhase(exec: ToolExecution, messages: Message[] = []): ToolPhase {

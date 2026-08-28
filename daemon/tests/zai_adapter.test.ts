@@ -333,11 +333,40 @@ test("maps Z.ai stream chunks to StreamEvents", async () => {
   });
 });
 
-test("maps empty streams to start then done", async () => {
-  const events = await collect(zaiStreamEvents("glm-5.1", fakeChunks([]), fakeClock()));
+test("rejects streams that end without terminal metadata", () => {
+  expect(collect(zaiStreamEvents("glm-5.1", fakeChunks([]), fakeClock())))
+    .rejects.toMatchObject({
+      kind: "stream_errored",
+      message: "Z.ai stream ended without a finish reason",
+    });
 
-  expect(events[0]).toEqual({ type: "start", model: "glm-5.1" });
-  expect(events[1]?.type).toBe("done");
+  expect(collect(zaiStreamEvents("glm-5.1", fakeChunks([{
+    choices: [{ index: 0, delta: { content: "partial" }, finish_reason: null }],
+  }]), fakeClock()))).rejects.toMatchObject({
+    kind: "stream_errored",
+    message: "Z.ai stream ended without a finish reason",
+  });
+});
+
+test("rejects completed streams with impossible zero-token accounting", () => {
+  expect(collect(zaiStreamEvents("glm-5.1", fakeChunks([{
+    choices: [{ index: 0, delta: { content: "corrupt" }, finish_reason: "stop" }],
+  }]), fakeClock()))).rejects.toMatchObject({
+    kind: "stream_errored",
+    message: "Z.ai stream ended with zero token usage",
+  });
+});
+
+test("rejects non-streaming responses without terminal metadata", () => {
+  expect(() => zaiGenerateResponse("glm-5.1", {
+    choices: [{ message: { content: "partial" }, finish_reason: null }],
+  }, 12)).toThrow();
+});
+
+test("rejects completed non-streaming responses with zero-token accounting", () => {
+  expect(() => zaiGenerateResponse("glm-5.1", {
+    choices: [{ message: { content: "corrupt" }, finish_reason: "stop" }],
+  }, 12)).toThrow("Z.ai response ended with zero token usage");
 });
 
 test("maps Z.ai non-streaming responses to GenerateResponse", () => {

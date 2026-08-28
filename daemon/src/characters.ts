@@ -152,6 +152,12 @@ export class CharacterRegistry {
     if (existing !== undefined) return existing;
 
     const engine = await ConversationEngine.load(name, this.#dataDir, this.#onHistory);
+    const recovered = await engine.recoverInterruptedToolLoop();
+    if (recovered > 0) {
+      shoreLog.warn(
+        `shore: recovered ${String(recovered)} interrupted tool call(s) for ${name}`,
+      );
+    }
     this.#engines.set(name, engine);
     return engine;
   }

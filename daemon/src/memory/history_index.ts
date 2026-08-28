@@ -11,11 +11,16 @@ import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
 
 export const HISTORY_SEARCH_DB_FILE = "history_search.db";
-export const HISTORY_SEARCH_SCHEMA_VERSION = 3;
+export const HISTORY_SEARCH_SCHEMA_VERSION = 4;
 export const HISTORY_CHUNK_CHARS = 1_200;
 export const HISTORY_CHUNK_OVERLAP = 120;
 export const HISTORY_EMBED_BATCH_ITEMS = 32;
 export const HISTORY_EMBED_BATCH_CHARS = 96_000;
+
+const HISTORY_VECTOR_CANDIDATES = 2_048;
+const LSH_BANDS = 8;
+const LSH_BITS_PER_BAND = 8;
+const LSH_SAMPLES_PER_BIT = 32;
 
 const EMBED_CURSOR = "embed_cursor";
 
@@ -54,6 +59,16 @@ CREATE TABLE embeddings (
   vector BLOB NOT NULL,
   PRIMARY KEY(content_hash, model, dimensions)
 );
+CREATE TABLE embedding_lsh (
+  content_hash TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dimensions INTEGER NOT NULL,
+  band INTEGER NOT NULL,
+  code INTEGER NOT NULL,
+  PRIMARY KEY(content_hash, model, dimensions, band)
+);
+CREATE INDEX embedding_lsh_lookup
+  ON embedding_lsh(model, dimensions, band, code, content_hash);
 `;
 
 export interface HistoryIndexDiagnostics {
@@ -318,14 +333,36 @@ export class HistorySearchIndex {
 
   vectorRows(queryVector: readonly number[], embedder: Embedder): { row: IndexedMessage; rank: number; score: number }[] {
     const identity = embeddingIdentity(embedder);
+    const probes = lshProbes(queryVector);
+    if (probes.length === 0) return [];
+    const values = probes.map(() => "(?, ?, ?)").join(", ");
+    const args: (number | string)[] = probes.flatMap((probe) => [
+      probe.band,
+      probe.code,
+      probe.weight,
+    ]);
+    args.push(identity, queryVector.length, HISTORY_VECTOR_CANDIDATES);
     const rows = this.#db.query(
-      `SELECT m.id, m.segment, m.ordinal, m.msg_id, m.role,
+      `WITH probes(band, code, weight) AS (VALUES ${values}),
+       candidates AS (
+         SELECT c.id AS chunk_id, SUM(p.weight) AS lsh_score
+         FROM probes p
+         JOIN embedding_lsh l ON l.band = p.band AND l.code = p.code
+         JOIN chunks c ON c.content_hash = l.content_hash
+         WHERE l.model = ? AND l.dimensions = ?
+         GROUP BY c.id
+         ORDER BY lsh_score DESC, c.id
+         LIMIT ?
+       )
+       SELECT m.id, m.segment, m.ordinal, m.msg_id, m.role,
               m.timestamp, m.model, m.content_hash, e.vector
-       FROM chunks c
+       FROM candidates candidate
+       JOIN chunks c ON c.id = candidate.chunk_id
        JOIN messages m ON m.id = c.message_id
-       JOIN embeddings e ON e.content_hash = c.content_hash AND e.model = ?1
-                            AND e.dimensions = ?2`,
-    ).all(identity, queryVector.length) as (IndexedMessage & { vector: Uint8Array })[];
+       JOIN embeddings e ON e.content_hash = c.content_hash
+                            AND e.model = ?${String(args.length - 2)}
+                            AND e.dimensions = ?${String(args.length - 1)}`,
+    ).all(...args) as (IndexedMessage & { vector: Uint8Array })[];
     const best = new Map<number, { row: IndexedMessage; score: number }>();
     for (const row of rows) {
       const score = cosineSimilarity(queryVector, bytesToVector(row.vector));
@@ -341,6 +378,9 @@ export class HistorySearchIndex {
     const identity = embeddingIdentity(embedder);
     const invalidated = this.#db.query(
       "DELETE FROM embeddings WHERE model <> ?1 OR (?2 IS NOT NULL AND dimensions <> ?2)",
+    ).run(identity, embedder.dimensions ?? null);
+    this.#db.query(
+      "DELETE FROM embedding_lsh WHERE model <> ?1 OR (?2 IS NOT NULL AND dimensions <> ?2)",
     ).run(identity, embedder.dimensions ?? null);
     if (invalidated.changes > 0) this.#setMetadata(EMBED_CURSOR, "0");
     const cursor = Number(this.#metadata(EMBED_CURSOR) ?? 0);
@@ -404,9 +444,17 @@ export class HistorySearchIndex {
       `INSERT OR REPLACE INTO embeddings(content_hash, model, dimensions, vector)
        VALUES (?1, ?2, ?3, ?4)`,
     );
+    const putLsh = this.#db.query(
+      `INSERT OR REPLACE INTO embedding_lsh(content_hash, model, dimensions, band, code)
+       VALUES (?1, ?2, ?3, ?4, ?5)`,
+    );
     this.#db.transaction(() => {
       vectors.forEach((vector, i) => {
-        put.run(required(chosen[i]).content_hash, identity, vector.length, vectorToBytes(vector));
+        const hash = required(chosen[i]).content_hash;
+        put.run(hash, identity, vector.length, vectorToBytes(vector));
+        lshBands(vector).forEach((code, band) => {
+          putLsh.run(hash, identity, vector.length, band, code);
+        });
       });
       this.#setMetadata(EMBED_CURSOR, String(lastAttempted));
     })();
@@ -586,14 +634,65 @@ function embeddingIdentity(embedder: Embedder): string {
 }
 
 function vectorToBytes(vector: readonly number[]): Uint8Array {
-  const floats = new Float32Array(vector.length);
-  vector.forEach((value, i) => { floats[i] = Math.fround(value); });
-  return new Uint8Array(floats.buffer.slice(0));
+  let max = 0;
+  for (const value of vector) max = Math.max(max, Math.abs(value));
+  const scale = max === 0 ? 0 : 127 / max;
+  const quantized = new Int8Array(vector.length);
+  vector.forEach((value, i) => {
+    quantized[i] = Math.max(-127, Math.min(127, Math.round(value * scale)));
+  });
+  return new Uint8Array(quantized.buffer.slice(0));
 }
 
-function bytesToVector(bytes: Uint8Array): Float32Array {
+function bytesToVector(bytes: Uint8Array): Int8Array {
   const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  return new Float32Array(copy);
+  return new Int8Array(copy);
+}
+
+interface LshProbe {
+  band: number;
+  code: number;
+  weight: number;
+}
+
+function lshProbes(vector: readonly number[]): LshProbe[] {
+  if (vector.length === 0) return [];
+  return lshBands(vector).flatMap((code, band) => [
+    { band, code, weight: 2 },
+    ...Array.from({ length: LSH_BITS_PER_BAND }, (_, bit) => ({
+      band,
+      code: code ^ (1 << bit),
+      weight: 1,
+    })),
+  ]);
+}
+
+function lshBands(vector: readonly number[]): number[] {
+  if (vector.length === 0) return [];
+  return Array.from({ length: LSH_BANDS }, (_, band) => {
+    let code = 0;
+    for (let bitInBand = 0; bitInBand < LSH_BITS_PER_BAND; bitInBand += 1) {
+      const bit = band * LSH_BITS_PER_BAND + bitInBand;
+      let sum = 0;
+      for (let sample = 0; sample < LSH_SAMPLES_PER_BIT; sample += 1) {
+        const mixed = mix32(Math.imul(bit + 1, 0x9e3779b1) ^ Math.imul(sample + 1, 0x85ebca6b));
+        const index = (mixed >>> 1) % vector.length;
+        sum += required(vector[index]) * ((mixed & 1) === 0 ? -1 : 1);
+      }
+      if (sum >= 0) code |= 1 << bitInBand;
+    }
+    return code;
+  });
+}
+
+function mix32(value: number): number {
+  let mixed = value >>> 0;
+  mixed ^= mixed >>> 16;
+  mixed = Math.imul(mixed, 0x7feb352d);
+  mixed ^= mixed >>> 15;
+  mixed = Math.imul(mixed, 0x846ca68b);
+  mixed ^= mixed >>> 16;
+  return mixed >>> 0;
 }
 
 function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): number {
