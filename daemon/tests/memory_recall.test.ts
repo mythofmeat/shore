@@ -71,11 +71,10 @@ describe("memory recall", () => {
     );
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.tool).toBe("mcp__hindsight__search");
+    expect(calls[0]?.tool).toBe("mcp__hindsight__recall");
     expect(calls[0]?.args).toEqual({
       query: "morning to you\n\nwhat was that music script i wrote",
-      character: "qifei",
-      limit: 3,
+      max_tokens: 2048,
     });
     expect(block).toBe(
       "- Ren wrote beet-smartplaylist.py (said 2026-07-04)\n" +
@@ -181,6 +180,29 @@ describe("memory recall", () => {
     expect(parseRecallResult({ memories: "nope" })).toEqual([]);
     expect(parseRecallResult({ memories: [{ text: "" }, { text: 7 }, null, { text: "kept" }] }))
       .toEqual([{ text: "kept" }]);
+  });
+
+  test("result parsing reads a hindsight recall payload", () => {
+    expect(
+      parseRecallResult({
+        results: [
+          {
+            id: "15452ec7",
+            text: "Ren has multiple cats and is the one who feeds them.",
+            fact_type: "observation",
+            occurred_start: "2026-08-18T00:00:00.020000+00:00",
+            occurred_end: "2026-08-18T00:00:00.020000+00:00",
+          },
+          { id: "725b8545", text: "Beer is a ragdoll.", occurred_start: null },
+        ],
+      }),
+    ).toEqual([
+      {
+        text: "Ren has multiple cats and is the one who feeds them.",
+        occurred_at: "2026-08-18T00:00:00.020000+00:00",
+      },
+      { text: "Beer is a ragdoll." },
+    ]);
   });
 
   test("formatting omits the date when the server did not give one", () => {

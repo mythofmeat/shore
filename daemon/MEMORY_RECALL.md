@@ -2,22 +2,31 @@
 
 Shore retrieves relevant memories before each fresh user turn and injects them
 into the prompt, so the character does not have to decide to go looking. The
-retrieval itself lives outside shore, in an MCP server that exposes a `search`
+retrieval itself lives outside shore, in an MCP server that exposes a retrieval
 tool:
 
 ```toml
 [mcp.hindsight]
-url = "http://mcp-hindsight:3000/mcp"
+url = "http://mcp-hindsight:8888/mcp/qifei/"
 
 [memory.recall]
 mode = "inject"       # off | inject
 server = "hindsight"
+tool = "recall"       # defaults to "recall"
 max_memories = 6
+max_tokens = 2048
 recent_messages = 2
 ```
 
-`memory.recall.server` names the `[mcp.<server>]` entry to call; shore calls
-`mcp__<server>__search` itself. Deliberately do **not** grant that tool to any
+The bank a server answers for is part of its URL, not a call argument, so each
+character points at its own endpoint from its own config overlay.
+
+`memory.recall.server` names the `[mcp.<server>]` entry to call and
+`memory.recall.tool` the tool on it, defaulting to `recall`; shore calls
+`mcp__<server>__<tool>` itself with `{ query, max_tokens }`, then keeps the first
+`max_memories` results. A reply is read from `results` or `memories`, and a date
+from `occurred_start` or `occurred_at`, so both hindsight's shape and a plainer
+one parse. Deliberately do **not** grant that tool to any
 character: `McpRegistry.call` resolves against the full tool surface while the
 model's tool list is built separately from `tools.enabled_tools`, so the daemon
 calls it and the character never sees it. Granting it would hand the decision
@@ -56,10 +65,14 @@ regenerate.
 
 ## The write path
 
-There is none in-tree right now. The mem0 ingest service and its backfill
-importer were removed on 2026-08-29; they are archived on the `mem0-archive`
-branch. Two conclusions from that build are worth carrying into whatever
-replaces it:
+No live ingest yet. `contrib/hindsight/backfill.py` imports archived segments,
+one segment per document, and must be re-run for new conversations to reach
+memory. Because `document_id` upserts, it carries no cursor and no resume state:
+re-running a range is both idempotent and the recovery path, which is why it is
+a fifth the size of the mem0 importer it replaced.
+
+The mem0 ingest service was removed on 2026-08-29 and is archived on the
+`mem0-archive` branch. Two conclusions from that build still hold:
 
 - **Ingest archived segments, not the live conversation.** Compaction retains
   `keep_recent_turns` and archives the rest, so a turn is archived exactly when

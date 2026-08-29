@@ -582,14 +582,18 @@ const MEMORY_RECALL_MODES: readonly MemoryRecallMode[] = ["off", "inject"];
 export interface MemoryRecallConfig {
   mode: MemoryRecallMode;
   server: string;
+  tool: string;
   max_memories: number;
+  max_tokens: number;
   recent_messages: number;
 }
 
 export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
   mode: "off",
   server: "",
+  tool: "recall",
   max_memories: 6,
+  max_tokens: 2048,
   recent_messages: 2,
 });
 
@@ -599,7 +603,9 @@ const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
   fields: {
     mode: readEnum(MEMORY_RECALL_MODES),
     server: readString,
+    tool: readString,
     max_memories: readUsize,
+    max_tokens: readUsize,
     recent_messages: readUsize,
   },
 };
@@ -608,6 +614,12 @@ export function validateMemoryRecall(recall: MemoryRecallConfig): string | undef
   if (recall.mode === "off") return undefined;
   if (recall.server.trim() === "") {
     return "memory.recall.server must name an [mcp.<server>] entry when recall is enabled";
+  }
+  if (recall.tool.trim() === "") {
+    return "memory.recall.tool must name a tool on the server when recall is enabled";
+  }
+  if (recall.max_tokens === 0) {
+    return "memory.recall.max_tokens must be greater than 0 when recall is enabled";
   }
   if (recall.recent_messages === 0) {
     return "memory.recall.recent_messages must be greater than 0 when recall is enabled";

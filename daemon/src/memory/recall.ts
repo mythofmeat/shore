@@ -70,8 +70,8 @@ export async function runMemoryRecall(
   const started = clock();
   try {
     const raw = await deps.mcpRegistry.call(
-      `mcp__${recall.server}__search`,
-      { query, character: input.character, limit: recall.max_memories },
+      `mcp__${recall.server}__${recall.tool}`,
+      { query, max_tokens: recall.max_tokens },
       input.signal,
     );
     const memories = parseRecallResult(raw).slice(0, recall.max_memories);
@@ -159,12 +159,14 @@ export function recallQuery(messages: readonly Message[], limit: number): string
 
 export function parseRecallResult(raw: unknown): RecalledMemory[] {
   const payload = typeof raw === "string" ? safeParse(raw) : raw;
-  if (!isRecord(payload) || !Array.isArray(payload["memories"])) return [];
-  return payload["memories"].flatMap((entry) => {
+  if (!isRecord(payload)) return [];
+  const entries = payload["results"] ?? payload["memories"];
+  if (!Array.isArray(entries)) return [];
+  return entries.flatMap((entry) => {
     if (!isRecord(entry)) return [];
     const text = entry["text"];
     if (typeof text !== "string" || text.trim() === "") return [];
-    const occurredAt = entry["occurred_at"];
+    const occurredAt = entry["occurred_at"] ?? entry["occurred_start"];
     return [{
       text: truncate(text.trim(), MEMORY_CHARS),
       ...(typeof occurredAt === "string" ? { occurred_at: occurredAt } : {}),

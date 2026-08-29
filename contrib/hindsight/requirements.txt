@@ -1,0 +1,2 @@
+hindsight-client
+zstandard==0.25.0
