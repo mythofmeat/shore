@@ -44,6 +44,8 @@ import { historyIndexPath } from "./memory/history_index.ts";
 import { HistoryIndexService } from "./memory/history_index_service.ts";
 import { indexPath as workspaceIndexPath } from "./memory/workspace_index.ts";
 import { WorkspaceIndexService } from "./memory/workspace_index_service.ts";
+import { HindsightRetainService } from "./memory/hindsight_retain_service.ts";
+import { memoryRetainServer, resolveDisplayName } from "./config/app.ts";
 
 const CALL_STORE_RETENTION_DAYS = 14;
 const CALL_STORE_MAX_BYTES = 536_870_912;
@@ -76,6 +78,7 @@ export interface ShoreRuntime {
   readonly autonomy: AutonomyService;
   readonly historyIndex: HistoryIndexService;
   readonly workspaceIndex: WorkspaceIndexService;
+  readonly memoryRetain: HindsightRetainService;
   refreshHistoryIndexes(): Promise<void>;
   refreshMcpCaches(registry: McpRegistry): Promise<void>;
   shutdown(): Promise<void>;
@@ -97,6 +100,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   let historyIndex: HistoryIndexService | undefined;
   let workspaceIndex: WorkspaceIndexService | undefined;
+  let memoryRetain: HindsightRetainService | undefined;
   const registry = await CharacterRegistry.create(
     config.dirs.config,
     config.dirs.data,
@@ -121,6 +125,9 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     }
     for (const character of workspaceIndex?.registeredCharacters() ?? []) {
       if (!available.has(character)) workspaceIndex?.unregister(character);
+    }
+    for (const character of memoryRetain?.registeredCharacters() ?? []) {
+      if (!available.has(character)) memoryRetain?.unregister(character);
     }
     for (const character of available) {
       const effective = registry.effectiveConfig(character);
@@ -155,6 +162,20 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         ...(embedder === undefined ? {} : { embedder }),
         ...(embedderError === undefined ? {} : { embedderError }),
       });
+      if (effective.app.memory.retain.enabled) {
+        const retain = effective.app.memory.retain;
+        memoryRetain?.register({
+          character,
+          historyPath: rustJoin(effective.dirs.data, "history.db"),
+          server: memoryRetainServer(effective.app.memory),
+          userName:
+            retain.user_name ?? resolveDisplayName(effective.app.defaults, options.env ?? process.env),
+          possessivePronoun: retain.possessive_pronoun,
+          timeoutMs: retain.timeout.asMillis(),
+        });
+      } else {
+        memoryRetain?.unregister(character);
+      }
     }
   };
   await refreshHistoryIndexes();
@@ -191,6 +212,9 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       options.mcpRegistryOptions,
     ),
   );
+  memoryRetain = new HindsightRetainService(mcp.callView());
+  await refreshHistoryIndexes();
+  memoryRetain.start();
 
   const autonomy = new AutonomyService(
     new InProcessAutonomyExecutor({
@@ -234,11 +258,13 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     autonomy,
     historyIndex,
     workspaceIndex,
+    memoryRetain,
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
       await historyIndex.shutdown();
       await workspaceIndex.shutdown();
+      await memoryRetain.shutdown();
       await mcp.current.shutdown();
       uninstallWireCapture();
       callStore?.close();

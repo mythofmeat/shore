@@ -169,6 +169,7 @@ describe("runIdleCompaction: the pass", () => {
   test("archive-only mode rotates history without calling the memory model", async () => {
     const { config, dataDir, characterDir } = await world();
     config.app.memory.compaction.write_memory = false;
+    config.app.memory.retain.enabled = true;
     let generated = false;
 
     const result = await runIdleCompaction("ada", deps(config, {
@@ -184,6 +185,12 @@ describe("runIdleCompaction: the pass", () => {
     expect(result).toEqual({ turnCount: 2, events: [] });
     expect(await activeIds(characterDir)).toEqual(["m_3", "m_4", "m_5", "m_6"]);
     expect(historySegmentCount(dataDir)).toBe(1);
+    const history = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+    expect(history.nextMemoryRetainJob("ada", 0)).toMatchObject({
+      segment: 0,
+      status: "pending",
+    });
+    history.close();
     expect(existsSync(join(config.dirs.config, "characters", "ada", "workspace", "memory", "boats.md"))).toBe(false);
   });
 

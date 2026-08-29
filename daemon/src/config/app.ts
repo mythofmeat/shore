@@ -649,6 +649,66 @@ export function validateMemoryRecall(recall: MemoryRecallConfig): string | undef
   return undefined;
 }
 
+export interface MemoryRetainConfig {
+  enabled: boolean;
+  server: string;
+  user_name: string | undefined;
+  possessive_pronoun: string;
+  timeout: ConfigDuration;
+}
+
+export const defaultMemoryRetainConfig = (): MemoryRetainConfig => ({
+  enabled: false,
+  server: "",
+  user_name: undefined,
+  possessive_pronoun: "their",
+  timeout: ConfigDuration.fromSecs(15),
+});
+
+const MEMORY_RETAIN: StructSpec<MemoryRetainConfig> = {
+  name: "MemoryRetainConfig",
+  noDefault: ["user_name"],
+  make: defaultMemoryRetainConfig,
+  fields: {
+    enabled: readBool,
+    server: readString,
+    user_name: optional(readString),
+    possessive_pronoun: readString,
+    timeout: readDuration,
+  },
+};
+
+export function memoryRetainServer(memory: Pick<MemoryConfig, "recall" | "retain">): string {
+  return memory.retain.server.trim() || memory.recall.server.trim();
+}
+
+export function validateMemoryRetain(
+  retain: MemoryRetainConfig,
+  compaction: CompactionConfig,
+  fallbackServer: string,
+): string | undefined {
+  if (!retain.enabled) return undefined;
+  if (compaction.write_memory) {
+    return "memory.retain.enabled requires memory.compaction.write_memory = false";
+  }
+  if (retain.server.trim() === "" && fallbackServer.trim() === "") {
+    return (
+      "memory.retain.server must name an [mcp.<server>] entry when archive retain is enabled " +
+      "(or memory.recall.server must provide the fallback)"
+    );
+  }
+  if (retain.possessive_pronoun.trim() === "") {
+    return "memory.retain.possessive_pronoun must not be blank";
+  }
+  if (retain.user_name?.trim() === "") {
+    return "memory.retain.user_name must not be blank when set";
+  }
+  if (retain.timeout.asMillisExact() === 0n) {
+    return "memory.retain.timeout must be greater than 0 when archive retain is enabled";
+  }
+  return undefined;
+}
+
 function rejectFractionalSeconds(field: string, value: ConfigDuration): string | undefined {
   const millis = value.asMillisExact();
   if (millis % 1000n === 0n) return undefined;
@@ -782,6 +842,7 @@ const RETRIEVAL: StructSpec<RetrievalConfig> = {
 export interface MemoryConfig {
   compaction: CompactionConfig;
   recall: MemoryRecallConfig;
+  retain: MemoryRetainConfig;
   file_limits: MemoryFileLimitsConfig;
   thinking: ThinkingConfig;
   retrieval: RetrievalConfig;
@@ -813,6 +874,7 @@ const MEMORY_FILE_LIMITS: StructSpec<MemoryFileLimitsConfig> = {
 const defaultMemoryConfig = (): MemoryConfig => ({
   compaction: defaultCompactionConfig(),
   recall: defaultMemoryRecallConfig(),
+  retain: defaultMemoryRetainConfig(),
   file_limits: defaultMemoryFileLimitsConfig(),
   thinking: defaultThinkingConfig(),
   retrieval: defaultRetrievalConfig(),
@@ -825,6 +887,7 @@ const MEMORY: StructSpec<MemoryConfig> = {
   fields: {
     compaction: struct(COMPACTION),
     recall: struct(MEMORY_RECALL),
+    retain: struct(MEMORY_RETAIN),
     file_limits: struct(MEMORY_FILE_LIMITS),
     thinking: struct(THINKING),
     retrieval: struct(RETRIEVAL),

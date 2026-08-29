@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import fixture from "./autonomy_captures/deep_archive.json" with { type: "json" };
 import { MessageStore } from "../src/engine/message_store.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { conversationManager } from "../src/memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
@@ -208,13 +209,20 @@ describe("runDeepIdleArchive", () => {
   test("archive-only mode sweeps uncovered turns without compaction dependencies", async () => {
     const uncovered = required(fixture.plan.find((kase) => kase.plan.arm === "compaction"));
     const messages = uncovered.input.map((shape) => fromShape(shape));
-    const { config, characterDir } = await world(messages);
+    const { config, dataDir, characterDir } = await world(messages);
     config.app.memory.compaction.write_memory = false;
+    config.app.memory.retain.enabled = true;
 
     const result = await runDeepIdleArchive("ada", deps(config), uncovered.covered_turn_count);
 
     expect(result).toEqual({ turnCount: 0, events: [], deepArchiveDone: true });
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe("");
+    const history = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+    expect(history.nextMemoryRetainJob("ada", 0)).toMatchObject({
+      segment: 0,
+      status: "pending",
+    });
+    history.close();
   });
 
   test("nothing to archive quiesces, and says the idle period is finished", async () => {

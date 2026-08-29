@@ -118,7 +118,11 @@ async function pureArchive(
       characterDir,
       deps.now ?? (() => new Date().toISOString()),
       deps.newId ?? (() => crypto.randomUUID()),
-      { dbPath: join(dataDir, HISTORY_DB_FILE), character },
+      {
+        dbPath: join(dataDir, HISTORY_DB_FILE),
+        character,
+        retain: deps.config.app.memory.retain.enabled,
+      },
     ).archiveAndRetain("deep-idle", { keepLastN: tail, activeContent });
   } catch (e) {
     shoreLog.warn(

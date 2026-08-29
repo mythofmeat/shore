@@ -18,6 +18,7 @@ const SEGMENTS_DIR = "segments";
 export interface DurableHistoryLocation {
   dbPath: string;
   character: string;
+  retain?: boolean;
 }
 
 export function conversationManager(
@@ -124,6 +125,7 @@ async function archiveToDatabase(
           message_count: messages.length,
           compacted_at: now(),
           ...(operationId === undefined ? {} : { compaction_id: operationId }),
+          ...(history.retain === true ? { retain: true } : {}),
           ...segmentMetadata,
         },
         messages,

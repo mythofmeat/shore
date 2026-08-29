@@ -121,7 +121,11 @@ export async function runArchiveOnlyRotation(
       loaded.characterDir,
       deps.now ?? (() => new Date().toISOString()),
       deps.newId ?? (() => crypto.randomUUID()),
-      { dbPath: join(dataDir, HISTORY_DB_FILE), character },
+      {
+        dbPath: join(dataDir, HISTORY_DB_FILE),
+        character,
+        retain: deps.config.app.memory.retain.enabled,
+      },
     ).archiveAndRetain("archive-only", {
       keepLastN: retained,
       activeContent: loaded.rawContent,
@@ -173,7 +177,11 @@ export async function runCompactionPass(
           loaded.characterDir,
           deps.now ?? (() => new Date().toISOString()),
           deps.newId ?? (() => crypto.randomUUID()),
-          { dbPath: join(dataDir, HISTORY_DB_FILE), character },
+          {
+            dbPath: join(dataDir, HISTORY_DB_FILE),
+            character,
+            retain: resolved.effective.app.memory.retain.enabled,
+          },
         ),
         ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
         dryRun: options.dryRun ?? false,

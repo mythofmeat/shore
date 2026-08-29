@@ -22,6 +22,7 @@ export interface SegmentIndexMutationSink {
 
 export interface ClearContext {
   dataDir: string;
+  retainArchived?: boolean;
   repoint?: (character: string) => Promise<void>;
   onComplete?: (character: string) => void;
   now?: () => string;
@@ -33,9 +34,11 @@ export async function segments(
   character: string,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
+  retainArchived = false,
 ): Promise<unknown> {
   const action = typeof args["action"] === "string" ? args["action"] : "list";
-  const mutate = () => runSegments(dataDir, character, action, args, historyIndex);
+  const mutate = () =>
+    runSegments(dataDir, character, action, args, historyIndex, retainArchived);
   const indexPath =
     action === "list" || action === "show"
       ? undefined
@@ -51,6 +54,7 @@ function runSegments(
   action: string,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
+  retainArchived = false,
 ): unknown {
   const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
   try {
@@ -73,10 +77,10 @@ function runSegments(
     let changed: boolean;
     switch (action) {
       case "exclude":
-        changed = store.setExcluded(character, idx, true);
+        changed = store.setExcluded(character, idx, true, retainArchived);
         break;
       case "include":
-        changed = store.setExcluded(character, idx, false);
+        changed = store.setExcluded(character, idx, false, retainArchived);
         break;
       case "label":
         changed = store.setLabel(character, idx, nullableText(args["value"], "label"));
@@ -130,7 +134,11 @@ export async function clear(
       ctx.now ?? (() => new Date().toISOString()),
       ctx.newId ?? (() => crypto.randomUUID()),
       `clear-${crypto.randomUUID()}`,
-      { dbPath: join(ctx.dataDir, HISTORY_DB_FILE), character },
+      {
+        dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
+        character,
+        retain: ctx.retainArchived === true,
+      },
       {
         ...(excluded ? { excluded: true } : {}),
         ...(note === undefined ? {} : { note }),

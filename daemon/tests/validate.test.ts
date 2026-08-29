@@ -511,6 +511,24 @@ describe("a config shore refuses, and what it says", () => {
   test("off recall permits zero limits because it performs no work", () => {
     expect(accepted("\n[memory.recall]\nmode = \"off\"\nrecent_messages = 0\nmax_memories = 0\ntimeout = \"0s\"\nserver = \"absent\"\n")).toBeDefined();
   });
+  test("archive retain has one memory owner and a reachable MCP server", () => {
+    expect(refused("\n[memory.retain]\nenabled = true\nserver = \"hindsight\"\n")).toContain(
+      "memory.retain.enabled requires memory.compaction.write_memory = false",
+    );
+    expect(refused("\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\n")).toContain(
+      "memory.retain.server must name an [mcp.<server>] entry",
+    );
+    expect(refused("\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\nserver = \"absent\"\n")).toContain(
+      "memory.retain resolves server 'absent', which has no [mcp.<server>] definition",
+    );
+    expect(refused("\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\nserver = \"hindsight\"\npossessive_pronoun = \"  \"\n")).toContain(
+      "memory.retain.possessive_pronoun must not be blank",
+    );
+    expect(refused("\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\nserver = \"hindsight\"\ntimeout = \"0s\"\n")).toContain(
+      "memory.retain.timeout must be greater than 0",
+    );
+    expect(accepted("\n[mcp.hindsight]\nurl = \"http://localhost:8888/mcp/ada/\"\n\n[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nserver = \"hindsight\"\n\n[memory.retain]\nenabled = true\nuser_name = \"Ren\"\npossessive_pronoun = \"her\"\n")).toBeDefined();
+  });
   test("usage check precedes compaction check", () => {
     expect(refused("\n[usage]\ntimezone = \"nope\"\n\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"nope\"");
   });

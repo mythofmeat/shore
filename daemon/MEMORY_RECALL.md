@@ -71,11 +71,53 @@ does not run on a regenerate.
 
 ## The write path
 
-No live ingest yet. `contrib/hindsight/backfill.py` imports archived segments,
-one segment per document, and must be re-run for new conversations to reach
-memory. Because `document_id` upserts, it carries no cursor and no resume state:
-re-running a range is both idempotent and the recovery path, which is why it is
-a fifth the size of the mem0 importer it replaced.
+Live ingest is opt-in and follows the same archive boundary as
+`contrib/hindsight/backfill.py`:
+
+```toml
+[memory.compaction]
+write_memory = false
+
+[memory.retain]
+enabled = true
+# server = "hindsight"       # defaults to memory.recall.server
+user_name = "Ren"            # defaults to defaults.display_name
+possessive_pronoun = "his"   # defaults to "their"
+timeout = "15s"              # MCP submission deadline, not extraction time
+```
+
+One committed segment becomes one `shore:<character>:seg<N>` document with the
+same content and relationship context as the backfill script. The archive
+transaction records retain intent before the active-file swap and enqueues work
+in the same transaction that commits the segment. A daemon crash cannot expose
+an uncommitted segment to Hindsight or lose a committed segment's pending work.
+The worker calls Hindsight's asynchronous `retain`, so the 90-400 second
+extraction runs behind Hindsight rather than blocking compaction or the turn
+that triggered it. The worker follows accepted operations to completion,
+serializes them per character, and retries submission or extraction failures
+with exponential backoff; the stable document id makes a retry converge on one
+document.
+
+Hindsight's current MCP `retain` returns an operation id but does not accept a
+caller-supplied one. A connection loss after Hindsight accepted a submission
+can therefore repeat extraction cost on retry, although the stable document id
+still prevents duplicate final documents. The REST retain endpoint closes that
+last ambiguity; the MCP surface does not yet expose its idempotency key.
+
+`memory.retain.enabled` requires `write_memory = false`: Hindsight owns the
+retrieved layer instead of running the compaction LLM that rewrites memory
+files. Existing `MEMORY.md` and workspace notes are not deleted and remain in
+the always-present prompt, so they can still be hand-curated.
+
+Exclusion is part of the durable queue state. A segment excluded before submit
+is never read. Excluding an already-submitted segment first attempts to cancel
+its Hindsight operation, then calls `delete_document`; including it queues a
+fresh upsert. This cleanup also applies when `shore segments exclude N` first
+adopts a segment created by the manual backfill path.
+
+`contrib/hindsight/backfill.py` remains the historical import and repair tool.
+Because `document_id` upserts, it carries no cursor and no resume state:
+re-running a range is both idempotent and the recovery path.
 
 The mem0 ingest service was removed on 2026-08-29 and is archived on the
 `mem0-archive` branch. Two conclusions from that build still hold:
@@ -85,10 +127,9 @@ The mem0 ingest service was removed on 2026-08-29 and is archived on the
   it falls out of the live window -- which is the moment memory has to start
   carrying it. While a turn is still in context, recalling it only duplicates
   text the prompt already holds.
-- **Honour exclusion before ingest, not after.** `shore segments exclude N` and
-  `shore clear --exclude` set a flag. If a segment is excluded before it is ever
-  read, nothing has to be deleted downstream -- which matters, because a store
-  that exposes `search` and `add` and no delete cannot take it back.
+- **Honour exclusion before ingest.** `shore segments exclude N` and
+  `shore clear --exclude` set a flag. Hindsight also exposes cancellation and
+  `delete_document`, which provide the after-the-fact backstop mem0 lacked.
 
 ## Watching it
 

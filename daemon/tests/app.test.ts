@@ -899,6 +899,17 @@ describe("a config.toml sets what it says and nothing else", () => {
     });
   });
 
+  test("memory.retain", () => {
+    const cfg = parsed("[memory.retain]\nenabled = true\nserver = \"hindsight\"\nuser_name = \"Ren\"\npossessive_pronoun = \"his\"\ntimeout = \"20s\"\n");
+    expect(at(cfg, "memory.retain")).toEqual({
+      enabled: true,
+      server: "hindsight",
+      user_name: "Ren",
+      possessive_pronoun: "his",
+      timeout: "20s",
+    });
+  });
+
   test("memory.git_push", () => {
     const cfg = parsed("[memory]\ngit_push = true\n");
     expect(at(cfg, "memory.git_push"), "memory.git_push").toEqual(true);

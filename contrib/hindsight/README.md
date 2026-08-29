@@ -5,8 +5,8 @@ It ships its own MCP server, so unlike the mem0 experiment there is no wrapper t
 write: shore talks to it directly.
 
 Shore calls `recall` before each turn and injects the result as a transient
-prompt block. `backfill.py` imports archived conversations. There is no live
-ingest yet — new conversations reach memory only when backfill is re-run.
+prompt block. A durable background worker retains newly archived segments;
+`backfill.py` imports conversations archived before that worker was enabled.
 
 ## How it wants to be fed
 
@@ -70,6 +70,14 @@ server = "hindsight"
 max_memories = 6
 query_from = "user"
 timeout = "3s"
+
+[memory.compaction]
+write_memory = false
+
+[memory.retain]
+enabled = true
+user_name = "Ren"
+possessive_pronoun = "his"
 ```
 
 `memory.recall.tool` defaults to `recall` and `max_tokens` to 2048, which is
@@ -81,7 +89,26 @@ older last-`recent_messages` behavior for comparison. Recall fails open after
 `timeout`, so a slow or cold Hindsight server does not block the turn.
 
 Do **not** grant `mcp__hindsight__*` to any character. The daemon calls `recall`
-itself; granting it would hand the decision back to the model.
+and `retain` itself; granting them would hand the decision back to the model.
+
+`memory.retain.server` defaults to `memory.recall.server`. `user_name` defaults
+to `defaults.display_name`, and `possessive_pronoun` defaults to `their`; set
+both explicitly to keep live documents byte-identical to the arguments used for
+manual backfill. The retain timeout is only the deadline for Hindsight to accept
+an asynchronous job. Extraction continues in Hindsight and does not block the
+archive or user turn.
+
+The worker persists pending submissions in `history.db` at the same durable
+boundary as the segment commit, follows accepted operations to completion, and
+retries transport or extraction failures. It keeps one retain in flight per
+character. A segment excluded before submission is skipped. Excluding one later
+cancels its known operation when possible and deletes
+`shore:<character>:seg<N>` from Hindsight; including it queues the document
+again.
+
+Turning off automatic memory writes does not erase `MEMORY.md` or workspace
+notes. They remain always-present, hand-curated context; Hindsight replaces the
+compaction LLM's ongoing updates and supplies the retrieved layer.
 
 The control plane at `:9999` browses memories, entities and the relation graph.
 
@@ -122,7 +149,7 @@ recall should be reading -- never get built.
 
 ## Order of operations
 
-`memory.recall` is only understood by a daemon built after the recall layer was
-made tool-name-configurable. Rebuild and restart `shore-daemon` **before**
-enabling `[memory.recall]`; an older daemon calls a `search` tool that hindsight
-does not expose, and recall fails open on every turn.
+`memory.recall` and `memory.retain` require a current daemon. Rebuild and restart
+`shore-daemon` **before** enabling either section; an older daemon rejects the
+retain table and older recall builds call a `search` tool that Hindsight does
+not expose.

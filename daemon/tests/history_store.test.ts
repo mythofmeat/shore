@@ -101,6 +101,33 @@ test("pending compactions are hidden and recover from either side of the active-
   store.close();
 });
 
+test("archive retain work becomes visible only with the durable segment commit", () => {
+  const store = HistoryStore.openInMemory();
+  const messages = [message("u1", "hello")];
+  const segment = store.beginCompaction(
+    "ada",
+    {
+      file: HISTORY_DB_FILE,
+      message_count: 1,
+      compacted_at: "2026-08-13T10:01:00+10:00",
+      retain: true,
+    },
+    messages,
+    "before\n",
+    "after\n",
+  );
+
+  expect(store.nextMemoryRetainJob("ada", 0)).toBeUndefined();
+  store.recoverPending("ada", "after\n");
+  expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+    character: "ada",
+    segment,
+    status: "pending",
+    attempts: 0,
+  });
+  store.close();
+});
+
 test("a compaction remains readable after its JSONL recovery copy is removed", async () => {
   const dataDir = testTmp(`history-durable-${crypto.randomUUID()}`);
   const characterDir = join(dataDir, "ada");

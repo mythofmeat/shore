@@ -181,10 +181,17 @@ export async function runCommand(
         args,
       );
     case "segments":
-      return await segments(session.dataDir, character, args, deps.historyIndex);
+      return await segments(
+        session.dataDir,
+        character,
+        args,
+        deps.historyIndex,
+        session.config.app.memory.retain.enabled,
+      );
     case "clear":
       return await clear(engine, {
         dataDir: session.dataDir,
+        retainArchived: session.config.app.memory.retain.enabled,
         ...(deps.compaction?.repoint === undefined
           ? {}
           : { repoint: async (name) => await deps.compaction?.repoint?.(name, session.config) }),

@@ -120,6 +120,21 @@ describe("segment management", () => {
     })).count).toBe(1);
   });
 
+  test("excluding a pre-existing segment schedules hindsight cleanup when retain is managed", async () => {
+    const root = testTmp(`segments-retain-exclude-${crypto.randomUUID()}`);
+    const characterDir = join(root, "ada");
+    await mkdir(characterDir, { recursive: true });
+    put(characterDir, 0, [message("u0", "old import", 0)]);
+
+    await segments(root, "ada", { action: "exclude", index: 0 }, undefined, true);
+    const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
+    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+      segment: 0,
+      status: "delete_pending",
+    });
+    store.close();
+  });
+
   test("clear archives without memory work and can exclude and annotate atomically", async () => {
     const root = testTmp(`segments-clear-${crypto.randomUUID()}`);
     const characterDir = join(root, "ada");
