@@ -117,13 +117,12 @@ test("archive retain work becomes visible only with the durable segment commit",
     "after\n",
   );
 
-  expect(store.nextMemoryRetainJob("ada", 0)).toBeUndefined();
+  expect(store.nextMemoryRetainJob("ada")).toBeUndefined();
   store.recoverPending("ada", "after\n");
-  expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+  expect(store.nextMemoryRetainJob("ada")).toMatchObject({
     character: "ada",
     segment,
-    status: "pending",
-    attempts: 0,
+    action: "retain",
   });
   store.close();
 });

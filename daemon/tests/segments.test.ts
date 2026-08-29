@@ -128,9 +128,9 @@ describe("segment management", () => {
 
     await segments(root, "ada", { action: "exclude", index: 0 }, undefined, true);
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+    expect(store.nextMemoryRetainJob("ada")).toMatchObject({
       segment: 0,
-      status: "delete_pending",
+      action: "delete",
     });
     store.close();
   });

@@ -98,16 +98,15 @@ manual backfill. The retain timeout is only the deadline for Hindsight to accept
 an asynchronous job. Extraction continues in Hindsight and does not block the
 archive or user turn.
 
-The worker persists pending submissions in `history.db` at the same durable
-boundary as the segment commit, follows accepted operations to completion, and
-retries transport or extraction failures. Hindsight reports tool failures in the
-reply body rather than as MCP errors, so the worker reads every reply for an
-error payload and re-queues on one; an operation Hindsight has since pruned is
-settled by asking whether the document exists. It keeps one retain in flight per
-character. A segment excluded before submission is skipped. Excluding one later
-cancels its known operation when possible and deletes
-`shore:<character>:seg<N>` from Hindsight; including it queues the document
-again.
+New segments are sent to Hindsight as they are archived; `backfill.py` stays the
+tool for everything archived before that was switched on, and for repairing a
+document that never landed. The daemon marks the segment row `pending` in the
+same statement that commits it, sends one `retain` call, and marks it `stored`.
+It does not follow Hindsight's extraction operation — `document_id` upserts, so
+re-sending is the recovery path. Hindsight reports tool failures in the reply
+body rather than as MCP errors, so the worker reads every reply for an error
+payload and leaves the segment queued on one. A segment excluded before it is
+sent is never read; excluding one already sent deletes its document.
 
 Turning off automatic memory writes does not erase `MEMORY.md` or workspace
 notes. They remain always-present, hand-curated context; Hindsight replaces the

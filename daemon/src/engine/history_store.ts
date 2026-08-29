@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS history_segments (
     memory_before TEXT,
     memory_after  TEXT,
     excluded      INTEGER NOT NULL DEFAULT 0,
-    memory_retain INTEGER NOT NULL DEFAULT 0,
+    memory_doc    TEXT,
     label         TEXT,
     note          TEXT,
     PRIMARY KEY (character, idx)
@@ -69,21 +69,6 @@ CREATE TABLE IF NOT EXISTS history_pending (
     before_hash TEXT NOT NULL,
     after_hash  TEXT NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS history_memory_retain (
-    character          TEXT    NOT NULL,
-    segment            INTEGER NOT NULL,
-    status             TEXT    NOT NULL,
-    remote_operation_id TEXT,
-    attempts           INTEGER NOT NULL DEFAULT 0,
-    next_attempt_at    INTEGER NOT NULL DEFAULT 0,
-    last_error         TEXT,
-    updated_at         TEXT    NOT NULL,
-    PRIMARY KEY (character, segment)
-);
-
-CREATE INDEX IF NOT EXISTS idx_history_memory_retain_work
-    ON history_memory_retain (character, status, next_attempt_at, segment);
 
 CREATE TABLE IF NOT EXISTS history_messages (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,22 +141,12 @@ export interface SegmentRecord extends SegmentEntry {
   last_message_at: string | null;
 }
 
-export type MemoryRetainStatus =
-  | "pending"
-  | "submitted"
-  | "complete"
-  | "delete_pending"
-  | "skipped"
-  | "excluded";
+export type MemoryRetainAction = "retain" | "delete";
 
 export interface MemoryRetainJob {
   character: string;
   segment: number;
-  status: MemoryRetainStatus;
-  remote_operation_id?: string;
-  attempts: number;
-  next_attempt_at: number;
-  last_error?: string;
+  action: MemoryRetainAction;
 }
 
 const ZSTD_LEVEL = 3;
@@ -280,12 +255,10 @@ export class HistoryStore {
     this.#db.transaction(() => {
       const row = this.#db
         .query(
-          `SELECT committed, excluded, memory_retain FROM history_segments
+          `SELECT committed FROM history_segments
            WHERE character = ?1 AND idx = ?2`,
         )
-        .get(character, idx) as
-        | { committed: number; excluded: number; memory_retain: number }
-        | null;
+        .get(character, idx) as { committed: number } | null;
       this.#db
         .query("UPDATE history_segments SET committed = 1 WHERE character = ?1 AND idx = ?2")
         .run(character, idx);
@@ -294,9 +267,6 @@ export class HistoryStore {
         .run(character, idx);
       if (row?.committed === 0) {
         this.#updateCharacterStats(character, this.#segmentTurnCount(character, idx));
-      }
-      if (row?.memory_retain === 1) {
-        this.#enqueueMemoryRetain(character, idx, row.excluded === 1);
       }
     })();
   }
@@ -454,267 +424,63 @@ export class HistoryStore {
     manageRetain = false,
   ): boolean {
     return this.#db.transaction(() => {
-      const previous = this.#db
-        .query(
-          `SELECT memory_retain FROM history_segments
-           WHERE character = ?1 AND idx = ?2 AND committed = 1`,
-        )
-        .get(character, idx) as { memory_retain: number } | null;
       const changed = this.#db
         .query(
-          `UPDATE history_segments
-           SET excluded = ?3,
-               memory_retain = CASE WHEN ?4 = 1 THEN 1 ELSE memory_retain END
+          `UPDATE history_segments SET excluded = ?3
            WHERE character = ?1 AND idx = ?2 AND committed = 1`,
         )
-        .run(character, idx, excluded ? 1 : 0, manageRetain ? 1 : 0).changes > 0;
+        .run(character, idx, excluded ? 1 : 0).changes > 0;
       if (!changed) return false;
-      const row = this.#db
-        .query(
-          `SELECT memory_retain FROM history_segments
-           WHERE character = ?1 AND idx = ?2`,
-        )
-        .get(character, idx) as { memory_retain: number } | null;
-      if (row?.memory_retain !== 1) return true;
-      this.#enqueueMemoryRetain(character, idx, excluded);
       if (excluded) {
         this.#db
           .query(
-            `UPDATE history_memory_retain
-             SET status = CASE
-                   WHEN ?3 = 0 THEN 'delete_pending'
-                   WHEN status IN ('skipped', 'excluded') THEN 'excluded'
-                   WHEN status = 'pending' AND attempts = 0 THEN 'excluded'
-                   ELSE 'delete_pending'
-                 END,
-                 next_attempt_at = 0,
-                 last_error = NULL,
-                 updated_at = ?4
-             WHERE character = ?1 AND segment = ?2`,
+            `UPDATE history_segments
+             SET memory_doc = CASE
+                   WHEN memory_doc = 'pending' THEN NULL
+                   WHEN memory_doc IS NULL AND ?3 = 1 THEN 'stored'
+                   ELSE memory_doc
+                 END
+             WHERE character = ?1 AND idx = ?2`,
           )
-          .run(character, idx, previous?.memory_retain ?? 0, new Date().toISOString());
-      } else {
+          .run(character, idx, manageRetain ? 1 : 0);
+      } else if (manageRetain) {
         this.#db
           .query(
-            `UPDATE history_memory_retain
-             SET status = 'pending', remote_operation_id = NULL, attempts = 0,
-                 next_attempt_at = 0, last_error = NULL, updated_at = ?3
-             WHERE character = ?1 AND segment = ?2`,
+            `UPDATE history_segments SET memory_doc = 'pending'
+             WHERE character = ?1 AND idx = ?2 AND memory_doc IS NULL`,
           )
-          .run(character, idx, new Date().toISOString());
+          .run(character, idx);
       }
       return true;
     })();
   }
 
-  nextMemoryRetainJob(character: string, now: number): MemoryRetainJob | undefined {
+  nextMemoryRetainJob(character: string): MemoryRetainJob | undefined {
     const row = this.#db
       .query(
-        `SELECT q.character, q.segment, q.status, q.remote_operation_id,
-                q.attempts, q.next_attempt_at, q.last_error
-         FROM history_memory_retain q
-         JOIN history_segments s
-           ON s.character = q.character AND s.idx = q.segment
-         WHERE q.character = ?1 AND s.committed = 1
-           AND q.status IN ('pending', 'submitted', 'delete_pending')
-           AND q.next_attempt_at <= ?2
-           AND (
-             q.status <> 'pending' OR NOT EXISTS (
-               SELECT 1 FROM history_memory_retain active
-               WHERE active.character = q.character AND active.status = 'submitted'
-             )
-           )
-         ORDER BY CASE q.status
-                    WHEN 'delete_pending' THEN 0
-                    WHEN 'submitted' THEN 1
-                    ELSE 2
-                  END,
-                  q.segment
+        `SELECT idx, excluded FROM history_segments
+         WHERE character = ?1 AND committed = 1
+           AND ((memory_doc = 'pending' AND excluded = 0)
+                OR (memory_doc = 'stored' AND excluded = 1))
+         ORDER BY idx
          LIMIT 1`,
       )
-      .get(character, now) as
-      | {
-          character: string;
-          segment: number;
-          status: MemoryRetainStatus;
-          remote_operation_id: string | null;
-          attempts: number;
-          next_attempt_at: number;
-          last_error: string | null;
-        }
-      | null;
+      .get(character) as { idx: number; excluded: number } | null;
     if (row === null) return undefined;
     return {
-      character: row.character,
-      segment: row.segment,
-      status: row.status,
-      attempts: row.attempts,
-      next_attempt_at: row.next_attempt_at,
-      ...(row.remote_operation_id === null
-        ? {}
-        : { remote_operation_id: row.remote_operation_id }),
-      ...(row.last_error === null ? {} : { last_error: row.last_error }),
+      character,
+      segment: row.idx,
+      action: row.excluded === 1 ? "delete" : "retain",
     };
   }
 
-  nextMemoryRetainDueAt(character: string): number | undefined {
-    const row = this.#db
-      .query(
-        `SELECT MIN(q.next_attempt_at) AS due
-         FROM history_memory_retain q
-         JOIN history_segments s
-           ON s.character = q.character AND s.idx = q.segment
-         WHERE q.character = ?1 AND s.committed = 1
-           AND q.status IN ('pending', 'submitted', 'delete_pending')
-           AND (
-             q.status <> 'pending' OR NOT EXISTS (
-               SELECT 1 FROM history_memory_retain active
-               WHERE active.character = q.character AND active.status = 'submitted'
-             )
-           )`,
-      )
-      .get(character) as { due: number | null } | null;
-    return row?.due ?? undefined;
-  }
-
-  markMemoryRetainSubmitted(
-    character: string,
-    segment: number,
-    remoteOperationId: string,
-    nextPollAt: number,
-  ): boolean {
+  markMemoryDocument(character: string, idx: number, state: "stored" | null): boolean {
     return this.#db
       .query(
-        `UPDATE history_memory_retain
-         SET status = CASE
-               WHEN EXISTS (
-                 SELECT 1 FROM history_segments
-                 WHERE character = ?1 AND idx = ?2 AND excluded = 1
-               ) THEN 'delete_pending'
-               ELSE 'submitted'
-             END,
-             remote_operation_id = ?3, attempts = attempts + 1,
-             next_attempt_at = ?4, last_error = NULL, updated_at = ?5
-         WHERE character = ?1 AND segment = ?2 AND status IN ('pending', 'excluded')`,
+        `UPDATE history_segments SET memory_doc = ?3
+         WHERE character = ?1 AND idx = ?2 AND committed = 1`,
       )
-      .run(character, segment, remoteOperationId, nextPollAt, new Date().toISOString())
-      .changes > 0;
-  }
-
-  markMemoryRetainPoll(
-    character: string,
-    segment: number,
-    nextPollAt: number,
-    error?: string,
-  ): boolean {
-    return this.#db
-      .query(
-        `UPDATE history_memory_retain
-         SET next_attempt_at = ?3, last_error = ?4,
-             attempts = attempts + CASE WHEN ?4 IS NULL THEN 0 ELSE 1 END,
-             updated_at = ?5
-         WHERE character = ?1 AND segment = ?2 AND status = 'submitted'`,
-      )
-      .run(character, segment, nextPollAt, error ?? null, new Date().toISOString()).changes > 0;
-  }
-
-  markMemoryRetainComplete(character: string, segment: number): boolean {
-    return this.#db
-      .query(
-        `UPDATE history_memory_retain
-         SET status = CASE
-               WHEN EXISTS (
-                 SELECT 1 FROM history_segments
-                 WHERE character = ?1 AND idx = ?2 AND excluded = 1
-               ) THEN 'delete_pending'
-               ELSE 'complete'
-             END,
-             next_attempt_at = 0, last_error = NULL, updated_at = ?3
-         WHERE character = ?1 AND segment = ?2 AND status = 'submitted'`,
-      )
-      .run(character, segment, new Date().toISOString()).changes > 0;
-  }
-
-  markMemoryRetainSkipped(character: string, segment: number): boolean {
-    return this.#db
-      .query(
-        `UPDATE history_memory_retain
-         SET status = CASE
-               WHEN EXISTS (
-                 SELECT 1 FROM history_segments
-                 WHERE character = ?1 AND idx = ?2 AND excluded = 1
-               ) THEN 'excluded'
-               ELSE 'skipped'
-             END,
-             attempts = attempts + 1, next_attempt_at = 0,
-             last_error = NULL, updated_at = ?3
-         WHERE character = ?1 AND segment = ?2 AND status IN ('pending', 'excluded')`,
-      )
-      .run(character, segment, new Date().toISOString()).changes > 0;
-  }
-
-  markMemoryRetainFailure(
-    character: string,
-    segment: number,
-    error: string,
-    retryAt: number,
-  ): boolean {
-    return this.#db
-      .query(
-        `UPDATE history_memory_retain
-         SET status = CASE
-               WHEN EXISTS (
-                 SELECT 1 FROM history_segments
-                 WHERE character = ?1 AND idx = ?2 AND excluded = 1
-               ) THEN 'delete_pending'
-               ELSE 'pending'
-             END,
-             attempts = attempts + 1, next_attempt_at = ?4,
-             last_error = ?3, remote_operation_id = NULL, updated_at = ?5
-         WHERE character = ?1 AND segment = ?2`,
-      )
-      .run(character, segment, error, retryAt, new Date().toISOString()).changes > 0;
-  }
-
-  markMemoryDeleteComplete(character: string, segment: number): boolean {
-    return this.#db
-      .query(
-        `UPDATE history_memory_retain
-         SET status = CASE
-               WHEN EXISTS (
-                 SELECT 1 FROM history_segments
-                 WHERE character = ?1 AND idx = ?2 AND excluded = 0
-               ) THEN 'pending'
-               ELSE 'excluded'
-             END,
-             remote_operation_id = NULL, attempts = 0,
-             next_attempt_at = 0, last_error = NULL, updated_at = ?3
-         WHERE character = ?1 AND segment = ?2 AND status = 'delete_pending'`,
-      )
-      .run(character, segment, new Date().toISOString()).changes > 0;
-  }
-
-  markMemoryDeleteFailure(
-    character: string,
-    segment: number,
-    error: string,
-    retryAt: number,
-  ): boolean {
-    return this.#db
-      .query(
-        `UPDATE history_memory_retain
-         SET status = CASE
-               WHEN EXISTS (
-                 SELECT 1 FROM history_segments
-                 WHERE character = ?1 AND idx = ?2 AND excluded = 0
-               ) THEN 'pending'
-               ELSE 'delete_pending'
-             END,
-             attempts = attempts + 1, next_attempt_at = ?4,
-             last_error = ?3, updated_at = ?5
-         WHERE character = ?1 AND segment = ?2`,
-      )
-      .run(character, segment, error, retryAt, new Date().toISOString()).changes > 0;
+      .run(character, idx, state).changes > 0;
   }
 
   setLabel(character: string, idx: number, label: string | null): boolean {
@@ -872,7 +638,7 @@ export class HistoryStore {
       .query(
         `INSERT INTO history_segments
              (character, idx, file, message_count, compacted_at, compaction_id, committed,
-              memory_before, memory_after, excluded, memory_retain, label, note)
+              memory_before, memory_after, excluded, memory_doc, label, note)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
          ON CONFLICT (character, idx) DO UPDATE SET
            file = excluded.file,
@@ -883,7 +649,7 @@ export class HistoryStore {
            memory_before = excluded.memory_before,
            memory_after = excluded.memory_after,
            excluded = excluded.excluded,
-           memory_retain = excluded.memory_retain,
+           memory_doc = excluded.memory_doc,
            label = excluded.label,
            note = excluded.note`,
       )
@@ -898,7 +664,7 @@ export class HistoryStore {
         entry.memory_before ?? null,
         entry.memory_after ?? null,
         entry.excluded === true ? 1 : 0,
-        entry.retain === true ? 1 : 0,
+        entry.retain === true && entry.excluded !== true ? "pending" : null,
         entry.label ?? null,
         entry.note ?? null,
       );
@@ -926,20 +692,6 @@ export class HistoryStore {
     this.#db
       .query("DELETE FROM history_segments WHERE character = ?1 AND idx = ?2")
       .run(character, idx);
-    this.#db
-      .query("DELETE FROM history_memory_retain WHERE character = ?1 AND segment = ?2")
-      .run(character, idx);
-  }
-
-  #enqueueMemoryRetain(character: string, segment: number, excluded: boolean): void {
-    this.#db
-      .query(
-        `INSERT OR IGNORE INTO history_memory_retain
-           (character, segment, status, remote_operation_id, attempts,
-            next_attempt_at, last_error, updated_at)
-         VALUES (?1, ?2, ?3, NULL, 0, 0, NULL, ?4)`,
-      )
-      .run(character, segment, excluded ? "excluded" : "pending", new Date().toISOString());
   }
 
   #committedSegmentTurnCount(character: string, idx: number): number {
@@ -1096,8 +848,11 @@ function migrate(db: Database): void {
   if (!columns.some((column) => column.name === "excluded")) {
     db.run("ALTER TABLE history_segments ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0");
   }
-  if (!columns.some((column) => column.name === "memory_retain")) {
-    db.run("ALTER TABLE history_segments ADD COLUMN memory_retain INTEGER NOT NULL DEFAULT 0");
+  if (!columns.some((column) => column.name === "memory_doc")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN memory_doc TEXT");
+  }
+  if (columns.some((column) => column.name === "memory_retain")) {
+    db.run("DROP TABLE IF EXISTS history_memory_retain");
   }
   if (!columns.some((column) => column.name === "label")) {
     db.run("ALTER TABLE history_segments ADD COLUMN label TEXT");
