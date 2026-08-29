@@ -92,8 +92,7 @@ interface World {
 function recorder(calls: string[]): ConfigRuntime {
   return {
     reloadRuntimeConfig: () => calls.push("reloadRuntimeConfig"),
-    setUsageConfig: () => calls.push("setUsageConfig"),
-    setCacheKeepaliveCeiling: () => calls.push("setCacheKeepaliveCeiling"),
+    adoptGlobalConfig: () => calls.push("adoptGlobalConfig"),
     notifyPromptSnapshotRefreshed: (c) => calls.push(`notifyPromptSnapshotRefreshed:${c}`),
   };
 }
@@ -613,11 +612,7 @@ describe("configReload", () => {
     await check(row("config_reload", "apply adopts the config on disk"), w, () =>
       configReload(w.ctx, { apply: true }),
     );
-    expect(w.calls).toEqual([
-      "reloadRuntimeConfig",
-      "setUsageConfig",
-      "setCacheKeepaliveCeiling",
-    ]);
+    expect(w.calls).toEqual(["adoptGlobalConfig", "reloadRuntimeConfig"]);
   });
 
   test("a broken config aborts before adopting anything", async () => {
@@ -680,9 +675,8 @@ describe("configReload", () => {
 
     expect(w.calls).toEqual([
       "notifyPromptSnapshotRefreshed:mid",
+      "adoptGlobalConfig",
       "reloadRuntimeConfig",
-      "setUsageConfig",
-      "setCacheKeepaliveCeiling",
     ]);
   });
 
@@ -701,5 +695,62 @@ describe("configReload", () => {
       ),
     ).toEqual(r.changed_after as string[]);
     expect(w.calls).not.toContain("notifyPromptSnapshotRefreshed:mid");
+  });
+});
+
+describe("secrets in config output", () => {
+  const SECRETS = [
+    "[notifications.ntfy]",
+    'url = "https://ntfy.example.com"',
+    'topic = "shore"',
+    'token = "tk_do_not_leak"',
+    "",
+    "[mcp.weather]",
+    'command = "weather-mcp"',
+    "",
+    "[mcp.weather.env]",
+    'WEATHER_API_KEY = "env_do_not_leak"',
+    "",
+    "[mcp.remote]",
+    'url = "https://mcp.example.com"',
+    "",
+    "[mcp.remote.headers]",
+    'Authorization = "Bearer hdr_do_not_leak"',
+    "",
+  ].join("\n");
+
+  const sentinels = ["tk_do_not_leak", "env_do_not_leak", "hdr_do_not_leak"];
+
+  test("a full config dump redacts them", async () => {
+    const w = await build(undefined, SECRETS);
+    const blob = JSON.stringify(config(w.ctx, {}));
+    for (const sentinel of sentinels) expect(blob).not.toContain(sentinel);
+    expect(blob).toContain("<redacted>");
+  });
+
+  test("asking for the key directly redacts it too", async () => {
+    const w = await build(undefined, SECRETS);
+    expect(config(w.ctx, { key: "notifications.ntfy.token" })).toMatchObject({
+      key: "notifications.ntfy.token",
+      config: "<redacted>",
+    });
+    const headers = JSON.stringify(config(w.ctx, { key: "mcp" }));
+    expect(headers).not.toContain("hdr_do_not_leak");
+    expect(headers).not.toContain("env_do_not_leak");
+  });
+
+  test("non-secret neighbours are still readable", async () => {
+    const w = await build(undefined, SECRETS);
+    expect(config(w.ctx, { key: "notifications.ntfy.url" })).toMatchObject({
+      config: "https://ntfy.example.com",
+    });
+    expect(config(w.ctx, { key: "mcp.weather.command" })).toMatchObject({
+      config: "weather-mcp",
+    });
+  });
+
+  test("an unset secret reads as empty, not as one that is set", async () => {
+    const w = await build(undefined, "[notifications.ntfy]\ntopic = \"shore\"\n");
+    expect(config(w.ctx, { key: "notifications.ntfy.token" })).toMatchObject({ config: "" });
   });
 });

@@ -15,6 +15,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
+import { ConfigDuration } from "../src/config/duration.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -204,7 +205,7 @@ describe("running a heartbeat", () => {
     expect(seen.every((r) => r.context?.character === "ada")).toBe(true);
   });
 
-  test("a tool's media payload is described, not serialized as an empty object", async () => {
+  test("a tool's media payload is attached the way chat attaches it", async () => {
     const config = await world();
     const seen: SidecarRequest[] = [];
     const executor = new InProcessAutonomyExecutor({
@@ -241,9 +242,98 @@ describe("running a heartbeat", () => {
     const results = (seen[1]?.messages ?? [])
       .flatMap((m) => m.content)
       .filter((b) => b.type === "tool_result");
-    expect(results.map((b) => b.content)).toEqual([
-      "[image/png, 5 bytes returned, not included here]",
-    ]);
+    expect(results).toHaveLength(1);
+
+    const content = results[0]?.content;
+    expect(Array.isArray(content)).toBe(true);
+    const blocks = content as ContentBlock[];
+    expect(blocks[0]?.type).toBe("text");
+    expect((blocks[0] as { text: string }).text).toContain("[image/png, 5 bytes attached, saved to");
+    expect(blocks[1]).toMatchObject({
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: "aGVsbG8=" },
+    });
+  });
+
+  test("a heartbeat tool obeys the configured deadline, as chat does", async () => {
+    const config = await world();
+    config.app.tools.timeout = ConfigDuration.fromMillis(40);
+    const seen: SidecarRequest[] = [];
+    let released = false;
+
+    const executor = new InProcessAutonomyExecutor({
+      registry: registryFor(config),
+      cache: new LastRequestCache(),
+      tools: {
+        mcpRegistry: {
+          call: async () => {
+            await new Promise((resolve) => {
+              setTimeout(resolve, 5_000);
+            });
+            released = true;
+            return interpretResult({ content: [{ type: "text", text: "too late" }] });
+          },
+        },
+      },
+      providers: {
+        anthropic: scriptedProvider(
+          [
+            response(
+              [{ type: "tool_use", id: "t1", name: "mcp__srv__slow", input: {} }],
+              "tool_use",
+            ),
+            response([{ type: "text", text: "done" }]),
+          ],
+          seen,
+        ),
+      },
+    });
+
+    await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+    const results = (seen[1]?.messages ?? [])
+      .flatMap((m) => m.content)
+      .filter((b) => b.type === "tool_result");
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ is_error: true });
+    expect(String((results[0] as { content: unknown }).content)).toContain("timed out");
+    expect(released).toBe(false);
+  });
+
+  test("a heartbeat tool call with bad arguments is rejected before it runs", async () => {
+    const config = await world();
+    config.app.tools.enabled_tools = ["web_search"];
+    const seen: SidecarRequest[] = [];
+
+    const executor = new InProcessAutonomyExecutor({
+      registry: registryFor(config),
+      cache: new LastRequestCache(),
+      providers: {
+        anthropic: scriptedProvider(
+          [
+            response(
+              [{ type: "tool_use", id: "t1", name: "web_search", input: { query: 7 } }],
+              "tool_use",
+            ),
+            response([{ type: "text", text: "done" }]),
+          ],
+          seen,
+        ),
+      },
+    });
+
+    await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+    const results = (seen[1]?.messages ?? [])
+      .flatMap((m) => m.content)
+      .filter((b) => b.type === "tool_result");
+    expect(results[0]).toMatchObject({ is_error: true });
+    expect(String((results[0] as { content: unknown }).content)).toContain(
+      "was not run because",
+    );
+    expect(String((results[0] as { content: unknown }).content)).toContain(
+      "Nothing was executed and no state changed",
+    );
   });
 
   test("set_next_wake goes to the runner's clock and quotes what it got", async () => {

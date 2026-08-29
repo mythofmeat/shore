@@ -339,6 +339,31 @@ describe("CharacterRegistry", () => {
   }
 });
 
+test("concurrent first loads of one character resolve to the same engine", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  const dataDir = join(root, "data");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeCharacter(configDir, "Alice", true);
+  mkdirSync(join(dataDir, "Alice"), { recursive: true });
+
+  const registry = await CharacterRegistry.create(
+    configDir,
+    dataDir,
+    loadFrom(join(configDir, "config.toml")),
+  );
+
+  const engines = await Promise.all([
+    registry.getOrCreate("Alice"),
+    registry.getOrCreate("Alice"),
+    registry.getOrCreate("Alice"),
+  ]);
+
+  expect(engines[1]).toBe(engines[0]);
+  expect(engines[2]).toBe(engines[0]);
+});
+
 test("opening a character seals tool calls interrupted by a daemon restart", async () => {
   const root = makeRoot();
   const configDir = join(root, "config");

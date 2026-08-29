@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS payloads (
 
 const HASH_BYTES = 16;
 const BLOB_RAW_UNDER = 256;
+const MAX_PAYLOAD_BYTES = 33_554_432;
 
 export interface Usage {
   input_tokens: number;
@@ -297,7 +298,7 @@ export class CallStore {
   }
 
   storePayload(data: Uint8Array | string): number {
-    const bytes = typeof data === "string" ? Buffer.from(data, "utf8") : data;
+    const bytes = capturedBytes(typeof data === "string" ? Buffer.from(data, "utf8") : data);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const chunks = chunkPayload(bytes);
     const manifest = new Uint8Array(chunks.length * HASH_BYTES);
@@ -875,6 +876,18 @@ function entryOf(op: DiffOp, chunk: PayloadChunk): PayloadDiffEntry {
 
 function decodeLossy(bytes: Uint8Array): string {
   return new TextDecoder("utf-8").decode(bytes);
+}
+
+function capturedBytes(bytes: Uint8Array): Uint8Array {
+  if (bytes.byteLength <= MAX_PAYLOAD_BYTES) return bytes;
+  const notice = Buffer.from(
+    `\n\n[shore: payload truncated, kept ${String(MAX_PAYLOAD_BYTES)} of ${String(bytes.byteLength)} bytes]`,
+    "utf8",
+  );
+  const out = new Uint8Array(MAX_PAYLOAD_BYTES + notice.byteLength);
+  out.set(bytes.subarray(0, MAX_PAYLOAD_BYTES), 0);
+  out.set(notice, MAX_PAYLOAD_BYTES);
+  return out;
 }
 
 function chunkPayload(bytes: Uint8Array): Uint8Array[] {

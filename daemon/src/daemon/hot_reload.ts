@@ -20,7 +20,7 @@ export interface ConfigWatcherOptions {
 
 export function startConfigWatcher(
   options: ConfigWatcherOptions,
-): { stop: () => void } | undefined {
+): { stop: () => Promise<void> } | undefined {
   const debounceMs = options.debounceMs ?? DEBOUNCE_MS;
   const pending = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -93,11 +93,12 @@ export function startConfigWatcher(
   });
 
   return {
-    stop: () => {
+    stop: async () => {
       stopped = true;
       if (timer !== undefined) clearTimeout(timer);
       watcher.close();
       workspaceWatcher?.close();
+      await inFlight;
       options.log?.info?.("Config hot reload watcher stopped");
     },
   };

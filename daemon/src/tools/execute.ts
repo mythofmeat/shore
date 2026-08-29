@@ -46,6 +46,7 @@ export interface ToolRun {
   rejected: boolean;
   durationMs: number;
   window?: ToolResultWindow;
+  value?: unknown;
 }
 
 export async function executeToolUse(
@@ -129,6 +130,7 @@ export async function runToolUse(
     rejected: false,
     durationMs: dispatchMs,
     window: windowed,
+    value: okValue,
   };
 }
 

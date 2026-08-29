@@ -30,8 +30,7 @@ sdk = "openrouter"
 
 const silentRuntime = (): ConfigRuntime => ({
   reloadRuntimeConfig: () => {},
-  setUsageConfig: () => {},
-  setCacheKeepaliveCeiling: () => {},
+  adoptGlobalConfig: () => {},
   notifyPromptSnapshotRefreshed: () => {},
 });
 

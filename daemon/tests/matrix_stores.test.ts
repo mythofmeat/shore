@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -185,5 +185,46 @@ describe("per-room view preferences", () => {
     const second = new ViewPrefs(path);
     expect(second.room("!a:example.com").tools).toBe(true);
     expect(second.room("!b:example.com").tools).toBe(false);
+  });
+});
+
+describe("sidecar durability", () => {
+  test("a corrupt file is set aside rather than silently read as empty", () => {
+    const root = scratch();
+    const path = join(root, "bindings.json");
+    writeFileSync(path, "{ not json at all");
+
+    const rooms = new RoomBindings(path);
+    expect(rooms.entries()).toEqual([]);
+    expect(readdirSync(root).some((f) => f.startsWith("bindings.json.corrupt."))).toBe(true);
+    expect(existsSync(path)).toBe(false);
+  });
+
+  test("a missing file is just a first run, with nothing set aside", () => {
+    const root = scratch();
+    const rooms = new RoomBindings(join(root, "bindings.json"));
+    expect(rooms.entries()).toEqual([]);
+    expect(readdirSync(root)).toEqual([]);
+  });
+
+  test("a write that cannot land is reported, not swallowed", () => {
+    const root = scratch();
+    const rooms = new RoomBindings(join(root, "nested", "bindings.json"));
+    rmSync(root, { recursive: true, force: true });
+    writeFileSync(root, "this is a file, so nothing can be created under it");
+    expect(() => rooms.bind("!room:example.com", "alice")).toThrow();
+  });
+
+  test("the temporary file is unique per write, so writers cannot collide", () => {
+    const root = scratch();
+    const path = join(root, "bindings.json");
+    const rooms = new RoomBindings(path);
+    rooms.bind("!a:example.com", "alice");
+    rooms.bind("!b:example.com", "bob");
+    expect(readdirSync(root)).toEqual(["bindings.json"]);
+    expect(new RoomBindings(path).entries()).toEqual([
+      ["alice", "!a:example.com"],
+      ["bob", "!b:example.com"],
+    ]);
   });
 });

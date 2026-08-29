@@ -259,7 +259,7 @@ export class Bridge {
       );
       return;
     }
-    this.#options.rooms.bind(roomId, only);
+    if (!(await this.#persistBinding(roomId, only))) return;
     await this.#options.bot.sendNotice(roomId, `This room is now bound to **${only}**.`);
   }
 
@@ -282,8 +282,26 @@ export class Bridge {
       await this.#options.bot.sendNotice(roomId, `No such character: \`${character}\`.`);
       return;
     }
-    this.#options.rooms.bind(roomId, character);
+    if (!(await this.#persistBinding(roomId, character))) return;
     await this.#options.bot.sendNotice(roomId, `This room is now bound to **${character}**.`);
+  }
+
+  async #persistBinding(roomId: string, character: string): Promise<boolean> {
+    try {
+      this.#options.rooms.bind(roomId, character);
+      return true;
+    } catch (e) {
+      this.#options.log?.warn?.("failed to persist room binding", {
+        room_id: roomId,
+        character,
+        error: String(e),
+      });
+      await this.#options.bot.sendNotice(
+        roomId,
+        `Could not save that binding, so it would not survive a restart: ${String(e)}`,
+      );
+      return false;
+    }
   }
 
   async #view(roomId: string, key: string | undefined, value: boolean | undefined): Promise<void> {

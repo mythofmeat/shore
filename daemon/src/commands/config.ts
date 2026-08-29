@@ -1,9 +1,9 @@
 import { required } from "../util/required.ts";
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { atomicWriteSync } from "../engine/atomic.ts";
 import { join } from "node:path";
 
-import { ConfigDuration } from "../config/duration.ts";
 import { discoverCharacters, type Env } from "../config/dirs.ts";
 import {
   ConfigError,
@@ -13,7 +13,7 @@ import {
   type LoadedConfig,
 } from "../config/loader.ts";
 import { findModel, NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
-import { serializeConfigValue } from "../config/serialize.ts";
+import { redactSecrets, serializeConfigValue } from "../config/serialize.ts";
 import { CATALOG_SECTIONS, defaultAppConfig } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
@@ -31,8 +31,7 @@ import type { Args } from "./navigation.ts";
 
 export interface ConfigRuntime {
   reloadRuntimeConfig(fresh: LoadedConfig): void;
-  setUsageConfig(fresh: LoadedConfig): void;
-  setCacheKeepaliveCeiling(ceiling: ConfigDuration): void;
+  adoptGlobalConfig(fresh: LoadedConfig): void;
   notifyPromptSnapshotRefreshed(character: string): void;
 }
 
@@ -182,10 +181,10 @@ function catalogSections(ctx: ConfigContext): Record<string, unknown> {
 }
 
 function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
-  return {
+  return redactSecrets({
     ...(serializeConfigValue(ctx.config.app) as Record<string, unknown>),
     ...catalogSections(ctx),
-  };
+  }) as Record<string, unknown>;
 }
 
 export function reportedDefaults(): Record<string, unknown> {
@@ -293,6 +292,17 @@ function targetFile(ctx: ConfigContext, path: readonly string[]): string {
   return ctx.configPath;
 }
 
+function restoreConfigFile(file: string, before: string, existed: boolean): void {
+  try {
+    if (existed) atomicWriteSync(file, before);
+    else rmSync(file, { force: true });
+  } catch (e) {
+    throw internalError(
+      `${file} was left holding a rejected edit: restoring it failed: ${(e as Error).message}`,
+    );
+  }
+}
+
 function readOrEmpty(file: string): string {
   try {
     return readFileSync(file, "utf8");
@@ -328,8 +338,10 @@ function commitConfigKey(
     throw e;
   }
 
+  const existed = existsSync(file);
+
   try {
-    writeFileSync(file, written);
+    atomicWriteSync(file, written);
   } catch (e) {
     throw internalError(`failed to write ${file}: ${(e as Error).message}`);
   }
@@ -338,7 +350,7 @@ function commitConfigKey(
   try {
     fresh = loadConfig(ctx.configPath, loaderOptions(ctx));
   } catch (e) {
-    writeFileSync(file, before);
+    restoreConfigFile(file, before, existed);
     throw invalidRequest(`${rejection} was rejected: ${message(e)}`);
   }
 
@@ -487,8 +499,7 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
 }
 
 function adopt(ctx: ConfigContext, fresh: LoadedConfig): void {
+  ctx.runtime.adoptGlobalConfig(fresh);
   ctx.runtime.reloadRuntimeConfig(fresh);
-  ctx.runtime.setUsageConfig(fresh);
-  ctx.runtime.setCacheKeepaliveCeiling(fresh.app.cache.keepalive_max);
   ctx.config = fresh;
 }
