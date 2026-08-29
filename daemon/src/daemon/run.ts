@@ -275,7 +275,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
   const done = (async () => {
     await served;
-    watcher?.stop();
+    await watcher?.stop();
     discovery?.stop();
     await bounded(matrixBridge.stop(), "matrix bridge", log);
     await bounded(handlerDone, "message handler", log);

@@ -8,11 +8,11 @@ import { pathTriggersReload, startConfigWatcher } from "../src/daemon/hot_reload
 const DIR = "/tmp/shore-test-config";
 const FILE = join(DIR, "config.toml");
 
-const stoppers: (() => void)[] = [];
+const stoppers: (() => Promise<void>)[] = [];
 const roots: string[] = [];
 
 afterEach(async () => {
-  for (const stop of stoppers.splice(0)) stop();
+  for (const stop of stoppers.splice(0)) await stop();
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
@@ -114,7 +114,7 @@ describe("the watcher", () => {
       debounceMs: 60,
     });
     expect(watcher).toBeDefined();
-    stoppers.push(() => watcher?.stop());
+    stoppers.push(async () => { await watcher?.stop(); });
 
     await writeFile(configPath, "a = 1\n");
     await writeFile(join(dir, "models.toml"), "b = 2\n");
@@ -144,7 +144,7 @@ describe("the watcher", () => {
       },
       debounceMs: 150,
     });
-    stoppers.push(() => watcher?.stop());
+    stoppers.push(async () => { await watcher?.stop(); });
 
     await writeFile(configPath, "a = 1\n");
     await new Promise((resolve) => {
@@ -181,7 +181,7 @@ describe("the watcher", () => {
       knownCharacter: () => false,
       debounceMs: 60,
     });
-    stoppers.push(() => watcher?.stop());
+    stoppers.push(async () => { await watcher?.stop(); });
 
     await mkdir(join(dir, "characters", "ada", "workspace"), { recursive: true });
     await writeFile(join(dir, "characters", "ada", "workspace", "SOUL.md"), "You are ada.\n");
@@ -218,13 +218,55 @@ describe("the watcher", () => {
       setTimeout(resolve, 120);
     });
 
-    watcher?.stop();
+    const stopping = watcher?.stop();
     release();
+    await stopping;
     await new Promise((resolve) => {
       setTimeout(resolve, 150);
     });
 
     expect(calls).toBe(1);
+  });
+
+  test("stop waits for a reload already in flight", async () => {
+    const dir = await tempRoot();
+    const configPath = join(dir, "config.toml");
+    await writeFile(configPath, "");
+    let started = 0;
+    let finished = 0;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const watcher = startConfigWatcher({
+      configPath,
+      configDir: dir,
+      reload: async () => {
+        started += 1;
+        await gate;
+        finished += 1;
+      },
+      debounceMs: 40,
+    });
+
+    await writeFile(configPath, "a = 1\n");
+    await until(() => started === 1);
+
+    let stopped = false;
+    const stopping = (watcher?.stop() ?? Promise.resolve()).then(() => {
+      stopped = true;
+    });
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 60);
+    });
+    expect(stopped).toBe(false);
+    expect(finished).toBe(0);
+
+    release();
+    await stopping;
+    expect(finished).toBe(1);
   });
 
   test("a workspace save does not wake it at all", async () => {
@@ -244,7 +286,7 @@ describe("the watcher", () => {
       },
       debounceMs: 40,
     });
-    stoppers.push(() => watcher?.stop());
+    stoppers.push(async () => { await watcher?.stop(); });
 
     await writeFile(join(workspace, "facts.toml"), "x = 1\n");
     await writeFile(join(dir, "characters", "ada", "workspace", "SOUL.md"), "hi\n");
@@ -275,7 +317,7 @@ describe("the watcher", () => {
     await new Promise((resolve) => {
       setTimeout(resolve, 30);
     });
-    watcher?.stop();
+    await watcher?.stop();
     await new Promise((resolve) => {
       setTimeout(resolve, 250);
     });

@@ -24,7 +24,7 @@ import { backfillLedgerCosts } from "./ledger/usage.ts";
 import { setSubscriptionProviders } from "./ledger/store.ts";
 import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
 import { ledgerFor } from "./ledger/record.ts";
-import { setCallObserver } from "./ledger/record.ts";
+import { closeLedgers, setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
 import { captureProviders } from "./llm/capture.ts";
 import { withResolvedCredential } from "./llm/generate.ts";
@@ -269,6 +269,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       await mcp.current.shutdown();
       uninstallWireCapture();
       callStore?.close();
+      closeLedgers();
     },
   };
 }
@@ -304,6 +305,7 @@ export function startRuntimeClocks(
       autonomyTimer.stop();
       rotation.stop();
       costBackfill.stop();
+      setCallObserver(undefined);
     },
   };
 }

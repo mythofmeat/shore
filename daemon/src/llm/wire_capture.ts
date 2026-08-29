@@ -32,6 +32,7 @@ export interface WireExchange {
 export type WireSink = (exchange: WireExchange) => void;
 
 const scopes = new AsyncLocalStorage<WireScope>();
+const MAX_CAPTURED_BODY_BYTES = 33_554_432;
 const INSTALLED = Symbol.for("shore.wireCapture.installed");
 
 export function newWireScope(
@@ -196,7 +197,7 @@ async function drain(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value !== undefined) {
+      if (value !== undefined && total < MAX_CAPTURED_BODY_BYTES) {
         chunks.push(value);
         total += value.byteLength;
       }

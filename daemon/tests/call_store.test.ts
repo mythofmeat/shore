@@ -356,6 +356,29 @@ describe("rotating a store", () => {
   });
 });
 
+describe("a payload larger than one call may store", () => {
+  test("is truncated to the cap and says so, so the newest-call exemption stays bounded", () => {
+    const store = CallStore.openInMemory();
+    const oversized = "x".repeat(33_554_432 + 4096);
+    const id = store.storePayload(oversized);
+    const loaded = store.loadPayload(id);
+    expect(loaded).not.toBeNull();
+    const text = Buffer.from(loaded as Uint8Array).toString("utf8");
+    expect(text.length).toBeLessThan(oversized.length);
+    expect(text).toContain("payload truncated");
+    expect(text).toContain("33554432");
+    store.close();
+  });
+
+  test("a payload at or under the cap is stored whole", () => {
+    const store = CallStore.openInMemory();
+    const exact = "y".repeat(1024);
+    const loaded = store.loadPayload(store.storePayload(exact));
+    expect(Buffer.from(loaded as Uint8Array).toString("utf8")).toBe(exact);
+    store.close();
+  });
+});
+
 describe("the schema a store opens with", () => {
   test("a database opened twice is left alone the second time", () => {
     const first = CallStore.openInMemory();

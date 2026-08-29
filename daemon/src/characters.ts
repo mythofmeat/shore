@@ -85,7 +85,7 @@ export class CharacterRegistry {
   readonly #configDir: string;
   readonly #dataDir: string;
   readonly #onHistory: HistoryListener | undefined;
-  readonly #engines = new Map<string, ConversationEngine>();
+  readonly #engines = new Map<string, Promise<ConversationEngine>>();
   readonly #charConfigs = new Map<string, LoadedConfig | undefined>();
   #available: string[] = [];
   #selected: string | undefined;
@@ -149,8 +149,19 @@ export class CharacterRegistry {
     if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);
 
     const existing = this.#engines.get(name);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) return await existing;
 
+    const loading = this.#load(name);
+    this.#engines.set(name, loading);
+    try {
+      return await loading;
+    } catch (e) {
+      if (this.#engines.get(name) === loading) this.#engines.delete(name);
+      throw e;
+    }
+  }
+
+  async #load(name: string): Promise<ConversationEngine> {
     const engine = await ConversationEngine.load(name, this.#dataDir, this.#onHistory);
     const recovered = await engine.recoverInterruptedToolLoop();
     if (recovered > 0) {
@@ -158,7 +169,6 @@ export class CharacterRegistry {
         `shore: recovered ${String(recovered)} interrupted tool call(s) for ${name}`,
       );
     }
-    this.#engines.set(name, engine);
     return engine;
   }
 
