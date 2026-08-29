@@ -11,6 +11,7 @@ import json
 import sqlite3
 import sys
 import time
+import urllib.request
 
 import zstandard
 from hindsight_client import Hindsight
@@ -26,7 +27,7 @@ CONTEXT = (
 )
 
 
-def segments(db, character, since, limit):
+def segments(db, character, limit, done):
     rows = db.execute(
         """SELECT idx, message_count FROM history_segments
             WHERE character = ? AND committed = 1 AND excluded = 0 AND message_count > 0
@@ -37,6 +38,8 @@ def segments(db, character, since, limit):
     for idx, count in rows:
         if len(out) == limit:
             break
+        if f"shore:{character}:seg{idx}" in done:
+            continue
         out.append((idx, count))
     return out
 
@@ -67,6 +70,16 @@ def document(db, character, segment, user, char_label):
     return "\n\n".join(lines), stamps
 
 
+def imported(url, character):
+    request = urllib.request.Request(
+        f"{url}/v1/default/banks/{character}/documents?limit=10000"
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        payload = json.load(response)
+    items = payload.get("items") or payload.get("documents") or []
+    return {item.get("document_id") or item.get("id") for item in items}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--history", required=True, help="path to shore's history.db")
@@ -77,11 +90,19 @@ def main() -> int:
     parser.add_argument("--since", default="", help="oldest date to import, YYYY-MM-DD")
     parser.add_argument("--limit", type=int, default=1, help="how many segments to import")
     parser.add_argument("--dry-run", action="store_true", help="list the work, make no calls")
+    parser.add_argument(
+        "--skip-existing", action="store_true",
+        help="skip segments already imported, so an interrupted run resumes",
+    )
     args = parser.parse_args()
 
     db = sqlite3.connect(f"file:{args.history}?mode=ro", uri=True)
     try:
-        planned = segments(db, args.character, args.since, args.limit)
+        done = imported(args.url, args.character) if args.skip_existing else set()
+        if done:
+            print(f"{len(done)} segment(s) already imported, skipping those")
+
+        planned = segments(db, args.character, args.limit, done)
         if not planned:
             print("nothing to import")
             return 0

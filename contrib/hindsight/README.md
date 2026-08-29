@@ -87,7 +87,12 @@ Run one segment first and read what it produced:
       --character qifei --user Ren --pronoun his --limit 1
 
 `--dry-run` lists the work without calling the model. `--since YYYY-MM-DD` stops
-at a date. Widen `--limit` once single-segment runs look right. Reruns are safe.
+at a date. Widen `--limit` once single-segment runs look right.
+
+A rerun is always safe, but `--skip-existing` also makes it cheap: it reads the
+bank's document list first and skips what is already there, so an interrupted
+import resumes instead of starting over. `--limit` counts what is left to do,
+not what was considered.
 
 Turn auto-consolidation **off** for a bulk import. It runs after every retain,
 competes with the next document's extraction for the same LLM, and gets slower as
