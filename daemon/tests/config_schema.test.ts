@@ -15,8 +15,7 @@ const NO_INSTANCES = { instancesAt: () => [] };
 
 const runtime = (): ConfigRuntime => ({
   reloadRuntimeConfig: () => {},
-  setUsageConfig: () => {},
-  setCacheKeepaliveCeiling: () => {},
+  adoptGlobalConfig: () => {},
   notifyPromptSnapshotRefreshed: () => {},
 });
 

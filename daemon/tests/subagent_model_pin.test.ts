@@ -40,8 +40,7 @@ prompt = "you are a librarian"
 
 const silentRuntime = (): ConfigRuntime => ({
   reloadRuntimeConfig: () => {},
-  setUsageConfig: () => {},
-  setCacheKeepaliveCeiling: () => {},
+  adoptGlobalConfig: () => {},
   notifyPromptSnapshotRefreshed: () => {},
 });
 

@@ -106,8 +106,7 @@ async function harness(characters: readonly string[]): Promise<Harness> {
     },
     runtime: {
       reloadRuntimeConfig: () => {},
-      setUsageConfig: () => {},
-      setCacheKeepaliveCeiling: () => {},
+      adoptGlobalConfig: () => {},
       notifyPromptSnapshotRefreshed: () => {},
     },
     dispatchRuntime: {
