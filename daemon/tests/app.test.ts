@@ -887,13 +887,15 @@ describe("a config.toml sets what it says and nothing else", () => {
   });
 
   test("memory.recall and archive-only rotation", () => {
-    const cfg = parsed("[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nmode = \"inject\"\nserver = \"hindsight\"\nrecent_messages = 3\nmax_memories = 8\n");
+    const cfg = parsed("[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nmode = \"inject\"\nserver = \"hindsight\"\nquery_from = \"recent\"\nrecent_messages = 3\nmax_memories = 8\ntimeout = \"1500ms\"\n");
     expect(at(cfg, "memory.compaction.write_memory")).toBe(false);
     expect(at(cfg, "memory.recall")).toMatchObject({
       mode: "inject",
       server: "hindsight",
+      query_from: "recent",
       recent_messages: 3,
       max_memories: 8,
+      timeout: "1500ms",
     });
   });
 

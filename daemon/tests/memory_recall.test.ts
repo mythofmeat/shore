@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { defaultAppConfig } from "../src/config/app.ts";
+import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -73,8 +74,9 @@ describe("memory recall", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.tool).toBe("mcp__hindsight__recall");
     expect(calls[0]?.args).toEqual({
-      query: "morning to you\n\nwhat was that music script i wrote",
+      query: "what was that music script i wrote",
       max_tokens: 2048,
+      query_timestamp: "2026-01-01T10:00:00-05:00",
     });
     expect(block).toBe(
       "- Ren wrote beet-smartplaylist.py (said 2026-07-04)\n" +
@@ -169,10 +171,42 @@ describe("memory recall", () => {
     expect(diagnostics.memory_recall.lastN(1)[0]).toMatchObject({ status: "no_query" });
   });
 
-  test("query takes the last messages and skips empty ones", () => {
+  test("query takes only the latest user message by default", () => {
     expect(recallQuery([...CONVERSATION, message("assistant", "m4", "  ")], 2)).toBe(
+      "what was that music script i wrote",
+    );
+  });
+
+  test("an empty latest user message does not fall back to stale user text", () => {
+    expect(recallQuery([...CONVERSATION, message("user", "m4", "  ")], 2)).toBe("");
+  });
+
+  test("recent query mode preserves the old multi-message behavior", () => {
+    expect(recallQuery([...CONVERSATION, message("assistant", "m4", "  ")], 2, "recent")).toBe(
       "morning to you\n\nwhat was that music script i wrote",
     );
+  });
+
+  test("times out, records the failure, and proceeds without a block", async () => {
+    const config = world();
+    config.app.memory.recall.timeout = ConfigDuration.fromMillis(5);
+    const diagnostics = new Diagnostics();
+    const block = await runMemoryRecall(
+      { config, character: "qifei", messages: CONVERSATION },
+      {
+        diagnostics,
+        mcpRegistry: {
+          call: () => new Promise(() => {}),
+        },
+      },
+    );
+
+    expect(block).toBeUndefined();
+    expect(diagnostics.memory_recall.lastN(1)[0]).toMatchObject({
+      status: "failed",
+      recalled: 0,
+      error: "memory recall timed out after 5ms",
+    });
   });
 
   test("result parsing survives junk from the server", () => {

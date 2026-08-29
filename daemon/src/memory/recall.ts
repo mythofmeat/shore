@@ -1,4 +1,5 @@
 import type { LoadedConfig } from "../config/loader.ts";
+import type { MemoryRecallQueryFrom } from "../config/app.ts";
 import type { MemoryRecallEntry } from "../diagnostics.ts";
 import type { Message } from "../engine/types.ts";
 import type { CallStore } from "../call_store.ts";
@@ -61,18 +62,30 @@ export async function runMemoryRecall(
     character: input.character,
   };
 
-  const query = recallQuery(input.messages, recall.recent_messages);
+  const query = recallQuery(input.messages, recall.recent_messages, recall.query_from);
   if (query === "") {
     deps.diagnostics.memory_recall.push({ ...base, status: "no_query", recalled: 0, elapsed_ms: 0 });
     return undefined;
   }
 
   const started = clock();
+  const deadline = AbortSignal.timeout(recall.timeout.asMillis());
+  const signal = input.signal === undefined
+    ? deadline
+    : AbortSignal.any([input.signal, deadline]);
+  const queryTimestamp = latestUserTimestamp(input.messages);
   try {
-    const raw = await deps.mcpRegistry.call(
-      `mcp__${recall.server}__${recall.tool}`,
-      { query, max_tokens: recall.max_tokens },
-      input.signal,
+    const raw = await settleBeforeAbort(
+      deps.mcpRegistry.call(
+        `mcp__${recall.server}__${recall.tool}`,
+        {
+          query,
+          max_tokens: recall.max_tokens,
+          ...(queryTimestamp === undefined ? {} : { query_timestamp: queryTimestamp }),
+        },
+        signal,
+      ),
+      signal,
     );
     const memories = parseRecallResult(raw).slice(0, recall.max_memories);
     const status = memories.length === 0 ? "no_match" : "recalled";
@@ -91,7 +104,9 @@ export async function runMemoryRecall(
     });
     return memories.length === 0 ? undefined : formatMemories(memories);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = deadline.aborted && input.signal?.aborted !== true
+      ? `memory recall timed out after ${recall.timeout.toString()}`
+      : error instanceof Error ? error.message : String(error);
     const elapsed = clock() - started;
     deps.diagnostics.memory_recall.push({
       ...base,
@@ -149,12 +164,55 @@ function keepTranscript(
   }
 }
 
-export function recallQuery(messages: readonly Message[], limit: number): string {
-  const recent = messages
-    .filter((message) => message.content.trim() !== "")
-    .slice(-limit)
+export function recallQuery(
+  messages: readonly Message[],
+  limit: number,
+  from: MemoryRecallQueryFrom = "user",
+): string {
+  if (from === "user") {
+    const content = latestUserMessage(messages)?.content.trim() ?? "";
+    return truncate(content, MESSAGE_CHARS);
+  }
+  const eligible = messages.filter((message) => message.content.trim() !== "");
+  const recent = eligible.slice(-limit)
     .map((message) => truncate(message.content.trim(), MESSAGE_CHARS));
   return truncate(recent.join("\n\n"), QUERY_CHARS);
+}
+
+function latestUserTimestamp(messages: readonly Message[]): string | undefined {
+  return latestUserMessage(messages)?.timestamp;
+}
+
+function latestUserMessage(messages: readonly Message[]): Message | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === "user") return message;
+  }
+  return undefined;
+}
+
+function settleBeforeAbort<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason)));
+    };
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+    void work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
 }
 
 export function parseRecallResult(raw: unknown): RecalledMemory[] {

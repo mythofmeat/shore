@@ -15,7 +15,9 @@ server = "hindsight"
 tool = "recall"       # defaults to "recall"
 max_memories = 6
 max_tokens = 2048
-recent_messages = 2
+query_from = "user"    # user | recent; defaults to the latest user message
+recent_messages = 2    # only used by query_from = "recent"
+timeout = "3s"
 ```
 
 The bank a server answers for is part of its URL, not a call argument, so each
@@ -23,19 +25,23 @@ character points at its own endpoint from its own config overlay.
 
 `memory.recall.server` names the `[mcp.<server>]` entry to call and
 `memory.recall.tool` the tool on it, defaulting to `recall`; shore calls
-`mcp__<server>__<tool>` itself with `{ query, max_tokens }`, then keeps the first
-`max_memories` results. A reply is read from `results` or `memories`, and a date
-from `occurred_start` or `occurred_at`, so both hindsight's shape and a plainer
-one parse. Deliberately do **not** grant that tool to any
-character: `McpRegistry.call` resolves against the full tool surface while the
-model's tool list is built separately from `tools.enabled_tools`, so the daemon
-calls it and the character never sees it. Granting it would hand the decision
-back to the model, which is the problem this exists to solve.
+`mcp__<server>__<tool>` itself with `{ query, max_tokens, query_timestamp }`,
+then keeps the first `max_memories` results. By default the query is the latest
+user message; `query_from = "recent"` restores the older behavior of
+joining the last `recent_messages` messages regardless of role. The timestamp
+of the latest user message anchors Hindsight's temporal ranking. A reply is read
+from `results` or `memories`, and a date from `occurred_start` or `occurred_at`,
+so both hindsight's shape and a plainer one parse. Deliberately do **not** grant
+that tool to any character: `McpRegistry.call` resolves against the full tool
+surface while the model's tool list is built separately from
+`tools.enabled_tools`, so the daemon calls it and the character never sees it.
+Granting it would hand the decision back to the model, which is the problem this
+exists to solve.
 
 ## The read path
 
-`runGenerationCore` calls recall before it builds the request, using the last
-`recent_messages` messages as the query. What comes back is appended as a single
+`runGenerationCore` calls recall before it builds the request, using the latest
+user message as the query by default. What comes back is appended as a single
 `system`-role message at the **tail of the messages array**, after everything
 real, and is never persisted.
 
@@ -59,9 +65,9 @@ is room under the four-marker limit, but it means changing `tsMessageBreakpoints
 for every provider path, so it is deliberately left alone until the injected
 version has been watched in `shore usage` for a while.
 
-Recall fails open. An unavailable server, a malformed reply, or a timeout logs a
-diagnostics entry and the turn proceeds with no block. Recall does not run on a
-regenerate.
+Recall fails open. An unavailable server, a malformed reply, or the configured
+`timeout` logs a diagnostics entry and the turn proceeds with no block. Recall
+does not run on a regenerate.
 
 ## The write path
 

@@ -579,6 +579,10 @@ export type MemoryRecallMode = "off" | "inject";
 
 const MEMORY_RECALL_MODES: readonly MemoryRecallMode[] = ["off", "inject"];
 
+export type MemoryRecallQueryFrom = "user" | "recent";
+
+const MEMORY_RECALL_QUERY_FROM: readonly MemoryRecallQueryFrom[] = ["user", "recent"];
+
 export interface MemoryRecallConfig {
   mode: MemoryRecallMode;
   server: string;
@@ -586,6 +590,8 @@ export interface MemoryRecallConfig {
   max_memories: number;
   max_tokens: number;
   recent_messages: number;
+  query_from: MemoryRecallQueryFrom;
+  timeout: ConfigDuration;
 }
 
 export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
@@ -595,6 +601,8 @@ export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
   max_memories: 6,
   max_tokens: 2048,
   recent_messages: 2,
+  query_from: "user",
+  timeout: ConfigDuration.fromSecs(3),
 });
 
 const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
@@ -607,6 +615,8 @@ const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
     max_memories: readUsize,
     max_tokens: readUsize,
     recent_messages: readUsize,
+    query_from: readEnum(MEMORY_RECALL_QUERY_FROM),
+    timeout: readDuration,
   },
 };
 
@@ -626,6 +636,9 @@ export function validateMemoryRecall(recall: MemoryRecallConfig): string | undef
   }
   if (recall.max_memories === 0) {
     return "memory.recall.max_memories must be greater than 0 when recall is enabled";
+  }
+  if (recall.timeout.asMillisExact() === 0n) {
+    return "memory.recall.timeout must be greater than 0 when recall is enabled";
   }
   if (recall.recent_messages > 20) {
     return "memory.recall.recent_messages cannot exceed 20";

@@ -501,12 +501,15 @@ describe("a config shore refuses, and what it says", () => {
     expect(refused("\n[memory.recall]\nmode = \"inject\"\nserver = \"absent\"\nmax_tokens = 0\n")).toContain(
       "memory.recall.max_tokens must be greater than 0",
     );
+    expect(refused("\n[memory.recall]\nmode = \"inject\"\nserver = \"absent\"\ntimeout = \"0s\"\n")).toContain(
+      "memory.recall.timeout must be greater than 0",
+    );
     expect(refused("\n[memory.recall]\nmode = \"inject\"\nserver = \"absent\"\n")).toContain(
       "memory.recall.server names 'absent', which has no [mcp.<server>] definition",
     );
   });
   test("off recall permits zero limits because it performs no work", () => {
-    expect(accepted("\n[memory.recall]\nmode = \"off\"\nrecent_messages = 0\nmax_memories = 0\nserver = \"absent\"\n")).toBeDefined();
+    expect(accepted("\n[memory.recall]\nmode = \"off\"\nrecent_messages = 0\nmax_memories = 0\ntimeout = \"0s\"\nserver = \"absent\"\n")).toBeDefined();
   });
   test("usage check precedes compaction check", () => {
     expect(refused("\n[usage]\ntimezone = \"nope\"\n\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("usage.timezone must be \"local\" or \"utc\", got \"nope\"");

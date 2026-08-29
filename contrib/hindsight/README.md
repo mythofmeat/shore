@@ -68,11 +68,17 @@ url = "http://mcp-hindsight:8888/mcp/qifei/"
 mode = "inject"
 server = "hindsight"
 max_memories = 6
-recent_messages = 2
+query_from = "user"
+timeout = "3s"
 ```
 
 `memory.recall.tool` defaults to `recall` and `max_tokens` to 2048, which is
 what hindsight wants, so neither needs to be written down.
+
+The latest user message is the recall query by default, avoiding the character's
+own previous reply dominating retrieval. `query_from = "recent"` restores the
+older last-`recent_messages` behavior for comparison. Recall fails open after
+`timeout`, so a slow or cold Hindsight server does not block the turn.
 
 Do **not** grant `mcp__hindsight__*` to any character. The daemon calls `recall`
 itself; granting it would hand the decision back to the model.
