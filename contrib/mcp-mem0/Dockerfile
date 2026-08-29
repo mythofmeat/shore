@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM docker pull python:slim
 
 WORKDIR /app
 COPY requirements.txt .

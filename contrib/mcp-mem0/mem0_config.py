@@ -40,7 +40,7 @@ def build_config() -> dict:
                 "api_key": key,
                 "openai_base_url": env("llm_base_url"),
                 "temperature": 0,
-                "max_tokens": 2000,
+                "max_tokens": 8192,
             },
         },
         "embedder": {
