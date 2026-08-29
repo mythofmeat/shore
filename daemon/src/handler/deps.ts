@@ -558,7 +558,10 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     },
     historyIndex: {
       progressFor: (character) => runtime.historyIndex.progress(character),
-      noteMutation: (character) => runtime.historyIndex.noteMutation(character),
+      noteMutation: (character) => {
+        runtime.historyIndex.noteMutation(character);
+        runtime.memoryRetain.noteWork(character);
+      },
     },
   };
 }

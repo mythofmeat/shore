@@ -36,6 +36,8 @@ export interface HindsightRetainServiceOptions {
   now?: () => number;
   timerIntervalMs?: number;
   pollIntervalMs?: number;
+  idlePauseMs?: number;
+  maxIdlePauseMs?: number;
 }
 
 export interface HindsightDocument {
@@ -89,6 +91,9 @@ export class HindsightRetainService {
   readonly #now: () => number;
   readonly #timerIntervalMs: number;
   readonly #pollIntervalMs: number;
+  readonly #idlePauseMs: number;
+  readonly #maxIdlePauseMs: number;
+  readonly #idle = new Map<string, { rounds: number; until: number }>();
   readonly #stop = new AbortController();
   #timer: ReturnType<typeof setInterval> | undefined;
   #running: Promise<void> | undefined;
@@ -103,14 +108,22 @@ export class HindsightRetainService {
     this.#now = options.now ?? Date.now;
     this.#timerIntervalMs = options.timerIntervalMs ?? 1_000;
     this.#pollIntervalMs = options.pollIntervalMs ?? 5_000;
+    this.#idlePauseMs = options.idlePauseMs ?? 1_000;
+    this.#maxIdlePauseMs = options.maxIdlePauseMs ?? 5 * 60_000;
   }
 
   register(registration: HindsightRetainRegistration): void {
     this.#registrations.set(registration.character, registration);
+    this.#idle.delete(registration.character);
   }
 
   unregister(character: string): void {
     this.#registrations.delete(character);
+    this.#idle.delete(character);
+  }
+
+  noteWork(character: string): void {
+    this.#idle.delete(character);
   }
 
   registeredCharacters(): string[] {
@@ -151,10 +164,16 @@ export class HindsightRetainService {
       if (character === undefined) continue;
       const registration = this.#registrations.get(character);
       if (registration === undefined) continue;
+      const now = this.#now();
+      if ((this.#idle.get(character)?.until ?? 0) > now) continue;
       const store = HistoryStore.open(registration.historyPath);
       try {
-        const job = store.nextMemoryRetainJob(character, this.#now());
-        if (job === undefined) continue;
+        const job = store.nextMemoryRetainJob(character, now);
+        if (job === undefined) {
+          this.#sleep(character, now, store.nextMemoryRetainDueAt(character));
+          continue;
+        }
+        this.#idle.delete(character);
         this.#lastPicked = character;
         await this.#process(store, registration, job);
       } finally {
@@ -162,6 +181,19 @@ export class HindsightRetainService {
       }
       break;
     }
+  }
+
+  #sleep(character: string, now: number, dueAt: number | undefined): void {
+    if (dueAt !== undefined) {
+      this.#idle.set(character, { rounds: 0, until: Math.max(dueAt, now) });
+      return;
+    }
+    const rounds = (this.#idle.get(character)?.rounds ?? 0) + 1;
+    const grown = this.#idlePauseMs * 2 ** Math.min(rounds - 1, 20);
+    this.#idle.set(character, {
+      rounds,
+      until: now + Math.min(grown, this.#maxIdlePauseMs),
+    });
   }
 
   async #process(

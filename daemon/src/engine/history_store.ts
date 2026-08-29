@@ -557,6 +557,26 @@ export class HistoryStore {
     };
   }
 
+  nextMemoryRetainDueAt(character: string): number | undefined {
+    const row = this.#db
+      .query(
+        `SELECT MIN(q.next_attempt_at) AS due
+         FROM history_memory_retain q
+         JOIN history_segments s
+           ON s.character = q.character AND s.idx = q.segment
+         WHERE q.character = ?1 AND s.committed = 1
+           AND q.status IN ('pending', 'submitted', 'delete_pending')
+           AND (
+             q.status <> 'pending' OR NOT EXISTS (
+               SELECT 1 FROM history_memory_retain active
+               WHERE active.character = q.character AND active.status = 'submitted'
+             )
+           )`,
+      )
+      .get(character) as { due: number | null } | null;
+    return row?.due ?? undefined;
+  }
+
   markMemoryRetainSubmitted(
     character: string,
     segment: number,

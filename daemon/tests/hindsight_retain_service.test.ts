@@ -404,6 +404,72 @@ describe("hindsight retain service", () => {
     await service.shutdown();
   });
 
+  test("an idle character backs off and a mutation wakes it immediately", async () => {
+    const { path } = queuedHistory("hindsight-idle-backoff");
+    const store = HistoryStore.open(path);
+    store.markMemoryRetainSkipped("ada", 0);
+    store.close();
+    let now = 0;
+    const service = new HindsightRetainService(
+      { call: async () => ({}) },
+      { now: () => now, idlePauseMs: 1_000, maxIdlePauseMs: 8_000 },
+    );
+    register(service, path);
+
+    const ticked: number[] = [];
+    const original = HistoryStore.open.bind(HistoryStore);
+    (HistoryStore as unknown as { open: typeof HistoryStore.open }).open = (dbPath: string) => {
+      ticked.push(now);
+      return original(dbPath);
+    };
+    try {
+      for (now = 0; now <= 20_000; now += 1_000) await service.runOnce();
+      expect(ticked).toEqual([0, 1_000, 3_000, 7_000, 15_000]);
+
+      ticked.length = 0;
+      service.noteWork("ada");
+      now = 20_500;
+      await service.runOnce();
+      expect(ticked).toEqual([20_500]);
+    } finally {
+      (HistoryStore as unknown as { open: typeof HistoryStore.open }).open = original;
+      await service.shutdown();
+    }
+  });
+
+  test("a queued retry wakes exactly when it is due, not on the idle curve", async () => {
+    const { path } = queuedHistory("hindsight-due-wake");
+    let now = 0;
+    const service = new HindsightRetainService(
+      {
+        call: async () => {
+          throw new Error("offline");
+        },
+      },
+      { now: () => now, idlePauseMs: 60_000, maxIdlePauseMs: 60_000 },
+    );
+    register(service, path);
+
+    await service.runOnce();
+    const store = HistoryStore.open(path);
+    expect(store.nextMemoryRetainDueAt("ada")).toBe(1_000);
+    store.close();
+
+    const ticked: number[] = [];
+    const original = HistoryStore.open.bind(HistoryStore);
+    (HistoryStore as unknown as { open: typeof HistoryStore.open }).open = (dbPath: string) => {
+      ticked.push(now);
+      return original(dbPath);
+    };
+    try {
+      for (now = 100; now <= 1_000; now += 100) await service.runOnce();
+      expect(ticked).toEqual([100, 1_000]);
+    } finally {
+      (HistoryStore as unknown as { open: typeof HistoryStore.open }).open = original;
+      await service.shutdown();
+    }
+  });
+
   test("an excluded segment is never read or retained", async () => {
     const { path } = queuedHistory("hindsight-excluded");
     const store = HistoryStore.open(path);

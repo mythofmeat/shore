@@ -109,6 +109,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       const character = history.selected_character;
       if (character !== undefined) {
         historyIndex?.noteMutation(character);
+        memoryRetain?.noteWork(character);
       }
       options.onHistory?.(history);
     },
