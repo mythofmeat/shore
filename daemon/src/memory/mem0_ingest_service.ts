@@ -3,16 +3,22 @@ import { join } from "node:path";
 
 import { shoreLog } from "../log.ts";
 
-import { MessageStore } from "../engine/message_store.ts";
+import { HistoryStore } from "../engine/history_store.ts";
+import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
-const ACTIVE_JSONL_FILE = "active.jsonl";
 const CURSOR_FILE = "mem0_cursor.json";
 const MESSAGE_CHARS = 4_000;
+
+export interface Mem0Cursor {
+  segment: number;
+  ordinal: number;
+}
 
 export interface Mem0IngestRegistration {
   character: string;
   characterDataDir: string;
+  historyDbPath: string;
   server: string;
 }
 
@@ -22,23 +28,27 @@ export interface Mem0IngestServiceOptions {
   idleDelayMs?: number | undefined;
   batchSize?: number | undefined;
   timerIntervalMs?: number | undefined;
+  pollPauseMs?: number | undefined;
+  maxPollPauseMs?: number | undefined;
   maxRetryDelayMs?: number | undefined;
 }
 
 export interface Mem0IngestProgress {
   character: string;
   server: string;
-  cursor: string | undefined;
+  cursor: Mem0Cursor | undefined;
   pending: boolean;
   failures: number;
   retryAt: number;
+  nextPollAt: number;
   lastError: string | undefined;
 }
 
 interface Entry extends Mem0IngestRegistration {
-  dirty: boolean;
-  cursor: string | undefined;
+  cursor: Mem0Cursor | undefined;
   loaded: boolean;
+  idleRounds: number;
+  nextPollAt: number;
   failures: number;
   retryAt: number;
   lastError: string | undefined;
@@ -50,6 +60,8 @@ export class Mem0IngestService {
   readonly #idleDelayMs: number;
   readonly #batchSize: number;
   readonly #timerIntervalMs: number;
+  readonly #pollPauseMs: number;
+  readonly #maxPollPauseMs: number;
   readonly #maxRetryDelayMs: number;
   #mcpRegistry: Pick<McpRegistry, "call"> | undefined;
   #idleSince: number;
@@ -65,6 +77,8 @@ export class Mem0IngestService {
     this.#idleDelayMs = options.idleDelayMs ?? 30_000;
     this.#batchSize = options.batchSize ?? 8;
     this.#timerIntervalMs = options.timerIntervalMs ?? 1_000;
+    this.#pollPauseMs = options.pollPauseMs ?? 1_000;
+    this.#maxPollPauseMs = options.maxPollPauseMs ?? 5 * 60_000;
     this.#maxRetryDelayMs = options.maxRetryDelayMs ?? 60_000;
     this.#idleSince = this.#now();
   }
@@ -75,12 +89,15 @@ export class Mem0IngestService {
 
   register(registration: Mem0IngestRegistration): void {
     const previous = this.#entries.get(registration.character);
-    const moved = previous?.characterDataDir !== registration.characterDataDir;
+    const moved =
+      previous?.characterDataDir !== registration.characterDataDir ||
+      previous?.historyDbPath !== registration.historyDbPath;
     this.#entries.set(registration.character, {
       ...registration,
-      dirty: previous === undefined ? true : previous.dirty || moved,
       cursor: moved ? undefined : previous?.cursor,
       loaded: moved ? false : previous?.loaded ?? false,
+      idleRounds: moved ? 0 : previous?.idleRounds ?? 0,
+      nextPollAt: moved ? 0 : previous?.nextPollAt ?? 0,
       failures: moved ? 0 : previous?.failures ?? 0,
       retryAt: moved ? 0 : previous?.retryAt ?? 0,
       lastError: moved ? undefined : previous?.lastError,
@@ -102,9 +119,10 @@ export class Mem0IngestService {
       character: entry.character,
       server: entry.server,
       cursor: entry.cursor,
-      pending: entry.dirty,
+      pending: entry.idleRounds === 0,
       failures: entry.failures,
       retryAt: entry.retryAt,
+      nextPollAt: entry.nextPollAt,
       lastError: entry.lastError,
     };
   }
@@ -112,7 +130,8 @@ export class Mem0IngestService {
   noteMutation(character: string): void {
     const entry = this.#entries.get(character);
     if (entry === undefined) return;
-    entry.dirty = true;
+    entry.idleRounds = 0;
+    entry.nextPollAt = 0;
   }
 
   beginForeground(): () => void {
@@ -159,14 +178,15 @@ export class Mem0IngestService {
 
     for (const character of this.#roundRobin()) {
       const entry = this.#entries.get(character);
-      if (entry === undefined || !entry.dirty || now < entry.retryAt) continue;
+      if (entry === undefined || now < entry.retryAt || now < entry.nextPollAt) continue;
       this.#lastPicked = character;
       try {
         const sent = await this.#ingest(entry);
         entry.failures = 0;
         entry.retryAt = 0;
         entry.lastError = undefined;
-        if (sent === 0) entry.dirty = false;
+        entry.idleRounds = sent > 0 ? 0 : entry.idleRounds + 1;
+        entry.nextPollAt = this.#now() + this.#pauseFor(entry.idleRounds);
       } catch (error) {
         entry.failures += 1;
         entry.lastError = error instanceof Error ? error.message : String(error);
@@ -177,6 +197,12 @@ export class Mem0IngestService {
       }
       return;
     }
+  }
+
+  #pauseFor(idleRounds: number): number {
+    if (idleRounds === 0) return this.#pollPauseMs;
+    const grown = this.#pollPauseMs * 2 ** Math.min(idleRounds, 20);
+    return Math.min(grown, this.#maxPollPauseMs);
   }
 
   #roundRobin(): string[] {
@@ -192,28 +218,26 @@ export class Mem0IngestService {
       entry.loaded = true;
     }
 
-    const pending = (await activeMessages(entry.characterDataDir))
-      .filter((message) => entry.cursor === undefined || message.timestamp > entry.cursor)
-      .slice(0, this.#batchSize);
-    if (pending.length === 0) return 0;
+    const batch = nextBatch(entry.historyDbPath, entry.character, entry.cursor, this.#batchSize);
+    if (batch === undefined) return 0;
 
     const registry = this.#mcpRegistry;
     if (registry === undefined) return 0;
     await registry.call(`mcp__${entry.server}__add`, {
-      messages: pending.map((message) => ({
+      messages: batch.messages.map((message) => ({
         role: message.role,
         content: `[${message.timestamp.slice(0, 16)}] ${message.text.slice(0, MESSAGE_CHARS)}`,
       })),
       character: entry.character,
-      metadata: { ts: pending[0]?.timestamp ?? "" },
+      metadata: {
+        ts: batch.messages[0]?.timestamp ?? "",
+        segment: batch.cursor.segment,
+      },
     });
 
-    const last = pending[pending.length - 1];
-    if (last !== undefined) {
-      entry.cursor = last.timestamp;
-      await writeCursor(entry.characterDataDir, last.timestamp);
-    }
-    return pending.length;
+    entry.cursor = batch.cursor;
+    await writeCursor(entry.characterDataDir, batch.cursor);
+    return batch.messages.length;
   }
 }
 
@@ -223,42 +247,59 @@ interface IngestMessage {
   timestamp: string;
 }
 
-async function activeMessages(characterDataDir: string): Promise<IngestMessage[]> {
+interface IngestBatch {
+  messages: IngestMessage[];
+  cursor: Mem0Cursor;
+}
+
+function nextBatch(
+  historyDbPath: string,
+  character: string,
+  cursor: Mem0Cursor | undefined,
+  limit: number,
+): IngestBatch | undefined {
+  let store: HistoryStore;
   try {
-    const { store } = await MessageStore.loadWithRaw(join(characterDataDir, ACTIVE_JSONL_FILE));
-    return settledOnly(store.messages())
-      .flatMap((message) => {
-        const text = message.content.trim();
-        if (text === "" || message.timestamp === undefined) return [];
-        return [{ role: message.role, text, timestamp: message.timestamp }];
-      })
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    store = HistoryStore.open(historyDbPath);
   } catch {
-    return [];
+    return undefined;
   }
-}
+  try {
+    for (const record of store.entries(character)) {
+      if (record.excluded === true || record.message_count === 0) continue;
+      if (cursor !== undefined && record.idx < cursor.segment) continue;
+      const after = cursor !== undefined && record.idx === cursor.segment ? cursor.ordinal : -1;
 
-export function settledOnly<T extends { role: string }>(messages: readonly T[]): T[] {
-  let lastUser = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === "user") {
-      lastUser = index;
-      break;
+      const messages: IngestMessage[] = [];
+      let ordinal = after;
+      const archived = store.readSegment(character, record.idx);
+      for (let at = after + 1; at < archived.length && messages.length < limit; at += 1) {
+        const message = archived[at];
+        if (message === undefined || message.timestamp === undefined) continue;
+        const text = deriveContentFromBlocks(message.content_blocks, false).trim();
+        if (text === "") continue;
+        messages.push({ role: message.role, text, timestamp: message.timestamp });
+        ordinal = at;
+      }
+      if (messages.length > 0) return { messages, cursor: { segment: record.idx, ordinal } };
     }
+    return undefined;
+  } finally {
+    store.close();
   }
-  return lastUser < 0 ? [] : messages.slice(0, lastUser + 1);
 }
 
-async function readCursor(characterDataDir: string): Promise<string | undefined> {
+async function readCursor(characterDataDir: string): Promise<Mem0Cursor | undefined> {
   try {
     const raw = await readFile(join(characterDataDir, CURSOR_FILE), "utf8");
-    const parsed = JSON.parse(raw) as { cursor?: unknown };
-    return typeof parsed.cursor === "string" ? parsed.cursor : undefined;
+    const parsed = JSON.parse(raw) as { segment?: unknown; ordinal?: unknown };
+    if (typeof parsed.segment !== "number" || typeof parsed.ordinal !== "number") return undefined;
+    return { segment: parsed.segment, ordinal: parsed.ordinal };
   } catch {
     return undefined;
   }
 }
 
-async function writeCursor(characterDataDir: string, cursor: string): Promise<void> {
-  await writeFile(join(characterDataDir, CURSOR_FILE), JSON.stringify({ cursor }), "utf8");
+async function writeCursor(characterDataDir: string, cursor: Mem0Cursor): Promise<void> {
+  await writeFile(join(characterDataDir, CURSOR_FILE), JSON.stringify(cursor), "utf8");
 }

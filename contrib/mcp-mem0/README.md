@@ -4,8 +4,8 @@ mem0 as an MCP server, so shore can retrieve and record memories without the
 character having to decide to search.
 
 Shore calls `search` before each turn and injects the result as a transient
-prompt block; it calls `add` from a background service after each turn. Neither
-tool is granted to the character — `McpRegistry.call` resolves against the full
+prompt block; it calls `add` from a background service that reads archived,
+non-excluded conversation segments. Neither tool is granted to the character — `McpRegistry.call` resolves against the full
 tool surface, while the model's tool list is built separately from
 `tools.enabled_tools`, so these stay invisible to it.
 
@@ -13,9 +13,10 @@ tool surface, while the model's tool list is built separately from
 
 | variable | default |
 | --- | --- |
-| `MEM0_LLM_API_KEY` | required |
-| `MEM0_LLM_MODEL` | `deepseek/deepseek-v4-flash` |
-| `MEM0_LLM_BASE_URL` | `https://openrouter.ai/api/v1` |
+| `MEM0_LLM_API_KEY` | required, unless `MEM0_LLM_API_KEY_ENV` is set |
+| `MEM0_LLM_API_KEY_ENV` | names another variable to read the key from |
+| `MEM0_LLM_MODEL` | `deepseek-v4-flash` |
+| `MEM0_LLM_BASE_URL` | `https://api.deepseek.com` |
 | `MEM0_EMBEDDER` | `BAAI/bge-small-en-v1.5` |
 | `MEM0_EMBEDDER_DIMS` | `384` |
 | `MEM0_STORE` | `/data` |
@@ -31,9 +32,11 @@ Characters are isolated by `user_id`, so one store serves all of them.
 ## Backfill
 
 `backfill.py` imports history from shore's archive a slice at a time and keeps a
-cursor, so it can be run repeatedly without redoing work.
+cursor, so it can be run repeatedly without redoing work. It reads only
+committed, non-excluded segments, and opens the database read-only so it can run
+against a read-only bind mount of a live data directory.
 
-    python backfill.py --history /data/shore-data/history.db --character qifei --from 2026-07-12 --to 2026-08-01
+    python backfill.py --history /shore-data/history.db --character qifei --from 2026-07-12 --to 2026-08-01
 
 `--reembed <memories.json>` loads already-extracted memories instead of running
 extraction again, which is how an existing store is migrated to a new embedder.
@@ -45,18 +48,31 @@ Alongside the other MCP services in `compose.yaml`:
 ```yaml
   mcp-mem0:
     container_name: mcp-mem0
-    build: ./contrib/mcp-mem0
+    build:
+      context: ${SHORE_CONTEXT}#main:contrib/mcp-mem0
     init: true
     user: "1000:1000"
+    env_file:
+      - ./config/.env
     environment:
       - TZ=${TZ}
-      - MEM0_LLM_API_KEY=${DEEPSEEK_API_KEY}
+      - MEM0_LLM_API_KEY_ENV=DEEPSEEK_API_KEY
       - MEM0_LLM_BASE_URL=https://api.deepseek.com
-      - MEM0_LLM_MODEL=deepseek-chat
+      - MEM0_LLM_MODEL=deepseek-v4-flash-vision-exp
     volumes:
       - ./data/mem0:/data
+      - ./data/shore-data:/shore-data:ro
     restart: unless-stopped
 ```
+
+`env_file` is shore's own key file, and `MEM0_LLM_API_KEY_ENV` picks the one key
+out of it, so the extraction key is never written down twice and rotating it in
+one place is enough. It does mean every other provider key is visible in this
+container; `build_memory` already drops `OPENROUTER_API_KEY` because mem0's
+OpenAI client would otherwise hijack the configured base URL.
+
+`./data/shore-data` is mounted read-only purely so `backfill.py` can read
+`history.db`. The daemon reads its own archive directly and does not need it.
 
 and in shore's config:
 

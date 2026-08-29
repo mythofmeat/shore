@@ -11,6 +11,7 @@ import { CharacterRegistry } from "./characters.ts";
 import { characterDataDir, characterWorkspaceDir, pluginsDir, rustJoin } from "./config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
+import { HISTORY_DB_FILE } from "./engine/history_store.ts";
 import type { Message } from "./engine/types.ts";
 import type { SubagentTurn } from "./handler/generation.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
@@ -170,6 +171,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         mem0Ingest?.register({
           character,
           characterDataDir: characterDataDir(effective.dirs.data, character),
+          historyDbPath: rustJoin(effective.dirs.data, HISTORY_DB_FILE),
           server: recall.server,
         });
       }

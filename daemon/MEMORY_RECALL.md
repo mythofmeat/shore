@@ -55,24 +55,48 @@ regenerate.
 
 ## The write path
 
-`Mem0IngestService` feeds finished turns back, driven by the same
-`HistoryListener` that drives the history indexer, so it also sees autonomous
-and heartbeat turns. It is idle-gated, yields while a turn is in flight, does one
-batch per tick, backs off on failure, and keeps a per-character cursor in
-`mem0_cursor.json` so a restart resumes rather than re-ingests.
+`Mem0IngestService` reads **archived segments**, never the live conversation. It
+walks `history_segments` in order, skips any segment marked `excluded`, and keeps
+a per-character `{segment, ordinal}` cursor in `mem0_cursor.json` so a restart
+resumes rather than re-ingests. A batch never spans two segments, and every `add`
+carries `metadata.segment`, so a memory can be traced back to where it came from.
 
-It only ingests as far as the **last user message**. Anything after that can
-still be regenerated, and the cursor is a timestamp, so a regenerated reply would
-otherwise be ingested a second time and mem0 would learn from a response that was
-thrown away. The reply is picked up on the following turn, once the user has
-moved on and it is settled.
+Archive, not "the conversation ended", is the right boundary. Compaction retains
+`keep_recent_turns` and archives the rest, so a turn is archived exactly when it
+falls out of the live window — which is the moment memory has to start carrying
+it. While a turn is still in context, recalling it would only duplicate text the
+prompt already holds.
+
+Reading the archive is also what makes exclusion mean anything. `shore segments
+exclude N` and `shore clear --exclude` set a flag that used to be honoured by the
+history search index alone; ingest honours it now too. Because a segment is
+excluded before it is ever ingested, nothing has to be deleted from mem0
+afterwards. Two limits follow from that and are deliberate:
+
+- Excluding a segment that has **already** been ingested does not remove its
+  memories. The server exposes `search` and `add` and no delete. `metadata.segment`
+  is the provenance a delete would need when one is written.
+- Re-including a segment the cursor has already passed does not bring it back.
+  The cursor only moves forward.
+
+It is idle-gated, yields while a turn is in flight, does one batch per tick, and
+backs off on failure. When the archive has nothing new the poll interval doubles
+from 1s up to 5 minutes, and any conversation activity resets it. There is no
+mutation flag to go stale, so a compaction that archives during a quiet spell is
+still picked up without waiting for the next message.
 
 ## Backfilling
 
 `contrib/mcp-mem0/backfill.py` imports history from the archive a slice at a
 time, through the server rather than by opening the store — embedded Qdrant is
 single-process and the server owns it. It keeps its own cursor, so it can be run
-repeatedly to bring the archive forward piecemeal.
+repeatedly to bring the archive forward piecemeal. It reads only committed,
+non-excluded segments and stamps `metadata.segment`, matching the daemon.
+
+It opens `history.db` read-only, so it can run against a read-only bind mount of
+a live data directory. SQLite cannot build a `-shm` there, so it reads the main
+database file and not the tail still sitting in the WAL; the daemon's own ingest
+covers that tail.
 
 ## Watching it
 

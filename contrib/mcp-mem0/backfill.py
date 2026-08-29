@@ -50,9 +50,13 @@ def read_messages(history: str, character: str, after: int, since: str, until: s
     db = sqlite3.connect(f"file:{history}?mode=ro", uri=True)
     try:
         rows = db.execute(
-            """SELECT m.id, m.role, m.timestamp, b.data, b.size, b.compressed
-                 FROM history_messages m JOIN history_blobs b ON b.hash = m.blocks_hash
+            """SELECT m.id, m.segment, m.role, m.timestamp, b.data, b.size, b.compressed
+                 FROM history_messages m
+                 JOIN history_blobs b ON b.hash = m.blocks_hash
+                 JOIN history_segments s
+                   ON s.character = m.character AND s.idx = m.segment
                 WHERE m.character = ? AND m.id > ?
+                  AND s.committed = 1 AND s.excluded = 0
                 ORDER BY m.segment, m.ordinal""",
             (character, after),
         ).fetchall()
@@ -60,7 +64,7 @@ def read_messages(history: str, character: str, after: int, since: str, until: s
         db.close()
 
     out = []
-    for row_id, role, timestamp, data, size, compressed in rows:
+    for row_id, segment, role, timestamp, data, size, compressed in rows:
         if since and timestamp[:10] < since:
             continue
         if until and timestamp[:10] >= until:
@@ -70,7 +74,15 @@ def read_messages(history: str, character: str, after: int, since: str, until: s
         except (ValueError, zstandard.ZstdError):
             continue
         if body:
-            out.append({"id": row_id, "role": role, "timestamp": timestamp, "text": body})
+            out.append(
+                {
+                    "id": row_id,
+                    "segment": segment,
+                    "role": role,
+                    "timestamp": timestamp,
+                    "text": body,
+                }
+            )
     return out
 
 
@@ -86,7 +98,12 @@ def added_count(result) -> int:
 
 
 async def ingest(client, character: str, messages: list, batch: int, workers: int) -> None:
-    batches = [messages[i : i + batch] for i in range(0, len(messages), batch)]
+    groups = []
+    for message in messages:
+        if not groups or groups[-1][0]["segment"] != message["segment"]:
+            groups.append([])
+        groups[-1].append(message)
+    batches = [g[i : i + batch] for g in groups for i in range(0, len(g), batch)]
     started = time.time()
     done = added = failed = 0
     gate = asyncio.Semaphore(workers)
@@ -104,7 +121,10 @@ async def ingest(client, character: str, messages: list, batch: int, workers: in
                     {
                         "messages": payload,
                         "character": character,
-                        "metadata": {"ts": chunk[0]["timestamp"]},
+                        "metadata": {
+                            "ts": chunk[0]["timestamp"],
+                            "segment": chunk[0]["segment"],
+                        },
                     },
                 )
                 added += added_count(result)

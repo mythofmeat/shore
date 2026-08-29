@@ -7,7 +7,7 @@ the vector store is an on-disk Qdrant. Only the extraction LLM leaves the machin
 import os
 
 DEFAULTS = {
-    "llm_model": "deepseek-chat",
+    "llm_model": "deepseek-v4-flash",
     "llm_base_url": "https://api.deepseek.com",
     "embedder": "BAAI/bge-small-en-v1.5",
     "embedder_dims": "384",
@@ -19,10 +19,18 @@ def env(name: str) -> str:
     return os.environ.get(f"MEM0_{name.upper()}") or DEFAULTS[name]
 
 
-def build_config() -> dict:
-    key = os.environ.get("MEM0_LLM_API_KEY")
+def api_key() -> str:
+    named = os.environ.get("MEM0_LLM_API_KEY_ENV")
+    key = os.environ.get(named) if named else os.environ.get("MEM0_LLM_API_KEY")
     if not key:
-        raise SystemExit("MEM0_LLM_API_KEY is required")
+        raise SystemExit(
+            f"{named} is empty" if named else "MEM0_LLM_API_KEY is required"
+        )
+    return key
+
+
+def build_config() -> dict:
+    key = api_key()
     store = env("store")
     return {
         "llm": {
