@@ -38,6 +38,16 @@ class FailingMemory:
         raise RuntimeError("provider unavailable")
 
 
+class SuccessfulMemory:
+    def add(self, **_arguments):
+        return {
+            "results": [
+                {"id": "one", "memory": "User likes brown switches", "event": "ADD"},
+                {"id": "two", "memory": "User owns a Keychron", "event": "ADD"},
+            ]
+        }
+
+
 class ServerTest(unittest.TestCase):
     def test_add_does_not_retry_by_default(self):
         memory = FailingMemory()
@@ -45,6 +55,16 @@ class ServerTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "after 1 attempt"):
             server.add([{"role": "user", "content": "hello"}], "ada")
         self.assertEqual(memory.calls, 1)
+
+    def test_add_returns_the_created_memory_text(self):
+        server._memory = SuccessfulMemory()
+        self.assertEqual(
+            server.add([{"role": "user", "content": "hello"}], "ada"),
+            {
+                "added": 2,
+                "memories": ["User likes brown switches", "User owns a Keychron"],
+            },
+        )
 
 
 if __name__ == "__main__":

@@ -55,8 +55,8 @@ slice without making an API call:
     python backfill.py --history /shore-data/history.db --character qifei \
       --dry-run --from 2026-08-01
 
-Run at most one mem0 batch and watch its message count, memories added,
-latency, and saved cursor:
+Run at most one mem0 batch and watch its message count, latency, saved cursor,
+and the text of every memory it created:
 
     python backfill.py --history /shore-data/history.db --character qifei \
       --from 2026-08-01

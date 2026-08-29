@@ -115,8 +115,9 @@ python backfill.py --history /shore-data/history.db --character qifei --dry-run 
 python backfill.py --history /shore-data/history.db --character qifei --from 2026-08-01
 ```
 
-Each real invocation prints the exact number of planned extraction calls, then
-the message count, memories added, latency, and saved cursor for every batch.
+Each real invocation prints the exact number of planned mem0 batches, then
+the message count, memories added, latency, saved cursor, and text of every
+created memory for each batch.
 Increase `--max-batches` only after several one-batch runs look healthy. The
 import reads only committed, non-excluded segments and stamps
 `metadata.segment`, matching the daemon.

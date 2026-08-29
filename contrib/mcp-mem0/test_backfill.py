@@ -131,6 +131,13 @@ class BackfillQueryTest(unittest.TestCase):
         self.assertEqual(len(batches), 1)
         self.assertEqual({message.position.segment for message in batches[0].messages}, {2})
 
+    def test_add_result_keeps_the_memory_text(self):
+        result = SimpleNamespace(
+            isError=False,
+            content=[SimpleNamespace(text='{"added": 2, "memories": ["one", "two"]}')],
+        )
+        self.assertEqual(backfill.add_result(result), (2, ["one", "two"]))
+
 
 class FakeClient:
     def __init__(self, outcomes):
@@ -163,7 +170,9 @@ class BackfillCheckpointTest(unittest.IsolatedAsyncioTestCase):
                     backfill.Batch([archived((2, 1))], backfill.Position(2, 1)),
                     backfill.Batch([archived((1, 1))], backfill.Position(1, 1)),
                 ]
-                client = FakeClient(['{"added": 1}', RuntimeError("provider unavailable")])
+                client = FakeClient(
+                    ['{"added": 1, "memories": ["new memory"]}', RuntimeError("provider unavailable")]
+                )
                 with self.assertRaisesRegex(RuntimeError, "provider unavailable"):
                     await backfill.ingest(client, "ada", batches, state, saved)
                 with open(backfill.state_path()) as handle:

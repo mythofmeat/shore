@@ -253,7 +253,7 @@ def make_batches(messages: list[ArchivedMessage], batch_size: int, maximum: int)
     return batches
 
 
-def added_count(result) -> int:
+def add_result(result) -> tuple[int, list[str]]:
     if getattr(result, "isError", False):
         details = " ".join(
             str(getattr(block, "text", "")) for block in getattr(result, "content", [])
@@ -263,7 +263,14 @@ def added_count(result) -> int:
         text = getattr(block, "text", None)
         if text:
             try:
-                return int(json.loads(text).get("added", 0))
+                parsed = json.loads(text)
+                added = int(parsed.get("added", 0))
+                memories = parsed.get("memories", [])
+                if not isinstance(memories, list) or not all(
+                    isinstance(memory, str) for memory in memories
+                ):
+                    raise TypeError("memories must be a list of strings")
+                return added, memories
             except (ValueError, AttributeError, TypeError):
                 raise RuntimeError(f"MCP add returned an invalid result: {text[:200]}")
     raise RuntimeError("MCP add returned no result")
@@ -298,7 +305,7 @@ async def ingest(
                     },
                 },
             )
-            added = added_count(result)
+            added, memories = add_result(result)
         except BaseException as error:
             elapsed = time.monotonic() - started
             print(
@@ -316,6 +323,11 @@ async def ingest(
             f"{elapsed:.1f}s; next before {batch.before.segment}:{batch.before.ordinal}{warning}",
             flush=True,
         )
+        for memory in memories:
+            rendered = memory.replace("\n", "\n    ")
+            print(f"  + {rendered}", flush=True)
+        if added > 0 and not memories:
+            print("  WARNING: server returned a count but no memory text; rebuild mcp-mem0", flush=True)
     print(f"stopped after the requested {len(batches)} batch(es); {total_added} memories added")
 
 

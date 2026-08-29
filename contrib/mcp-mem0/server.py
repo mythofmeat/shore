@@ -74,7 +74,11 @@ def add(
                 metadata=metadata or {},
                 infer=infer,
             )
-            return {"added": len(_results(raw) or [])}
+            results = [item for item in (_results(raw) or []) if isinstance(item, dict)]
+            return {
+                "added": len(results),
+                "memories": [item["memory"] for item in results if item.get("memory")],
+            }
         except Exception as error:
             last = error
     raise RuntimeError(f"mem0 add failed after {_add_attempts} attempt(s): {last}")
