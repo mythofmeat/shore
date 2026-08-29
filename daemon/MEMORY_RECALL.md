@@ -57,9 +57,17 @@ regenerate.
 
 `Mem0IngestService` reads **archived segments**, never the live conversation. It
 walks `history_segments` in order, skips any segment marked `excluded`, and keeps
-a per-character `{segment, ordinal}` cursor in `mem0_cursor.json` so a restart
-resumes rather than re-ingests. A batch never spans two segments, and every `add`
-carries `metadata.segment`, so a memory can be traced back to where it came from.
+a versioned per-character checkpoint in `mem0_cursor.json` so a restart resumes
+rather than re-ingests. A batch never spans two segments, and every `add` carries
+`metadata.segment`, so a memory can be traced back to where it came from.
+
+The first run is deliberately inert. With no checkpoint, the service records the
+current archive end as both its live cursor and an immutable
+`backfill_through` boundary, without making an `add` call. From then on the live
+cursor moves forward as newly archived segments are ingested. Starting the
+feature therefore never turns the existing archive into an automatic paid job.
+An old or malformed cursor also fails safe by skipping existing history and
+disabling automatic historical backfill; it never falls back to segment zero.
 
 Archive, not "the conversation ended", is the right boundary. Compaction retains
 `keep_recent_turns` and archives the rest, so a turn is archived exactly when it
@@ -87,11 +95,31 @@ still picked up without waiting for the next message.
 
 ## Backfilling
 
-`contrib/mcp-mem0/backfill.py` imports history from the archive a slice at a
-time, through the server rather than by opening the store — embedded Qdrant is
-single-process and the server owns it. It keeps its own cursor, so it can be run
-repeatedly to bring the archive forward piecemeal. It reads only committed,
-non-excluded segments and stamps `metadata.segment`, matching the daemon.
+`contrib/mcp-mem0/backfill.py` is the only path that imports history predating
+feature activation. It reads the daemon's immutable `backfill_through` boundary
+and moves backward from it while live ingest moves forward. Their ranges cannot
+overlap.
+
+The command makes **at most one mem0 batch by default**. `--max-batches` is a
+hard per-invocation batch bound, batches run sequentially, and the backfill
+cursor advances atomically after each successful call. A batch can involve more
+than one provider call because mem0 may extract facts and then update existing
+memories. The MCP server makes one whole-batch attempt by default. An MCP or
+provider failure stops the run without advancing past that batch. Backfill
+starts with the newest history, so an initial `--from` date can later be moved
+earlier without repeating the recent slice.
+
+```console
+python backfill.py --history /shore-data/history.db --character qifei --status --from 2026-08-01
+python backfill.py --history /shore-data/history.db --character qifei --dry-run --from 2026-08-01
+python backfill.py --history /shore-data/history.db --character qifei --from 2026-08-01
+```
+
+Each real invocation prints the exact number of planned extraction calls, then
+the message count, memories added, latency, and saved cursor for every batch.
+Increase `--max-batches` only after several one-batch runs look healthy. The
+import reads only committed, non-excluded segments and stamps
+`metadata.segment`, matching the daemon.
 
 It opens `history.db` read-only, so it can run against a read-only bind mount of
 a live data directory. SQLite cannot build a `-shm` there, so it reads the main
@@ -99,6 +127,12 @@ database file and not the tail still sitting in the WAL; the daemon's own ingest
 covers that tail.
 
 ## Watching it
+
+`backfill.py --status` is the write-side status view. It shows the advancing
+live cursor, fixed historical boundary, backward backfill cursor, and remaining
+eligible message count without making an API call. A running backfill prints one
+line after every extraction call. `shore trace recall` is the separate read-side
+view:
 
 ```console
 shore trace recall

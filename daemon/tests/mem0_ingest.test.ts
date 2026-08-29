@@ -40,7 +40,24 @@ interface World {
   dbPath: string;
 }
 
-async function world(segments: Archived[], active: Message[] = []): Promise<World> {
+const FROM_THE_START = { segment: 0, ordinal: -1 };
+
+function checkpoint(
+  cursor: { segment: number; ordinal: number },
+  backfillThrough: { segment: number; ordinal: number } = cursor,
+) {
+  return {
+    version: 1,
+    cursor,
+    backfill_through: backfillThrough,
+  };
+}
+
+async function world(
+  segments: Archived[],
+  active: Message[] = [],
+  seed: { segment: number; ordinal: number } | null = FROM_THE_START,
+): Promise<World> {
   const root = await mkdtemp(testTmp("shore-mem0-"));
   const dir = join(root, "ada");
   await mkdir(dir, { recursive: true });
@@ -48,6 +65,9 @@ async function world(segments: Archived[], active: Message[] = []): Promise<Worl
     join(dir, "active.jsonl"),
     active.map((m) => JSON.stringify(m)).join("\n") + (active.length === 0 ? "" : "\n"),
   );
+  if (seed !== null) {
+    await writeFile(join(dir, "mem0_cursor.json"), JSON.stringify(checkpoint(seed)));
+  }
 
   const dbPath = join(root, HISTORY_DB_FILE);
   const store = HistoryStore.open(dbPath);
@@ -196,10 +216,9 @@ describe("mem0 ingest service", () => {
     const made = service(place, registry);
 
     await made.runOnce();
-    expect(JSON.parse(await readFile(join(place.dir, "mem0_cursor.json"), "utf8"))).toEqual({
-      segment: 0,
-      ordinal: 2,
-    });
+    expect(JSON.parse(await readFile(join(place.dir, "mem0_cursor.json"), "utf8"))).toEqual(
+      checkpoint({ segment: 0, ordinal: 2 }, FROM_THE_START),
+    );
 
     await made.runOnce();
     expect(calls).toHaveLength(1);
@@ -210,7 +229,7 @@ describe("mem0 ingest service", () => {
     const place = await world([{ messages: MORNING }]);
     await writeFile(
       join(place.dir, "mem0_cursor.json"),
-      JSON.stringify({ segment: 0, ordinal: 1 }),
+      JSON.stringify(checkpoint({ segment: 0, ordinal: 1 })),
     );
     const { registry, sent } = recorder();
     const made = service(place, registry);
@@ -316,13 +335,95 @@ describe("mem0 ingest service", () => {
     expect(calls).toHaveLength(1);
   });
 
-  test("ingests nothing when the archive is empty", async () => {
-    const place = await world([]);
+  test("a first run starts at the end of the archive instead of importing it", async () => {
+    const place = await world([{ messages: MORNING }, { messages: EVENING }], [], null);
     const { calls, registry } = recorder();
     const made = service(place, registry);
 
     await made.runOnce();
     expect(calls).toHaveLength(0);
-    expect(made.progress("ada")?.cursor).toBeUndefined();
+    expect(JSON.parse(await readFile(join(place.dir, "mem0_cursor.json"), "utf8"))).toEqual(
+      checkpoint({ segment: 1, ordinal: 1 }),
+    );
+
+    await made.runOnce();
+    expect(calls).toHaveLength(0);
+  });
+
+  test("a seeded cursor still ingests everything after it", async () => {
+    const place = await world([{ messages: MORNING }, { messages: EVENING }]);
+    await writeFile(
+      join(place.dir, "mem0_cursor.json"),
+      JSON.stringify(checkpoint({ segment: 0, ordinal: 2 })),
+    );
+    const { calls, registry, sent } = recorder();
+    const made = service(place, registry);
+
+    await made.runOnce();
+    expect(calls).toHaveLength(1);
+    expect(sent(0).map((m) => m.content).join(" ")).toContain("the switches are browns");
+  });
+
+  test("ingests nothing when the archive is empty", async () => {
+    const place = await world([], [], null);
+    const { calls, registry } = recorder();
+    const made = service(place, registry);
+
+    await made.runOnce();
+    expect(calls).toHaveLength(0);
+    expect(made.progress("ada")?.cursor).toEqual({ segment: -1, ordinal: -1 });
+    expect(JSON.parse(await readFile(join(place.dir, "mem0_cursor.json"), "utf8"))).toEqual(
+      checkpoint({ segment: -1, ordinal: -1 }),
+    );
+  });
+
+  test("a legacy cursor skips existing history and disables automatic backfill", async () => {
+    const place = await world([{ messages: MORNING }, { messages: EVENING }]);
+    await writeFile(
+      join(place.dir, "mem0_cursor.json"),
+      JSON.stringify({ segment: 0, ordinal: 1 }),
+    );
+    const { calls, registry } = recorder();
+    const made = service(place, registry);
+
+    await made.runOnce();
+    expect(calls).toHaveLength(0);
+    expect(made.progress("ada")).toMatchObject({
+      cursor: { segment: 1, ordinal: 1 },
+      backfillThrough: { segment: -1, ordinal: -1 },
+    });
+  });
+
+  test("an initialization error never falls back to importing from the start", async () => {
+    const place = await world([], [], null);
+    const missingDir = join(place.dir, "missing");
+    const missingDb = join(missingDir, "history.db");
+    let clock = 1_000_000;
+    const { calls, registry } = recorder();
+    const made = service({ dir: place.dir, dbPath: missingDb }, registry, {
+      now: () => clock,
+    });
+
+    await made.runOnce();
+    expect(made.progress("ada")).toMatchObject({ failures: 1, cursor: undefined });
+
+    await mkdir(missingDir);
+    const store = HistoryStore.open(missingDb);
+    store.putSegment(
+      "ada",
+      0,
+      {
+        file: HISTORY_DB_FILE,
+        message_count: MORNING.length,
+        compacted_at: "2026-01-03T00:00:00Z",
+      },
+      MORNING,
+    );
+    store.close();
+    clock += 1_000;
+
+    await made.runOnce();
+    expect(calls).toHaveLength(0);
+    expect(made.progress("ada")?.cursor).toEqual({ segment: 0, ordinal: 2 });
   });
 });

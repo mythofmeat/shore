@@ -21,6 +21,7 @@ tool surface, while the model's tool list is built separately from
 | `MEM0_EMBEDDER_DIMS` | `384` |
 | `MEM0_STORE` | `/data` |
 | `MEM0_HOST` / `MEM0_PORT` | `0.0.0.0` / `3000` |
+| `MEM0_ADD_ATTEMPTS` | `1` |
 
 The embedder runs on CPU via fastembed and the vector store is an on-disk
 Qdrant, so only extraction leaves the machine. DeepSeek is the default because
@@ -31,12 +32,42 @@ Characters are isolated by `user_id`, so one store serves all of them.
 
 ## Backfill
 
-`backfill.py` imports history from shore's archive a slice at a time and keeps a
-cursor, so it can be run repeatedly without redoing work. It reads only
-committed, non-excluded segments, and opens the database read-only so it can run
-against a read-only bind mount of a live data directory.
+The daemon never imports history that existed when mem0 was enabled. On its
+first run it snapshots the archive end into `mem0_cursor.json`, ingests only new
+segments after that point, and exposes the snapshot as an immutable historical
+boundary.
 
-    python backfill.py --history /shore-data/history.db --character qifei --from 2026-07-12 --to 2026-08-01
+`backfill.py` is the explicit historical importer. It moves backward from that
+boundary while the daemon moves forward, so the two ranges cannot overlap. It
+reads only committed, non-excluded segments and opens the database read-only.
+One invocation makes at most one sequential mem0 batch by default; it atomically
+checkpoints each successful batch and stops without advancing on failure. A
+batch can involve more than one provider call because mem0 may extract facts and
+then update existing memories. The MCP server makes one `add` attempt by default;
+raising `MEM0_ADD_ATTEMPTS` is an explicit opt-in to whole-batch retries.
+
+Start the updated daemon once so its checkpoint exists, then inspect a recent
+slice without making an API call:
+
+    python backfill.py --history /shore-data/history.db --character qifei \
+      --status --from 2026-08-01
+
+    python backfill.py --history /shore-data/history.db --character qifei \
+      --dry-run --from 2026-08-01
+
+Run at most one mem0 batch and watch its message count, memories added,
+latency, and saved cursor:
+
+    python backfill.py --history /shore-data/history.db --character qifei \
+      --from 2026-08-01
+
+Only after one-batch runs look healthy, increase the hard bound deliberately:
+
+    python backfill.py --history /shore-data/history.db --character qifei \
+      --from 2026-08-01 --max-batches 5
+
+Backfill starts with the newest eligible messages. Moving `--from` to an earlier
+date later continues backward without repeating the recent slice.
 
 `--reembed <memories.json>` loads already-extracted memories instead of running
 extraction again, which is how an existing store is migrated to a new embedder.

@@ -15,6 +15,9 @@ mcp = MCPServer("mem0")
 
 _memory = None
 _lock = threading.Lock()
+_add_attempts = int(os.environ.get("MEM0_ADD_ATTEMPTS", "1"))
+if _add_attempts < 1 or _add_attempts > 3:
+    raise ValueError("MEM0_ADD_ATTEMPTS must be between 1 and 3")
 
 
 def memory():
@@ -63,7 +66,7 @@ def add(
     if not messages:
         return {"added": 0}
     last = None
-    for attempt in range(3):
+    for _attempt in range(_add_attempts):
         try:
             raw = memory().add(
                 messages=messages,
@@ -74,7 +77,7 @@ def add(
             return {"added": len(_results(raw) or [])}
         except Exception as error:
             last = error
-    raise RuntimeError(f"mem0 add failed after 3 attempts: {last}")
+    raise RuntimeError(f"mem0 add failed after {_add_attempts} attempt(s): {last}")
 
 
 if __name__ == "__main__":

@@ -1,14 +1,17 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { shoreLog } from "../log.ts";
 
+import { atomicWrite } from "../engine/atomic.ts";
 import { HistoryStore } from "../engine/history_store.ts";
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 const CURSOR_FILE = "mem0_cursor.json";
 const MESSAGE_CHARS = 4_000;
+const CHECKPOINT_VERSION = 1;
+const BEFORE_ARCHIVE = { segment: -1, ordinal: -1 } as const;
 
 export interface Mem0Cursor {
   segment: number;
@@ -37,6 +40,7 @@ export interface Mem0IngestProgress {
   character: string;
   server: string;
   cursor: Mem0Cursor | undefined;
+  backfillThrough: Mem0Cursor | undefined;
   pending: boolean;
   failures: number;
   retryAt: number;
@@ -46,6 +50,7 @@ export interface Mem0IngestProgress {
 
 interface Entry extends Mem0IngestRegistration {
   cursor: Mem0Cursor | undefined;
+  backfillThrough: Mem0Cursor | undefined;
   loaded: boolean;
   idleRounds: number;
   nextPollAt: number;
@@ -95,6 +100,7 @@ export class Mem0IngestService {
     this.#entries.set(registration.character, {
       ...registration,
       cursor: moved ? undefined : previous?.cursor,
+      backfillThrough: moved ? undefined : previous?.backfillThrough,
       loaded: moved ? false : previous?.loaded ?? false,
       idleRounds: moved ? 0 : previous?.idleRounds ?? 0,
       nextPollAt: moved ? 0 : previous?.nextPollAt ?? 0,
@@ -119,6 +125,7 @@ export class Mem0IngestService {
       character: entry.character,
       server: entry.server,
       cursor: entry.cursor,
+      backfillThrough: entry.backfillThrough,
       pending: entry.idleRounds === 0,
       failures: entry.failures,
       retryAt: entry.retryAt,
@@ -214,7 +221,26 @@ export class Mem0IngestService {
 
   async #ingest(entry: Entry): Promise<number> {
     if (!entry.loaded) {
-      entry.cursor = await readCursor(entry.characterDataDir);
+      const saved = await readCheckpoint(entry.characterDataDir);
+      if (saved?.kind === "current") {
+        entry.cursor = saved.checkpoint.cursor;
+        entry.backfillThrough = saved.checkpoint.backfillThrough;
+      } else {
+        const end = archiveEnd(entry.historyDbPath, entry.character);
+        entry.cursor = end;
+        entry.backfillThrough = saved?.kind === "legacy" ? BEFORE_ARCHIVE : end;
+        await writeCheckpoint(entry.characterDataDir, {
+          cursor: end,
+          backfillThrough: entry.backfillThrough,
+        });
+        const history = saved?.kind === "legacy" ? "disabled for a legacy cursor" : "explicit";
+        shoreLog.info(
+          `shore: mem0 ingest for ${entry.character} starts at segment ${String(end.segment)}; ` +
+            `historical backfill is ${history}`,
+        );
+        entry.loaded = true;
+        return 0;
+      }
       entry.loaded = true;
     }
 
@@ -236,7 +262,10 @@ export class Mem0IngestService {
     });
 
     entry.cursor = batch.cursor;
-    await writeCursor(entry.characterDataDir, batch.cursor);
+    await writeCheckpoint(entry.characterDataDir, {
+      cursor: batch.cursor,
+      backfillThrough: entry.backfillThrough ?? BEFORE_ARCHIVE,
+    });
     return batch.messages.length;
   }
 }
@@ -289,17 +318,61 @@ function nextBatch(
   }
 }
 
-async function readCursor(characterDataDir: string): Promise<Mem0Cursor | undefined> {
+function archiveEnd(historyDbPath: string, character: string): Mem0Cursor {
+  const store = HistoryStore.open(historyDbPath);
   try {
-    const raw = await readFile(join(characterDataDir, CURSOR_FILE), "utf8");
-    const parsed = JSON.parse(raw) as { segment?: unknown; ordinal?: unknown };
-    if (typeof parsed.segment !== "number" || typeof parsed.ordinal !== "number") return undefined;
-    return { segment: parsed.segment, ordinal: parsed.ordinal };
-  } catch {
-    return undefined;
+    const last = store.entries(character).at(-1);
+    if (last === undefined) return BEFORE_ARCHIVE;
+    return { segment: last.idx, ordinal: store.readSegment(character, last.idx).length - 1 };
+  } finally {
+    store.close();
   }
 }
 
-async function writeCursor(characterDataDir: string, cursor: Mem0Cursor): Promise<void> {
-  await writeFile(join(characterDataDir, CURSOR_FILE), JSON.stringify(cursor), "utf8");
+interface Mem0Checkpoint {
+  cursor: Mem0Cursor;
+  backfillThrough: Mem0Cursor;
+}
+
+type SavedCheckpoint =
+  | { kind: "current"; checkpoint: Mem0Checkpoint }
+  | { kind: "legacy" };
+
+async function readCheckpoint(characterDataDir: string): Promise<SavedCheckpoint | undefined> {
+  try {
+    const raw = await readFile(join(characterDataDir, CURSOR_FILE), "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const cursor = parseCursor(parsed["cursor"]);
+    const backfillThrough = parseCursor(parsed["backfill_through"]);
+    if (parsed["version"] === CHECKPOINT_VERSION && cursor !== undefined && backfillThrough !== undefined) {
+      return { kind: "current", checkpoint: { cursor, backfillThrough } };
+    }
+    return { kind: "legacy" };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    return { kind: "legacy" };
+  }
+}
+
+function parseCursor(value: unknown): Mem0Cursor | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate["segment"] !== "number" || typeof candidate["ordinal"] !== "number") {
+    return undefined;
+  }
+  return { segment: candidate["segment"], ordinal: candidate["ordinal"] };
+}
+
+async function writeCheckpoint(
+  characterDataDir: string,
+  checkpoint: Mem0Checkpoint,
+): Promise<void> {
+  await atomicWrite(
+    join(characterDataDir, CURSOR_FILE),
+    JSON.stringify({
+      version: CHECKPOINT_VERSION,
+      cursor: checkpoint.cursor,
+      backfill_through: checkpoint.backfillThrough,
+    }),
+  );
 }
