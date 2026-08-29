@@ -11,6 +11,7 @@ import json
 import sqlite3
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 import zstandard
@@ -70,6 +71,20 @@ def document(db, character, segment, user, char_label):
     return "\n\n".join(lines), stamps
 
 
+def created(url, character, document_id):
+    query = urllib.parse.urlencode({"document_id": document_id, "limit": 200})
+    request = urllib.request.Request(
+        f"{url}/v1/default/banks/{character}/memories/list?{query}"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            payload = json.load(response)
+    except OSError:
+        return []
+    items = payload.get("items") or payload.get("memories") or []
+    return [item.get("content") or item.get("text") or "" for item in items]
+
+
 def imported(url, character):
     request = urllib.request.Request(
         f"{url}/v1/default/banks/{character}/documents?limit=10000"
@@ -91,14 +106,15 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=1, help="how many segments to import")
     parser.add_argument("--dry-run", action="store_true", help="list the work, make no calls")
     parser.add_argument(
-        "--skip-existing", action="store_true",
-        help="skip segments already imported, so an interrupted run resumes",
+        "--redo", action="store_true",
+        help="re-import segments already present instead of skipping them",
     )
+    parser.add_argument("--quiet", action="store_true", help="counts only, no memory text")
     args = parser.parse_args()
 
     db = sqlite3.connect(f"file:{args.history}?mode=ro", uri=True)
     try:
-        done = imported(args.url, args.character) if args.skip_existing else set()
+        done = set() if args.redo else imported(args.url, args.character)
         if done:
             print(f"{len(done)} segment(s) already imported, skipping those")
 
@@ -131,11 +147,17 @@ def main() -> int:
                 document_id=f"shore:{args.character}:seg{segment}",
                 update_mode="replace",
             )
+            document_id = f"shore:{args.character}:seg{segment}"
+            memories = created(args.url, args.character, document_id)
             print(
                 f"seg{segment}: {len(stamps)} turns, {len(content)} chars, "
-                f"{first}..{last}, {time.time() - started:.0f}s",
+                f"{first}..{last}, {time.time() - started:.0f}s, "
+                f"{len(memories)} memories",
                 flush=True,
             )
+            if not args.quiet:
+                for memory in memories:
+                    print(f"    + {memory}", flush=True)
     finally:
         db.close()
     return 0

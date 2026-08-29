@@ -89,10 +89,14 @@ Run one segment first and read what it produced:
 `--dry-run` lists the work without calling the model. `--since YYYY-MM-DD` stops
 at a date. Widen `--limit` once single-segment runs look right.
 
-A rerun is always safe, but `--skip-existing` also makes it cheap: it reads the
-bank's document list first and skips what is already there, so an interrupted
-import resumes instead of starting over. `--limit` counts what is left to do,
-not what was considered.
+Segments already imported are skipped by default, so an interrupted import
+resumes rather than starting over and `--limit` counts what is left to do rather
+than what was considered. `--redo` re-imports them anyway, which is what to use
+after changing the context wording, since `document_id` upserts and the old
+memories are replaced.
+
+Every run prints the text of each memory it created. `--quiet` reduces that to
+counts.
 
 Turn auto-consolidation **off** for a bulk import. It runs after every retain,
 competes with the next document's extraction for the same LLM, and gets slower as
