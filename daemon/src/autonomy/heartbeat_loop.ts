@@ -8,7 +8,7 @@ import {
   type ToolUse,
 } from "./heartbeat_shape.ts";
 import { budgetDecision, appendWrapUpNudge, generatedImageRef } from "./heartbeat_shape.ts";
-import type { GenerateResponse, SidecarRequest } from "../llm/types.ts";
+import type { GenerateResponse, SidecarRequest, ToolDefinition } from "../llm/types.ts";
 import type { ContentBlock } from "../engine/types.ts";
 import { truncateSummary } from "../notifications.ts";
 import type { CapturedTool } from "../transcript_capture.ts";
@@ -20,6 +20,7 @@ export interface HeartbeatToolResult {
   output: string;
   isError: boolean;
   value?: unknown;
+  block?: ContentBlock;
 }
 
 export interface TranscriptRound {
@@ -40,6 +41,7 @@ export interface HeartbeatLoopDeps {
     name: string,
     input: unknown,
     toolUseId?: string,
+    tools?: readonly ToolDefinition[],
   ) => Promise<HeartbeatToolResult>;
   scheduleNextWake: (hoursFromNow: number, reason: string) => string;
   note: (text: string) => void;
@@ -76,6 +78,7 @@ function responseText(resp: GenerateResponse): string {
 export async function dispatchHeartbeatTools(
   toolUses: readonly ToolUse[],
   deps: Pick<HeartbeatLoopDeps, "dispatch" | "scheduleNextWake" | "note">,
+  tools?: readonly ToolDefinition[],
 ): Promise<{ results: ContentBlock[]; captured: CapturedTool[]; images: ImageRef[] }> {
   const results: ContentBlock[] = [];
   const captured: CapturedTool[] = [];
@@ -84,6 +87,7 @@ export async function dispatchHeartbeatTools(
   for (const [id, name, input] of toolUses) {
     let output: string;
     let isError: boolean;
+    let block: ContentBlock | undefined;
 
     if (name === "set_next_wake") {
       const record = (typeof input === "object" && input !== null ? input : {}) as Record<
@@ -101,16 +105,19 @@ export async function dispatchHeartbeatTools(
       });
       isError = false;
     } else {
-      const result = await deps.dispatch(name, input, id);
+      const result = await deps.dispatch(name, input, id, tools);
       output = result.output;
       isError = result.isError;
+      block = result.block;
       if (!isError && name === "generate_image") {
         const ref = generatedImageRef(result.value);
         if (ref !== undefined) images.push(ref);
       }
     }
 
-    results.push({ type: "tool_result", tool_use_id: id, content: output, is_error: isError });
+    results.push(
+      block ?? { type: "tool_result", tool_use_id: id, content: output, is_error: isError },
+    );
     captured.push({ name, input, output, isError });
 
     if (name !== "set_next_wake") deps.note(`Tool: ${name} → ${truncateSummary(output, 80)}`);
@@ -194,7 +201,7 @@ export async function runHeartbeatToolLoop(
 
     let captured: CapturedTool[] = [];
     if (hasTools) {
-      const round = await dispatchHeartbeatTools(toolUses, deps);
+      const round = await dispatchHeartbeatTools(toolUses, deps, request.tools);
       request.messages.push({ role: "user", content: round.results });
       if (round.images.length > 0 && sendMessageText === undefined) messageThinking = thinking;
       images.push(...round.images);

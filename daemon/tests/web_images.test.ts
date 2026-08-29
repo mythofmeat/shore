@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 import fixture from "./tools_captures/web_images.json" with { type: "json" };
 import {
   handleFetchUrl,
+  MAX_BODY_BYTES,
+  type FetchUrlPolicy,
   handleWebSearch,
   MAX_CONTENT_BYTES,
   stripHtml,
@@ -257,6 +259,11 @@ describe("handleFetchUrl", () => {
   const html = (body: string, contentType = "text/html; charset=utf-8"): FetchLike =>
     async () => new Response(body, { status: 200, headers: { "content-type": contentType } });
 
+  const U = "https://example.com/page";
+  const href = (input: string | URL | Request): string =>
+    typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  const pub: FetchUrlPolicy = { lookup: async () => ["93.184.216.34"] };
+
   test("a missing url is an argument error", async () => {
     expect(handleFetchUrl({}, html(""))).rejects.toThrow(
       "invalid args: missing 'url' field",
@@ -264,44 +271,152 @@ describe("handleFetchUrl", () => {
   });
 
   test("html is extracted, other types are returned verbatim", async () => {
-    const asHtml = await handleFetchUrl({ url: "u" }, html("<p>hi</p><script>x</script>"));
+    const asHtml = await handleFetchUrl(
+      { url: U },
+      html("<p>hi</p><script>x</script>"),
+      undefined,
+      pub,
+    );
     expect(asHtml.content).toBe("hi");
     expect(asHtml.truncated).toBe(false);
 
-    const asText = await handleFetchUrl(
-      { url: "u" },
-      html("<p>hi</p>", "text/plain"),
-    );
+    const asText = await handleFetchUrl({ url: U }, html("<p>hi</p>", "text/plain"), undefined, pub);
     expect(asText.content).toBe("<p>hi</p>");
   });
 
   test("html is detected by substring, so xhtml extracts too", async () => {
     const out = await handleFetchUrl(
-      { url: "u" },
+      { url: U },
       html("<p>hi</p>", "application/xhtml+xml"),
+      undefined,
+      pub,
     );
     expect(out.content).toBe("hi");
   });
 
   test("a response with no content type reports unknown and is not extracted", async () => {
     const out = await handleFetchUrl(
-      { url: "u" },
+      { url: U },
       async () => new Response("<p>hi</p>", { status: 200 }),
+      undefined,
+      pub,
     );
     expect(out.content).toBe("<p>hi</p>");
   });
 
   test("a non-2xx response names the status and the url", async () => {
     expect(
-      handleFetchUrl({ url: "https://x/y" }, async () => new Response("", { status: 404 })),
-    ).rejects.toThrow("http: HTTP 404 for https://x/y");
+      handleFetchUrl(
+        { url: "https://x.example/y" },
+        async () => new Response("", { status: 404 }),
+        undefined,
+        pub,
+      ),
+    ).rejects.toThrow("http: HTTP 404 for https://x.example/y");
   });
 
   test("an oversized body is truncated and says so", async () => {
     const big = "a".repeat(MAX_CONTENT_BYTES + 10);
-    const out = await handleFetchUrl({ url: "u" }, html(big, "text/plain"));
+    const out = await handleFetchUrl({ url: U }, html(big, "text/plain"), undefined, pub);
     expect(out.truncated).toBe(true);
     expect(utf8(out.content)).toBe(MAX_CONTENT_BYTES);
+  });
+
+  test("only http and https can be fetched", async () => {
+    for (const url of ["file:///etc/passwd", "gopher://x.example/", "data:text/plain,hi"]) {
+      expect(handleFetchUrl({ url }, html("x"), undefined, pub)).rejects.toThrow(
+        "only http and https URLs can be fetched",
+      );
+    }
+  });
+
+  test("a literal private or local address is refused without a lookup", async () => {
+    const blocked = [
+      "http://127.0.0.1/x",
+      "http://10.1.2.3/x",
+      "http://192.168.18.2/api",
+      "http://172.16.0.1/x",
+      "http://169.254.169.254/latest/meta-data/",
+      "http://0.0.0.0/x",
+      "http://100.118.27.64/x",
+      "http://[::1]/x",
+      "http://[fd00::1]/x",
+      "http://[fe80::1]/x",
+      "http://[::ffff:127.0.0.1]/x",
+    ];
+    for (const url of blocked) {
+      expect(
+        handleFetchUrl({ url }, html("x"), undefined, {
+          lookup: () => {
+            throw new Error("must not resolve a literal address");
+          },
+        }),
+      ).rejects.toThrow("private or local address");
+    }
+  });
+
+  test("a name that resolves to a private address is refused", async () => {
+    expect(
+      handleFetchUrl({ url: "http://sneaky.example/x" }, html("x"), undefined, {
+        lookup: async () => ["93.184.216.34", "192.168.1.5"],
+      }),
+    ).rejects.toThrow("it resolves to a private or local address");
+  });
+
+  test("a redirect into a private address is refused at the hop", async () => {
+    const redirecting: FetchLike = async (input) =>
+      href(input).includes("example.com")
+        ? new Response("", { status: 302, headers: { location: "http://169.254.169.254/creds" } })
+        : new Response("secrets", { status: 200 });
+
+    expect(handleFetchUrl({ url: U }, redirecting, undefined, pub)).rejects.toThrow(
+      "private or local address",
+    );
+  });
+
+  test("redirects are followed, but not forever", async () => {
+    const hops: string[] = [];
+    const looping: FetchLike = async (input) => {
+      hops.push(href(input));
+      return new Response("", {
+        status: 302,
+        headers: { location: `https://example.com/${String(hops.length)}` },
+      });
+    };
+    expect(handleFetchUrl({ url: U }, looping, undefined, pub)).rejects.toThrow(
+      "too many redirects",
+    );
+    expect(hops.length).toBeLessThan(10);
+  });
+
+  test("a redirect to a public address is followed to its body", async () => {
+    const moved: FetchLike = async (input) =>
+      href(input).endsWith("/page")
+        ? new Response("", { status: 301, headers: { location: "https://example.com/moved" } })
+        : new Response("<p>arrived</p>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          });
+    const out = await handleFetchUrl({ url: U }, moved, undefined, pub);
+    expect(out.content).toBe("arrived");
+  });
+
+  test("the body stops at the wire cap instead of buffering whatever arrives", async () => {
+    let produced = 0;
+    const endless: FetchLike = async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            produced += 65_536;
+            controller.enqueue(new Uint8Array(65_536).fill(0x61));
+          },
+        }),
+        { status: 200, headers: { "content-type": "text/plain" } },
+      );
+
+    const out = await handleFetchUrl({ url: U }, endless, undefined, pub);
+    expect(out.truncated).toBe(true);
+    expect(produced).toBeLessThanOrEqual(MAX_BODY_BYTES + 65_536);
   });
 });
 

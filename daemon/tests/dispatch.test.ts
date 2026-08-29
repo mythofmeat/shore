@@ -350,6 +350,7 @@ describe("context fields reach their handler argument", () => {
         seen.push(requestUrl(input));
         return new Response("<p>hi</p>", { headers: { "content-type": "text/html" } });
       },
+      lookupImpl: async () => ["93.184.216.34"],
     });
     const result = (await dispatchTool(
       "fetch_url",

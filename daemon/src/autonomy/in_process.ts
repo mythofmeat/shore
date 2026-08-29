@@ -19,10 +19,11 @@ import type { GenerateDeps } from "../llm/generate.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import type { ToolContextDeps } from "../handler/tool_context.ts";
 import { buildToolContext } from "../handler/tool_context.ts";
-import { dispatchTool } from "../tools/dispatch.ts";
+import { toolLimitsFrom } from "../tools/dispatch.ts";
 import type { CallStore } from "../call_store.ts";
 import { recordTranscript } from "../transcript_capture.ts";
-import { renderToolValue } from "../tools/media.ts";
+import { runToolUse, type ToolExecution } from "../tools/execute.ts";
+import { schemasFrom } from "../tools/validate.ts";
 
 export interface InProcessExecutorDeps {
   registry: CharacterRegistry;
@@ -70,16 +71,26 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         return response;
       },
 
-      dispatch: async (name, input, toolUseId) => {
-        try {
-          const value = await dispatchTool(name, input, {
-            ...toolCtx,
-            ...(toolUseId === undefined ? {} : { toolUseId }),
-          });
-          return { output: renderToolValue(value), isError: false, value };
-        } catch (e) {
-          return { output: e instanceof Error ? e.message : String(e), isError: true };
-        }
+      dispatch: async (name, input, toolUseId, tools) => {
+        const exec: ToolExecution = {
+          sendDirect: () => {},
+          ctx: toolCtx,
+          limits: toolLimitsFrom(config.app.tools, config.app.subagents),
+          now: () => new Date().toISOString(),
+          newMessageId: () => `m_${crypto.randomUUID()}`,
+          schemas: schemasFrom(tools),
+        };
+        const run = await runToolUse(
+          { id: toolUseId ?? `hb_${crypto.randomUUID()}`, name, input },
+          exec,
+          [],
+        );
+        return {
+          output: run.window?.output ?? run.raw,
+          isError: run.isError,
+          block: run.block,
+          ...(run.value === undefined ? {} : { value: run.value }),
+        };
       },
 
       scheduleNextWake: (hours, reason) => {

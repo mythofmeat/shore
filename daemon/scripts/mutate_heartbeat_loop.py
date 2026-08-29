@@ -200,8 +200,12 @@ MUTANTS = [
      "      isError = false;"),
     ("undeclared: results come back out of order",
      L,
-     "    results.push({ type: \"tool_result\", tool_use_id: id, content: output, is_error: isError });",
-     "    results.unshift({ type: \"tool_result\", tool_use_id: id, content: output, is_error: isError });"),
+     "    results.push(\n      block ?? { type: \"tool_result\", tool_use_id: id, content: output, is_error: isError },\n    );",
+     "    results.unshift(\n      block ?? { type: \"tool_result\", tool_use_id: id, content: output, is_error: isError },\n    );"),
+    ("tools: the executed block is dropped, losing attached media",
+     L,
+     "    results.push(\n      block ?? { type: \"tool_result\", tool_use_id: id, content: output, is_error: isError },\n    );",
+     "    results.push({ type: \"tool_result\", tool_use_id: id, content: output, is_error: isError });"),
 ]
 
 
