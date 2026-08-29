@@ -486,10 +486,13 @@ describe("a config shore refuses, and what it says", () => {
     expect(refused("\n[memory.compaction]\nmin_turns = 4\nkeep_recent_turns = 4\n")).toContain("must both be greater than keep_recent_turns (4)");
   });
   test("injecting recall requires usable limits and a server that exists", () => {
-    expect(refused("\n[memory.recall]\nmode = \"inject\"\nmax_memories = 0\n")).toContain(
+    expect(refused("\n[memory.recall]\nmode = \"inject\"\n")).toContain(
+      "memory.recall.server must name an [mcp.<server>] entry when recall is enabled",
+    );
+    expect(refused("\n[memory.recall]\nmode = \"inject\"\nserver = \"absent\"\nmax_memories = 0\n")).toContain(
       "memory.recall.max_memories must be greater than 0",
     );
-    expect(refused("\n[memory.recall]\nmode = \"inject\"\nrecent_messages = 0\n")).toContain(
+    expect(refused("\n[memory.recall]\nmode = \"inject\"\nserver = \"absent\"\nrecent_messages = 0\n")).toContain(
       "memory.recall.recent_messages must be greater than 0",
     );
     expect(refused("\n[memory.recall]\nmode = \"inject\"\nserver = \"absent\"\n")).toContain(

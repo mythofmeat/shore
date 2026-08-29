@@ -588,7 +588,7 @@ export interface MemoryRecallConfig {
 
 export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
   mode: "off",
-  server: "mem0",
+  server: "",
   max_memories: 6,
   recent_messages: 2,
 });

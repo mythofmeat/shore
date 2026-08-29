@@ -1793,7 +1793,7 @@ mod tests {
                     "query": "anything",
                     "elapsed_ms": 12,
                     "memories": [],
-                    "error": "MCP server 'mem0' is unavailable"
+                    "error": "MCP server 'hindsight' is unavailable"
                 }
             }]
         });
@@ -1803,7 +1803,7 @@ mod tests {
         let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
 
         assert!(rendered.contains("failed"));
-        assert!(rendered.contains("MCP server 'mem0' is unavailable"));
+        assert!(rendered.contains("MCP server 'hindsight' is unavailable"));
     }
 
     #[test]

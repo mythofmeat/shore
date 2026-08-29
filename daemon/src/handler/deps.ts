@@ -221,11 +221,9 @@ export interface HandlerAssembly
 function beginIndexForeground(a: HandlerAssembly): () => void {
   const endHistory = a.runtime.historyIndex.beginForeground();
   const endWorkspace = a.runtime.workspaceIndex.beginForeground();
-  const endMem0 = a.runtime.mem0Ingest.beginForeground();
   return () => {
     endHistory();
     endWorkspace();
-    endMem0();
   };
 }
 

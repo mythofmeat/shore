@@ -28,7 +28,7 @@ function message(role: "user" | "assistant", id: string, text: string): Message 
 function world(): LoadedConfig {
   const app = defaultAppConfig();
   app.memory.recall.mode = "inject";
-  app.memory.recall.server = "mem0";
+  app.memory.recall.server = "hindsight";
   app.memory.recall.max_memories = 3;
   app.memory.recall.recent_messages = 2;
   return {
@@ -71,7 +71,7 @@ describe("memory recall", () => {
     );
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.tool).toBe("mcp__mem0__search");
+    expect(calls[0]?.tool).toBe("mcp__hindsight__search");
     expect(calls[0]?.args).toEqual({
       query: "morning to you\n\nwhat was that music script i wrote",
       character: "qifei",
@@ -120,7 +120,7 @@ describe("memory recall", () => {
       {
         diagnostics,
         mcpRegistry: {
-          call: () => Promise.reject(new Error("MCP server 'mem0' is unavailable")),
+          call: () => Promise.reject(new Error("MCP server 'hindsight' is unavailable")),
         },
         monotonicMs: () => 0,
       },
@@ -130,7 +130,7 @@ describe("memory recall", () => {
     expect(diagnostics.memory_recall.lastN(1)[0]).toMatchObject({
       status: "failed",
       recalled: 0,
-      error: "MCP server 'mem0' is unavailable",
+      error: "MCP server 'hindsight' is unavailable",
     });
   });
 

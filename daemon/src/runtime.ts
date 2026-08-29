@@ -11,7 +11,6 @@ import { CharacterRegistry } from "./characters.ts";
 import { characterDataDir, characterWorkspaceDir, pluginsDir, rustJoin } from "./config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
-import { HISTORY_DB_FILE } from "./engine/history_store.ts";
 import type { Message } from "./engine/types.ts";
 import type { SubagentTurn } from "./handler/generation.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
@@ -45,7 +44,6 @@ import { historyIndexPath } from "./memory/history_index.ts";
 import { HistoryIndexService } from "./memory/history_index_service.ts";
 import { indexPath as workspaceIndexPath } from "./memory/workspace_index.ts";
 import { WorkspaceIndexService } from "./memory/workspace_index_service.ts";
-import { Mem0IngestService } from "./memory/mem0_ingest_service.ts";
 
 const CALL_STORE_RETENTION_DAYS = 14;
 const CALL_STORE_MAX_BYTES = 536_870_912;
@@ -78,7 +76,6 @@ export interface ShoreRuntime {
   readonly autonomy: AutonomyService;
   readonly historyIndex: HistoryIndexService;
   readonly workspaceIndex: WorkspaceIndexService;
-  readonly mem0Ingest: Mem0IngestService;
   refreshHistoryIndexes(): Promise<void>;
   refreshMcpCaches(registry: McpRegistry): Promise<void>;
   shutdown(): Promise<void>;
@@ -100,7 +97,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   let historyIndex: HistoryIndexService | undefined;
   let workspaceIndex: WorkspaceIndexService | undefined;
-  let mem0Ingest: Mem0IngestService | undefined;
   const registry = await CharacterRegistry.create(
     config.dirs.config,
     config.dirs.data,
@@ -109,7 +105,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       const character = history.selected_character;
       if (character !== undefined) {
         historyIndex?.noteMutation(character);
-        mem0Ingest?.noteMutation(character);
       }
       options.onHistory?.(history);
     },
@@ -119,7 +114,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   historyIndex = new HistoryIndexService();
   workspaceIndex = new WorkspaceIndexService();
-  mem0Ingest = new Mem0IngestService();
   const refreshHistoryIndexes = async () => {
     const available = new Set(registry.availableCharacters());
     for (const character of historyIndex?.registeredCharacters() ?? []) {
@@ -127,9 +121,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     }
     for (const character of workspaceIndex?.registeredCharacters() ?? []) {
       if (!available.has(character)) workspaceIndex?.unregister(character);
-    }
-    for (const character of mem0Ingest?.registeredCharacters() ?? []) {
-      if (!available.has(character)) mem0Ingest?.unregister(character);
     }
     for (const character of available) {
       const effective = registry.effectiveConfig(character);
@@ -164,17 +155,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         ...(embedder === undefined ? {} : { embedder }),
         ...(embedderError === undefined ? {} : { embedderError }),
       });
-      const recall = effective.app.memory.recall;
-      if (recall.mode === "off") {
-        mem0Ingest?.unregister(character);
-      } else {
-        mem0Ingest?.register({
-          character,
-          characterDataDir: characterDataDir(effective.dirs.data, character),
-          historyDbPath: rustJoin(effective.dirs.data, HISTORY_DB_FILE),
-          server: recall.server,
-        });
-      }
     }
   };
   await refreshHistoryIndexes();
@@ -212,9 +192,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     ),
   );
 
-  mem0Ingest.attachRegistry(mcp.callView());
-  await mem0Ingest.start();
-
   const autonomy = new AutonomyService(
     new InProcessAutonomyExecutor({
       registry,
@@ -234,11 +211,9 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       beginForeground: () => {
         const endHistory = historyIndex.beginForeground();
         const endWorkspace = workspaceIndex.beginForeground();
-        const endMem0 = mem0Ingest.beginForeground();
         return () => {
           endHistory();
           endWorkspace();
-          endMem0();
         };
       },
     }),
@@ -259,13 +234,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     autonomy,
     historyIndex,
     workspaceIndex,
-    mem0Ingest,
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
       await historyIndex.shutdown();
       await workspaceIndex.shutdown();
-      await mem0Ingest.shutdown();
       await mcp.current.shutdown();
       uninstallWireCapture();
       callStore?.close();
