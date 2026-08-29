@@ -211,8 +211,26 @@ class BackfillCheckpointTest(unittest.IsolatedAsyncioTestCase):
                 batch = backfill.Batch([archived((1, 1))], backfill.Position(1, 1))
                 client = FakeClient(
                     [
-                        '{"added": 0, "memories": [], "diagnostic": '
-                        '{"empty_reason": "model_extracted_no_memories"}}'
+                        json.dumps(
+                            {
+                                "added": 0,
+                                "memories": [],
+                                "diagnostic": {
+                                    "empty_reason": "model_extracted_no_memories",
+                                    "provider_response": {
+                                        "choices": [
+                                            {
+                                                "message": {
+                                                    "content": '{"memory": []}',
+                                                    "refusal": None,
+                                                    "reasoning_content": "No durable facts found.",
+                                                }
+                                            }
+                                        ]
+                                    },
+                                },
+                            }
+                        )
                     ]
                 )
                 output = io.StringIO()
@@ -224,6 +242,7 @@ class BackfillCheckpointTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("cursor remains 2:1", output.getvalue())
                 self.assertIn("model explicitly extracted no memories", output.getvalue())
                 self.assertIn("NOT CHECKPOINTED", output.getvalue())
+                self.assertIn("No durable facts found.", output.getvalue())
 
                 with open(backfill.state_path()) as handle:
                     persisted = json.load(handle)

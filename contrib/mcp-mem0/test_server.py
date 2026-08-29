@@ -82,9 +82,23 @@ class ServerTest(unittest.TestCase):
         server.llm_diagnostics = lambda: {
             "finish_reason": "stop",
             "content": '{"memory": []}',
+            "refusal": None,
             "prompt_tokens": 120,
             "completion_tokens": 8,
             "reasoning_tokens": 40,
+            "provider_response": {
+                "id": "chatcmpl-test",
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "content": '{"memory": []}',
+                            "refusal": None,
+                            "reasoning_content": "No durable facts found.",
+                        },
+                    }
+                ],
+            },
         }
         self.assertEqual(
             server.add([{"role": "user", "content": "hello"}], "ada"),
@@ -96,6 +110,19 @@ class ServerTest(unittest.TestCase):
                     "prompt_tokens": 120,
                     "completion_tokens": 8,
                     "reasoning_tokens": 40,
+                    "provider_response": {
+                        "id": "chatcmpl-test",
+                        "choices": [
+                            {
+                                "finish_reason": "stop",
+                                "message": {
+                                    "content": '{"memory": []}',
+                                    "refusal": None,
+                                    "reasoning_content": "No durable facts found.",
+                                },
+                            }
+                        ],
+                    },
                     "candidate_count": 0,
                     "empty_reason": "model_extracted_no_memories",
                 },
@@ -111,6 +138,17 @@ class ServerTest(unittest.TestCase):
         result = server.add([{"role": "user", "content": "hello"}], "ada")
         self.assertEqual(result["diagnostic"]["empty_reason"], "mem0_filtered_all_candidates")
         self.assertEqual(result["diagnostic"]["candidates"], ["User owns a keyboard"])
+
+    def test_explicit_refusal_is_classified(self):
+        server._memory = type("EmptyMemory", (), {"add": lambda self, **kwargs: {"results": []}})()
+        server.llm_diagnostics = lambda: {
+            "finish_reason": "stop",
+            "content": "",
+            "refusal": "I cannot process this conversation.",
+            "provider_response": {"choices": []},
+        }
+        result = server.add([{"role": "user", "content": "hello"}], "ada")
+        self.assertEqual(result["diagnostic"]["empty_reason"], "model_refused")
 
     def test_diagnostic_failure_does_not_retry_a_successful_commit(self):
         memory = SuccessfulMemory()

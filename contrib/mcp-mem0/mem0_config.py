@@ -39,19 +39,69 @@ def _field(value, name: str):
     return getattr(value, name, None)
 
 
+def _response_dict(response, choice, message, usage, details) -> dict:
+    dump = getattr(response, "model_dump", None)
+    if callable(dump):
+        try:
+            payload = dump(mode="json")
+        except TypeError:
+            payload = dump()
+        if isinstance(payload, dict):
+            return payload
+
+    legacy_dump = getattr(response, "dict", None)
+    if callable(legacy_dump):
+        payload = legacy_dump()
+        if isinstance(payload, dict):
+            return payload
+
+    return {
+        "id": _field(response, "id"),
+        "object": _field(response, "object"),
+        "created": _field(response, "created"),
+        "model": _field(response, "model"),
+        "choices": [
+            {
+                "index": _field(choice, "index"),
+                "finish_reason": _field(choice, "finish_reason"),
+                "message": {
+                    "role": _field(message, "role"),
+                    "content": _field(message, "content"),
+                    "refusal": _field(message, "refusal"),
+                    "reasoning_content": (
+                        _field(message, "reasoning_content") or _field(message, "reasoning")
+                    ),
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": _field(usage, "prompt_tokens"),
+            "completion_tokens": _field(usage, "completion_tokens"),
+            "total_tokens": _field(usage, "total_tokens"),
+            "completion_tokens_details": {
+                "reasoning_tokens": _field(details, "reasoning_tokens"),
+            },
+        },
+    }
+
+
 def _capture_response(_llm, response, _params) -> None:
     choices = _field(response, "choices") or []
     choice = choices[0] if choices else None
     message = _field(choice, "message")
     usage = _field(response, "usage")
     details = _field(usage, "completion_tokens_details")
+    reasoning_content = _field(message, "reasoning_content") or _field(message, "reasoning")
     _llm_response.set(
         {
             "finish_reason": _field(choice, "finish_reason"),
             "content": _field(message, "content") or "",
+            "refusal": _field(message, "refusal"),
+            "reasoning_content": reasoning_content,
             "prompt_tokens": _field(usage, "prompt_tokens"),
             "completion_tokens": _field(usage, "completion_tokens"),
             "reasoning_tokens": _field(details, "reasoning_tokens"),
+            "provider_response": _response_dict(response, choice, message, usage, details),
         }
     )
 

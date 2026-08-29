@@ -42,8 +42,9 @@ boundary while the daemon moves forward, so the two ranges cannot overlap. It
 reads only committed, non-excluded segments and opens the database read-only.
 One invocation makes at most one sequential mem0 batch by default; it atomically
 checkpoints each batch that creates memories and stops without advancing on a
-failure or empty extraction. An empty extraction prints the provider finish
-reason, token counts, and the specific point where the result became empty. A
+failure or empty extraction. An empty extraction prints the complete provider
+response (including content, refusal, and reasoning), token counts, and the
+specific point where the result became empty. A
 normal rerun retries that exact batch. After reviewing a legitimate empty result,
 `--accept-empty` checkpoints it without making another model call. A
 batch can involve more than one provider call because mem0 may extract facts and

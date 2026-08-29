@@ -284,6 +284,8 @@ EMPTY_REASONS = {
     "no_input_messages": "the batch contained no input messages",
     "diagnostic_unavailable": "the server did not capture a provider response",
     "model_hit_token_limit": "the extraction model hit its output-token limit",
+    "model_content_filtered": "the provider marked the response as content-filtered",
+    "model_refused": "the provider returned an explicit model refusal",
     "model_returned_empty_content": "the extraction model returned empty content",
     "model_extracted_no_memories": "the model explicitly extracted no memories",
     "mem0_filtered_all_candidates": (
@@ -311,12 +313,19 @@ def print_diagnostic(diagnostic: dict) -> None:
     if reason:
         explanation = EMPTY_REASONS.get(reason, str(reason))
         print(f"  reason: {explanation} [{reason}]", flush=True)
+    if diagnostic.get("provider_response") is not None:
+        print("  provider response:", flush=True)
+        rendered = json.dumps(
+            diagnostic["provider_response"], indent=2, ensure_ascii=False
+        )
+        for line in rendered.splitlines():
+            print(f"    {line}", flush=True)
     for candidate in diagnostic.get("candidates", []):
         rendered = str(candidate).replace("\n", "\n      ")
         print(f"  candidate (not committed): {rendered}", flush=True)
     if diagnostic.get("response_preview"):
         preview = str(diagnostic["response_preview"]).replace("\n", "\n      ")
-        print(f"  provider response: {preview}", flush=True)
+        print(f"  provider response preview: {preview}", flush=True)
     if diagnostic.get("diagnostic_error"):
         print(f"  diagnostic error: {diagnostic['diagnostic_error']}", flush=True)
 

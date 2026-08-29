@@ -77,9 +77,18 @@ def _add_diagnostic(results: list, infer: bool) -> dict:
     if results:
         return diagnostic
 
+    if captured.get("provider_response") is not None:
+        diagnostic["provider_response"] = captured["provider_response"]
+
     content = captured.get("content") or ""
     if captured.get("finish_reason") == "length":
         diagnostic["empty_reason"] = "model_hit_token_limit"
+        return diagnostic
+    if captured.get("finish_reason") == "content_filter":
+        diagnostic["empty_reason"] = "model_content_filtered"
+        return diagnostic
+    if captured.get("refusal"):
+        diagnostic["empty_reason"] = "model_refused"
         return diagnostic
     if not content.strip():
         diagnostic["empty_reason"] = "model_returned_empty_content"

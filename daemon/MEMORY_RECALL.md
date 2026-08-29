@@ -106,8 +106,9 @@ cursor advances atomically only after a call creates memories. A batch can
 involve more than one provider call because mem0 may extract facts and then
 update existing memories. The MCP server makes one whole-batch attempt by
 default. An MCP or provider failure or an empty extraction stops the run without
-advancing past that batch. Empty results include the provider finish reason,
-token usage, and a classified cause. A normal rerun retries the exact batch;
+advancing past that batch. Empty results include the complete provider response,
+including content, refusal, and reasoning, plus a classified cause. A normal
+rerun retries the exact batch;
 `--accept-empty` explicitly checkpoints a reviewed empty result without another
 model call. `--rewind-before SEGMENT:ORDINAL` can recover a cursor advanced by
 an older version, also without making a model call. Backfill starts with the
