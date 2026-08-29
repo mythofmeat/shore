@@ -96,12 +96,13 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
 }
 
 const TRANSCRIPT_SOURCE = "heartbeat";
+const TRANSCRIPT_SOURCES: readonly string[] = [TRANSCRIPT_SOURCE, "memory_recall"];
 
 export function transcript(ctx: CallLogContext, args: Args): Json {
   const source = asStr(args["source"]) ?? TRANSCRIPT_SOURCE;
-  if (source !== TRANSCRIPT_SOURCE) {
+  if (!TRANSCRIPT_SOURCES.includes(source)) {
     throw invalidRequest(
-      `unknown transcript source '${source}' (expected '${TRANSCRIPT_SOURCE}')`,
+      `unknown transcript source '${source}' (expected one of ${TRANSCRIPT_SOURCES.join(", ")})`,
     );
   }
   const store = ctx.callStore;

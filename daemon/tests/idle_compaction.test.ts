@@ -7,6 +7,7 @@ import type { Message } from "../src/engine/types.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
 import { runIdleCompaction, type IdleCompactionDeps } from "../src/autonomy/idle_compaction.ts";
+import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -165,6 +166,38 @@ function withKey<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 describe("runIdleCompaction: the pass", () => {
+  test("archive-only mode rotates history without calling the memory model", async () => {
+    const { config, dataDir, characterDir } = await world();
+    config.app.memory.compaction.write_memory = false;
+    let generated = false;
+
+    const result = await runIdleCompaction("ada", deps(config, {
+      run: {
+        generate: async () => {
+          generated = true;
+          throw new Error("archive-only mode must not call this");
+        },
+      },
+    }));
+
+    expect(generated).toBe(false);
+    expect(result).toEqual({ turnCount: 2, events: [] });
+    expect(await activeIds(characterDir)).toEqual(["m_3", "m_4", "m_5", "m_6"]);
+    expect(historySegmentCount(dataDir)).toBe(1);
+    expect(existsSync(join(config.dirs.config, "characters", "ada", "workspace", "memory", "boats.md"))).toBe(false);
+  });
+
+  test("archive-only mode gives the compaction slot back", async () => {
+    const { config, dataDir } = await world();
+    config.app.memory.compaction.write_memory = false;
+
+    await runIdleCompaction("ada", deps(config));
+
+    const guard = tryBeginCompaction(dataDir, "ada");
+    expect(guard).toBeDefined();
+    guard?.release();
+  });
+
   test("keeps the configured retention, because it passes no keep-turns override", async () => {
     const { config, dataDir, characterDir } = await world();
     expect(config.app.memory.compaction.keep_recent_turns).toBe(2);

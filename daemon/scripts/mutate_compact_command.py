@@ -100,8 +100,8 @@ MUTANTS = [
      '  if (outcome === undefined) throw internalError("No messages to compact");'),
     ("guards: the slot is never given back",
      R,
-     "  } finally {\n    guard.release();\n  }",
-     "  } finally {\n    void guard;\n  }"),
+     "    return outcome;\n  } finally {\n    guard.release();\n  }",
+     "    return outcome;\n  } finally {\n    void guard;\n  }"),
 
     # --- the error mapping ----------------------------------------------------
     ("errors: insufficient messages is an internal error",

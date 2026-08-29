@@ -1018,6 +1018,18 @@ pub(crate) enum TraceCommand {
         json: bool,
     },
 
+    /// What memory recall pulled in before each turn: the text it searched on,
+    /// the memories it injected, and how long it took
+    Recall {
+        /// Number of turns to show
+        #[arg(short = 'n', long = "count", default_value = "10")]
+        count: u32,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// The heartbeat operational timeline: tick fired, dormant, woke, timeout
     Events {
         /// Number of events to show
@@ -2270,6 +2282,10 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         TraceCommand::Heartbeat { count, .. } => Some((
             "transcript",
             json!({ "source": "heartbeat", "count": count }),
+        )),
+        TraceCommand::Recall { count, .. } => Some((
+            "transcript",
+            json!({ "source": "memory_recall", "count": count }),
         )),
         TraceCommand::Errors { count, .. } => Some(("error_log", json!({ "count": count }))),
         TraceCommand::Events { count, .. } => Some(("heartbeat_log", json!({ "count": count }))),
@@ -4978,6 +4994,21 @@ mod tests {
         assert_eq!(name, "call_log");
         assert_eq!(arg(&args, "count"), 5);
         assert_eq!(arg(&args, "call_type"), "heartbeat");
+    }
+
+    #[test]
+    fn trace_recall_reads_the_memory_recall_transcript() {
+        let (command, args) = to_swp_command(
+            parsed_command(&parse(&["trace", "recall", "-n", "4"])),
+            None,
+        )
+        .unwrap();
+        assert_eq!(command, "transcript");
+        assert_eq!(arg(&args, "source"), "memory_recall");
+        assert_eq!(
+            args.get("count").and_then(serde_json::Value::as_u64),
+            Some(4)
+        );
     }
 
     #[test]

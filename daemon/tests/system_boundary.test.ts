@@ -83,4 +83,5 @@ describe("the assembled prompt puts its dynamic block at the tail", () => {
     expect(labels(system).at(-1)).toBe("memory_index");
     expect(cacheBoundaryIndex(system)).toBe(system.length - 2);
   });
+
 });

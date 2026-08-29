@@ -205,6 +205,18 @@ function deps(config: LoadedConfig, over: Partial<DeepArchiveDeps> = {}): DeepAr
 }
 
 describe("runDeepIdleArchive", () => {
+  test("archive-only mode sweeps uncovered turns without compaction dependencies", async () => {
+    const uncovered = required(fixture.plan.find((kase) => kase.plan.arm === "compaction"));
+    const messages = uncovered.input.map((shape) => fromShape(shape));
+    const { config, characterDir } = await world(messages);
+    config.app.memory.compaction.write_memory = false;
+
+    const result = await runDeepIdleArchive("ada", deps(config), uncovered.covered_turn_count);
+
+    expect(result).toEqual({ turnCount: 0, events: [], deepArchiveDone: true });
+    expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe("");
+  });
+
   test("nothing to archive quiesces, and says the idle period is finished", async () => {
     const { config, characterDir } = await world([
       fromShape(required(fixture.plan[1]).input[0] as Shape),

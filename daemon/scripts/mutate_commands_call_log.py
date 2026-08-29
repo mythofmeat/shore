@@ -131,10 +131,10 @@ MUTANTS = [
 
     # --- the source check -----------------------------------------------------
     ("source: dreaming is still accepted",
-     "  if (source !== TRANSCRIPT_SOURCE) {",
-     "  if (source !== TRANSCRIPT_SOURCE && source !== \"dreaming\") {"),
+     "  if (!TRANSCRIPT_SOURCES.includes(source)) {",
+     "  if (!TRANSCRIPT_SOURCES.includes(source) && source !== \"dreaming\") {"),
     ("source: any source is accepted",
-     "  if (source !== TRANSCRIPT_SOURCE) {",
+     "  if (!TRANSCRIPT_SOURCES.includes(source)) {",
      "  if (false) {"),
     ("source: a non-string source is coerced rather than defaulted",
      "  const source = asStr(args[\"source\"]) ?? TRANSCRIPT_SOURCE;",
@@ -143,21 +143,21 @@ MUTANTS = [
      "  const source = asStr(args[\"source\"]) ?? TRANSCRIPT_SOURCE;",
      "  const source = asStr(args[\"source\"]) ?? \"\";"),
     ("source: the rejection message loses the offending value",
-     "      `unknown transcript source '${source}' (expected '${TRANSCRIPT_SOURCE}')`,",
-     "      `unknown transcript source (expected '${TRANSCRIPT_SOURCE}')`,"),
+     "      `unknown transcript source '${source}' (expected one of ${TRANSCRIPT_SOURCES.join(\", \")})`,",
+     "      `unknown transcript source (expected one of ${TRANSCRIPT_SOURCES.join(\", \")})`,"),
     ("source: the check runs after the store is consulted, not before",
-     "  if (source !== TRANSCRIPT_SOURCE) {\n"
+     "  if (!TRANSCRIPT_SOURCES.includes(source)) {\n"
      "    throw invalidRequest(\n"
-     "      `unknown transcript source '${source}' (expected '${TRANSCRIPT_SOURCE}')`,\n"
+     "      `unknown transcript source '${source}' (expected one of ${TRANSCRIPT_SOURCES.join(\", \")})`,\n"
      "    );\n"
      "  }\n"
      "  const store = ctx.callStore;\n"
      "  if (store === undefined) return { enabled: false, source, entries: [] };",
      "  const store = ctx.callStore;\n"
      "  if (store === undefined) return { enabled: false, source, entries: [] };\n"
-     "  if (source !== TRANSCRIPT_SOURCE) {\n"
+     "  if (!TRANSCRIPT_SOURCES.includes(source)) {\n"
      "    throw invalidRequest(\n"
-     "      `unknown transcript source '${source}' (expected '${TRANSCRIPT_SOURCE}')`,\n"
+     "      `unknown transcript source '${source}' (expected one of ${TRANSCRIPT_SOURCES.join(\", \")})`,\n"
      "    );\n"
      "  }"),
 
