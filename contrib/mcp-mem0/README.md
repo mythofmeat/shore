@@ -41,7 +41,11 @@ boundary.
 boundary while the daemon moves forward, so the two ranges cannot overlap. It
 reads only committed, non-excluded segments and opens the database read-only.
 One invocation makes at most one sequential mem0 batch by default; it atomically
-checkpoints each successful batch and stops without advancing on failure. A
+checkpoints each batch that creates memories and stops without advancing on a
+failure or empty extraction. An empty extraction prints the provider finish
+reason, token counts, and the specific point where the result became empty. A
+normal rerun retries that exact batch. After reviewing a legitimate empty result,
+`--accept-empty` checkpoints it without making another model call. A
 batch can involve more than one provider call because mem0 may extract facts and
 then update existing memories. The MCP server makes one `add` attempt by default;
 raising `MEM0_ADD_ATTEMPTS` is an explicit opt-in to whole-batch retries.
@@ -60,6 +64,19 @@ and the text of every memory it created:
 
     python backfill.py --history /shore-data/history.db --character qifei \
       --from 2026-08-01
+
+If that batch extracts no memories, either rerun the same command to retry it or
+explicitly accept and skip the saved empty batch:
+
+    python backfill.py --history /shore-data/history.db --character qifei \
+      --accept-empty
+
+To recover a cursor advanced by an older version, move it toward the immutable
+boundary. This performs no model call; the next normal run retries below the
+specified position:
+
+    python backfill.py --history /shore-data/history.db --character qifei \
+      --rewind-before 700:45
 
 Only after one-batch runs look healthy, increase the hard bound deliberately:
 

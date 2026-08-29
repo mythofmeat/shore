@@ -102,12 +102,17 @@ overlap.
 
 The command makes **at most one mem0 batch by default**. `--max-batches` is a
 hard per-invocation batch bound, batches run sequentially, and the backfill
-cursor advances atomically after each successful call. A batch can involve more
-than one provider call because mem0 may extract facts and then update existing
-memories. The MCP server makes one whole-batch attempt by default. An MCP or
-provider failure stops the run without advancing past that batch. Backfill
-starts with the newest history, so an initial `--from` date can later be moved
-earlier without repeating the recent slice.
+cursor advances atomically only after a call creates memories. A batch can
+involve more than one provider call because mem0 may extract facts and then
+update existing memories. The MCP server makes one whole-batch attempt by
+default. An MCP or provider failure or an empty extraction stops the run without
+advancing past that batch. Empty results include the provider finish reason,
+token usage, and a classified cause. A normal rerun retries the exact batch;
+`--accept-empty` explicitly checkpoints a reviewed empty result without another
+model call. `--rewind-before SEGMENT:ORDINAL` can recover a cursor advanced by
+an older version, also without making a model call. Backfill starts with the
+newest history, so an initial `--from` date can later be moved earlier without
+repeating the recent slice.
 
 ```console
 python backfill.py --history /shore-data/history.db --character qifei --status --from 2026-08-01

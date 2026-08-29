@@ -3,7 +3,8 @@
 The daemon checkpoint contains an immutable activation boundary. Live ingest
 only moves forward from that boundary; this importer moves backward from it, so
 the two jobs cannot cover the same messages. One invocation processes at most
-one mem0 batch by default and checkpoints only successful MCP calls.
+one mem0 batch by default and checkpoints only batches that created memories or
+were explicitly accepted.
 """
 
 import argparse
@@ -253,7 +254,7 @@ def make_batches(messages: list[ArchivedMessage], batch_size: int, maximum: int)
     return batches
 
 
-def add_result(result) -> tuple[int, list[str]]:
+def add_result(result) -> tuple[int, list[str], dict]:
     if getattr(result, "isError", False):
         details = " ".join(
             str(getattr(block, "text", "")) for block in getattr(result, "content", [])
@@ -270,10 +271,137 @@ def add_result(result) -> tuple[int, list[str]]:
                     isinstance(memory, str) for memory in memories
                 ):
                     raise TypeError("memories must be a list of strings")
-                return added, memories
+                diagnostic = parsed.get("diagnostic", {})
+                if not isinstance(diagnostic, dict):
+                    raise TypeError("diagnostic must be an object")
+                return added, memories, diagnostic
             except (ValueError, AttributeError, TypeError):
                 raise RuntimeError(f"MCP add returned an invalid result: {text[:200]}")
     raise RuntimeError("MCP add returned no result")
+
+
+EMPTY_REASONS = {
+    "no_input_messages": "the batch contained no input messages",
+    "diagnostic_unavailable": "the server did not capture a provider response",
+    "model_hit_token_limit": "the extraction model hit its output-token limit",
+    "model_returned_empty_content": "the extraction model returned empty content",
+    "model_extracted_no_memories": "the model explicitly extracted no memories",
+    "mem0_filtered_all_candidates": (
+        "the model produced candidates, but mem0 filtered all of them before commit "
+        "(empty text, embedding failure, or exact-hash duplicate)"
+    ),
+    "model_response_unparseable": "the extraction model returned an unparseable response",
+}
+
+
+def print_diagnostic(diagnostic: dict) -> None:
+    model = []
+    for key, label in (
+        ("finish_reason", "finish"),
+        ("prompt_tokens", "prompt"),
+        ("completion_tokens", "completion"),
+        ("reasoning_tokens", "reasoning"),
+    ):
+        if diagnostic.get(key) is not None:
+            model.append(f"{label}={diagnostic[key]}")
+    if model:
+        print(f"  model: {', '.join(model)}", flush=True)
+
+    reason = diagnostic.get("empty_reason")
+    if reason:
+        explanation = EMPTY_REASONS.get(reason, str(reason))
+        print(f"  reason: {explanation} [{reason}]", flush=True)
+    for candidate in diagnostic.get("candidates", []):
+        rendered = str(candidate).replace("\n", "\n      ")
+        print(f"  candidate (not committed): {rendered}", flush=True)
+    if diagnostic.get("response_preview"):
+        preview = str(diagnostic["response_preview"]).replace("\n", "\n      ")
+        print(f"  provider response: {preview}", flush=True)
+    if diagnostic.get("diagnostic_error"):
+        print(f"  diagnostic error: {diagnostic['diagnostic_error']}", flush=True)
+
+
+def pending_signature(batch: Batch) -> list[dict]:
+    return [message.position.json() for message in batch.messages]
+
+
+def validate_pending_batch(saved: dict, batch: Batch) -> None:
+    pending = saved.get("last_empty")
+    if pending is None:
+        return
+    if not isinstance(pending, dict):
+        raise RuntimeError("saved empty-batch record is invalid")
+    if pending.get("cursor_before_attempt") != saved.get("before"):
+        raise RuntimeError("saved empty-batch record is stale; use --accept-empty or --rewind-before")
+    if pending.get("messages") != pending_signature(batch):
+        raise RuntimeError(
+            "the next batch differs from the saved empty batch; rerun with the same "
+            "--from and --batch options, or use --accept-empty"
+        )
+
+
+def print_pending(saved: dict) -> None:
+    pending = saved.get("last_empty")
+    if not isinstance(pending, dict):
+        return
+    next_value = pending.get("next_before")
+    try:
+        position = parse_position(next_value, "empty batch cursor")
+        target = f"{position.segment}:{position.ordinal}"
+    except RuntimeError:
+        target = "invalid"
+    print(
+        f"pending empty batch: {len(pending.get('messages') or [])} messages, "
+        f"{int(pending.get('attempts', 0))} attempt(s), next before {target}; "
+        "a normal run retries it",
+        flush=True,
+    )
+
+
+def record_empty(state: dict, saved: dict, batch: Batch) -> None:
+    previous = saved.get("last_empty")
+    attempts = 1
+    if isinstance(previous, dict) and previous.get("messages") == pending_signature(batch):
+        attempts = int(previous.get("attempts", 0)) + 1
+    saved["last_empty"] = {
+        "cursor_before_attempt": saved.get("before"),
+        "next_before": batch.before.json(),
+        "messages": pending_signature(batch),
+        "attempts": attempts,
+    }
+    save_state(state)
+
+
+def accept_empty(state: dict, saved: dict) -> Position:
+    pending = saved.get("last_empty")
+    if not isinstance(pending, dict):
+        raise RuntimeError("there is no uncommitted empty batch to accept")
+    if pending.get("cursor_before_attempt") != saved.get("before"):
+        raise RuntimeError("saved empty-batch record is stale; refusing to advance")
+    position = parse_position(pending.get("next_before"), "empty batch cursor")
+    saved["before"] = position.json()
+    del saved["last_empty"]
+    save_state(state)
+    return position
+
+
+def rewind_before(state: dict, saved: dict, through: Position, target: Position) -> None:
+    if target > through:
+        raise RuntimeError(
+            f"rewind target {target.segment}:{target.ordinal} is past the historical boundary "
+            f"{through.segment}:{through.ordinal}"
+        )
+    current_value = saved.get("before")
+    if current_value is None:
+        raise RuntimeError("backfill has not advanced, so there is nothing to rewind")
+    current = parse_position(current_value, "saved cursor")
+    if target <= current:
+        raise RuntimeError(
+            f"rewind target must be newer than current cursor {current.segment}:{current.ordinal}"
+        )
+    saved["before"] = target.json()
+    saved.pop("last_empty", None)
+    save_state(state)
 
 
 async def ingest(
@@ -285,6 +413,7 @@ async def ingest(
 ) -> None:
     total_added = 0
     for index, batch in enumerate(batches, start=1):
+        validate_pending_batch(saved, batch)
         payload = [
             {
                 "role": message.role,
@@ -305,7 +434,7 @@ async def ingest(
                     },
                 },
             )
-            added, memories = add_result(result)
+            added, memories, diagnostic = add_result(result)
         except BaseException as error:
             elapsed = time.monotonic() - started
             print(
@@ -313,22 +442,50 @@ async def ingest(
                 flush=True,
             )
             raise
+        elapsed = time.monotonic() - started
+        if added == 0:
+            record_empty(state, saved, batch)
+            current = saved.get("before")
+            current_text = (
+                f"{current['segment']}:{current['ordinal']}" if current is not None else "-:-"
+            )
+            print(
+                f"attempted batch {index}/{len(batches)}: {len(batch.messages)} messages, "
+                f"0 memories, {elapsed:.1f}s; cursor remains {current_text}",
+                flush=True,
+            )
+            print_diagnostic(diagnostic)
+            if not diagnostic:
+                print(
+                    "  reason: unavailable; rebuild mcp-mem0 to enable provider diagnostics",
+                    flush=True,
+                )
+            print(
+                "  NOT CHECKPOINTED: rerun to retry this batch, or use --accept-empty to skip it",
+                flush=True,
+            )
+            print(
+                f"stopped on an uncommitted empty batch; {total_added} memories committed",
+                flush=True,
+            )
+            return
+
         saved["before"] = batch.before.json()
+        saved.pop("last_empty", None)
         save_state(state)
         total_added += added
-        elapsed = time.monotonic() - started
-        warning = " WARNING: no memories extracted" if added == 0 else ""
         print(
             f"batch {index}/{len(batches)}: {len(batch.messages)} messages, {added} memories, "
-            f"{elapsed:.1f}s; next before {batch.before.segment}:{batch.before.ordinal}{warning}",
+            f"{elapsed:.1f}s; next before {batch.before.segment}:{batch.before.ordinal}",
             flush=True,
         )
+        print_diagnostic(diagnostic)
         for memory in memories:
             rendered = memory.replace("\n", "\n    ")
             print(f"  + {rendered}", flush=True)
         if added > 0 and not memories:
             print("  WARNING: server returned a count but no memory text; rebuild mcp-mem0", flush=True)
-    print(f"stopped after the requested {len(batches)} batch(es); {total_added} memories added")
+    print(f"stopped after the requested {len(batches)} batch(es); {total_added} memories committed")
 
 
 async def reembed(client, path: str, character: str) -> None:
@@ -357,6 +514,17 @@ def valid_date(value: str) -> str:
     return value
 
 
+def valid_position(value: str) -> Position:
+    try:
+        segment, ordinal = value.split(":", 1)
+        position = Position(int(segment), int(ordinal))
+    except (TypeError, ValueError) as error:
+        raise argparse.ArgumentTypeError("position must be SEGMENT:ORDINAL") from error
+    if position.segment < 0 or position.ordinal < 0:
+        raise argparse.ArgumentTypeError("position values must be non-negative")
+    return position
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--character", required=True)
@@ -369,8 +537,31 @@ async def main() -> None:
     )
     parser.add_argument("--status", action="store_true", help="show cursors and remaining work")
     parser.add_argument("--dry-run", action="store_true", help="show the next bounded run")
+    parser.add_argument(
+        "--accept-empty",
+        action="store_true",
+        help="checkpoint the last reviewed empty batch without another model call",
+    )
+    parser.add_argument(
+        "--rewind-before",
+        type=valid_position,
+        metavar="SEGMENT:ORDINAL",
+        help="move the backfill cursor newer so already-skipped batches can be retried",
+    )
     parser.add_argument("--reembed", help="import already-extracted memories from a JSON dump")
     args = parser.parse_args()
+
+    exclusive = [
+        args.status,
+        args.dry_run,
+        args.accept_empty,
+        args.rewind_before is not None,
+        args.reembed is not None,
+    ]
+    if sum(bool(option) for option in exclusive) > 1:
+        parser.error(
+            "--status, --dry-run, --accept-empty, --rewind-before, and --reembed are exclusive"
+        )
 
     if args.batch < 1 or args.batch > 64:
         parser.error("--batch must be between 1 and 64")
@@ -400,6 +591,23 @@ async def main() -> None:
         f"{remaining} eligible messages",
         flush=True,
     )
+    print_pending(saved)
+    if args.accept_empty:
+        position = accept_empty(state, saved)
+        print(
+            f"accepted empty batch; next backfill is before "
+            f"{position.segment}:{position.ordinal}; no model call made",
+            flush=True,
+        )
+        return
+    if args.rewind_before is not None:
+        rewind_before(state, saved, through, args.rewind_before)
+        print(
+            f"rewound backfill cursor to {args.rewind_before.segment}:"
+            f"{args.rewind_before.ordinal}; no model call made",
+            flush=True,
+        )
+        return
     if args.status:
         return
     if remaining == 0:
@@ -412,6 +620,11 @@ async def main() -> None:
     )
     batches = make_batches(messages, args.batch, args.max_batches)
     if not batches:
+        if saved.get("last_empty") is not None:
+            raise RuntimeError(
+                "an empty batch is pending, but the current options do not select it; "
+                "rerun with the same --from and --batch options, or use --accept-empty"
+            )
         if messages:
             saved["before"] = messages[-1].position.json()
             if not args.dry_run:
@@ -421,6 +634,7 @@ async def main() -> None:
             print("nothing eligible to import")
         return
 
+    validate_pending_batch(saved, batches[0])
     planned = sum(len(batch.messages) for batch in batches)
     print(
         f"planned: {len(batches)} mem0 batch(es), {planned} messages; "

@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import sqlite3
@@ -5,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+from contextlib import redirect_stdout
 from types import SimpleNamespace
 
 zstandard = types.ModuleType("zstandard")
@@ -134,9 +136,16 @@ class BackfillQueryTest(unittest.TestCase):
     def test_add_result_keeps_the_memory_text(self):
         result = SimpleNamespace(
             isError=False,
-            content=[SimpleNamespace(text='{"added": 2, "memories": ["one", "two"]}')],
+            content=[
+                SimpleNamespace(
+                    text=(
+                        '{"added": 2, "memories": ["one", "two"], '
+                        '"diagnostic": {"finish_reason": "stop"}}'
+                    )
+                )
+            ],
         )
-        self.assertEqual(backfill.add_result(result), (2, ["one", "two"]))
+        self.assertEqual(backfill.add_result(result), (2, ["one", "two"], {"finish_reason": "stop"}))
 
 
 class FakeClient:
@@ -183,6 +192,143 @@ class BackfillCheckpointTest(unittest.IsolatedAsyncioTestCase):
                 )
             finally:
                 backfill.STORE = previous
+
+    async def test_empty_result_is_saved_but_does_not_advance(self):
+        with tempfile.TemporaryDirectory() as store:
+            previous = backfill.STORE
+            backfill.STORE = store
+            try:
+                state = {
+                    "version": 2,
+                    "characters": {
+                        "ada": {
+                            "through": {"segment": 2, "ordinal": 1},
+                            "before": {"segment": 2, "ordinal": 1},
+                        }
+                    },
+                }
+                saved = state["characters"]["ada"]
+                batch = backfill.Batch([archived((1, 1))], backfill.Position(1, 1))
+                client = FakeClient(
+                    [
+                        '{"added": 0, "memories": [], "diagnostic": '
+                        '{"empty_reason": "model_extracted_no_memories"}}'
+                    ]
+                )
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    await backfill.ingest(client, "ada", [batch], state, saved)
+                self.assertEqual(saved["before"], {"segment": 2, "ordinal": 1})
+                self.assertEqual(saved["last_empty"]["next_before"], {"segment": 1, "ordinal": 1})
+                self.assertEqual(saved["last_empty"]["attempts"], 1)
+                self.assertIn("cursor remains 2:1", output.getvalue())
+                self.assertIn("model explicitly extracted no memories", output.getvalue())
+                self.assertIn("NOT CHECKPOINTED", output.getvalue())
+
+                with open(backfill.state_path()) as handle:
+                    persisted = json.load(handle)
+                self.assertEqual(
+                    persisted["characters"]["ada"]["before"],
+                    {"segment": 2, "ordinal": 1},
+                )
+            finally:
+                backfill.STORE = previous
+
+    async def test_successful_retry_clears_empty_record_and_advances(self):
+        with tempfile.TemporaryDirectory() as store:
+            previous = backfill.STORE
+            backfill.STORE = store
+            try:
+                batch = backfill.Batch([archived((1, 1))], backfill.Position(1, 1))
+                state = {
+                    "version": 2,
+                    "characters": {
+                        "ada": {
+                            "through": {"segment": 2, "ordinal": 1},
+                            "before": {"segment": 2, "ordinal": 1},
+                            "last_empty": {
+                                "cursor_before_attempt": {"segment": 2, "ordinal": 1},
+                                "next_before": {"segment": 1, "ordinal": 1},
+                                "messages": backfill.pending_signature(batch),
+                                "attempts": 1,
+                            },
+                        }
+                    },
+                }
+                saved = state["characters"]["ada"]
+                await backfill.ingest(
+                    FakeClient(['{"added": 1, "memories": ["retried memory"]}']),
+                    "ada",
+                    [batch],
+                    state,
+                    saved,
+                )
+                self.assertEqual(saved["before"], {"segment": 1, "ordinal": 1})
+                self.assertNotIn("last_empty", saved)
+            finally:
+                backfill.STORE = previous
+
+
+class BackfillRecoveryTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.previous = backfill.STORE
+        backfill.STORE = self.temp.name
+        self.state = {
+            "version": 2,
+            "characters": {
+                "ada": {
+                    "through": {"segment": 700, "ordinal": 57},
+                    "before": {"segment": 700, "ordinal": 29},
+                }
+            },
+        }
+        self.saved = self.state["characters"]["ada"]
+
+    def tearDown(self):
+        backfill.STORE = self.previous
+        self.temp.cleanup()
+
+    def test_accept_empty_advances_without_a_client(self):
+        self.saved["last_empty"] = {
+            "cursor_before_attempt": {"segment": 700, "ordinal": 29},
+            "next_before": {"segment": 700, "ordinal": 21},
+            "messages": [],
+        }
+        position = backfill.accept_empty(self.state, self.saved)
+        self.assertEqual(position, backfill.Position(700, 21))
+        self.assertEqual(self.saved["before"], {"segment": 700, "ordinal": 21})
+        self.assertNotIn("last_empty", self.saved)
+
+    def test_rewind_moves_toward_boundary_for_recovery(self):
+        backfill.rewind_before(
+            self.state,
+            self.saved,
+            backfill.Position(700, 57),
+            backfill.Position(700, 45),
+        )
+        self.assertEqual(self.saved["before"], {"segment": 700, "ordinal": 45})
+
+    def test_rewind_refuses_to_move_farther_back(self):
+        with self.assertRaisesRegex(RuntimeError, "must be newer"):
+            backfill.rewind_before(
+                self.state,
+                self.saved,
+                backfill.Position(700, 57),
+                backfill.Position(700, 20),
+            )
+
+    def test_pending_batch_must_be_retried_with_the_same_messages(self):
+        expected = backfill.Batch([archived((700, 28))], backfill.Position(700, 28))
+        different = backfill.Batch([archived((700, 27))], backfill.Position(700, 27))
+        self.saved["last_empty"] = {
+            "cursor_before_attempt": {"segment": 700, "ordinal": 29},
+            "next_before": {"segment": 700, "ordinal": 28},
+            "messages": backfill.pending_signature(expected),
+            "attempts": 1,
+        }
+        with self.assertRaisesRegex(RuntimeError, "next batch differs"):
+            backfill.validate_pending_batch(self.saved, different)
 
 
 if __name__ == "__main__":
