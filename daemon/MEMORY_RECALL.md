@@ -94,9 +94,29 @@ an uncommitted segment to Hindsight or lose a committed segment's pending work.
 The worker calls Hindsight's asynchronous `retain`, so the 90-400 second
 extraction runs behind Hindsight rather than blocking compaction or the turn
 that triggered it. The worker follows accepted operations to completion,
-serializes them per character, and retries submission or extraction failures
-with exponential backoff; the stable document id makes a retry converge on one
-document.
+serializes them per character, and retries submission, poll and extraction
+failures with exponential backoff; the stable document id makes a retry converge
+on one document. Only a reply carrying an operation id counts as submitted, so a
+rejected `retain` stays queued instead of being recorded as stored.
+
+Hindsight's MCP tools report failure **in band**: the JSON-RPC result carries
+`isError: false` and the payload itself says what went wrong. Measured against a
+live server, `retain` answers `{"status": "error", "message": ...}`, and
+`get_document` and `delete_document` answer `{"error": ...}`. `McpClient.call`
+only throws on `isError`, so the worker inspects every reply and raises
+`HindsightToolError` on those shapes; without that a rejected `retain` looks
+like a submission with no operation id. A reply is treated as a tool failure
+when `status` is `"error"`, or when it carries an `error` string and no `status`
+at all — `get_operation` reports a genuinely failed job as `status: "failed"`
+with an `error_message`, which is the operation's outcome, not a tool error.
+
+`get_operation` answers `status: "not_found"` for an operation Hindsight has
+pruned, which is the normal state after a daemon was down longer than the
+operation retention window. That alone does not say whether the retain
+succeeded, so the worker asks `get_document` for `shore:<character>:seg<N>`: if
+the document is there the segment is complete, and if it is not the segment goes
+back to `pending` for a fresh submission. Treating `not_found` as either outcome
+without checking would silently drop segments or repeat extraction forever.
 
 Hindsight's current MCP `retain` returns an operation id but does not accept a
 caller-supplied one. A connection loss after Hindsight accepted a submission

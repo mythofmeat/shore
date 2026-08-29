@@ -11,6 +11,7 @@ const RETAIN_TOOL = "retain";
 const GET_OPERATION_TOOL = "get_operation";
 const CANCEL_OPERATION_TOOL = "cancel_operation";
 const DELETE_DOCUMENT_TOOL = "delete_document";
+const GET_DOCUMENT_TOOL = "get_document";
 const MAX_RETRY_MS = 60_000;
 
 const CONTEXT =
@@ -204,6 +205,9 @@ export class HindsightRetainService {
         document_id: document.documentId,
       });
       const operationId = operationIdFrom(response);
+      if (operationId === undefined) {
+        throw new HindsightToolError(`hindsight ${RETAIN_TOOL} returned no operation id`);
+      }
       store.markMemoryRetainSubmitted(
         job.character,
         job.segment,
@@ -220,11 +224,7 @@ export class HindsightRetainService {
       if (job.status === "delete_pending") {
         store.markMemoryDeleteFailure(job.character, job.segment, detail, retryAt);
       } else if (job.status === "submitted") {
-        if (/\b(?:404|not found)\b/i.test(detail)) {
-          store.markMemoryRetainComplete(job.character, job.segment);
-        } else {
-          store.markMemoryRetainPoll(job.character, job.segment, retryAt, detail);
-        }
+        store.markMemoryRetainPoll(job.character, job.segment, retryAt, detail);
       } else {
         store.markMemoryRetainFailure(job.character, job.segment, detail, retryAt);
       }
@@ -242,7 +242,12 @@ export class HindsightRetainService {
   ): Promise<void> {
     const operationId = job.remote_operation_id;
     if (operationId === undefined) {
-      store.markMemoryRetainComplete(job.character, job.segment);
+      store.markMemoryRetainFailure(
+        job.character,
+        job.segment,
+        "submitted without an operation id",
+        this.#now() + retryDelayMs(job.attempts),
+      );
       return;
     }
     const response = await this.#call(registration, GET_OPERATION_TOOL, {
@@ -271,11 +276,59 @@ export class HindsightRetainService {
       );
       return;
     }
+    if (status === "not_found") {
+      await this.#resolveMissingOperation(store, registration, job, operationId);
+      return;
+    }
     store.markMemoryRetainPoll(
       job.character,
       job.segment,
       this.#now() + this.#pollIntervalMs,
     );
+  }
+
+  async #resolveMissingOperation(
+    store: HistoryStore,
+    registration: HindsightRetainRegistration,
+    job: MemoryRetainJob,
+    operationId: string,
+  ): Promise<void> {
+    const documentId = `shore:${job.character}:seg${String(job.segment)}`;
+    if (await this.#documentExists(registration, documentId)) {
+      store.markMemoryRetainComplete(job.character, job.segment);
+      shoreLog.info(
+        `shore: hindsight dropped operation ${operationId} for ${job.character} ` +
+          `(segment=${String(job.segment)}) but ${documentId} is stored; treating it as done`,
+      );
+      return;
+    }
+    const detail =
+      `hindsight operation ${operationId} is gone and ${documentId} was never stored`;
+    store.markMemoryRetainFailure(
+      job.character,
+      job.segment,
+      detail,
+      this.#now() + retryDelayMs(job.attempts),
+    );
+    shoreLog.warn(
+      `shore: re-queuing hindsight archive retain for ${job.character} ` +
+        `(segment=${String(job.segment)}): ${detail}`,
+    );
+  }
+
+  async #documentExists(
+    registration: HindsightRetainRegistration,
+    documentId: string,
+  ): Promise<boolean> {
+    try {
+      const response = await this.#call(registration, GET_DOCUMENT_TOOL, {
+        document_id: documentId,
+      });
+      return typeof response?.["id"] === "string";
+    } catch (error) {
+      if (error instanceof HindsightToolError) return false;
+      throw error;
+    }
   }
 
   async #delete(
@@ -303,44 +356,52 @@ export class HindsightRetainService {
     registration: HindsightRetainRegistration,
     tool: string,
     args: Record<string, unknown>,
-  ): Promise<unknown> {
+  ): Promise<Record<string, unknown> | undefined> {
     const deadline = AbortSignal.timeout(registration.timeoutMs);
     const signal = AbortSignal.any([this.#stop.signal, deadline]);
-    return await settleBeforeAbort(
+    const raw = await settleBeforeAbort(
       this.#mcpRegistry.call(`mcp__${registration.server}__${tool}`, args, signal),
       signal,
       `${tool} timed out after ${String(registration.timeoutMs)}ms`,
     );
+    const payload = parsedObject(raw);
+    const failure = toolErrorFrom(payload);
+    if (failure !== undefined) throw new HindsightToolError(`hindsight ${tool}: ${failure}`);
+    return payload;
   }
+}
+
+export class HindsightToolError extends Error {}
+
+function toolErrorFrom(payload: Record<string, unknown> | undefined): string | undefined {
+  if (payload === undefined) return undefined;
+  const status = payload["status"];
+  if (status === "error") {
+    const message = payload["message"];
+    return typeof message === "string" && message !== "" ? message : "unspecified failure";
+  }
+  if (status !== undefined) return undefined;
+  const error = payload["error"];
+  return typeof error === "string" && error !== "" ? error : undefined;
 }
 
 function retryDelayMs(attempts: number): number {
   return Math.min(1_000 * 2 ** Math.min(attempts, 20), MAX_RETRY_MS);
 }
 
-function operationIdFrom(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    try {
-      return operationIdFrom(JSON.parse(value) as unknown);
-    } catch {
-      return undefined;
-    }
-  }
-  if (typeof value !== "object" || value === null) return undefined;
-  const operationId = (value as Record<string, unknown>)["operation_id"];
+function operationIdFrom(payload: Record<string, unknown> | undefined): string | undefined {
+  const operationId = payload?.["operation_id"];
   return typeof operationId === "string" && operationId !== "" ? operationId : undefined;
 }
 
-function operationStatusFrom(value: unknown): string | undefined {
-  const parsed = parsedObject(value);
-  const status = parsed?.["status"];
+function operationStatusFrom(payload: Record<string, unknown> | undefined): string | undefined {
+  const status = payload?.["status"];
   return typeof status === "string" ? status.toLowerCase() : undefined;
 }
 
-function operationErrorFrom(value: unknown): string | undefined {
-  const parsed = parsedObject(value);
+function operationErrorFrom(payload: Record<string, unknown> | undefined): string | undefined {
   for (const key of ["error", "error_message", "message"]) {
-    const detail = parsed?.[key];
+    const detail = payload?.[key];
     if (typeof detail === "string" && detail !== "") return detail;
   }
   return undefined;

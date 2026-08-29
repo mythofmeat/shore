@@ -100,7 +100,10 @@ archive or user turn.
 
 The worker persists pending submissions in `history.db` at the same durable
 boundary as the segment commit, follows accepted operations to completion, and
-retries transport or extraction failures. It keeps one retain in flight per
+retries transport or extraction failures. Hindsight reports tool failures in the
+reply body rather than as MCP errors, so the worker reads every reply for an
+error payload and re-queues on one; an operation Hindsight has since pruned is
+settled by asking whether the document exists. It keeps one retain in flight per
 character. A segment excluded before submission is skipped. Excluding one later
 cancels its known operation when possible and deletes
 `shore:<character>:seg<N>` from Hindsight; including it queues the document

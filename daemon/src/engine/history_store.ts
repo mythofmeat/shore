@@ -560,7 +560,7 @@ export class HistoryStore {
   markMemoryRetainSubmitted(
     character: string,
     segment: number,
-    remoteOperationId: string | undefined,
+    remoteOperationId: string,
     nextPollAt: number,
   ): boolean {
     return this.#db
@@ -571,20 +571,14 @@ export class HistoryStore {
                  SELECT 1 FROM history_segments
                  WHERE character = ?1 AND idx = ?2 AND excluded = 1
                ) THEN 'delete_pending'
-               WHEN ?3 IS NULL THEN 'complete'
                ELSE 'submitted'
              END,
              remote_operation_id = ?3, attempts = attempts + 1,
              next_attempt_at = ?4, last_error = NULL, updated_at = ?5
          WHERE character = ?1 AND segment = ?2 AND status IN ('pending', 'excluded')`,
       )
-      .run(
-        character,
-        segment,
-        remoteOperationId ?? null,
-        remoteOperationId === undefined ? 0 : nextPollAt,
-        new Date().toISOString(),
-      ).changes > 0;
+      .run(character, segment, remoteOperationId, nextPollAt, new Date().toISOString())
+      .changes > 0;
   }
 
   markMemoryRetainPoll(
@@ -596,7 +590,9 @@ export class HistoryStore {
     return this.#db
       .query(
         `UPDATE history_memory_retain
-         SET next_attempt_at = ?3, last_error = ?4, updated_at = ?5
+         SET next_attempt_at = ?3, last_error = ?4,
+             attempts = attempts + CASE WHEN ?4 IS NULL THEN 0 ELSE 1 END,
+             updated_at = ?5
          WHERE character = ?1 AND segment = ?2 AND status = 'submitted'`,
       )
       .run(character, segment, nextPollAt, error ?? null, new Date().toISOString()).changes > 0;
@@ -654,7 +650,7 @@ export class HistoryStore {
                ELSE 'pending'
              END,
              attempts = attempts + 1, next_attempt_at = ?4,
-             last_error = ?3, updated_at = ?5
+             last_error = ?3, remote_operation_id = NULL, updated_at = ?5
          WHERE character = ?1 AND segment = ?2`,
       )
       .run(character, segment, error, retryAt, new Date().toISOString()).changes > 0;

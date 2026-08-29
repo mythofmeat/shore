@@ -159,7 +159,7 @@ describe("hindsight retain service", () => {
         call: async () => {
           attempts += 1;
           if (attempts === 1) throw new Error("offline");
-          return { success: true };
+          return { operation_id: "op-1" };
         },
       },
       { now: () => now },
@@ -183,7 +183,10 @@ describe("hindsight retain service", () => {
     await service.runOnce();
     expect(attempts).toBe(2);
     store = HistoryStore.open(path);
-    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toMatchObject({
+      status: "submitted",
+      remote_operation_id: "op-1",
+    });
     store.close();
     await service.shutdown();
   });
@@ -199,9 +202,9 @@ describe("hindsight retain service", () => {
           calls.push(name);
           if (name.endsWith("__retain")) {
             submissions += 1;
-            return submissions === 1 ? { operation_id: "op-failed" } : { success: true };
+            return { operation_id: submissions === 1 ? "op-failed" : "op-second" };
           }
-          return { status: "failed", error: "extractor stopped" };
+          return { status: "failed", error_message: "extractor stopped" };
         },
       },
       { now: () => now, pollIntervalMs: 100 },
@@ -228,6 +231,174 @@ describe("hindsight retain service", () => {
       "mcp__hindsight__retain",
     ]);
     store = HistoryStore.open(path);
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toMatchObject({
+      status: "submitted",
+      remote_operation_id: "op-second",
+    });
+    store.close();
+    await service.shutdown();
+  });
+
+  test("a retain that answers with an in-band error is retried, not completed", async () => {
+    const { path } = queuedHistory("hindsight-inband-error");
+    let now = 0;
+    const service = new HindsightRetainService(
+      {
+        call: async () => ({ status: "error", message: "extraction provider unavailable" }),
+      },
+      { now: () => now },
+    );
+    register(service, path);
+
+    await service.runOnce();
+    const store = HistoryStore.open(path);
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toMatchObject({
+      status: "pending",
+      attempts: 1,
+      last_error: "hindsight retain: extraction provider unavailable",
+    });
+    store.close();
+    await service.shutdown();
+  });
+
+  test("a forgotten operation completes when the document is stored", async () => {
+    const { path } = queuedHistory("hindsight-forgotten-stored");
+    let now = 0;
+    const calls: string[] = [];
+    const service = new HindsightRetainService(
+      {
+        call: async (name) => {
+          calls.push(name);
+          if (name.endsWith("__retain")) return { operation_id: "op-pruned" };
+          if (name.endsWith("__get_document")) return { id: "shore:ada:seg0", bank_id: "ada" };
+          return { operation_id: "op-pruned", status: "not_found", error_message: null };
+        },
+      },
+      { now: () => now, pollIntervalMs: 10 },
+    );
+    register(service, path);
+
+    await service.runOnce();
+    now = 10;
+    await service.runOnce();
+    expect(calls).toEqual([
+      "mcp__hindsight__retain",
+      "mcp__hindsight__get_operation",
+      "mcp__hindsight__get_document",
+    ]);
+    const store = HistoryStore.open(path);
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    store.close();
+    await service.shutdown();
+  });
+
+  test("a forgotten operation is re-queued when the document never landed", async () => {
+    const { path } = queuedHistory("hindsight-forgotten-missing");
+    let now = 0;
+    const service = new HindsightRetainService(
+      {
+        call: async (name) => {
+          if (name.endsWith("__retain")) return { operation_id: "op-pruned" };
+          if (name.endsWith("__get_document")) {
+            return { error: "Document 'shore:ada:seg0' not found" };
+          }
+          return { operation_id: "op-pruned", status: "not_found", error_message: null };
+        },
+      },
+      { now: () => now, pollIntervalMs: 10 },
+    );
+    register(service, path);
+
+    await service.runOnce();
+    now = 10;
+    await service.runOnce();
+    const store = HistoryStore.open(path);
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toMatchObject({
+      status: "pending",
+      last_error:
+        "hindsight operation op-pruned is gone and shore:ada:seg0 was never stored",
+    });
+    store.close();
+    await service.shutdown();
+  });
+
+  test("a failing poll backs off instead of retrying at a flat interval", async () => {
+    const { path } = queuedHistory("hindsight-poll-backoff");
+    let now = 0;
+    let polls = 0;
+    const service = new HindsightRetainService(
+      {
+        call: async (name) => {
+          if (name.endsWith("__retain")) return { operation_id: "op-1" };
+          polls += 1;
+          throw new Error("connection refused");
+        },
+      },
+      { now: () => now, pollIntervalMs: 10 },
+    );
+    register(service, path);
+
+    await service.runOnce();
+    const seen: number[] = [];
+    for (const at of [10, 2_010, 6_010]) {
+      now = at;
+      await service.runOnce();
+      const store = HistoryStore.open(path);
+      const job = store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER);
+      store.close();
+      seen.push(job?.next_attempt_at ?? -1);
+    }
+    expect(polls).toBe(3);
+    expect(seen).toEqual([2_010, 6_010, 14_010]);
+    await service.shutdown();
+  });
+
+  test("a delete that answers with an in-band error stays queued", async () => {
+    const { path } = queuedHistory("hindsight-delete-error");
+    const seed = HistoryStore.open(path);
+    seed.markMemoryRetainSubmitted("ada", 0, "op-1", 0);
+    seed.setExcluded("ada", 0, true, true);
+    seed.close();
+    let now = 0;
+    const service = new HindsightRetainService(
+      {
+        call: async (name) => {
+          if (name.endsWith("__delete_document")) return { error: "database unavailable" };
+          return { status: "cancelled" };
+        },
+      },
+      { now: () => now },
+    );
+    register(service, path);
+
+    await service.runOnce();
+    const store = HistoryStore.open(path);
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toMatchObject({
+      status: "delete_pending",
+      last_error: "hindsight delete_document: database unavailable",
+    });
+    store.close();
+    await service.shutdown();
+  });
+
+  test("a delete of an already-missing document settles", async () => {
+    const { path } = queuedHistory("hindsight-delete-missing");
+    const seed = HistoryStore.open(path);
+    seed.markMemoryRetainSubmitted("ada", 0, "op-1", 0);
+    seed.setExcluded("ada", 0, true, true);
+    seed.close();
+    const service = new HindsightRetainService({
+      call: async (name) => {
+        if (name.endsWith("__delete_document")) {
+          return { error: "Document 'shore:ada:seg0' not found" };
+        }
+        return { status: "cancelled" };
+      },
+    });
+    register(service, path);
+
+    await service.runOnce();
+    const store = HistoryStore.open(path);
     expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
     store.close();
     await service.shutdown();
