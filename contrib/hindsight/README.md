@@ -89,6 +89,22 @@ Run one segment first and read what it produced:
 `--dry-run` lists the work without calling the model. `--since YYYY-MM-DD` stops
 at a date. Widen `--limit` once single-segment runs look right. Reruns are safe.
 
+Turn auto-consolidation **off** for a bulk import. It runs after every retain,
+competes with the next document's extraction for the same LLM, and gets slower as
+the bank fills -- measured at 55s for the first batch of 8 memories and 100s for
+the second, against a 176s extraction running beside it. Set
+
+    HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION=false
+
+for the duration, then consolidate once at the end:
+
+    curl -XPOST http://127.0.0.1:8888/v1/default/banks/qifei/consolidate -d '{}' \
+      -H 'Content-Type: application/json'
+
+and remove the variable afterwards, so day-to-day retains consolidate as they
+land. Leaving it off permanently means observations -- the deduplicated layer
+recall should be reading -- never get built.
+
 ## Order of operations
 
 `memory.recall` is only understood by a daemon built after the recall layer was
