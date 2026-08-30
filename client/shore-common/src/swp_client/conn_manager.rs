@@ -17,6 +17,7 @@ pub enum ConnEvent {
         selected_character: Option<String>,
     },
     Message(ServerMessage),
+    SendFailed(ClientMessage),
     Disconnected(String),
 }
 
@@ -165,9 +166,7 @@ async fn run_connected_session(
                     Some(ConnCommand::Send(msg)) => {
                         if let Err(e) = conn.send(&msg).await {
                             error!(error = %e, "send failed, disconnecting");
-                            let _send_fail_sent = event_tx.send(ConnEvent::Disconnected(
-                                "send failed".into()
-                            )).await;
+                            let _send_fail_sent = event_tx.send(ConnEvent::SendFailed(msg)).await;
                             return SessionOutcome::Reconnect;
                         }
                     }
@@ -221,6 +220,7 @@ async fn run_connected_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::client_msg::ClientMessageBody;
 
     #[test]
     fn test_next_backoff_doubles() {
@@ -281,5 +281,51 @@ mod tests {
             Some("Yuna".into())
         );
         assert_eq!(reconnect_target(&sync, None), None);
+    }
+
+    #[tokio::test]
+    async fn send_failure_returns_the_unsent_message() {
+        let (client, server) = tokio::io::duplex(64);
+        drop(server);
+        let mut conn = SWPConnection::from_raw_stream(client);
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+        let (cmd_tx, mut cmd_rx) = mpsc::channel(1);
+        let mut sync_state = SyncState::new(0, None);
+        let message = ClientMessage::Message(ClientMessageBody {
+            rid: None,
+            text: "keep this".into(),
+            stream: true,
+            images: vec!["photo.png".into()],
+            image_data: vec![],
+            absence_seconds: None,
+        });
+        cmd_tx.send(ConnCommand::Send(message)).await.unwrap();
+
+        let outcome =
+            run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync_state).await;
+
+        assert!(matches!(outcome, SessionOutcome::Reconnect));
+        let event = event_rx.recv().await.unwrap();
+        let failed_message = match event {
+            ConnEvent::SendFailed(ClientMessage::Message(failed)) => Some(failed),
+            ConnEvent::Connected { .. }
+            | ConnEvent::Message(_)
+            | ConnEvent::SendFailed(
+                ClientMessage::Hello(_)
+                | ClientMessage::Regen(_)
+                | ClientMessage::Command(_)
+                | ClientMessage::Cancel(_),
+            )
+            | ConnEvent::Disconnected(_) => None,
+        };
+        assert!(
+            failed_message.is_some(),
+            "expected the failed message to be returned"
+        );
+        let Some(failed) = failed_message else {
+            return;
+        };
+        assert_eq!(failed.text, "keep this");
+        assert_eq!(failed.images, vec!["photo.png"]);
     }
 }

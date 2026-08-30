@@ -726,6 +726,31 @@ async fn send_conn_commands(
     }
 }
 
+fn restore_failed_send(app: &mut App, command: ConnCommand) {
+    let ConnCommand::Send(client_message) = command else {
+        return;
+    };
+    let ClientMessage::Message(message) = client_message else {
+        app.set_error("command not sent; connection unavailable");
+        return;
+    };
+
+    app.input.set_text(message.text);
+    app.pending_images = message.images;
+    app.set_error("message not sent; restored to input for retry");
+}
+
+async fn send_conn_command(
+    app: &mut App,
+    cmd_tx: &tokio::sync::mpsc::Sender<ConnCommand>,
+    command: ConnCommand,
+) {
+    if let Err(error) = cmd_tx.send(command).await {
+        prepare_for_reconnect(app);
+        restore_failed_send(app, error.0);
+    }
+}
+
 fn model_settings_conn_command(_app: &App, rid: Option<String>) -> ConnCommand {
     ConnCommand::Send(ClientMessage::Command(Command {
         rid,
@@ -903,6 +928,19 @@ fn mark_connection_task_exited(app: &mut App, conn_events_open: &mut bool) {
     app.set_warning("connection task exited");
 }
 
+fn prepare_for_reconnect(app: &mut App) {
+    app.connection_status = ConnectionStatus::Connecting;
+    app.abort_stream();
+    app.effective_sampler = None;
+    app.sampler_settings_loading = false;
+    app.pending_sampler_settings_rid = None;
+    app.pending_palette_commands.clear();
+    app.invalidate_palette_catalog();
+    app.history_page_loading = false;
+    app.pending_subagent_trace_ids.clear();
+    app.usage_budgets.clear();
+}
+
 async fn handle_action(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
@@ -922,7 +960,7 @@ async fn handle_action(
         }
         Action::Send(cmd) => {
             if send_enabled {
-                drop(cmd_tx.send(cmd).await);
+                send_conn_command(app, cmd_tx, cmd).await;
             } else {
                 app.set_status("fixture mode: command ignored");
             }
@@ -1250,17 +1288,14 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             }
         }
 
+        ConnEvent::SendFailed(message) => {
+            prepare_for_reconnect(app);
+            restore_failed_send(app, ConnCommand::Send(message));
+            UiEffect::redraw(RedrawEffect::Immediate)
+        }
+
         ConnEvent::Disconnected(reason) => {
-            app.connection_status = ConnectionStatus::Connecting;
-            app.abort_stream();
-            app.effective_sampler = None;
-            app.sampler_settings_loading = false;
-            app.pending_sampler_settings_rid = None;
-            app.pending_palette_commands.clear();
-            app.invalidate_palette_catalog();
-            app.history_page_loading = false;
-            app.pending_subagent_trace_ids.clear();
-            app.usage_budgets.clear();
+            prepare_for_reconnect(app);
             app.set_status(format!("reconnecting: {reason}"));
             UiEffect::redraw(RedrawEffect::Immediate)
         }
@@ -4665,6 +4700,66 @@ mod redraw_tests {
                     t.msg_id.as_deref() == Some("m_missing_from_history") && t.metadata.is_some()
                 })
         );
+    }
+}
+
+#[cfg(test)]
+mod send_failure_tests {
+    use super::*;
+    use shore_common::protocol::client_msg::ClientMessageBody;
+
+    fn failed_message() -> ClientMessage {
+        ClientMessage::Message(ClientMessageBody {
+            rid: None,
+            text: "please keep this".into(),
+            stream: true,
+            images: vec!["one.png".into(), "two.jpg".into()],
+            image_data: vec![],
+            absence_seconds: None,
+        })
+    }
+
+    fn assert_message_was_restored(app: &App) {
+        assert_eq!(app.input.text, "please keep this");
+        assert_eq!(app.pending_images, vec!["one.png", "two.jpg"]);
+        assert!(
+            app.notifications
+                .iter()
+                .any(|notification| notification.content.contains("restored to input")),
+            "the failure should explain where the message went: {:?}",
+            app.notifications
+        );
+    }
+
+    #[test]
+    fn failed_connection_send_restores_text_and_attachments() {
+        let mut app = App {
+            connection_status: ConnectionStatus::Connected,
+            ..App::default()
+        };
+        app.stream.active = true;
+
+        let _ = handle_conn_event(&mut app, ConnEvent::SendFailed(failed_message()));
+
+        assert!(matches!(
+            app.connection_status,
+            ConnectionStatus::Connecting
+        ));
+        assert!(!app.stream.active, "the abandoned stream must stop");
+        assert_message_was_restored(&app);
+    }
+
+    #[tokio::test]
+    async fn failed_command_enqueue_restores_text_and_attachments() {
+        let mut app = App::default();
+        app.stream.active = true;
+        let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(1);
+        drop(cmd_rx);
+
+        send_conn_command(&mut app, &cmd_tx, ConnCommand::Send(failed_message())).await;
+
+        assert!(!app.stream.active, "the abandoned stream must stop");
+        assert_message_was_restored(&app);
     }
 }
 
