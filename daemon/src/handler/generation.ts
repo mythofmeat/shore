@@ -326,6 +326,7 @@ async function runGenerationCore(
     messages: withRecalledMemory(
       droppedHistoryImages(built.request.messages, imageSupport, resolved),
       recalledMemory,
+      config.app.memory.recall.preamble,
     ),
     context: callContext(deps, config, charName, params.rid, built.keepalive_max_secs, (built.request.provider_options === undefined
         ? {}
@@ -665,25 +666,18 @@ function recordKeyFallback(
 export function withRecalledMemory(
   messages: readonly WireMessage[],
   recalled: string | undefined,
+  preamble: string,
 ): WireMessage[] {
   if (recalled === undefined || recalled.trim() === "") return [...messages];
   return [...messages, {
     role: "system",
-    content: [{ type: "text", text: recalledMemoryText(recalled) }],
+    content: [{ type: "text", text: recalledMemoryText(recalled, preamble) }],
   }];
 }
 
-function recalledMemoryText(recalled: string): string {
-  return (
-    "<recalled_memory>\n" +
-    "Things you already know that bear on what is being said right now, pulled " +
-    "from your memory of past conversations without you having to go looking. " +
-    "They are notes on the record, not the record itself: use what is relevant, " +
-    "ignore what is not, and ask your memory subagent when you need more than " +
-    "these lines give you.\n\n" +
-    `${recalled}\n` +
-    "</recalled_memory>"
-  );
+function recalledMemoryText(recalled: string, preamble: string): string {
+  const framing = preamble === "" ? "" : `${preamble}\n\n`;
+  return `<recalled_memory>\n${framing}${recalled}\n</recalled_memory>`;
 }
 
 export function applyIntermediateMessages(

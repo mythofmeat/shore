@@ -9,6 +9,7 @@ import type { McpRegistry } from "../tools/mcp_registry.ts";
 const MESSAGE_CHARS = 1_200;
 const QUERY_CHARS = 4_000;
 const MEMORY_CHARS = 600;
+const TRANSCRIPT_RESULTS = 12;
 
 export interface MemoryRecallDiagnostics {
   memory_recall: { push: (entry: MemoryRecallEntry) => void };
@@ -39,6 +40,16 @@ export interface MemoryRecallDeps {
 export interface RecalledMemory {
   text: string;
   occurred_at?: string | undefined;
+  id?: string | undefined;
+  type?: string | undefined;
+  scores?: RecallScores | undefined;
+}
+
+export interface RecallScores {
+  final?: number | null | undefined;
+  reranker?: number | null | undefined;
+  semantic?: number | null | undefined;
+  keyword?: number | null | undefined;
 }
 
 export function memoryRecallRunner(deps: MemoryRecallDeps): MemoryRecallRunner {
@@ -87,7 +98,8 @@ export async function runMemoryRecall(
       ),
       signal,
     );
-    const memories = parseRecallResult(raw).slice(0, recall.max_memories);
+    const results = parseRecallResult(raw);
+    const memories = results.slice(0, recall.max_memories);
     const status = memories.length === 0 ? "no_match" : "recalled";
     const elapsed = clock() - started;
     deps.diagnostics.memory_recall.push({
@@ -99,7 +111,13 @@ export async function runMemoryRecall(
     keepTranscript(deps, input.character, {
       status,
       query,
+      query_from: recall.query_from,
+      ...(queryTimestamp === undefined ? {} : { query_timestamp: queryTimestamp }),
       elapsed_ms: elapsed,
+      returned: results.length,
+      injected: memories.length,
+      results: results.slice(0, TRANSCRIPT_RESULTS),
+      results_truncated: results.length > TRANSCRIPT_RESULTS,
       memories: memories.map((memory) => memory.text),
     });
     return memories.length === 0 ? undefined : formatMemories(memories);
@@ -118,7 +136,13 @@ export async function runMemoryRecall(
     keepTranscript(deps, input.character, {
       status: "failed",
       query,
+      query_from: recall.query_from,
+      ...(queryTimestamp === undefined ? {} : { query_timestamp: queryTimestamp }),
       elapsed_ms: elapsed,
+      returned: 0,
+      injected: 0,
+      results: [],
+      results_truncated: false,
       memories: [],
       error: message,
     });
@@ -129,7 +153,13 @@ export async function runMemoryRecall(
 interface RecallTranscript {
   status: string;
   query: string;
+  query_from: MemoryRecallQueryFrom;
+  query_timestamp?: string;
   elapsed_ms: number;
+  returned: number;
+  injected: number;
+  results: RecalledMemory[];
+  results_truncated: boolean;
   memories: string[];
   error?: string;
 }
@@ -225,11 +255,29 @@ export function parseRecallResult(raw: unknown): RecalledMemory[] {
     const text = entry["text"];
     if (typeof text !== "string" || text.trim() === "") return [];
     const occurredAt = entry["occurred_at"] ?? entry["occurred_start"];
+    const id = entry["id"];
+    const type = entry["type"] ?? entry["fact_type"];
+    const scores = parseRecallScores(entry["scores"]);
     return [{
       text: truncate(text.trim(), MEMORY_CHARS),
       ...(typeof occurredAt === "string" ? { occurred_at: occurredAt } : {}),
+      ...(typeof id === "string" ? { id } : {}),
+      ...(typeof type === "string" ? { type } : {}),
+      ...(scores === undefined ? {} : { scores }),
     }];
   });
+}
+
+function parseRecallScores(raw: unknown): RecallScores | undefined {
+  if (!isRecord(raw)) return undefined;
+  const scores: RecallScores = {};
+  for (const key of ["final", "reranker", "semantic", "keyword"] as const) {
+    const value = raw[key];
+    if (value === null || (typeof value === "number" && Number.isFinite(value))) {
+      scores[key] = value;
+    }
+  }
+  return Object.keys(scores).length === 0 ? undefined : scores;
 }
 
 export function formatMemories(memories: readonly RecalledMemory[]): string {
