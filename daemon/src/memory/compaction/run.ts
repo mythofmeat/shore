@@ -274,6 +274,7 @@ async function resolveDeps(character: string, deps: CompactionRunDeps): Promise<
       model: toRequestModel(model),
       character,
       generate: deps.generate,
+      cacheDir: effective.dirs.cache,
       ...(providerEntry === undefined ? {} : { providerEntry }),
       ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
     }),

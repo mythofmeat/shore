@@ -1,6 +1,9 @@
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import fixture from "./memory_captures/compaction_llm.json";
 
@@ -9,8 +12,13 @@ import {
   type ImageGenSettings,
 } from "../src/llm/image_generate";
 import { hardcodedProviderBaseUrl, type ResolvedModel } from "../src/llm/request";
+import {
+  countImageBlocks,
+  readLearnedImageSupport,
+  recordImageRejection,
+} from "../src/llm/image_support";
 import type { ProviderEntry } from "../src/llm/credentials";
-import type { SidecarRequest } from "../src/llm/types";
+import type { GenerateResponse, SidecarRequest } from "../src/llm/types";
 import {
   appendCompactionTail,
   COMPACTION_TAIL_ENTRY_COUNT,
@@ -21,6 +29,40 @@ import { CompactionError } from "../src/memory/compaction/types";
 type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
 const section = (name: string): Json[] => fx[name] as Json[];
+
+function cacheScratch(): string {
+  return mkdtempSync(join(tmpdir(), "shore-compaction-llm-"));
+}
+
+function requestWithImage(): SidecarRequest {
+  return {
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+          { type: "text", text: "look" },
+        ],
+      },
+    ],
+  } as unknown as SidecarRequest;
+}
+
+function okResponse(): GenerateResponse {
+  return {
+    content: "done",
+    content_blocks: [],
+    finish_reason: "end_turn",
+    usage: {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_tokens: 0,
+      cache_creation_tokens: 0,
+    },
+    timing: { total_ms: 0, time_to_first_token_ms: 0 },
+    model: "m",
+  };
+}
 
 const withoutDeadCitation = (err: string): string =>
   err.replace(" (see CONFIGURATION.md).", ".");
@@ -147,6 +189,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
         generate: () => {
           throw new Error("generate is not exercised by this fixture");
         },
+        cacheDir: cacheScratch(),
         env: envFrom(rec.env as Json[]),
       });
 
@@ -230,6 +273,7 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
       generate: () => {
         throw new Error("not used");
       },
+      cacheDir: cacheScratch(),
       env: { CMP_TEST_KEY: "sk-test" },
     });
 
@@ -252,6 +296,7 @@ describe("RealCompactionLlm.generate", () => {
       generate: () => {
         throw new Error("upstream is down");
       },
+      cacheDir: cacheScratch(),
     });
     expect(
       llm.generate({ messages: [] } as unknown as SidecarRequest),
@@ -281,9 +326,92 @@ describe("RealCompactionLlm.generate", () => {
           model: "m",
         };
       },
+      cacheDir: cacheScratch(),
     });
     const resp = await llm.generate(request);
     expect(seen).toEqual([request, model, "Aria"]);
     expect(resp.content).toBe("done");
+  });
+
+  test("strips images when the model is already known to refuse them", async () => {
+    const cacheDir = cacheScratch();
+    recordImageRejection(cacheDir, "zai-sub", "glm-5.3");
+    const sent: SidecarRequest[] = [];
+    const request = requestWithImage();
+    const llm = new RealCompactionLlm({
+      model: {
+        provider_key: "zai-sub",
+        model_id: "glm-5.3",
+        sdk: "zai",
+      } as ResolvedModel,
+      character: "Aria",
+      generate: async (req) => {
+        sent.push(req);
+        return okResponse();
+      },
+      cacheDir,
+    });
+
+    await llm.generate(request);
+
+    expect(sent.length).toBe(1);
+    expect(countImageBlocks(required(sent[0]).messages)).toBe(0);
+    expect(countImageBlocks(request.messages)).toBe(0);
+    expect(JSON.stringify(request.messages)).toContain("image omitted");
+  });
+
+  test("records the refusal and retries without images when the provider rejects one", async () => {
+    const cacheDir = cacheScratch();
+    const seen: number[] = [];
+    const request = requestWithImage();
+    const llm = new RealCompactionLlm({
+      model: {
+        provider_key: "zai-sub",
+        model_id: "glm-5.3",
+        sdk: "zai",
+      } as ResolvedModel,
+      character: "Aria",
+      generate: async (req) => {
+        seen.push(countImageBlocks(req.messages));
+        if (seen.length === 1) {
+          throw new Error("400 messages.content.type is invalid, allowed values: ['text']");
+        }
+        return okResponse();
+      },
+      cacheDir,
+    });
+
+    const resp = await llm.generate(request);
+
+    expect(seen).toEqual([1, 0]);
+    expect(resp.content).toBe("done");
+    expect(readLearnedImageSupport(cacheDir, "zai-sub")["glm-5.3"]).toBe(false);
+    expect(countImageBlocks(request.messages)).toBe(0);
+  });
+
+  test("a rejection with no images left to drop is an llm error", async () => {
+    const cacheDir = cacheScratch();
+    let calls = 0;
+    const llm = new RealCompactionLlm({
+      model: {
+        provider_key: "zai-sub",
+        model_id: "glm-5.3",
+        sdk: "zai",
+      } as ResolvedModel,
+      character: "Aria",
+      generate: () => {
+        calls += 1;
+        throw new Error("400 messages.content.type is invalid, allowed values: ['text']");
+      },
+      cacheDir,
+    });
+
+    expect(
+      llm.generate({
+        messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      } as unknown as SidecarRequest),
+    ).rejects.toThrow("llm: 400 messages.content.type is invalid");
+    expect(calls).toBe(1);
+    expect(readLearnedImageSupport(cacheDir, "zai-sub")["glm-5.3"]).toBeUndefined();
   });
 });
