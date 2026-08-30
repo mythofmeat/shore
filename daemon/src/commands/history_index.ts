@@ -5,6 +5,7 @@ import type { Json } from "./conversation.ts";
 export interface HistoryIndexSource {
   progressFor: (character: string) => HistoryIndexProgress | undefined;
   noteMutation?: (character: string) => void;
+  noteMemoryWork?: (character: string) => void;
   now?: () => number;
 }
 

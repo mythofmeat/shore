@@ -87,53 +87,55 @@ timeout = "15s"              # MCP submission deadline, not extraction time
 ```
 
 One committed segment becomes one `shore:<character>:seg<N>` document with the
-same content and relationship context as the backfill script. The archive
-transaction records retain intent before the active-file swap and enqueues work
-in the same transaction that commits the segment. A daemon crash cannot expose
-an uncommitted segment to Hindsight or lose a committed segment's pending work.
-The worker calls Hindsight's asynchronous `retain`, so the 90-400 second
-extraction runs behind Hindsight rather than blocking compaction or the turn
-that triggered it. The worker follows accepted operations to completion,
-serializes them per character, and retries submission, poll and extraction
-failures with exponential backoff; the stable document id makes a retry converge
-on one document. Only a reply carrying an operation id counts as submitted, so a
-rejected `retain` stays queued instead of being recorded as stored.
+same content and relationship context as the backfill script. `memory_doc` is a
+column on `history_segments`, not a queue table: the archive writes it `pending`
+in the same statement that inserts the segment, so a crash cannot leave the two
+disagreeing and there is no second transaction to keep in step. The worker sends
+the document, sets the column `stored`, and never looks at it again.
+
+Hindsight's `retain` is asynchronous on its side — it returns `accepted` with an
+operation id and runs the 90-400 second extraction in its own worker — so shore
+makes one fast call and does not follow the operation. Nothing in shore reads
+retain completion, and `document_id` upserts, so the recovery path for a
+document that never landed is to re-send it. That is what
+`contrib/hindsight/backfill.py` is for. The daemon carries no operation polling
+or cancellation, but submission failures are bounded: it stores the attempt
+count and last error on the segment, retries with exponential backoff capped at
+60 seconds, and moves the segment to `failed` (or `delete_failed`) after ten
+attempts. Failed work is terminal across daemon restarts. `shore segments` shows
+the failure; after fixing the cause, `shore segments retry N` explicitly queues
+that segment again with a fresh attempt count.
+
+The cost of not following the operation: if Hindsight accepts a document and its
+extraction then fails, shore records it `stored` and the segment is quietly
+absent from memory. `list_documents` shows what is really in the bank, and
+re-running backfill.py over the range repairs it.
 
 Hindsight's MCP tools report failure **in band**: the JSON-RPC result carries
 `isError: false` and the payload itself says what went wrong. Measured against a
-live server, `retain` answers `{"status": "error", "message": ...}`, and
-`get_document` and `delete_document` answer `{"error": ...}`. `McpClient.call`
-only throws on `isError`, so the worker inspects every reply and raises
-`HindsightToolError` on those shapes; without that a rejected `retain` looks
-like a submission with no operation id. A reply is treated as a tool failure
-when `status` is `"error"`, or when it carries an `error` string and no `status`
-at all — `get_operation` reports a genuinely failed job as `status: "failed"`
-with an `error_message`, which is the operation's outcome, not a tool error.
+live server, `retain` answers `{"status": "error", "message": ...}` and
+`delete_document` answers `{"error": ...}`. `McpClient.call` only throws on
+`isError`, so the worker inspects every reply and raises `HindsightToolError` on
+those shapes. Without that check a rejected `retain` is indistinguishable from a
+successful one, and the segment is marked `stored` having never been sent.
 
-`get_operation` answers `status: "not_found"` for an operation Hindsight has
-pruned, which is the normal state after a daemon was down longer than the
-operation retention window. That alone does not say whether the retain
-succeeded, so the worker asks `get_document` for `shore:<character>:seg<N>`: if
-the document is there the segment is complete, and if it is not the segment goes
-back to `pending` for a fresh submission. Treating `not_found` as either outcome
-without checking would silently drop segments or repeat extraction forever.
-
-Hindsight's current MCP `retain` returns an operation id but does not accept a
-caller-supplied one. A connection loss after Hindsight accepted a submission
-can therefore repeat extraction cost on retry, although the stable document id
-still prevents duplicate final documents. The REST retain endpoint closes that
-last ambiguity; the MCP surface does not yet expose its idempotency key.
+Exclusion is read off the same column. A segment excluded before it is sent has
+`memory_doc` cleared and is never read. Excluding one that was already sent
+leaves the column `stored`, which is what makes it show up as a delete; the
+worker calls `delete_document` and clears the column. `shore segments exclude N`
+on a segment backfill imported sets `stored` first, so the same path removes it.
 
 `memory.retain.enabled` requires `write_memory = false`: Hindsight owns the
 retrieved layer instead of running the compaction LLM that rewrites memory
 files. Existing `MEMORY.md` and workspace notes are not deleted and remain in
 the always-present prompt, so they can still be hand-curated.
 
-Exclusion is part of the durable queue state. A segment excluded before submit
-is never read. Excluding an already-submitted segment first attempts to cancel
-its Hindsight operation, then calls `delete_document`; including it queues a
-fresh upsert. This cleanup also applies when `shore segments exclude N` first
-adopts a segment created by the manual backfill path.
+Exclusion is part of the durable segment state. A segment excluded before
+submit is never read. Excluding an already-submitted segment calls
+`delete_document`; including it queues a fresh upsert. This cleanup also applies
+when `shore segments exclude N` first adopts a segment created by the manual
+backfill path. Retain and delete failures both use the same ten-attempt bound
+and can be requeued with `shore segments retry N`.
 
 `contrib/hindsight/backfill.py` remains the historical import and repair tool.
 Because `document_id` upserts, it carries no cursor and no resume state:

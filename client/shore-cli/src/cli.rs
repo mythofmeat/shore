@@ -680,6 +680,9 @@ pub(crate) enum SegmentsCommand {
 
     /// Set a segment note, or omit NOTE to clear it
     Note { index: u32, note: Option<String> },
+
+    /// Retry a Hindsight retain or delete that exhausted its attempts
+    Retry { index: u32 },
 }
 
 /// Display elements `shore view` can change. Every one of these persists into
@@ -2182,6 +2185,7 @@ pub(crate) fn to_swp_command(
                     ("label", Some(index), Some(label))
                 }
                 Some(SegmentsCommand::Note { index, note }) => ("note", Some(index), Some(note)),
+                Some(SegmentsCommand::Retry { index }) => ("retry", Some(index), None),
             };
             let mut args = serde_json::Map::new();
             _ = args.insert("action".into(), json!(action));
@@ -3438,6 +3442,14 @@ mod tests {
             parsed_command(&segments),
             CliCommand::Segments {
                 subcommand: Some(SegmentsCommand::Show { index }),
+                ..
+            } => assert_eq!(*index, 4),
+        );
+        let retry = parse(&["segments", "retry", "4"]);
+        assert_variant!(
+            parsed_command(&retry),
+            CliCommand::Segments {
+                subcommand: Some(SegmentsCommand::Retry { index }),
                 ..
             } => assert_eq!(*index, 4),
         );
@@ -5078,6 +5090,12 @@ mod tests {
         assert_eq!(arg(&note_args, "action"), "note");
         assert_eq!(arg(&note_args, "index"), 2);
         assert_eq!(arg(&note_args, "value"), "review later");
+
+        let (retry_name, retry_args) =
+            to_swp_command(parsed_command(&parse(&["segments", "retry", "2"])), None).unwrap();
+        assert_eq!(retry_name, "segments");
+        assert_eq!(arg(&retry_args, "action"), "retry");
+        assert_eq!(arg(&retry_args, "index"), 2);
 
         let (clear_name, clear_args) =
             to_swp_command(parsed_command(&parse(&["clear", "--exclude"])), None).unwrap();

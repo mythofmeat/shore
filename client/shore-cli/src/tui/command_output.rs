@@ -82,7 +82,29 @@ fn segment_row(segment: &serde_json::Value) -> String {
         .and_then(serde_json::Value::as_str)
         .map(|value| format!("\n  {value}"))
         .unwrap_or_default();
-    format!("#{index}  {first} → {last} · {messages} messages{excluded}{label}{note}")
+    let memory = match segment
+        .get("memory_status")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some(status @ ("failed" | "delete_failed")) => {
+            let action = if status == "delete_failed" {
+                "delete"
+            } else {
+                "retain"
+            };
+            let attempts = segment
+                .get("memory_attempts")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            let error = segment
+                .get("memory_error")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown error");
+            format!("\n  hindsight {action} failed after {attempts} attempts: {error}")
+        }
+        _ => String::new(),
+    };
+    format!("#{index}  {first} → {last} · {messages} messages{excluded}{label}{note}{memory}")
 }
 
 fn render_segments(data: &serde_json::Value) -> String {
@@ -560,6 +582,29 @@ mod tests {
         let text = ansi::plain(&rendered);
         assert!(text.contains("cache.ttl"));
         assert!(!text.contains("daemon.addr"));
+    }
+
+    #[test]
+    fn segments_surface_terminal_hindsight_failures() {
+        let rendered = render(
+            "segments",
+            "segments",
+            &serde_json::json!({
+                "segments": [{
+                    "index": 4,
+                    "first_message_at": "2026-08-20T10:00:00Z",
+                    "last_message_at": "2026-08-20T11:00:00Z",
+                    "message_count": 2,
+                    "memory_status": "failed",
+                    "memory_attempts": 10,
+                    "memory_error": "document rejected"
+                }]
+            }),
+            "ada",
+        )
+        .expect("rendered");
+        let text = ansi::plain(&rendered);
+        assert!(text.contains("hindsight retain failed after 10 attempts: document rejected"));
     }
 
     #[test]

@@ -218,9 +218,9 @@ describe("runDeepIdleArchive", () => {
     expect(result).toEqual({ turnCount: 0, events: [], deepArchiveDone: true });
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe("");
     const history = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
-    expect(history.nextMemoryRetainJob("ada", 0)).toMatchObject({
+    expect(history.nextMemoryRetainJob("ada")).toMatchObject({
       segment: 0,
-      status: "pending",
+      action: "retain",
     });
     history.close();
   });
