@@ -313,8 +313,9 @@ function configRuntime(a: CommandAssembly): ConfigRuntime {
     reloadRuntimeConfig: () => {
       a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
     },
-    setUsageConfig: () => {},
-    setCacheKeepaliveCeiling: () => {},
+    adoptGlobalConfig: (fresh) => {
+      runtime.registry.setGlobalConfig(fresh);
+    },
     notifyPromptSnapshotRefreshed: (character) => {
       runtime.cache.invalidate(character, "prompt_reload");
       void runtime.cache

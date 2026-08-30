@@ -20,7 +20,9 @@ import type { LastRequestCache } from "../../cache/last_request.ts";
 import type { RebuildDeps } from "../../cache/rebuild.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { buildToolContext, credentialEntry, type ToolContextDeps } from "../../handler/tool_context.ts";
-import { dispatchTool } from "../../tools/dispatch.ts";
+import { toolLimitsFrom, type ToolContext } from "../../tools/dispatch.ts";
+import { runToolUse, type ToolExecution } from "../../tools/execute.ts";
+import { BUILTIN_TOOL_SCHEMAS } from "../../tools/registry.ts";
 import {
   ensureWorkspaceGitRepoBestEffort,
   gitCommitAll,
@@ -276,16 +278,31 @@ async function resolveDeps(character: string, deps: CompactionRunDeps): Promise<
       ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
     }),
     markdownStore,
-    tools: compactionTools(toolCtx),
+    tools: compactionTools(toolCtx, effective),
     maxToolIterations: model.maxToolIterations,
   };
 }
 
-function compactionTools(ctx: Parameters<typeof dispatchTool>[2]): CompactionTools {
+function compactionTools(ctx: ToolContext, config: LoadedConfig): CompactionTools {
+  const exec: ToolExecution = {
+    sendDirect: () => {},
+    ctx,
+    limits: toolLimitsFrom(config.app.tools, config.app.subagents),
+    now: () => new Date().toISOString(),
+    newMessageId: () => `m_${crypto.randomUUID()}`,
+    schemas: BUILTIN_TOOL_SCHEMAS,
+  };
   return {
     workspaceDir: ctx.workspaceDir,
     configDir: ctx.configDir,
-    dispatch: (name, input) => renderToolOutcome(() => dispatchTool(name, input, ctx)),
+    dispatch: async (name, input) => {
+      const run = await runToolUse(
+        { id: `compaction_${crypto.randomUUID()}`, name, input },
+        exec,
+        [],
+      );
+      return { output: run.window?.output ?? run.raw, isError: run.isError };
+    },
     ensureWorkspaceGitRepo: async (workspaceDir) => {
       await ensureWorkspaceGitRepoBestEffort(workspaceDir);
     },

@@ -490,6 +490,27 @@ describe("the tools the loop answers itself", () => {
     ]);
   });
 
+  test("the executed block is used as-is, so attached media survives", async () => {
+    const block = {
+      type: "tool_result" as const,
+      tool_use_id: "t1",
+      content: [
+        { type: "text" as const, text: "[image/png, 5 bytes attached, saved to /x/y.png]" },
+        {
+          type: "image" as const,
+          source: { type: "base64" as const, media_type: "image/png", data: "aGVsbG8=" },
+        },
+      ],
+      is_error: false,
+    };
+    const out = await dispatchHeartbeatTools([["t1", "mcp__srv__shot", {}]], {
+      ...noop,
+      dispatch: async () => ({ output: "", isError: false, block }),
+    });
+
+    expect(out.results[0]).toBe(block);
+  });
+
   test("a failed tool is text with a flag, not a throw", async () => {
     const out = await dispatchHeartbeatTools([["t1", "edit", { path: "/etc/passwd" }]], {
       ...noop,

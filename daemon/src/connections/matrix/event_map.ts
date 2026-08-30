@@ -1,3 +1,4 @@
+import { shoreLog } from "../../log.ts";
 import { jsonSidecar, type Sidecar } from "./store.ts";
 
 export type EventOrigin = "assistant" | "mirrored_user" | "matrix_user";
@@ -81,7 +82,11 @@ export class EventMap {
   }
 
   #save(): void {
-    this.#sidecar.write({ entries: this.#entries });
+    try {
+      this.#sidecar.write({ entries: this.#entries });
+    } catch (e) {
+      shoreLog.warn(`shore: could not persist the Matrix event map: ${String(e)}`);
+    }
   }
 }
 

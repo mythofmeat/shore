@@ -115,8 +115,7 @@ async function harness(): Promise<{
     activeModel: undefined,
     runtime: {
       reloadRuntimeConfig: () => {},
-      setUsageConfig: () => {},
-      setCacheKeepaliveCeiling: () => {},
+      adoptGlobalConfig: () => {},
       notifyPromptSnapshotRefreshed: () => {},
     },
   };

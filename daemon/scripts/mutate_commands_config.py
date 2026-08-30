@@ -219,9 +219,12 @@ MUTANTS = [
      "    ctx.runtime.notifyPromptSnapshotRefreshed(character);",
      "    void character;"),
 
-    ("adopt: the keepalive ceiling is never handed over",
-     "  ctx.runtime.setCacheKeepaliveCeiling(fresh.app.cache.keepalive_max);",
-     "  void fresh.app.cache.keepalive_max;"),
+    ("adopt: the fresh config is never handed to the live readers",
+     "  ctx.runtime.adoptGlobalConfig(fresh);\n",
+     ""),
+    ("adopt: the fresh config is adopted after the reload, not before",
+     "  ctx.runtime.adoptGlobalConfig(fresh);\n  ctx.runtime.reloadRuntimeConfig(fresh);",
+     "  ctx.runtime.reloadRuntimeConfig(fresh);\n  ctx.runtime.adoptGlobalConfig(fresh);"),
 ]
 
 

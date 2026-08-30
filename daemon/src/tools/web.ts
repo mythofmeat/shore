@@ -187,6 +187,89 @@ export async function handleWebSearch(
   };
 }
 
+export const MAX_BODY_BYTES = 5_242_880;
+const MAX_REDIRECTS = 5;
+
+export interface FetchUrlPolicy {
+  lookup?: (hostname: string) => Promise<string[]>;
+}
+
+function parseTarget(raw: string): URL {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new InvalidArgs(`not a URL: ${raw}`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new InvalidArgs(`only http and https URLs can be fetched, not ${url.protocol}`);
+  }
+  return url;
+}
+
+function ipv4Blocked(a: number, b: number): boolean {
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a >= 224) return true;
+  return false;
+}
+
+export function addressBlocked(address: string): boolean {
+  const plain = address.split("%")[0] ?? address;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(plain);
+  if (v4 !== null) {
+    return ipv4Blocked(Number(v4[1]), Number(v4[2]));
+  }
+
+  const lower = plain.toLowerCase();
+  const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(lower);
+  if (mapped !== null) return addressBlocked(mapped[1] as string);
+
+  const packed = /^::ffff:([0-9a-f]{1,4}):[0-9a-f]{1,4}$/.exec(lower);
+  if (packed !== null) {
+    const high = Number.parseInt(packed[1] as string, 16);
+    return ipv4Blocked(high >> 8, high & 0xff);
+  }
+
+  if (lower === "::1" || lower === "::") return true;
+  if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true;
+  if (/^fe[89ab][0-9a-f]:/.test(lower)) return true;
+  if (/^ff[0-9a-f]{2}:/.test(lower)) return true;
+  return false;
+}
+
+async function resolveHost(hostname: string): Promise<string[]> {
+  const { lookup } = await import("node:dns/promises");
+  const found = await lookup(hostname, { all: true });
+  return found.map((entry) => entry.address);
+}
+
+async function assertReachable(
+  url: URL,
+  lookup: (hostname: string) => Promise<string[]>,
+): Promise<void> {
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+
+  if (addressBlocked(host)) {
+    throw new ToolHttpError(`refusing to fetch a private or local address: ${url.hostname}`);
+  }
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":")) return;
+
+  let addresses: string[];
+  try {
+    addresses = await lookup(host);
+  } catch (e) {
+    throw new ToolHttpError(`could not resolve ${host}: ${String(e)}`);
+  }
+  if (addresses.length === 0) throw new ToolHttpError(`could not resolve ${host}`);
+  if (addresses.some(addressBlocked)) {
+    throw new ToolHttpError(`refusing to fetch ${host}: it resolves to a private or local address`);
+  }
+}
+
 export interface FetchUrlResult {
   url: string;
   content_type: string;
@@ -198,21 +281,37 @@ export async function handleFetchUrl(
   input: Record<string, unknown>,
   fetchImpl: FetchLike = fetch,
   signal?: AbortSignal,
+  policy: FetchUrlPolicy = {},
 ): Promise<FetchUrlResult> {
   const url = input["url"];
   if (typeof url !== "string") {
     throw new InvalidArgs("missing 'url' field");
   }
 
+  const lookup = policy.lookup ?? resolveHost;
+  let target = parseTarget(url);
   let resp: Response;
-  try {
-    resp = await fetchImpl(url, {
-      headers: { "user-agent": "shore/2.0" },
-      redirect: "follow",
-      signal: requestSignal(signal),
-    });
-  } catch (e) {
-    throw new ToolHttpError(`request failed: ${String(e)}`);
+  let hops = 0;
+
+  for (;;) {
+    await assertReachable(target, lookup);
+    try {
+      resp = await fetchImpl(target.href, {
+        headers: { "user-agent": "shore/2.0" },
+        redirect: "manual",
+        signal: requestSignal(signal),
+      });
+    } catch (e) {
+      throw new ToolHttpError(`request failed: ${String(e)}`);
+    }
+
+    const location = redirectTarget(resp);
+    if (location === undefined) break;
+    hops += 1;
+    if (hops > MAX_REDIRECTS) {
+      throw new ToolHttpError(`too many redirects (over ${String(MAX_REDIRECTS)}) from ${url}`);
+    }
+    target = parseTarget(new URL(location, target).href);
   }
 
   if (!resp.ok) {
@@ -220,18 +319,54 @@ export async function handleFetchUrl(
   }
 
   const contentType = resp.headers.get("content-type") ?? "unknown";
-
-  let body: string;
-  try {
-    body = await resp.text();
-  } catch (e) {
-    throw new ToolHttpError(`failed to read body: ${String(e)}`);
-  }
-
-  const extracted = contentType.includes("html") ? stripHtml(body) : body;
+  const { text, capped } = await readCapped(resp);
+  const extracted = contentType.includes("html") ? stripHtml(text) : text;
   const { content, truncated } = truncateToBytes(extracted, MAX_CONTENT_BYTES);
 
-  return { url, content_type: contentType, content, truncated };
+  return { url, content_type: contentType, content, truncated: truncated || capped };
+}
+
+function redirectTarget(resp: Response): string | undefined {
+  if (resp.status < 300 || resp.status > 399) return undefined;
+  return resp.headers.get("location") ?? undefined;
+}
+
+async function readCapped(resp: Response): Promise<{ text: string; capped: boolean }> {
+  const body: ReadableStream<Uint8Array> | null = resp.body;
+  if (body === null) return { text: "", capped: false };
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let capped = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined) continue;
+      const room = MAX_BODY_BYTES - total;
+      if (value.byteLength >= room) {
+        chunks.push(value.subarray(0, room));
+        total += room;
+        capped = true;
+        break;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } catch (e) {
+    throw new ToolHttpError(`failed to read body: ${String(e)}`);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+
+  const joined = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(joined), capped };
 }
 
 export { InvalidArgs, ToolIoError };

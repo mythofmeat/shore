@@ -1,3 +1,4 @@
+import { shoreLog } from "../../log.ts";
 import { jsonSidecar, type Sidecar } from "./store.ts";
 
 const VIEW_KEYS = ["thinking", "tools", "usage"] as const;
@@ -37,7 +38,11 @@ export class ViewPrefs {
     const view = this.room(roomId);
     view[key] = value ?? !view[key];
     this.#rooms.set(roomId, view);
-    this.#sidecar.write(Object.fromEntries(this.#rooms));
+    try {
+      this.#sidecar.write(Object.fromEntries(this.#rooms));
+    } catch (e) {
+      shoreLog.warn(`shore: could not persist Matrix view preferences: ${String(e)}`);
+    }
     return view[key];
   }
 }

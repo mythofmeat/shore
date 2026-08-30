@@ -1066,14 +1066,27 @@ describe("the command path", () => {
     }
   });
 
-  test("the two setters with a live reader behind them are no-ops", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-cmd-noop-");
+  test("adopting a config makes the live readers behind it see the new value", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-adopt-");
     try {
       const deps = buildCommandPathDeps(commandAssembly(runtime));
-      expect(() => {
-        deps.runtime.setUsageConfig(runtime.config);
-        deps.runtime.setCacheKeepaliveCeiling(ConfigDuration.fromSecs(1));
-      }).not.toThrow();
+      const before = runtime.registry.globalConfig();
+      const fresh: LoadedConfig = {
+        ...before,
+        app: {
+          ...before.app,
+          cache: { ...before.app.cache, keepalive_max: ConfigDuration.fromSecs(4242) },
+        },
+      };
+
+      deps.runtime.adoptGlobalConfig(fresh);
+
+      expect(
+        Number(runtime.registry.globalConfig().app.cache.keepalive_max.asSecs()),
+      ).toBe(4242);
+      expect(
+        Number(runtime.registry.effectiveConfig("ada").app.cache.keepalive_max.asSecs()),
+      ).toBe(4242);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

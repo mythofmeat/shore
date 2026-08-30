@@ -62,6 +62,7 @@ export interface ToolContext {
 
   signal?: AbortSignal;
   fetchImpl?: FetchLike;
+  lookupImpl?: (hostname: string) => Promise<string[]>;
 }
 
 function defaultSearchMode(
@@ -162,7 +163,12 @@ export async function dispatchTool(
       return await handleWebSearch(args, ctx.searchConfig, process.env, ctx.fetchImpl ?? fetch, ctx.signal);
 
     case "fetch_url":
-      return await handleFetchUrl(args, ctx.fetchImpl ?? fetch, ctx.signal);
+      return await handleFetchUrl(
+        args,
+        ctx.fetchImpl ?? fetch,
+        ctx.signal,
+        ctx.lookupImpl === undefined ? {} : { lookup: ctx.lookupImpl },
+      );
 
     case "roll_dice":
       return handleRollDice(args);
