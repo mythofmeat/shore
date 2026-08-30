@@ -5,7 +5,7 @@ import {
   HistoryStore,
   type MemoryRetainJob,
 } from "../engine/history_store.ts";
-import type { McpRegistry } from "../tools/mcp_registry.ts";
+import type { MemoryBackend } from "./backend.ts";
 
 const RETAIN_TOOL = "retain";
 const DELETE_DOCUMENT_TOOL = "delete_document";
@@ -35,7 +35,6 @@ const CONTEXT =
 export interface HindsightRetainRegistration {
   character: string;
   historyPath: string;
-  server: string;
   userName: string;
   possessivePronoun: string;
   timeoutMs: number;
@@ -101,7 +100,7 @@ export function hindsightDocument(
 
 export class HindsightRetainService {
   readonly #registrations = new Map<string, HindsightRetainRegistration>();
-  readonly #mcpRegistry: Pick<McpRegistry, "call">;
+  readonly #backend: (character: string) => MemoryBackend | undefined;
   readonly #now: () => number;
   readonly #maxAttempts: number;
   readonly #confirmIntervalMs: number;
@@ -118,10 +117,10 @@ export class HindsightRetainService {
   #closed = false;
 
   constructor(
-    mcpRegistry: Pick<McpRegistry, "call">,
+    backend: (character: string) => MemoryBackend | undefined,
     options: HindsightRetainServiceOptions = {},
   ) {
-    this.#mcpRegistry = mcpRegistry;
+    this.#backend = backend;
     this.#now = options.now ?? Date.now;
     this.#maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
     this.#confirmIntervalMs = options.confirmIntervalMs ?? CONFIRM_INTERVAL_MS;
@@ -531,10 +530,16 @@ export class HindsightRetainService {
     tool: string,
     args: Record<string, unknown>,
   ): Promise<Record<string, unknown> | undefined> {
+    const backend = this.#backend(registration.character);
+    if (backend === undefined) {
+      throw new HindsightToolError(
+        `hindsight ${tool}: no memory backend is configured for '${registration.character}'`,
+      );
+    }
     const deadline = AbortSignal.timeout(registration.timeoutMs);
     const signal = AbortSignal.any([this.#stop.signal, deadline]);
     const raw = await settleBeforeAbort(
-      this.#mcpRegistry.call(`mcp__${registration.server}__${tool}`, args, signal),
+      backend.call(tool, args, signal),
       signal,
       `${tool} timed out after ${String(registration.timeoutMs)}ms`,
     );
@@ -551,7 +556,7 @@ function sameRegistration(
   a: HindsightRetainRegistration,
   b: HindsightRetainRegistration,
 ): boolean {
-  return a.historyPath === b.historyPath && a.server === b.server &&
+  return a.historyPath === b.historyPath &&
     a.userName === b.userName && a.possessivePronoun === b.possessivePronoun &&
     a.timeoutMs === b.timeoutMs;
 }

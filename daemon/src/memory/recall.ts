@@ -4,7 +4,7 @@ import type { MemoryRecallEntry } from "../diagnostics.ts";
 import type { Message } from "../engine/types.ts";
 import type { CallStore } from "../call_store.ts";
 import { shoreLog } from "../log.ts";
-import type { McpRegistry } from "../tools/mcp_registry.ts";
+import type { MemoryBackend } from "./backend.ts";
 
 const MESSAGE_CHARS = 1_200;
 const QUERY_CHARS = 4_000;
@@ -29,8 +29,10 @@ export interface MemoryRecallRunner {
 
 export const RECALL_TRANSCRIPT_SOURCE = "memory_recall";
 
+export const RECALL_TOOL = "recall";
+
 export interface MemoryRecallDeps {
-  mcpRegistry: Pick<McpRegistry, "call">;
+  backend: (character: string) => MemoryBackend | undefined;
   diagnostics: MemoryRecallDiagnostics;
   callStore?: Pick<CallStore, "recordTranscript"> | undefined;
   now?: (() => string) | undefined;
@@ -79,6 +81,18 @@ export async function runMemoryRecall(
     return undefined;
   }
 
+  const backend = deps.backend(input.character);
+  if (backend === undefined) {
+    deps.diagnostics.memory_recall.push({
+      ...base,
+      status: "failed",
+      recalled: 0,
+      elapsed_ms: 0,
+      error: "memory backend is not configured",
+    });
+    return undefined;
+  }
+
   const started = clock();
   const deadline = AbortSignal.timeout(recall.timeout.asMillis());
   const signal = input.signal === undefined
@@ -87,8 +101,8 @@ export async function runMemoryRecall(
   const queryTimestamp = latestUserTimestamp(input.messages);
   try {
     const raw = await settleBeforeAbort(
-      deps.mcpRegistry.call(
-        `mcp__${recall.server}__${recall.tool}`,
+      backend.call(
+        RECALL_TOOL,
         {
           query,
           max_tokens: recall.max_tokens,

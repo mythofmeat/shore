@@ -6,6 +6,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
+import type { MemoryBackend } from "../src/memory/backend.ts";
 import type { Message } from "../src/engine/types.ts";
 import {
   formatMemories,
@@ -29,7 +30,7 @@ function message(role: "user" | "assistant", id: string, text: string): Message 
 function world(): LoadedConfig {
   const app = defaultAppConfig();
   app.memory.recall.mode = "inject";
-  app.memory.recall.server = "hindsight";
+  app.memory.backend.url = "http://hindsight.test/mcp/";
   app.memory.recall.max_memories = 3;
   app.memory.recall.recent_messages = 2;
   return {
@@ -39,6 +40,10 @@ function world(): LoadedConfig {
     dirs: { config: "/c", data: "/d", cache: "/k", runtime: "/r" },
     rawTable: undefined,
   };
+}
+
+function backendOf(backend: MemoryBackend): () => MemoryBackend {
+  return () => backend;
 }
 
 const CONVERSATION = [
@@ -55,7 +60,7 @@ describe("memory recall", () => {
       { config: world(), character: "qifei", messages: CONVERSATION, rid: "rid-1" },
       {
         diagnostics,
-        mcpRegistry: {
+        backend: backendOf({
           call: async (tool, args) => {
             calls.push({ tool, args });
             return JSON.stringify({
@@ -65,14 +70,14 @@ describe("memory recall", () => {
               ],
             });
           },
-        },
+        }),
         now: () => "2026-08-29T00:00:00Z",
         monotonicMs: () => 0,
       },
     );
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.tool).toBe("mcp__hindsight__recall");
+    expect(calls[0]?.tool).toBe("recall");
     expect(calls[0]?.args).toEqual({
       query: "what was that music script i wrote",
       max_tokens: 2048,
@@ -100,12 +105,12 @@ describe("memory recall", () => {
       { config, character: "qifei", messages: CONVERSATION },
       {
         diagnostics,
-        mcpRegistry: {
+        backend: backendOf({
           call: async () => {
             called = true;
             return "{}";
           },
-        },
+        }),
       },
     );
 
@@ -120,9 +125,9 @@ describe("memory recall", () => {
       { config: world(), character: "qifei", messages: CONVERSATION },
       {
         diagnostics,
-        mcpRegistry: {
+        backend: backendOf({
           call: () => Promise.reject(new Error("MCP server 'hindsight' is unavailable")),
-        },
+        }),
         monotonicMs: () => 0,
       },
     );
@@ -141,7 +146,7 @@ describe("memory recall", () => {
       { config: world(), character: "qifei", messages: CONVERSATION },
       {
         diagnostics,
-        mcpRegistry: { call: async () => ({ memories: [] }) },
+        backend: backendOf({ call: async () => ({ memories: [] }) }),
         monotonicMs: () => 0,
       },
     );
@@ -157,12 +162,12 @@ describe("memory recall", () => {
       { config: world(), character: "qifei", messages: [message("user", "m1", "   ")] },
       {
         diagnostics,
-        mcpRegistry: {
+        backend: backendOf({
           call: async () => {
             called = true;
             return "{}";
           },
-        },
+        }),
       },
     );
 
@@ -195,9 +200,9 @@ describe("memory recall", () => {
       { config, character: "qifei", messages: CONVERSATION },
       {
         diagnostics,
-        mcpRegistry: {
+        backend: backendOf({
           call: () => new Promise(() => {}),
-        },
+        }),
       },
     );
 
@@ -249,7 +254,7 @@ describe("memory recall", () => {
       { config: world(), character: "qifei", messages: CONVERSATION },
       {
         diagnostics: new Diagnostics(),
-        mcpRegistry: {
+        backend: backendOf({
           call: async () => ({
             results: [
               { id: "a", text: "first", type: "world", scores: { final: 0.9 } },
@@ -258,7 +263,7 @@ describe("memory recall", () => {
               { id: "d", text: "fourth", type: "world", scores: { final: 0.2 } },
             ],
           }),
-        },
+        }),
         callStore: { recordTranscript: (entry) => rows.push(entry.entry_json) },
         monotonicMs: () => 0,
       },

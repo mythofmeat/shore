@@ -45,7 +45,12 @@ import { HistoryIndexService } from "./memory/history_index_service.ts";
 import { indexPath as workspaceIndexPath } from "./memory/workspace_index.ts";
 import { WorkspaceIndexService } from "./memory/workspace_index_service.ts";
 import { HindsightRetainService } from "./memory/hindsight_retain_service.ts";
-import { memoryRetainServer, resolveDisplayName } from "./config/app.ts";
+import { memoryBackendNeeded, resolveDisplayName } from "./config/app.ts";
+import {
+  MemoryBackends,
+  memoryBackendTarget,
+  type ConnectMemoryBackend,
+} from "./memory/backend.ts";
 
 const CALL_STORE_RETENTION_DAYS = 14;
 const CALL_STORE_MAX_BYTES = 536_870_912;
@@ -60,6 +65,7 @@ export interface RuntimeOptions {
   onHistory?: HistoryListener | undefined;
   emit?: ((character: string, revision: number, msg: Message) => void) | undefined;
   connectMcp?: ((spec: McpServerSpec) => Promise<McpClient>) | undefined;
+  connectMemoryBackend?: ConnectMemoryBackend | undefined;
   mcpRegistryOptions?: Omit<McpRegistryOptions, "onToolsChanged"> | undefined;
   diagnostics?: Diagnostics | undefined;
 }
@@ -79,6 +85,7 @@ export interface ShoreRuntime {
   readonly historyIndex: HistoryIndexService;
   readonly workspaceIndex: WorkspaceIndexService;
   readonly memoryRetain: HindsightRetainService;
+  readonly memoryBackends: MemoryBackends;
   refreshHistoryIndexes(): Promise<void>;
   refreshMcpCaches(registry: McpRegistry): Promise<void>;
   shutdown(): Promise<void>;
@@ -101,6 +108,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   let historyIndex: HistoryIndexService | undefined;
   let workspaceIndex: WorkspaceIndexService | undefined;
   let memoryRetain: HindsightRetainService | undefined;
+  const memoryBackends = new MemoryBackends(options.connectMemoryBackend);
   const registry = await CharacterRegistry.create(
     config.dirs.config,
     config.dirs.data,
@@ -163,7 +171,22 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     }
     refreshRetainRegistrations();
   };
+  const refreshMemoryBackends = () => {
+    const available = new Set(registry.availableCharacters());
+    for (const character of registry.availableCharacters()) {
+      const memory = registry.effectiveConfig(character).app.memory;
+      if (!memoryBackendNeeded(memory) || memory.backend.url.trim() === "") {
+        memoryBackends.remove(character);
+        continue;
+      }
+      memoryBackends.set(character, memoryBackendTarget(memory.backend, character));
+    }
+    for (const character of memoryBackends.characters()) {
+      if (!available.has(character)) memoryBackends.remove(character);
+    }
+  };
   const refreshRetainRegistrations = () => {
+    refreshMemoryBackends();
     if (memoryRetain === undefined) return;
     const available = new Set(registry.availableCharacters());
     for (const character of memoryRetain.registeredCharacters()) {
@@ -179,7 +202,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       memoryRetain.register({
         character,
         historyPath: rustJoin(effective.dirs.data, "history.db"),
-        server: memoryRetainServer(effective.app.memory),
         userName:
           retain.user_name ?? resolveDisplayName(effective.app.defaults, options.env ?? process.env),
         possessivePronoun: retain.possessive_pronoun,
@@ -221,7 +243,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       options.mcpRegistryOptions,
     ),
   );
-  memoryRetain = new HindsightRetainService(mcp.callView());
+  memoryRetain = new HindsightRetainService((name) => memoryBackends.get(name));
   refreshRetainRegistrations();
   memoryRetain.start();
 
@@ -268,12 +290,14 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     historyIndex,
     workspaceIndex,
     memoryRetain,
+    memoryBackends,
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
       await historyIndex.shutdown();
       await workspaceIndex.shutdown();
       await memoryRetain.shutdown();
+      await memoryBackends.shutdown();
       await mcp.current.shutdown();
       uninstallWireCapture();
       callStore?.close();

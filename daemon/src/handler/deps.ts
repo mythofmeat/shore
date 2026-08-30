@@ -92,7 +92,7 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     },
     compaction: chatCompactionRunner(a),
     recall: memoryRecallRunner({
-      mcpRegistry: runtime.mcp.callView(),
+      backend: (character) => runtime.memoryBackends.get(character),
       diagnostics: a.diagnostics,
       ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
       ...(a.now === undefined ? {} : { monotonicMs: a.now }),

@@ -887,11 +887,10 @@ describe("a config.toml sets what it says and nothing else", () => {
   });
 
   test("memory.recall and archive-only rotation", () => {
-    const cfg = parsed("[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nmode = \"inject\"\nserver = \"hindsight\"\nquery_from = \"recent\"\nrecent_messages = 3\nmax_memories = 8\ntimeout = \"1500ms\"\npreamble = \"Relevant private notes:\"\n");
+    const cfg = parsed("[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nmode = \"inject\"\nquery_from = \"recent\"\nrecent_messages = 3\nmax_memories = 8\ntimeout = \"1500ms\"\npreamble = \"Relevant private notes:\"\n");
     expect(at(cfg, "memory.compaction.write_memory")).toBe(false);
     expect(at(cfg, "memory.recall")).toMatchObject({
       mode: "inject",
-      server: "hindsight",
       query_from: "recent",
       recent_messages: 3,
       max_memories: 8,
@@ -901,13 +900,21 @@ describe("a config.toml sets what it says and nothing else", () => {
   });
 
   test("memory.retain", () => {
-    const cfg = parsed("[memory.retain]\nenabled = true\nserver = \"hindsight\"\nuser_name = \"Ren\"\npossessive_pronoun = \"his\"\ntimeout = \"20s\"\n");
+    const cfg = parsed("[memory.retain]\nenabled = true\nuser_name = \"Ren\"\npossessive_pronoun = \"his\"\ntimeout = \"20s\"\n");
     expect(at(cfg, "memory.retain")).toEqual({
       enabled: true,
-      server: "hindsight",
       user_name: "Ren",
       possessive_pronoun: "his",
       timeout: "20s",
+    });
+  });
+
+  test("memory.backend", () => {
+    const cfg = parsed("[memory.backend]\nurl = \"http://mcp-hindsight:8888/mcp/\"\nbank = \"shared\"\n\n[memory.backend.headers]\nAuthorization = \"Bearer t\"\n");
+    expect(at(cfg, "memory.backend")).toEqual({
+      url: "http://mcp-hindsight:8888/mcp/",
+      bank: "shared",
+      headers: { Authorization: "Bearer t" },
     });
   });
 

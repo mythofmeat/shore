@@ -12,6 +12,7 @@ import {
   HindsightRetainService,
   hindsightDocument,
 } from "../src/memory/hindsight_retain_service.ts";
+import type { MemoryBackend } from "../src/memory/backend.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const ACCEPTED = {
@@ -166,7 +167,6 @@ function register(service: HindsightRetainService, path: string): void {
   service.register({
     character: "ada",
     historyPath: path,
-    server: "hindsight",
     userName: "Ren",
     possessivePronoun: "her",
     timeoutMs: 1_000,
@@ -202,20 +202,26 @@ interface Recorded {
 
 function recorder(
   reply: (tool: string, args: Record<string, unknown>) => unknown,
-): { calls: Recorded[]; tools: string[]; call: (name: string, args: unknown) => Promise<unknown> } {
+): {
+  calls: Recorded[];
+  tools: string[];
+  backend: (character: string) => MemoryBackend | undefined;
+} {
   const calls: Recorded[] = [];
+  const backend: MemoryBackend = {
+    call: async (name: string, args: Record<string, unknown>) => {
+      calls.push({ name, args });
+      const answer = reply(name, args);
+      if (answer instanceof Error) throw answer;
+      return await Promise.resolve(answer);
+    },
+  };
   return {
     calls,
     get tools() {
-      return calls.map((entry) => entry.name.replace("mcp__hindsight__", ""));
+      return calls.map((entry) => entry.name);
     },
-    call: async (name: string, args: unknown) => {
-      const tool = name.replace("mcp__hindsight__", "");
-      calls.push({ name, args: args as Record<string, unknown> });
-      const answer = reply(tool, args as Record<string, unknown>);
-      if (answer instanceof Error) throw answer;
-      return answer;
-    },
+    backend: () => backend,
   };
 }
 
@@ -261,7 +267,7 @@ describe("hindsight retain acknowledgement", () => {
       if (tool === "get_document") return finished ? document() : DOCUMENT_MISSING;
       return {};
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -297,7 +303,7 @@ describe("hindsight retain acknowledgement", () => {
         ? { status: "accepted", message: "Memory storage initiated" }
         : operations([])
     );
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
 
     await service.runOnce();
@@ -310,7 +316,7 @@ describe("hindsight retain acknowledgement", () => {
   test("an empty reply stays queued with a diagnostic", async () => {
     const { path } = queuedHistory("hindsight-empty-reply");
     const mcp = recorder((tool) => (tool === "retain" ? {} : operations([])));
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
 
     await service.runOnce();
@@ -322,7 +328,7 @@ describe("hindsight retain acknowledgement", () => {
   test("an unreadable reply stays queued with a diagnostic", async () => {
     const { path } = queuedHistory("hindsight-unreadable-reply");
     const mcp = recorder((tool) => (tool === "retain" ? "not json at all" : operations([])));
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
 
     await service.runOnce();
@@ -336,7 +342,7 @@ describe("hindsight retain acknowledgement", () => {
     const mcp = recorder((tool) =>
       tool === "retain" ? { status: "queued", operation_id: "op-1" } : operations([])
     );
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
 
     await service.runOnce();
@@ -352,7 +358,7 @@ describe("hindsight retain acknowledgement", () => {
       if (tool === "get_document") return DOCUMENT_MISSING;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, { now: () => now });
+    const service = new HindsightRetainService(mcp.backend, { now: () => now });
     register(service, path);
 
     await service.runOnce();
@@ -384,12 +390,12 @@ describe("hindsight retain acknowledgement", () => {
     });
     const options = { now: () => now, maxAttempts: 3, confirmIntervalMs: 1_000 };
 
-    let service = new HindsightRetainService(mcp, options);
+    let service = new HindsightRetainService(mcp.backend, options);
     register(service, path);
     await service.runOnce();
     await service.shutdown();
 
-    service = new HindsightRetainService(mcp, options);
+    service = new HindsightRetainService(mcp.backend, options);
     register(service, path);
     now = 999;
     await service.runOnce();
@@ -435,7 +441,7 @@ describe("hindsight retain acknowledgement", () => {
       if (tool === "get_document") return DOCUMENT_MISSING;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       maxAttempts: 3,
       confirmIntervalMs: 1_000,
@@ -469,7 +475,7 @@ describe("hindsight retain confirmation", () => {
       if (tool === "get_document") return retains === 1 ? DOCUMENT_MISSING : document();
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -504,7 +510,7 @@ describe("hindsight retain confirmation", () => {
       if (tool === "get_document") return retains === 1 ? DOCUMENT_MISSING : document();
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -544,7 +550,7 @@ describe("hindsight retain confirmation", () => {
       if (tool === "get_document") return document();
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -571,7 +577,7 @@ describe("hindsight retain confirmation", () => {
       if (tool === "get_document") return DOCUMENT_MISSING;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 5_000,
@@ -606,14 +612,14 @@ describe("hindsight retain confirmation", () => {
     });
     const options = { now: () => now, confirmIntervalMs: 1_000, confirmWindowMs: 100_000 };
 
-    let service = new HindsightRetainService(mcp, options);
+    let service = new HindsightRetainService(mcp.backend, options);
     register(service, path);
     await service.runOnce();
     expect(state(path).status).toBe("submitted");
     await service.shutdown();
 
     finished = true;
-    service = new HindsightRetainService(mcp, options);
+    service = new HindsightRetainService(mcp.backend, options);
     register(service, path);
     now = 1_000;
     await service.runOnce();
@@ -640,7 +646,7 @@ describe("hindsight retain confirmation", () => {
         operationRow("48cb4aa0-0000-4000-8000-000000000000", "processing", "shore:ada:seg9"),
       ]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -670,7 +676,7 @@ describe("hindsight retain confirmation", () => {
       if (tool === "retain") return RETAIN_REJECTED;
       return new Error(`MCP server 'hindsight' is unavailable (${tool})`);
     });
-    const service = new HindsightRetainService(mcp, { now: () => now, maxAttempts: 3 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => now, maxAttempts: 3 });
     register(service, path);
 
     await service.runOnce();
@@ -697,7 +703,7 @@ describe("hindsight retain confirmation", () => {
       if (tool === "get_document") return retains === 1 ? document() : DOCUMENT_MISSING;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -717,7 +723,7 @@ describe("hindsight exclusion", () => {
   test("a segment excluded before it is committed is never read or sent", async () => {
     const { path } = queuedHistory("hindsight-excluded", { excluded: true });
     const mcp = recorder(() => ({}));
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
     await service.runOnce();
     expect(mcp.calls).toHaveLength(0);
@@ -730,7 +736,7 @@ describe("hindsight exclusion", () => {
     expect(store.setExcluded("ada", 0, true, true)).toBe(true);
     store.close();
     const mcp = recorder(() => ({}));
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
     await service.runOnce();
     expect(mcp.calls).toHaveLength(0);
@@ -748,7 +754,7 @@ describe("hindsight exclusion", () => {
       if (tool === "delete_document") return DELETED;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -787,7 +793,7 @@ describe("hindsight exclusion", () => {
       if (tool === "delete_document") return DELETED;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -824,7 +830,7 @@ describe("hindsight exclusion", () => {
       if (tool === "delete_document") return DELETED_MISSING;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -853,7 +859,7 @@ describe("hindsight exclusion", () => {
     const mcp = recorder((tool) =>
       tool === "delete_document" ? { error: "Document 'shore:ada:seg0' not found" } : {}
     );
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
     await service.runOnce();
     expect(mcp.tools).toEqual(["delete_document"]);
@@ -867,7 +873,7 @@ describe("hindsight exclusion", () => {
     expect(store.setExcluded("ada", 0, true, true)).toBe(true);
     store.close();
     const mcp = recorder(() => DELETED);
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
     await service.runOnce();
     expect(mcp.tools).toEqual(["delete_document"]);
@@ -884,7 +890,7 @@ describe("hindsight exclusion", () => {
       if (tool === "delete_document") return DELETED;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -923,7 +929,7 @@ describe("hindsight exclusion", () => {
       if (tool === "get_document") return document();
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -965,7 +971,7 @@ describe("hindsight exclusion", () => {
       }
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       confirmIntervalMs: 1_000,
       confirmWindowMs: 100_000,
@@ -1005,7 +1011,7 @@ describe("hindsight exclusion", () => {
     store.close();
 
     const mcp = recorder(() => ({}));
-    const service = new HindsightRetainService(mcp, { now: () => 0 });
+    const service = new HindsightRetainService(mcp.backend, { now: () => 0 });
     register(service, path);
     await service.runOnce();
     expect(mcp.calls).toHaveLength(0);
@@ -1020,7 +1026,7 @@ describe("hindsight retain scheduling", () => {
     let now = 0;
     const opens: number[] = [];
     const service = new HindsightRetainService(
-      { call: async () => ({}) },
+      () => ({ call: async () => await Promise.resolve({}) }),
       {
         now: () => now,
         sweepIntervalMs: 3_600_000,
@@ -1060,7 +1066,7 @@ describe("hindsight retain scheduling", () => {
       if (tool === "get_document") return DOCUMENT_MISSING;
       return operations([]);
     });
-    const service = new HindsightRetainService(mcp, {
+    const service = new HindsightRetainService(mcp.backend, {
       now: () => now,
       sweepIntervalMs: 3_600_000,
       openStore: (dbPath) => {

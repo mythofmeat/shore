@@ -2,17 +2,16 @@
 
 Shore retrieves relevant memories before each fresh user turn and injects them
 into the prompt, so the character does not have to decide to go looking. The
-retrieval itself lives outside shore, in an MCP server that exposes a retrieval
-tool:
+retrieval itself lives outside shore, in a Hindsight instance shore connects to
+directly:
 
 ```toml
-[mcp.hindsight]
-url = "http://mcp-hindsight:8888/mcp/qifei/"
+[memory.backend]
+url = "http://mcp-hindsight:8888/mcp/"
+# bank = "qifei"      # defaults to the character name
 
 [memory.recall]
 mode = "inject"       # off | inject
-server = "hindsight"
-tool = "recall"       # defaults to "recall"
 max_memories = 6
 max_tokens = 2048
 query_from = "user"    # user | recent; defaults to the latest user message
@@ -21,23 +20,26 @@ timeout = "3s"
 # preamble = "Relevant private notes:"  # defaults to shore's explanatory text
 ```
 
-The bank a server answers for is part of its URL, not a call argument, so each
-character points at its own endpoint from its own config overlay.
+`memory.backend.url` is the base a Hindsight instance serves; the bank becomes
+the last path segment, so one base serves every character and each gets its own
+bank without its own config entry. `bank` overrides the default when two
+characters should share one, or when the bank is named differently from the
+character.
 
-`memory.recall.server` names the `[mcp.<server>]` entry to call and
-`memory.recall.tool` the tool on it, defaulting to `recall`; shore calls
-`mcp__<server>__<tool>` itself with `{ query, max_tokens, query_timestamp }`,
-then keeps the first `max_memories` results. By default the query is the latest
-user message; `query_from = "recent"` restores the older behavior of
+Shore owns this connection: `MemoryBackends` holds one `McpClient` per
+character, opened on first use and reopened after a transport failure. It is
+deliberately not an `[mcp.*]` server. Those exist to put tools in front of the
+model, and this is the opposite — the daemon calls `recall` itself with
+`{ query, max_tokens, query_timestamp }` and keeps the first `max_memories`
+results, so the character never sees the tool and never decides to use it.
+Routing memory through the model-facing registry is what made it possible to
+break memory silently by writing the server entry in the wrong file.
+
+By default the query is the latest user message; `query_from = "recent"` restores the older behavior of
 joining the last `recent_messages` messages regardless of role. The timestamp
 of the latest user message anchors Hindsight's temporal ranking. A reply is read
 from `results` or `memories`, and a date from `occurred_start` or `occurred_at`,
-so both hindsight's shape and a plainer one parse. Deliberately do **not** grant
-that tool to any character: `McpRegistry.call` resolves against the full tool
-surface while the model's tool list is built separately from
-`tools.enabled_tools`, so the daemon calls it and the character never sees it.
-Granting it would hand the decision back to the model, which is the problem this
-exists to solve.
+so both hindsight's shape and a plainer one parse.
 
 ## The read path
 
@@ -93,7 +95,6 @@ write_memory = false
 
 [memory.retain]
 enabled = true
-# server = "hindsight"       # defaults to memory.recall.server
 user_name = "Ren"            # defaults to defaults.display_name
 possessive_pronoun = "his"   # defaults to "their"
 timeout = "15s"              # MCP submission deadline, not extraction time

@@ -56,17 +56,17 @@ Both must be rotated together.
 
 ## Banks
 
-A bank is a character. The bank id is in the **URL**, not in a tool argument, so
-each character points at its own endpoint from its own config overlay:
+A bank is a character. The bank id is a **path segment** under the base URL, and
+shore appends it, so one base serves every character:
 
 ```toml
 # config/characters/qifei/config.toml
-[mcp.hindsight]
-url = "http://mcp-hindsight:8888/mcp/qifei/"
+[memory.backend]
+url = "http://mcp-hindsight:8888/mcp/"
+# bank = "qifei"   # defaults to the character name
 
 [memory.recall]
 mode = "inject"
-server = "hindsight"
 max_memories = 6
 query_from = "user"
 timeout = "3s"
@@ -81,8 +81,9 @@ user_name = "Ren"
 possessive_pronoun = "his"
 ```
 
-`memory.recall.tool` defaults to `recall` and `max_tokens` to 2048, which is
-what hindsight wants, so neither needs to be written down.
+`max_tokens` defaults to 2048, which is what hindsight wants, so it does not
+need to be written down. The tool names are not configurable: shore calls
+`recall` and `retain` because those are the tools a Hindsight bank exposes.
 
 The latest user message is the recall query by default, avoiding the character's
 own previous reply dominating retrieval. `query_from = "recent"` restores the
@@ -91,10 +92,12 @@ older last-`recent_messages` behavior for comparison. Recall fails open after
 `preamble` replaces shore's explanatory paragraph inside `<recalled_memory>`;
 an empty string leaves the tagged fact list bare.
 
-Do **not** grant `mcp__hindsight__*` to any character. The daemon calls `recall`
-and `retain` itself; granting them would hand the decision back to the model.
+Hindsight is not an `[mcp.*]` server and must not be declared as one. Shore
+opens its own connection and calls `recall` and `retain` itself, so the tools
+never enter any character's tool surface and the model never decides whether to
+use them.
 
-`memory.retain.server` defaults to `memory.recall.server`. `user_name` defaults
+`user_name` defaults
 to `defaults.display_name`, and `possessive_pronoun` defaults to `their`; set
 both explicitly to keep live documents byte-identical to the arguments used for
 manual backfill. The retain timeout is only the deadline for Hindsight to accept

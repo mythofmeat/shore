@@ -5,9 +5,9 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import { compareByCodePoint } from "../util/sort.ts";
 import {
   budgetPeriodRank,
-  memoryRetainServer,
   parseAppConfig,
   validateCompaction,
+  validateMemoryBackend,
   validateMemoryRecall,
   validateMemoryRetain,
   type AppConfig,
@@ -447,25 +447,11 @@ function validateConfig(
   if (compaction !== undefined) throw validationError(compaction);
   const recall = validateMemoryRecall(app.memory.recall);
   if (recall !== undefined) throw validationError(recall);
-  const retain = validateMemoryRetain(
-    app.memory.retain,
-    app.memory.compaction,
-    app.memory.recall.server,
-  );
+  const retain = validateMemoryRetain(app.memory.retain, app.memory.compaction);
   if (retain !== undefined) throw validationError(retain);
 
-  if (app.memory.recall.mode !== "off" && !app.mcp.has(app.memory.recall.server)) {
-    throw validationError(
-      `memory.recall.server names '${app.memory.recall.server}', which has no ` +
-        "[mcp.<server>] definition",
-    );
-  }
-  const retainServer = memoryRetainServer(app.memory);
-  if (app.memory.retain.enabled && !app.mcp.has(retainServer)) {
-    throw validationError(
-      `memory.retain resolves server '${retainServer}', which has no [mcp.<server>] definition`,
-    );
-  }
+  const backend = validateMemoryBackend(app.memory.backend, app.memory);
+  if (backend !== undefined) throw validationError(backend);
 }
 
 function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {

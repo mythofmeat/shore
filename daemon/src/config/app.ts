@@ -592,8 +592,6 @@ export const DEFAULT_MEMORY_RECALL_PREAMBLE =
 
 export interface MemoryRecallConfig {
   mode: MemoryRecallMode;
-  server: string;
-  tool: string;
   max_memories: number;
   max_tokens: number;
   recent_messages: number;
@@ -604,8 +602,6 @@ export interface MemoryRecallConfig {
 
 export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
   mode: "off",
-  server: "",
-  tool: "recall",
   max_memories: 6,
   max_tokens: 2048,
   recent_messages: 2,
@@ -619,8 +615,6 @@ const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
   make: defaultMemoryRecallConfig,
   fields: {
     mode: readEnum(MEMORY_RECALL_MODES),
-    server: readString,
-    tool: readString,
     max_memories: readUsize,
     max_tokens: readUsize,
     recent_messages: readUsize,
@@ -632,12 +626,6 @@ const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
 
 export function validateMemoryRecall(recall: MemoryRecallConfig): string | undefined {
   if (recall.mode === "off") return undefined;
-  if (recall.server.trim() === "") {
-    return "memory.recall.server must name an [mcp.<server>] entry when recall is enabled";
-  }
-  if (recall.tool.trim() === "") {
-    return "memory.recall.tool must name a tool on the server when recall is enabled";
-  }
   if (recall.max_tokens === 0) {
     return "memory.recall.max_tokens must be greater than 0 when recall is enabled";
   }
@@ -661,7 +649,6 @@ export function validateMemoryRecall(recall: MemoryRecallConfig): string | undef
 
 export interface MemoryRetainConfig {
   enabled: boolean;
-  server: string;
   user_name: string | undefined;
   possessive_pronoun: string;
   timeout: ConfigDuration;
@@ -669,7 +656,6 @@ export interface MemoryRetainConfig {
 
 export const defaultMemoryRetainConfig = (): MemoryRetainConfig => ({
   enabled: false,
-  server: "",
   user_name: undefined,
   possessive_pronoun: "their",
   timeout: ConfigDuration.fromSecs(15),
@@ -681,31 +667,19 @@ const MEMORY_RETAIN: StructSpec<MemoryRetainConfig> = {
   make: defaultMemoryRetainConfig,
   fields: {
     enabled: readBool,
-    server: readString,
     user_name: optional(readString),
     possessive_pronoun: readString,
     timeout: readDuration,
   },
 };
 
-export function memoryRetainServer(memory: Pick<MemoryConfig, "recall" | "retain">): string {
-  return memory.retain.server.trim() || memory.recall.server.trim();
-}
-
 export function validateMemoryRetain(
   retain: MemoryRetainConfig,
   compaction: CompactionConfig,
-  fallbackServer: string,
 ): string | undefined {
   if (!retain.enabled) return undefined;
   if (compaction.write_memory) {
     return "memory.retain.enabled requires memory.compaction.write_memory = false";
-  }
-  if (retain.server.trim() === "" && fallbackServer.trim() === "") {
-    return (
-      "memory.retain.server must name an [mcp.<server>] entry when archive retain is enabled " +
-      "(or memory.recall.server must provide the fallback)"
-    );
   }
   if (retain.possessive_pronoun.trim() === "") {
     return "memory.retain.possessive_pronoun must not be blank";
@@ -850,6 +824,7 @@ const RETRIEVAL: StructSpec<RetrievalConfig> = {
 };
 
 export interface MemoryConfig {
+  backend: MemoryBackendConfig;
   compaction: CompactionConfig;
   recall: MemoryRecallConfig;
   retain: MemoryRetainConfig;
@@ -881,7 +856,60 @@ const MEMORY_FILE_LIMITS: StructSpec<MemoryFileLimitsConfig> = {
   },
 };
 
+export interface MemoryBackendConfig {
+  url: string;
+  bank: string;
+  headers: Map<string, string>;
+}
+
+export const defaultMemoryBackendConfig = (): MemoryBackendConfig => ({
+  url: "",
+  bank: "",
+  headers: new Map(),
+});
+
+const MEMORY_BACKEND: StructSpec<MemoryBackendConfig> = {
+  name: "MemoryBackendConfig",
+  make: defaultMemoryBackendConfig,
+  fields: {
+    url: readString,
+    bank: readString,
+    headers: readMap(readString),
+  },
+};
+
+export function memoryBackendBank(backend: MemoryBackendConfig, character: string): string {
+  return backend.bank.trim() || character;
+}
+
+export function memoryBackendNeeded(memory: Pick<MemoryConfig, "recall" | "retain">): boolean {
+  return memory.recall.mode !== "off" || memory.retain.enabled;
+}
+
+export function validateMemoryBackend(
+  backend: MemoryBackendConfig,
+  memory: Pick<MemoryConfig, "recall" | "retain">,
+): string | undefined {
+  if (!memoryBackendNeeded(memory)) return undefined;
+  if (backend.url.trim() === "") {
+    return (
+      "memory.backend.url must be set when memory.recall.mode is not \"off\" or " +
+      "memory.retain.enabled is true"
+    );
+  }
+  try {
+    const parsed = new URL(backend.url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return `memory.backend.url must be an http or https URL, got '${backend.url}'`;
+    }
+  } catch {
+    return `memory.backend.url is not a valid URL: '${backend.url}'`;
+  }
+  return undefined;
+}
+
 const defaultMemoryConfig = (): MemoryConfig => ({
+  backend: defaultMemoryBackendConfig(),
   compaction: defaultCompactionConfig(),
   recall: defaultMemoryRecallConfig(),
   retain: defaultMemoryRetainConfig(),
@@ -895,6 +923,7 @@ const MEMORY: StructSpec<MemoryConfig> = {
   name: "MemoryConfig",
   make: defaultMemoryConfig,
   fields: {
+    backend: struct(MEMORY_BACKEND),
     compaction: struct(COMPACTION),
     recall: struct(MEMORY_RECALL),
     retain: struct(MEMORY_RETAIN),
