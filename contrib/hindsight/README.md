@@ -105,8 +105,11 @@ same statement that commits it, sends one `retain` call, and marks it `stored`.
 It does not follow Hindsight's extraction operation — `document_id` upserts, so
 re-sending is the recovery path. Hindsight reports tool failures in the reply
 body rather than as MCP errors, so the worker reads every reply for an error
-payload and leaves the segment queued on one. A segment excluded before it is
-sent is never read; excluding one already sent deletes its document.
+payload and leaves the segment queued on one. Retries use exponential backoff
+capped at 60 seconds and stop after ten attempts. The durable failed state and
+last error appear in `shore segments`; once the cause is fixed, run
+`shore segments retry N` to requeue that segment. A segment excluded before it
+is sent is never read; excluding one already sent deletes its document.
 
 Turning off automatic memory writes does not erase `MEMORY.md` or workspace
 notes. They remain always-present, hand-curated context; Hindsight replaces the

@@ -98,10 +98,13 @@ operation id and runs the 90-400 second extraction in its own worker — so shor
 makes one fast call and does not follow the operation. Nothing in shore reads
 retain completion, and `document_id` upserts, so the recovery path for a
 document that never landed is to re-send it. That is what
-`contrib/hindsight/backfill.py` is for, and why the daemon carries no operation
-polling, no cancellation and no attempt counters on disk. Retry state lives in
-memory in the worker and is discarded on restart, where retrying immediately is
-the right behaviour anyway.
+`contrib/hindsight/backfill.py` is for. The daemon carries no operation polling
+or cancellation, but submission failures are bounded: it stores the attempt
+count and last error on the segment, retries with exponential backoff capped at
+60 seconds, and moves the segment to `failed` (or `delete_failed`) after ten
+attempts. Failed work is terminal across daemon restarts. `shore segments` shows
+the failure; after fixing the cause, `shore segments retry N` explicitly queues
+that segment again with a fresh attempt count.
 
 The cost of not following the operation: if Hindsight accepts a document and its
 extraction then fails, shore records it `stored` and the segment is quietly
@@ -127,11 +130,12 @@ retrieved layer instead of running the compaction LLM that rewrites memory
 files. Existing `MEMORY.md` and workspace notes are not deleted and remain in
 the always-present prompt, so they can still be hand-curated.
 
-Exclusion is part of the durable queue state. A segment excluded before submit
-is never read. Excluding an already-submitted segment first attempts to cancel
-its Hindsight operation, then calls `delete_document`; including it queues a
-fresh upsert. This cleanup also applies when `shore segments exclude N` first
-adopts a segment created by the manual backfill path.
+Exclusion is part of the durable segment state. A segment excluded before
+submit is never read. Excluding an already-submitted segment calls
+`delete_document`; including it queues a fresh upsert. This cleanup also applies
+when `shore segments exclude N` first adopts a segment created by the manual
+backfill path. Retain and delete failures both use the same ten-attempt bound
+and can be requeued with `shore segments retry N`.
 
 `contrib/hindsight/backfill.py` remains the historical import and repair tool.
 Because `document_id` upserts, it carries no cursor and no resume state:

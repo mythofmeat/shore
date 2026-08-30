@@ -10,6 +10,7 @@ import type { McpRegistry } from "../tools/mcp_registry.ts";
 const RETAIN_TOOL = "retain";
 const DELETE_DOCUMENT_TOOL = "delete_document";
 const MAX_RETRY_MS = 60_000;
+const MAX_ATTEMPTS = 10;
 
 const CONTEXT =
   "A private conversation between {user} and {character}, {pronoun} partner. " +
@@ -32,6 +33,7 @@ export interface HindsightRetainRegistration {
 export interface HindsightRetainServiceOptions {
   now?: () => number;
   timerIntervalMs?: number;
+  maxAttempts?: number;
 }
 
 export interface HindsightDocument {
@@ -84,6 +86,7 @@ export class HindsightRetainService {
   readonly #mcpRegistry: Pick<McpRegistry, "call">;
   readonly #now: () => number;
   readonly #timerIntervalMs: number;
+  readonly #maxAttempts: number;
   readonly #stop = new AbortController();
   readonly #retry = new Map<string, { failures: number; notBefore: number }>();
   #timer: ReturnType<typeof setInterval> | undefined;
@@ -98,6 +101,10 @@ export class HindsightRetainService {
     this.#mcpRegistry = mcpRegistry;
     this.#now = options.now ?? Date.now;
     this.#timerIntervalMs = options.timerIntervalMs ?? 1_000;
+    this.#maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
+    if (!Number.isSafeInteger(this.#maxAttempts) || this.#maxAttempts < 1) {
+      throw new RangeError("maxAttempts must be a positive integer");
+    }
   }
 
   register(registration: HindsightRetainRegistration): void {
@@ -210,16 +217,33 @@ export class HindsightRetainService {
       shoreLog.info(`shore: sent ${document.documentId} to hindsight for extraction`);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      const failures = this.#backOff(job.character, this.#now());
+      const failures = job.attempts + 1;
+      const exhausted = failures >= this.#maxAttempts;
+      store.markMemoryDocumentFailure(
+        job.character,
+        job.segment,
+        job.action,
+        detail,
+        exhausted,
+      );
+      if (exhausted) {
+        this.#retry.delete(job.character);
+        shoreLog.error(
+          `shore: hindsight archive ${job.action} exhausted retries for ${documentId} ` +
+            `(attempt ${String(failures)}/${String(this.#maxAttempts)}); giving up: ${detail}`,
+        );
+        return;
+      }
+      this.#backOff(job.character, this.#now(), failures);
       shoreLog.warn(
         `shore: hindsight archive ${job.action} failed for ${documentId} ` +
-          `(attempt ${String(failures)}); retrying later: ${detail}`,
+          `(attempt ${String(failures)}/${String(this.#maxAttempts)}); retrying later: ${detail}`,
       );
     }
   }
 
-  #backOff(character: string, now: number): number {
-    const failures = (this.#retry.get(character)?.failures ?? 0) + 1;
+  #backOff(character: string, now: number, failureCount?: number): number {
+    const failures = failureCount ?? (this.#retry.get(character)?.failures ?? 0) + 1;
     const grown = 1_000 * 2 ** Math.min(failures - 1, 20);
     this.#retry.set(character, {
       failures,

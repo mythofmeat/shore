@@ -18,6 +18,7 @@ export interface SegmentEngine {
 export interface SegmentIndexMutationSink {
   progressFor?(character: string): { indexPath: string } | undefined;
   noteMutation?(character: string): void;
+  noteMemoryWork?(character: string): void;
 }
 
 export interface ClearContext {
@@ -88,12 +89,20 @@ function runSegments(
       case "note":
         changed = store.setNote(character, idx, nullableText(args["value"], "note"));
         break;
+      case "retry":
+        changed = store.retryMemoryDocument(character, idx);
+        if (!changed && store.entries(character).some((entry) => entry.idx === idx)) {
+          throw invalidRequest(`segment ${String(idx)} has no failed hindsight operation`);
+        }
+        break;
       default:
         throw invalidRequest(`unknown segment action: ${action}`);
     }
     if (!changed) throw notFound(`segment ${String(idx)} not found for ${character}`);
     if (action === "exclude" || action === "include") {
       historyIndex?.noteMutation?.(character);
+    } else if (action === "retry") {
+      historyIndex?.noteMemoryWork?.(character);
     }
     const record = store.entries(character).find((entry) => entry.idx === idx);
     if (record === undefined) throw notFound(`segment ${String(idx)} not found for ${character}`);
@@ -182,6 +191,9 @@ function presentSegment(record: SegmentRecord): Record<string, unknown> {
     note: record.note ?? null,
     memory_before: record.memory_before ?? null,
     memory_after: record.memory_after ?? null,
+    memory_status: record.memory_status ?? null,
+    memory_attempts: record.memory_attempts ?? 0,
+    memory_error: record.memory_error ?? null,
   };
 }
 

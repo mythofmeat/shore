@@ -108,6 +108,16 @@ fn print_segment_row(segment: &serde_json::Value) {
     if let Some(note) = segment["note"].as_str() {
         cli_out!("      {note}");
     }
+    if let Some(status @ ("failed" | "delete_failed")) = segment["memory_status"].as_str() {
+        let action = if status == "delete_failed" {
+            "delete"
+        } else {
+            "retain"
+        };
+        let attempts = segment["memory_attempts"].as_u64().unwrap_or(0);
+        let error = segment["memory_error"].as_str().unwrap_or("unknown error");
+        cli_out!("      hindsight {action} failed after {attempts} attempts: {error}");
+    }
     match (
         segment["memory_before"].as_str(),
         segment["memory_after"].as_str(),

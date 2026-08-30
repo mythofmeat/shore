@@ -562,6 +562,9 @@ function commandDeps(a: CommandAssembly): CommandDeps {
         runtime.historyIndex.noteMutation(character);
         runtime.memoryRetain.noteWork(character);
       },
+      noteMemoryWork: (character) => {
+        runtime.memoryRetain.noteWork(character);
+      },
     },
   };
 }

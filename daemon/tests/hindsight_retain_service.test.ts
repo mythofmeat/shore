@@ -182,6 +182,73 @@ describe("hindsight retain service", () => {
     await service.shutdown();
   });
 
+  test("retry exhaustion is durable across restarts and becomes terminal", async () => {
+    const { path } = queuedHistory("hindsight-exhausted");
+    const seeded = HistoryStore.open(path);
+    seeded.putSegment("ada", 1, {
+      file: HISTORY_DB_FILE,
+      message_count: 1,
+      compacted_at: "2026-08-22T12:00:00+10:00",
+      retain: true,
+    }, [message("u2", "user", "later segment", "2026-08-22T10:00:00+10:00")]);
+    seeded.close();
+    let now = 0;
+    let rejectedAttempts = 0;
+    let acceptedAttempts = 0;
+    const registry = {
+      call: async () => {
+        if (rejectedAttempts < 3) {
+          rejectedAttempts += 1;
+          return { status: "error", message: "document rejected" };
+        }
+        acceptedAttempts += 1;
+        return { status: "accepted", operation_id: "op-2" };
+      },
+    };
+    let service = new HindsightRetainService(registry, {
+      now: () => now,
+      maxAttempts: 3,
+    });
+    register(service, path);
+    await service.runOnce();
+    await service.shutdown();
+
+    service = new HindsightRetainService(registry, {
+      now: () => now,
+      maxAttempts: 3,
+    });
+    register(service, path);
+    await service.runOnce();
+    now = 1_999;
+    await service.runOnce();
+    expect(rejectedAttempts).toBe(2);
+    now = 2_000;
+    await service.runOnce();
+
+    let store = HistoryStore.open(path);
+    expect(store.entries("ada")[0]).toMatchObject({
+      memory_status: "failed",
+      memory_attempts: 3,
+      memory_error: "hindsight retain: document rejected",
+    });
+    expect(store.nextMemoryRetainJob("ada")).toMatchObject({ segment: 1, action: "retain" });
+    store.close();
+
+    await service.runOnce();
+    store = HistoryStore.open(path);
+    expect(store.entries("ada")[1]).toMatchObject({ memory_status: "stored" });
+    expect(store.nextMemoryRetainJob("ada")).toBeUndefined();
+    store.close();
+
+    now = 1_000_000;
+    await service.runOnce();
+    expect({ rejectedAttempts, acceptedAttempts }).toEqual({
+      rejectedAttempts: 3,
+      acceptedAttempts: 1,
+    });
+    await service.shutdown();
+  });
+
   test("a segment excluded before it is committed is never read or sent", async () => {
     const { path } = queuedHistory("hindsight-excluded", { excluded: true });
     let calls = 0;

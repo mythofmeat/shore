@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS history_segments (
     memory_after  TEXT,
     excluded      INTEGER NOT NULL DEFAULT 0,
     memory_doc    TEXT,
+    memory_doc_attempts INTEGER NOT NULL DEFAULT 0,
+    memory_doc_error TEXT,
     label         TEXT,
     note          TEXT,
     PRIMARY KEY (character, idx)
@@ -139,14 +141,19 @@ export interface SegmentRecord extends SegmentEntry {
   idx: number;
   first_message_at: string | null;
   last_message_at: string | null;
+  memory_status?: MemoryDocumentState;
+  memory_attempts?: number;
+  memory_error?: string;
 }
 
 export type MemoryRetainAction = "retain" | "delete";
+export type MemoryDocumentState = "pending" | "stored" | "failed" | "delete_failed";
 
 export interface MemoryRetainJob {
   character: string;
   segment: number;
   action: MemoryRetainAction;
+  attempts: number;
 }
 
 const ZSTD_LEVEL = 3;
@@ -381,7 +388,8 @@ export class HistoryStore {
     const rows = this.#db
       .query(
         `SELECT s.idx, s.file, s.message_count, s.compacted_at, s.compaction_id,
-                s.memory_before, s.memory_after, s.excluded, s.label, s.note,
+                s.memory_before, s.memory_after, s.excluded, s.memory_doc,
+                s.memory_doc_attempts, s.memory_doc_error, s.label, s.note,
                 (SELECT m.timestamp FROM history_messages m
                  WHERE m.character = s.character AND m.segment = s.idx
                  ORDER BY m.ordinal ASC LIMIT 1) AS first_message_at,
@@ -398,6 +406,9 @@ export class HistoryStore {
       memory_before: string | null;
       memory_after: string | null;
       excluded: number;
+      memory_doc: MemoryDocumentState | null;
+      memory_doc_attempts: number;
+      memory_doc_error: string | null;
       label: string | null;
       note: string | null;
     })[];
@@ -412,6 +423,9 @@ export class HistoryStore {
       ...(row.memory_before === null ? {} : { memory_before: row.memory_before }),
       ...(row.memory_after === null ? {} : { memory_after: row.memory_after }),
       ...(row.excluded === 0 ? {} : { excluded: true }),
+      ...(row.memory_doc === null ? {} : { memory_status: row.memory_doc }),
+      ...(row.memory_doc_attempts === 0 ? {} : { memory_attempts: row.memory_doc_attempts }),
+      ...(row.memory_doc_error === null ? {} : { memory_error: row.memory_doc_error }),
       ...(row.label === null ? {} : { label: row.label }),
       ...(row.note === null ? {} : { note: row.note }),
     }));
@@ -436,9 +450,17 @@ export class HistoryStore {
           .query(
             `UPDATE history_segments
              SET memory_doc = CASE
-                   WHEN memory_doc = 'pending' THEN NULL
+                   WHEN memory_doc IN ('pending', 'failed') THEN NULL
                    WHEN memory_doc IS NULL AND ?3 = 1 THEN 'stored'
                    ELSE memory_doc
+                 END,
+                 memory_doc_attempts = CASE
+                   WHEN memory_doc IN ('pending', 'failed') THEN 0
+                   ELSE memory_doc_attempts
+                 END,
+                 memory_doc_error = CASE
+                   WHEN memory_doc IN ('pending', 'failed') THEN NULL
+                   ELSE memory_doc_error
                  END
              WHERE character = ?1 AND idx = ?2`,
           )
@@ -446,8 +468,10 @@ export class HistoryStore {
       } else if (manageRetain) {
         this.#db
           .query(
-            `UPDATE history_segments SET memory_doc = 'pending'
-             WHERE character = ?1 AND idx = ?2 AND memory_doc IS NULL`,
+            `UPDATE history_segments
+             SET memory_doc = 'pending', memory_doc_attempts = 0, memory_doc_error = NULL
+             WHERE character = ?1 AND idx = ?2
+               AND (memory_doc = 'delete_failed' OR memory_doc IS NULL)`,
           )
           .run(character, idx);
       }
@@ -458,29 +482,65 @@ export class HistoryStore {
   nextMemoryRetainJob(character: string): MemoryRetainJob | undefined {
     const row = this.#db
       .query(
-        `SELECT idx, excluded FROM history_segments
+        `SELECT idx, excluded, memory_doc_attempts FROM history_segments
          WHERE character = ?1 AND committed = 1
            AND ((memory_doc = 'pending' AND excluded = 0)
                 OR (memory_doc = 'stored' AND excluded = 1))
          ORDER BY idx
          LIMIT 1`,
       )
-      .get(character) as { idx: number; excluded: number } | null;
+      .get(character) as { idx: number; excluded: number; memory_doc_attempts: number } | null;
     if (row === null) return undefined;
     return {
       character,
       segment: row.idx,
       action: row.excluded === 1 ? "delete" : "retain",
+      attempts: row.memory_doc_attempts,
     };
   }
 
   markMemoryDocument(character: string, idx: number, state: "stored" | null): boolean {
     return this.#db
       .query(
-        `UPDATE history_segments SET memory_doc = ?3
+        `UPDATE history_segments
+         SET memory_doc = ?3, memory_doc_attempts = 0, memory_doc_error = NULL
          WHERE character = ?1 AND idx = ?2 AND committed = 1`,
       )
       .run(character, idx, state).changes > 0;
+  }
+
+  markMemoryDocumentFailure(
+    character: string,
+    idx: number,
+    action: MemoryRetainAction,
+    error: string,
+    exhausted: boolean,
+  ): boolean {
+    const pending = action === "retain" ? "pending" : "stored";
+    const failed = action === "retain" ? "failed" : "delete_failed";
+    return this.#db
+      .query(
+        `UPDATE history_segments
+         SET memory_doc = ?5, memory_doc_attempts = memory_doc_attempts + 1,
+             memory_doc_error = ?4
+         WHERE character = ?1 AND idx = ?2 AND committed = 1 AND memory_doc = ?3`,
+      )
+      .run(character, idx, pending, error, exhausted ? failed : pending).changes > 0;
+  }
+
+  retryMemoryDocument(character: string, idx: number): boolean {
+    return this.#db
+      .query(
+        `UPDATE history_segments
+         SET memory_doc = CASE memory_doc
+               WHEN 'failed' THEN 'pending'
+               WHEN 'delete_failed' THEN 'stored'
+             END,
+             memory_doc_attempts = 0, memory_doc_error = NULL
+         WHERE character = ?1 AND idx = ?2 AND committed = 1
+           AND memory_doc IN ('failed', 'delete_failed')`,
+      )
+      .run(character, idx).changes > 0;
   }
 
   setLabel(character: string, idx: number, label: string | null): boolean {
@@ -638,8 +698,9 @@ export class HistoryStore {
       .query(
         `INSERT INTO history_segments
              (character, idx, file, message_count, compacted_at, compaction_id, committed,
-              memory_before, memory_after, excluded, memory_doc, label, note)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+              memory_before, memory_after, excluded, memory_doc, memory_doc_attempts,
+              memory_doc_error, label, note)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT (character, idx) DO UPDATE SET
            file = excluded.file,
            message_count = excluded.message_count,
@@ -650,6 +711,8 @@ export class HistoryStore {
            memory_after = excluded.memory_after,
            excluded = excluded.excluded,
            memory_doc = excluded.memory_doc,
+           memory_doc_attempts = excluded.memory_doc_attempts,
+           memory_doc_error = excluded.memory_doc_error,
            label = excluded.label,
            note = excluded.note`,
       )
@@ -665,6 +728,8 @@ export class HistoryStore {
         entry.memory_after ?? null,
         entry.excluded === true ? 1 : 0,
         entry.retain === true && entry.excluded !== true ? "pending" : null,
+        0,
+        null,
         entry.label ?? null,
         entry.note ?? null,
       );
@@ -850,6 +915,14 @@ function migrate(db: Database): void {
   }
   if (!columns.some((column) => column.name === "memory_doc")) {
     db.run("ALTER TABLE history_segments ADD COLUMN memory_doc TEXT");
+  }
+  if (!columns.some((column) => column.name === "memory_doc_attempts")) {
+    db.run(
+      "ALTER TABLE history_segments ADD COLUMN memory_doc_attempts INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+  if (!columns.some((column) => column.name === "memory_doc_error")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN memory_doc_error TEXT");
   }
   if (columns.some((column) => column.name === "memory_retain")) {
     db.run("DROP TABLE IF EXISTS history_memory_retain");
