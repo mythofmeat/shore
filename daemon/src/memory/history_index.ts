@@ -1,3 +1,4 @@
+import { chunkText } from "./chunking.ts";
 import { required } from "../util/required.ts";
 
 import { Database } from "bun:sqlite";
@@ -474,33 +475,7 @@ export class HistorySearchIndex {
 }
 
 export function chunkVisibleText(text: string): string[] {
-  if (text.length <= HISTORY_CHUNK_CHARS) return text === "" ? [] : [text];
-  const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    const idealEnd = Math.min(start + HISTORY_CHUNK_CHARS, text.length);
-    let end = idealEnd;
-    if (idealEnd < text.length) {
-      const floor = start + Math.floor(HISTORY_CHUNK_CHARS * 0.55);
-      const paragraph = text.lastIndexOf("\n\n", idealEnd);
-      const sentence = lastSentenceBoundary(text, idealEnd, floor);
-      const line = text.lastIndexOf("\n", idealEnd);
-      end = paragraph >= floor ? paragraph + 2 : sentence >= floor ? sentence : line >= floor ? line + 1 : idealEnd;
-    }
-    const chunk = text.slice(start, end);
-    if (chunk !== "") chunks.push(chunk);
-    if (end >= text.length) break;
-    const next = Math.max(end - HISTORY_CHUNK_OVERLAP, start + 1);
-    start = next;
-  }
-  return chunks;
-}
-
-function lastSentenceBoundary(text: string, end: number, floor: number): number {
-  for (let i = end - 1; i >= floor; i -= 1) {
-    if (/[.!?。！？]/u.test(text[i] ?? "") && /\s/u.test(text[i + 1] ?? "")) return i + 1;
-  }
-  return -1;
+  return chunkText(text, HISTORY_CHUNK_CHARS, HISTORY_CHUNK_OVERLAP);
 }
 
 export async function loadMessageTexts(

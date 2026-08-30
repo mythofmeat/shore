@@ -474,6 +474,29 @@ describe("history search index", () => {
     expect(pauses).toEqual([2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000]);
   });
 
+  test("an llm-shaped embedder failure is recorded readably, not as [object Object]", async () => {
+    const dir = await character([message("u1", "user", "settled corpus", "2026-08-13T00:00:00Z")]);
+    const service = new HistoryIndexService({ now: () => 0, idleDelayMs: 0, batchPauseMs: 1 });
+    service.register({
+      character: "ada",
+      characterDataDir: dir,
+      indexPath: join(dir, HISTORY_SEARCH_DB_FILE),
+      embedder: {
+        modelId: "fake-history-v1",
+        dimensions: 2,
+        embed: () => {
+          throw { kind: "http_status", status: 413, body: "too many tokens" };
+        },
+      },
+    });
+    await service.reconcileAll();
+    await service.runOnce();
+
+    const recorded = service.progress("ada")?.lastError;
+    expect(recorded).toBe("HTTP 413: too many tokens");
+    await service.shutdown();
+  });
+
   test("a mutation cancels the back-off so new history indexes promptly", async () => {
     const dir = await character([message("u1", "user", "settled corpus", "2026-08-13T00:00:00Z")]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);

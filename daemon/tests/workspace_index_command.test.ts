@@ -61,7 +61,7 @@ function stocked(name: string): string {
       reason: "oversize",
     },
   ]);
-  store.putEmbeddings("qwen3", [{ hash: "ha", vector: [1, 0] }]);
+  store.putEmbeddings("qwen3", [{ hash: "ha", vectors: [[1, 0]] }]);
   store.setMetadata("last_indexed_at", "2026-08-15T01:44:00.000Z");
   store.close();
   return path;

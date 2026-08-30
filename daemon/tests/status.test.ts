@@ -642,7 +642,7 @@ describe("a halted keepalive reaches the status envelope", () => {
         reason: undefined,
       },
     ]);
-    store.putEmbeddings("qwen3", [{ hash: "h", vector: [1, 0] }]);
+    store.putEmbeddings("qwen3", [{ hash: "h", vectors: [[1, 0]] }]);
     store.close();
 
     const result = (await status({

@@ -6,7 +6,8 @@ import { readFile, readdir, lstat, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import { toF32, type Embedder } from "../llm/embed";
-import { describeLlmError, type LlmError } from "../llm/errors";
+import { describeError } from "../llm/errors";
+import { chunkText } from "./chunking.ts";
 import { compareRustStrings, rustLines, rustTrimStart, tokenizeQuery } from "./lines";
 import { migrateLegacyIndex } from "./workspace_legacy.ts";
 import {
@@ -137,7 +138,7 @@ export async function hybridSearch(options: HybridSearchOptions): Promise<Hybrid
         const vectors = await embedDocuments(embedder, refreshed.staleDocs);
         store.putEmbeddings(
           embedder.modelId,
-          refreshed.stale.map((entry, i) => ({ hash: entry.hash, vector: required(vectors[i]) })),
+          refreshed.stale.map((entry, i) => ({ hash: entry.hash, vectors: required(vectors[i]) })),
         );
         store.putFiles(refreshed.stale.map((entry) => ({ ...entry.row, embedded: true })));
         store.setMetadata("last_indexed_at", new Date().toISOString());
@@ -204,14 +205,14 @@ export async function indexPendingBatch(
       const limit = options.maxBatchItems ?? EMBED_BATCH_MAX_ITEMS;
       const batch = refreshed.stale.slice(0, limit);
       if (batch.length === 0) {
-        store.pruneEmbeddings();
+        store.pruneEmbeddings(embedder.modelId);
         return { embedded: 0, pending: 0, files: candidates.length };
       }
 
       const vectors = await embedDocuments(embedder, refreshed.staleDocs.slice(0, batch.length));
       store.putEmbeddings(
         embedder.modelId,
-        batch.map((entry, i) => ({ hash: entry.hash, vector: required(vectors[i]) })),
+        batch.map((entry, i) => ({ hash: entry.hash, vectors: required(vectors[i]) })),
       );
       store.putFiles(batch.map((entry) => ({ ...entry.row, embedded: true })));
       store.setMetadata("last_indexed_at", new Date().toISOString());
@@ -434,36 +435,13 @@ async function embedQuery(embedder: Embedder, query: string): Promise<number[]> 
   try {
     vectors = await embedder.embed([query]);
   } catch (e) {
-    throw WorkspaceIndexError.embedder(describeEmbedFailure(e));
+    throw WorkspaceIndexError.embedder(describeError(e));
   }
   const first = vectors[0];
   if (first === undefined) {
     throw WorkspaceIndexError.embedder("embedding response did not include query vector");
   }
   return first;
-}
-
-const LLM_ERROR_KINDS = new Set([
-  "transport",
-  "http_status",
-  "serialize",
-  "deserialize",
-  "incomplete_stream",
-  "stream_errored",
-  "missing_api_key",
-  "provider",
-]);
-
-function describeEmbedFailure(error: unknown): string {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    LLM_ERROR_KINDS.has((error as { kind?: unknown }).kind as string)
-  ) {
-    return describeLlmError(error as LlmError);
-  }
-  if (error instanceof Error) return error.message;
-  return String(error);
 }
 
 function scoreCandidates(
@@ -488,15 +466,17 @@ function scoreCandidates(
     const lexical =
       file.content === undefined ? 0 : lexicalScore(file.displayPath, file.content, qLower, terms);
     const row = rows.get(file.displayPath);
-    const vector = row !== undefined && row.embedded ? vectors.get(row.document_hash) : undefined;
+    const chunks = row !== undefined && row.embedded ? vectors.get(row.document_hash) : undefined;
     return {
       displayPath: file.displayPath,
       fsPath: file.fsPath,
       content: file.content,
       lexicalScore: lexical,
-      semanticScore: vector === undefined ? undefined : cosineSimilarity(queryVector, vector),
+      semanticScore: chunks === undefined || chunks.length === 0
+        ? undefined
+        : Math.max(...chunks.map((chunk) => cosineSimilarity(queryVector, chunk))),
       combinedScore: 0,
-      embedded: vector !== undefined,
+      embedded: chunks !== undefined && chunks.length > 0,
       skipReason: file.skipReason,
     };
   });
@@ -647,7 +627,30 @@ function charCount(text: string): number {
   return n;
 }
 
-export async function embedDocuments(embedder: Embedder, docs: string[]): Promise<number[][]> {
+export const WORKSPACE_CHUNK_CHARS = 1_200;
+export const WORKSPACE_CHUNK_OVERLAP = 120;
+
+export function chunksForEmbedding(document: string): string[] {
+  const chunks = chunkText(document, WORKSPACE_CHUNK_CHARS, WORKSPACE_CHUNK_OVERLAP);
+  return chunks.length === 0 ? [document] : chunks;
+}
+
+export async function embedDocuments(
+  embedder: Embedder,
+  docs: string[],
+): Promise<number[][][]> {
+  const groups = docs.map((doc) => chunksForEmbedding(doc));
+  const vectors = await embedChunks(embedder, groups.flat());
+  const out: number[][][] = [];
+  let cursor = 0;
+  for (const group of groups) {
+    out.push(vectors.slice(cursor, cursor + group.length));
+    cursor += group.length;
+  }
+  return out;
+}
+
+export async function embedChunks(embedder: Embedder, docs: string[]): Promise<number[][]> {
   const vectors: number[][] = [];
   let start = 0;
 
@@ -667,7 +670,7 @@ export async function embedDocuments(embedder: Embedder, docs: string[]): Promis
     try {
       batch = await embedder.embed(inputs);
     } catch (e) {
-      throw WorkspaceIndexError.embedder(describeEmbedFailure(e));
+      throw WorkspaceIndexError.embedder(describeError(e));
     }
     if (batch.length !== inputs.length) {
       throw WorkspaceIndexError.countMismatch(batch.length, inputs.length);

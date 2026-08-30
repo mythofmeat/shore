@@ -20,7 +20,10 @@ import {
   cosineSimilarity,
   displayPathFor,
   documentForEmbedding,
+  chunksForEmbedding,
+  embedChunks,
   embedDocuments,
+  WORKSPACE_CHUNK_CHARS,
   enumerateFiles,
   hybridSearch,
   indexPath,
@@ -885,6 +888,66 @@ describe("indexPath", () => {
   }
 });
 
+describe("workspace document chunking", () => {
+  test("a long file is embedded in chunks a 512-token model accepts", async () => {
+    const dir = await mkdtemp(join(root, "late-"));
+    const workspaceDir = join(dir, "workspace");
+    await mkdir(workspaceDir, { recursive: true });
+    const filler = "unrelated filler prose about the weather. ".repeat(60);
+    await writeFile(join(workspaceDir, "notes.md"), `${filler}\n\nthe kayak is in the shed\n`);
+
+    const embedder = new TopicEmbedder(["kayak"], "chunk-search", undefined, false);
+    const search = async () =>
+      await hybridSearch({
+        workspaceDir,
+        retrievalConfig: configOf(undefined),
+        query: "where is the kayak",
+        mode: "hybrid",
+        embedder,
+        indexPath: join(dir, "index.db"),
+      });
+    await search();
+    const embedded = embedder.calls.flat();
+    const result = await search();
+
+    expect(embedded.length).toBeGreaterThan(1);
+    for (const input of embedded) {
+      expect(input.length, "no input may exceed what a 512-token model accepts")
+        .toBeLessThanOrEqual(WORKSPACE_CHUNK_CHARS);
+    }
+    const hit = result.files.find((f) => f.displayPath === "notes.md");
+    expect(hit?.semanticScore ?? 0).toBeGreaterThan(0);
+  });
+
+
+  test("a document under the cap stays one chunk", () => {
+    expect(chunksForEmbedding("short note")).toEqual(["short note"]);
+  });
+
+  test("an empty document still embeds as one chunk rather than vanishing", () => {
+    expect(chunksForEmbedding("")).toEqual([""]);
+  });
+
+  test("a long document is split under the cap so a 512-token model accepts it", () => {
+    const document = "sentence about the workspace. ".repeat(400);
+    const chunks = chunksForEmbedding(document);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(WORKSPACE_CHUNK_CHARS);
+  });
+
+  test("embedDocuments returns one vector per chunk, grouped by document", async () => {
+    const short = "a short note";
+    const long = "paragraph text that keeps going. ".repeat(200);
+    const recorder = new TopicEmbedder(["never-matches"], "chunk-probe", undefined, false);
+    const vectors = await embedDocuments(recorder, [short, long]);
+    expect(vectors).toHaveLength(2);
+    expect(vectors[0]).toHaveLength(1);
+    expect(vectors[1]).toHaveLength(chunksForEmbedding(long).length);
+    expect(vectors[1]?.length ?? 0).toBeGreaterThan(1);
+    expect(recorder.calls.flat()).toHaveLength(1 + chunksForEmbedding(long).length);
+  });
+});
+
 describe("embedDocuments batching", () => {
   for (const c of fixture.embed_batching) {
     test(c.name, async () => {
@@ -892,7 +955,7 @@ describe("embedDocuments batching", () => {
         (i === 0 && c.name.includes("counts chars") ? "🌊" : "x").repeat(n),
       );
       const recorder = new TopicEmbedder(["never-matches"], "batch-probe", undefined, false);
-      await embedDocuments(recorder, docs);
+      await embedChunks(recorder, docs);
       expect(
         recorder.calls.map((b) => ({
           items: b.length,
@@ -909,7 +972,7 @@ describe("embedDocuments batching", () => {
     );
     const docs = c.doc_char_counts.map((n) => "🌊".repeat(n));
     const recorder = new TopicEmbedder(["never-matches"], "batch-probe", undefined, false);
-    await embedDocuments(recorder, docs);
+    await embedChunks(recorder, docs);
     expect(recorder.calls.map((b) => b.length)).toEqual(c.batches.map((b) => b.items));
     expect(docs[0]?.length).toBe(must(c.doc_char_counts[0], "a first document") * 2);
   });
@@ -1107,17 +1170,17 @@ describe("index persistence", () => {
   test("a vector round-trips as f32 without going through decimal text", () => {
     const store = WorkspaceIndexStore.open(join(root, "vec.db"));
     const vector = [1 / 3, -0.5, 0, 1e-8];
-    store.putEmbeddings("topic-v1", [{ hash: "h", vector }]);
-    expect(vec(store.vectorsFor("topic-v1", ["h"]).get("h"))).toEqual(f32s(vector));
+    store.putEmbeddings("topic-v1", [{ hash: "h", vectors: [vector] }]);
+    expect(vec(store.vectorsFor("topic-v1", ["h"]).get("h")?.[0])).toEqual(f32s(vector));
     store.close();
   });
 
   test("the same document under two models keeps both vectors", () => {
     const store = WorkspaceIndexStore.open(join(root, "models.db"));
-    store.putEmbeddings("old", [{ hash: "h", vector: [1, 0] }]);
-    store.putEmbeddings("new", [{ hash: "h", vector: [0, 1] }]);
-    expect(vec(store.vectorsFor("old", ["h"]).get("h"))).toEqual([1, 0]);
-    expect(vec(store.vectorsFor("new", ["h"]).get("h"))).toEqual([0, 1]);
+    store.putEmbeddings("old", [{ hash: "h", vectors: [[1, 0]] }]);
+    store.putEmbeddings("new", [{ hash: "h", vectors: [[0, 1]] }]);
+    expect(vec(store.vectorsFor("old", ["h"]).get("h")?.[0])).toEqual([1, 0]);
+    expect(vec(store.vectorsFor("new", ["h"]).get("h")?.[0])).toEqual([0, 1]);
     expect(store.hasVector("other", "h")).toBe(false);
     store.close();
   });
@@ -1125,12 +1188,12 @@ describe("index persistence", () => {
   test("re-embedding one file rewrites one row, not the whole index", () => {
     const store = WorkspaceIndexStore.open(join(root, "one.db"));
     store.putEmbeddings("m", [
-      { hash: "a", vector: [1, 0] },
-      { hash: "b", vector: [0, 1] },
+      { hash: "a", vectors: [[1, 0]] },
+      { hash: "b", vectors: [[0, 1]] },
     ]);
-    store.putEmbeddings("m", [{ hash: "a", vector: [0.5, 0.5] }]);
-    expect(vec(store.vectorsFor("m", ["a"]).get("a"))).toEqual(f32s([0.5, 0.5]));
-    expect(vec(store.vectorsFor("m", ["b"]).get("b"))).toEqual([0, 1]);
+    store.putEmbeddings("m", [{ hash: "a", vectors: [[0.5, 0.5]] }]);
+    expect(vec(store.vectorsFor("m", ["a"]).get("a")?.[0])).toEqual(f32s([0.5, 0.5]));
+    expect(vec(store.vectorsFor("m", ["b"]).get("b")?.[0])).toEqual([0, 1]);
     store.close();
   });
 
@@ -1148,8 +1211,8 @@ describe("index persistence", () => {
       },
     ]);
     store.putEmbeddings("m", [
-      { hash: "a", vector: [1] },
-      { hash: "orphan", vector: [2] },
+      { hash: "a", vectors: [[1]] },
+      { hash: "orphan", vectors: [[2]] },
     ]);
     expect(store.pruneEmbeddings()).toBe(1);
     expect(store.hasVector("m", "a")).toBe(true);
@@ -1157,10 +1220,42 @@ describe("index persistence", () => {
     store.close();
   });
 
+  test("pruning with a model drops the vectors an earlier model left behind", () => {
+    const store = WorkspaceIndexStore.open(join(root, "supersede.db"));
+    store.putFiles([
+      {
+        display_path: "a.md",
+        size: 1,
+        modified_at_secs: 1,
+        document_hash: "a",
+        embed_chars: 10,
+        embedded: true,
+        reason: undefined,
+      },
+    ]);
+    store.putEmbeddings("qwen3", [{ hash: "a", vectors: [[1, 0, 0, 0]] }]);
+    store.putEmbeddings("bge-small", [{ hash: "a", vectors: [[0, 1]] }]);
+    expect(store.hasVector("qwen3", "a")).toBe(true);
+
+    expect(store.pruneEmbeddings("bge-small")).toBe(1);
+    expect(store.hasVector("qwen3", "a")).toBe(false);
+    expect(store.hasVector("bge-small", "a")).toBe(true);
+    store.close();
+  });
+
+  test("re-embedding a document replaces its chunks rather than stacking them", () => {
+    const store = WorkspaceIndexStore.open(join(root, "rechunk.db"));
+    store.putEmbeddings("m", [{ hash: "a", vectors: [[1, 0], [0, 1], [1, 1]] }]);
+    expect(store.vectorsFor("m", ["a"]).get("a")).toHaveLength(3);
+    store.putEmbeddings("m", [{ hash: "a", vectors: [[0.5, 0.5]] }]);
+    expect(store.vectorsFor("m", ["a"]).get("a")).toHaveLength(1);
+    store.close();
+  });
+
   test("a store whose schema version moved on is rebuilt, not read", () => {
     const path = join(root, "ver.db");
     const store = WorkspaceIndexStore.open(path);
-    store.putEmbeddings("m", [{ hash: "h", vector: [1] }]);
+    store.putEmbeddings("m", [{ hash: "h", vectors: [[1]] }]);
     store.close();
 
     const raw = new Database(path, { readwrite: true });
@@ -1299,7 +1394,7 @@ describe("legacy JSON migration", () => {
     expect(out).toEqual({ files: 1, vectors: 1, stale: 0 });
     const hash = seededHash(join(dir, "workspace", "a.md"), "a.md", 4000);
     expect(store.hasVector("topic-v1", hash)).toBe(true);
-    expect(vec(store.vectorsFor("topic-v1", [hash]).get(hash))).toEqual(f32s([0.25, 0.5]));
+    expect(vec(store.vectorsFor("topic-v1", [hash]).get(hash)?.[0])).toEqual(f32s([0.25, 0.5]));
     expect(store.files().get("a.md")?.embedded).toBe(true);
     store.close();
   });

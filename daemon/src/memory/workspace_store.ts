@@ -6,7 +6,7 @@ import { chmodSync, closeSync, mkdirSync, openSync, readSync, statSync, unlinkSy
 import { dirname, join } from "node:path";
 
 export const WORKSPACE_INDEX_DB_FILE = "workspace_index.db";
-export const WORKSPACE_INDEX_SCHEMA_VERSION = 1;
+export const WORKSPACE_INDEX_SCHEMA_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -27,8 +27,9 @@ CREATE TABLE embeddings (
   document_hash TEXT NOT NULL,
   model TEXT NOT NULL,
   dimensions INTEGER NOT NULL,
+  chunk_ordinal INTEGER NOT NULL,
   vector BLOB NOT NULL,
-  PRIMARY KEY(document_hash, model, dimensions)
+  PRIMARY KEY(document_hash, model, dimensions, chunk_ordinal)
 );
 `;
 
@@ -244,8 +245,8 @@ export class WorkspaceIndexStore {
     return out;
   }
 
-  vectorsFor(model: string, hashes: readonly string[]): Map<string, Float32Array> {
-    const out = new Map<string, Float32Array>();
+  vectorsFor(model: string, hashes: readonly string[]): Map<string, Float32Array[]> {
+    const out = new Map<string, Float32Array[]>();
     if (hashes.length === 0) return out;
     const unique = [...new Set(hashes)];
     const chunk = 512;
@@ -255,10 +256,15 @@ export class WorkspaceIndexStore {
       const rows = this.#db
         .query(
           `SELECT document_hash, vector FROM embeddings
-           WHERE model = ?1 AND document_hash IN (${holes})`,
+           WHERE model = ?1 AND document_hash IN (${holes})
+           ORDER BY document_hash, chunk_ordinal`,
         )
         .all(model, ...slice) as { document_hash: string; vector: Uint8Array }[];
-      for (const row of rows) out.set(row.document_hash, bytesToVector(row.vector));
+      for (const row of rows) {
+        const bucket = out.get(row.document_hash);
+        if (bucket === undefined) out.set(row.document_hash, [bytesToVector(row.vector)]);
+        else bucket.push(bytesToVector(row.vector));
+      }
     }
     return out;
   }
@@ -309,28 +315,39 @@ export class WorkspaceIndexStore {
 
   putEmbeddings(
     model: string,
-    entries: readonly { hash: string; vector: readonly number[] }[],
+    entries: readonly { hash: string; vectors: readonly (readonly number[])[] }[],
   ): void {
     if (entries.length === 0) return;
+    const clear = this.#db.query(
+      "DELETE FROM embeddings WHERE document_hash = ?1 AND model = ?2",
+    );
     const put = this.#db.query(
-      `INSERT OR REPLACE INTO embeddings(document_hash, model, dimensions, vector)
-       VALUES (?1, ?2, ?3, ?4)`,
+      `INSERT OR REPLACE INTO embeddings
+             (document_hash, model, dimensions, chunk_ordinal, vector)
+       VALUES (?1, ?2, ?3, ?4, ?5)`,
     );
     this.#db.transaction(() => {
       for (const entry of entries) {
-        put.run(entry.hash, model, entry.vector.length, vectorToBytes(entry.vector));
+        clear.run(entry.hash, model);
+        entry.vectors.forEach((vector, ordinal) => {
+          put.run(entry.hash, model, vector.length, ordinal, vectorToBytes(vector));
+        });
       }
     })();
   }
 
-  pruneEmbeddings(): number {
-    const result = this.#db
+  pruneEmbeddings(model?: string): number {
+    const orphaned = this.#db
       .query(
         `DELETE FROM embeddings
          WHERE document_hash NOT IN (SELECT document_hash FROM files WHERE embedded = 1)`,
       )
       .run();
-    return result.changes ?? 0;
+    if (model === undefined) return orphaned.changes ?? 0;
+    const superseded = this.#db
+      .query("DELETE FROM embeddings WHERE model <> ?1")
+      .run(model);
+    return (orphaned.changes ?? 0) + (superseded.changes ?? 0);
   }
 
   metadata(key: string): string | undefined {

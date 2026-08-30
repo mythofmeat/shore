@@ -81,7 +81,12 @@ export async function migrateLegacyIndex(
   }
 
   store.putFiles(rows);
-  for (const [model, entries] of byModel) store.putEmbeddings(model, entries);
+  for (const [model, entries] of byModel) {
+    store.putEmbeddings(
+      model,
+      entries.map((entry) => ({ hash: entry.hash, vectors: [entry.vector] })),
+    );
+  }
   store.setMetadata("migrated_from_json_at", new Date().toISOString());
 
   try {

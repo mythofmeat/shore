@@ -1,5 +1,6 @@
 import { required } from "../util/required.ts";
 
+import { describeError } from "../llm/errors";
 import { shoreLog } from "../log.ts";
 
 import type { Embedder } from "../llm/embed.ts";
@@ -191,7 +192,7 @@ export class HistoryIndexService {
         entry.nextBatchAt = this.#now() + this.#pauseFor(entry.idleRounds);
       } catch (error) {
         entry.failures += 1;
-        entry.lastError = error instanceof Error ? error.message : String(error);
+        entry.lastError = describeError(error);
         entry.retryAt = now + Math.min(1_000 * 2 ** (entry.failures - 1), 60_000);
         shoreLog.warn(
           `shore: history embedding backfill failed for ${entry.character}; retrying later: ${entry.lastError}`,
