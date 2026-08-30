@@ -531,6 +531,11 @@ fn print_recall_entry(
         .as_array()
         .map(Vec::as_slice)
         .unwrap_or(&[]);
+    let results = body["results"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+    let injected = body["injected"]
+        .as_u64()
+        .and_then(|value| usize::try_from(value).ok())
+        .unwrap_or(memories.len());
 
     _ = writeln!(out);
     _ = write!(out, "{time_str}  {status}");
@@ -544,10 +549,44 @@ fn print_recall_entry(
         write_dim(out, &format!("searched: {trimmed}"));
         _ = writeln!(out);
     }
-    for memory in memories {
-        if let Some(text) = memory.as_str() {
+    if results.is_empty() {
+        for memory in memories {
+            if let Some(text) = memory.as_str() {
+                indent_to(out, 1);
+                _ = writeln!(out, "{text}");
+            }
+        }
+    } else {
+        for (index, result) in results.iter().enumerate() {
+            let Some(text) = result["text"].as_str() else {
+                continue;
+            };
+            let rank = index.saturating_add(1);
             indent_to(out, 1);
-            _ = writeln!(out, "{text}");
+            _ = writeln!(out, "{rank}. {text}");
+            indent_to(out, 2);
+            let disposition = if rank <= injected {
+                "injected"
+            } else {
+                "candidate"
+            };
+            let mut details = vec![disposition.to_owned()];
+            if let Some(kind) = result["type"].as_str() {
+                details.push(kind.to_owned());
+            }
+            if let Some(scores) = result.get("scores") {
+                for name in ["final", "reranker", "semantic", "keyword"] {
+                    match scores[name].as_f64() {
+                        Some(score) => details.push(format!("{name}={score:.4}")),
+                        None if scores.get(name).is_some_and(serde_json::Value::is_null) => {
+                            details.push(format!("{name}=null"));
+                        }
+                        None => {}
+                    }
+                }
+            }
+            write_dim(out, &details.join("  "));
+            _ = writeln!(out);
         }
     }
     if let Some(error) = body["error"].as_str() {
@@ -1787,6 +1826,49 @@ mod tests {
         assert!(rendered.contains("searched: remind me how i pick"));
         assert!(rendered.contains("beet-smartplaylist.py"));
         assert!(rendered.contains("five tiers"));
+    }
+
+    #[test]
+    fn trace_recall_shows_scores_and_marks_uninjected_candidates() {
+        set_color_enabled(false);
+        let data = serde_json::json!({
+            "enabled": true,
+            "source": "memory_recall",
+            "character": "qifei",
+            "entries": [{
+                "ts": "2026-08-29T10:00:00Z",
+                "entry": {
+                    "status": "recalled",
+                    "query": "music",
+                    "elapsed_ms": 129,
+                    "injected": 1,
+                    "memories": ["first"],
+                    "results": [
+                        {
+                            "text": "first",
+                            "type": "world",
+                            "scores": {
+                                "final": 0.75,
+                                "reranker": 0.5,
+                                "semantic": 0.6,
+                                "keyword": null
+                            }
+                        },
+                        { "text": "second", "scores": { "final": 0.25 } }
+                    ]
+                }
+            }]
+        });
+        let mut buf = Vec::new();
+
+        write_trace_transcript(&mut buf, &data, 100);
+        let rendered = String::from_utf8(buf).expect("terminal output is UTF-8");
+
+        assert!(rendered.contains("1. first"));
+        assert!(rendered.contains("injected  world  final=0.7500"));
+        assert!(rendered.contains("keyword=null"));
+        assert!(rendered.contains("2. second"));
+        assert!(rendered.contains("candidate  final=0.2500"));
     }
 
     #[test]

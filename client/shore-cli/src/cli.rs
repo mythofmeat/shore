@@ -1021,8 +1021,8 @@ pub(crate) enum TraceCommand {
         json: bool,
     },
 
-    /// What memory recall pulled in before each turn: the text it searched on,
-    /// the memories it injected, and how long it took
+    /// What memory recall pulled in before each turn: the query, scored
+    /// candidates, injected memories, and latency
     Recall {
         /// Number of turns to show
         #[arg(short = 'n', long = "count", default_value = "10")]

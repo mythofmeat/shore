@@ -583,6 +583,13 @@ export type MemoryRecallQueryFrom = "user" | "recent";
 
 const MEMORY_RECALL_QUERY_FROM: readonly MemoryRecallQueryFrom[] = ["user", "recent"];
 
+export const DEFAULT_MEMORY_RECALL_PREAMBLE =
+  "Things you already know that bear on what is being said right now, pulled " +
+  "from your memory of past conversations without you having to go looking. " +
+  "They are notes on the record, not the record itself: use what is relevant, " +
+  "ignore what is not, and ask your memory subagent when you need more than " +
+  "these lines give you.";
+
 export interface MemoryRecallConfig {
   mode: MemoryRecallMode;
   server: string;
@@ -592,6 +599,7 @@ export interface MemoryRecallConfig {
   recent_messages: number;
   query_from: MemoryRecallQueryFrom;
   timeout: ConfigDuration;
+  preamble: string;
 }
 
 export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
@@ -603,6 +611,7 @@ export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
   recent_messages: 2,
   query_from: "user",
   timeout: ConfigDuration.fromSecs(3),
+  preamble: DEFAULT_MEMORY_RECALL_PREAMBLE,
 });
 
 const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
@@ -617,6 +626,7 @@ const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
     recent_messages: readUsize,
     query_from: readEnum(MEMORY_RECALL_QUERY_FROM),
     timeout: readDuration,
+    preamble: readString,
   },
 };
 

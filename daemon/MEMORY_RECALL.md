@@ -18,6 +18,7 @@ max_tokens = 2048
 query_from = "user"    # user | recent; defaults to the latest user message
 recent_messages = 2    # only used by query_from = "recent"
 timeout = "3s"
+# preamble = "Relevant private notes:"  # defaults to shore's explanatory text
 ```
 
 The bank a server answers for is part of its URL, not a call argument, so each
@@ -68,6 +69,18 @@ version has been watched in `shore usage` for a while.
 Recall fails open. An unavailable server, a malformed reply, or the configured
 `timeout` logs a diagnostics entry and the turn proceeds with no block. Recall
 does not run on a regenerate.
+
+`memory.recall.preamble` replaces the explanatory paragraph at the start of the
+`<recalled_memory>` block. It is inserted verbatim and is not a template. Set it
+to `""` to omit the paragraph while retaining the tagged fact list. The shipped
+default says that the lines are notes rather than conversation and may be
+ignored; keep that framing unless a character needs different wording.
+
+`shore trace recall` shows the query, latency, injected count, and the first 12
+ranked candidates with Hindsight's `final`, `reranker`, `semantic`, and `keyword`
+scores. `--json` exports the same data. Scores are diagnostic: Hindsight defines
+them as relative within one query, not calibrated confidence across queries, so
+shore does not apply a score floor without measurements from the actual bank.
 
 ## The write path
 

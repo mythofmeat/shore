@@ -224,6 +224,7 @@ describe("memory recall", () => {
             id: "15452ec7",
             text: "Ren has multiple cats and is the one who feeds them.",
             fact_type: "observation",
+            scores: { final: 0.72, reranker: 0.7, semantic: 0.61, keyword: null },
             occurred_start: "2026-08-18T00:00:00.020000+00:00",
             occurred_end: "2026-08-18T00:00:00.020000+00:00",
           },
@@ -234,9 +235,51 @@ describe("memory recall", () => {
       {
         text: "Ren has multiple cats and is the one who feeds them.",
         occurred_at: "2026-08-18T00:00:00.020000+00:00",
+        id: "15452ec7",
+        type: "observation",
+        scores: { final: 0.72, reranker: 0.7, semantic: 0.61, keyword: null },
       },
-      { text: "Beer is a ragdoll." },
+      { text: "Beer is a ragdoll.", id: "725b8545" },
     ]);
+  });
+
+  test("the transcript keeps scored candidates beyond the injected slice", async () => {
+    const rows: string[] = [];
+    await runMemoryRecall(
+      { config: world(), character: "qifei", messages: CONVERSATION },
+      {
+        diagnostics: new Diagnostics(),
+        mcpRegistry: {
+          call: async () => ({
+            results: [
+              { id: "a", text: "first", type: "world", scores: { final: 0.9 } },
+              { id: "b", text: "second", type: "experience", scores: { final: 0.7 } },
+              { id: "c", text: "third", type: "observation", scores: { final: 0.4 } },
+              { id: "d", text: "fourth", type: "world", scores: { final: 0.2 } },
+            ],
+          }),
+        },
+        callStore: { recordTranscript: (entry) => rows.push(entry.entry_json) },
+        monotonicMs: () => 0,
+      },
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0] ?? "{}")).toMatchObject({
+      query: "what was that music script i wrote",
+      query_from: "user",
+      query_timestamp: "2026-01-01T10:00:00-05:00",
+      returned: 4,
+      injected: 3,
+      results_truncated: false,
+      memories: ["first", "second", "third"],
+      results: [
+        { id: "a", text: "first", type: "world", scores: { final: 0.9 } },
+        { id: "b", text: "second", type: "experience", scores: { final: 0.7 } },
+        { id: "c", text: "third", type: "observation", scores: { final: 0.4 } },
+        { id: "d", text: "fourth", type: "world", scores: { final: 0.2 } },
+      ],
+    });
   });
 
   test("formatting omits the date when the server did not give one", () => {

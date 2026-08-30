@@ -70,6 +70,7 @@ server = "hindsight"
 max_memories = 6
 query_from = "user"
 timeout = "3s"
+# preamble = "Relevant private notes:"
 
 [memory.compaction]
 write_memory = false
@@ -87,6 +88,8 @@ The latest user message is the recall query by default, avoiding the character's
 own previous reply dominating retrieval. `query_from = "recent"` restores the
 older last-`recent_messages` behavior for comparison. Recall fails open after
 `timeout`, so a slow or cold Hindsight server does not block the turn.
+`preamble` replaces shore's explanatory paragraph inside `<recalled_memory>`;
+an empty string leaves the tagged fact list bare.
 
 Do **not** grant `mcp__hindsight__*` to any character. The daemon calls `recall`
 and `retain` itself; granting them would hand the decision back to the model.
@@ -151,6 +154,37 @@ for the duration, then consolidate once at the end:
 and remove the variable afterwards, so day-to-day retains consolidate as they
 land. Leaving it off permanently means observations -- the deduplicated layer
 recall should be reading -- never get built.
+
+## Measuring recall
+
+`shore trace recall` shows live queries, latency, the injected memories, and up
+to 12 scored candidates. Use `shore trace recall --json` when the raw transcript
+is useful. Hindsight's scores rank candidates within a query; they are not
+calibrated confidence values across queries, so do not choose a fixed floor from
+a few appealing score examples.
+
+`recall_eval.py` provides the repeatable offline check. It reads archived turns
+from `history.db` without modifying them and calls Hindsight's REST recall path
+without writing to the bank. By default it compares the latest user message with
+the same message preceded by only the last 200 characters of the prior assistant
+reply:
+
+    python recall_eval.py collect \
+      --history data/shore-data/history.db --character qifei --limit 40 \
+      --output /tmp/qifei-recall.jsonl
+
+Turn the collection into a review sheet, fill the `label` column with `useful`,
+`harmless`, or `distracting`, then report top-1/top-3/top-6 coverage and tail
+cost:
+
+    python recall_eval.py review \
+      --input /tmp/qifei-recall.jsonl --output /tmp/qifei-recall-review.csv
+    python recall_eval.py report --input /tmp/qifei-recall-review.csv
+
+The collector refuses to overwrite an existing output file. Add `recent` to
+`--variants` to compare the old full-previous-message query as well. The report
+uses only completely labelled top-six cases for quality metrics and reports
+latency and call failures separately.
 
 ## Order of operations
 
