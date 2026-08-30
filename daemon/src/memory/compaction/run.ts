@@ -74,9 +74,6 @@ export async function runCompaction(
   deps: CompactionRunDeps,
   options: CompactionRunOptions = {},
 ): Promise<number> {
-  if (!deps.config.app.memory.compaction.write_memory) {
-    return await runArchiveOnlyRotation(character, deps, options);
-  }
   const outcome = await runCompactionPass(character, deps, options);
   if (outcome === undefined) return 0;
   if (outcome.kind === "paused") {
@@ -89,63 +86,54 @@ export async function runCompaction(
   return handleCompactionOutcome(character, deps.notify ?? (() => {}), outcome);
 }
 
-export async function runArchiveOnlyRotation(
+async function rotateWithoutMemoryWrite(
   character: string,
   deps: CompactionRunDeps,
-  options: CompactionRunOptions = {},
-): Promise<number> {
-  const dataDir = deps.config.dirs.data;
-  const guard = tryBeginCompaction(dataDir, character);
-  if (guard === undefined) throw CompactionError.busy(character);
+  effective: LoadedConfig,
+  loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
+  options: CompactionRunOptions,
+): Promise<CompactionOutcome> {
+  const compaction = effective.app.memory.compaction;
+  const keepTurns =
+    options.keepTurnsOverride ??
+    retentionForBudget(loaded.messages, compaction.keep_recent_turns, compaction.max_context_tokens);
+  const splitAt = archiveSplitIndex(
+    loaded.messages,
+    keepTurns,
+    options.retainTrailingAutonomous ?? false,
+  );
+  if (splitAt === 0) throw CompactionError.insufficientMessages();
 
-  try {
-    const loaded = await loadMessagesForCompaction(dataDir, character);
-    if (loaded.messages.length === 0) return 0;
+  const retained = loaded.messages.length - splitAt;
+  const dryRun = options.dryRun ?? false;
 
-    const compaction = deps.config.app.memory.compaction;
-    const keepTurns =
-      options.keepTurnsOverride ??
-      retentionForBudget(
-        loaded.messages,
-        compaction.keep_recent_turns,
-        compaction.max_context_tokens,
-      );
-    const splitAt = archiveSplitIndex(
-      loaded.messages,
-      keepTurns,
-      options.retainTrailingAutonomous ?? false,
-    );
-    if (splitAt === 0) throw CompactionError.insufficientMessages();
-
-    const retained = loaded.messages.length - splitAt;
-    const retainedTurns = countTurns(loaded.messages.slice(splitAt));
+  if (!dryRun) {
     await conversationManager(
       loaded.characterDir,
       deps.now ?? (() => new Date().toISOString()),
       deps.newId ?? (() => crypto.randomUUID()),
       {
-        dbPath: join(dataDir, HISTORY_DB_FILE),
+        dbPath: join(deps.config.dirs.data, HISTORY_DB_FILE),
         character,
-        retain: deps.config.app.memory.retain.enabled,
+        retain: effective.app.memory.retain.enabled,
       },
     ).archiveAndRetain("archive-only", {
       keepLastN: retained,
       activeContent: loaded.rawContent,
       note: "archive-only rotation; automatic memory writes disabled",
     });
-
-    shoreLog.info(
-      `shore: archive-only rotation completed for ${character} ` +
-        `(archived_messages=${String(splitAt)}, retained_turns=${String(retainedTurns)})`,
-    );
-    deps.notify?.(
-      `Shore — ${character}`,
-      `Conversation rotated into history (${String(splitAt)} messages, no memory write)`,
-    );
-    return retainedTurns;
-  } finally {
-    guard.release();
   }
+
+  return {
+    kind: "rotated",
+    conversationId: character,
+    dryRun,
+    messageCount: loaded.messages.length,
+    archivedMessages: splitAt,
+    compactedTurns: countTurns(loaded.messages.slice(0, splitAt)),
+    retainedCount: retained,
+    retainedTurns: countTurns(loaded.messages.slice(splitAt)),
+  };
 }
 
 export async function runCompactionPass(
@@ -162,7 +150,12 @@ export async function runCompactionPass(
     const loaded = await loadMessagesForCompaction(dataDir, character);
     if (loaded.messages.length === 0) return undefined;
 
-    const resolved = await resolveDeps(character, deps);
+    const effective = effectiveConfig(character, deps.config);
+    if (!effective.app.memory.compaction.write_memory) {
+      return await rotateWithoutMemoryWrite(character, deps, effective, loaded, options);
+    }
+
+    const resolved = await resolveDeps(character, deps, effective);
     const chatRequest = await resolveChatRequest(character, loaded, resolved.effective);
 
     const outcome = await compact(
@@ -228,17 +221,23 @@ interface ResolvedDeps {
   maxToolIterations: number | undefined;
 }
 
-async function resolveDeps(character: string, deps: CompactionRunDeps): Promise<ResolvedDeps> {
-  let effective = deps.config;
+export function effectiveConfig(character: string, config: LoadedConfig): LoadedConfig {
   try {
-    effective = loadCharacterConfig(deps.config, character) ?? deps.config;
+    return loadCharacterConfig(config, character) ?? config;
   } catch (e) {
     shoreLog.warn(
       `shore: character config failed to load for ${character}; ` +
         `compacting under the global config: ${String(e)}`,
     );
+    return config;
   }
+}
 
+async function resolveDeps(
+  character: string,
+  deps: CompactionRunDeps,
+  effective: LoadedConfig,
+): Promise<ResolvedDeps> {
   const configDir = effective.dirs.config;
   const systemTemplate =
     resolvePromptTemplate(configDir, character, "compact_system.md") ?? DEFAULT_COMPACT_SYSTEM;

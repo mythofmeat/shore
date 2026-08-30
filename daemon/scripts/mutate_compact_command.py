@@ -23,7 +23,7 @@ character tells them apart.
 A mutant is KILLED if `bun test tests/compact_command.test.ts` fails
 with it applied.
 
-This is **26/26**, from 28/29 on the first pass. One survivor, and it is the
+This is **28/28**, from 28/29 on the first pass. One survivor, and it is the
 shape this project has been caught by five times running — the case was there
 and nothing in it was load-bearing:
 
@@ -166,8 +166,16 @@ MUTANTS = [
      "  try {\n    await engine.reload();\n  } catch (e) {\n    shoreLog.warn(String(e));\n  }"),
     ("completion: autonomy is told the compacted turns",
      C,
-     "    await completeCompaction(engine, ctx, character, outcome.retainedTurns);",
-     "    await completeCompaction(engine, ctx, character, outcome.compactedTurns);"),
+     "    );\n    await completeCompaction(engine, ctx, character, outcome.retainedTurns);",
+     "    );\n    await completeCompaction(engine, ctx, character, outcome.compactedTurns);"),
+    ("completion: a rotation tells autonomy the compacted turns",
+     C,
+     "      await completeCompaction(engine, ctx, character, outcome.retainedTurns);",
+     "      await completeCompaction(engine, ctx, character, outcome.compactedTurns);"),
+    ("completion: a rotation dry run completes the compaction anyway",
+     C,
+     "    if (!outcome.dryRun) {\n      await completeCompaction(",
+     "    if (true) {\n      await completeCompaction("),
 ]
 
 

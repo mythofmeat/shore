@@ -60,6 +60,20 @@ export function handleCompactionOutcome(
     return outcome.retainedTurns;
   }
 
+  if (outcome.kind === "rotated") {
+    shoreLog.info(
+      `shore: archive-only rotation completed for ${character} ` +
+        `(archived_messages=${String(outcome.archivedMessages)}, ` +
+        `retained_turns=${String(outcome.retainedTurns)})`,
+    );
+    notify(
+      `Shore — ${character}`,
+      `Conversation rotated into history (${String(outcome.archivedMessages)} messages, ` +
+        `no memory write)`,
+    );
+    return outcome.retainedTurns;
+  }
+
   if (outcome.kind === "truncated") {
     shoreLog.warn(
       `shore: background compaction for ${character} was cut off at the token ceiling ` +

@@ -315,3 +315,69 @@ test("every error kind maps to a code", () => {
     "busy",
   ]);
 });
+
+describe("write_memory = false", () => {
+  const SIX = [
+    ["m_1", "user", "first question"],
+    ["m_2", "assistant", "first answer"],
+    ["m_3", "user", "second question"],
+    ["m_4", "assistant", "second answer"],
+    ["m_5", "user", "third question"],
+    ["m_6", "assistant", "third answer"],
+  ].map(([id, role, text]) => ({
+    msg_id: id,
+    role,
+    content: text,
+    images: [],
+    content_blocks: [{ type: "text", text }],
+    alternatives: [],
+    timestamp: "2026-01-01T10:00:00-05:00",
+  }));
+
+  async function disableWriteMemory(w: World): Promise<void> {
+    await writeFile(
+      join(w.config.dirs.config, "characters", "ada", "config.toml"),
+      "[memory.compaction]\nwrite_memory = false\n",
+    );
+  }
+
+  test("shore compact rotates instead of running the memory model", async () => {
+    const w = await world(SIX);
+    await disableWriteMemory(w);
+
+    const got = (await compact(w.engine, w.ctx, { keep_turns: 1 })) as Record<string, unknown>;
+
+    expect(got["status"]).toBe("rotated");
+    expect(got["memory_files_written"]).toEqual([]);
+    expect(got["archived_messages"]).toBe(4);
+    expect(got["compacted_turns"]).toBe(2);
+    expect(got["retained_turns"]).toBe(1);
+    expect(w.completed).toEqual([["ada", 1]]);
+  });
+
+  test("a dry run archives nothing", async () => {
+    const w = await world(SIX);
+    await disableWriteMemory(w);
+
+    const got = (await compact(w.engine, w.ctx, {
+      keep_turns: 1,
+      dry_run: true,
+    })) as Record<string, unknown>;
+
+    expect(got["status"]).toBe("rotated");
+    expect(got["dry_run"]).toBe(true);
+    expect(got["archived_messages"]).toBe(4);
+    expect(w.completed).toEqual([]);
+    expect(await listing(w.charDataDir)).toEqual(["active.jsonl"]);
+  });
+
+  test("the character config decides, not the global one", async () => {
+    const w = await world(SIX);
+    expect(w.config.app.memory.compaction.write_memory).toBe(true);
+    await disableWriteMemory(w);
+
+    const got = (await compact(w.engine, w.ctx, { keep_turns: 1 })) as Record<string, unknown>;
+
+    expect(got["status"]).toBe("rotated");
+  });
+});

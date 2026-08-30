@@ -69,6 +69,16 @@ export interface PausedCompactionResult {
   resumeAt?: string;
 }
 
+export interface RotatedResult {
+  conversationId: string;
+  dryRun: boolean;
+  messageCount: number;
+  archivedMessages: number;
+  compactedTurns: number;
+  retainedCount: number;
+  retainedTurns: number;
+}
+
 export interface TruncatedCompactionResult {
   conversationId: string;
   messageCount: number;
@@ -82,6 +92,7 @@ export interface TruncatedCompactionResult {
 export type CompactionOutcome =
   | ({ kind: "compacted" } & CompactionResult)
   | ({ kind: "dry_run" } & DryRunResult)
+  | ({ kind: "rotated" } & RotatedResult)
   | ({ kind: "truncated" } & TruncatedCompactionResult)
   | ({ kind: "paused" } & PausedCompactionResult);
 

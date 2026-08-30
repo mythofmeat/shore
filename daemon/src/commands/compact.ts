@@ -116,6 +116,29 @@ export async function buildCompactionResponse(
     };
   }
 
+  if (outcome.kind === "rotated") {
+    shoreLog.info(
+      `shore: archive-only rotation for ${character} ` +
+        `(dry_run=${String(outcome.dryRun)}, archived_messages=${String(outcome.archivedMessages)}, ` +
+        `retained_turns=${String(outcome.retainedTurns)})`,
+    );
+    if (!outcome.dryRun) {
+      await completeCompaction(engine, ctx, character, outcome.retainedTurns);
+    }
+    return {
+      status: "rotated",
+      character,
+      dry_run: outcome.dryRun,
+      memory_files_written: [],
+      message_count: outcome.messageCount,
+      archived_messages: outcome.archivedMessages,
+      turn_count: outcome.compactedTurns,
+      compacted_turns: outcome.compactedTurns,
+      retained_count: outcome.retainedCount,
+      retained_turns: outcome.retainedTurns,
+    };
+  }
+
   if (outcome.kind === "truncated") {
     shoreLog.warn(
       `shore: compaction for ${character} hit the token ceiling ` +

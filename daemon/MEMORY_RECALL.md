@@ -215,6 +215,13 @@ retrieved layer instead of running the compaction LLM that rewrites memory
 files. Existing `MEMORY.md` and workspace notes are not deleted and remain in
 the always-present prompt, so they can still be hand-curated.
 
+The switch is read inside `runCompactionPass`, off the **character's** effective
+config, so every trigger obeys it: the idle pass, the deep-idle archive, and a
+manual `shore compact`. With it off the pass archives and queues the segment for
+retain without loading a compaction model at all, and answers `status: "rotated"`
+rather than `"compacted"`. A `[memory.compaction]` block in a character file is
+enough; the global config does not have to agree.
+
 `contrib/hindsight/backfill.py` remains the **historical** import and repair
 tool — for segments archived before live retain was switched on, and for
 repairing a range by hand. It is not the recovery path for new segments; the

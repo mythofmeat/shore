@@ -7,7 +7,7 @@ import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
 import type { Message } from "../engine/types.ts";
 import { conversationManager } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
-import { runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
+import { effectiveConfig, runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
 import { CompactionPaused } from "../memory/compaction/types.ts";
@@ -87,7 +87,8 @@ export async function runDeepIdleArchive(
     return { events: [], deepArchiveDone: true };
   }
 
-  if (plan.arm === "pure" || !deps.config.app.memory.compaction.write_memory) {
+  const writeMemory = effectiveConfig(character, deps.config).app.memory.compaction.write_memory;
+  if (plan.arm === "pure" || !writeMemory) {
     return await pureArchive(character, deps, loaded.raw, plan.tail, plan.archivable);
   }
   return await compactionArchive(character, deps);

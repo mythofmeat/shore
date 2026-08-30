@@ -1510,6 +1510,7 @@ pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Val
     let suffix = match status {
         "dry_run" => "dry run",
         "compacted" => "",
+        "rotated" => "archive-only",
         "paused" => "paused",
         "truncated" => "cut off",
         other => other,
@@ -1542,6 +1543,32 @@ pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Val
                 "Turns",
                 &format!(
                     "{} compacted, {retained_turns} retained",
+                    planned_turns(data)
+                ),
+            );
+        }
+        "rotated" => {
+            let archived = data["archived_messages"].as_u64().unwrap_or(0);
+            let dry = data["dry_run"].as_bool().unwrap_or(false);
+            write_row(
+                out,
+                "Memory files",
+                "none written (memory.compaction.write_memory = false)",
+            );
+            write_row(
+                out,
+                "Messages",
+                &format!(
+                    "{} {archived} into history",
+                    if dry { "would archive" } else { "archived" }
+                ),
+            );
+            let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
+            write_row(
+                out,
+                "Turns",
+                &format!(
+                    "{} archived, {retained_turns} retained",
                     planned_turns(data)
                 ),
             );
@@ -2572,6 +2599,19 @@ mod tests {
                 }),
             ),
             (
+                "ARCHIVE-ONLY ROTATION (write_memory = false)",
+                serde_json::json!({
+                    "status": "rotated",
+                    "character": "qifei",
+                    "dry_run": false,
+                    "memory_files_written": [],
+                    "archived_messages": 22,
+                    "compacted_turns": 11,
+                    "retained_count": 4,
+                    "retained_turns": 2,
+                }),
+            ),
+            (
                 "PAUSED ON A WEDGED CHECKPOINT (shore compact 0)",
                 serde_json::json!({
                     "status": "paused",
@@ -2640,6 +2680,40 @@ mod tests {
         let mut buf = Vec::new();
         write_compact_result(&mut buf, data, 80);
         String::from_utf8(buf).expect("utf8")
+    }
+
+    #[test]
+    fn an_archive_only_rotation_says_no_memory_files_were_written() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "rotated",
+            "character": "qifei",
+            "dry_run": false,
+            "memory_files_written": [],
+            "archived_messages": 22,
+            "compacted_turns": 11,
+            "retained_count": 4,
+            "retained_turns": 2,
+        }));
+        assert!(rendered.contains("archive-only"), "{rendered}");
+        assert!(rendered.contains("write_memory = false"), "{rendered}");
+        assert!(rendered.contains("archived 22 into history"), "{rendered}");
+        assert!(rendered.contains("11 archived, 2 retained"), "{rendered}");
+    }
+
+    #[test]
+    fn a_rotation_dry_run_says_it_would_archive() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "rotated",
+            "character": "qifei",
+            "dry_run": true,
+            "archived_messages": 22,
+            "compacted_turns": 11,
+            "retained_turns": 2,
+        }));
+        assert!(
+            rendered.contains("would archive 22 into history"),
+            "{rendered}"
+        );
     }
 
     #[test]
