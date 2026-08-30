@@ -15,6 +15,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider } from "../src/llm/types.ts";
+import { HistoryIndexService } from "../src/memory/history_index_service.ts";
 import type { McpClient } from "../src/mcp/client.ts";
 import type { RecoveryWait } from "../src/tools/mcp_registry.ts";
 
@@ -170,6 +171,52 @@ describe("what assembly wires together", () => {
 
     notify("Shore — ada", "Idle conversation archived (12 messages, no LLM pass needed)");
     expect(events).toEqual(["compaction_complete"]);
+  });
+
+  test("startup registers each character's history index once, not twice", async () => {
+    const { root, config } = await dirsUnder("shore-runtime-once-");
+    type Register = (
+      this: HistoryIndexService,
+      registration: Parameters<HistoryIndexService["register"]>[0],
+    ) => void;
+    const proto = HistoryIndexService.prototype;
+    const original = Object.getOwnPropertyDescriptor(proto, "register")?.value as Register;
+    const registered: string[] = [];
+    proto.register = function (this: HistoryIndexService, registration) {
+      registered.push(registration.character);
+      original.call(this, registration);
+    };
+    try {
+      for (const character of ["ada", "bo"]) {
+        const workspace = join(config.dirs.config, "characters", character, "workspace");
+        await mkdir(workspace, { recursive: true });
+        await writeFile(join(workspace, "SOUL.md"), `# ${character}`);
+      }
+
+      const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
+      expect(registered).toEqual(["ada", "bo"]);
+
+      await runtime.shutdown();
+    } finally {
+      proto.register = original;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("retain registration follows the configured characters without a second index pass", async () => {
+    const { root, config } = await dirsUnder("shore-runtime-retain-");
+    try {
+      const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+      await mkdir(workspace, { recursive: true });
+      await writeFile(join(workspace, "SOUL.md"), "# ada");
+
+      const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
+      expect(runtime.memoryRetain.registeredCharacters()).toEqual([]);
+
+      await runtime.shutdown();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("characters on disk are discovered by the registry the executor holds", async () => {

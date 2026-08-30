@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -340,6 +341,168 @@ describe("archive revision", () => {
     store.putSegment("bo", 1, entry(1), [message("u2", "unrelated again")]);
     expect(store.archiveDigest("ada")).toBe(ada);
 
+    store.close();
+  });
+});
+
+describe("the durable state of an archive document", () => {
+  const segment = (store: HistoryStore, idx = 0, retain = true) => {
+    store.putSegment("ada", idx, {
+      file: HISTORY_DB_FILE,
+      message_count: 1,
+      compacted_at: "2026-08-13T10:01:00+10:00",
+      retain,
+    }, [message(`u${String(idx)}`, "hello")]);
+  };
+  const status = (store: HistoryStore, idx = 0) =>
+    store.entries("ada").find((entry) => entry.idx === idx)?.memory_status;
+
+  test("a submission is distinguishable from an ingestion across a reopen", () => {
+    const root = testTmp(`history-memory-${crypto.randomUUID()}`);
+    mkdirSync(root, { recursive: true });
+    const path = join(root, HISTORY_DB_FILE);
+    let store = HistoryStore.open(path);
+    segment(store);
+    expect(store.beginMemorySubmission("ada", 0, 60_000, 1_800_000)).toBe(true);
+    expect(store.recordMemoryOperation("ada", 0, "op-1", 60_000)).toBe(true);
+    store.close();
+
+    store = HistoryStore.open(path);
+    expect(status(store)).toBe("submitted");
+    expect(store.nextMemoryRetainJob("ada", 60_000)).toMatchObject({
+      action: "confirm",
+      status: "submitted",
+      operation: "op-1",
+      attempts: 1,
+      expires: 1_800_000,
+    });
+    expect(store.nextMemoryRetainJob("ada", 59_999)).toBeUndefined();
+    expect(store.nextMemoryRetainDeadline("ada")).toBe(60_000);
+    store.close();
+  });
+
+  test("only a pending segment can begin a submission", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    expect(store.beginMemorySubmission("ada", 0, 1, 2)).toBe(true);
+    expect(store.beginMemorySubmission("ada", 0, 1, 2)).toBe(false);
+    expect(store.entries("ada")[0]?.memory_attempts).toBe(1);
+    store.close();
+  });
+
+  test("a resubmission clears the operation it could not confirm", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    store.beginMemorySubmission("ada", 0, 1, 2);
+    store.recordMemoryOperation("ada", 0, "op-1", 1);
+    expect(store.requeueMemoryDocument("ada", 0, "operation failed", false)).toBe(true);
+    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+      action: "retain",
+      operation: undefined,
+      attempts: 1,
+    });
+    store.close();
+  });
+
+  test("an exhausted retain is terminal and holds its diagnostic", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    store.beginMemorySubmission("ada", 0, 1, 2);
+    expect(store.requeueMemoryDocument("ada", 0, "document rejected", true)).toBe(true);
+    expect(status(store)).toBe("failed");
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    expect(store.entries("ada")[0]?.memory_error).toBe("document rejected");
+    expect(store.retryMemoryDocument("ada", 0)).toBe(true);
+    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({ action: "retain", attempts: 0 });
+    store.close();
+  });
+
+  test("excluding before any submission leaves nothing to delete", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    expect(store.setExcluded("ada", 0, true, true)).toBe(true);
+    expect(status(store)).toBeUndefined();
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    store.close();
+  });
+
+  test("excluding after an ambiguous submission still queues a delete", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    store.beginMemorySubmission("ada", 0, 1, 2);
+    store.requeueMemoryDocument("ada", 0, "retain timed out", false);
+    expect(store.setExcluded("ada", 0, true, true)).toBe(true);
+    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({ action: "delete" });
+    store.close();
+  });
+
+  test("excluding mid-flight keeps the operation so the delete can wait for it", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    store.beginMemorySubmission("ada", 0, 1, 2);
+    store.recordMemoryOperation("ada", 0, "op-1", 1);
+    expect(store.setExcluded("ada", 0, true, true)).toBe(true);
+    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+      action: "delete",
+      status: "submitted",
+      operation: "op-1",
+    });
+    store.close();
+  });
+
+  test("re-including a deleted segment queues a fresh retain, a stored one does not", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    store.markMemoryDocument("ada", 0, "stored");
+    store.setExcluded("ada", 0, true, true);
+    store.markMemoryDocument("ada", 0, null);
+    expect(store.setExcluded("ada", 0, false, true)).toBe(true);
+    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({ action: "retain", attempts: 0 });
+
+    segment(store, 1);
+    store.markMemoryDocument("ada", 1, "stored");
+    store.setExcluded("ada", 1, true, true);
+    expect(store.setExcluded("ada", 1, false, true)).toBe(true);
+    expect(status(store, 1)).toBe("stored");
+    store.close();
+  });
+
+  test("a failed delete stays terminal until it is explicitly requeued", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    store.markMemoryDocument("ada", 0, "stored");
+    store.setExcluded("ada", 0, true, true);
+    expect(store.markMemoryDeleteFailure("ada", 0, "server unavailable", true, 0)).toBe(true);
+    expect(status(store)).toBe("delete_failed");
+    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    expect(store.retryMemoryDocument("ada", 0)).toBe(true);
+    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({ action: "delete" });
+    store.close();
+  });
+
+  test("an idle character reports no deadline at all", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store, 0, false);
+    expect(store.nextMemoryRetainDeadline("ada")).toBeUndefined();
+    segment(store, 1);
+    expect(store.nextMemoryRetainDeadline("ada")).toBe(0);
+    store.markMemoryDocument("ada", 1, "stored");
+    expect(store.nextMemoryRetainDeadline("ada")).toBeUndefined();
+    store.close();
+  });
+
+  test("re-archiving a segment drops the operation state of the old one", () => {
+    const store = HistoryStore.openInMemory();
+    segment(store);
+    store.beginMemorySubmission("ada", 0, 60_000, 1_800_000);
+    store.recordMemoryOperation("ada", 0, "op-1", 60_000);
+    segment(store);
+    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+      action: "retain",
+      operation: undefined,
+      attempts: 0,
+      expires: 0,
+    });
     store.close();
   });
 });
