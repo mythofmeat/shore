@@ -146,13 +146,13 @@ describe("segment management", () => {
       compacted_at: "2026-08-20T11:00:00+10:00",
       retain: true,
     }, [message("u0", "rejected memory", 0)]);
-    store.markMemoryDocumentFailure("ada", 0, "retain", "document rejected", true);
+    store.requeueMemoryDocument("ada", 0, "document rejected", true);
     store.close();
 
     expect(await segments(root, "ada", { action: "show", index: 0 })).toMatchObject({
       segment: {
         memory_status: "failed",
-        memory_attempts: 1,
+        memory_attempts: 0,
         memory_error: "document rejected",
       },
     });

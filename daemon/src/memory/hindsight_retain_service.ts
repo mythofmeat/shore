@@ -9,8 +9,19 @@ import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 const RETAIN_TOOL = "retain";
 const DELETE_DOCUMENT_TOOL = "delete_document";
+const GET_DOCUMENT_TOOL = "get_document";
+const GET_OPERATION_TOOL = "get_operation";
+const LIST_OPERATIONS_TOOL = "list_operations";
+
 const MAX_RETRY_MS = 60_000;
 const MAX_ATTEMPTS = 10;
+const CONFIRM_INTERVAL_MS = 60_000;
+const CONFIRM_WINDOW_MS = 30 * 60_000;
+const SWEEP_INTERVAL_MS = 60 * 60_000;
+const OPERATION_PAGE = 100;
+
+const IN_FLIGHT = new Set(["pending", "processing", "running", "queued"]);
+const TERMINAL = new Set(["completed", "failed", "cancelled", "not_found"]);
 
 const CONTEXT =
   "A private conversation between {user} and {character}, {pronoun} partner. " +
@@ -32,14 +43,21 @@ export interface HindsightRetainRegistration {
 
 export interface HindsightRetainServiceOptions {
   now?: () => number;
-  timerIntervalMs?: number;
   maxAttempts?: number;
+  confirmIntervalMs?: number;
+  confirmWindowMs?: number;
+  sweepIntervalMs?: number;
+  openStore?: (path: string) => HistoryStore;
 }
 
 export interface HindsightDocument {
   content: string;
   context: string;
   documentId: string;
+}
+
+export function hindsightDocumentId(character: string, segment: number): string {
+  return `shore:${character}:seg${String(segment)}`;
 }
 
 export function hindsightDocument(
@@ -77,7 +95,7 @@ export function hindsightDocument(
       .replace("{pronoun}", () => possessivePronoun)
       .replace("{first}", () => first.slice(0, 10))
       .replace("{last}", () => last.slice(0, 10)),
-    documentId: `shore:${character}:seg${String(segment)}`,
+    documentId: hindsightDocumentId(character, segment),
   };
 }
 
@@ -85,12 +103,17 @@ export class HindsightRetainService {
   readonly #registrations = new Map<string, HindsightRetainRegistration>();
   readonly #mcpRegistry: Pick<McpRegistry, "call">;
   readonly #now: () => number;
-  readonly #timerIntervalMs: number;
   readonly #maxAttempts: number;
+  readonly #confirmIntervalMs: number;
+  readonly #confirmWindowMs: number;
+  readonly #sweepIntervalMs: number;
+  readonly #openStore: (path: string) => HistoryStore;
   readonly #stop = new AbortController();
-  readonly #retry = new Map<string, { failures: number; notBefore: number }>();
-  #timer: ReturnType<typeof setInterval> | undefined;
+  readonly #deadlines = new Map<string, number | undefined>();
+  #nextSweep = 0;
+  #timer: ReturnType<typeof setTimeout> | undefined;
   #running: Promise<void> | undefined;
+  #started = false;
   #lastPicked: string | undefined;
   #closed = false;
 
@@ -100,25 +123,34 @@ export class HindsightRetainService {
   ) {
     this.#mcpRegistry = mcpRegistry;
     this.#now = options.now ?? Date.now;
-    this.#timerIntervalMs = options.timerIntervalMs ?? 1_000;
     this.#maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
+    this.#confirmIntervalMs = options.confirmIntervalMs ?? CONFIRM_INTERVAL_MS;
+    this.#confirmWindowMs = options.confirmWindowMs ?? CONFIRM_WINDOW_MS;
+    this.#sweepIntervalMs = options.sweepIntervalMs ?? SWEEP_INTERVAL_MS;
+    this.#openStore = options.openStore ?? ((path) => HistoryStore.open(path));
     if (!Number.isSafeInteger(this.#maxAttempts) || this.#maxAttempts < 1) {
       throw new RangeError("maxAttempts must be a positive integer");
     }
   }
 
   register(registration: HindsightRetainRegistration): void {
+    const previous = this.#registrations.get(registration.character);
     this.#registrations.set(registration.character, registration);
-    this.#retry.delete(registration.character);
+    if (previous !== undefined && sameRegistration(previous, registration)) return;
+    this.#deadlines.set(registration.character, 0);
+    this.#schedule();
   }
 
   unregister(character: string): void {
     this.#registrations.delete(character);
-    this.#retry.delete(character);
+    this.#deadlines.delete(character);
+    this.#schedule();
   }
 
   noteWork(character: string): void {
-    this.#retry.delete(character);
+    if (!this.#registrations.has(character)) return;
+    this.#deadlines.set(character, 0);
+    this.#schedule();
   }
 
   registeredCharacters(): string[] {
@@ -126,10 +158,9 @@ export class HindsightRetainService {
   }
 
   start(): void {
-    if (this.#closed || this.#timer !== undefined) return;
+    if (this.#closed || this.#started) return;
+    this.#started = true;
     void this.runOnce();
-    this.#timer = setInterval(() => { void this.runOnce(); }, this.#timerIntervalMs);
-    this.#timer.unref?.();
   }
 
   async runOnce(): Promise<void> {
@@ -146,12 +177,17 @@ export class HindsightRetainService {
   async shutdown(): Promise<void> {
     this.#closed = true;
     this.#stop.abort();
-    if (this.#timer !== undefined) clearInterval(this.#timer);
+    if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#timer = undefined;
     await this.#running;
   }
 
   async #runOnce(): Promise<void> {
+    const now = this.#now();
+    if (now >= this.#nextSweep) {
+      this.#nextSweep = now + this.#sweepIntervalMs;
+      for (const character of this.#registrations.keys()) this.#deadlines.set(character, 0);
+    }
     const characters = [...this.#registrations.keys()];
     const after = this.#lastPicked === undefined ? -1 : characters.indexOf(this.#lastPicked);
     for (let step = 1; step <= characters.length; step += 1) {
@@ -159,22 +195,36 @@ export class HindsightRetainService {
       if (character === undefined) continue;
       const registration = this.#registrations.get(character);
       if (registration === undefined) continue;
-      const now = this.#now();
-      if ((this.#retry.get(character)?.notBefore ?? 0) > now) continue;
-      const store = HistoryStore.open(registration.historyPath);
+      const due = this.#deadlines.get(character);
+      if (due === undefined || due > now) continue;
+      const store = this.#openStore(registration.historyPath);
+      let job: MemoryRetainJob | undefined;
       try {
-        const job = store.nextMemoryRetainJob(character);
-        if (job === undefined) {
-          this.#backOff(character, now);
-          continue;
+        job = store.nextMemoryRetainJob(character, now);
+        if (job !== undefined) {
+          this.#lastPicked = character;
+          await this.#process(store, registration, job);
         }
-        this.#lastPicked = character;
-        await this.#process(store, registration, job);
+        this.#deadlines.set(character, store.nextMemoryRetainDeadline(character));
       } finally {
         store.close();
       }
-      break;
+      if (job !== undefined) break;
     }
+    this.#schedule();
+  }
+
+  #schedule(): void {
+    if (!this.#started || this.#closed) return;
+    if (this.#timer !== undefined) clearTimeout(this.#timer);
+    this.#timer = undefined;
+    let target = this.#nextSweep;
+    for (const due of this.#deadlines.values()) {
+      if (due !== undefined && due < target) target = due;
+    }
+    const delay = Math.max(0, target - this.#now());
+    this.#timer = setTimeout(() => { void this.runOnce(); }, delay);
+    this.#timer.unref?.();
   }
 
   async #process(
@@ -182,74 +232,286 @@ export class HindsightRetainService {
     registration: HindsightRetainRegistration,
     job: MemoryRetainJob,
   ): Promise<void> {
-    const documentId = `shore:${job.character}:seg${String(job.segment)}`;
+    const documentId = hindsightDocumentId(job.character, job.segment);
+    let attempts = job.attempts;
     try {
       if (job.action === "delete") {
-        await this.#delete(registration, documentId);
-        store.markMemoryDocument(job.character, job.segment, null);
-        this.#retry.delete(job.character);
-        shoreLog.info(
-          `shore: removed excluded archive document ${documentId} from hindsight`,
-        );
+        attempts += 1;
+        await this.#processDelete(store, registration, job, documentId);
         return;
       }
-
-      const document = hindsightDocument(
-        job.character,
-        job.segment,
-        store.readSegment(job.character, job.segment),
-        registration.userName,
-        registration.possessivePronoun,
-      );
-      if (document === undefined) {
-        store.markMemoryDocument(job.character, job.segment, null);
-        this.#retry.delete(job.character);
-        shoreLog.debug(`shore: skipped empty hindsight archive document ${documentId}`);
+      if (job.action === "confirm") {
+        await this.#processConfirm(store, registration, job, documentId);
         return;
       }
-      await this.#call(registration, RETAIN_TOOL, {
-        content: document.content,
-        context: document.context,
-        document_id: document.documentId,
-      });
-      store.markMemoryDocument(job.character, job.segment, "stored");
-      this.#retry.delete(job.character);
-      shoreLog.info(`shore: sent ${document.documentId} to hindsight for extraction`);
+      attempts += 1;
+      await this.#processRetain(store, registration, job, documentId);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      const failures = job.attempts + 1;
-      const exhausted = failures >= this.#maxAttempts;
-      store.markMemoryDocumentFailure(
-        job.character,
-        job.segment,
-        job.action,
-        detail,
-        exhausted,
-      );
-      if (exhausted) {
-        this.#retry.delete(job.character);
-        shoreLog.error(
-          `shore: hindsight archive ${job.action} exhausted retries for ${documentId} ` +
-            `(attempt ${String(failures)}/${String(this.#maxAttempts)}); giving up: ${detail}`,
-        );
-        return;
-      }
-      this.#backOff(job.character, this.#now(), failures);
-      shoreLog.warn(
-        `shore: hindsight archive ${job.action} failed for ${documentId} ` +
-          `(attempt ${String(failures)}/${String(this.#maxAttempts)}); retrying later: ${detail}`,
-      );
+      this.#recordFailure(store, job, documentId, detail, attempts);
     }
   }
 
-  #backOff(character: string, now: number, failureCount?: number): number {
-    const failures = failureCount ?? (this.#retry.get(character)?.failures ?? 0) + 1;
-    const grown = 1_000 * 2 ** Math.min(failures - 1, 20);
-    this.#retry.set(character, {
-      failures,
-      notBefore: now + Math.min(grown, MAX_RETRY_MS),
+  async #processRetain(
+    store: HistoryStore,
+    registration: HindsightRetainRegistration,
+    job: MemoryRetainJob,
+    documentId: string,
+  ): Promise<void> {
+    const now = this.#now();
+    store.beginMemorySubmission(
+      job.character,
+      job.segment,
+      now + this.#confirmIntervalMs,
+      now + this.#confirmWindowMs,
+    );
+    if (job.attempts > 0 && await this.#adopt(store, registration, job, documentId)) return;
+    const document = hindsightDocument(
+      job.character,
+      job.segment,
+      store.readSegment(job.character, job.segment),
+      registration.userName,
+      registration.possessivePronoun,
+    );
+    if (document === undefined) {
+      store.markMemoryDocument(job.character, job.segment, null);
+      shoreLog.debug(`shore: skipped empty hindsight archive document ${documentId}`);
+      return;
+    }
+    const payload = await this.#call(registration, RETAIN_TOOL, {
+      content: document.content,
+      context: document.context,
+      document_id: document.documentId,
     });
-    return failures;
+    const operation = acceptedOperation(payload);
+    if (operation === undefined) {
+      throw new HindsightToolError(
+        `hindsight ${RETAIN_TOOL} did not accept the document: ${describe(payload)}`,
+      );
+    }
+    store.recordMemoryOperation(
+      job.character,
+      job.segment,
+      operation,
+      this.#now() + this.#confirmIntervalMs,
+    );
+    shoreLog.info(
+      `shore: submitted ${documentId} to hindsight as operation ${operation}`,
+    );
+  }
+
+  async #processConfirm(
+    store: HistoryStore,
+    registration: HindsightRetainRegistration,
+    job: MemoryRetainJob,
+    documentId: string,
+  ): Promise<void> {
+    if (job.operation === undefined) {
+      if (!await this.#adopt(store, registration, job, documentId)) {
+        store.requeueMemoryDocument(
+          job.character,
+          job.segment,
+          `hindsight has no record of ${documentId}; resubmitting`,
+          job.attempts >= this.#maxAttempts,
+        );
+      }
+      return;
+    }
+    const status = await this.#operationStatus(registration, job.operation);
+    if (status.status === "completed" || status.status === "not_found") {
+      if (await this.#documentExists(registration, documentId)) {
+        store.markMemoryDocument(job.character, job.segment, "stored");
+        shoreLog.info(`shore: hindsight stored ${documentId}`);
+        return;
+      }
+      store.requeueMemoryDocument(
+        job.character,
+        job.segment,
+        status.status === "completed"
+          ? `hindsight finished operation ${job.operation} without storing ${documentId}`
+          : `hindsight lost operation ${job.operation} and has no ${documentId}`,
+        job.attempts >= this.#maxAttempts,
+      );
+      return;
+    }
+    if (status.status === "failed" || status.status === "cancelled") {
+      store.requeueMemoryDocument(
+        job.character,
+        job.segment,
+        `hindsight retain operation ${status.status}${
+          status.error === undefined ? "" : `: ${status.error}`
+        }`,
+        job.attempts >= this.#maxAttempts,
+      );
+      return;
+    }
+    const now = this.#now();
+    if (now >= job.expires) {
+      store.requeueMemoryDocument(
+        job.character,
+        job.segment,
+        `hindsight operation ${job.operation} was still ${status.status} at the end of the ` +
+          "confirmation window; resubmitting",
+        job.attempts >= this.#maxAttempts,
+      );
+      return;
+    }
+    store.deferMemoryDocument(job.character, job.segment, now + this.#confirmIntervalMs);
+  }
+
+  async #processDelete(
+    store: HistoryStore,
+    registration: HindsightRetainRegistration,
+    job: MemoryRetainJob,
+    documentId: string,
+  ): Promise<void> {
+    const now = this.#now();
+    if (job.status === "submitted" && now < job.expires) {
+      if (job.operation === undefined) {
+        const found = await this.#findOperation(registration, documentId);
+        if (found !== undefined) {
+          store.recordMemoryOperation(
+            job.character,
+            job.segment,
+            found,
+            now + this.#confirmIntervalMs,
+          );
+          return;
+        }
+      } else if (!TERMINAL.has((await this.#operationStatus(registration, job.operation)).status)) {
+        store.deferMemoryDocument(job.character, job.segment, now + this.#confirmIntervalMs);
+        return;
+      }
+    }
+    await this.#delete(registration, documentId);
+    store.markMemoryDocument(job.character, job.segment, null);
+    shoreLog.info(`shore: removed excluded archive document ${documentId} from hindsight`);
+  }
+
+  async #adopt(
+    store: HistoryStore,
+    registration: HindsightRetainRegistration,
+    job: MemoryRetainJob,
+    documentId: string,
+  ): Promise<boolean> {
+    if (await this.#documentExists(registration, documentId)) {
+      store.markMemoryDocument(job.character, job.segment, "stored");
+      shoreLog.info(`shore: adopted the hindsight document already stored for ${documentId}`);
+      return true;
+    }
+    const operation = await this.#findOperation(registration, documentId);
+    if (operation === undefined) return false;
+    store.recordMemoryOperation(
+      job.character,
+      job.segment,
+      operation,
+      this.#now() + this.#confirmIntervalMs,
+    );
+    shoreLog.info(
+      `shore: adopted in-flight hindsight operation ${operation} for ${documentId}`,
+    );
+    return true;
+  }
+
+  #recordFailure(
+    store: HistoryStore,
+    job: MemoryRetainJob,
+    documentId: string,
+    detail: string,
+    attempts: number,
+  ): void {
+    if (job.action === "confirm") {
+      store.deferMemoryDocument(
+        job.character,
+        job.segment,
+        this.#now() + this.#confirmIntervalMs,
+        detail,
+      );
+      shoreLog.warn(
+        `shore: could not confirm hindsight document ${documentId}; retrying later: ${detail}`,
+      );
+      return;
+    }
+    const exhausted = attempts >= this.#maxAttempts;
+    const due = exhausted ? 0 : this.#now() + backOff(attempts);
+    if (job.action === "delete") {
+      store.markMemoryDeleteFailure(job.character, job.segment, detail, exhausted, due);
+    } else {
+      store.requeueMemoryDocument(job.character, job.segment, detail, exhausted, due);
+    }
+    const counted = `(attempt ${String(attempts)}/${String(this.#maxAttempts)})`;
+    if (exhausted) {
+      shoreLog.error(
+        `shore: hindsight archive ${job.action} exhausted retries for ${documentId} ` +
+          `${counted}; giving up: ${detail}`,
+      );
+      return;
+    }
+    shoreLog.warn(
+      `shore: hindsight archive ${job.action} failed for ${documentId} ` +
+        `${counted}; retrying later: ${detail}`,
+    );
+  }
+
+  async #operationStatus(
+    registration: HindsightRetainRegistration,
+    operation: string,
+  ): Promise<{ status: string; error?: string }> {
+    const payload = await this.#call(registration, GET_OPERATION_TOOL, {
+      operation_id: operation,
+    });
+    const status = payload?.["status"];
+    if (typeof status !== "string" || status === "") {
+      throw new HindsightToolError(
+        `hindsight ${GET_OPERATION_TOOL} returned no status: ${describe(payload)}`,
+      );
+    }
+    const error = payload?.["error_message"];
+    return {
+      status,
+      ...(typeof error === "string" && error !== "" ? { error } : {}),
+    };
+  }
+
+  async #documentExists(
+    registration: HindsightRetainRegistration,
+    documentId: string,
+  ): Promise<boolean> {
+    let payload: Record<string, unknown> | undefined;
+    try {
+      payload = await this.#call(registration, GET_DOCUMENT_TOOL, { document_id: documentId });
+    } catch (error) {
+      if (error instanceof HindsightToolError && isMissing(error.message)) return false;
+      throw error;
+    }
+    if (payload?.["id"] === documentId) return true;
+    throw new HindsightToolError(
+      `hindsight ${GET_DOCUMENT_TOOL} answered for ${documentId} with ${describe(payload)}`,
+    );
+  }
+
+  async #findOperation(
+    registration: HindsightRetainRegistration,
+    documentId: string,
+  ): Promise<string | undefined> {
+    const payload = await this.#call(registration, LIST_OPERATIONS_TOOL, {
+      limit: OPERATION_PAGE,
+    });
+    const operations = payload?.["operations"];
+    if (!Array.isArray(operations)) return undefined;
+    let fallback: string | undefined;
+    for (const entry of operations) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const row = entry as Record<string, unknown>;
+      if (row["document_id"] !== documentId) continue;
+      const status = row["status"];
+      const id = row["id"];
+      if (typeof status !== "string" || !IN_FLIGHT.has(status)) continue;
+      if (typeof id !== "string" || id === "") continue;
+      if (row["task_type"] === "batch_retain") return id;
+      fallback ??= id;
+    }
+    return fallback;
   }
 
   async #delete(
@@ -260,7 +522,7 @@ export class HindsightRetainService {
       await this.#call(registration, DELETE_DOCUMENT_TOOL, { document_id: documentId });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      if (!/\b(?:404|not found)\b/i.test(detail)) throw error;
+      if (!isMissing(detail)) throw error;
     }
   }
 
@@ -284,6 +546,35 @@ export class HindsightRetainService {
 }
 
 export class HindsightToolError extends Error {}
+
+function sameRegistration(
+  a: HindsightRetainRegistration,
+  b: HindsightRetainRegistration,
+): boolean {
+  return a.historyPath === b.historyPath && a.server === b.server &&
+    a.userName === b.userName && a.possessivePronoun === b.possessivePronoun &&
+    a.timeoutMs === b.timeoutMs;
+}
+
+function acceptedOperation(payload: Record<string, unknown> | undefined): string | undefined {
+  if (payload?.["status"] !== "accepted") return undefined;
+  const operation = payload["operation_id"];
+  return typeof operation === "string" && operation.trim() !== "" ? operation : undefined;
+}
+
+function backOff(attempts: number): number {
+  return Math.min(1_000 * 2 ** Math.min(attempts - 1, 20), MAX_RETRY_MS);
+}
+
+function isMissing(detail: string): boolean {
+  return /\b(?:404|not found)\b/i.test(detail);
+}
+
+function describe(payload: Record<string, unknown> | undefined): string {
+  if (payload === undefined) return "an unreadable reply";
+  const text = JSON.stringify(payload);
+  return text.length > 200 ? `${text.slice(0, 200)}...` : text;
+}
 
 function toolErrorFrom(payload: Record<string, unknown> | undefined): string | undefined {
   if (payload === undefined) return undefined;

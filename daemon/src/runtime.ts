@@ -127,9 +127,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     for (const character of workspaceIndex?.registeredCharacters() ?? []) {
       if (!available.has(character)) workspaceIndex?.unregister(character);
     }
-    for (const character of memoryRetain?.registeredCharacters() ?? []) {
-      if (!available.has(character)) memoryRetain?.unregister(character);
-    }
     for (const character of available) {
       const effective = registry.effectiveConfig(character);
       let embedder;
@@ -163,20 +160,31 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         ...(embedder === undefined ? {} : { embedder }),
         ...(embedderError === undefined ? {} : { embedderError }),
       });
-      if (effective.app.memory.retain.enabled) {
-        const retain = effective.app.memory.retain;
-        memoryRetain?.register({
-          character,
-          historyPath: rustJoin(effective.dirs.data, "history.db"),
-          server: memoryRetainServer(effective.app.memory),
-          userName:
-            retain.user_name ?? resolveDisplayName(effective.app.defaults, options.env ?? process.env),
-          possessivePronoun: retain.possessive_pronoun,
-          timeoutMs: retain.timeout.asMillis(),
-        });
-      } else {
-        memoryRetain?.unregister(character);
+    }
+    refreshRetainRegistrations();
+  };
+  const refreshRetainRegistrations = () => {
+    if (memoryRetain === undefined) return;
+    const available = new Set(registry.availableCharacters());
+    for (const character of memoryRetain.registeredCharacters()) {
+      if (!available.has(character)) memoryRetain.unregister(character);
+    }
+    for (const character of available) {
+      const effective = registry.effectiveConfig(character);
+      const retain = effective.app.memory.retain;
+      if (!retain.enabled) {
+        memoryRetain.unregister(character);
+        continue;
       }
+      memoryRetain.register({
+        character,
+        historyPath: rustJoin(effective.dirs.data, "history.db"),
+        server: memoryRetainServer(effective.app.memory),
+        userName:
+          retain.user_name ?? resolveDisplayName(effective.app.defaults, options.env ?? process.env),
+        possessivePronoun: retain.possessive_pronoun,
+        timeoutMs: retain.timeout.asMillis(),
+      });
     }
   };
   await refreshHistoryIndexes();
@@ -214,7 +222,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     ),
   );
   memoryRetain = new HindsightRetainService(mcp.callView());
-  await refreshHistoryIndexes();
+  refreshRetainRegistrations();
   memoryRetain.start();
 
   const autonomy = new AutonomyService(
