@@ -231,7 +231,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   placement: CachePlacement;
 } {
   const opts = req.provider_options ?? {};
-  const cacheTtl = effectiveCacheTtl(req.sdk, req.base_url, opts.cache_ttl ?? "");
+  const cacheTtl = effectiveCacheTtl(req.sdk, opts.cache_ttl ?? "");
   const cacheEnabled = cacheTtl !== "";
   if (req.context !== undefined && cacheTtl !== (opts.cache_ttl ?? "")) {
     if (cacheTtl === "") delete req.context.cache_ttl;

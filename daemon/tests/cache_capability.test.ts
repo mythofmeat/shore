@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import {
   effectiveCacheTtl,
   respectsInlineCacheHints,
-  supportsExtendedCacheTtl,
 } from "../src/llm/cache_capability.ts";
 import { buildAnthropicPlan } from "../src/llm/providers/anthropic.ts";
 import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
@@ -47,37 +46,13 @@ describe("which protocols read an inline cache marker", () => {
   });
 
   test("a marker requested for a protocol that discards it is not emitted", () => {
-    expect(effectiveCacheTtl("openai", undefined, "1h")).toBe("");
-    expect(effectiveCacheTtl("gemini", undefined, "5m")).toBe("");
+    expect(effectiveCacheTtl("openai", "1h")).toBe("");
+    expect(effectiveCacheTtl("gemini", "5m")).toBe("");
   });
 
   test("caching off stays off, without a warning about protocols", () => {
-    expect(effectiveCacheTtl("openai", undefined, "")).toBe("");
-    expect(effectiveCacheTtl("anthropic", undefined, "")).toBe("");
-  });
-});
-
-describe("which endpoints honour a 1h TTL", () => {
-  test("Anthropic's own API and the Vertex endpoints do", () => {
-    expect(supportsExtendedCacheTtl(undefined)).toBe(true);
-    expect(supportsExtendedCacheTtl("https://api.anthropic.com")).toBe(true);
-    expect(supportsExtendedCacheTtl("https://us-east5-aiplatform.googleapis.com/v1")).toBe(true);
-  });
-
-  test("a third-party proxy speaking the same shape does not", () => {
-    expect(supportsExtendedCacheTtl("https://openrouter.ai/api/v1")).toBe(false);
-    expect(supportsExtendedCacheTtl("https://some-gateway.example.com")).toBe(false);
-  });
-
-  test("a relay you run yourself does, because it forwards to Anthropic", () => {
-    expect(supportsExtendedCacheTtl("http://localhost:4000")).toBe(true);
-    expect(supportsExtendedCacheTtl("http://127.0.0.1:8080/v1")).toBe(true);
-    expect(supportsExtendedCacheTtl("http://192.168.1.20:4000")).toBe(true);
-  });
-
-  test("an ineligible host gets the default marker rather than a 1h one", () => {
-    expect(effectiveCacheTtl("anthropic", "https://openrouter.ai/api/v1", "1h")).toBe("5m");
-    expect(effectiveCacheTtl("anthropic", "https://api.anthropic.com", "1h")).toBe("1h");
+    expect(effectiveCacheTtl("openai", "")).toBe("");
+    expect(effectiveCacheTtl("anthropic", "")).toBe("");
   });
 });
 
@@ -89,14 +64,14 @@ describe("the built request follows the capability", () => {
     expect(markers[0]).toEqual({ type: "ephemeral", ttl: "1h" });
   });
 
-  test("a proxy gets markers, but not the 1h TTL it would ignore", () => {
+  test("an Anthropic-compatible endpoint receives the requested 1h TTL unchanged", () => {
     const { params } = buildAnthropicPlan(request({ base_url: "https://openrouter.ai/api/v1" }));
     const markers = markersIn(params);
     expect(markers.length).toBeGreaterThan(0);
-    expect(markers[0]).toEqual({ type: "ephemeral" });
+    expect(markers[0]).toEqual({ type: "ephemeral", ttl: "1h" });
   });
 
-  test("the ledger records the TTL that was actually sent, not the one asked for", () => {
+  test("an Anthropic-compatible endpoint does not rewrite the call context TTL", () => {
     const context = {
       character: "Rhia",
       call_type: "message",
@@ -104,6 +79,6 @@ describe("the built request follows the capability", () => {
       cache_ttl: "1h",
     };
     buildAnthropicPlan(request({ base_url: "https://openrouter.ai/api/v1", context }));
-    expect(context.cache_ttl).toBe("5m");
+    expect(context.cache_ttl).toBe("1h");
   });
 });
