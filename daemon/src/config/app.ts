@@ -584,11 +584,18 @@ export type MemoryRecallQueryFrom = "user" | "recent";
 const MEMORY_RECALL_QUERY_FROM: readonly MemoryRecallQueryFrom[] = ["user", "recent"];
 
 export const DEFAULT_MEMORY_RECALL_PREAMBLE =
-  "Things you already know that bear on what is being said right now, pulled " +
-  "from your memory of past conversations without you having to go looking. " +
-  "They are notes on the record, not the record itself: use what is relevant, " +
-  "ignore what is not, and ask your memory subagent when you need more than " +
-  "these lines give you.";
+  "Memories pulled from past conversations because they may bear on what is " +
+  "being said right now. Retrieval is imperfect and some of these may be " +
+  "irrelevant. They are notes on the record, not the record itself: use what " +
+  "actually applies, ignore what does not, and ask your memory subagent when " +
+  "you need more than these lines give you.";
+
+export const MEMORY_RECALL_SCORES: readonly string[] = [
+  "final",
+  "reranker",
+  "semantic",
+  "keyword",
+];
 
 export interface MemoryRecallConfig {
   mode: MemoryRecallMode;
@@ -598,6 +605,7 @@ export interface MemoryRecallConfig {
   query_from: MemoryRecallQueryFrom;
   timeout: ConfigDuration;
   preamble: string;
+  min_scores: Map<string, number>;
 }
 
 export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
@@ -606,8 +614,9 @@ export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
   max_tokens: 2048,
   recent_messages: 2,
   query_from: "user",
-  timeout: ConfigDuration.fromSecs(3),
+  timeout: ConfigDuration.fromSecs(12),
   preamble: DEFAULT_MEMORY_RECALL_PREAMBLE,
+  min_scores: new Map(),
 });
 
 const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
@@ -621,6 +630,7 @@ const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
     query_from: readEnum(MEMORY_RECALL_QUERY_FROM),
     timeout: readDuration,
     preamble: readString,
+    min_scores: readMap(readF64),
   },
 };
 
@@ -643,6 +653,15 @@ export function validateMemoryRecall(recall: MemoryRecallConfig): string | undef
   }
   if (recall.max_memories > 50) {
     return "memory.recall.max_memories cannot exceed 50";
+  }
+  for (const [name, value] of recall.min_scores) {
+    if (!MEMORY_RECALL_SCORES.includes(name)) {
+      return `memory.recall.min_scores has no score named '${name}'; ` +
+        `known scores are ${MEMORY_RECALL_SCORES.join(", ")}`;
+    }
+    if (!Number.isFinite(value)) {
+      return `memory.recall.min_scores.${name} must be a finite number`;
+    }
   }
   return undefined;
 }

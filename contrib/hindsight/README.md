@@ -37,9 +37,18 @@ by counting raw rows.
 | `HINDSIGHT_API_LLM_API_KEY` | the ZAI key |
 | `HINDSIGHT_API_EMBEDDINGS_PROVIDER` | `local` |
 | `HINDSIGHT_API_LLM_TIMEOUT` | `900` |
+| `HINDSIGHT_API_RERANKER_LOCAL_BUCKET_BATCHING` | `true` |
 
 The embedder runs on CPU, and the database is hindsight's embedded Postgres, so
 only extraction leaves the machine.
+
+Recall's expensive step is normally the local cross-encoder, not Postgres: it
+scores each fused query-memory candidate on CPU. Length-bucketed batching groups
+similarly sized pairs to avoid padding waste and is quality-identical; Hindsight
+documents a 36–54% speedup. If it is still too slow,
+`HINDSIGHT_API_RERANKER_MAX_CANDIDATES` bounds that work, but unlike batching it
+can discard a relevant candidate before reranking and should be measured with
+`recall_eval.py`.
 
 `HINDSIGHT_API_LLM_TIMEOUT` **must** be raised from its 120s default. ZAI takes
 150-400s for a segment; at the default every retain fails with a connection
@@ -69,7 +78,7 @@ url = "http://mcp-hindsight:8888/mcp/"
 mode = "inject"
 max_memories = 6
 query_from = "user"
-timeout = "3s"
+timeout = "12s"
 # preamble = "Relevant private notes:"
 
 [memory.compaction]
@@ -88,7 +97,9 @@ need to be written down. The tool names are not configurable: shore calls
 The latest user message is the recall query by default, avoiding the character's
 own previous reply dominating retrieval. `query_from = "recent"` restores the
 older last-`recent_messages` behavior for comparison. Recall fails open after
-`timeout`, so a slow or cold Hindsight server does not block the turn.
+`timeout`, so a slow or cold Hindsight server does not block the turn. Twelve
+seconds is the default: it leaves headroom above normal CPU reranking latency
+once bucketed batching is enabled, while remaining a firm fail-open bound.
 `preamble` replaces shore's explanatory paragraph inside `<recalled_memories>`;
 an empty string leaves the tagged fact list bare.
 

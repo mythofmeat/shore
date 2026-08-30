@@ -16,8 +16,11 @@ max_memories = 6
 max_tokens = 2048
 query_from = "user"    # user | recent; defaults to the latest user message
 recent_messages = 2    # only used by query_from = "recent"
-timeout = "3s"
+timeout = "12s"
 # preamble = "Relevant private notes:"  # defaults to shore's explanatory text
+
+# [memory.recall.min_scores]
+# reranker = 0.1     # drop results Hindsight scored below this
 ```
 
 `memory.backend.url` is the base a Hindsight instance serves; the bank becomes
@@ -30,8 +33,9 @@ Shore owns this connection: `MemoryBackends` holds one `McpClient` per
 character, opened on first use and reopened after a transport failure. It is
 deliberately not an `[mcp.*]` server. Those exist to put tools in front of the
 model, and this is the opposite — the daemon calls `recall` itself with
-`{ query, max_tokens, query_timestamp }` and keeps the first `max_memories`
-results, so the character never sees the tool and never decides to use it.
+`{ query, max_tokens, query_timestamp }` plus `min_scores` when configured, and
+keeps the first `max_memories` results, so the character never sees the tool and
+never decides to use it.
 Routing memory through the model-facing registry is what made it possible to
 break memory silently by writing the server entry in the wrong file.
 
@@ -40,6 +44,25 @@ joining the last `recent_messages` messages regardless of role. The timestamp
 of the latest user message anchors Hindsight's temporal ranking. A reply is read
 from `results` or `memories`, and a date from `occurred_start` or `occurred_at`,
 so both hindsight's shape and a plainer one parse.
+
+## Score floors
+
+`memory.recall.min_scores` is passed through to Hindsight, which drops results
+scoring below the floor on any named score (`final`, `reranker`, `semantic`,
+`keyword`). It is empty by default and nothing is sent when it is.
+
+It exists because a query that names its subject and a query that does not are
+not two points on one scale. Measured on the qifei bank: a topical query scores
+0.99/0.98/0.94 on its top three, while a contentless one ("what did you mean by
+that") scores ~1e-5 flat across every result. In the flat case the ordering is
+sigmoid-tail noise, so `max_memories` slices six arbitrary memories off an
+unranked list and the preamble presents them as relevant. A floor turns that turn
+into an empty recall instead.
+
+Hindsight warns that reranker scores are not calibrated across queries, so the
+floor is not shipped with a default. Derive it from a labelled archive:
+`contrib/hindsight/recall_eval.py report` prints the reranker distribution per
+label and what each candidate floor would keep and drop.
 
 ## The read path
 
@@ -74,6 +97,25 @@ version has been watched in `shore usage` for a while.
 Recall fails open. An unavailable server, a malformed reply, or the configured
 `timeout` logs a diagnostics entry and the turn proceeds with no block. Recall
 does not run on a regenerate.
+
+The timeout covers Hindsight's entire retrieval and reranking pipeline; it does
+not make that pipeline faster. On a CPU-only Hindsight deployment the local
+cross-encoder normally dominates recall latency because it scores every fused
+query-memory pair. Enable Hindsight's quality-identical length-bucketed batching
+before reducing search quality:
+
+```yaml
+environment:
+  - HINDSIGHT_API_RERANKER_LOCAL_BUCKET_BATCHING=true
+```
+
+Hindsight documents that optimization as a 36–54% speedup. Shore's default 12s
+deadline then leaves headroom for a cold or contended CPU without making every
+turn wait indefinitely. If the reranker still approaches the deadline, cap
+`HINDSIGHT_API_RERANKER_MAX_CANDIDATES`; that trades recall coverage for speed,
+so compare it with `contrib/hindsight/recall_eval.py` before deploying it.
+`memory.recall.min_scores.reranker` improves result quality but does not save the
+reranking work, because that floor is applied after candidates have been scored.
 
 `memory.recall.preamble` replaces the explanatory paragraph at the start of the
 `<recalled_memories>` block. It is inserted verbatim and is not a template. Set it

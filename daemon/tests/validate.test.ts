@@ -501,6 +501,9 @@ describe("a config shore refuses, and what it says", () => {
     expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\ntimeout = \"0s\"\n")).toContain(
       "memory.recall.timeout must be greater than 0",
     );
+    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.recall]\nmode = \"inject\"\n\n[memory.recall.min_scores]\nrerankr = 0.1\n")).toContain(
+      "memory.recall.min_scores has no score named 'rerankr'",
+    );
     expect(refused("\n[memory.backend]\nurl = \"mcp-hindsight:8888\"\n\n[memory.recall]\nmode = \"inject\"\n")).toContain(
       "memory.backend.url must be an http or https URL, got 'mcp-hindsight:8888'",
     );

@@ -95,6 +95,33 @@ describe("memory recall", () => {
     });
   });
 
+  test("sends min_scores only when the character configures one", async () => {
+    const config = world();
+    config.app.memory.recall.min_scores = new Map([["reranker", 0.1]]);
+    const calls: { tool: string; args: unknown }[] = [];
+    await runMemoryRecall(
+      { config, character: "qifei", messages: CONVERSATION },
+      {
+        diagnostics: new Diagnostics(),
+        backend: backendOf({
+          call: async (tool, args) => {
+            calls.push({ tool, args });
+            return JSON.stringify({ memories: [{ text: "Ren wrote beet-smartplaylist.py" }] });
+          },
+        }),
+        now: () => "2026-08-29T00:00:00Z",
+        monotonicMs: () => 0,
+      },
+    );
+
+    expect(calls[0]?.args).toEqual({
+      query: "what was that music script i wrote",
+      max_tokens: 2048,
+      query_timestamp: "2026-01-01T10:00:00-05:00",
+      min_scores: { reranker: 0.1 },
+    });
+  });
+
   test("stays out of the way when recall is off", async () => {
     const config = world();
     config.app.memory.recall.mode = "off";

@@ -837,6 +837,10 @@ describe("the shipped defaults", () => {
     walk(defaultAppConfig(), "app");
   });
 
+  test("give memory recall enough time for a CPU reranker", () => {
+    expect(at(parsed(""), "memory.recall.timeout")).toEqual("12s");
+  });
+
   test("leave compaction's archive step off, since zero means disabled", () => {
     expect(defaultAppConfig().memory.compaction.archive_after.asMillis()).toBe(0);
   });

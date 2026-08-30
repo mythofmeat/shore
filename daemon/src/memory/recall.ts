@@ -100,6 +100,7 @@ export async function runMemoryRecall(
     : AbortSignal.any([input.signal, deadline]);
   const queryTimestamp = latestUserTimestamp(input.messages);
   try {
+    const minScores = Object.fromEntries(recall.min_scores);
     const raw = await settleBeforeAbort(
       backend.call(
         RECALL_TOOL,
@@ -107,6 +108,7 @@ export async function runMemoryRecall(
           query,
           max_tokens: recall.max_tokens,
           ...(queryTimestamp === undefined ? {} : { query_timestamp: queryTimestamp }),
+          ...(recall.min_scores.size === 0 ? {} : { min_scores: minScores }),
         },
         signal,
       ),
@@ -127,6 +129,7 @@ export async function runMemoryRecall(
       query,
       query_from: recall.query_from,
       ...(queryTimestamp === undefined ? {} : { query_timestamp: queryTimestamp }),
+      ...(recall.min_scores.size === 0 ? {} : { min_scores: minScores }),
       elapsed_ms: elapsed,
       returned: results.length,
       injected: memories.length,
@@ -169,6 +172,7 @@ interface RecallTranscript {
   query: string;
   query_from: MemoryRecallQueryFrom;
   query_timestamp?: string;
+  min_scores?: Record<string, number>;
   elapsed_ms: number;
   returned: number;
   injected: number;
