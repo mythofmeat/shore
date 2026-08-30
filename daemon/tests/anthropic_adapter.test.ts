@@ -508,6 +508,21 @@ describe("inline system messages", () => {
     expect(m.every((x) => x.role !== "system")).toBe(true);
     expect(JSON.stringify(m)).toContain("<system_instruction>be brief</system_instruction>");
   });
+
+  test("a recalled-memory turn keeps its own tag and is not wrapped again", () => {
+    const block = "<recalled_memories>\n- she kept the ticket stub\n</recalled_memories>";
+    const p = buildAnthropicParams(
+      req({
+        messages: [
+          { role: "user", content: [{ type: "text", text: "hey" }] },
+          { role: "system", content: [{ type: "text", text: block }] },
+        ],
+      }),
+    );
+    const m = p.messages as Array<{ role: string; content: unknown }>;
+    expect(JSON.stringify(m)).not.toContain("system_instruction");
+    expect(JSON.stringify(m)).toContain("recalled_memories");
+  });
 });
 
 function asEvent(e: unknown): RawMessageStreamEvent {

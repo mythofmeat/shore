@@ -53,7 +53,7 @@ describe("recalled memory injection", () => {
     const withBlock = withRecalledMemory(HISTORY, "- a recalled line", "Private notes:");
     const body = withBlock.at(-1)?.content[0];
     expect(body?.type === "text" ? body.text : "").toBe(
-      "<recalled_memory>\nPrivate notes:\n\n- a recalled line\n</recalled_memory>",
+      "<recalled_memories>\nPrivate notes:\n\n- a recalled line\n</recalled_memories>",
     );
   });
 
@@ -61,7 +61,7 @@ describe("recalled memory injection", () => {
     const withBlock = withRecalledMemory(HISTORY, "- a recalled line", "");
     const body = withBlock.at(-1)?.content[0];
     expect(body?.type === "text" ? body.text : "").toBe(
-      "<recalled_memory>\n- a recalled line\n</recalled_memory>",
+      "<recalled_memories>\n- a recalled line\n</recalled_memories>",
     );
   });
 

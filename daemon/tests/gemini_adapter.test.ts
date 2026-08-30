@@ -132,6 +132,14 @@ describe("request construction", () => {
     expect(contents[1]?.parts?.[1]?.text).toBe("<system_instruction>be brief</system_instruction>");
   });
 
+  test("a recalled-memory turn keeps its own tag and is not wrapped again", () => {
+    const block = "<recalled_memories>\n- she kept the ticket stub\n</recalled_memories>";
+    const contents = translateMessages([
+      { role: "system", content: [{ type: "text", text: block }] },
+    ]);
+    expect(contents[0]?.parts?.[0]?.text).toBe(block);
+  });
+
   test("replays signed thinking as a thought part carrying its signature", () => {
     const contents = translateMessages([
       {

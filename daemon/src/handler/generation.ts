@@ -81,6 +81,7 @@ import { MAX_HISTORY_MESSAGES } from "../tools/subagent.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
 import type { MemoryRecallRunner } from "../memory/recall.ts";
+import { RECALLED_MEMORIES_TAG } from "../llm/inline_system.ts";
 import type { MemoryRecallEntry } from "../diagnostics.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {}
@@ -677,7 +678,7 @@ export function withRecalledMemory(
 
 function recalledMemoryText(recalled: string, preamble: string): string {
   const framing = preamble === "" ? "" : `${preamble}\n\n`;
-  return `<recalled_memory>\n${framing}${recalled}\n</recalled_memory>`;
+  return `<${RECALLED_MEMORIES_TAG}>\n${framing}${recalled}\n</${RECALLED_MEMORIES_TAG}>`;
 }
 
 export function applyIntermediateMessages(

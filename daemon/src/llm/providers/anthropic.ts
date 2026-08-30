@@ -38,6 +38,7 @@ import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
 import { parseToolArgs } from "../tool_args.ts";
+import { wrapInlineSystemInstruction } from "../inline_system.ts";
 
 type ThinkingDisplay = NonNullable<ProviderOptions["thinking_display"]>;
 
@@ -522,10 +523,6 @@ function applyMessageBreakpoint(content: ContentBlockParam[], cc: CacheControl):
 
 function systemMessageStrategy(_model: string): "wrap" | "native" {
   return "wrap";
-}
-
-function wrapInlineSystemInstruction(text: string): string {
-  return `<system_instruction>${text}</system_instruction>`;
 }
 
 function systemToBlocks(system: SystemContent | undefined): TextBlockParam[] {

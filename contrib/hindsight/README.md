@@ -89,7 +89,7 @@ The latest user message is the recall query by default, avoiding the character's
 own previous reply dominating retrieval. `query_from = "recent"` restores the
 older last-`recent_messages` behavior for comparison. Recall fails open after
 `timeout`, so a slow or cold Hindsight server does not block the turn.
-`preamble` replaces shore's explanatory paragraph inside `<recalled_memory>`;
+`preamble` replaces shore's explanatory paragraph inside `<recalled_memories>`;
 an empty string leaves the tagged fact list bare.
 
 Hindsight is not an `[mcp.*]` server and must not be declared as one. Shore

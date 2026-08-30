@@ -28,6 +28,7 @@ import type {
 } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA, toolResultImages, toolResultText } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
+import { wrapInlineSystemInstruction } from "../inline_system.ts";
 
 type GeminiSchema = NonNullable<FunctionDeclaration["parameters"]>;
 
@@ -391,10 +392,6 @@ function extractSystemText(content: WireMessage["content"]): string {
     .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
     .map((b) => b.text)
     .join("");
-}
-
-function wrapInlineSystemInstruction(text: string): string {
-  return `<system_instruction>${text}</system_instruction>`;
 }
 
 function normalizeFinishReason(reason: string | undefined): string {

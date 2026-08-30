@@ -169,5 +169,5 @@ test("memory recall diagnostics record the decision but never the recalled text"
   d.memory_recall.push(entry);
 
   expect(d.toJson(1).memory_recall).toEqual({ count: 1, recent: [entry] });
-  expect(JSON.stringify(d.toJson(1))).not.toContain("recalled_memory");
+  expect(JSON.stringify(d.toJson(1))).not.toContain("recalled_memories");
 });

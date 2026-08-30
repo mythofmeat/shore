@@ -46,7 +46,10 @@ so both hindsight's shape and a plainer one parse.
 `runGenerationCore` calls recall before it builds the request, using the latest
 user message as the query by default. What comes back is appended as a single
 `system`-role message at the **tail of the messages array**, after everything
-real, and is never persisted.
+real, and is never persisted. Adapters that have no mid-conversation `system`
+role fold such a turn into a user turn inside `<system_instruction>`; the recall
+block is exempt because `<recalled_memories>` already frames it, so it reaches
+the wire under one tag rather than two.
 
 The placement is a cache decision, not a stylistic one. Anthropic caching is a
 prefix match over `tools -> system -> messages`, so a block that changes every
@@ -73,7 +76,7 @@ Recall fails open. An unavailable server, a malformed reply, or the configured
 does not run on a regenerate.
 
 `memory.recall.preamble` replaces the explanatory paragraph at the start of the
-`<recalled_memory>` block. It is inserted verbatim and is not a template. Set it
+`<recalled_memories>` block. It is inserted verbatim and is not a template. Set it
 to `""` to omit the paragraph while retaining the tagged fact list. The shipped
 default says that the lines are notes rather than conversation and may be
 ignored; keep that framing unless a character needs different wording.
