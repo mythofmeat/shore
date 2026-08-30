@@ -16,7 +16,7 @@ max_memories = 6
 max_tokens = 2048
 query_from = "user"    # user | recent; defaults to the latest user message
 recent_messages = 2    # only used by query_from = "recent"
-timeout = "12s"
+timeout = "30s"
 # preamble = "Relevant private notes:"  # defaults to shore's explanatory text
 
 # [memory.recall.min_scores]
@@ -109,7 +109,7 @@ environment:
   - HINDSIGHT_API_RERANKER_LOCAL_BUCKET_BATCHING=true
 ```
 
-Hindsight documents that optimization as a 36–54% speedup. Shore's default 12s
+Hindsight documents that optimization as a 36–54% speedup. Shore's default 30s
 deadline then leaves headroom for a cold or contended CPU without making every
 turn wait indefinitely. If the reranker still approaches the deadline, cap
 `HINDSIGHT_API_RERANKER_MAX_CANDIDATES`; that trades recall coverage for speed,

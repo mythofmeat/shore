@@ -838,7 +838,7 @@ describe("the shipped defaults", () => {
   });
 
   test("give memory recall enough time for a CPU reranker", () => {
-    expect(at(parsed(""), "memory.recall.timeout")).toEqual("12s");
+    expect(at(parsed(""), "memory.recall.timeout")).toEqual("30s");
   });
 
   test("leave compaction's archive step off, since zero means disabled", () => {

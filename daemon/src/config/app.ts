@@ -614,7 +614,7 @@ export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
   max_tokens: 2048,
   recent_messages: 2,
   query_from: "user",
-  timeout: ConfigDuration.fromSecs(12),
+  timeout: ConfigDuration.fromSecs(30),
   preamble: DEFAULT_MEMORY_RECALL_PREAMBLE,
   min_scores: new Map(),
 });

@@ -78,7 +78,7 @@ url = "http://mcp-hindsight:8888/mcp/"
 mode = "inject"
 max_memories = 6
 query_from = "user"
-timeout = "12s"
+timeout = "30s"
 # preamble = "Relevant private notes:"
 
 [memory.compaction]
