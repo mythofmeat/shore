@@ -43,7 +43,8 @@ out/
 *.pem
 *.key
 test_char
-.worktree
+worktree/
+.worktree/
 .worktrees/
 sweep.timestamp
 nohup.out
