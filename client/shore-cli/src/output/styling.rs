@@ -1,6 +1,7 @@
 use std::io::{self, Write};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+use shore_common::duration::format_duration_ms;
 use shore_common::protocol::server_msg::{
     ConfigWarning, Phase, ProviderFallbackWarning, SendImage, ServerMessage, StreamChunk,
     StreamEnd, ToolCall, ToolResult, UsageWarning,
@@ -205,17 +206,7 @@ pub(crate) fn print_stream_end(end: &StreamEnd) {
 
     let _ignored = writeln!(out);
 
-    let model = abbreviate_model(&end.metadata.model);
-    let meta = format!(
-        "[{} | in:{} out:{} cache_r:{} cache_w:{} | ttft:{}ms total:{}ms]",
-        model,
-        end.metadata.tokens.input,
-        end.metadata.tokens.output,
-        end.metadata.tokens.cache_read,
-        end.metadata.tokens.cache_write,
-        end.metadata.timing.ttft_ms,
-        end.metadata.timing.total_ms,
-    );
+    let meta = format_stream_end_metadata(end);
     paint(&mut out, Tone::Muted, &meta);
     _ = writeln!(out);
 
@@ -229,6 +220,19 @@ pub(crate) fn print_stream_end(end: &StreamEnd) {
     }
 
     _ = writeln!(out);
+}
+
+fn format_stream_end_metadata(end: &StreamEnd) -> String {
+    format!(
+        "[{} | in:{} out:{} cache_r:{} cache_w:{} | ttft:{} total:{}]",
+        abbreviate_model(&end.metadata.model),
+        end.metadata.tokens.input,
+        end.metadata.tokens.output,
+        end.metadata.tokens.cache_read,
+        end.metadata.tokens.cache_write,
+        format_duration_ms(u64::from(end.metadata.timing.ttft_ms)),
+        format_duration_ms(u64::from(end.metadata.timing.total_ms)),
+    )
 }
 
 pub(crate) fn print_error(err: &dyn std::fmt::Display) {
@@ -411,6 +415,7 @@ pub(crate) fn print_phase(phase: &Phase) {
 mod tests {
     use super::*;
     use crate::output::set_color_enabled;
+    use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
 
     #[test]
     fn print_error_does_not_panic() {
@@ -420,6 +425,39 @@ mod tests {
     #[test]
     fn print_server_error_does_not_panic() {
         print_server_error("busy", "engine is busy");
+    }
+
+    #[test]
+    fn stream_end_metadata_uses_compact_durations() {
+        let end = StreamEnd {
+            rid: None,
+            msg_id: None,
+            revision: None,
+            content: String::new(),
+            terminal_content_blocks: None,
+            metadata: StreamMetadata {
+                tokens: TokenCounts {
+                    input: 66_605,
+                    output: 4_196,
+                    cache_read: 132_800,
+                    cache_write: 0,
+                },
+                timing: TimingInfo {
+                    ttft_ms: 5_677,
+                    total_ms: 915_369,
+                },
+                model: "glm-5.3".into(),
+            },
+            finish_reason: "stop".into(),
+            is_final: true,
+            subagent: None,
+            task_id: None,
+        };
+
+        assert_eq!(
+            format_stream_end_metadata(&end),
+            "[glm-5.3 | in:66605 out:4196 cache_r:132800 cache_w:0 | ttft:5.6s total:15.25m]"
+        );
     }
 
     #[test]
