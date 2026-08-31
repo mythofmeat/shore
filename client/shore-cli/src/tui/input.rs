@@ -1207,31 +1207,29 @@ fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action
         return Action::Redraw;
     }
 
-    let mut image_uploads: Vec<shore_common::protocol::client_msg::ImageUpload> = Vec::new();
-    let mut image_refs: Vec<shore_common::protocol::types::ImageRef> = Vec::new();
-    for path in &images {
-        match std::fs::read(path) {
-            Ok(bytes) => {
-                use base64::Engine;
-                let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                let filename = std::path::Path::new(path).file_name().map_or_else(
-                    || "image".to_owned(),
-                    |file| file.to_string_lossy().to_string(),
-                );
-                image_refs.push(shore_common::protocol::types::ImageRef {
+    let prepared_result = images
+        .iter()
+        .map(|path| {
+            shore_common::swp_client::read_image_upload(path).map(|upload| {
+                let image_ref = shore_common::protocol::types::ImageRef {
                     path: path.clone(),
                     caption: None,
-                    data: Some(data.clone()),
-                });
-                image_uploads.push(shore_common::protocol::client_msg::ImageUpload {
-                    filename,
-                    data,
-                    mime_type: None,
-                });
-            }
-            Err(error) => app.set_error(format!("failed to read image: {error}")),
+                    data: Some(upload.data.clone()),
+                };
+                (image_ref, upload)
+            })
+        })
+        .collect::<shore_common::swp_client::Result<Vec<_>>>();
+    let prepared = match prepared_result {
+        Ok(attachments) => attachments,
+        Err(error) => {
+            app.input.set_text(text);
+            app.pending_images = images;
+            app.set_error(format!("message not sent: {error}"));
+            return Action::Redraw;
         }
-    }
+    };
+    let (image_refs, image_uploads) = prepared.into_iter().unzip();
 
     app.dismiss_notifications();
     app.entries.push(ConversationEntry::user(
@@ -1821,6 +1819,41 @@ mod tests {
         app.input.mode = InputMode::Insert;
         let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Enter));
         assert!(matches!(action, Action::None));
+    }
+
+    #[test]
+    fn unreadable_attachment_keeps_the_whole_draft_in_the_composer() {
+        let temp = tempfile::tempdir().unwrap();
+        let readable = temp.path().join("readable.png");
+        std::fs::write(&readable, b"image bytes").unwrap();
+        let unreadable_path = temp.path().join("missing.png");
+        let unreadable = unreadable_path.to_string_lossy().into_owned();
+        let paths = vec![readable.to_string_lossy().into_owned(), unreadable.clone()];
+        let mut app = App::default();
+        app.input.mode = InputMode::Insert;
+        app.input.set_text("keep this draft".to_owned());
+        app.pending_images.clone_from(&paths);
+
+        let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Enter));
+
+        assert!(matches!(action, Action::Redraw));
+        assert_eq!(app.input.text, "keep this draft");
+        assert_eq!(app.pending_images, paths);
+        assert!(
+            app.entries.is_empty(),
+            "the unsent message must not appear in history"
+        );
+        assert!(
+            !app.stream.active,
+            "an unsent message must not start a stream"
+        );
+        assert!(
+            app.notifications.iter().any(|note| {
+                note.content.contains("message not sent") && note.content.contains(&unreadable)
+            }),
+            "the error should explain which attachment blocked the send: {:?}",
+            app.notifications
+        );
     }
 
     #[test]

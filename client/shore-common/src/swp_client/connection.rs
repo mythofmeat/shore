@@ -236,24 +236,12 @@ impl SWPConnection {
         stream: bool,
         images: Vec<String>,
     ) -> Result<Option<String>> {
-        use crate::protocol::client_msg::{ClientMessageBody, ImageUpload};
-        use base64::Engine;
+        use crate::protocol::client_msg::ClientMessageBody;
 
-        let image_data: Vec<ImageUpload> = images
+        let image_data = images
             .iter()
-            .filter_map(|path| {
-                let bytes = std::fs::read(path).ok()?;
-                let filename = std::path::Path::new(path)
-                    .file_name()
-                    .map_or_else(|| "image".to_owned(), |f| f.to_string_lossy().into_owned());
-                let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                Some(ImageUpload {
-                    filename,
-                    data,
-                    mime_type: None,
-                })
-            })
-            .collect();
+            .map(|path| read_image_upload(path))
+            .collect::<Result<Vec<_>>>()?;
 
         let rid = Some(uuid_v4());
         let msg = ClientMessage::Message(ClientMessageBody {
@@ -294,6 +282,25 @@ impl SWPConnection {
         self.send(&msg).await?;
         Ok(rid)
     }
+}
+
+pub fn read_image_upload(path: &str) -> Result<crate::protocol::client_msg::ImageUpload> {
+    use base64::Engine;
+
+    let bytes = std::fs::read(path).map_err(|source| ClientError::AttachmentRead {
+        path: path.to_owned(),
+        source,
+    })?;
+    let filename = std::path::Path::new(path).file_name().map_or_else(
+        || "image".to_owned(),
+        |file| file.to_string_lossy().into_owned(),
+    );
+    let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(crate::protocol::client_msg::ImageUpload {
+        filename,
+        data,
+        mime_type: None,
+    })
 }
 
 impl SWPConnection {
@@ -399,7 +406,7 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::AsyncWriteExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::time::{Duration, timeout};
 
     #[tokio::test]
@@ -431,6 +438,40 @@ mod tests {
             panic!("expected stream chunk");
         };
         assert_eq!(chunk.text, "hello");
+    }
+
+    #[tokio::test]
+    async fn unreadable_attachment_prevents_the_entire_message_send() {
+        let temp = tempfile::tempdir().unwrap();
+        let readable = temp.path().join("readable.png");
+        std::fs::write(&readable, b"image bytes").unwrap();
+        let unreadable = temp.path().join("missing.png");
+        let paths = vec![
+            readable.to_string_lossy().into_owned(),
+            unreadable.to_string_lossy().into_owned(),
+        ];
+        let (client_stream, mut server_stream) = tokio::io::duplex(1024);
+        let mut conn = SWPConnection::from_raw_stream(client_stream);
+
+        let error = conn
+            .send_message_with_images("keep every image", true, paths)
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                ClientError::AttachmentRead { ref path, .. }
+                    if path == &unreadable.to_string_lossy()
+            ),
+            "the failure should name the unreadable attachment: {error}"
+        );
+        assert!(
+            timeout(Duration::from_millis(10), server_stream.read_u8())
+                .await
+                .is_err(),
+            "no partial message should reach the daemon"
+        );
     }
 
     #[test]

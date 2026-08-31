@@ -6,7 +6,7 @@ pub mod error;
 pub mod sync;
 
 pub use conn_manager::{ConnCommand, ConnEvent, spawn_connection};
-pub use connection::{SWPConnection, ServerAddr};
+pub use connection::{SWPConnection, ServerAddr, read_image_upload};
 pub use discovery::{discover_config_dir, discover_or_default};
 pub use error::{ClientError, DiscoveryKind, Result};
 

@@ -438,8 +438,8 @@
       }
     },
     {
-      "name": "inline uploads win and legacy paths are ignored entirely",
-      "note": "not a merge — `ingest_images` only walks the legacy list when `image_data` is empty, so a client that sends both gets one attachment, not two",
+      "name": "an unrelated legacy path gets an omission marker alongside inline uploads",
+      "note": "inline uploads remain authoritative, but a legacy path with no corresponding upload must not silently disappear",
       "input": {
         "history": [],
         "body": {
@@ -473,6 +473,10 @@
             "content_blocks": [
               {
                 "type": "text",
+                "text": "[image omitted: red.png — the client could not upload it]"
+              },
+              {
+                "type": "text",
                 "text": "both"
               }
             ],
@@ -495,6 +499,10 @@
               }
             ],
             "content_blocks": [
+              {
+                "type": "text",
+                "text": "[image omitted: red.png — the client could not upload it]"
+              },
               {
                 "type": "text",
                 "text": "both"

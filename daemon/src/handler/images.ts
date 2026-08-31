@@ -203,6 +203,19 @@ export async function ingestImages(
     for (const src of imagePaths) {
       keep(src.split(/[/\\]/).pop() ?? src, await ingestLegacyPath(attachmentsDir, src, now));
     }
+  } else {
+    let uploadIndex = 0;
+    for (const src of imagePaths) {
+      const label = src.split(/[/\\]/).pop() ?? src;
+      if (imageData[uploadIndex]?.filename === label) {
+        uploadIndex += 1;
+      } else {
+        blocks.push({
+          type: "text",
+          text: omissionNotice(label, "the client could not upload it"),
+        });
+      }
+    }
   }
 
   return { images, blocks };

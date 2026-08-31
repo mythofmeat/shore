@@ -36,6 +36,13 @@ pub enum ClientError {
 
     #[error("I/O error: {0}")]
     Io(#[source] std::io::Error),
+
+    #[error("failed to read attachment {path}: {source}")]
+    AttachmentRead {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, ClientError>;

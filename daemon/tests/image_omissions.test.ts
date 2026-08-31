@@ -86,4 +86,39 @@ describe("ingestImages", () => {
     expect(images).toHaveLength(1);
     expect(blocks).toHaveLength(0);
   });
+
+  test("an upload missing from a mixed batch produces an omission note", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "shore-ingest-"));
+    const { images, blocks } = await ingestImages(
+      dir,
+      "Rhia",
+      ["/client/pixel.png", "/client/missing.png", "/client/other.png"],
+      [
+        { filename: "pixel.png", mime_type: "image/png", data: PNG_B64 },
+        { filename: "other.png", mime_type: "image/png", data: PNG_B64 },
+      ],
+    );
+
+    expect(images).toHaveLength(2);
+    expect(blocks).toEqual([
+      {
+        type: "text",
+        text: "[image omitted: missing.png — the client could not upload it]",
+      },
+    ]);
+  });
+
+  test("an unrelated legacy path is not hidden by an equal number of uploads", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "shore-ingest-"));
+    const { blocks } = await ingestImages(dir, "Rhia", ["/client/missing.png"], [
+      { filename: "different.png", mime_type: "image/png", data: PNG_B64 },
+    ]);
+
+    expect(blocks).toEqual([
+      {
+        type: "text",
+        text: "[image omitted: missing.png — the client could not upload it]",
+      },
+    ]);
+  });
 });
