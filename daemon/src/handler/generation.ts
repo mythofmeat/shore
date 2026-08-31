@@ -324,10 +324,13 @@ async function runGenerationCore(
   });
   const request: SidecarRequest = {
     ...built.request,
-    messages: withRecalledMemory(
-      droppedHistoryImages(built.request.messages, imageSupport, resolved),
-      recalledMemory,
-      config.app.memory.recall.preamble,
+    messages: withRegenGuidance(
+      withRecalledMemory(
+        droppedHistoryImages(built.request.messages, imageSupport, resolved),
+        recalledMemory,
+        config.app.memory.recall.preamble,
+      ),
+      regen ? params.body.guidance : undefined,
     ),
     context: callContext(deps, config, charName, params.rid, built.keepalive_max_secs, (built.request.provider_options === undefined
         ? {}
@@ -673,6 +676,17 @@ export function withRecalledMemory(
   return [...messages, {
     role: "system",
     content: [{ type: "text", text: recalledMemoryText(recalled, preamble) }],
+  }];
+}
+
+export function withRegenGuidance(
+  messages: readonly WireMessage[],
+  guidance: string | undefined,
+): WireMessage[] {
+  if (guidance === undefined || guidance.trim() === "") return [...messages];
+  return [...messages, {
+    role: "system",
+    content: [{ type: "text", text: guidance }],
   }];
 }
 

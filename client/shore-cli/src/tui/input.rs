@@ -1421,12 +1421,13 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             })))
         }
         CliCommand::Msg {
-            command: MsgCommand::Regen,
+            command: MsgCommand::Regen { guidance },
         } => {
             app.begin_regen_optimistic();
             Action::Send(ConnCommand::Send(ClientMessage::Regen(Regen {
                 rid: None,
                 stream: true,
+                guidance: guidance.clone(),
             })))
         }
         CliCommand::Msg {

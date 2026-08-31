@@ -97,9 +97,11 @@ mod tests {
         let msg = ClientMessage::Regen(Regen {
             rid: Some("regen_01".into()),
             stream: true,
+            guidance: Some("consult memory".into()),
         });
         let (json, _back) = round_trip(&msg);
         assert_eq!(field(&json, "type"), "regen");
+        assert_eq!(field(&json, "guidance"), "consult memory");
     }
 
     #[test]

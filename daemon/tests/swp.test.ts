@@ -203,6 +203,25 @@ describe("a message from an older client", () => {
   });
 });
 
+test("regen guidance survives wire framing", async () => {
+  const line = JSON.stringify({
+    type: "regen",
+    rid: "r-guided",
+    stream: true,
+    guidance: "consult memory",
+  }) + "\n";
+  const [first] = await driveFraming(once(new TextEncoder().encode(line)));
+
+  expect(first).toEqual({
+    ok: {
+      type: "regen",
+      rid: "r-guided",
+      stream: true,
+      guidance: "consult memory",
+    },
+  });
+});
+
 describe("write_message", () => {
   for (const c of fixture.write_message) {
     test(c.name, async () => {

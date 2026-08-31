@@ -34,7 +34,7 @@ const LEADING_FLAGS: [(&str, &str); 3] = [
     ("--addr", "--addr"),
 ];
 
-const RETIRED_FLAGS: [(&str, &str); 8] = [
+const RETIRED_FLAGS: [(&str, &str); 6] = [
     ("--config", "name the daemon with --addr, or set SHORE_ADDR"),
     ("--no-color", "set NO_COLOR=1 in the environment"),
     (
@@ -53,12 +53,7 @@ const RETIRED_FLAGS: [(&str, &str); 8] = [
         "--thinking",
         "set it on the model: shore model setting budget_tokens <tokens>",
     ),
-    ("--guidance", GUIDANCE_WAS_NEVER_READ),
-    ("-g", GUIDANCE_WAS_NEVER_READ),
 ];
-
-const GUIDANCE_WAS_NEVER_READ: &str =
-    "it never reached the model, so `shore msg regen` is the same call";
 
 const NAMED_BY_USE: [&str; 2] = ["model", "character"];
 
@@ -617,7 +612,11 @@ pub(crate) enum MsgCommand {
     },
 
     /// Regenerate the last assistant response
-    Regen,
+    Regen {
+        /// Ephemeral system guidance for this regeneration
+        #[arg(short, long)]
+        guidance: Option<String>,
+    },
 
     /// List or select alternate responses for the latest assistant message
     Alt {
@@ -2228,7 +2227,7 @@ pub(crate) fn to_swp_command(
 fn msg_to_swp(cmd: &MsgCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::json;
     match cmd {
-        MsgCommand::Send { system: false, .. } | MsgCommand::Regen => None,
+        MsgCommand::Send { system: false, .. } | MsgCommand::Regen { .. } => None,
         MsgCommand::Send {
             system: true,
             message,
@@ -2774,21 +2773,21 @@ mod tests {
 
     #[test]
     fn parse_regen() {
-        assert_variant!(parsed_msg(&parse(&["msg", "regen"])), MsgCommand::Regen => {});
+        let cli = parse(&["msg", "regen"]);
+        assert_variant!(
+            parsed_msg(&cli),
+            MsgCommand::Regen { guidance } => assert!(guidance.is_none())
+        );
     }
 
     #[test]
-    fn regen_guidance_no_longer_parses() {
-        for flag in ["--guidance", "-g"] {
-            assert_eq!(
-                misplaced(&["msg", "regen", flag, "be more concise"]),
-                Some(FlagProblem::Retired(flag, GUIDANCE_WAS_NEVER_READ)),
-                "{flag}"
-            );
-        }
-        assert_eq!(
-            parse_error(&["msg", "regen", "--guidance", "be more concise"]).kind(),
-            clap::error::ErrorKind::UnknownArgument
+    fn parse_regen_with_guidance() {
+        let cli = parse(&["msg", "regen", "--guidance", "be more concise"]);
+        assert_variant!(
+            parsed_msg(&cli),
+            MsgCommand::Regen { guidance } => {
+                assert_eq!(guidance.as_deref(), Some("be more concise"));
+            }
         );
     }
 
@@ -3877,7 +3876,7 @@ mod tests {
 
     #[test]
     fn regen_maps_to_none() {
-        let cmd = msg(MsgCommand::Regen);
+        let cmd = msg(MsgCommand::Regen { guidance: None });
         assert!(to_swp_command(&cmd, None).is_none());
     }
 

@@ -106,8 +106,8 @@ pub(crate) async fn execute(
     match command_ref {
         CliCommand::Msg { command: message } => match message {
             MsgCommand::Send { .. } => handle_send_command(&mut conn, message).await?,
-            MsgCommand::Regen => {
-                _ = conn.send_regen(true).await?;
+            MsgCommand::Regen { guidance } => {
+                _ = conn.send_regen(true, guidance.clone()).await?;
                 recv_streaming_response(&mut conn).await?;
             }
             MsgCommand::Alt { .. } => handle_alt_command(&mut conn, message).await?,
@@ -1886,9 +1886,9 @@ mod tests {
                 super::recv_streaming_response(&mut conn).await.unwrap();
             }
             CliCommand::Msg {
-                command: MsgCommand::Regen,
+                command: MsgCommand::Regen { guidance },
             } => {
-                let _ignored = conn.send_regen(true).await.unwrap();
+                let _ignored = conn.send_regen(true, guidance.clone()).await.unwrap();
                 super::recv_streaming_response(&mut conn).await.unwrap();
             }
             other @ (CliCommand::Msg { .. }
@@ -1986,12 +1986,17 @@ mod tests {
 
     #[tokio::test]
     async fn regen_sends_swp_regen() {
-        let cli = test_cli(msg_command(MsgCommand::Regen));
+        let cli = test_cli(msg_command(MsgCommand::Regen {
+            guidance: Some("consult memory first".into()),
+        }));
         let received = execute_with_mock(cli, streaming_response("Haha!")).await;
 
         assert_variant!(
             received,
-            ClientMessage::Regen(r) => assert!(r.stream)
+            ClientMessage::Regen(r) => {
+                assert!(r.stream);
+                assert_eq!(r.guidance.as_deref(), Some("consult memory first"));
+            }
         );
     }
 

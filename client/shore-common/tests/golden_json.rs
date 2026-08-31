@@ -630,24 +630,26 @@ fn client_regen_golden() {
     ClientMessage::Regen(r) => {
         assert_eq!(r.rid.as_deref(), Some("req_002"));
         assert!(r.stream);
+        assert_eq!(r.guidance, None);
     }
     );
 }
 
 #[test]
-fn client_regen_tolerates_a_retired_guidance_field() {
+fn client_regen_carries_guidance() {
     let fixture = r#"{
         "type": "regen",
         "rid": "req_002",
         "stream": true,
         "guidance": "Be more concise"
     }"#;
-    let msg: ClientMessage = serde_json::from_str(fixture).expect("retired field must not reject");
+    let msg: ClientMessage = serde_json::from_str(fixture).expect("guidance should decode");
     assert_variant!(
     msg,
     ClientMessage::Regen(r) => {
         assert_eq!(r.rid.as_deref(), Some("req_002"));
         assert!(r.stream);
+        assert_eq!(r.guidance.as_deref(), Some("Be more concise"));
     }
     );
 }
@@ -939,6 +941,7 @@ fn client_regen_missing_optionals() {
     ClientMessage::Regen(r) => {
         assert_eq!(r.rid, None);
         assert!(!r.stream);
+        assert_eq!(r.guidance, None);
     }
     );
 }
