@@ -234,6 +234,30 @@ describe("the adapter's schedule, against the modelled cache", () => {
 });
 
 describe("stream mechanics", () => {
+  test("generate uses the streaming transport and returns the assembled message", async () => {
+    const m = await mock({
+      script: [{
+        thinking: "considering it",
+        thinkingSignature: "sig-abc",
+        text: "the answer",
+        toolUses: [{ id: "tool-1", name: "search", input: { q: "shore" } }],
+        stopReason: "tool_use",
+      }],
+    });
+
+    const response = await new AnthropicProvider().generate(request(m.url, [user("hello")]));
+
+    expect(m.requests).toHaveLength(1);
+    expect(m.requests[0]?.streaming).toBe(true);
+    expect(response.content).toBe("the answer");
+    expect(response.finish_reason).toBe("tool_use");
+    expect(response.content_blocks).toEqual([
+      { type: "thinking", thinking: "considering it", signature: "sig-abc" },
+      { type: "text", text: "the answer" },
+      { type: "tool_use", id: "tool-1", name: "search", input: { q: "shore" } },
+    ]);
+  });
+
   test("text, thinking and its signature come back in order", async () => {
     const m = await mock({
       script: [{ thinking: "considering it", thinkingSignature: "sig-abc", text: "the answer" }],

@@ -1043,6 +1043,34 @@ describe("the command path", () => {
     }
   });
 
+  test("a model change disarms the old keepalive before rebuilding its request", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-model-change-");
+    try {
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+      runtime.cache.set(
+        "ada",
+        {
+          sdk: "anthropic",
+          model: "claude-old",
+          api_key: "",
+          messages: [],
+          max_tokens: 128,
+          replay_prior_thinking: "all",
+        },
+        { intervalMs: 55 * 60_000, maxSecs: undefined },
+      );
+      expect(runtime.keepalive.nextPingAt("ada")).toBeDefined();
+
+      await deps.dispatchRuntime.refreshCachedRequest("ada");
+
+      expect(runtime.cache.get("ada")).toBeUndefined();
+      expect(runtime.keepalive.nextPingAt("ada")).toBeUndefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("a `config` set reaches the registry and the loop", async () => {
     const { root, config, runtime } = await runtimeUnder("shore-deps-cmd-set-", () => {}, ["ada"]);
     try {

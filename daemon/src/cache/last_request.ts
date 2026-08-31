@@ -10,6 +10,7 @@ export type InvalidationReason =
   | "compaction"
   | "idle_compaction"
   | "deep_idle_archive"
+  | "model_change"
   | "prompt_reload"
   | "mcp_reload"
   | "mcp_recovery";

@@ -180,8 +180,8 @@ MUTANTS = [
      D,
      "    reloadRuntimeConfig: () => {\n"
      "      a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));\n    },\n\n"
-     "    applyReloadedConfig:",
-     "    reloadRuntimeConfig: () => {},\n\n    applyReloadedConfig:"),
+     "    refreshCachedRequest:",
+     "    reloadRuntimeConfig: () => {},\n\n    refreshCachedRequest:"),
     ("adopt: the registry never re-scans, so a character added at runtime stays invisible",
      D,
      "  const summary = await a.runtime.registry.reloadRuntimeState(config);",

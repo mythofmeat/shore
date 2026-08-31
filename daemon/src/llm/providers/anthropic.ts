@@ -60,10 +60,9 @@ export class AnthropicProvider implements SidecarProvider {
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
     const { client, params, placement } = buildAnthropicCall(req);
-    const message = (await client.messages.create(
-      params as Parameters<typeof client.messages.create>[0],
-      signal ? { signal } : undefined,
-    )) as Message;
+    const message = (await client.messages
+      .stream(params, signal ? { signal } : undefined)
+      .finalMessage()) as Message;
 
     const content_blocks: ContentBlock[] = [];
     let textAccum = "";

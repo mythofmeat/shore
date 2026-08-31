@@ -352,6 +352,23 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
       a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
     },
 
+    refreshCachedRequest: async (character) => {
+      runtime.keepalive.disarm(character);
+      runtime.cache.invalidate(character, "model_change");
+      try {
+        await runtime.cache.reprimeFromDisk(
+          character,
+          runtime.config.dirs.data,
+          runtime.registry.effectiveConfig(character),
+          { mcpRegistry: runtime.mcp.current },
+        );
+      } catch (e) {
+        shoreLog.warn(
+          `shore: request cache refresh after model change failed for ${character}: ${String(e)}`,
+        );
+      }
+    },
+
     applyReloadedConfig: async (config) => await applyReloadedConfig(a, config),
   };
 }

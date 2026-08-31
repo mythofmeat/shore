@@ -17,6 +17,8 @@ export interface DispatchRuntime {
 
   reloadRuntimeConfig(config: LoadedConfig): void;
 
+  refreshCachedRequest(character: string): Promise<void>;
+
   applyReloadedConfig(config: LoadedConfig): Promise<ReloadSummary>;
 }
 
@@ -54,11 +56,32 @@ async function annotations(
         : undefined;
     case "config_reload":
       return await afterConfigReload(data, ctx);
+    case "switch_model":
+    case "reset_model":
+    case "set_model_setting":
+      return await afterChatModelChange(name, args, data, ctx);
     case "switch_character":
       return await afterSwitchCharacter(data, ctx);
     default:
       return undefined;
   }
+}
+
+async function afterChatModelChange(
+  name: string,
+  args: unknown,
+  data: unknown,
+  ctx: DispatchContext,
+): Promise<Record<string, unknown> | undefined> {
+  if (!isRecord(args)) return undefined;
+  if (name === "switch_model" && typeof args["name"] !== "string") return undefined;
+  if (
+    name !== "set_model_setting" &&
+    (args["background_task"] !== undefined || args["subagent"] !== undefined)
+  ) return undefined;
+
+  await ctx.runtime.refreshCachedRequest(ctx.character);
+  return invalidated(data, { cached_request: true });
 }
 
 async function afterConfigSet(

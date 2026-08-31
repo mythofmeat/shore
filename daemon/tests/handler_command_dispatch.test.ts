@@ -38,6 +38,7 @@ interface Log {
   readonly effective: Array<{ character: string; config: LoadedConfig }>;
   readonly schedulers: LoadedConfig[];
   readonly adopted: LoadedConfig[];
+  readonly refreshed: string[];
   readonly sent: ServerMessage[];
 }
 
@@ -57,7 +58,14 @@ function fakes(
     rid?: string;
   } = {},
 ): Fakes {
-  const log: Log = { order: [], effective: [], schedulers: [], adopted: [], sent: [] };
+  const log: Log = {
+    order: [],
+    effective: [],
+    schedulers: [],
+    adopted: [],
+    refreshed: [],
+    sent: [],
+  };
   const summary = opts.summary ?? { characterDiscoveryChanged: false, droppedEngines: 0 };
 
   const state: Fakes = {
@@ -79,6 +87,10 @@ function fakes(
     reloadRuntimeConfig: (cfg) => {
       log.order.push("schedulers");
       log.schedulers.push(cfg);
+    },
+    refreshCachedRequest: async (character) => {
+      log.order.push("refresh-cache");
+      log.refreshed.push(character);
     },
     applyReloadedConfig: async (cfg) => {
       log.order.push("adopt");
@@ -192,6 +204,49 @@ describe("restartRequiredChanges", () => {
         c.app.cache.forensics = true;
       }),
     ).toEqual(["[daemon]", "[notifications]", "[cache].forensics"]);
+  });
+});
+
+describe("a chat model change", () => {
+  test("refreshes the autonomous request cache immediately", async () => {
+    const f = fakes();
+    const changed = { active: "glm", changed: true };
+
+    const out = await afterCommand("switch_model", { name: "glm" }, changed, f.ctx);
+
+    expect(f.log.refreshed).toEqual([CHARACTER]);
+    expect(out).toEqual({ ...changed, invalidated: { cached_request: true } });
+  });
+
+  test("a model query and background model changes leave the chat cache alone", async () => {
+    for (const args of [{}, { name: "glm", background_task: "heartbeat" }, { name: "glm", subagent: "music" }]) {
+      const f = fakes();
+      const data = { active: "glm" };
+
+      expect(await afterCommand("switch_model", args, data, f.ctx)).toBe(data);
+      expect(f.log.refreshed).toEqual([]);
+    }
+  });
+
+  test("resetting the chat model refreshes the cache", async () => {
+    const f = fakes();
+
+    await afterCommand("reset_model", {}, { active: null }, f.ctx);
+
+    expect(f.log.refreshed).toEqual([CHARACTER]);
+  });
+
+  test("changing model settings refreshes any cached request built with them", async () => {
+    const f = fakes();
+
+    await afterCommand(
+      "set_model_setting",
+      { key: "cache_keepalive", value: "off" },
+      { changed: true },
+      f.ctx,
+    );
+
+    expect(f.log.refreshed).toEqual([CHARACTER]);
   });
 });
 
