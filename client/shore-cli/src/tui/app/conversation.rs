@@ -96,6 +96,7 @@ impl Turn {
 pub(crate) enum ConversationEntry {
     Turn(Turn),
     System {
+        msg_id: Option<String>,
         content: String,
         count: u32,
         timestamp: String,

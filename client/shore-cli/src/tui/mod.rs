@@ -233,6 +233,7 @@ impl TuiFixtureConfig {
                         .push(ConversationEntry::user(content.clone(), vec![], timestamp));
                 }
                 FixtureRole::System => app.entries.push(ConversationEntry::System {
+                    msg_id: None,
                     content: content.clone(),
                     count: 1,
                     timestamp,
@@ -1589,9 +1590,34 @@ fn editable_text(msg: &Message) -> String {
         .join("\n")
 }
 
+fn restore_unpersisted_user_draft(app: &mut App) -> bool {
+    if !app.input.text.is_empty() || !app.pending_images.is_empty() {
+        return false;
+    }
+    let is_unpersisted_user = matches!(
+        app.entries.last(),
+        Some(ConversationEntry::Turn(Turn {
+            role: Role::User,
+            msg_id: None,
+            state: TurnState::Complete,
+            ..
+        }))
+    );
+    if !is_unpersisted_user {
+        return false;
+    }
+    let Some(ConversationEntry::Turn(turn)) = app.entries.pop() else {
+        return false;
+    };
+    app.input.set_text(turn.joined_text());
+    app.pending_images = turn.images.into_iter().map(|image| image.path).collect();
+    true
+}
+
 fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
     if msg.role == Role::System {
         entries.push(ConversationEntry::System {
+            msg_id: Some(msg.msg_id),
             content: msg.content,
             count: 1,
             timestamp: msg.timestamp,
@@ -2320,6 +2346,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                 .collect::<Vec<_>>()
                                 .join("\n");
                             app.entries.push(ConversationEntry::System {
+                                msg_id: None,
                                 content: format!("Characters:\n{list}"),
                                 count: 1,
                                 timestamp: String::new(),
@@ -2457,6 +2484,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                 String::new()
                             };
                             app.entries.push(ConversationEntry::System {
+                                msg_id: None,
                                 content: format!("Models:\n{list}{footer}"),
                                 count: 1,
                                 timestamp: String::new(),
@@ -2644,9 +2672,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     (None, None) => true,
                     (Some(_), None) | (None, Some(_)) => false,
                 };
-            if generation_error {
+            let restored_draft = if generation_error {
                 app.fail_stream();
-            }
+                restore_unpersisted_user_draft(app)
+            } else {
+                false
+            };
             app.compaction = None;
             if app.alt_picker.is_some() {
                 app.cancel_alt_picker();
@@ -2670,7 +2701,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             let context =
                 palette_command.map_or_else(String::new, |command| format!(":{command}: "));
-            let rendered = format!("{context}error: {:?} - {}", err.code, err.message);
+            let mut rendered = format!("{context}error: {:?} - {}", err.code, err.message);
+            if restored_draft {
+                rendered.push_str(
+                    " Draft restored to the composer; use `:image clear` to remove its attachments.",
+                );
+            }
             if generation_error {
                 app.set_critical_error(rendered);
             } else {
@@ -4094,6 +4130,52 @@ mod redraw_tests {
             app.error_log
                 .iter()
                 .any(|e| e.contains("Message index 99 out of range"))
+        );
+    }
+
+    #[test]
+    fn rejected_unpersisted_message_returns_text_and_images_to_the_composer() {
+        let mut app = App::default();
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_assistant".into()),
+            "the answer".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
+        app.entries.push(ConversationEntry::user(
+            "look at this".into(),
+            vec![shore_common::protocol::types::ImageRef {
+                path: "/tmp/image.png".into(),
+                caption: None,
+                data: None,
+            }],
+            String::new(),
+        ));
+        app.stream.active = true;
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::Error(CommandError {
+                rid: None,
+                code: ErrorCode::InvalidRequest,
+                message: "model does not accept images".into(),
+            }),
+        );
+
+        assert_eq!(
+            app.entries.len(),
+            1,
+            "the rejected optimistic row is removed"
+        );
+        assert_eq!(app.input.text, "look at this");
+        assert_eq!(app.pending_images, vec!["/tmp/image.png"]);
+        assert!(
+            app.error_log.last().is_some_and(|error| {
+                error.contains("restored to the composer") && error.contains(":image clear")
+            }),
+            "the recovery path should be explicit: {:?}",
+            app.error_log
         );
     }
 

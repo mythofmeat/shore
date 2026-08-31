@@ -8,7 +8,7 @@ use crate::cli::{
     CharacterCommand, CliCommand, ConfigCommand, MsgCommand, PaletteScope, ScrollDirection,
     UiCommand, ViewKey,
 };
-use crate::tui::app::{App, InputMode, PaletteMode};
+use crate::tui::app::{App, ConversationEntry, InputMode, PaletteMode};
 use crate::tui::connection::ConnCommand;
 use crate::tui::keymap::{Scope, key_token};
 
@@ -811,6 +811,72 @@ pub(crate) fn expand_aliases(input: &str) -> String {
     }
 }
 
+fn visible_message_ids(app: &App) -> Vec<Option<String>> {
+    app.entries
+        .iter()
+        .filter_map(|entry| match entry {
+            ConversationEntry::Turn(turn) => Some(turn.msg_id.clone()),
+            ConversationEntry::System {
+                msg_id: Some(msg_id),
+                ..
+            } => Some(Some(msg_id.clone())),
+            ConversationEntry::System { msg_id: None, .. }
+            | ConversationEntry::ArchiveBoundary { .. } => None,
+        })
+        .collect()
+}
+
+fn pin_delete_refs(app: &App, refs: &[String]) -> Result<Vec<String>, String> {
+    let visible = visible_message_ids(app);
+    refs.iter()
+        .map(|msg_ref| {
+            let from_end_index = match msg_ref.as_str() {
+                "last" | "latest" => Some(1_usize),
+                _ => msg_ref
+                    .parse::<i64>()
+                    .ok()
+                    .filter(|index| *index < 0)
+                    .and_then(|index| usize::try_from(index.unsigned_abs()).ok()),
+            };
+            let Some(distance_from_end) = from_end_index else {
+                return Ok(msg_ref.clone());
+            };
+            let Some(target) = visible
+                .len()
+                .checked_sub(distance_from_end)
+                .and_then(|index| visible.get(index))
+            else {
+                return Err(format!(
+                    "cannot safely resolve message {msg_ref:?} from the loaded transcript; nothing was deleted"
+                ));
+            };
+            target.clone().ok_or_else(|| {
+                format!(
+                    "the message shown as {msg_ref:?} was not accepted by the daemon; nothing was deleted"
+                )
+            })
+        })
+        .collect()
+}
+
+fn pinned_delete_input(app: &App, command: &CliCommand) -> Result<Option<String>, String> {
+    let CliCommand::Msg {
+        command: MsgCommand::Delete { msg_refs, json },
+    } = command
+    else {
+        return Ok(None);
+    };
+    let pinned = pin_delete_refs(app, msg_refs)?;
+    if pinned.as_slice() == msg_refs.as_slice() {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "msg delete {}{}",
+        pinned.join(" "),
+        if *json { " --json" } else { "" }
+    )))
+}
+
 fn parse_command(app: &mut App, input: &str) -> Action {
     let expanded = expand_aliases(input);
     if expanded.is_empty() {
@@ -1168,7 +1234,7 @@ fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action
     }
 
     app.dismiss_notifications();
-    app.entries.push(crate::tui::app::ConversationEntry::user(
+    app.entries.push(ConversationEntry::user(
         text.clone(),
         image_refs,
         String::new(),
@@ -1201,8 +1267,8 @@ fn palette_swp_command(
     })))
 }
 
-fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
-    if shlex::split(input).is_some_and(|words| {
+fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
+    if shlex::split(raw_input).is_some_and(|words| {
         words.iter().any(|word| {
             matches!(word.as_str(), "--addr" | "--character" | "-c")
                 || word.starts_with("--addr=")
@@ -1212,8 +1278,9 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
         app.set_error("the TUI is already attached to a daemon and character; switch with `character use` instead");
         return Action::Redraw;
     }
-    let command = match crate::cli::parse_palette_command(input) {
-        Ok(command) => command,
+    let mut effective_input = raw_input.to_owned();
+    let mut command = match crate::cli::parse_palette_command(raw_input) {
+        Ok(parsed) => parsed,
         Err(error) => {
             let message = error
                 .lines()
@@ -1224,6 +1291,24 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
             return Action::Redraw;
         }
     };
+    match pinned_delete_input(app, &command) {
+        Ok(Some(pinned)) => {
+            effective_input = pinned;
+            command = match crate::cli::parse_palette_command(&effective_input) {
+                Ok(parsed) => parsed,
+                Err(error) => {
+                    app.set_error(format!("could not pin delete target: {error}"));
+                    return Action::Redraw;
+                }
+            };
+        }
+        Ok(None) => {}
+        Err(error) => {
+            app.set_error(error);
+            return Action::Redraw;
+        }
+    }
+    let input = effective_input.as_str();
 
     if let CliCommand::View { key, value } = &command {
         return run_view_command(app, *key, value.as_deref());
@@ -1286,7 +1371,7 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
         | CliCommand::Ui { .. } => {}
     }
 
-    if let Some(prompt) = palette_confirmation_prompt(&command)
+    if let Some(prompt) = palette_confirmation_prompt(app, &command)
         && app.confirmed_palette_command.as_deref() != Some(input)
     {
         app.palette_confirmation = Some(crate::tui::app::PaletteConfirmation {
@@ -1441,22 +1526,57 @@ fn dispatch_cli_command(app: &mut App, input: &str) -> Action {
     }
 }
 
+fn delete_target_description(app: &App, msg_ref: &str) -> String {
+    let target = app.entries.iter().find_map(|entry| match entry {
+        ConversationEntry::Turn(turn) if turn.msg_id.as_deref() == Some(msg_ref) => Some((
+            format!("{:?}", turn.role).to_lowercase(),
+            turn.joined_text(),
+        )),
+        ConversationEntry::System {
+            msg_id: Some(msg_id),
+            content,
+            ..
+        } if msg_id == msg_ref => Some(("system".to_owned(), content.clone())),
+        ConversationEntry::Turn(_)
+        | ConversationEntry::System { .. }
+        | ConversationEntry::ArchiveBoundary { .. } => None,
+    });
+    let Some((role, content)) = target else {
+        return format!("conversation entry {msg_ref:?}");
+    };
+    let compact = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut preview = compact.chars().take(48).collect::<String>();
+    if compact.chars().count() > 48 {
+        preview.push('…');
+    }
+    if preview.is_empty() {
+        format!("{role} message {msg_ref:?}")
+    } else {
+        format!("{role} message {msg_ref:?} ({preview:?})")
+    }
+}
+
 #[expect(
     clippy::wildcard_enum_match_arm,
     reason = "only a deliberately small subset of commands needs confirmation"
 )]
-fn palette_confirmation_prompt(command: &CliCommand) -> Option<String> {
+fn palette_confirmation_prompt(app: &App, command: &CliCommand) -> Option<String> {
     match command {
         CliCommand::Msg {
             command: MsgCommand::Delete { msg_refs, .. },
+        } if msg_refs.len() == 1 => Some(format!(
+            "Delete {}? This cannot be undone.",
+            msg_refs.first().map_or_else(
+                || "conversation entry".to_owned(),
+                |msg_ref| delete_target_description(app, msg_ref)
+            )
+        )),
+        CliCommand::Msg {
+            command: MsgCommand::Delete { msg_refs, .. },
         } => Some(format!(
-            "Delete {} conversation {}?",
+            "Delete {} conversation entries ({})? This cannot be undone.",
             msg_refs.len(),
-            if msg_refs.len() == 1 {
-                "entry"
-            } else {
-                "entries"
-            }
+            msg_refs.join(", ")
         )),
         CliCommand::Msg {
             command: MsgCommand::Edit {
@@ -2047,17 +2167,69 @@ mod tests {
     }
 
     #[test]
-    fn delete_command_sends_single_delete_request() {
+    fn delete_last_pins_the_visible_message_before_confirmation() {
         let mut app = App::default();
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_assistant".into()),
+            "the answer".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
         assert!(
             matches!(parse_command(&mut app, "delete last"), Action::Redraw),
             "deleting a message should ask first"
         );
-        app.palette_confirmation = None;
-        app.confirmed_palette_command = Some("msg delete last".into());
-        let cmd = sent_command(parse_command(&mut app, "delete last"));
+        assert_eq!(
+            app.palette_confirmation
+                .as_ref()
+                .map(|confirmation| confirmation.command.as_str()),
+            Some("msg delete m_assistant")
+        );
+        assert!(
+            app.palette_confirmation
+                .as_ref()
+                .is_some_and(|confirmation| {
+                    confirmation.prompt.contains("assistant message")
+                        && confirmation.prompt.contains("m_assistant")
+                        && confirmation.prompt.contains("the answer")
+                })
+        );
+        let cmd = sent_command(handle_palette_confirmation(
+            &mut app,
+            make_key(KeyModifiers::NONE, KeyCode::Enter),
+        ));
         assert_eq!(cmd.name, "delete");
-        assert_eq!(cmd.args.get("refs"), Some(&serde_json::json!(["last"])));
+        assert_eq!(
+            cmd.args.get("refs"),
+            Some(&serde_json::json!(["m_assistant"]))
+        );
+    }
+
+    #[test]
+    fn delete_last_refuses_an_optimistic_message_the_daemon_never_accepted() {
+        let mut app = App::default();
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_assistant".into()),
+            "the answer".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
+        app.entries.push(ConversationEntry::user(
+            "failed image message".into(),
+            vec![],
+            String::new(),
+        ));
+
+        assert!(matches!(
+            parse_command(&mut app, "delete last"),
+            Action::Redraw
+        ));
+        assert!(app.palette_confirmation.is_none());
+        assert!(app.error_log.last().is_some_and(
+            |error| error.contains("not accepted") && error.contains("nothing was deleted")
+        ));
     }
 
     #[test]

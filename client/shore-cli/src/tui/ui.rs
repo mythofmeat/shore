@@ -939,6 +939,7 @@ fn build_conversation_lines(
                 content,
                 count,
                 timestamp,
+                ..
             } => {
                 let header = if *count > 1 {
                     format!("System (×{count})")
@@ -7069,6 +7070,7 @@ pub(crate) mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
 
         h.app.entries.push(ConversationEntry::System {
+            msg_id: None,
             content: "Memory updated: user prefers dark themes".into(),
             count: 1,
             timestamp: "t1".into(),
@@ -7091,6 +7093,7 @@ pub(crate) mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
 
         h.app.entries.push(ConversationEntry::System {
+            msg_id: None,
             content: "reconnecting: connection lost".into(),
             count: 7,
             timestamp: "t1".into(),
