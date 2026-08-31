@@ -4,7 +4,7 @@ import { parseInput } from "./commands.ts";
 import { EventMap } from "./event_map.ts";
 import type { MatrixEvent } from "./events.ts";
 import { sanitizeFilename } from "./events.ts";
-import { formatUserMirror, parseReaction, routeMirror, type PendingImage, type RoomTarget } from "./mirror.ts";
+import { formatUserMirror, parseReaction, routeMirror, type MirrorAction, type PendingImage } from "./mirror.ts";
 import { ViewPrefs } from "./prefs.ts";
 import { renderCommandOutput } from "./render.ts";
 import { RoomBindings } from "./rooms.ts";
@@ -28,7 +28,8 @@ export interface BridgeBot {
 
 export interface BridgeOptions {
   readonly bot: BridgeBot;
-  readonly peer: LocalPeer;
+  readonly attach: (character: string) => Promise<LocalPeer>;
+  readonly roster: () => Promise<readonly string[]>;
   readonly rooms: RoomBindings;
   readonly events: EventMap;
   readonly prefs: ViewPrefs;
@@ -43,10 +44,10 @@ interface PendingEcho {
   readonly eventId: string;
 }
 
-interface PendingCommand {
-  readonly roomId: string | undefined;
-  readonly silent: boolean;
-  readonly settle: (data: unknown) => void;
+interface RoomPeer {
+  readonly character: string;
+  readonly peer: LocalPeer;
+  readonly pump: Promise<void>;
 }
 
 const MAX_PENDING_ECHOES = 32;
@@ -56,21 +57,19 @@ const COMMAND_TIMEOUT_MS = 15_000;
 export class Bridge {
   readonly #options: BridgeOptions;
   readonly #echoes: PendingEcho[] = [];
-  readonly #commands = new Map<string, PendingCommand>();
-  #characters: readonly string[] = [];
-  #selected: string | undefined;
-  #activeRoom: string | undefined;
+  readonly #silent = new Set<string>();
+  readonly #peers = new Map<string, RoomPeer>();
   #nextRid = 1;
 
   constructor(options: BridgeOptions) {
     this.#options = options;
-    this.#characters = options.peer.characters.map((c) => c.name);
-    this.#selected = options.peer.history.selectedCharacter ?? undefined;
   }
 
   async run(): Promise<void> {
+    await this.#syncPeers();
     await this.#adoptInitialRoom();
-    await Promise.all([this.#pumpMatrix(), this.#pumpDaemon()]);
+    await this.#pumpMatrix();
+    await this.#detachAll();
   }
 
   async #pumpMatrix(): Promise<void> {
@@ -86,10 +85,10 @@ export class Bridge {
     }
   }
 
-  async #pumpDaemon(): Promise<void> {
-    for await (const msg of this.#options.peer.events()) {
+  async #pumpPeer(peer: LocalPeer, roomId: string): Promise<void> {
+    for await (const msg of peer.events()) {
       try {
-        await this.#onDaemonFrame(msg);
+        await this.#onDaemonFrame(msg, roomId);
       } catch (e) {
         this.#options.log?.warn?.("daemon frame handler failed", {
           type: msg.type,
@@ -97,7 +96,50 @@ export class Bridge {
         });
       }
     }
-    this.#failPendingCommands();
+  }
+
+  async #syncPeers(): Promise<void> {
+    const bound = new Map(
+      this.#options.rooms.entries().map(([character, roomId]) => [roomId, character] as const),
+    );
+    const stale = new Map<string, RoomPeer>();
+    for (const [roomId, attached] of this.#peers) {
+      if (bound.get(roomId) !== attached.character) stale.set(roomId, attached);
+    }
+    for (const [roomId, attached] of stale) {
+      this.#peers.delete(roomId);
+      await this.#release(attached);
+    }
+    for (const [roomId, character] of bound) await this.#peerFor(roomId, character);
+  }
+
+  async #peerFor(roomId: string, character: string): Promise<LocalPeer | undefined> {
+    const attached = this.#peers.get(roomId);
+    if (attached !== undefined && attached.character === character) return attached.peer;
+
+    let peer: LocalPeer;
+    try {
+      peer = await this.#options.attach(character);
+    } catch (e) {
+      this.#options.log?.warn?.("could not attach a daemon session for a room", {
+        room_id: roomId,
+        character,
+        error: String(e),
+      });
+      return undefined;
+    }
+    this.#peers.set(roomId, { character, peer, pump: this.#pumpPeer(peer, roomId) });
+    return peer;
+  }
+
+  async #release(attached: RoomPeer): Promise<void> {
+    await attached.peer.detach();
+    await attached.pump;
+  }
+
+  async #detachAll(): Promise<void> {
+    for (const attached of this.#peers.values()) await this.#release(attached);
+    this.#peers.clear();
   }
 
   async #onMatrixEvent(event: MatrixEvent): Promise<void> {
@@ -128,33 +170,39 @@ export class Bridge {
 
       case "unbind":
         this.#options.rooms.unbindRoom(roomId);
+        await this.#syncPeers();
         await this.#options.bot.sendNotice(roomId, "This room is no longer bound to a character.");
         return;
 
       case "view":
         return await this.#view(roomId, input.key, input.value);
 
-      case "cancel":
-        if (!(await this.#target(roomId))) return;
-        await this.#options.peer.send({ type: "cancel" });
+      case "cancel": {
+        const peer = await this.#target(roomId);
+        if (peer === undefined) return;
+        await peer.send({ type: "cancel" });
         return;
+      }
 
-      case "regen":
-        if (!(await this.#target(roomId))) return;
-        this.#activeRoom = roomId;
-        await this.#options.peer.send({ type: "regen", stream: true });
+      case "regen": {
+        const peer = await this.#target(roomId);
+        if (peer === undefined) return;
+        await peer.send({ type: "regen", stream: true });
         return;
+      }
 
-      case "command":
-        if (!(await this.#target(roomId))) return;
-        await this.#runCommand(input.name, input.args, roomId, false);
+      case "command": {
+        const peer = await this.#target(roomId);
+        if (peer === undefined) return;
+        await this.#runCommand(peer, input.name, input.args, false);
         return;
+      }
 
       case "text": {
-        if (!(await this.#target(roomId))) return;
-        this.#activeRoom = roomId;
+        const peer = await this.#target(roomId);
+        if (peer === undefined) return;
         this.#rememberEcho({ roomId, text: input.text, eventId });
-        await this.#options.peer.send({
+        await peer.send({
           type: "message",
           text: input.text,
           stream: true,
@@ -166,7 +214,8 @@ export class Bridge {
   }
 
   async #onImage(event: Extract<MatrixEvent, { kind: "image" }>): Promise<void> {
-    if (!(await this.#target(event.roomId))) return;
+    const peer = await this.#target(event.roomId);
+    if (peer === undefined) return;
 
     const bytes = await this.#options.bot.downloadMedia(event.url);
     if (bytes === undefined) {
@@ -176,10 +225,9 @@ export class Bridge {
 
     const filename = sanitizeFilename(event.body);
     const caption = event.body === filename ? "" : event.body;
-    this.#activeRoom = event.roomId;
     this.#rememberEcho({ roomId: event.roomId, text: caption, eventId: event.eventId });
 
-    await this.#options.peer.send({
+    await peer.send({
       type: "message",
       text: caption,
       stream: true,
@@ -200,16 +248,18 @@ export class Bridge {
       await this.#options.bot.sendNotice(roomId, "That message is no longer tracked, so the edit was not applied.");
       return;
     }
-    if (!(await this.#target(roomId))) return;
-    await this.#runCommand("edit", { ref: mapped.msgId, content: newText }, roomId, true);
+    const peer = await this.#target(roomId);
+    if (peer === undefined) return;
+    await this.#runCommand(peer, "edit", { ref: mapped.msgId, content: newText }, true);
     this.#options.events.updateContent(mapped.msgId, newText);
   }
 
   async #onRedaction(roomId: string, redacts: string): Promise<void> {
     const mapped = this.#options.events.byEventId(redacts);
     if (mapped === undefined) return;
-    if (!(await this.#target(roomId))) return;
-    await this.#runCommand("delete", { refs: [mapped.msgId] }, roomId, true);
+    const peer = await this.#target(roomId);
+    if (peer === undefined) return;
+    await this.#runCommand(peer, "delete", { refs: [mapped.msgId] }, true);
     this.#options.events.removeEvent(redacts);
   }
 
@@ -218,7 +268,8 @@ export class Bridge {
     if (control === undefined) return;
     const mapped = this.#options.events.byEventId(targetEventId);
     if (mapped === undefined) return;
-    if (!(await this.#target(roomId))) return;
+    const peer = await this.#target(roomId);
+    if (peer === undefined) return;
 
     switch (control) {
       case "regen": {
@@ -227,21 +278,20 @@ export class Bridge {
           await this.#options.bot.sendNotice(roomId, "Only the most recent reply can be regenerated.");
           return;
         }
-        this.#activeRoom = roomId;
-        await this.#options.peer.send({ type: "regen", stream: true });
+        await peer.send({ type: "regen", stream: true });
         return;
       }
       case "delete":
-        await this.#runCommand("delete", { refs: [mapped.msgId] }, roomId, true);
+        await this.#runCommand(peer, "delete", { refs: [mapped.msgId] }, true);
         this.#options.events.removeEvent(targetEventId);
         await this.#options.bot.redact(roomId, targetEventId, "deleted from shore");
         return;
       case "alt_prev":
       case "alt_next":
         await this.#runCommand(
+          peer,
           "alt",
           { ref: mapped.msgId, direction: control === "alt_prev" ? "prev" : "next" },
-          roomId,
           false,
         );
     }
@@ -251,7 +301,8 @@ export class Bridge {
     const roomId = this.#options.initialRoomId;
     if (roomId === undefined || roomId === "" || this.#options.rooms.isBound(roomId)) return;
 
-    const only = this.#characters.length === 1 ? this.#characters[0] : undefined;
+    const characters = await this.#options.roster();
+    const only = characters.length === 1 ? characters[0] : undefined;
     if (only === undefined) {
       await this.#options.bot.sendNotice(
         roomId,
@@ -264,21 +315,23 @@ export class Bridge {
   }
 
   async #bind(roomId: string, character: string | undefined): Promise<void> {
+    const characters = await this.#options.roster();
+
     if (character === undefined) {
       const bound = this.#options.rooms.characterForRoom(roomId);
-      const list = this.#characters.map((name) => `- \`${name}\``).join("\n");
+      const list = characters.map((name) => `- \`${name}\``).join("\n");
       await this.#options.bot.sendNotice(
         roomId,
         [
           bound === undefined ? "This room is not bound." : `This room is bound to **${bound}**.`,
-          this.#characters.length === 0 ? "_No characters available._" : `Available:\n${list}`,
+          characters.length === 0 ? "_No characters available._" : `Available:\n${list}`,
           "Bind with `!bind <character>`.",
         ].join("\n\n"),
       );
       return;
     }
 
-    if (!this.#characters.includes(character)) {
+    if (!characters.includes(character)) {
       await this.#options.bot.sendNotice(roomId, `No such character: \`${character}\`.`);
       return;
     }
@@ -289,7 +342,6 @@ export class Bridge {
   async #persistBinding(roomId: string, character: string): Promise<boolean> {
     try {
       this.#options.rooms.bind(roomId, character);
-      return true;
     } catch (e) {
       this.#options.log?.warn?.("failed to persist room binding", {
         room_id: roomId,
@@ -302,6 +354,8 @@ export class Bridge {
       );
       return false;
     }
+    await this.#syncPeers();
+    return true;
   }
 
   async #view(roomId: string, key: string | undefined, value: boolean | undefined): Promise<void> {
@@ -318,120 +372,77 @@ export class Bridge {
     );
   }
 
-  async #target(roomId: string): Promise<boolean> {
+  async #target(roomId: string): Promise<LocalPeer | undefined> {
     const character = this.#options.rooms.characterForRoom(roomId);
     if (character === undefined) {
       await this.#options.bot.sendNotice(roomId, "This room is not bound. Use `!bind <character>`.");
-      return false;
+      return undefined;
     }
-    if (character === this.#selected) return true;
-
-    const switched = await this.#awaitCommand("switch_character", { name: character }, undefined, true);
-    const selected = isRecord(switched) ? switched.selected_character : undefined;
-    if (typeof selected !== "string") {
-      await this.#options.bot.sendNotice(roomId, `Could not switch to **${character}**.`);
-      return false;
+    const peer = await this.#peerFor(roomId, character);
+    if (peer === undefined) {
+      await this.#options.bot.sendNotice(roomId, `Could not reach the daemon for **${character}**.`);
     }
-    this.#selected = selected;
-    return true;
+    return peer;
   }
 
   async #runCommand(
+    peer: LocalPeer,
     name: string,
     args: Record<string, unknown>,
-    roomId: string | undefined,
     silent: boolean,
   ): Promise<void> {
     const rid = `matrix-${this.#nextRid}`;
     this.#nextRid += 1;
-    this.#commands.set(rid, { roomId, silent, settle: () => {} });
-    this.#expire(rid);
-    await this.#options.peer.send({ type: "command", rid, name, args });
-  }
-
-  async #awaitCommand(
-    name: string,
-    args: Record<string, unknown>,
-    roomId: string | undefined,
-    silent: boolean,
-  ): Promise<unknown> {
-    const rid = `matrix-${this.#nextRid}`;
-    this.#nextRid += 1;
-
-    const settled = new Promise<unknown>((resolve) => {
-      this.#commands.set(rid, { roomId, silent, settle: resolve });
-    });
-    this.#expire(rid);
-    await this.#options.peer.send({ type: "command", rid, name, args });
-    return await settled;
+    if (silent) {
+      this.#silent.add(rid);
+      this.#expire(rid);
+    }
+    await peer.send({ type: "command", rid, name, args });
   }
 
   #expire(rid: string): void {
     const timer = setTimeout(() => {
-      const pending = this.#commands.get(rid);
-      if (pending === undefined) return;
-      this.#commands.delete(rid);
+      if (!this.#silent.delete(rid)) return;
       this.#options.log?.warn?.("no answer from the daemon", { rid });
-      pending.settle(undefined);
     }, COMMAND_TIMEOUT_MS);
     timer.unref?.();
   }
 
-  #failPendingCommands(): void {
-    for (const pending of this.#commands.values()) pending.settle(undefined);
-    this.#commands.clear();
-  }
-
-  async #onDaemonFrame(msg: ServerMessage): Promise<void> {
+  async #onDaemonFrame(msg: ServerMessage, roomId: string): Promise<void> {
     const rid = "rid" in msg ? (msg.rid ?? undefined) : undefined;
-    const pending = rid === undefined ? undefined : this.#commands.get(rid);
-    if (pending !== undefined && (msg.type === "command_output" || msg.type === "error")) {
-      this.#commands.delete(rid as string);
-      pending.settle(msg.type === "command_output" ? msg.data : undefined);
-      if (pending.silent) {
-        if (msg.type === "error") {
-          const room = pending.roomId ?? this.#activeRoom;
-          if (room !== undefined) await this.#options.bot.sendNotice(room, `⚠️ ${msg.message}`);
-        }
-        return;
-      }
+    if (
+      rid !== undefined &&
+      (msg.type === "command_output" || msg.type === "error") &&
+      this.#silent.delete(rid)
+    ) {
+      if (msg.type === "error") await this.#options.bot.sendNotice(roomId, `⚠️ ${msg.message}`);
+      return;
     }
 
-    const route = routeMirror(msg);
-    const roomId = this.#resolveRoom(route.target, pending?.roomId);
-    if (roomId === undefined) return;
+    const action = routeMirror(msg);
 
-    switch (route.action.kind) {
+    switch (action.kind) {
       case "start_typing":
         return await this.#options.bot.setTyping(roomId, true);
       case "stop_typing":
         return await this.#options.bot.setTyping(roomId, false);
       case "post":
-        return await this.#post(roomId, route.action);
+        return await this.#post(roomId, action);
       case "user_prompt":
-        return await this.#mirrorPrompt(roomId, route.action.msgId, route.action.content);
+        return await this.#mirrorPrompt(roomId, action.msgId, action.content);
       case "command_output":
         return void (await this.#options.bot.sendNotice(
           roomId,
-          renderCommandOutput(route.action.name, route.action.data),
+          renderCommandOutput(action.name, action.data),
         ));
       case "error":
       case "notice":
-        return void (await this.#options.bot.sendNotice(roomId, route.action.text));
+        return void (await this.#options.bot.sendNotice(roomId, action.text));
       case "none":
     }
   }
 
-  #resolveRoom(target: RoomTarget, requester: string | undefined): string | undefined {
-    if (target.kind === "active") return requester ?? this.#activeRoom;
-    if (target.character === undefined) return this.#activeRoom;
-    return this.#options.rooms.roomForCharacter(target.character) ?? this.#activeRoom;
-  }
-
-  async #post(
-    roomId: string,
-    action: Extract<ReturnType<typeof routeMirror>["action"], { kind: "post" }>,
-  ): Promise<void> {
+  async #post(roomId: string, action: Extract<MirrorAction, { kind: "post" }>): Promise<void> {
     const body = this.#withThinking(roomId, action.text, action.thinking);
 
     if (action.replacesLast) {
@@ -526,6 +537,3 @@ export class Bridge {
     return echo;
   }
 }
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);

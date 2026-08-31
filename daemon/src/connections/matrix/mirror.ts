@@ -8,10 +8,6 @@ export interface PendingImage {
   readonly data: string | undefined;
 }
 
-export type RoomTarget =
-  | { readonly kind: "character"; readonly character: string | undefined }
-  | { readonly kind: "active" };
-
 export type MirrorAction =
   | { readonly kind: "start_typing" }
   | { readonly kind: "stop_typing" }
@@ -30,87 +26,63 @@ export type MirrorAction =
   | { readonly kind: "notice"; readonly text: string }
   | { readonly kind: "none" };
 
-export interface MirrorRoute {
-  readonly target: RoomTarget;
-  readonly action: MirrorAction;
-}
+const NONE: MirrorAction = { kind: "none" };
 
-const ACTIVE_NONE: MirrorRoute = { target: { kind: "active" }, action: { kind: "none" } };
-
-export function routeMirror(msg: ServerMessage): MirrorRoute {
+export function routeMirror(msg: ServerMessage): MirrorAction {
   switch (msg.type) {
     case "new_message": {
       const msgId = msg.msg_id === "" ? undefined : msg.msg_id;
-      const target: RoomTarget = { kind: "character", character: msg.character ?? undefined };
       if (msg.origin === "user_input") {
-        return { target, action: { kind: "user_prompt", msgId, content: msg.content } };
+        return { kind: "user_prompt", msgId, content: msg.content };
       }
       const altCount = msg.alt_count ?? msg.alternatives?.length ?? 0;
       return {
-        target,
-        action: {
-          kind: "post",
-          msgId,
-          replacesLast: msg.origin === "assistant_reply" && altCount >= 2,
-          autonomous: msg.origin === "autonomous",
-          thinking: extractThinking(msg.content_blocks),
-          text: msg.content,
-          images: pendingImages(msg.images),
-        },
+        kind: "post",
+        msgId,
+        replacesLast: msg.origin === "assistant_reply" && altCount >= 2,
+        autonomous: msg.origin === "autonomous",
+        thinking: extractThinking(msg.content_blocks),
+        text: msg.content,
+        images: pendingImages(msg.images),
       };
     }
 
     case "stream_start":
     case "stream_chunk":
-      return { target: { kind: "active" }, action: { kind: "start_typing" } };
+      return { kind: "start_typing" };
 
     case "stream_end":
-      return { target: { kind: "active" }, action: { kind: "stop_typing" } };
+      return { kind: "stop_typing" };
 
     case "command_output":
-      return {
-        target: { kind: "active" },
-        action: { kind: "command_output", name: msg.name, data: msg.data },
-      };
+      return { kind: "command_output", name: msg.name, data: msg.data };
 
     case "error":
-      return {
-        target: { kind: "active" },
-        action: { kind: "error", text: `${msg.code}: ${msg.message}` },
-      };
+      return { kind: "error", text: `${msg.code}: ${msg.message}` };
 
     case "usage_warning":
       return {
-        target: { kind: "active" },
-        action: {
-          kind: "notice",
-          text:
-            `⚠️ ${msg.message} — $${msg.current_cost.toFixed(2)} of ` +
-            `$${msg.cost_limit.toFixed(2)} (${Math.round(msg.percent_used * 100)}%) this ${msg.period}`,
-        },
+        kind: "notice",
+        text:
+          `⚠️ ${msg.message} — $${msg.current_cost.toFixed(2)} of ` +
+          `$${msg.cost_limit.toFixed(2)} (${Math.round(msg.percent_used * 100)}%) this ${msg.period}`,
       };
 
     case "cache_warning":
-      return {
-        target: { kind: "active" },
-        action: { kind: "notice", text: `⚠️ cache: ${msg.message}` },
-      };
+      return { kind: "notice", text: `⚠️ cache: ${msg.message}` };
 
     case "provider_fallback_warning": {
       const status = msg.status === undefined || msg.status === null ? "" : `, HTTP ${msg.status}`;
       return {
-        target: { kind: "active" },
-        action: {
-          kind: "notice",
-          text:
-            `⚠️ provider \`${msg.provider}\`: key **${msg.from_key}** failed ` +
-            `(${msg.kind}${status}) — now using **${msg.to_key}**`,
-        },
+        kind: "notice",
+        text:
+          `⚠️ provider \`${msg.provider}\`: key **${msg.from_key}** failed ` +
+          `(${msg.kind}${status}) — now using **${msg.to_key}**`,
       };
     }
 
     default:
-      return ACTIVE_NONE;
+      return NONE;
   }
 }
 

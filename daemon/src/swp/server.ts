@@ -140,6 +140,11 @@ export class Server {
     return this.#router;
   }
 
+  async characters(): Promise<readonly CharacterInfo[]> {
+    const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
+    return (await provider.hello()).characters;
+  }
+
   routes(): AsyncGenerator<RoutedMessage> {
     return this.#routes.drain();
   }

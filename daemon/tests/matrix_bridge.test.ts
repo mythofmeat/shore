@@ -5,7 +5,6 @@ import type { NewMessage } from "../src/protocol/NewMessage";
 import type { ServerMessage } from "../src/protocol/ServerMessage";
 
 import { Server } from "../src/swp/server.ts";
-import { ALL_CHARACTERS_CAPABILITY } from "../src/swp/session.ts";
 import { Bridge, type BridgeBot } from "../src/connections/matrix/bridge.ts";
 import { EventMap } from "../src/connections/matrix/event_map.ts";
 import type { MatrixEvent } from "../src/connections/matrix/events.ts";
@@ -106,12 +105,19 @@ class FakeBot implements BridgeBot {
   }
 }
 
+interface Delivered {
+  readonly character: string | null;
+  readonly msg: ClientMessage;
+}
+
 interface BridgeHarness {
   bot: FakeBot;
   rooms: RoomBindings;
   events: EventMap;
   received: ClientMessage[];
-  reply(msg: ServerMessage): Promise<void>;
+  delivered: Delivered[];
+  sessions: Map<string, number>;
+  reply(msg: ServerMessage, character?: string): Promise<void>;
   broadcast(msg: ServerMessage): void;
   settle(): Promise<void>;
   stop(): Promise<void>;
@@ -153,29 +159,15 @@ async function harness(
   const running = server.serve();
 
   const received: ClientMessage[] = [];
-  const peer = await server.attachLocal({
-    clientType: "bridge",
-    clientName: "shore-matrix",
-    capabilities: ["streaming", ALL_CHARACTERS_CAPABILITY],
-  });
-  const sessionId = peer.session.sessionId;
+  const delivered: Delivered[] = [];
+  const sessions = new Map<string, number>();
 
   const routing = (async () => {
     for await (const routed of server.routes()) {
       if (routed.kind === "all_clients_disconnected") continue;
       const msg = routed.kind === "command" ? ({ type: "command", ...routed.cmd } as ClientMessage) : routed.msg;
       received.push(msg);
-
-      if (msg.type === "command" && msg.name === "switch_character") {
-        const name = (msg.args as { name?: string } | null)?.name ?? null;
-        if (typeof name === "string") server.sessionRouter.setSelectedCharacter(sessionId, name);
-        await server.sessionRouter.sendToSession(sessionId, {
-          type: "command_output",
-          ...(msg.rid === undefined || msg.rid === null ? {} : { rid: msg.rid }),
-          name: "switch_character",
-          data: { character: name, selected_character: name },
-        });
-      }
+      delivered.push({ character: routed.meta.session.selectedCharacter, msg });
     }
   })();
 
@@ -186,7 +178,17 @@ async function harness(
 
   const bridge = new Bridge({
     bot,
-    peer,
+    attach: async (character) => {
+      const peer = await server.attachLocal({
+        clientType: "bridge",
+        clientName: `shore-matrix/${character}`,
+        capabilities: ["streaming"],
+        character,
+      });
+      sessions.set(character, peer.session.sessionId);
+      return peer;
+    },
+    roster: async () => (await server.characters()).map((c) => c.name),
     rooms,
     events,
     prefs: new ViewPrefs(),
@@ -209,7 +211,11 @@ async function harness(
     rooms,
     events,
     received,
-    reply: async (msg) => {
+    delivered,
+    sessions,
+    reply: async (msg, character) => {
+      const sessionId = sessions.get(character ?? (names[0] ?? ""));
+      if (sessionId === undefined) throw new Error(`no session for ${character}`);
       await server.sessionRouter.sendToSession(sessionId, msg);
       await settle();
     },
@@ -217,9 +223,9 @@ async function harness(
     settle,
     stop: async () => {
       bot.close();
-      await peer.detach();
+      await pump;
       server.stop();
-      await Promise.allSettled([running, routing, pump]);
+      await Promise.allSettled([running, routing]);
     },
   };
   harnesses.push(built);
@@ -294,8 +300,7 @@ describe("the room named in config.toml", () => {
 
 describe("a bound room forwards prompts", () => {
   test("a plain message reaches the daemon as a streaming message", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$e1", text: "hello there" });
     await h.settle();
 
@@ -303,31 +308,30 @@ describe("a bound room forwards prompts", () => {
     expect(sent).toMatchObject({ type: "message", text: "hello there", stream: true });
   });
 
-  test("a room bound to another character switches the session first", async () => {
-    const h = await harness();
-    h.rooms.bind(OTHER_ROOM, "bee");
+  test("a room bound to another character needs no switch, it has its own session", async () => {
+    const h = await harness({ bindings: [[OTHER_ROOM, "bee"]] });
     h.bot.push({ kind: "message", roomId: OTHER_ROOM, sender: USER, eventId: "$e1", text: "hi bee" });
     await h.settle();
 
-    const order = h.received.map((m) => (m.type === "command" ? `command:${m.name}` : m.type));
-    expect(order).toEqual(["command:switch_character", "message"]);
+    expect(h.received.map((m) => m.type)).toEqual(["message"]);
+    expect(h.delivered.at(-1)).toMatchObject({ character: "bee", msg: { text: "hi bee" } });
   });
 
-  test("the switch happens once, not on every message", async () => {
-    const h = await harness();
-    h.rooms.bind(OTHER_ROOM, "bee");
-    h.bot.push({ kind: "message", roomId: OTHER_ROOM, sender: USER, eventId: "$e1", text: "one" });
+  test("each bound room keeps its own session for the whole conversation", async () => {
+    const h = await harness({ bindings: [[ROOM, "ada"], [OTHER_ROOM, "bee"]] });
+    h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$a1", text: "one" });
     await h.settle();
-    h.bot.push({ kind: "message", roomId: OTHER_ROOM, sender: USER, eventId: "$e2", text: "two" });
+    h.bot.push({ kind: "message", roomId: OTHER_ROOM, sender: USER, eventId: "$b1", text: "two" });
+    await h.settle();
+    h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$a2", text: "three" });
     await h.settle();
 
-    const switches = h.received.filter((m) => m.type === "command" && m.name === "switch_character");
-    expect(switches).toHaveLength(1);
+    expect(h.delivered.map((d) => d.character)).toEqual(["ada", "bee", "ada"]);
+    expect(h.sessions.get("ada")).not.toBe(h.sessions.get("bee"));
   });
 
   test("an image travels as base64 with its declared mime type and no filename in the body", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.bot.media.set("mxc://example.com/pic", new Uint8Array([1, 2, 3, 4]));
     h.bot.push({
       kind: "image",
@@ -351,8 +355,7 @@ describe("a bound room forwards prompts", () => {
 
 describe("replies coming back", () => {
   test("an assistant reply lands in the bound room and is remembered", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant());
     await h.settle();
 
@@ -361,8 +364,7 @@ describe("replies coming back", () => {
   });
 
   test("a reply for an unbound character goes nowhere rather than to the wrong room", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant({ character: "bee", msg_id: "m_bee" }));
     await h.settle();
 
@@ -370,8 +372,7 @@ describe("replies coming back", () => {
   });
 
   test("a regenerated reply edits the previous message in place", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant());
     await h.settle();
 
@@ -385,8 +386,7 @@ describe("replies coming back", () => {
   });
 
   test("streaming turns the typing indicator on and off in the room being answered", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$e1", text: "hello" });
     await h.settle();
 
@@ -411,8 +411,7 @@ describe("replies coming back", () => {
   });
 
   test("thinking is attached only when the room asked for it", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     const withThinking = assistant({
       content_blocks: [
         { type: "thinking", thinking: "let me consider" },
@@ -434,8 +433,7 @@ describe("replies coming back", () => {
 
 describe("mirroring other clients", () => {
   test("a prompt from the CLI is blockquoted into the character's room", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(
       assistant({ msg_id: "m_user", role: "user", origin: "user_input", content: "from the cli" }),
     );
@@ -446,8 +444,7 @@ describe("mirroring other clients", () => {
   });
 
   test("with mirror_all off, another client's prompt stays out of the room", async () => {
-    const h = await harness({ mirrorAll: false });
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ mirrorAll: false, bindings: [[ROOM, "ada"]] });
     h.broadcast(
       assistant({ msg_id: "m_user", role: "user", origin: "user_input", content: "from the cli" }),
     );
@@ -457,8 +454,7 @@ describe("mirroring other clients", () => {
   });
 
   test("the bridge's own prompt is not mirrored back, but is mapped to its Matrix event", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$mine", text: "hello there" });
     await h.settle();
 
@@ -474,8 +470,7 @@ describe("mirroring other clients", () => {
 
 describe("Matrix-native interactions", () => {
   test("an edit becomes an edit command against the mapped message", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant());
     await h.settle();
     const eventId = h.events.byMsgId("m_reply")?.eventId as string;
@@ -497,8 +492,7 @@ describe("Matrix-native interactions", () => {
   });
 
   test("an edit to an unmapped event says so and sends nothing", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.bot.push({
       kind: "edit",
       roomId: ROOM,
@@ -513,8 +507,7 @@ describe("Matrix-native interactions", () => {
   });
 
   test("a redaction becomes a delete command and forgets the mapping", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant());
     await h.settle();
     const eventId = h.events.byMsgId("m_reply")?.eventId as string;
@@ -531,8 +524,7 @@ describe("Matrix-native interactions", () => {
   });
 
   test("🔁 on the latest reply regenerates; on an older one it refuses", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant({ msg_id: "m1" }));
     await h.settle();
     const older = h.events.byMsgId("m1")?.eventId as string;
@@ -551,8 +543,7 @@ describe("Matrix-native interactions", () => {
   });
 
   test("🗑 deletes daemon-side and redacts the Matrix copy", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant());
     await h.settle();
     const eventId = h.events.byMsgId("m_reply")?.eventId as string;
@@ -565,8 +556,7 @@ describe("Matrix-native interactions", () => {
   });
 
   test("◀ and ▶ walk the alternates", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant());
     await h.settle();
     const eventId = h.events.byMsgId("m_reply")?.eventId as string;
@@ -584,18 +574,82 @@ describe("Matrix-native interactions", () => {
   });
 
   test("an unmapped reaction is ignored entirely", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.bot.push({ kind: "reaction", roomId: ROOM, sender: USER, targetEventId: "$nope", key: "👍" });
     await h.settle();
     expect(h.received.some((m) => m.type === "command")).toBe(false);
   });
 });
 
+describe("two rooms generating at once", () => {
+  test("typing, errors, warnings and replies each stay in the room that asked", async () => {
+    const h = await harness({ bindings: [[ROOM, "ada"], [OTHER_ROOM, "bee"]] });
+
+    h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$a1", text: "ada first" });
+    await h.settle();
+    h.bot.push({ kind: "message", roomId: OTHER_ROOM, sender: USER, eventId: "$b1", text: "bee next" });
+    await h.settle();
+
+    await h.reply({ type: "stream_start", regen: false }, "ada");
+    await h.reply({ type: "stream_start", regen: false }, "bee");
+    expect(h.bot.sent.filter((sent) => sent.kind === "typing")).toEqual([
+      { kind: "typing", roomId: ROOM, typing: true },
+      { kind: "typing", roomId: OTHER_ROOM, typing: true },
+    ]);
+
+    await h.reply({ type: "error", code: "provider_error", message: "ada broke" }, "ada");
+    await h.reply(
+      {
+        type: "usage_warning",
+        budget: "daily",
+        message: "80% of daily budget",
+        current_cost: 8,
+        cost_limit: 10,
+        percent_used: 0.8,
+        crossed_warn_at: [0.8],
+        period: "day",
+        period_start: "2026-08-08T00:00:00Z",
+        reset_at: "2026-08-09T00:00:00Z",
+        reset_at_display: "2026-08-09 12:00 AM",
+      },
+      "bee",
+    );
+    expect(h.bot.sent.filter((sent) => sent.kind === "notice")).toEqual([
+      { kind: "notice", roomId: ROOM, body: "provider_error: ada broke" },
+      {
+        kind: "notice",
+        roomId: OTHER_ROOM,
+        body: "⚠️ 80% of daily budget — $8.00 of $10.00 (80%) this day",
+      },
+    ]);
+
+    h.broadcast(assistant({ character: "bee", msg_id: "m_bee", content: "bee replies" }));
+    await h.settle();
+    h.broadcast(assistant({ msg_id: "m_ada", content: "ada replies" }));
+    await h.settle();
+    expect(h.bot.sent.filter((sent) => sent.kind === "text")).toEqual([
+      { kind: "text", roomId: OTHER_ROOM, body: "bee replies" },
+      { kind: "text", roomId: ROOM, body: "ada replies" },
+    ]);
+  });
+
+  test("a cancel reaches only the session of the room it was typed in", async () => {
+    const h = await harness({ bindings: [[ROOM, "ada"], [OTHER_ROOM, "bee"]] });
+
+    h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$a1", text: "ada first" });
+    await h.settle();
+    h.bot.push({ kind: "message", roomId: OTHER_ROOM, sender: USER, eventId: "$b1", text: "bee next" });
+    await h.settle();
+    h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$a2", text: "!cancel" });
+    await h.settle();
+
+    expect(h.delivered.at(-1)).toMatchObject({ character: "ada", msg: { type: "cancel" } });
+  });
+});
+
 describe("command output", () => {
   test("a bang command's output is rendered back into the room that asked", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.bot.push({ kind: "message", roomId: ROOM, sender: USER, eventId: "$e1", text: "!status" });
     await h.settle();
 
@@ -614,8 +668,7 @@ describe("command output", () => {
   });
 
   test("a daemon error for a silent command surfaces as a warning, not a JSON dump", async () => {
-    const h = await harness();
-    h.rooms.bind(ROOM, "ada");
+    const h = await harness({ bindings: [[ROOM, "ada"]] });
     h.broadcast(assistant());
     await h.settle();
     const eventId = h.events.byMsgId("m_reply")?.eventId as string;

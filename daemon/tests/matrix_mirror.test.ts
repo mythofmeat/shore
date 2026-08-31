@@ -25,11 +25,10 @@ function newMessage(overrides: Partial<NewMessage> = {}): ServerMessage {
   return { type: "new_message", ...message, ...overrides };
 }
 
-describe("mirror_all routing", () => {
-  test("an assistant reply routes to the character's room", () => {
+describe("mirror_all frames", () => {
+  test("an assistant reply becomes a post", () => {
     const route = routeMirror(newMessage({ origin: "assistant_reply" }));
-    expect(route.target).toEqual({ kind: "character", character: "alice" });
-    expect(route.action).toEqual({
+    expect(route).toEqual({
       kind: "post",
       msgId: "m1",
       replacesLast: false,
@@ -40,24 +39,23 @@ describe("mirror_all routing", () => {
     });
   });
 
-  test("an autonomous message routes to the character's room and is flagged", () => {
+  test("an autonomous message is posted and flagged", () => {
     const route = routeMirror(
       newMessage({ character: "bob", origin: "autonomous", content: "thinking of you" }),
     );
-    expect(route.target).toEqual({ kind: "character", character: "bob" });
-    expect(route.action).toMatchObject({ kind: "post", autonomous: true });
+    expect(route).toMatchObject({ kind: "post", autonomous: true });
   });
 
   test("a regen reply carrying an alternative replaces the last one", () => {
     const route = routeMirror(
       newMessage({ origin: "assistant_reply", alt_count: 2, alt_index: 1, content: "better" }),
     );
-    expect(route.action).toMatchObject({ kind: "post", replacesLast: true });
+    expect(route).toMatchObject({ kind: "post", replacesLast: true });
   });
 
   test("an autonomous message never replaces, whatever its alt metadata says", () => {
     const route = routeMirror(newMessage({ origin: "autonomous", alt_count: 2 }));
-    expect(route.action).toMatchObject({ kind: "post", replacesLast: false });
+    expect(route).toMatchObject({ kind: "post", replacesLast: false });
   });
 
   test("alternatives stand in for alt_count when the daemon sends only the list", () => {
@@ -70,13 +68,12 @@ describe("mirror_all routing", () => {
         ],
       }),
     );
-    expect(route.action).toMatchObject({ kind: "post", replacesLast: true });
+    expect(route).toMatchObject({ kind: "post", replacesLast: true });
   });
 
   test("a user prompt from another client becomes a mirrored prompt", () => {
     const route = routeMirror(newMessage({ origin: "user_input", content: "ping from the cli" }));
-    expect(route.target).toEqual({ kind: "character", character: "alice" });
-    expect(route.action).toEqual({
+    expect(route).toEqual({
       kind: "user_prompt",
       msgId: "m1",
       content: "ping from the cli",
@@ -84,11 +81,11 @@ describe("mirror_all routing", () => {
   });
 
   test("a message with no origin posts as the bot", () => {
-    expect(routeMirror(newMessage()).action).toMatchObject({ kind: "post", replacesLast: false });
+    expect(routeMirror(newMessage())).toMatchObject({ kind: "post", replacesLast: false });
   });
 
   test("an empty msg_id is no msg_id", () => {
-    expect(routeMirror(newMessage({ msg_id: "" })).action).toMatchObject({ msgId: undefined });
+    expect(routeMirror(newMessage({ msg_id: "" }))).toMatchObject({ msgId: undefined });
   });
 
   test("thinking blocks are concatenated and redacted ones skipped", () => {
@@ -104,7 +101,7 @@ describe("mirror_all routing", () => {
         ],
       }),
     );
-    expect(route.action).toMatchObject({ thinking: "first\n\nsecond" });
+    expect(route).toMatchObject({ thinking: "first\n\nsecond" });
   });
 
   test("no readable thinking is undefined, not an empty string", () => {
@@ -119,7 +116,7 @@ describe("mirror_all routing", () => {
         images: [{ path: "/tmp/a.png", caption: "a cat" }, { path: "/tmp/b.png" }],
       }),
     );
-    expect(route.action).toMatchObject({
+    expect(route).toMatchObject({
       images: [
         { path: "/tmp/a.png", caption: "a cat", data: undefined },
         { path: "/tmp/b.png", caption: undefined, data: undefined },
@@ -128,18 +125,17 @@ describe("mirror_all routing", () => {
   });
 });
 
-describe("the stream lifecycle rides the active room", () => {
+describe("the stream lifecycle", () => {
   test("start and chunk both assert typing; end only stops it", () => {
     const start = routeMirror({ type: "stream_start", regen: false });
-    expect(start.target).toEqual({ kind: "active" });
-    expect(start.action).toEqual({ kind: "start_typing" });
+    expect(start).toEqual({ kind: "start_typing" });
 
     const chunk = routeMirror({
       type: "stream_chunk",
       text: "partial",
       content_type: "text",
     });
-    expect(chunk.action).toEqual({ kind: "start_typing" });
+    expect(chunk).toEqual({ kind: "start_typing" });
 
     const end = routeMirror({
       type: "stream_end",
@@ -151,15 +147,14 @@ describe("the stream lifecycle rides the active room", () => {
         model: "test",
       },
     });
-    expect(end.target).toEqual({ kind: "active" });
-    expect(end.action).toEqual({ kind: "stop_typing" });
+    expect(end).toEqual({ kind: "stop_typing" });
   });
 });
 
 describe("warnings, errors and command output", () => {
   test("an error carries its code and message", () => {
     const route = routeMirror({ type: "error", code: "provider_error", message: "no model" });
-    expect(route.action).toEqual({ kind: "error", text: "provider_error: no model" });
+    expect(route).toEqual({ kind: "error", text: "provider_error: no model" });
   });
 
   test("a usage warning renders money and percentage", () => {
@@ -176,7 +171,7 @@ describe("warnings, errors and command output", () => {
       reset_at: "2026-08-09T00:00:00Z",
       reset_at_display: "2026-08-09 12:00 AM",
     });
-    expect(route.action).toEqual({
+    expect(route).toEqual({
       kind: "notice",
       text: "⚠️ 80% of daily budget — $8.00 of $10.00 (80%) this day",
     });
@@ -192,7 +187,7 @@ describe("warnings, errors and command output", () => {
       status: 429,
       message: "quota",
     });
-    expect(withStatus.action).toMatchObject({
+    expect(withStatus).toMatchObject({
       text:
         "⚠️ provider `openrouter`: key **primary** failed (quota_exhausted, HTTP 429) " +
         "— now using **backup**",
@@ -206,25 +201,24 @@ describe("warnings, errors and command output", () => {
       kind: "missing_key",
       message: "missing",
     });
-    expect(without.action).toMatchObject({
+    expect(without).toMatchObject({
       text: "⚠️ provider `openrouter`: key **primary** failed (missing_key) — now using **backup**",
     });
   });
 
-  test("a command output is carried whole to the active room", () => {
+  test("a command output is carried whole", () => {
     const route = routeMirror({ type: "command_output", name: "status", data: { turns: 3 } });
-    expect(route.target).toEqual({ kind: "active" });
-    expect(route.action).toEqual({ kind: "command_output", name: "status", data: { turns: 3 } });
+    expect(route).toEqual({ kind: "command_output", name: "status", data: { turns: 3 } });
   });
 
-  test("frames with no room action say so", () => {
+  test("frames with nothing to show say so", () => {
     for (const msg of [
       { type: "ping" },
       { type: "shutdown" },
       { type: "unknown" },
       { type: "phase", phase: "thinking" },
     ] as ServerMessage[]) {
-      expect(routeMirror(msg).action).toEqual({ kind: "none" });
+      expect(routeMirror(msg)).toEqual({ kind: "none" });
     }
   });
 });

@@ -4,7 +4,6 @@ import type { MatrixConfig } from "../../config/app.ts";
 import { rustJoin } from "../../config/dirs.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
 import type { Server } from "../../swp/server.ts";
-import { ALL_CHARACTERS_CAPABILITY } from "../../swp/session.ts";
 import { MatrixBot } from "./bot.ts";
 import { Bridge, type BridgeLogger } from "./bridge.ts";
 import { EventMap } from "./event_map.ts";
@@ -108,16 +107,18 @@ export async function attemptMatrixBridge(options: StartOptions): Promise<StartO
   const initialRoomId =
     matrix.room_id.trim() === "" ? undefined : await bot.resolveRoom(matrix.room_id);
 
-  const peer = await options.server.attachLocal({
-    clientType: "bridge",
-    clientName: "shore-matrix",
-    capabilities: ["streaming", ALL_CHARACTERS_CAPABILITY],
-    onLag: (skipped) => options.log?.warn?.("Matrix bridge fell behind", { skipped }),
-  });
-
   const bridge = new Bridge({
     bot,
-    peer,
+    attach: (character) =>
+      options.server.attachLocal({
+        clientType: "bridge",
+        clientName: `shore-matrix/${character}`,
+        capabilities: ["streaming"],
+        character,
+        onLag: (skipped) =>
+          options.log?.warn?.("Matrix bridge fell behind", { skipped, character }),
+      }),
+    roster: async () => (await options.server.characters()).map((c) => c.name),
     rooms: new RoomBindings(rustJoin(stateDir, "rooms.json")),
     events: new EventMap(rustJoin(stateDir, "events.json")),
     prefs: new ViewPrefs(rustJoin(stateDir, "prefs.json")),
@@ -140,7 +141,6 @@ export async function attemptMatrixBridge(options: StartOptions): Promise<StartO
       faulted: bot.faulted,
       stop: async () => {
         bot.stop();
-        await peer.detach();
         await done;
       },
     },
