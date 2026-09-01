@@ -7,6 +7,7 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { ImagesUnsupportedError, NoModelError } from "./setup.ts";
 import type {
   DirectSender,
+  ControlRoutedMessage,
   RequestMeta,
   RoutedMessage,
   SessionRouter,
@@ -145,12 +146,24 @@ export class MessageHandler {
         await this.handleEngine(routed.msg, routed.meta);
         return;
       case "all_clients_disconnected": {
-        for (const sessionId of this.#sessions.keys()) {
-          await this.cancelGeneration(sessionId, null, "all clients disconnected");
-        }
-        this.#deps.leases.clear();
+        await this.handleControl(routed);
       }
     }
+  }
+
+  async handleControl(routed: ControlRoutedMessage): Promise<void> {
+    if (routed.kind === "engine") {
+      await this.cancelGeneration(
+        routed.meta.session.sessionId,
+        routed.meta.rid,
+        "user cancelled",
+      );
+      return;
+    }
+    for (const sessionId of this.#sessions.keys()) {
+      await this.cancelGeneration(sessionId, null, "all clients disconnected");
+    }
+    this.#deps.leases.clear();
   }
 
   async handleEngine(msg: ClientMessage, meta: RequestMeta): Promise<void> {

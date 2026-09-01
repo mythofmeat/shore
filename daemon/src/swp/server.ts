@@ -18,7 +18,15 @@ import {
   resolveHandshakeCharacter,
   routeClientMessage,
 } from "./routing";
-import { sessionMetaOf, SessionRouter, type ClientInfo, type RoutedMessage, type SessionMeta } from "./session";
+import {
+  isControlRoutedMessage,
+  sessionMetaOf,
+  SessionRouter,
+  type ClientInfo,
+  type ControlRoutedMessage,
+  type RoutedMessage,
+  type SessionMeta,
+} from "./session";
 
 export interface ServerConfig {
   readonly addr: string;
@@ -120,6 +128,7 @@ export class Server {
   readonly #routes = new RouteQueue();
   readonly #connections = new Set<Promise<void>>();
   #handshake: HandshakeProvider | undefined;
+  #controlHandler: ((msg: ControlRoutedMessage) => Promise<void>) | undefined;
   #nextId = 1;
   #listener: NetServer | null = null;
   #shutdown!: () => void;
@@ -135,6 +144,10 @@ export class Server {
 
   setHandshakeProvider(handshake: HandshakeProvider): void {
     this.#handshake = handshake;
+  }
+
+  setControlHandler(handler: (msg: ControlRoutedMessage) => Promise<void>): void {
+    this.#controlHandler = handler;
   }
 
   get sessionRouter(): SessionRouter {
@@ -230,7 +243,7 @@ export class Server {
           this.#router.characterFor(clientId),
         );
         if (outcome.action === "reply") inbox.push(outcome.reply);
-        else this.#routes.push(outcome.routed);
+        else await this.#route(outcome.routed);
       },
       events: () => inbox.drain(),
       detach: async () => {
@@ -239,7 +252,7 @@ export class Server {
         subscription.unsubscribe();
         const { allGone } = this.#router.unregisterSession(clientId);
         this.#config.log?.info?.("Local client detached", { client_id: clientId });
-        if (allGone) this.#routes.push({ kind: "all_clients_disconnected" });
+        if (allGone) await this.#route({ kind: "all_clients_disconnected" });
         await relay;
       },
     };
@@ -330,9 +343,7 @@ export class Server {
         handshake: this.#handshake ?? DEFAULT_HANDSHAKE,
         authenticate: this.#config.authenticate,
         peer: socket.remoteAddress ?? "",
-        route: async (msg) => {
-          this.#routes.push(msg);
-        },
+        route: (msg) => this.#route(msg),
         shutdown: this.#shutdownSignal,
         ...(this.#config.log === undefined ? {} : { log: this.#config.log }),
       },
@@ -346,6 +357,14 @@ export class Server {
       });
 
     this.#connections.add(work);
+  }
+
+  async #route(msg: RoutedMessage): Promise<void> {
+    if (isControlRoutedMessage(msg) && this.#controlHandler !== undefined) {
+      await this.#controlHandler(msg);
+      return;
+    }
+    this.#routes.push(msg);
   }
 }
 

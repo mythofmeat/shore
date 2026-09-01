@@ -3,6 +3,7 @@ import { connect, type Socket } from "node:net";
 
 import { Server } from "../src/swp/server.ts";
 import type { HandshakeProvider } from "../src/swp/connection.ts";
+import type { ControlRoutedMessage } from "../src/swp/session.ts";
 
 const OPEN = (): boolean => true;
 
@@ -189,6 +190,53 @@ describe("stopping", () => {
 });
 
 describe("what a connection produces", () => {
+  test("cancel and final disconnect bypass blocked regular work", async () => {
+    const { server, stop } = await serving();
+    server.setHandshakeProvider(providerNaming(["ada"]));
+    let releaseCommand = (): void => undefined;
+    const commandBlocked = new Promise<void>((resolve) => {
+      releaseCommand = resolve;
+    });
+    let commandStarted = (): void => undefined;
+    const started = new Promise<void>((resolve) => {
+      commandStarted = resolve;
+    });
+    const routing = (async () => {
+      for await (const message of server.routes()) {
+        if (message.kind !== "command") continue;
+        commandStarted();
+        await commandBlocked;
+      }
+    })();
+    const controls: ControlRoutedMessage[] = [];
+    server.setControlHandler((message) => {
+      controls.push(message);
+      return Promise.resolve();
+    });
+    const peer = await server.attachLocal({
+      clientType: "bridge",
+      clientName: "shore-matrix",
+      character: "ada",
+    });
+
+    try {
+      await peer.send({ type: "command", name: "status", args: {} });
+      await started;
+
+      await peer.send({ type: "cancel" });
+      expect(controls).toHaveLength(1);
+      expect(controls[0]).toMatchObject({ kind: "engine", msg: { type: "cancel" } });
+
+      await peer.detach();
+      expect(controls).toHaveLength(2);
+      expect(controls[1]).toEqual({ kind: "all_clients_disconnected" });
+    } finally {
+      releaseCommand();
+      await stop();
+      await routing;
+    }
+  });
+
   test("a command reaches the route stream", async () => {
     const { server, port, stop } = await serving();
     try {

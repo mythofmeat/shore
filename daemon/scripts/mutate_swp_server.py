@@ -94,8 +94,18 @@ MUTANTS = [
     # --- routing --------------------------------------------------------------
     ("route: nothing is pushed, so the handler never sees a client's message",
      S,
-     "        route: async (msg) => {\n          this.#routes.push(msg);\n        },",
-     "        route: async (msg) => {\n          void msg;\n        },"),
+     "    this.#routes.push(msg);",
+     "    void msg;"),
+    ("route: controls wait in the regular queue instead of reaching their handler",
+     S,
+     "    if (isControlRoutedMessage(msg) && this.#controlHandler !== undefined) {\n"
+     "      await this.#controlHandler(msg);\n"
+     "      return;\n"
+     "    }",
+     "    if (false as boolean) {\n"
+     "      await this.#controlHandler?.(msg as never);\n"
+     "      return;\n"
+     "    }"),
     ("route: the queue never wakes its reader, so a drain started first hangs",
      S,
      "  push(msg: RoutedMessage): void {\n"

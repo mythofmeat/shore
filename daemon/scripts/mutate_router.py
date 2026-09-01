@@ -127,16 +127,16 @@ MUTANTS = [
      "    );",
      "    const send = issuerSend;"),
     ("the disconnect sweep leaves the leases in place",
-     "        this.#deps.leases.clear();",
-     "        void 0;"),
+     "    this.#deps.leases.clear();",
+     "    void 0;"),
     ("the disconnect sweep cancels nothing",
-     "        for (const sessionId of this.#sessions.keys()) {\n"
-     '          await this.cancelGeneration(sessionId, null, "all clients disconnected");\n'
-     "        }",
-     "        void 0;"),
+     "    for (const sessionId of this.#sessions.keys()) {\n"
+     '      await this.cancelGeneration(sessionId, null, "all clients disconnected");\n'
+     "    }",
+     "    void 0;"),
     ("the disconnect sweep answers with the last request's rid",
-     '          await this.cancelGeneration(sessionId, null, "all clients disconnected");',
-     '          await this.cancelGeneration(sessionId, "r1", "all clients disconnected");'),
+     '      await this.cancelGeneration(sessionId, null, "all clients disconnected");',
+     '      await this.cancelGeneration(sessionId, "r1", "all clients disconnected");'),
 
     # ── the cancel frame ────────────────────────────────────────────────
     ("a cancel with nothing running still sends a frame",

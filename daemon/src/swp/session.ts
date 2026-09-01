@@ -34,6 +34,19 @@ export type RoutedMessage =
   | { readonly kind: "command"; readonly cmd: Command; readonly meta: RequestMeta }
   | { readonly kind: "all_clients_disconnected" };
 
+export type ControlRoutedMessage =
+  | {
+      readonly kind: "engine";
+      readonly msg: Extract<ClientMessage, { readonly type: "cancel" }>;
+      readonly meta: RequestMeta;
+    }
+  | { readonly kind: "all_clients_disconnected" };
+
+export function isControlRoutedMessage(msg: RoutedMessage): msg is ControlRoutedMessage {
+  return msg.kind === "all_clients_disconnected" ||
+    (msg.kind === "engine" && msg.msg.type === "cancel");
+}
+
 export function sessionMetaOf(client: ClientInfo): SessionMeta {
   return {
     clientId: client.id,

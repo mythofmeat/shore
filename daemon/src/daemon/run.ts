@@ -237,6 +237,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
 
   const handler = new MessageHandler(buildMessageHandlerDeps(assembly));
+  server.setControlHandler((routed) => handler.handleControl(routed));
 
   const handlerDone = handler.run(server.routes());
 
