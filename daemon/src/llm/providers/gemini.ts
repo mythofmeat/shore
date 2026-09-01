@@ -28,7 +28,6 @@ import type {
 } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA, toolResultImages, toolResultText } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
-import { wrapInlineSystemInstruction } from "../inline_system.ts";
 
 type GeminiSchema = NonNullable<FunctionDeclaration["parameters"]>;
 
@@ -235,7 +234,7 @@ export function translateMessages(messages: WireMessage[]): Content[] {
   for (const msg of messages) {
     if (msg.role === "system") {
       const text = extractSystemText(msg.content);
-      contents.push({ role: "user", parts: [{ text: wrapInlineSystemInstruction(text) }] });
+      contents.push({ role: "user", parts: [{ text }] });
       continue;
     }
 

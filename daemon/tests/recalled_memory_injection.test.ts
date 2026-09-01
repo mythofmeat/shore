@@ -16,6 +16,14 @@ const HISTORY: WireMessage[] = [
   turn("assistant", "in a manner of speaking"),
 ];
 
+function framing(
+  preamble = DEFAULT_MEMORY_RECALL_PREAMBLE,
+  wrap_before = "",
+  wrap_after = "",
+) {
+  return { preamble, wrap_before, wrap_after };
+}
+
 function plan(messages: WireMessage[]) {
   const request = {
     sdk: "anthropic",
@@ -32,15 +40,15 @@ function plan(messages: WireMessage[]) {
 
 describe("recalled memory injection", () => {
   test("appends nothing when recall came back empty", () => {
-    expect(withRecalledMemory(HISTORY, undefined, DEFAULT_MEMORY_RECALL_PREAMBLE)).toEqual(HISTORY);
-    expect(withRecalledMemory(HISTORY, "   ", DEFAULT_MEMORY_RECALL_PREAMBLE)).toEqual(HISTORY);
+    expect(withRecalledMemory(HISTORY, undefined, framing())).toEqual(HISTORY);
+    expect(withRecalledMemory(HISTORY, "   ", framing())).toEqual(HISTORY);
   });
 
   test("appends one system turn after the last message, changing no earlier turn", () => {
     const withBlock = withRecalledMemory(
       HISTORY,
       "- he told her about the bicycle",
-      DEFAULT_MEMORY_RECALL_PREAMBLE,
+      framing(),
     );
     expect(withBlock).toHaveLength(HISTORY.length + 1);
     expect(withBlock.slice(0, HISTORY.length)).toEqual(HISTORY);
@@ -50,37 +58,45 @@ describe("recalled memory injection", () => {
   });
 
   test("uses a configured preamble verbatim", () => {
-    const withBlock = withRecalledMemory(HISTORY, "- a recalled line", "Private notes:");
+    const withBlock = withRecalledMemory(HISTORY, "- a recalled line", framing("Private notes:"));
+    const body = withBlock.at(-1)?.content[0];
+    expect(body?.type === "text" ? body.text : "").toBe("Private notes:\n\n- a recalled line");
+  });
+
+  test("an empty preamble leaves only the fact list", () => {
+    const withBlock = withRecalledMemory(HISTORY, "- a recalled line", framing(""));
+    const body = withBlock.at(-1)?.content[0];
+    expect(body?.type === "text" ? body.text : "").toBe("- a recalled line");
+  });
+
+  test("configured wrappers surround the complete preamble and fact list verbatim", () => {
+    const withBlock = withRecalledMemory(
+      HISTORY,
+      "- a recalled line",
+      framing("Private notes:", "<recalled_memories>\n", "\n</recalled_memories>"),
+    );
     const body = withBlock.at(-1)?.content[0];
     expect(body?.type === "text" ? body.text : "").toBe(
       "<recalled_memories>\nPrivate notes:\n\n- a recalled line\n</recalled_memories>",
     );
   });
 
-  test("an empty preamble leaves only the tagged fact list", () => {
-    const withBlock = withRecalledMemory(HISTORY, "- a recalled line", "");
-    const body = withBlock.at(-1)?.content[0];
-    expect(body?.type === "text" ? body.text : "").toBe(
-      "<recalled_memories>\n- a recalled line\n</recalled_memories>",
-    );
-  });
-
   test("the system prompt the block does not touch stays byte-identical", () => {
     const plain = plan([...HISTORY]);
-    const injected = plan(withRecalledMemory(HISTORY, "- a recalled line", DEFAULT_MEMORY_RECALL_PREAMBLE));
+    const injected = plan(withRecalledMemory(HISTORY, "- a recalled line", framing()));
     expect(JSON.stringify(injected.params.system)).toBe(JSON.stringify(plain.params.system));
   });
 
   test("every turn before the last stays byte-identical on the wire", () => {
     const plain = plan([...HISTORY]);
-    const injected = plan(withRecalledMemory(HISTORY, "- a recalled line", DEFAULT_MEMORY_RECALL_PREAMBLE));
+    const injected = plan(withRecalledMemory(HISTORY, "- a recalled line", framing()));
     const shared = plain.params.messages.length - 1;
     expect(JSON.stringify(injected.params.messages.slice(0, shared)))
       .toBe(JSON.stringify(plain.params.messages.slice(0, shared)));
   });
 
   test("the frozen breakpoint still lands inside unchanged history", () => {
-    const injected = plan(withRecalledMemory(HISTORY, "- a recalled line", DEFAULT_MEMORY_RECALL_PREAMBLE));
+    const injected = plan(withRecalledMemory(HISTORY, "- a recalled line", framing()));
     const frozen = injected.placement.msg_breakpoints.filter(
       (index) => index < HISTORY.length - 1,
     );

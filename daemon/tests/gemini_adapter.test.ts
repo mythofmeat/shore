@@ -129,10 +129,10 @@ describe("request construction", () => {
     });
     expect(contents).toHaveLength(2);
     expect(contents[1]?.role).toBe("user");
-    expect(contents[1]?.parts?.[1]?.text).toBe("<system_instruction>be brief</system_instruction>");
+    expect(contents[1]?.parts?.[1]?.text).toBe("be brief");
   });
 
-  test("a recalled-memory turn keeps its own tag and is not wrapped again", () => {
+  test("a pre-framed system turn stays byte-identical", () => {
     const block = "<recalled_memories>\n- she kept the ticket stub\n</recalled_memories>";
     const contents = translateMessages([
       { role: "system", content: [{ type: "text", text: block }] },

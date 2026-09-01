@@ -80,6 +80,8 @@ max_memories = 6
 query_from = "user"
 timeout = "30s"
 # preamble = "Relevant private notes:"
+# wrap_before = "<recalled_memories>\n"
+# wrap_after = "\n</recalled_memories>"
 
 [memory.compaction]
 write_memory = false
@@ -93,6 +95,8 @@ possessive_pronoun = "his"
 `max_tokens` defaults to 2048, which is what hindsight wants, so it does not
 need to be written down. The tool names are not configurable: shore calls
 `recall` and `retain` because those are the tools a Hindsight bank exposes.
+`wrap_before` and `wrap_after` are empty by default and are inserted verbatim
+around the complete preamble-and-memory text when configured.
 
 The latest user message is the recall query by default, avoiding the character's
 own previous reply dominating retrieval. `query_from = "recent"` restores the

@@ -891,7 +891,7 @@ describe("a config.toml sets what it says and nothing else", () => {
   });
 
   test("memory.recall and archive-only rotation", () => {
-    const cfg = parsed("[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nmode = \"inject\"\nquery_from = \"recent\"\nrecent_messages = 3\nmax_memories = 8\ntimeout = \"1500ms\"\npreamble = \"Relevant private notes:\"\n");
+    const cfg = parsed("[memory.compaction]\nwrite_memory = false\n\n[memory.recall]\nmode = \"inject\"\nquery_from = \"recent\"\nrecent_messages = 3\nmax_memories = 8\ntimeout = \"1500ms\"\npreamble = \"Relevant private notes:\"\nwrap_before = \"<recalled_memories>\\n\"\nwrap_after = \"\\n</recalled_memories>\"\n");
     expect(at(cfg, "memory.compaction.write_memory")).toBe(false);
     expect(at(cfg, "memory.recall")).toMatchObject({
       mode: "inject",
@@ -900,6 +900,8 @@ describe("a config.toml sets what it says and nothing else", () => {
       max_memories: 8,
       timeout: "1500ms",
       preamble: "Relevant private notes:",
+      wrap_before: "<recalled_memories>\n",
+      wrap_after: "\n</recalled_memories>",
     });
   });
 

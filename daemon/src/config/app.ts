@@ -606,6 +606,8 @@ export interface MemoryRecallConfig {
   timeout: ConfigDuration;
   preamble: string;
   min_scores: Map<string, number>;
+  wrap_before: string;
+  wrap_after: string;
 }
 
 export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
@@ -617,6 +619,8 @@ export const defaultMemoryRecallConfig = (): MemoryRecallConfig => ({
   timeout: ConfigDuration.fromSecs(30),
   preamble: DEFAULT_MEMORY_RECALL_PREAMBLE,
   min_scores: new Map(),
+  wrap_before: "",
+  wrap_after: "",
 });
 
 const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
@@ -631,6 +635,8 @@ const MEMORY_RECALL: StructSpec<MemoryRecallConfig> = {
     timeout: readDuration,
     preamble: readString,
     min_scores: readMap(readF64),
+    wrap_before: readString,
+    wrap_after: readString,
   },
 };
 

@@ -38,7 +38,6 @@ import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
 import { parseToolArgs } from "../tool_args.ts";
-import { wrapInlineSystemInstruction } from "../inline_system.ts";
 
 type ThinkingDisplay = NonNullable<ProviderOptions["thinking_display"]>;
 
@@ -520,8 +519,8 @@ function applyMessageBreakpoint(content: ContentBlockParam[], cc: CacheControl):
   return false;
 }
 
-function systemMessageStrategy(_model: string): "wrap" | "native" {
-  return "wrap";
+function systemMessageStrategy(_model: string): "inline" | "native" {
+  return "inline";
 }
 
 function systemToBlocks(system: SystemContent | undefined): TextBlockParam[] {
@@ -601,14 +600,12 @@ function convertInlineSystemMessages(
       .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
       .map((b) => b.text)
       .join("");
-    const wrapped = wrapInlineSystemInstruction(text);
-
     const prev = out[out.length - 1];
     if (prev && prev.role === "user") {
-      prev.content = [...prev.content, { type: "text", text: wrapped }];
+      prev.content = [...prev.content, { type: "text", text }];
       continue;
     }
-    out.push({ role: "user", content: [{ type: "text", text: wrapped }] });
+    out.push({ role: "user", content: [{ type: "text", text }] });
   }
   return out;
 }

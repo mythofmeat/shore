@@ -495,21 +495,22 @@ describe("provider routing", () => {
 });
 
 describe("inline system messages", () => {
-  test("role:system turn is wrapped into a user <system_instruction>", () => {
+  test("role:system turn becomes a user block without changing its text", () => {
+    const guidance = "Please use ask_memory before responding.";
     const p = buildAnthropicParams(
       req({
         messages: [
           { role: "user", content: [{ type: "text", text: "hey" }] },
-          { role: "system", content: [{ type: "text", text: "be brief" }] },
+          { role: "system", content: [{ type: "text", text: guidance }] },
         ],
       }),
     );
     const m = p.messages as Array<{ role: string; content: unknown }>;
     expect(m.every((x) => x.role !== "system")).toBe(true);
-    expect(JSON.stringify(m)).toContain("<system_instruction>be brief</system_instruction>");
+    expect((m[0]?.content as Array<{ text?: string }> | undefined)?.[1]?.text).toBe(guidance);
   });
 
-  test("a recalled-memory turn keeps its own tag and is not wrapped again", () => {
+  test("a pre-framed system turn stays byte-identical", () => {
     const block = "<recalled_memories>\n- she kept the ticket stub\n</recalled_memories>";
     const p = buildAnthropicParams(
       req({
@@ -520,8 +521,7 @@ describe("inline system messages", () => {
       }),
     );
     const m = p.messages as Array<{ role: string; content: unknown }>;
-    expect(JSON.stringify(m)).not.toContain("system_instruction");
-    expect(JSON.stringify(m)).toContain("recalled_memories");
+    expect((m[0]?.content as Array<{ text?: string }> | undefined)?.[1]?.text).toBe(block);
   });
 });
 

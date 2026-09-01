@@ -81,7 +81,6 @@ import { MAX_HISTORY_MESSAGES } from "../tools/subagent.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
 import type { MemoryRecallRunner } from "../memory/recall.ts";
-import { RECALLED_MEMORIES_TAG } from "../llm/inline_system.ts";
 import type { MemoryRecallEntry } from "../diagnostics.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {}
@@ -328,7 +327,7 @@ async function runGenerationCore(
       withRecalledMemory(
         droppedHistoryImages(built.request.messages, imageSupport, resolved),
         recalledMemory,
-        config.app.memory.recall.preamble,
+        config.app.memory.recall,
       ),
       regen ? params.body.guidance : undefined,
     ),
@@ -670,12 +669,12 @@ function recordKeyFallback(
 export function withRecalledMemory(
   messages: readonly WireMessage[],
   recalled: string | undefined,
-  preamble: string,
+  framing: { preamble: string; wrap_before: string; wrap_after: string },
 ): WireMessage[] {
   if (recalled === undefined || recalled.trim() === "") return [...messages];
   return [...messages, {
     role: "system",
-    content: [{ type: "text", text: recalledMemoryText(recalled, preamble) }],
+    content: [{ type: "text", text: recalledMemoryText(recalled, framing) }],
   }];
 }
 
@@ -690,9 +689,12 @@ export function withRegenGuidance(
   }];
 }
 
-function recalledMemoryText(recalled: string, preamble: string): string {
-  const framing = preamble === "" ? "" : `${preamble}\n\n`;
-  return `<${RECALLED_MEMORIES_TAG}>\n${framing}${recalled}\n</${RECALLED_MEMORIES_TAG}>`;
+function recalledMemoryText(
+  recalled: string,
+  framing: { preamble: string; wrap_before: string; wrap_after: string },
+): string {
+  const body = framing.preamble === "" ? recalled : `${framing.preamble}\n\n${recalled}`;
+  return `${framing.wrap_before}${body}${framing.wrap_after}`;
 }
 
 export function applyIntermediateMessages(
