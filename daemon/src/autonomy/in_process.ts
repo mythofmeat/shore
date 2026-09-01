@@ -24,6 +24,7 @@ import type { CallStore } from "../call_store.ts";
 import { recordTranscript } from "../transcript_capture.ts";
 import { runToolUse, type ToolExecution } from "../tools/execute.ts";
 import { schemasFrom } from "../tools/validate.ts";
+import type { RebuildDeps } from "../cache/rebuild.ts";
 
 export interface InProcessExecutorDeps {
   registry: CharacterRegistry;
@@ -34,6 +35,7 @@ export interface InProcessExecutorDeps {
   notifyCompactionComplete?: (title: string, body: string) => void;
   callStore?: Pick<CallStore, "recordTranscript">;
   tools?: ToolContextDeps;
+  rebuild?: RebuildDeps;
   env?: NodeJS.ProcessEnv;
   beginForeground?: () => () => void;
   runActivity?: <T>(run: () => Promise<T>) => Promise<T>;
@@ -58,6 +60,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
 
       return await runHeartbeatTick(character, config, {
         cache: this.#deps.cache,
+        ...(this.#deps.rebuild === undefined ? {} : { rebuild: this.#deps.rebuild }),
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
 
       generate: async (request, _iteration, callType) => {

@@ -179,6 +179,39 @@ describe("running a heartbeat", () => {
     ]);
   });
 
+  test("a cold-cache tick advertises enabled MCP tools", async () => {
+    const config = await world();
+    config.app.tools.enabled_tools = ["mcp__notes__search"];
+    const seen: SidecarRequest[] = [];
+    const filteredBy: string[][] = [];
+    const executor = new InProcessAutonomyExecutor({
+      registry: registryFor(config),
+      cache: new LastRequestCache(),
+      providers: {
+        anthropic: scriptedProvider([response([{ type: "text", text: "quiet tick" }])], seen),
+      },
+      rebuild: {
+        mcpRegistry: {
+          toolDefsFiltered: (patterns) => {
+            filteredBy.push([...patterns]);
+            return [
+              {
+                name: "mcp__notes__search",
+                description: "search notes",
+                input_schema: { type: "object", properties: {} },
+              },
+            ];
+          },
+        },
+      },
+    });
+
+    await executor.runHeartbeatTick("ada", NO_HOOKS);
+
+    expect(filteredBy).toEqual([["mcp__notes__search"]]);
+    expect(seen[0]?.tools?.map((tool) => tool.name)).toContain("mcp__notes__search");
+  });
+
   test("labels the ledger context per round", async () => {
     const config = await world();
     const seen: SidecarRequest[] = [];

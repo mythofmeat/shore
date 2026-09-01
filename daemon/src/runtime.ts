@@ -264,6 +264,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         ...(callStore === undefined ? {} : { callStore }),
         ...(options.env === undefined ? {} : { env: options.env }),
       }),
+      rebuild: {
+        mcpRegistry: {
+          toolDefsFiltered: (patterns) => mcp.current.toolDefsFiltered(patterns),
+        },
+      },
       ...(callStore === undefined ? {} : { callStore }),
       ...(options.emit === undefined ? {} : { emit: options.emit }),
       ...(options.env === undefined ? {} : { env: options.env }),
