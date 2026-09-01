@@ -47,6 +47,7 @@ export interface HindsightRetainServiceOptions {
   confirmWindowMs?: number;
   sweepIntervalMs?: number;
   openStore?: (path: string) => HistoryStore;
+  runActivity?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
 export interface HindsightDocument {
@@ -107,6 +108,7 @@ export class HindsightRetainService {
   readonly #confirmWindowMs: number;
   readonly #sweepIntervalMs: number;
   readonly #openStore: (path: string) => HistoryStore;
+  readonly #runActivity: <T>(run: () => Promise<T>) => Promise<T>;
   readonly #stop = new AbortController();
   readonly #deadlines = new Map<string, number | undefined>();
   #nextSweep = 0;
@@ -127,6 +129,7 @@ export class HindsightRetainService {
     this.#confirmWindowMs = options.confirmWindowMs ?? CONFIRM_WINDOW_MS;
     this.#sweepIntervalMs = options.sweepIntervalMs ?? SWEEP_INTERVAL_MS;
     this.#openStore = options.openStore ?? ((path) => HistoryStore.open(path));
+    this.#runActivity = options.runActivity ?? (async (run) => await run());
     if (!Number.isSafeInteger(this.#maxAttempts) || this.#maxAttempts < 1) {
       throw new RangeError("maxAttempts must be a positive integer");
     }
@@ -164,7 +167,7 @@ export class HindsightRetainService {
 
   async runOnce(): Promise<void> {
     if (this.#closed || this.#running !== undefined) return await this.#running;
-    const running = this.#runOnce();
+    const running = this.#runActivity(async () => await this.#runOnce());
     this.#running = running;
     try {
       await running;

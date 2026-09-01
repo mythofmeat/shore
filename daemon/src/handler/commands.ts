@@ -161,7 +161,7 @@ async function characterlessCommand(
     const data =
       cmd.name === "refresh_provider_models"
         ? await refreshProviderModels(session, deps, cmd)
-        : runCharacterlessCommand(session, deps.commands, cmd);
+        : await runCharacterlessCommand(session, deps.commands, cmd);
     frame = commandFrame(cmd.name, { ok: data });
   } catch (e) {
     frame = commandFrame(cmd.name, { err: e });

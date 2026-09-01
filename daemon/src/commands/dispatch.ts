@@ -73,6 +73,11 @@ import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import type { McpServerStatus } from "../tools/mcp_registry.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { clear, segments } from "./segments.ts";
+import {
+  exportCharacter,
+  importCharacter,
+  type ArchiveContext,
+} from "./archive.ts";
 
 export interface CommandSession {
   config: LoadedConfig;
@@ -100,6 +105,7 @@ export interface CommandDeps {
   workspaceIndex?: WorkspaceIndexSource;
   historyIndex?: HistoryIndexSource;
   mcpStatus?: () => readonly McpServerStatus[];
+  archive?: ArchiveContext;
 }
 
 const CHARACTERLESS = new Set([
@@ -108,6 +114,8 @@ const CHARACTERLESS = new Set([
   "list_models",
   "list_providers",
   "list_provider_models",
+  "export_character",
+  "import_character",
 ]);
 
 export async function runCommand(
@@ -304,6 +312,12 @@ export function runCharacterlessCommand(
       return listProviders(providersContext(session, deps));
     case "list_provider_models":
       return listProviderModels(providersContext(session, deps), args);
+    case "export_character":
+      if (deps.archive === undefined) throw unwired("export_character");
+      return exportCharacter(deps.archive, args);
+    case "import_character":
+      if (deps.archive === undefined) throw unwired("import_character");
+      return importCharacter(deps.archive, args);
     default:
       throw invalidRequest(`Command '${cmd.name}' requires a character`);
   }

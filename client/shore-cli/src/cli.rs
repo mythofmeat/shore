@@ -1,5 +1,6 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+use std::path::{Path, PathBuf};
 
 const LEADING_HEADING: &str = "Options — must come before the command";
 
@@ -433,6 +434,32 @@ pub(crate) enum CliCommand {
 
         /// Output raw JSON
         #[arg(long, global = true)]
+        json: bool,
+    },
+
+    /// Back up one character to a compressed archive while Shore keeps running
+    #[command(display_order = 9)]
+    Export {
+        /// Character to back up
+        character: String,
+
+        /// Archive path on the daemon host (defaults to <character>.shore.tar.gz)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Restore a character archive; existing characters are never overwritten
+    #[command(display_order = 9)]
+    Import {
+        /// Archive created by `shore export`, on the daemon host
+        archive: PathBuf,
+
+        /// Output raw JSON
+        #[arg(long)]
         json: bool,
     },
 
@@ -1461,7 +1488,10 @@ fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
 
 const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
     ("Conversation", &["msg", "log"]),
-    ("Maintenance", &["compact", "clear", "segments"]),
+    (
+        "Maintenance",
+        &["compact", "clear", "segments", "export", "import"],
+    ),
     (
         "Configuration",
         &["character", "model", "provider", "config"],
@@ -2123,6 +2153,25 @@ pub(crate) fn to_swp_command(
             }
         }
 
+        CliCommand::Export {
+            character: export_character,
+            output,
+            ..
+        } => {
+            let fallback = PathBuf::from(format!("{export_character}.shore.tar.gz"));
+            Some((
+                "export_character",
+                json!({
+                    "character": export_character,
+                    "output": absolute_path(output.as_deref().unwrap_or(&fallback)),
+                }),
+            ))
+        }
+        CliCommand::Import { archive, .. } => Some((
+            "import_character",
+            json!({ "archive": absolute_path(archive) }),
+        )),
+
         CliCommand::Log { .. } => log_to_swp(cmd),
         CliCommand::Trace { subcommand: None } => None,
         CliCommand::Trace { .. } => trace_to_swp(cmd),
@@ -2222,6 +2271,16 @@ pub(crate) fn to_swp_command(
 
         CliCommand::Usage { .. } => usage_to_swp(cmd, character),
     }
+}
+
+fn absolute_path(path: &Path) -> String {
+    if path.is_absolute() {
+        return path.display().to_string();
+    }
+    std::env::current_dir()
+        .map_or_else(|_| path.to_path_buf(), |cwd| cwd.join(path))
+        .display()
+        .to_string()
 }
 
 fn msg_to_swp(cmd: &MsgCommand) -> Option<(&'static str, serde_json::Value)> {
@@ -2727,6 +2786,24 @@ mod tests {
     #[test]
     fn an_unknown_command_does_not_become_the_tui() {
         assert!(try_parse(&["stauts"]).is_err());
+    }
+
+    #[test]
+    fn export_and_import_map_to_absolute_daemon_paths() {
+        let export = parse(&["export", "ada", "--output", "backup.tar.gz"]);
+        let (name, args) = to_swp_command(parsed_command(&export), None).unwrap();
+        assert_eq!(name, "export_character");
+        assert_eq!(arg(&args, "character"), "ada");
+        let output = Path::new(arg(&args, "output").as_str().unwrap());
+        assert!(output.is_absolute());
+        assert!(output.ends_with("backup.tar.gz"));
+
+        let import = parse(&["import", "backup.tar.gz"]);
+        let (import_name, import_args) = to_swp_command(parsed_command(&import), None).unwrap();
+        assert_eq!(import_name, "import_character");
+        let archive = Path::new(arg(&import_args, "archive").as_str().unwrap());
+        assert!(archive.is_absolute());
+        assert!(archive.ends_with("backup.tar.gz"));
     }
 
     #[test]

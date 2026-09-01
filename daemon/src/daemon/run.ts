@@ -240,13 +240,15 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   server.setControlHandler((routed) => handler.handleControl(routed));
 
   const handlerDone = handler.run(server.routes());
+  const reloadConfig = configReloader(assembly);
 
   const watcher = options.watchConfig === false
     ? undefined
     : startConfigWatcher({
         configPath: startup.configPath,
         configDir: loaded.dirs.config,
-        reload: configReloader(assembly),
+        reload: async (changedPaths) =>
+          await runtime.snapshotGate.withActivity(async () => await reloadConfig(changedPaths)),
         knownCharacter: (name) => runtime.registry.hasCharacter(name),
         ...(loaded.dirs.workspace === undefined
           ? {}

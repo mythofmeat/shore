@@ -1,0 +1,255 @@
+import { Database, type SQLQueryBindings } from "bun:sqlite";
+import { writeFileSync } from "node:fs";
+
+import { HistoryStore } from "../engine/history_store.ts";
+import { Ledger } from "../ledger/store.ts";
+
+type Row = Record<string, SQLQueryBindings>;
+
+export function exportHistoryDatabase(path: string, character: string, output: string): void {
+  const opened = HistoryStore.open(path);
+  opened.close();
+  const source = new Database(path, { readonly: true });
+  writeFileSync(output, source.serialize());
+  source.close();
+  const copy = new Database(output, { create: false, readwrite: true });
+  copy.run("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = OFF");
+  copy.query(
+    `DELETE FROM history_alternatives
+       WHERE message_id IN (SELECT id FROM history_messages WHERE character != ?1)`,
+  ).run(character);
+  for (const table of [
+    "history_messages",
+    "history_segments",
+    "history_pending",
+    "history_character_stats",
+    "history_archive_revision",
+  ]) {
+    copy.query(`DELETE FROM ${table} WHERE character != ?1`).run(character);
+  }
+  copy.run(
+    `DELETE FROM history_blobs
+       WHERE hash NOT IN (SELECT blocks_hash FROM history_messages
+                          UNION SELECT blocks_hash FROM history_alternatives)`,
+  );
+  copy.run("DELETE FROM history_metadata; VACUUM;");
+  copy.close();
+}
+
+export function exportLedgerDatabase(path: string, character: string, output: string): void {
+  Ledger.create(path).close();
+  const source = new Database(path, { readonly: true });
+  writeFileSync(output, source.serialize());
+  source.close();
+  const copy = new Database(output, { create: false, readwrite: true });
+  copy.run("PRAGMA journal_mode = DELETE");
+  copy.query("DELETE FROM call_attempts WHERE character != ?1").run(character);
+  copy.query("DELETE FROM calls WHERE character != ?1").run(character);
+  copy.run("DELETE FROM pricing; DELETE FROM usage_budget_warnings; VACUUM;");
+  copy.close();
+}
+
+export function importHistoryDatabase(
+  destinationPath: string,
+  sourcePath: string,
+  character: string,
+): void {
+  const initialized = HistoryStore.open(destinationPath);
+  initialized.close();
+  const destination = new Database(destinationPath, { create: true, readwrite: true });
+  const source = new Database(sourcePath, { readonly: true });
+  try {
+    requireOnlyCharacter(source, "history_messages", character);
+    const exists = destination
+      .query(
+        `SELECT 1 FROM history_segments WHERE character = ?1
+         UNION ALL SELECT 1 FROM history_messages WHERE character = ?1 LIMIT 1`,
+      )
+      .get(character);
+    if (exists !== null) throw new Error(`history already exists for ${character}`);
+
+    destination.transaction(() => {
+      copyRows(source, destination, "history_blobs", undefined, "OR IGNORE");
+      copyRows(source, destination, "history_segments", "character = ?1", "", character);
+      copyRows(source, destination, "history_pending", "character = ?1", "", character);
+      copyRows(source, destination, "history_character_stats", "character = ?1", "", character);
+
+      const ids = new Map<number, number>();
+      const messages = source
+        .query("SELECT * FROM history_messages WHERE character = ?1 ORDER BY id")
+        .all(character) as Row[];
+      const messageColumns = columnsOf(source, "history_messages").filter((column) => column !== "id");
+      const insertMessage = inserter(destination, "history_messages", messageColumns);
+      for (const row of messages) {
+        const oldId = number(row["id"]);
+        const inserted = insertMessage.run(...messageColumns.map((column) => binding(row, column)));
+        ids.set(oldId, Number(inserted.lastInsertRowid));
+      }
+
+      const alternativeColumns = columnsOf(source, "history_alternatives");
+      const insertAlternative = inserter(destination, "history_alternatives", alternativeColumns);
+      for (const row of source.query("SELECT * FROM history_alternatives ORDER BY message_id, ordinal").all() as Row[]) {
+        const mapped = ids.get(number(row["message_id"]));
+        if (mapped === undefined) throw new Error("archive contains an orphaned message alternative");
+        insertAlternative.run(
+          ...alternativeColumns.map((column) =>
+            column === "message_id" ? mapped : binding(row, column)
+          ),
+        );
+      }
+
+      const revision = source
+        .query("SELECT revision FROM history_archive_revision WHERE character = ?1")
+        .get(character) as Row | null;
+      if (revision !== null) {
+        destination.query(
+          `INSERT INTO history_archive_revision(character, revision) VALUES (?1, ?2)
+             ON CONFLICT(character) DO UPDATE SET revision = excluded.revision`,
+        ).run(character, binding(revision, "revision"));
+      }
+
+      destination.query(
+        `UPDATE history_segments
+            SET memory_doc = 'pending', memory_doc_attempts = 0,
+                memory_doc_error = NULL, memory_doc_op = NULL,
+                memory_doc_due = 0, memory_doc_expires = 0
+          WHERE character = ?1 AND committed = 1 AND excluded = 0
+            AND memory_doc IN ('submitted', 'stored')`,
+      ).run(character);
+    })();
+  } finally {
+    source.close();
+    destination.close();
+  }
+}
+
+export function importLedgerDatabase(
+  destinationPath: string,
+  sourcePath: string,
+  character: string,
+): void {
+  Ledger.create(destinationPath).close();
+  const destination = new Database(destinationPath, { create: true, readwrite: true });
+  const source = new Database(sourcePath, { readonly: true });
+  try {
+    requireOnlyCharacter(source, "calls", character);
+    const exists = destination
+      .query("SELECT 1 FROM calls WHERE character = ?1 LIMIT 1")
+      .get(character);
+    if (exists !== null) throw new Error(`ledger already exists for ${character}`);
+
+    destination.transaction(() => {
+      const ids = new Map<number, number>();
+      const callColumns = columnsOf(source, "calls").filter((column) => column !== "id");
+      const insertCall = inserter(destination, "calls", callColumns);
+      for (const row of source.query("SELECT * FROM calls WHERE character = ?1 ORDER BY id").all(character) as Row[]) {
+        const inserted = insertCall.run(...callColumns.map((column) => binding(row, column)));
+        ids.set(number(row["id"]), Number(inserted.lastInsertRowid));
+      }
+
+      const attemptColumns = columnsOf(source, "call_attempts");
+      const insertAttempt = inserter(destination, "call_attempts", attemptColumns, "OR IGNORE");
+      for (const row of source.query("SELECT * FROM call_attempts WHERE character = ?1").all(character) as Row[]) {
+        const oldCall = row["call_id"];
+        const mapped = typeof oldCall === "number" ? ids.get(oldCall) ?? null : null;
+        insertAttempt.run(
+          ...attemptColumns.map((column) =>
+            column === "call_id" ? mapped : binding(row, column)
+          ),
+        );
+      }
+    })();
+  } finally {
+    source.close();
+    destination.close();
+  }
+}
+
+export function removeImportedDatabaseRows(
+  historyPath: string,
+  ledgerPath: string,
+  character: string,
+  imported: { history: boolean; ledger: boolean },
+): void {
+  if (imported.history) {
+    const history = new Database(historyPath, { create: true, readwrite: true });
+    history.transaction(() => {
+      history.query(
+        `DELETE FROM history_alternatives
+           WHERE message_id IN (SELECT id FROM history_messages WHERE character = ?1)`,
+      ).run(character);
+      for (const table of [
+        "history_messages",
+        "history_segments",
+        "history_pending",
+        "history_character_stats",
+        "history_archive_revision",
+      ]) {
+        history.query(`DELETE FROM ${table} WHERE character = ?1`).run(character);
+      }
+      history.run(
+        `DELETE FROM history_blobs
+           WHERE hash NOT IN (SELECT blocks_hash FROM history_messages
+                              UNION SELECT blocks_hash FROM history_alternatives)`,
+      );
+    })();
+    history.close();
+  }
+
+  if (imported.ledger) {
+    const ledger = new Database(ledgerPath, { create: true, readwrite: true });
+    ledger.transaction(() => {
+      ledger.query("DELETE FROM call_attempts WHERE character = ?1").run(character);
+      ledger.query("DELETE FROM calls WHERE character = ?1").run(character);
+    })();
+    ledger.close();
+  }
+}
+
+function requireOnlyCharacter(db: Database, table: string, character: string): void {
+  const other = db
+    .query(`SELECT character FROM ${table} WHERE character != ?1 LIMIT 1`)
+    .get(character) as Row | null;
+  if (other !== null) throw new Error(`archive database contains another character`);
+}
+
+function copyRows(
+  source: Database,
+  destination: Database,
+  table: string,
+  where?: string,
+  conflict = "",
+  ...params: SQLQueryBindings[]
+): void {
+  const columns = columnsOf(source, table);
+  const insert = inserter(destination, table, columns, conflict);
+  const suffix = where === undefined ? "" : ` WHERE ${where}`;
+  for (const row of source.query(`SELECT * FROM ${table}${suffix}`).all(...params) as Row[]) {
+    insert.run(...columns.map((column) => binding(row, column)));
+  }
+}
+
+function columnsOf(db: Database, table: string): string[] {
+  return (db.query(`PRAGMA table_info(${table})`).all() as Row[])
+    .map((row) => {
+      const name = row["name"];
+      if (typeof name !== "string") throw new Error(`archive has a malformed ${table} schema`);
+      return name;
+    });
+}
+
+function inserter(db: Database, table: string, columns: readonly string[], conflict = "") {
+  const placeholders = columns.map((_, index) => `?${String(index + 1)}`).join(", ");
+  return db.query(
+    `INSERT ${conflict} INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`,
+  );
+}
+
+function number(value: unknown): number {
+  if (typeof value !== "number") throw new Error("archive database has a malformed numeric id");
+  return value;
+}
+
+function binding(row: Row, column: string): SQLQueryBindings {
+  return row[column] ?? null;
+}

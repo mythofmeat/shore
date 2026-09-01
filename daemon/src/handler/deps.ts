@@ -229,12 +229,14 @@ function beginIndexForeground(a: HandlerAssembly): () => void {
 
 export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps {
   async function runGenerationInForeground(params: GenerationParams): Promise<void> {
-    const endForeground = beginIndexForeground(a);
-    try {
-      await runGeneration(params);
-    } finally {
-      endForeground();
-    }
+    await a.runtime.snapshotGate.withActivity(async () => {
+      const endForeground = beginIndexForeground(a);
+      try {
+        await runGeneration(params);
+      } finally {
+        endForeground();
+      }
+    });
   }
 
   const runGeneration = makeRunGeneration(buildGenerationDeps(a));
@@ -245,12 +247,17 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     registry: handlerRegistry(a.runtime.registry),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta) => {
-      const endForeground = beginIndexForeground(a);
-      try {
-        return await dispatchCommand(command, meta);
-      } finally {
-        endForeground();
-      }
+      const run = async () => {
+        const endForeground = beginIndexForeground(a);
+        try {
+          return await dispatchCommand(command, meta);
+        } finally {
+          endForeground();
+        }
+      };
+      return command.name === "export_character" || command.name === "import_character"
+        ? await run()
+        : await a.runtime.snapshotGate.withActivity(run);
     },
     runGeneration: runGenerationInForeground,
     ...(a.log === undefined ? {} : { log: a.log }),
@@ -534,6 +541,14 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     diagnostics: a.diagnostics,
     callStore: runtime.callStore,
     ledgerPath,
+    archive: {
+      dirs: runtime.config.dirs,
+      hasCharacter: (character) => runtime.registry.hasCharacter(character),
+      withSnapshot: async (run) => await runtime.snapshotGate.withSnapshot(run),
+      refreshAfterImport: async () => {
+        await applyReloadedConfig(a, runtime.registry.globalConfig());
+      },
+    },
     compaction: {
       run: {
         generate: compactionGenerate({

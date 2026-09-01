@@ -51,6 +51,7 @@ import {
   memoryBackendTarget,
   type ConnectMemoryBackend,
 } from "./memory/backend.ts";
+import { SnapshotGate } from "./snapshot_gate.ts";
 
 const CALL_STORE_RETENTION_DAYS = 14;
 const CALL_STORE_MAX_BYTES = 536_870_912;
@@ -86,6 +87,7 @@ export interface ShoreRuntime {
   readonly workspaceIndex: WorkspaceIndexService;
   readonly memoryRetain: HindsightRetainService;
   readonly memoryBackends: MemoryBackends;
+  readonly snapshotGate: SnapshotGate;
   refreshHistoryIndexes(): Promise<void>;
   refreshMcpCaches(registry: McpRegistry): Promise<void>;
   shutdown(): Promise<void>;
@@ -99,6 +101,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   createRuntimeDirs(config);
 
   const notifier = new NotificationService(config.app.notifications);
+  const snapshotGate = new SnapshotGate();
   const callStore = openCallStore(config);
   ensureLedger(config);
 
@@ -227,6 +230,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       ledgerPath: rustJoin(config.dirs.data, "ledger.db"),
       maxIdleSecs: () =>
         Number(registry.globalConfig().app.cache.keepalive_max.asSecs()),
+      runActivity: async (run) => await snapshotGate.withActivity(run),
     },
   );
   const cache = new LastRequestCache(keepalive);
@@ -243,7 +247,9 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       options.mcpRegistryOptions,
     ),
   );
-  memoryRetain = new HindsightRetainService((name) => memoryBackends.get(name));
+  memoryRetain = new HindsightRetainService((name) => memoryBackends.get(name), {
+    runActivity: async (run) => await snapshotGate.withActivity(run),
+  });
   refreshRetainRegistrations();
   memoryRetain.start();
 
@@ -271,6 +277,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
           endWorkspace();
         };
       },
+      runActivity: async (run) => await snapshotGate.withActivity(run),
     }),
   );
   autonomy.attachKeepalive(keepalive);
@@ -291,6 +298,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     workspaceIndex,
     memoryRetain,
     memoryBackends,
+    snapshotGate,
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
@@ -329,6 +337,7 @@ export function startRuntimeClocks(
   const rotation = startCallStoreRotation(runtime.callStore);
   const costBackfill = startCostBackfill(
     rustJoin(runtime.config.dirs.data, "ledger.db"),
+    runtime.snapshotGate,
   );
 
   return {
@@ -516,13 +525,14 @@ export function applySubscriptionProviders(registry: CharacterRegistry): void {
   setSubscriptionProviders(flat);
 }
 
-function startCostBackfill(ledgerPath: string): { stop: () => void } {
+function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () => void } {
   let running = false;
   const sweep = async () => {
     if (running) return;
     running = true;
     try {
-      const result = await backfillLedgerCosts(ledgerPath);
+      const result = await (gate?.withActivity(async () => await backfillLedgerCosts(ledgerPath)) ??
+        backfillLedgerCosts(ledgerPath));
       if (result.updated > 0) {
         shoreLog.info(
           `shore: priced ${result.updated} of ${result.total} ledger rows that had no cost`,
@@ -544,7 +554,9 @@ function startCostBackfill(ledgerPath: string): { stop: () => void } {
   return { stop: () => clearInterval(timer) };
 }
 
-function startCallStoreRotation(store: CallStore | undefined): { stop: () => void } {
+function startCallStoreRotation(
+  store: CallStore | undefined,
+): { stop: () => void } {
   if (store === undefined) return { stop: () => {} };
 
   const rotate = () => {

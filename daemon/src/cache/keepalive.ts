@@ -129,6 +129,7 @@ export interface KeepaliveCallLabels {
 export interface KeepaliveServiceOptions {
   ledgerPath?: string;
   maxIdleSecs?: () => number;
+  runActivity?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
 export function buildKeepalivePing(
@@ -163,6 +164,7 @@ export class KeepaliveService {
   readonly #now: () => number;
   readonly #ledgerPath: string | undefined;
   readonly #configuredMaxIdleSecs: () => number;
+  readonly #runActivity: <T>(run: () => Promise<T>) => Promise<T>;
   #sink: KeepaliveEventSink | undefined;
   #halt: KeepaliveHalt | undefined;
 
@@ -175,6 +177,7 @@ export class KeepaliveService {
     this.#now = now;
     this.#ledgerPath = opts.ledgerPath;
     this.#configuredMaxIdleSecs = opts.maxIdleSecs ?? (() => DEFAULT_MAX_IDLE_SECS);
+    this.#runActivity = opts.runActivity ?? (async (run) => await run());
   }
 
   #labels(entry: Entry): KeepaliveCallLabels {
@@ -278,6 +281,10 @@ export class KeepaliveService {
   }
 
   async pingNow(character: string): Promise<PingNowOutcome> {
+    return await this.#runActivity(async () => await this.#pingNow(character));
+  }
+
+  async #pingNow(character: string): Promise<PingNowOutcome> {
     const entry = this.#entries.get(character);
     const prefix = entry?.prefix;
     if (entry === undefined || prefix === undefined) {
@@ -371,7 +378,7 @@ export class KeepaliveService {
     const entry = this.#entries.get(character);
     if (entry === undefined) return;
     try {
-      await this.#pingInner(character, entry);
+      await this.#runActivity(async () => await this.#pingInner(character, entry));
     } finally {
       entry.inFlight = false;
     }

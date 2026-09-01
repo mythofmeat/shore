@@ -28,6 +28,16 @@ fn checked_rem_u64(value: u64, divisor: u64) -> u64 {
 pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
     match name {
         "character_info" => print_character_info(data),
+        "export_character" => cli_out!(
+            "Exported {} to {} ({} bytes).",
+            data["character"].as_str().unwrap_or("character"),
+            data["archive"].as_str().unwrap_or("archive"),
+            data["bytes"].as_u64().unwrap_or(0),
+        ),
+        "import_character" => cli_out!(
+            "Imported character {}.",
+            data["character"].as_str().unwrap_or("?"),
+        ),
         "switch_model" => print_model_switched(data),
         "reset_model" => print_model_reset(data),
         "set_model_setting" => print_set_model_setting(data),

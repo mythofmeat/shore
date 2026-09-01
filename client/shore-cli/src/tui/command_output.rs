@@ -34,6 +34,8 @@ fn config_modes(command: &CliCommand) -> (bool, bool) {
         | CliCommand::Clear { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Character { .. }
+        | CliCommand::Export { .. }
+        | CliCommand::Import { .. }
         | CliCommand::Status { .. }
         | CliCommand::Debug { .. }
         | CliCommand::Model { .. }

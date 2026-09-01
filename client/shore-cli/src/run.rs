@@ -184,6 +184,8 @@ pub(crate) async fn execute(
                 .into());
         }
         other @ (CliCommand::Character { .. }
+        | CliCommand::Export { .. }
+        | CliCommand::Import { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Debug { .. }
         | CliCommand::Model { .. }
@@ -245,6 +247,8 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
                 )
         }
         CliCommand::Character { json, .. }
+        | CliCommand::Export { json, .. }
+        | CliCommand::Import { json, .. }
         | CliCommand::Compact { json, .. }
         | CliCommand::Segments { json, .. }
         | CliCommand::Clear { json, .. }
@@ -1895,6 +1899,8 @@ mod tests {
             | CliCommand::Log { .. }
             | CliCommand::Trace { .. }
             | CliCommand::Character { .. }
+            | CliCommand::Export { .. }
+            | CliCommand::Import { .. }
             | CliCommand::Status { .. }
             | CliCommand::Debug { .. }
             | CliCommand::Model { .. }

@@ -36,6 +36,7 @@ export interface InProcessExecutorDeps {
   tools?: ToolContextDeps;
   env?: NodeJS.ProcessEnv;
   beginForeground?: () => () => void;
+  runActivity?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
 export class InProcessAutonomyExecutor implements AutonomyExecutor {
@@ -161,12 +162,15 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   }
 
   async #withForeground<T>(run: () => Promise<T>): Promise<T> {
-    const end = this.#deps.beginForeground?.();
-    try {
-      return await run();
-    } finally {
-      end?.();
-    }
+    const foreground = async () => {
+      const end = this.#deps.beginForeground?.();
+      try {
+        return await run();
+      } finally {
+        end?.();
+      }
+    };
+    return await (this.#deps.runActivity?.(foreground) ?? foreground());
   }
 
   #engineReloader(): PostArchiveEngine {
