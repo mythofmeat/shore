@@ -4,7 +4,15 @@ import type { ClientMessage } from "../protocol/ClientMessage";
 import type { Message } from "../protocol/Message";
 import type { ServerMessage } from "../protocol/ServerMessage";
 import type { RecvResult, Subscription } from "./broadcast";
-import { WireReader, writeMessage, type ByteSink } from "./framing";
+import { AdmissionError, admitClientMessage } from "./admission.ts";
+import {
+  MAX_PRE_AUTH_WIRE_MESSAGE_SIZE,
+  MAX_WIRE_MESSAGE_SIZE,
+  WireError,
+  WireReader,
+  writeMessage,
+  type ByteSink,
+} from "./framing";
 import {
   eventMatchesSession,
   msgTypeName,
@@ -128,8 +136,19 @@ export async function performHandshake(
     });
     throw new HandshakeError("Unauthorized: bad or missing token");
   }
+  reader.setMaxMessageSize(MAX_WIRE_MESSAGE_SIZE);
 
-  const requested = first.character ?? null;
+  let admitted: ClientMessage;
+  try {
+    admitted = admitClientMessage(first);
+  } catch (e) {
+    if (!(e instanceof AdmissionError)) throw e;
+    await writeMessage(sink, { type: "error", code: "invalid_request", message: e.message });
+    throw new HandshakeError(e.message);
+  }
+  if (admitted.type !== "hello") throw new HandshakeError("Protocol error: expected hello");
+
+  const requested = admitted.character ?? null;
   const selected = resolveHandshakeCharacter(requested, hello.characters, hello.selected ?? null);
   if (requested !== null && selected === null) {
     ctx.log?.warn?.("Connect-time character selection is not available", { requested });
@@ -150,9 +169,9 @@ export async function performHandshake(
 
   const client: ClientInfo = {
     id: ctx.clientId,
-    clientType: first.client_type,
-    clientName: first.client_name,
-    capabilities: first.capabilities ?? [],
+    clientType: admitted.client_type,
+    clientName: admitted.client_name,
+    capabilities: admitted.capabilities,
     character: history.selectedCharacter,
   };
   ctx.router.registerSession(client, (msg) => writeMessage(sink, msg));
@@ -178,7 +197,7 @@ export function historyMessage(history: HistorySnapshot, rid?: string): ServerMe
 
 export async function handleConnection(duplex: Duplex, ctx: ConnectionContext): Promise<void> {
   const sink = serialSink(duplex.output);
-  const reader = new WireReader(duplex.input);
+  const reader = new WireReader(duplex.input, MAX_PRE_AUTH_WIRE_MESSAGE_SIZE);
   let session: SessionMeta | null = null;
 
   try {
@@ -198,6 +217,7 @@ export async function handleConnection(duplex: Duplex, ctx: ConnectionContext): 
 
 type LoopWake =
   | { readonly src: "client"; readonly value: ClientMessage | null }
+  | { readonly src: "client_error"; readonly error: unknown }
   | { readonly src: "ping" }
   | { readonly src: "event"; readonly value: RecvResult }
   | { readonly src: "shutdown" };
@@ -219,7 +239,10 @@ export async function messageLoop(
   const pendingShutdown: Promise<LoopWake> = ctx.shutdown.then(() => ({ src: "shutdown" }) as const);
 
   for (;;) {
-    pendingClient ??= reader.readMessage().then((value) => ({ src: "client", value }) as const);
+    pendingClient ??= reader.readMessage().then(
+      (value) => ({ src: "client", value }) as const,
+      (error: unknown) => ({ src: "client_error", error }) as const,
+    );
     pendingEvent ??= ctx.events.recv().then((value) => ({ src: "event", value }) as const);
     pendingPing ??= sleepUntil(nextTick(started, period, tick)).then(() => ({ src: "ping" }) as const);
 
@@ -229,8 +252,16 @@ export async function messageLoop(
       case "client": {
         pendingClient = null;
         if (wake.value === null) return;
+        let admitted: ClientMessage;
+        try {
+          admitted = admitClientMessage(wake.value);
+        } catch (e) {
+          if (!(e instanceof AdmissionError)) throw e;
+          await writeMessage(sink, { type: "error", code: "invalid_request", message: e.message });
+          break;
+        }
         const outcome = routeClientMessage(
-          wake.value,
+          admitted,
           session,
           ctx.router.characterFor(session.sessionId),
         );
@@ -241,6 +272,16 @@ export async function messageLoop(
         }
         break;
       }
+
+      case "client_error":
+        pendingClient = null;
+        if (!(wake.error instanceof WireError)) throw wake.error;
+        await writeMessage(sink, {
+          type: "error",
+          code: "invalid_request",
+          message: wake.error.message,
+        });
+        break;
 
       case "ping": {
         pendingPing = null;

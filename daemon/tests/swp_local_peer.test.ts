@@ -3,6 +3,7 @@ import { createConnection, type Socket } from "node:net";
 
 import type { RoutedMessage } from "../src/swp/session.ts";
 import { Server } from "../src/swp/server.ts";
+import { MAX_TOTAL_ATTACHMENT_BYTES } from "../src/swp/admission.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 
@@ -171,6 +172,31 @@ describe("what the peer sends", () => {
     const next = await events.next();
 
     expect(next.value).toMatchObject({ type: "error", code: "protocol_error" });
+    expect(routed).toHaveLength(0);
+  });
+
+  test("a connector cannot bypass aggregate attachment admission", async () => {
+    const { server, routed } = await fixture();
+    const peer = await server.attachLocal({ clientType: "bridge", clientName: "shore-matrix" });
+    const events = peer.events();
+    await events.next();
+    const data = Buffer.alloc(MAX_TOTAL_ATTACHMENT_BYTES / 4).toString("base64");
+
+    await peer.send({
+      type: "message",
+      text: "",
+      stream: true,
+      images: [],
+      image_data: Array.from({ length: 5 }, (_, i) => ({
+        filename: `${String(i)}.png`,
+        data,
+      })),
+    });
+
+    const rejection = await events.next();
+    if (rejection.done || rejection.value.type !== "error") throw new Error("expected an error frame");
+    expect(rejection.value).toMatchObject({ type: "error", code: "invalid_request" });
+    expect(rejection.value.message).toContain("total");
     expect(routed).toHaveLength(0);
   });
 });

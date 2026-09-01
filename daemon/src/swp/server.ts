@@ -3,6 +3,7 @@ import { createServer, type Server as NetServer, type Socket } from "node:net";
 import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ServerMessage } from "../protocol/ServerMessage";
+import { AdmissionError, admitCapabilities, admitClientMessage } from "./admission.ts";
 import { Broadcast } from "./broadcast";
 import {
   DEFAULT_HANDSHAKE,
@@ -74,7 +75,7 @@ export interface LocalPeer {
   readonly characters: readonly CharacterInfo[];
   readonly history: HistorySnapshot;
   send(msg: ClientMessage): Promise<void>;
-  events(): AsyncGenerator<ServerMessage>;
+  events(): AsyncGenerator<ServerMessage, void>;
   detach(): Promise<void>;
 }
 
@@ -97,7 +98,7 @@ class Inbox {
     wake?.();
   }
 
-  async *drain(): AsyncGenerator<ServerMessage> {
+  async *drain(): AsyncGenerator<ServerMessage, void> {
     for (;;) {
       const next = this.#queue.shift();
       if (next !== undefined) {
@@ -161,11 +162,12 @@ export class Server {
 
     const clientId = this.#nextId;
     this.#nextId += 1;
+    const capabilities = admitCapabilities(options.capabilities ?? []);
     const client: ClientInfo = {
       id: clientId,
       clientType: options.clientType,
       clientName: options.clientName,
-      capabilities: options.capabilities ?? [],
+      capabilities,
       character: history.selectedCharacter,
     };
 
@@ -214,8 +216,16 @@ export class Server {
       characters: hello.characters,
       history,
       send: async (msg) => {
+        let admitted: ClientMessage;
+        try {
+          admitted = admitClientMessage(msg);
+        } catch (e) {
+          if (!(e instanceof AdmissionError)) throw e;
+          inbox.push({ type: "error", code: "invalid_request", message: e.message });
+          return;
+        }
         const outcome = routeClientMessage(
-          msg,
+          admitted,
           sessionMetaOf(client),
           this.#router.characterFor(clientId),
         );

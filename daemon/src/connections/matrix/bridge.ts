@@ -9,6 +9,7 @@ import { ViewPrefs } from "./prefs.ts";
 import { renderCommandOutput } from "./render.ts";
 import { RoomBindings } from "./rooms.ts";
 import type { LocalPeer } from "../../swp/server.ts";
+import type { MediaDownloadResult } from "./bot.ts";
 
 export interface BridgeLogger {
   info?(message: string, fields?: Record<string, unknown>): void;
@@ -23,7 +24,7 @@ export interface BridgeBot {
   redact(roomId: string, eventId: string, reason?: string): Promise<void>;
   setTyping(roomId: string, typing: boolean): Promise<void>;
   sendImage(roomId: string, path: string, caption?: string): Promise<string | undefined>;
-  downloadMedia(url: string): Promise<Uint8Array | undefined>;
+  downloadMedia(url: string): Promise<MediaDownloadResult>;
 }
 
 export interface BridgeOptions {
@@ -217,11 +218,18 @@ export class Bridge {
     const peer = await this.#target(event.roomId);
     if (peer === undefined) return;
 
-    const bytes = await this.#options.bot.downloadMedia(event.url);
-    if (bytes === undefined) {
-      await this.#options.bot.sendNotice(event.roomId, "That image could not be downloaded.");
+    const download = await this.#options.bot.downloadMedia(event.url);
+    if (!download.ok) {
+      const message =
+        download.reason === "too_large"
+          ? "That image is larger than Shore's 5 MiB attachment limit."
+          : download.reason === "timed_out"
+            ? "That image download timed out."
+            : "That image could not be downloaded.";
+      await this.#options.bot.sendNotice(event.roomId, message);
       return;
     }
+    const { bytes } = download;
 
     const filename = sanitizeFilename(event.body);
     const caption = event.body === filename ? "" : event.body;

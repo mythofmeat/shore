@@ -1,7 +1,9 @@
 import type { ClientMessage } from "../protocol/ClientMessage";
+import type { ImageUpload } from "../protocol/ImageUpload";
 import type { ServerMessage } from "../protocol/ServerMessage";
 
 export const MAX_WIRE_MESSAGE_SIZE = 128 * 1024 * 1024;
+export const MAX_PRE_AUTH_WIRE_MESSAGE_SIZE = 64 * 1024;
 
 const NEWLINE = 0x0a;
 
@@ -31,9 +33,15 @@ export class WireReader {
   #pending: Uint8Array = new Uint8Array(0);
   #offset = 0;
   #exhausted = false;
+  #maxMessageSize: number;
 
-  constructor(source: AsyncIterable<Uint8Array>) {
+  constructor(source: AsyncIterable<Uint8Array>, maxMessageSize = MAX_WIRE_MESSAGE_SIZE) {
     this.#chunks = source[Symbol.asyncIterator]();
+    this.#maxMessageSize = maxMessageSize;
+  }
+
+  setMaxMessageSize(maxMessageSize: number): void {
+    this.#maxMessageSize = maxMessageSize;
   }
 
   async #fill(): Promise<Uint8Array> {
@@ -64,7 +72,7 @@ export class WireReader {
       const newline = buf.indexOf(NEWLINE);
       const consume = newline === -1 ? buf.length : newline + 1;
 
-      if (length + consume > MAX_WIRE_MESSAGE_SIZE) {
+      if (length + consume > this.#maxMessageSize) {
         throw new WireError("Message exceeds maximum size");
       }
 
@@ -110,8 +118,55 @@ function decodeClientMessage(value: unknown): ClientMessage {
     }
     return v;
   };
-  const bool = (key: string): boolean => raw[key] === true;
-  const arr = <T,>(key: string): T[] => (Array.isArray(raw[key]) ? (raw[key] as T[]) : []);
+  const bool = (key: string): boolean => {
+    const fieldValue = raw[key];
+    if (fieldValue === undefined || fieldValue === null) return false;
+    if (typeof fieldValue !== "boolean") {
+      throw new WireError(`Frame field ${JSON.stringify(key)} is not a boolean`);
+    }
+    return fieldValue;
+  };
+  const arr = (key: string): unknown[] => {
+    const fieldValue = raw[key];
+    if (fieldValue === undefined || fieldValue === null) return [];
+    if (!Array.isArray(fieldValue)) {
+      throw new WireError(`Frame field ${JSON.stringify(key)} is not an array`);
+    }
+    return fieldValue;
+  };
+  const strArr = (key: string): string[] =>
+    arr(key).map((element, index) => {
+      if (typeof element !== "string") {
+        throw new WireError(
+          `Frame field ${JSON.stringify(key)} element ${String(index + 1)} is not a string`,
+        );
+      }
+      return element;
+    });
+  const uploads = (): ImageUpload[] =>
+    arr("image_data").map((element, index) => {
+      if (typeof element !== "object" || element === null || Array.isArray(element)) {
+        throw new WireError(`Frame attachment ${String(index + 1)} is not an object`);
+      }
+      const upload = element as Record<string, unknown>;
+      const filename = upload.filename;
+      const data = upload.data;
+      const mimeType = upload.mime_type;
+      if (typeof filename !== "string") {
+        throw new WireError(`Frame attachment ${String(index + 1)} filename is not a string`);
+      }
+      if (typeof data !== "string") {
+        throw new WireError(`Frame attachment ${String(index + 1)} data is not a string`);
+      }
+      if (mimeType !== undefined && mimeType !== null && typeof mimeType !== "string") {
+        throw new WireError(`Frame attachment ${String(index + 1)} mime_type is not a string`);
+      }
+      return {
+        filename,
+        data,
+        ...(typeof mimeType === "string" ? { mime_type: mimeType } : {}),
+      };
+    });
   const opt = <T,>(key: string, v: T | undefined): Record<string, T> =>
     v === undefined ? {} : ({ [key]: v });
 
@@ -121,7 +176,7 @@ function decodeClientMessage(value: unknown): ClientMessage {
         type: "hello",
         client_type: str("client_type", true) as string,
         client_name: str("client_name", true) as string,
-        capabilities: arr<string>("capabilities"),
+        capabilities: strArr("capabilities"),
         ...opt("character", str("character", false)),
         ...opt("token", str("token", false)),
       };
@@ -131,8 +186,8 @@ function decodeClientMessage(value: unknown): ClientMessage {
         ...opt("rid", str("rid", false)),
         text: str("text", true) as string,
         stream: bool("stream"),
-        images: arr<string>("images"),
-        image_data: arr("image_data"),
+        images: strArr("images"),
+        image_data: uploads(),
         ...opt("absence_seconds", numberOrUndefined(raw.absence_seconds, "absence_seconds")),
       };
     case "regen":

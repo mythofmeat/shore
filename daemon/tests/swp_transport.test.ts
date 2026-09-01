@@ -9,7 +9,7 @@ import {
   serialSink,
   type ConnectionContext,
 } from "../src/swp/connection";
-import { WireReader, type ByteSink } from "../src/swp/framing";
+import { MAX_PRE_AUTH_WIRE_MESSAGE_SIZE, WireReader, type ByteSink } from "../src/swp/framing";
 import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
 
 const OPEN = (): boolean => true;
@@ -365,6 +365,38 @@ describe("handleConnection", () => {
     expect(c.routed).toEqual([]);
     expect(c.lines().map((l) => (JSON.parse(l) as ServerMessage).type)).toEqual(["hello", "error"]);
   });
+
+  test("the small pre-auth limit becomes the normal limit only after authentication", async () => {
+    const rejected = connect();
+    rejected.send(
+      `${JSON.stringify({
+        type: "hello",
+        client_type: "tui",
+        client_name: "x".repeat(MAX_PRE_AUTH_WIRE_MESSAGE_SIZE),
+      })}\n`,
+    );
+    await rejected.done.catch(() => {});
+    expect(rejected.router.sessions()).toEqual([]);
+
+    const accepted = connect();
+    accepted.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
+    for (let i = 0; i < 2000 && accepted.router.sessions().length === 0; i += 1) {
+      await Promise.resolve();
+    }
+    accepted.send(
+      `${JSON.stringify({
+        type: "message",
+        text: "x".repeat(MAX_PRE_AUTH_WIRE_MESSAGE_SIZE),
+        stream: false,
+        images: [],
+        image_data: [],
+      })}\n`,
+    );
+    for (let i = 0; i < 100 && accepted.routed.length === 0; i += 1) await Promise.resolve();
+    accepted.close();
+    await accepted.done;
+    expect(accepted.routed.some((r) => r.kind === "engine")).toBe(true);
+  });
 });
 
 describe("message loop", () => {
@@ -445,6 +477,28 @@ describe("message loop", () => {
     for (let i = 0; i < 10; i += 1) await Promise.resolve();
     expect(h.routed.map((r) => r.kind)).toEqual(["engine"]);
 
+    h.shutdown();
+    await done;
+  });
+
+  test("a structurally invalid post-auth frame gets an invalid-request response", async () => {
+    const h = harness();
+    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
+    h.send('{"type":"message","text":"hello","images":[42]}\n');
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    expect(h.frames()).toEqual([
+      {
+        type: "error",
+        code: "invalid_request",
+        message: 'Frame field "images" element 1 is not a string',
+      },
+    ]);
+    expect(h.routed).toEqual([]);
+
+    h.send('{"type":"cancel"}\n');
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(h.routed.map((r) => r.kind)).toEqual(["engine"]);
     h.shutdown();
     await done;
   });

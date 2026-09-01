@@ -18,10 +18,24 @@ import {
 } from "matrix-js-sdk";
 
 import { normalizeEvent, type MatrixEvent, type RawEvent } from "./events.ts";
+import { MAX_ATTACHMENT_BYTES } from "../../swp/admission.ts";
 
 const TYPING_TIMEOUT_MS = 20_000;
 
 export const SYNC_START_TIMEOUT_MS = 60_000;
+export const MEDIA_DOWNLOAD_TIMEOUT_MS = 30_000;
+
+export type MediaDownloadResult =
+  | { readonly ok: true; readonly bytes: Uint8Array }
+  | { readonly ok: false; readonly reason: "failed" | "too_large" | "timed_out" };
+
+export class MediaDownloadError extends Error {
+  override readonly name = "MediaDownloadError";
+
+  constructor(readonly reason: "too_large" | "timed_out", message: string) {
+    super(message);
+  }
+}
 
 const TERMINAL_ERRCODES = new Set(["M_UNKNOWN_TOKEN", "M_MISSING_TOKEN", "M_FORBIDDEN"]);
 
@@ -215,7 +229,7 @@ export class MatrixBot {
     }
   }
 
-  async downloadMedia(mxcUrl: string): Promise<Uint8Array | undefined> {
+  async downloadMedia(mxcUrl: string): Promise<MediaDownloadResult> {
     const http = this.#client.mxcUrlToHttp(
       mxcUrl,
       undefined,
@@ -225,19 +239,31 @@ export class MatrixBot {
       true,
       true,
     );
-    if (http === null) return undefined;
+    if (http === null) return { ok: false, reason: "failed" };
     try {
       const response = await fetch(http, {
         headers: { Authorization: `Bearer ${this.#client.getAccessToken() ?? ""}` },
+        signal: AbortSignal.timeout(MEDIA_DOWNLOAD_TIMEOUT_MS),
       });
       if (!response.ok) {
         this.#log?.warn?.("media download refused", { status: response.status });
-        return undefined;
+        return { ok: false, reason: "failed" };
       }
-      return new Uint8Array(await response.arrayBuffer());
+      return {
+        ok: true,
+        bytes: await readMediaResponse(response, MAX_ATTACHMENT_BYTES, MEDIA_DOWNLOAD_TIMEOUT_MS),
+      };
     } catch (e) {
+      if (e instanceof MediaDownloadError) {
+        this.#log?.warn?.("media download rejected", { reason: e.reason, error: e.message });
+        return { ok: false, reason: e.reason };
+      }
+      if (isTimeoutError(e)) {
+        this.#log?.warn?.("media download timed out", { error: String(e) });
+        return { ok: false, reason: "timed_out" };
+      }
       this.#log?.warn?.("media download failed", { error: String(e) });
-      return undefined;
+      return { ok: false, reason: "failed" };
     }
   }
 
@@ -304,6 +330,80 @@ export class MatrixBot {
     this.#pending.push(normalized);
     this.#wake?.();
   }
+}
+
+export async function readMediaResponse(
+  response: Response,
+  maxBytes: number = MAX_ATTACHMENT_BYTES,
+  timeoutMs: number = MEDIA_DOWNLOAD_TIMEOUT_MS,
+): Promise<Uint8Array> {
+  const declared = response.headers.get("content-length");
+  if (declared !== null && /^\d+$/.test(declared)) {
+    const bytes = Number(declared);
+    if (!Number.isSafeInteger(bytes) || bytes > maxBytes) {
+      throw new MediaDownloadError(
+        "too_large",
+        `declared body is ${String(bytes)} bytes; the maximum is ${String(maxBytes)}`,
+      );
+    }
+  }
+
+  if (response.body === null) return new Uint8Array(0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      void reader.cancel();
+      reject(
+        new MediaDownloadError(
+          "timed_out",
+          `media body was not received within ${String(timeoutMs)}ms`,
+        ),
+      );
+    }, timeoutMs);
+    timer.unref?.();
+  });
+
+  const reading = (async (): Promise<Uint8Array> => {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      const chunk: unknown = next.value;
+      if (!(chunk instanceof Uint8Array)) throw new Error("media response yielded non-byte data");
+      total += chunk.byteLength;
+      if (total > maxBytes) {
+        void reader.cancel();
+        throw new MediaDownloadError(
+          "too_large",
+          `body exceeded the ${String(maxBytes)}-byte maximum`,
+        );
+      }
+      chunks.push(chunk);
+    }
+
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
+  })();
+
+  try {
+    return await Promise.race([reading, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
 }
 
 export function awaitInitialSync(

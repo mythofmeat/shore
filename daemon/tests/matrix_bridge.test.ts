@@ -10,6 +10,7 @@ import { EventMap } from "../src/connections/matrix/event_map.ts";
 import type { MatrixEvent } from "../src/connections/matrix/events.ts";
 import { ViewPrefs } from "../src/connections/matrix/prefs.ts";
 import { RoomBindings } from "../src/connections/matrix/rooms.ts";
+import type { MediaDownloadResult } from "../src/connections/matrix/bot.ts";
 
 const ROOM = "!room:example.com";
 const OTHER_ROOM = "!other:example.com";
@@ -25,7 +26,7 @@ type Sent =
 
 class FakeBot implements BridgeBot {
   readonly sent: Sent[] = [];
-  readonly media = new Map<string, Uint8Array>();
+  readonly media = new Map<string, MediaDownloadResult>();
   readonly #queue: MatrixEvent[] = [];
   #wake: (() => void) | null = null;
   #closed = false;
@@ -92,8 +93,8 @@ class FakeBot implements BridgeBot {
     return Promise.resolve(this.#mint());
   }
 
-  downloadMedia(url: string): Promise<Uint8Array | undefined> {
-    return Promise.resolve(this.media.get(url));
+  downloadMedia(url: string): Promise<MediaDownloadResult> {
+    return Promise.resolve(this.media.get(url) ?? { ok: false, reason: "failed" });
   }
 
   notices(): string[] {
@@ -332,7 +333,10 @@ describe("a bound room forwards prompts", () => {
 
   test("an image travels as base64 with its declared mime type and no filename in the body", async () => {
     const h = await harness({ bindings: [[ROOM, "ada"]] });
-    h.bot.media.set("mxc://example.com/pic", new Uint8Array([1, 2, 3, 4]));
+    h.bot.media.set("mxc://example.com/pic", {
+      ok: true,
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    });
     h.bot.push({
       kind: "image",
       roomId: ROOM,
@@ -351,6 +355,30 @@ describe("a bound room forwards prompts", () => {
       image_data: [{ filename: "shot.png", data: "AQIDBA==", mime_type: "image/png" }],
     });
   });
+
+  for (const [reason, notice] of [
+    ["too_large", "5 MiB attachment limit"],
+    ["timed_out", "timed out"],
+    ["failed", "could not be downloaded"],
+  ] as const) {
+    test(`an image download rejected as ${reason} produces a useful notice`, async () => {
+      const h = await harness({ bindings: [[ROOM, "ada"]] });
+      h.bot.media.set("mxc://example.com/pic", { ok: false, reason });
+      h.bot.push({
+        kind: "image",
+        roomId: ROOM,
+        sender: USER,
+        eventId: "$e1",
+        url: "mxc://example.com/pic",
+        body: "shot.png",
+        mimeType: "image/png",
+      });
+      await h.settle();
+
+      expect(h.bot.notices().at(-1)).toContain(notice);
+      expect(h.received.some((message) => message.type === "message")).toBe(false);
+    });
+  }
 });
 
 describe("replies coming back", () => {

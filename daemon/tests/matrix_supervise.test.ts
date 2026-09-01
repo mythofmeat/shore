@@ -91,8 +91,8 @@ class FaultingBot {
   sendImage(): Promise<string | undefined> {
     return Promise.resolve(undefined);
   }
-  downloadMedia(): Promise<Uint8Array | undefined> {
-    return Promise.resolve(undefined);
+  downloadMedia(): Promise<{ ok: false; reason: "failed" }> {
+    return Promise.resolve({ ok: false, reason: "failed" });
   }
 }
 
