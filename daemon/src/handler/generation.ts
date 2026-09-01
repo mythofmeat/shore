@@ -292,15 +292,20 @@ async function runGenerationCore(
   notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
 
   let recalledMemory: string | undefined;
+  const recallMessages = regen
+    ? engine.messagesThroughLastUserTurn()
+    : engine.messages();
   if (
-    !regen &&
-    (body.text !== "" || body.images.length > 0 || body.image_data.length > 0)
+    regen ||
+    body.text !== "" ||
+    body.images.length > 0 ||
+    body.image_data.length > 0
   ) {
     try {
       recalledMemory = await deps.recall?.run({
         config,
         character: charName,
-        messages: engine.messages(),
+        messages: recallMessages,
         signal: params.signal,
         ...(params.rid === null ? {} : { rid: params.rid }),
       });
