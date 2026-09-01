@@ -30,14 +30,13 @@
       "err": null
     },
     {
-      "name": "queue the memory index writes a sentinel",
+      "name": "queue the memory index without creating a snapshot sentinel",
       "op": {
         "fn": "queue_deferred_edit",
         "path": "MEMORY.md"
       },
       "before": {},
       "after": {
-        "data/active_prompt/MEMORY.md": "",
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTEzODg3MzcrMDA6MDAifQo="
       },
       "returns": null,
@@ -129,7 +128,7 @@
       "err": null
     },
     {
-      "name": "queue the memory index leaves an existing sentinel alone",
+      "name": "queue the memory index leaves an existing snapshot alone",
       "op": {
         "fn": "queue_deferred_edit",
         "path": "MEMORY.md"
@@ -166,7 +165,6 @@
       },
       "before": {},
       "after": {
-        "data/active_prompt/MEMORY.md": "",
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiTUVNT1JZLm1kIiwidGltZXN0YW1wIjoiMjAyNi0wOC0wMlQwMjozMzozNC4wMTQwNzQ0NTcrMDA6MDAifQo="
       },
       "returns": null,
@@ -304,6 +302,22 @@
       "err": null
     },
     {
+      "name": "load_memory_index does not fall through when the snapshot omits memory",
+      "op": {
+        "fn": "load_memory_index"
+      },
+      "before": {
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
+        "data/active_prompt/SOUL.md": "c25hcHNob3Qgc291bAo="
+      },
+      "after": {
+        "config/characters/Iris/workspace/MEMORY.md": "Y2Fub25pY2FsIGluZGV4Cg==",
+        "data/active_prompt/SOUL.md": "c25hcHNob3Qgc291bAo="
+      },
+      "returns": null,
+      "err": null
+    },
+    {
       "name": "load_memory_index does NOT fall through when the snapshot is blank",
       "op": {
         "fn": "load_memory_index"
@@ -401,14 +415,30 @@
         "fn": "changed_prompt_files"
       },
       "before": {
+        "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK",
+        "data/active_prompt/USER.md": "ICAgCg=="
+      },
+      "after": {
+        "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK",
+        "data/active_prompt/USER.md": "ICAgCg=="
+      },
+      "returns": [
+        "MEMORY.md"
+      ],
+      "err": null
+    },
+    {
+      "name": "changed prompt files reports nothing without a snapshot",
+      "op": {
+        "fn": "changed_prompt_files"
+      },
+      "before": {
         "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK"
       },
       "after": {
         "config/characters/Iris/workspace/MEMORY.md": "aW5kZXgK"
       },
-      "returns": [
-        "MEMORY.md"
-      ],
+      "returns": [],
       "err": null
     },
     {
@@ -504,11 +534,12 @@
       },
       "before": {
         "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "data/active.jsonl": "e30K",
         "data/active_prompt/SOUL.md": "c3RhbGUK",
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCJ9Cg=="
       },
       "after": {
-        "$ref": "s0"
+        "$ref": "s1"
       },
       "returns": null,
       "err": null
@@ -519,10 +550,29 @@
         "fn": "apply_deferred_edits"
       },
       "before": {
-        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK"
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "data/active.jsonl": "e30K"
       },
       "after": {
-        "$ref": "s0"
+        "$ref": "s1"
+      },
+      "returns": null,
+      "err": null
+    },
+    {
+      "name": "apply drops the snapshot and queue for an empty conversation",
+      "op": {
+        "fn": "apply_deferred_edits"
+      },
+      "before": {
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "data/active.jsonl": "",
+        "data/active_prompt/SOUL.md": "c3RhbGUK",
+        "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCJ9Cg=="
+      },
+      "after": {
+        "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+        "data/active.jsonl": ""
       },
       "returns": null,
       "err": null
@@ -650,6 +700,13 @@
     "s0": {
       "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
       "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRvb2xzIHdoZW4gdGhleSBtYXRlcmlhbGx5IGhlbHAuCgotIFJlYWQgZmlsZXMgYmVmb3JlIGVkaXRpbmcgdGhlbS4KLSBTZWFyY2ggbWVtb3J5IGZpbGVzIGJlZm9yZSBndWVzc2luZyBmYWN0cyBhYm91dCB0aGUgdXNlciBvciBwYXN0IGV2ZW50cy4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
+      "data/active_prompt/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+      "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRvb2xzIHdoZW4gdGhleSBtYXRlcmlhbGx5IGhlbHAuCgotIFJlYWQgZmlsZXMgYmVmb3JlIGVkaXRpbmcgdGhlbS4KLSBTZWFyY2ggbWVtb3J5IGZpbGVzIGJlZm9yZSBndWVzc2luZyBmYWN0cyBhYm91dCB0aGUgdXNlciBvciBwYXN0IGV2ZW50cy4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
+    },
+    "s1": {
+      "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
+      "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRvb2xzIHdoZW4gdGhleSBtYXRlcmlhbGx5IGhlbHAuCgotIFJlYWQgZmlsZXMgYmVmb3JlIGVkaXRpbmcgdGhlbS4KLSBTZWFyY2ggbWVtb3J5IGZpbGVzIGJlZm9yZSBndWVzc2luZyBmYWN0cyBhYm91dCB0aGUgdXNlciBvciBwYXN0IGV2ZW50cy4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
+      "data/active.jsonl": "e30K",
       "data/active_prompt/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
       "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRvb2xzIHdoZW4gdGhleSBtYXRlcmlhbGx5IGhlbHAuCgotIFJlYWQgZmlsZXMgYmVmb3JlIGVkaXRpbmcgdGhlbS4KLSBTZWFyY2ggbWVtb3J5IGZpbGVzIGJlZm9yZSBndWVzc2luZyBmYWN0cyBhYm91dCB0aGUgdXNlciBvciBwYXN0IGV2ZW50cy4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
     }

@@ -86,10 +86,7 @@ class TwoRoundLlm implements CompactionLlm {
 }
 
 class QuietTools implements CompactionTools {
-  constructor(
-    readonly workspaceDir: string,
-    readonly configDir: string,
-  ) {}
+  constructor(readonly workspaceDir: string) {}
   dispatch(): Promise<ToolOutput> {
     return Promise.resolve({ output: "written", isError: false });
   }
@@ -129,7 +126,7 @@ async function collectFrames(): Promise<ServerMessage[]> {
         dryRun: false,
         retainTrailingAutonomous: false,
         chatRequest: chatRequest(),
-        tools: new QuietTools(workspace, ""),
+        tools: new QuietTools(workspace),
         emit: tagCompactionFrames((message) => frames.push(message)),
       },
       { keepRecentTurns: 0 },
@@ -203,7 +200,7 @@ describe("a compaction pass reports what it is doing", () => {
           dryRun: false,
           retainTrailingAutonomous: false,
           chatRequest: chatRequest(),
-          tools: new QuietTools(workspace, ""),
+          tools: new QuietTools(workspace),
         },
         { keepRecentTurns: 0 },
       );

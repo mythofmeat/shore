@@ -13,8 +13,10 @@ import { assemblePrompt, type AssembledPrompt } from "../engine/prompt.ts";
 import type { Message } from "../engine/types.ts";
 import {
   ensureActivePromptSnapshot,
-  loadActivePromptFile,
+  ensureCharacterWorkspace,
+  loadPromptFile,
   loadMemoryIndex,
+  resetActivePromptSnapshot,
 } from "../memory/deferred_edits.ts";
 import { buildRequestWithProviderKeys, type BuiltRequest } from "../llm/request.ts";
 import type { SystemBlock, ToolDefinition, WireMessage } from "../llm/types.ts";
@@ -29,6 +31,7 @@ export interface PrepareChatContextParams {
   resolved: ResolvedModel;
   messages: Message[];
   hasPriorContext: boolean;
+  activeConversation?: boolean;
   mcpToolDefs: readonly ToolDefinition[];
   timeZone?: string;
 }
@@ -46,21 +49,44 @@ export async function prepareChatContext(
   const { character, characterDataDir, config, resolved, messages, mcpToolDefs } = params;
   const displayName = resolveDisplayName(config.app.defaults);
 
-  try {
-    await ensureActivePromptSnapshot(
+  const activeConversation = params.activeConversation ?? messages.length > 0;
+  if (activeConversation) {
+    try {
+      await ensureActivePromptSnapshot(
+        characterDataDir,
+        config.dirs.config,
+        character,
+        config.dirs.workspace,
+      );
+    } catch (e) {
+      shoreLog.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);
+    }
+  } else {
+    try {
+      await resetActivePromptSnapshot(characterDataDir);
+      await ensureCharacterWorkspace(
+        characterDataDir,
+        config.dirs.config,
+        character,
+        config.dirs.workspace,
+      );
+    } catch (e) {
+      shoreLog.warn(`shore: failed to prepare character workspace for ${character}: ${String(e)}`);
+    }
+  }
+
+  const promptFile = (name: string) =>
+    loadPromptFile(
       characterDataDir,
       config.dirs.config,
       character,
+      name,
       config.dirs.workspace,
     );
-  } catch (e) {
-    shoreLog.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);
-  }
-
-  const characterDefinition = await loadActivePromptFile(characterDataDir, SOUL_FILE);
-  const userDefinition = await loadActivePromptFile(characterDataDir, USER_FILE);
-  const systemPrompt = await loadActivePromptFile(characterDataDir, AGENTS_FILE);
-  const toolsGuidance = await loadActivePromptFile(characterDataDir, TOOLS_FILE);
+  const characterDefinition = await promptFile(SOUL_FILE);
+  const userDefinition = await promptFile(USER_FILE);
+  const systemPrompt = await promptFile(AGENTS_FILE);
+  const toolsGuidance = await promptFile(TOOLS_FILE);
   const memoryIndex = await loadMemoryIndex(
     characterDataDir,
     config.dirs.config,
@@ -120,6 +146,7 @@ export async function buildChatShapeRequestFromDisk(
   options: {
     mcpToolDefs?: readonly ToolDefinition[];
     timeZone?: string;
+    activeConversation?: boolean;
   } = {},
 ): Promise<BuiltRequest> {
   const prepared = await prepareChatContext({
@@ -130,6 +157,9 @@ export async function buildChatShapeRequestFromDisk(
     messages,
     hasPriorContext,
     mcpToolDefs: options.mcpToolDefs ?? [],
+    ...(options.activeConversation === undefined
+      ? {}
+      : { activeConversation: options.activeConversation }),
     ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
   });
 

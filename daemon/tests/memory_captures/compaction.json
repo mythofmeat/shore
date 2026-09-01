@@ -957,7 +957,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -974,7 +973,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -992,7 +990,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1022,7 +1019,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1040,7 +1036,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1057,49 +1052,9 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [
-        "MEMORY.md"
-      ],
       "deferred_queued_paths": [
         "MEMORY.md"
       ],
-      "error": null,
-      "messages_ref": "set1"
-    },
-    {
-      "name": "writes_memory_index_with_config_dir",
-      "keep_recent_turns": 2,
-      "keep_turns_override": null,
-      "retain_trailing_autonomous": false,
-      "dry_run": false,
-      "with_store": true,
-      "max_tool_iterations": null,
-      "archive_fails": false,
-      "seed": [],
-      "seed_dirs": [],
-      "seed_links": [],
-      "store_elsewhere": false,
-      "config_dir_set": true,
-      "with_data_dir": true,
-      "dispatches": [
-        {
-          "name": "edit",
-          "input": {
-            "path": "MEMORY.md",
-            "content": "# Index\n"
-          },
-          "output": "{\"path\":\"MEMORY.md\",\"bytes_written\":8,\"prompt_visible_file\":true,\"deferred_until_compaction\":true,\"deferred_path\":\"MEMORY.md\",\"prompt_reload_required\":true}",
-          "is_error": false,
-          "writes": {
-            "MEMORY.md": "# Index\n"
-          },
-          "deletes": []
-        }
-      ],
-      "deferred_via_ctx": [
-        "MEMORY.md"
-      ],
-      "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
     },
@@ -1116,7 +1071,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": false,
       "dispatches": [
         {
@@ -1133,10 +1087,9 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [
+      "deferred_queued_paths": [
         "MEMORY.md"
       ],
-      "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
     },
@@ -1153,7 +1106,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1165,7 +1117,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1183,10 +1134,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1204,10 +1153,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1225,7 +1172,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1255,10 +1201,9 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [
+      "deferred_queued_paths": [
         "SOUL.md"
       ],
-      "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
     },
@@ -1275,7 +1220,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1292,7 +1236,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1310,7 +1253,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1327,7 +1269,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1350,7 +1291,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1372,7 +1312,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1390,7 +1329,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1410,7 +1348,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1433,7 +1370,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1450,7 +1386,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1473,7 +1408,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1503,7 +1437,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": "conversation: simulated archive failure",
       "messages_ref": "set1"
@@ -1521,10 +1454,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1542,10 +1473,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1563,10 +1492,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1584,10 +1511,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1605,10 +1530,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": "markdown store: markdown memory store not available",
       "messages_ref": "set1"
@@ -1626,10 +1549,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": "insufficient messages",
       "messages_ref": "set2"
@@ -1647,10 +1568,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": "insufficient messages",
       "messages_ref": "set3"
@@ -1668,7 +1587,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1685,7 +1603,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1703,7 +1620,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1720,7 +1636,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set4"
@@ -1738,7 +1653,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1755,7 +1669,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set5"
@@ -1773,7 +1686,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1790,7 +1702,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set6"
@@ -1808,10 +1719,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": "insufficient messages",
       "messages_ref": "set7"
@@ -1829,10 +1738,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1850,7 +1757,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1867,7 +1773,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1885,7 +1790,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1902,7 +1806,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1920,7 +1823,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1950,7 +1852,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -1968,7 +1869,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -1985,7 +1885,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": "llm: scripted LLM exhausted",
       "messages_ref": "set1"
@@ -2003,7 +1902,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2033,7 +1931,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2051,7 +1948,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2078,7 +1974,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2096,7 +1991,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2124,7 +2018,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2142,7 +2035,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2159,7 +2051,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2177,7 +2068,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2192,7 +2082,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2210,10 +2099,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2236,7 +2123,6 @@
         }
       ],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2253,7 +2139,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2278,7 +2163,6 @@
       ],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2295,7 +2179,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2313,10 +2196,8 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": true,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": "markdown store: workspace root mismatch: store=<root>/other tool_ctx=<root>/workspace",
       "messages_ref": "set1"
@@ -2334,7 +2215,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2364,9 +2244,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [
-        "MEMORY.md"
-      ],
       "deferred_queued_paths": [
         "MEMORY.md"
       ],
@@ -2374,7 +2251,7 @@
       "messages_ref": "set1"
     },
     {
-      "name": "other_file_only_queues_nothing",
+      "name": "only_the_prompt_visible_write_is_queued",
       "keep_recent_turns": 2,
       "keep_turns_override": null,
       "retain_trailing_autonomous": false,
@@ -2386,7 +2263,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2416,10 +2292,9 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [
+      "deferred_queued_paths": [
         "SOUL.md"
       ],
-      "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
     },
@@ -2441,7 +2316,6 @@
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [
         {
@@ -2471,7 +2345,6 @@
           "deletes": []
         }
       ],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": "conversation: simulated archive failure",
       "messages_ref": "set1"
@@ -2494,10 +2367,8 @@
         }
       ],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
@@ -2522,10 +2393,8 @@
       ],
       "seed_links": [],
       "store_elsewhere": false,
-      "config_dir_set": false,
       "with_data_dir": true,
       "dispatches": [],
-      "deferred_via_ctx": [],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"

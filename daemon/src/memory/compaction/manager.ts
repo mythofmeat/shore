@@ -13,7 +13,6 @@ import { budgetStopIn } from "../../llm/errors.ts";
 import { retainedTurns as retentionForBudget } from "./retention.ts";
 import type { ContentBlock } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
-import { MEMORY_INDEX_FILE, noteMemoryIndexDeferred } from "../deferred_edits";
 import { rustLines, rustTrim } from "../lines";
 import { hasCompactionOperation } from "./archive.ts";
 import {
@@ -300,8 +299,8 @@ async function dispatchCompactionTool(
         resolvedPath: resolved,
         ...(previousContent === undefined ? {} : { previousContent }),
         ...(resultingContent === undefined ? {} : { resultingContent }),
-        memoryIndexTarget: normalizePromptVisiblePath(displayPath) === MEMORY_INDEX_FILE,
       });
+      await tools.deferEdit?.(displayPath);
     }
     return result;
   }
@@ -601,12 +600,6 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     const liveContent = await currentActiveContent(opts);
     const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
     const markdownPaths = checkpoint.loop.writesApplied.map((write) => write.displayPath);
-    await queueMemoryIndexRefresh(
-      checkpoint.loop.writesApplied.some((write) => write.memoryIndexTarget),
-      tools,
-      opts.dataDir,
-      opts.charName,
-    );
     await clearCheckpoint(opts);
     return {
       kind: "compacted",
@@ -765,8 +758,6 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   await clearCheckpoint(opts);
 
   const markdownPaths = state.writesApplied.map((w) => w.displayPath);
-  const memoryIndexUpdated = state.writesApplied.some((w) => w.memoryIndexTarget);
-  await queueMemoryIndexRefresh(memoryIndexUpdated, tools, opts.dataDir, opts.charName);
 
   return {
     kind: "compacted",
@@ -1000,24 +991,3 @@ function countRetainedTurns(lines: readonly string[]): number {
   return count;
 }
 
-async function queueMemoryIndexRefresh(
-  memoryIndexUpdated: boolean,
-  tools: CompactionTools,
-  dataDir: string | undefined,
-  charName: string,
-): Promise<void> {
-  if (!memoryIndexUpdated || tools.configDir !== "") return;
-  if (dataDir === undefined) {
-    shoreLog.warn(
-      "shore: compaction updated MEMORY.md but no data dir was available for the prompt refresh queue",
-    );
-    return;
-  }
-  try {
-    await noteMemoryIndexDeferred(characterDataDir(dataDir, charName));
-  } catch (e) {
-    shoreLog.warn(
-      `shore: compaction failed to queue MEMORY.md prompt refresh: ${(e as Error).message}`,
-    );
-  }
-}

@@ -195,6 +195,10 @@ describe("workspace preparation", () => {
     expect(await loadMemoryIndex(join(data, "ada"), config, "ada", ws)).toBe(
       "the index under the root\n",
     );
+    expect(await changedPromptFiles(join(data, "ada"), config, "ada", ws)).toEqual([]);
+
+    write(data, "ada/active_prompt/MEMORY.md", "the index under the config tree\n");
+
     expect(await changedPromptFiles(join(data, "ada"), config, "ada", ws)).toContain(
       "MEMORY.md",
     );

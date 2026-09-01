@@ -115,7 +115,11 @@ export async function rebuildRequestFromDisk(
       resolved,
       selected,
       hasPriorContext,
-      { mcpToolDefs, ...(deps.timeZone === undefined ? {} : { timeZone: deps.timeZone }) },
+      {
+        mcpToolDefs,
+        activeConversation: store.messageCount() > 0,
+        ...(deps.timeZone === undefined ? {} : { timeZone: deps.timeZone }),
+      },
     );
     shoreLog.info(`shore: heartbeat rebuilt the request for ${character} from disk`);
     return built;

@@ -2,7 +2,7 @@ import { expandShared } from "./support/shared_subtrees.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import rawFixture from "./handler_captures/generation.json" with { type: "json" };
@@ -110,7 +110,6 @@ interface Knobs {
 }
 
 interface BuildToolContextOutput {
-  active_prompt_snapshot: string[];
   character_data_dir: string;
   character_name: string;
   config_dir: string;
@@ -260,17 +259,12 @@ describe("applyIntermediateMessages", () => {
 describe("buildToolContext", () => {
   for (const c of fixture.build_tool_context) {
     test(c.name, async () => {
-      const caseInput = c.input as Knobs & { prompt_files: string[] };
+      const caseInput = c.input as Knobs;
       const out = c.output as BuildToolContextOutput;
       const root = await tempRoot("tc");
       const config = await loadedConfig(root, caseInput);
 
-      await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
-      const workspace = join(config.dirs.config, "characters", "ada", "workspace");
-      await mkdir(workspace, { recursive: true });
-      for (const name of caseInput.prompt_files) {
-        await writeFile(join(workspace, name), `# ${name}`);
-      }
+      await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
       await mkdir(join(config.dirs.data, "ada"), { recursive: true });
 
       const ctx = await buildToolContext(config, config.dirs.data, "ada", {
@@ -309,8 +303,7 @@ describe("buildToolContext", () => {
       );
       expect(ctx.retrievalMode).toBe(out["memory_retrieval_config"]["mode"]);
 
-      const snapshot = readdirSync(join(config.dirs.data, "ada", "active_prompt")).sort();
-      expect(snapshot).toEqual(out.active_prompt_snapshot);
+      expect(existsSync(join(config.dirs.data, "ada", "active_prompt"))).toBe(false);
     });
   }
 });

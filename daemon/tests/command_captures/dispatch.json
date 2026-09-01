@@ -515,7 +515,7 @@
           "applied": "bool",
           "config_path": "string",
           "character": "string",
-          "changed_prompt_files": "array[1]"
+          "changed_prompt_files": "array[0]"
         }
       }
     },

@@ -5,7 +5,6 @@ import type { ProviderEntry as RegistryEntry } from "../config/providers.ts";
 import { characterDataDir, characterWorkspaceDir, rustJoin } from "../config/dirs.ts";
 import type { ProviderEntry } from "../llm/credentials.ts";
 import { resolveImageGenConfig } from "../llm/image_generate.ts";
-import { ensureActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { resolveEmbedder } from "../memory/retrieval.ts";
 import { indexPath, type RetrievalConfig } from "../memory/workspace_index.ts";
 import { historyIndexPath } from "../memory/history_index.ts";
@@ -57,12 +56,6 @@ export async function buildToolContext(
     shoreLog.warn(
       `shore: embedder unavailable for ${charName}; semantic memory retrieval disabled: ${String(e)}`,
     );
-  }
-
-  try {
-    await ensureActivePromptSnapshot(charDataDir, configDir, charName, config.dirs.workspace);
-  } catch (e) {
-    shoreLog.warn(`shore: failed to prepare active prompt snapshot for ${charName}: ${String(e)}`);
   }
 
   const mcp = deps.mcpRegistry;

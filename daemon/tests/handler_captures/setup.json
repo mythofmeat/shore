@@ -670,7 +670,7 @@
     },
     {
       "name": "an empty history still builds a request",
-      "note": "a first turn with nothing appended yet",
+      "note": "a first turn with nothing appended yet; an empty conversation carries no snapshot, so the prompt files are read from canonical and the stale snapshot AGENTS.md is not in play",
       "input": {
         "history": [],
         "with_segments": false,
@@ -689,9 +689,19 @@
         "model": "opus-id",
         "api_key": "",
         "messages": [],
-        "system": {
-          "$ref": "s2"
-        },
+        "system": [
+          {
+            "label": "system",
+            "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+          },
+          {
+            "$ref": "s5"
+          },
+          {
+            "label": "character",
+            "text": "<qifei>\nI am qifei.\n\n</qifei>"
+          }
+        ],
         "max_tokens": 1024,
         "temperature": 0.5,
         "provider_key": "anthropic",
