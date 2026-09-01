@@ -1256,7 +1256,7 @@
       "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
-      "err": "failed to parse model entry [chat.anthropic.opus]: unknown variant `nope`, expected one of `anthropic`, `openai`, `openrouter`, `gemini`, `zai`, `deepseek`, `moonshot`\n"
+      "err": "failed to parse model entry [chat.anthropic.opus]: unknown variant `nope`, expected one of `anthropic`, `openai`, `openrouter`, `gemini`, `zai`, `deepseek`, `moonshot`, `claude_agent`\n"
     },
     {
       "name": "parse_entry_removed_zhipuai_sdk",

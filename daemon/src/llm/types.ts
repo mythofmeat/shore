@@ -10,7 +10,8 @@ export type Sdk =
   | "gemini"
   | "openrouter"
   | "deepseek"
-  | "moonshot";
+  | "moonshot"
+  | "claude_agent";
 
 export const SDK_VARIANTS: readonly Sdk[] = [
   "anthropic",
@@ -20,6 +21,7 @@ export const SDK_VARIANTS: readonly Sdk[] = [
   "zai",
   "deepseek",
   "moonshot",
+  "claude_agent",
 ];
 
 export function sdkFromWire(s: string): Sdk | undefined {

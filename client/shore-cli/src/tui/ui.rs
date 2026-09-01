@@ -3246,7 +3246,7 @@ pub(crate) mod scenario_tests {
                     {"key":"cache_ttl","kind":"duration","applicability":"honored","suggestions":["5m","1h"],"allow_custom":true},
                     {"key":"cache_keepalive","kind":"duration_or_off","applicability":"always","suggestions":["off","55m"],"allow_custom":true},
                     {"key":"cache_keepalive_max","kind":"duration","applicability":"always","suggestions":["90m","12h"],"allow_custom":true},
-                    {"key":"sdk","kind":"string","applicability":"always","suggestions":["anthropic","openai","openrouter","gemini","zai","deepseek","moonshot"],"allow_custom":false},
+                    {"key":"sdk","kind":"string","applicability":"always","suggestions":["anthropic","openai","openrouter","gemini","zai","deepseek","moonshot","claude_agent"],"allow_custom":false},
                     {"key":"replay_prior_thinking","kind":"string","applicability":"always","suggestions":["all","none"],"allow_custom":false},
                     {"key":"max_tool_iterations","kind":"u32","applicability":"always","suggestions":["8","16","32","64"],"allow_custom":true},
                     {"key":"openrouter_provider","kind":"json_object","applicability":"ignored","suggestions":[],"allow_custom":true},

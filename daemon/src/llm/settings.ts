@@ -195,6 +195,7 @@ type MoonshotEffort = NonNullable<MoonshotAIProviderOptions["reasoningEffort"]>;
 
 const ANTHROPIC_NAMED_EFFORT = ["low", "medium", "high", "xhigh", "max"] as const satisfies readonly AnthropicEffort[];
 const ANTHROPIC_EFFORT = ["adaptive", ...ANTHROPIC_NAMED_EFFORT] as const;
+const CLAUDE_AGENT_EFFORT = ANTHROPIC_NAMED_EFFORT;
 const OPENAI_EFFORT = ["minimal", "low", "medium", "high", "xhigh", "max"] as const satisfies readonly OpenAiEffort[];
 const ZAI_EFFORT = ["minimal", "low", "medium", "high", "xhigh", "max"] as const satisfies readonly ZhipuReasoningEffort[];
 const DEEPSEEK_EFFORT = ["low", "high", "max"] as const satisfies readonly DeepSeekEffort[];
@@ -211,6 +212,7 @@ function adapterSupportsOff(sdk: Sdk): boolean {
 function adapterEffortSuggestions(sdk: Sdk): readonly string[] {
   switch (sdk) {
     case "anthropic": return ANTHROPIC_EFFORT;
+    case "claude_agent": return CLAUDE_AGENT_EFFORT;
     case "openai": return OPENAI_EFFORT;
     case "openrouter": return OPENROUTER_EFFORT;
     case "gemini": return GEMINI_EFFORT;
