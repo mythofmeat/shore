@@ -5,6 +5,8 @@ import {
   daysFromMonday,
   daysInMonth,
   formatLocalAmPm,
+  normalizeToZone,
+  toZonedRfc3339,
   HOUR_MS,
   asNaive,
   naiveFrom,
@@ -138,5 +140,58 @@ describe("rendering", () => {
 
   test("an unparseable timestamp passes through", () => {
     expect(formatLocalAmPm("not a timestamp", NY)).toBe("not a timestamp");
+  });
+});
+
+describe("rendering an instant in a zone", () => {
+  const CBR = "Australia/Canberra";
+
+  test("the offset is the zone's, on both sides of a DST boundary", () => {
+    expect(toZonedRfc3339(Date.parse("2026-08-13T00:00:00Z"), CBR)).toBe(
+      "2026-08-13T10:00:00+10:00",
+    );
+    expect(toZonedRfc3339(Date.parse("2026-01-13T00:00:00Z"), CBR)).toBe(
+      "2026-01-13T11:00:00+11:00",
+    );
+    expect(toZonedRfc3339(Date.parse("2026-08-13T00:00:00Z"), "UTC")).toBe(
+      "2026-08-13T00:00:00+00:00",
+    );
+  });
+
+  test("a negative offset keeps its sign", () => {
+    expect(toZonedRfc3339(Date.parse("2026-03-11T10:00:00Z"), "America/New_York")).toBe(
+      "2026-03-11T06:00:00-04:00",
+    );
+  });
+
+  test("sub-second precision survives, and whole seconds stay bare", () => {
+    expect(toZonedRfc3339(Date.parse("2026-08-13T00:00:00.123Z"), "UTC")).toBe(
+      "2026-08-13T00:00:00.123+00:00",
+    );
+    expect(toZonedRfc3339(Date.parse("2026-08-13T00:00:00.000Z"), "UTC")).toBe(
+      "2026-08-13T00:00:00+00:00",
+    );
+  });
+
+  test("every stored encoding normalizes to the same instant", () => {
+    const same = [
+      "2026-08-13T00:00:00Z",
+      "2026-08-13T00:00:00+00:00",
+      "2026-08-13T10:00:00+10:00",
+      "2026-08-13T11:00:00+11:00",
+    ];
+    for (const ts of same) {
+      expect(normalizeToZone(ts, CBR)).toBe("2026-08-13T10:00:00+10:00");
+    }
+  });
+
+  test("nanosecond precision from the Rust era is accepted", () => {
+    expect(normalizeToZone("2026-03-30T07:33:16.656165788+00:00", "UTC")).toBe(
+      "2026-03-30T07:33:16.656+00:00",
+    );
+  });
+
+  test("an unparseable timestamp passes through untouched", () => {
+    expect(normalizeToZone("not-a-timestamp", CBR)).toBe("not-a-timestamp");
   });
 });

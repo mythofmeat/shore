@@ -268,6 +268,19 @@ export function formatWallClock(instantMs: number, timeZone: string): string {
   return `${weekday} ${String(year).padStart(4, "0")}-${pad2(month)}-${pad2(day)} · ${hour12}:${pad2(d.getUTCMinutes())} ${meridiem}`;
 }
 
+export function wallClockMarker(
+  previousTimestamp: string | undefined,
+  timestamp: string,
+  timeZone: string,
+): string | undefined {
+  const currentMs = parseRfc3339(timestamp);
+  if (currentMs === undefined) return undefined;
+  const prevMs = previousTimestamp === undefined ? undefined : parseRfc3339(previousTimestamp);
+  if (prevMs === undefined) return formatTimeMarker(undefined, currentMs, timeZone);
+  const gap = gapSeconds(prevMs, currentMs);
+  return gap < TIME_GAP_THRESHOLD_SECS ? undefined : formatTimeMarker(gap, currentMs, timeZone);
+}
+
 function gapSeconds(fromMs: number, toMs: number): number {
   return Math.trunc((toMs - fromMs) / 1000);
 }

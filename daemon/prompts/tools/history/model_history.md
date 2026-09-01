@@ -2,4 +2,6 @@ Report which LLM models generated your words over a time period, from the daemon
 
 Returns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.
 
+`first_seen` and `last_seen` are rendered in the zone named by `time_zone` with an explicit UTC offset, matching `search_chat_logs`, so rows from the two tools can be compared directly.
+
 Coverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).

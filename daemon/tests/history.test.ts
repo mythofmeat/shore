@@ -136,7 +136,11 @@ describe("searching a conversation's history", () => {
       let got: Awaited<ReturnType<typeof handleSearchHistory>> | undefined;
       let thrown: unknown;
       try {
-        got = await handleSearchHistory(c.input, dir, { defaultMode: "lexical" });
+        got = await handleSearchHistory(c.input, dir, {
+          defaultMode: "lexical",
+          timeZone: "UTC",
+          now: () => Date.parse("2026-01-05T00:00:00Z"),
+        });
       } catch (e) {
         thrown = e;
       }
@@ -173,9 +177,24 @@ describe("searching a conversation's history", () => {
         expect(hit.role, `${String(hit.msg_id)}: comes back as the role it was written in`).toBe(
           message.role,
         );
-        expect(hit.timestamp ?? null, `${String(hit.msg_id)}: and when it was written`).toBe(
-          message.timestamp ?? null,
-        );
+        const storedTs = message.timestamp;
+        if (storedTs === undefined) {
+          expect(hit.timestamp ?? null, `${String(hit.msg_id)}: carries no time`).toBe(null);
+        } else if (Number.isNaN(Date.parse(storedTs))) {
+          expect(
+            hit.timestamp,
+            `${String(hit.msg_id)}: an unparseable stamp is passed through untouched`,
+          ).toBe(storedTs);
+        } else {
+          expect(
+            Date.parse(String(hit.timestamp)),
+            `${String(hit.msg_id)}: and the instant it was written`,
+          ).toBe(Date.parse(storedTs));
+          expect(
+            String(hit.timestamp),
+            `${String(hit.msg_id)}: rendered with an explicit offset`,
+          ).toMatch(/[+-]\d{2}:\d{2}$/u);
+        }
         expect(hit.model ?? null, `${String(hit.msg_id)}: and which model wrote it`).toBe(
           message.model ?? null,
         );

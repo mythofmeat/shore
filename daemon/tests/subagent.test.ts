@@ -345,6 +345,43 @@ describe("renderHistorySlice", () => {
     expect(out.endsWith("U: m249")).toBe(true);
   });
 
+  test("timed history carries the same wall-clock markers the conversation shows", () => {
+    const at = (ts: string, content: string): Message => ({
+      ...toMessage({ role: "user", content, images: 0, blocks: [] }),
+      timestamp: ts,
+    });
+    const out = renderHistorySlice(
+      [
+        at("2026-09-01T13:00:00Z", "first"),
+        at("2026-09-01T13:05:00Z", "still talking"),
+        at("2026-09-01T18:00:00Z", "hours later"),
+      ],
+      "3",
+      "Qifei",
+      "Ren",
+      "Australia/Canberra",
+    );
+
+    expect(out.split("\n")).toEqual([
+      "[Tuesday 2026-09-01 · 11:00 PM]",
+      "Ren: first",
+      "Ren: still talking",
+      "[5 hours later · Wednesday 2026-09-02 · 4:00 AM]",
+      "Ren: hours later",
+    ]);
+  });
+
+  test("untimed history is rendered exactly as before", () => {
+    const out = renderHistorySlice(
+      [toMessage({ role: "user", content: "hi", images: 0, blocks: [] })],
+      "1",
+      "Qifei",
+      "Ren",
+      "Australia/Canberra",
+    );
+    expect(out).toBe("Ren: hi");
+  });
+
   test("a non-numeric count yields nothing rather than everything", () => {
     const many = Array.from({ length: 10 }, (_, i) =>
       toMessage({ role: "user", content: `m${i}`, images: 0, blocks: [] }),
