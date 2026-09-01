@@ -22,7 +22,7 @@
     "@google/genai": "^2.20.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
-    "ai": "^7.0.87",
+    "ai": "^7.0.88",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "matrix-js-sdk": "^42.3.0",
