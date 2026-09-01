@@ -138,7 +138,7 @@ interface ToolStep {
 }
 
 interface GenerationInput {
-  body: { image_data?: unknown[]; images?: string[]; text: string };
+  body: { guidance?: string; image_data?: unknown[]; images?: string[]; text: string };
   events: StreamEvent[];
   history: Message[];
   max_retries: number | null;
@@ -485,6 +485,9 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
         stream: true,
         images: turnInput["body"]["images"] ?? [],
         image_data: turnInput["body"]["image_data"] ?? [],
+        ...(turnInput["body"]["guidance"] === undefined
+          ? {}
+          : { guidance: turnInput["body"]["guidance"] }),
       },
       regen: turnInput.regen,
       charName: "ada",
@@ -648,6 +651,70 @@ describe("runGeneration", () => {
       }
     });
   }
+});
+
+test("regen guidance reaches the model ephemerally and is not persisted", async () => {
+  const guidance = "Use ask_memory before responding, then respond naturally.";
+  const run = await replayTurn({
+    input: {
+      history: [
+        {
+          msg_id: "m_question",
+          role: "user",
+          content: "Do you remember Lio Rush?",
+          images: [],
+          content_blocks: [{ type: "text", text: "Do you remember Lio Rush?" }],
+          timestamp: "2026-01-01T10:00:00-05:00",
+        },
+        {
+          msg_id: "m_bad_answer",
+          role: "assistant",
+          content: "I don't think so.",
+          images: [],
+          content_blocks: [{ type: "text", text: "I don't think so." }],
+          timestamp: "2026-01-01T10:00:01-05:00",
+        },
+      ],
+      body: { text: "", guidance },
+      regen: true,
+      rid: "r-guided-regen",
+      max_retries: 0,
+      subagent: null,
+      tools_enabled: null,
+      tool_steps: [],
+      events: [
+        { type: "start", model: "claude-fixture" },
+        { type: "text", text: "Of course I remember him." },
+        {
+          type: "done",
+          content: "Of course I remember him.",
+          finish_reason: "end_turn",
+          usage: {
+            input_tokens: 100,
+            output_tokens: 8,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+          },
+          timing: { total_ms: 10, time_to_first_token_ms: 2 },
+        },
+      ],
+    },
+    output: {},
+  });
+
+  expect(run.error).toBeUndefined();
+  expect(run.recallCalls).toHaveLength(0);
+  expect(run.requests.at(-1)?.messages.at(-1)).toEqual({
+    role: "system",
+    content: [{ type: "text", text: guidance }],
+  });
+
+  const stored = await readBack(run.dataDir);
+  expect(stored.map((message) => message.content)).toEqual([
+    "Do you remember Lio Rush?",
+    "Of course I remember him.",
+  ]);
+  expect(JSON.stringify(stored)).not.toContain(guidance);
 });
 
 test("a failed tool loop is durable before the final answer and repaired after restart", async () => {

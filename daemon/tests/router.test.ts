@@ -332,6 +332,24 @@ describe("routed messages", () => {
 });
 
 describe("what a generation is handed", () => {
+  test("regen guidance reaches the generation body", async () => {
+    const h = harness(["Alice"], 1);
+
+    await h.handler.handleRouted({
+      kind: "engine",
+      msg: {
+        type: "regen",
+        rid: "r-guided",
+        stream: true,
+        guidance: "consult memory",
+      },
+      meta: meta("Alice", 1, "r-guided", "regen"),
+    });
+
+    expect(h.started[0]?.body.guidance).toBe("consult memory");
+    expect(h.started[0]?.body.text).toBe("");
+  });
+
   test("the stream reaches the lease holder as well as the issuer", async () => {
     const h = harness(["Alice"], 2);
 

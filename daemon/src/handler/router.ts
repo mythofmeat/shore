@@ -84,6 +84,7 @@ export interface EngineBody {
   readonly images: readonly string[];
   readonly image_data: readonly unknown[];
   readonly absence_seconds?: number | null;
+  readonly guidance?: string;
 }
 
 export interface HandlerNotifier {
@@ -179,6 +180,9 @@ export class MessageHandler {
           stream: msg.stream,
           images: [],
           image_data: [],
+          ...(msg.guidance === undefined || msg.guidance === null
+            ? {}
+            : { guidance: msg.guidance }),
         }
       : {
           rid: msg.rid ?? null,

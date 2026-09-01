@@ -140,6 +140,7 @@ function decodeClientMessage(value: unknown): ClientMessage {
         type: "regen",
         ...opt("rid", str("rid", false)),
         stream: bool("stream"),
+        ...opt("guidance", str("guidance", false)),
       };
     case "command":
       return {

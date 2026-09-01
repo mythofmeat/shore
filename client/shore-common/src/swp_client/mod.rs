@@ -255,7 +255,10 @@ mod tests {
             let mut reader = tokio::io::BufReader::new(r);
 
             let regen_msg: ClientMessage = read_json_line(&mut reader).await;
-            assert!(matches!(regen_msg, ClientMessage::Regen(_)));
+            let ClientMessage::Regen(regen) = regen_msg else {
+                panic!("expected regen");
+            };
+            assert_eq!(regen.guidance.as_deref(), Some("consult memory"));
 
             let command_msg: ClientMessage = read_json_line(&mut reader).await;
             let ClientMessage::Command(c) = command_msg else {
@@ -265,7 +268,10 @@ mod tests {
         });
 
         let mut conn = SWPConnection::from_raw_stream(client_stream);
-        let _regen_sent = conn.send_regen(true).await.unwrap();
+        let _regen_sent = conn
+            .send_regen(true, Some("consult memory".into()))
+            .await
+            .unwrap();
         let _command_sent = conn
             .send_command("switch_character", serde_json::json!({"name": "alice"}))
             .await

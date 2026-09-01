@@ -179,26 +179,82 @@ a few appealing score examples.
 
 `recall_eval.py` provides the repeatable offline check. It reads archived turns
 from `history.db` without modifying them and calls Hindsight's REST recall path
-without writing to the bank. By default it compares the latest user message with
-the same message preceded by only the last 200 characters of the prior assistant
-reply:
+without writing to the bank. `retrieval_targets` asks for the smallest specific
+older fact whose absence would materially change the next reply, instead of
+paraphrasing the message or assembling broad background coverage. It knows that
+the visible dialogue, character/user identities, `MEMORY.md`, and workspace
+state are already supplied elsewhere. `NO_RECALL` skips Hindsight when no
+particular older memory is needed.
 
-    python recall_eval.py collect \
-      --history data/shore-data/history.db --character qifei --limit 40 \
-      --output /tmp/qifei-recall.jsonl
+Before spending anything on retrieval, preview six target queries from an
+existing collection. This calls only the rewrite model and produces a local HTML
+page:
 
-Turn the collection into a review sheet, fill the `label` column with `useful`,
-`harmless`, or `distracting`, then report top-1/top-3/top-6 coverage and tail
-cost:
+    python recall_eval.py preview-rewrites \
+      --input /tmp/recall-cases.jsonl --character qifei --user-name Ren \
+      --output /tmp/retrieval-target-preview.html
+
+Once those outputs look like retrieval requests rather than summaries, reuse
+the valid `user` recalls and run only the new targets through Hindsight:
+
+    python recall_eval.py refresh-rewrites \
+      --input /tmp/recall-cases.jsonl --character qifei --user-name Ren \
+      --output /tmp/recall-targets.jsonl
+
+Do not expand that collection into a giant CSV. Build a local review page:
 
     python recall_eval.py review \
-      --input /tmp/qifei-recall.jsonl --output /tmp/qifei-recall-review.csv
-    python recall_eval.py report --input /tmp/qifei-recall-review.csv
+      --input /tmp/recall-targets.jsonl --output /tmp/recall-targets-review.html
+
+The page selects 24 cases spread across the archive and compares the top three
+results from `user` and `retrieval_targets`. The sides are shuffled per case; query
+text, variant names, and scores stay hidden until after the judgment. It shows
+the exact recent dialogue supplied to the rewrite model, stores progress only in
+browser local storage, and exports compact JSON containing no conversation or
+memory text. **Neither is useful** means both result sets were unusable; inspect
+the generated query before deciding whether generation or retrieval caused it.
+
+For GLM-5.3-Flash, rewriting uses the model-supported
+`reasoning_effort=max`, an 8192-token completion budget shared by reasoning and
+the final answer, a 120-second offline timeout, and the provider's native
+sampling defaults. Do not send the
+older `thinking.type=disabled` field: GLM-5.3-Flash exposes `low`, `high`, and
+`max` reasoning effort, not a non-thinking mode. Every collected case records
+the model, endpoint, reasoning budget, prompt version, exact instructions, and
+rewrite token usage. Clear refusals and provider safety blocks are recorded as
+failed rewrites, receive no Hindsight call, and are excluded explicitly from the
+comparison count. Review refuses older rewrite collections without provenance
+rather than silently mixing incompatible runs.
+
+After exporting the judgments from the page:
+
+    python recall_eval.py report \
+      --input ~/Downloads/shore-recall-comparison-REPLACE_ME.json
+
+The report keeps rewrite time separate from Hindsight recall time and reports
+rewrite token totals, so the same archive can compare the quality and operating
+cost of a faster or cheaper rewrite model without confusing its latency with the
+retriever's. When testing a model that does not use GLM-5.3-Flash's effort
+contract, pass `--rewrite-reasoning-effort default`; this omits the reasoning
+field rather than guessing at another model's controls. Keep `--limit` and
+`--sample` identical so each run selects the same archived turns.
+
+Only after choosing a query strategy, build the separate score-calibration page:
+
+    python recall_eval.py calibrate \
+      --input /tmp/recall-targets.jsonl --variant retrieval_targets \
+      --output /tmp/qifei-recall-calibration.html
+
+That page samples ten cases and asks for `useful`, `harmless`, or `distracting`
+on only the top six memories. Scores remain hidden until each label is chosen.
+Export its judgments and pass that JSON to `report` to see the score distribution
+and threshold ladder. This keeps query selection and score-floor calibration as
+two independent decisions.
 
 The collector refuses to overwrite an existing output file. Add `recent` to
-`--variants` to compare the old full-previous-message query as well. The report
-uses only completely labelled top-six cases for quality metrics and reports
-latency and call failures separately.
+`--variants` only when it is genuinely worth collecting; it need not be included
+in the human comparison. `review-csv` preserves the old expanded CSV workflow
+for an existing analysis, but it is not the default review path.
 
 ## Order of operations
 

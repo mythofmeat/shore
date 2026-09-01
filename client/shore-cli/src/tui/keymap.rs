@@ -572,6 +572,24 @@ mod tests {
     }
 
     #[test]
+    fn guided_regen_can_be_bound_to_one_key() {
+        let mut keymap = Keymap::default();
+        keymap
+            .bind(
+                Scope::Normal,
+                "R",
+                "msg regen --guidance 'Use ask_memory before responding'",
+            )
+            .unwrap();
+        let binding = keymap.lookup(Scope::Normal, "R").unwrap();
+        assert_eq!(
+            binding.command,
+            "msg regen --guidance 'Use ask_memory before responding'"
+        );
+        assert!(!binding.needs_more_input);
+    }
+
+    #[test]
     fn shortcuts_are_seeded_and_carry_the_key_that_also_runs_them() {
         let keymap = Keymap::default();
         assert!(keymap.warnings.is_empty(), "{:?}", keymap.warnings);
