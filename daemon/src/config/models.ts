@@ -43,11 +43,17 @@ function deserializeSdk(raw: string): ParseResult<Sdk> {
 }
 
 export function sdkEchoesUnsignedThinking(sdk: Sdk): boolean {
-  return sdk === "openai" || sdk === "zai" || sdk === "deepseek" || sdk === "moonshot";
+  return (
+    sdk === "openai" ||
+    sdk === "zai" ||
+    sdk === "deepseek" ||
+    sdk === "moonshot" ||
+    sdk === "nanogpt"
+  );
 }
 
 export function sdkUsesAnthropicPromptCache(sdk: Sdk): boolean {
-  return sdk === "anthropic";
+  return sdk === "anthropic" || sdk === "nanogpt";
 }
 
 export interface ModelConfigFields {
@@ -664,7 +670,7 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
       return {
         fields: {
           ...base,
-          sdk: "openai",
+          sdk: "nanogpt",
           apiKeyEnv: "NANOGPT_API_KEY",
           baseUrl: "https://nano-gpt.com/api/v1",
         },
@@ -695,6 +701,8 @@ export function defaultSdk(providerKey: string): Sdk {
     case "moonshot":
     case "moonshotai":
       return "moonshot";
+    case "nanogpt":
+      return "nanogpt";
     default:
       return isZaiProvider(providerKey) ? "zai" : "openai";
   }

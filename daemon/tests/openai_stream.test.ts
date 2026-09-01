@@ -115,3 +115,54 @@ test("text-only stream ends with end_turn and no tool_use events", async () => {
     expect(done.usage.total_cost_usd).toBeUndefined();
   }
 });
+
+test("nano-gpt's Anthropic-shaped cache counters are read, not dropped as zero", async () => {
+  const chunks = [
+    { choices: [{ index: 0, delta: { content: "hi" }, finish_reason: "stop" }] },
+    {
+      choices: [],
+      usage: {
+        prompt_tokens: 8500,
+        completion_tokens: 200,
+        cache_creation_input_tokens: 8000,
+        cache_read_input_tokens: 400,
+      },
+    },
+  ];
+  const events = await collect(
+    openAIStreamEvents("anthropic/claude-sonnet-5", fakeChunks(chunks), fakeClock()),
+  );
+  const done = events[2];
+  if (done?.type === "done") {
+    expect(done.usage).toEqual({
+      input_tokens: 100,
+      output_tokens: 200,
+      cache_read_tokens: 400,
+      cache_creation_tokens: 8000,
+    });
+  }
+});
+
+test("an OpenAI-only usage block still reports its cached tokens as a read", async () => {
+  const chunks = [
+    { choices: [{ index: 0, delta: { content: "hi" }, finish_reason: "stop" }] },
+    {
+      choices: [],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        prompt_tokens_details: { cached_tokens: 80 },
+      },
+    },
+  ];
+  const events = await collect(openAIStreamEvents("openai/gpt-5.5", fakeChunks(chunks), fakeClock()));
+  const done = events[2];
+  if (done?.type === "done") {
+    expect(done.usage).toEqual({
+      input_tokens: 20,
+      output_tokens: 20,
+      cache_read_tokens: 80,
+      cache_creation_tokens: 0,
+    });
+  }
+});

@@ -4600,11 +4600,11 @@
       },
       {
         "provider_key": "zai-api",
-        "base_url": null
+        "base_url": "https://api.z.ai/api/paas/v4"
       },
       {
         "provider_key": "zai-sub",
-        "base_url": null
+        "base_url": "https://api.z.ai/api/coding/paas/v4"
       },
       {
         "provider_key": "nanogpt",

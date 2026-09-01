@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   effectiveCacheTtl,
-  respectsInlineCacheHints,
+  honorsCacheTtl,
 } from "../src/llm/cache_capability.ts";
 import { buildAnthropicPlan } from "../src/llm/providers/anthropic.ts";
 import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
@@ -37,11 +37,13 @@ function markersIn(params: { messages: unknown[]; system?: unknown }): unknown[]
     .filter((cc) => cc !== undefined);
 }
 
-describe("which protocols read an inline cache marker", () => {
-  test("only the Anthropic Messages shape does", () => {
-    expect(respectsInlineCacheHints("anthropic")).toBe(true);
+describe("which protocols carry a cache TTL", () => {
+  test("the Anthropic Messages shape and nano-gpt's helper do", () => {
+    for (const sdk of ["anthropic", "nanogpt"] as const) {
+      expect(honorsCacheTtl(sdk)).toBe(true);
+    }
     for (const sdk of ["openai", "openrouter", "gemini", "zai", "deepseek", "moonshot"] as const) {
-      expect(respectsInlineCacheHints(sdk)).toBe(false);
+      expect(honorsCacheTtl(sdk)).toBe(false);
     }
   });
 

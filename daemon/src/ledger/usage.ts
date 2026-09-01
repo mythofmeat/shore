@@ -10,7 +10,7 @@ import {
   type UsageConfig,
 } from "./budget.ts";
 import { reconstructState } from "../cache/tracker.ts";
-import { toOpenRouterId, type PricingEngine } from "./pricing.ts";
+import { catalogId, type PricingEngine } from "./pricing.ts";
 import {
   activeAnthropicCharacters,
   allCostRows,
@@ -394,7 +394,7 @@ export async function backfillMissingCosts(
     }
     const found = await pricing.getOrFetch(row.provider, row.model);
     if (found === undefined) {
-      const modelId = toOpenRouterId(row.provider, row.model);
+      const modelId = catalogId(row.provider, row.model);
       shoreLog.warn(`shore: pricing fetch returned no data for ${modelId}`);
       fetched.set(key, `no pricing data for ${modelId}`);
     } else {

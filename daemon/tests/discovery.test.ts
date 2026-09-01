@@ -52,6 +52,18 @@ describe("the models URL a provider is asked for", () => {
     expect(buildModelsUrl("")).toBe("/models");
   });
 
+  test("nano-gpt is asked for the catalog that carries pricing and capabilities", () => {
+    expect(buildModelsUrl("https://nano-gpt.com/api/v1", "nanogpt")).toBe(
+      "https://nano-gpt.com/api/v1/models?detailed=true",
+    );
+  });
+
+  test("no other provider is asked for the detailed shape", () => {
+    for (const key of ["openrouter", "xai", "opencode-go", undefined]) {
+      expect(buildModelsUrl("https://x.test/v1", key), String(key)).toBe("https://x.test/v1/models");
+    }
+  });
+
   test("anthropic supplies the /v1 the base is missing", () => {
     expect(buildAnthropicModelsUrl("https://api.anthropic.com")).toBe(
       "https://api.anthropic.com/v1/models",
@@ -176,6 +188,55 @@ describe("turning a provider's catalog entry into a model", () => {
       effort: { supported: true, levels: ["low", "high"] },
       thinking: { adaptive: true, enabled: false },
     });
+  });
+
+  test("reads nano-gpt's flat capability flags, which name nothing the same way", () => {
+    const got = mapEntry("nanogpt", "https://nano-gpt.com/api/v1", "nanogpt", {
+      id: "inception/mercury-2.5-preview",
+      name: "Mercury 2.5 Preview",
+      context_length: 260000,
+      max_output_tokens: 65536,
+      architecture: { input_modalities: ["text"], output_modalities: ["text"] },
+      capabilities: { vision: false, reasoning: true, tool_calling: true },
+      reasoning_efforts: ["none", "low", "medium", "high"],
+    }, NOW);
+    expect(got).toMatchObject({
+      model_id: "inception/mercury-2.5-preview",
+      display_name: "Mercury 2.5 Preview",
+      context_length: 260000,
+      max_output_tokens: 65536,
+      supports_tools: true,
+      supports_reasoning: true,
+      supports_images: false,
+    });
+    expect(got?.support?.effort).toEqual({
+      supported: true,
+      levels: ["low", "medium", "high"],
+    });
+  });
+
+  test("a nano-gpt model that cannot reason is pinned to off, not left to guess", () => {
+    for (const efforts of [{ reasoning_efforts: [] }, {}]) {
+      const got = mapEntry("nanogpt", "https://nano-gpt.com/api/v1", "nanogpt", {
+        id: "some/plain-model",
+        capabilities: { reasoning: false, tool_calling: false },
+        ...efforts,
+      }, NOW);
+      expect(got?.supports_reasoning, JSON.stringify(efforts)).toBe(false);
+      expect(got?.support?.effort, JSON.stringify(efforts)).toEqual({
+        supported: false,
+        levels: [],
+      });
+    }
+  });
+
+  test("a reasoning model with no effort knob keeps the adapter's own levels", () => {
+    const got = mapEntry("nanogpt", "https://nano-gpt.com/api/v1", "nanogpt", {
+      id: "qwen/qwen3.8-27b",
+      capabilities: { reasoning: true },
+      reasoning_efforts: [],
+    }, NOW);
+    expect(got?.support?.effort).toBeUndefined();
   });
 
   test("takes the sdk from the per-model rule, not the provider default", () => {

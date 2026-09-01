@@ -1027,18 +1027,14 @@ describe("hardcodedProviderBaseUrl", () => {
     });
   }
 
-  test("it is not the same table chat uses", () => {
+  test("chat reaches every provider this table knows at the same endpoint", () => {
     const disagreements = fixture.retrieval.hardcoded_base_url.filter(
       (c) => (c.base_url ?? undefined) !== defaultBaseUrl(c.provider_key),
     );
     expect(disagreements.map((c) => c.provider_key).sort(compareStrings)).toEqual([
       "anthropic",
       "deepseek",
-      "nanogpt",
       "openai",
-      "zai-api",
-      "zai-sub",
-      "zhipuai",
     ]);
   });
 });

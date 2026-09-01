@@ -6,7 +6,7 @@ import {
   calculateCost,
   isAnthropicPricing,
   PricingEngine,
-  toOpenRouterId,
+  catalogId,
   type ModelPricing,
   type PricingStore,
 } from "../src/ledger/pricing.ts";
@@ -87,17 +87,17 @@ describe("cost calculation", () => {
 
 describe("model id mapping", () => {
   test("anthropic minor versions become dotted", () => {
-    expect(toOpenRouterId("anthropic", "claude-opus-4-6")).toBe("anthropic/claude-opus-4.6");
-    expect(toOpenRouterId("anthropic", "claude-sonnet-4-5")).toBe("anthropic/claude-sonnet-4.5");
+    expect(catalogId("anthropic", "claude-opus-4-6")).toBe("anthropic/claude-opus-4.6");
+    expect(catalogId("anthropic", "claude-sonnet-4-5")).toBe("anthropic/claude-sonnet-4.5");
   });
 
   test("other providers are prefixed verbatim", () => {
-    expect(toOpenRouterId("openai", "gpt-4o")).toBe("openai/gpt-4o");
+    expect(catalogId("openai", "gpt-4o")).toBe("openai/gpt-4o");
   });
 
   test("already-prefixed ids pass through", () => {
-    expect(toOpenRouterId("openrouter", "google/gemini-3-pro")).toBe("google/gemini-3-pro");
-    expect(toOpenRouterId("openrouter-anthropic", "anthropic/claude-opus-4.6")).toBe(
+    expect(catalogId("openrouter", "google/gemini-3-pro")).toBe("google/gemini-3-pro");
+    expect(catalogId("openrouter-anthropic", "anthropic/claude-opus-4.6")).toBe(
       "anthropic/claude-opus-4.6",
     );
   });
@@ -183,6 +183,66 @@ describe("the engine", () => {
       engine.getOrFetch("openai", "gpt-4o"),
     ]);
     expect(calls).toBe(1);
+  });
+
+  test("nano-gpt is priced from its own catalog, not by guessing an OpenRouter id", async () => {
+    const urls: string[] = [];
+    const engine = new PricingEngine(memoryStore(), async (url) => {
+      urls.push(url);
+      return Response.json({
+        data: [
+          {
+            id: "anthropic/claude-sonnet-5",
+            pricing: {
+              prompt: 2,
+              completion: 10,
+              cacheReadInputPer1kTokens: 0.0002,
+              cacheWriteInputPer1kTokens: 0.0025,
+              currency: "USD",
+              unit: "per_million_tokens",
+            },
+          },
+        ],
+      });
+    });
+
+    const found = required(await engine.getOrFetch("nanogpt", "anthropic/claude-sonnet-5"));
+    close(found.input_per_token, 0.000_002);
+    close(found.output_per_token, 0.000_01);
+    close(found.cache_read_per_token, 0.000_000_2);
+    close(found.cache_write_per_token, 0.000_002_5);
+    expect(urls).toEqual(["https://nano-gpt.com/api/v1/models?detailed=true"]);
+  });
+
+  test("a nano-gpt id that collides with an OpenRouter one keeps its own price", async () => {
+    const store = memoryStore({
+      "anthropic/claude-sonnet-5": {
+        input_per_token: 999,
+        output_per_token: 999,
+        cache_read_per_token: 999,
+        cache_write_per_token: 999,
+      },
+    });
+    const engine = new PricingEngine(store, async () =>
+      Response.json({
+        data: [{ id: "anthropic/claude-sonnet-5", pricing: { prompt: 2, completion: 10 } }],
+      }),
+    );
+    const found = required(await engine.getOrFetch("nanogpt", "anthropic/claude-sonnet-5"));
+    close(found.input_per_token, 0.000_002);
+    expect(catalogId("nanogpt", "anthropic/claude-sonnet-5")).toBe(
+      "nanogpt/anthropic/claude-sonnet-5",
+    );
+  });
+
+  test("a bare nano-gpt id is priced too, where an OpenRouter guess found nothing", async () => {
+    const engine = new PricingEngine(memoryStore(), async () =>
+      Response.json({
+        data: [{ id: "gemma-4-26b-a4b-uncensored", pricing: { prompt: 0.1, completion: 0.4 } }],
+      }),
+    );
+    const found = required(await engine.getOrFetch("nanogpt", "gemma-4-26b-a4b-uncensored"));
+    close(found.input_per_token, 0.000_000_1);
   });
 
   test("a failed fetch leaves the row unpriced rather than failing the call", async () => {

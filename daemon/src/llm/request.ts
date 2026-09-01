@@ -65,22 +65,10 @@ export function defaultBaseUrl(providerKey: string): string | undefined {
       return "https://api.anthropic.com";
     case "openai":
       return "https://api.openai.com/v1";
-    case "openrouter":
-      return "https://openrouter.ai/api/v1";
     case "deepseek":
       return "https://api.deepseek.com";
-    case "moonshot":
-    case "moonshotai":
-      return "https://api.moonshot.ai/v1";
-    case "xai":
-      return "https://api.x.ai/v1";
-    case ZAI_API_PROVIDER:
-    case ZAI_SUB_PROVIDER:
-      return zaiBaseUrl(providerKey);
-    case "opencode-go":
-      return "https://opencode.ai/zen/go/v1";
     default:
-      return undefined;
+      return hardcodedProviderBaseUrl(providerKey);
   }
 }
 
@@ -97,6 +85,9 @@ export function hardcodedProviderBaseUrl(providerKey: string): string | undefine
       return "https://api.x.ai/v1";
     case "zhipuai":
       return "https://open.bigmodel.cn/api/paas/v4";
+    case ZAI_API_PROVIDER:
+    case ZAI_SUB_PROVIDER:
+      return zaiBaseUrl(providerKey);
     case "nanogpt":
       return "https://nano-gpt.com/api/v1";
     case "opencode-go":
@@ -104,10 +95,6 @@ export function hardcodedProviderBaseUrl(providerKey: string): string | undefine
     default:
       return undefined;
   }
-}
-
-export function requiresReasoningReplay(providerKey: string): boolean {
-  return providerKey === "deepseek" || providerKey === "moonshot" || providerKey === "moonshotai";
 }
 
 export function providerOptionsFor(model: ResolvedModel): ProviderOptions | undefined {

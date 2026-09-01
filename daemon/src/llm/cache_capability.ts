@@ -2,12 +2,12 @@ import { shoreLog } from "../log.ts";
 
 import type { Sdk } from "./types.ts";
 
-const RESPECTS_INLINE_HINTS: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic"]);
+const HONORS_CACHE_TTL: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic", "nanogpt"]);
 
-const REPORTS_CACHE_WRITES: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic"]);
+const REPORTS_CACHE_WRITES: ReadonlySet<Sdk> = new Set<Sdk>(["anthropic", "nanogpt"]);
 
-export function respectsInlineCacheHints(sdk: Sdk): boolean {
-  return RESPECTS_INLINE_HINTS.has(sdk);
+export function honorsCacheTtl(sdk: Sdk): boolean {
+  return HONORS_CACHE_TTL.has(sdk);
 }
 
 export function reportsCacheWrites(sdk: Sdk): boolean {
@@ -16,10 +16,10 @@ export function reportsCacheWrites(sdk: Sdk): boolean {
 
 export function effectiveCacheTtl(sdk: Sdk, requested: string): string {
   if (requested === "") return "";
-  if (!respectsInlineCacheHints(sdk)) {
+  if (!honorsCacheTtl(sdk)) {
     shoreLog.warn(
-      `shore: cache_ttl=${requested} was requested for sdk ${sdk}, which does not read inline ` +
-        `cache_control markers; no marker is being sent`,
+      `shore: cache_ttl=${requested} was requested for sdk ${sdk}, which has no prompt-cache ` +
+        `control to carry it; no cache hint is being sent`,
     );
     return "";
   }

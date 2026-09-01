@@ -142,7 +142,6 @@ describe("authoritative coercion", () => {
 describe("applicability", () => {
   test("vendor settings belong only to their adapters", () => {
     for (const [key, owner] of [
-      ["cache_ttl", "anthropic"],
       ["openrouter_provider", "openrouter"],
       ["gemini_generation", "gemini"],
       ["zai_clear_thinking", "zai"],
@@ -151,6 +150,16 @@ describe("applicability", () => {
         const entry = settingSchema(sdk).find((candidate) => candidate.key === key);
         expect(entry?.applicability, `${key}/${sdk}`).toBe(sdk === owner ? "honored" : "ignored");
       }
+    }
+  });
+
+  test("cache_ttl is offered on every adapter that can carry one", () => {
+    const carriers = new Set(["anthropic", "nanogpt"]);
+    for (const sdk of SDK_VARIANTS) {
+      const entry = settingSchema(sdk).find((candidate) => candidate.key === "cache_ttl");
+      expect(entry?.applicability, `cache_ttl/${sdk}`).toBe(
+        carriers.has(sdk) ? "honored" : "ignored",
+      );
     }
   });
 

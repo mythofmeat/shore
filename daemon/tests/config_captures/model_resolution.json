@@ -116,6 +116,12 @@
       "as_str": "moonshot",
       "echoes_unsigned_thinking": true,
       "uses_anthropic_prompt_cache": false
+    },
+    {
+      "sdk": "nanogpt",
+      "as_str": "nanogpt",
+      "echoes_unsigned_thinking": true,
+      "uses_anthropic_prompt_cache": true
     }
   ],
   "field_keys": [
@@ -316,13 +322,13 @@
     {
       "provider": "nanogpt",
       "fields": {
-        "sdk": "openai",
+        "sdk": "nanogpt",
         "api_key_env": "NANOGPT_API_KEY",
         "base_url": "https://nano-gpt.com/api/v1",
         "max_context_tokens": 200000,
         "max_output_tokens": 32768
       },
-      "default_sdk": "openai"
+      "default_sdk": "nanogpt"
     },
     {
       "provider": "opencode-go",
@@ -1256,7 +1262,7 @@
       "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
-      "err": "failed to parse model entry [chat.anthropic.opus]: unknown variant `nope`, expected one of `anthropic`, `openai`, `openrouter`, `gemini`, `zai`, `deepseek`, `moonshot`\n"
+      "err": "failed to parse model entry [chat.anthropic.opus]: unknown variant `nope`, expected one of `anthropic`, `openai`, `openrouter`, `gemini`, `zai`, `deepseek`, `moonshot`, `nanogpt`\n"
     },
     {
       "name": "parse_entry_removed_zhipuai_sdk",
