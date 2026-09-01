@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -28,6 +28,10 @@ afterAll(() => {
   restoreTestEnv();
   closeLedgers();
   for (const c of cleanups) c();
+});
+
+afterEach(() => {
+  setSystemTime();
 });
 
 const KEY_ENV = "SHORE_HB_TICK_KEY";
@@ -485,6 +489,7 @@ describe("running a tick", () => {
   });
 
   test("the real gate pauses the tick, because the body is tagged as a heartbeat", async () => {
+    setSystemTime(new Date("2026-08-31T12:00:00.000Z"));
     const config = await world();
     const f = freshLedger();
     cleanups.push(f.cleanup);
