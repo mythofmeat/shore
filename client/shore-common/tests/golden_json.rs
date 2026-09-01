@@ -1079,6 +1079,7 @@ fn protocol_version_mismatch_produces_error() {
                 "protocol version mismatch: expected {}, got {}",
                 SWP_V1, h.v
             ),
+            retry_after_ms: None,
         });
         let json = serde_json::to_value(&err).unwrap();
         assert_eq!(field(&json, "type"), "error");
@@ -1104,6 +1105,24 @@ fn protocol_error_code_golden() {
     ServerMessage::Error(e) => {
         assert_eq!(e.code, ErrorCode::ProtocolError);
         assert_eq!(e.message, "unsupported protocol version");
+    }
+    );
+}
+
+#[test]
+fn provider_error_retry_after_golden() {
+    let fixture = r#"{
+        "type": "error",
+        "rid": "msg_01",
+        "code": "provider_error",
+        "message": "rate limited",
+        "retry_after_ms": 1250
+    }"#;
+    let msg: ServerMessage = assert_golden(fixture);
+    assert_variant!(
+    msg,
+    ServerMessage::Error(e) => {
+        assert_eq!(e.retry_after_ms, Some(1250));
     }
     );
 }

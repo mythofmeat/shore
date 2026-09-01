@@ -2391,6 +2391,7 @@ mod tests {
             rid: None,
             code: ErrorCode::InvalidRequest,
             message: "no characters available".into(),
+            retry_after_ms: None,
         })
         .await;
 

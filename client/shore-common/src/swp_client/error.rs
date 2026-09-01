@@ -22,6 +22,18 @@ pub enum ClientError {
     #[error("{0}")]
     Unauthorized(String),
 
+    #[error("provider error: {message}")]
+    Provider {
+        message: String,
+        retry_after_ms: Option<u64>,
+    },
+
+    #[error("request timed out: {message}")]
+    Timeout {
+        message: String,
+        retry_after_ms: Option<u64>,
+    },
+
     #[error("discovery error: {message}")]
     Discovery {
         kind: DiscoveryKind,

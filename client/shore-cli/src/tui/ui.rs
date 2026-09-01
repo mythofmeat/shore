@@ -7230,6 +7230,7 @@ pub(crate) mod scenario_tests {
                 rid: None,
                 code: ErrorCode::ProviderError,
                 message: "insufficient balance".into(),
+                retry_after_ms: None,
             }),
         );
 
@@ -7288,6 +7289,7 @@ pub(crate) mod scenario_tests {
                 rid: None,
                 code: ErrorCode::InvalidRequest,
                 message: "no such character".into(),
+                retry_after_ms: None,
             }),
         );
 
@@ -7313,6 +7315,7 @@ pub(crate) mod scenario_tests {
                 rid: None,
                 code: ErrorCode::ProviderError,
                 message: "insufficient balance".into(),
+                retry_after_ms: None,
             }),
         );
 

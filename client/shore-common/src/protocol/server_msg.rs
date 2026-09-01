@@ -63,6 +63,9 @@ pub struct Error {
     pub rid: Option<String>,
     pub code: ErrorCode,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "number | null")]
+    pub retry_after_ms: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]

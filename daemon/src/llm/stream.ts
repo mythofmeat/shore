@@ -166,6 +166,7 @@ export class StreamAccumulator {
                   ...(event.retry_after_ms === undefined
                     ? {}
                     : { retry_after_ms: event.retry_after_ms }),
+                  ...(event.timeout === true ? { timeout: true } : {}),
                 },
         };
     }

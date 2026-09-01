@@ -611,4 +611,66 @@ describe("a generation that throws", () => {
       fields: { error: "provider hung up" },
     });
   });
+
+  test("reports provider HTTP failures with their retry delay", async () => {
+    const frame = await failWith({
+      kind: "http_status",
+      status: 429,
+      body: "rate limited",
+      retry_after_ms: 12_000,
+    });
+    expect(frame).toMatchObject({
+      type: "error",
+      code: "provider_error",
+      message: "HTTP 429: rate limited",
+      retry_after_ms: 12_000,
+    });
+  });
+
+  test("reports provider-shaped failures as provider errors", async () => {
+    const frame = await failWith({ kind: "provider", message: "upstream rejected the request" });
+    expect(frame).toMatchObject({
+      type: "error",
+      code: "provider_error",
+      message: "provider error: upstream rejected the request",
+    });
+  });
+
+  test("reports provider stream failures as provider errors", async () => {
+    const frame = await failWith({
+      kind: "stream_errored",
+      message: "upstream overloaded",
+      usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 },
+      timing: { total_ms: 2_000, time_to_first_token_ms: 0 },
+    });
+    expect(frame).toMatchObject({
+      type: "error",
+      code: "provider_error",
+      message: "stream errored after partial usage: upstream overloaded",
+    });
+  });
+
+  test("reports provider timeouts as timeouts", async () => {
+    const frame = await failWith(new DOMException("The operation timed out.", "TimeoutError"));
+    expect(frame).toMatchObject({
+      type: "error",
+      code: "timeout",
+      message: "The operation timed out.",
+    });
+  });
+
+  test("keeps timeout classification after a stream failure is flattened", async () => {
+    const frame = await failWith({
+      kind: "stream_errored",
+      message: "The operation timed out.",
+      usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 },
+      timing: { total_ms: 30_000, time_to_first_token_ms: 0 },
+      timeout: true,
+    });
+    expect(frame).toMatchObject({
+      type: "error",
+      code: "timeout",
+      message: "stream errored after partial usage: The operation timed out.",
+    });
+  });
 });

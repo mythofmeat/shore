@@ -4,7 +4,7 @@ use tracing::{debug, error, trace, warn};
 
 use crate::protocol::client_msg::{ClientHello, ClientMessage};
 use crate::protocol::error::ErrorCode;
-use crate::protocol::server_msg::{History, ServerHello, ServerMessage};
+use crate::protocol::server_msg::{Error as ServerError, History, ServerHello, ServerMessage};
 use crate::protocol::{MAX_WIRE_MESSAGE_SIZE, SWP_V1};
 
 use crate::swp_client::error::{ClientError, Result};
@@ -157,16 +157,7 @@ impl SWPConnection {
                 }
                 ServerMessage::Error(e) => {
                     error!(code = ?e.code, "daemon refused the handshake");
-                    return Err(match e.code {
-                        ErrorCode::Unauthorized => ClientError::Unauthorized(e.message),
-                        ErrorCode::ProtocolError
-                        | ErrorCode::InvalidRequest
-                        | ErrorCode::NotFound
-                        | ErrorCode::Busy
-                        | ErrorCode::ProviderError
-                        | ErrorCode::Timeout
-                        | ErrorCode::InternalError => ClientError::Protocol(e.message),
-                    });
+                    return Err(client_error_from_server(e));
                 }
                 other @ (ServerMessage::Hello(_)
                 | ServerMessage::Shutdown(_)
@@ -286,6 +277,25 @@ impl SWPConnection {
         });
         self.send(&msg).await?;
         Ok(rid)
+    }
+}
+
+fn client_error_from_server(error: ServerError) -> ClientError {
+    match error.code {
+        ErrorCode::Unauthorized => ClientError::Unauthorized(error.message),
+        ErrorCode::ProviderError => ClientError::Provider {
+            message: error.message,
+            retry_after_ms: error.retry_after_ms,
+        },
+        ErrorCode::Timeout => ClientError::Timeout {
+            message: error.message,
+            retry_after_ms: error.retry_after_ms,
+        },
+        ErrorCode::ProtocolError
+        | ErrorCode::InvalidRequest
+        | ErrorCode::NotFound
+        | ErrorCode::Busy
+        | ErrorCode::InternalError => ClientError::Protocol(error.message),
     }
 }
 
@@ -413,6 +423,37 @@ mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::time::{Duration, timeout};
+
+    #[test]
+    fn provider_and_timeout_frames_keep_their_semantics() {
+        let provider = client_error_from_server(ServerError {
+            rid: None,
+            code: ErrorCode::ProviderError,
+            message: "rate limited".into(),
+            retry_after_ms: Some(1_250),
+        });
+        assert!(matches!(
+            provider,
+            ClientError::Provider {
+                ref message,
+                retry_after_ms: Some(1_250),
+            } if message == "rate limited"
+        ));
+
+        let timeout = client_error_from_server(ServerError {
+            rid: None,
+            code: ErrorCode::Timeout,
+            message: "request deadline exceeded".into(),
+            retry_after_ms: None,
+        });
+        assert!(matches!(
+            timeout,
+            ClientError::Timeout {
+                ref message,
+                retry_after_ms: None,
+            } if message == "request deadline exceeded"
+        ));
+    }
 
     #[tokio::test]
     async fn cancelled_receive_keeps_the_partial_frame() {

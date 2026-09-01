@@ -350,13 +350,17 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
         (
             prop::option::of(arb_ident()),
             arb_error_code(),
-            arb_small_string()
+            arb_small_string(),
+            prop::option::of(any::<u64>())
         )
-            .prop_map(|(rid, code, message)| ServerMessage::Error(Error {
-                rid,
-                code,
-                message
-            }),),
+            .prop_map(
+                |(rid, code, message, retry_after_ms)| ServerMessage::Error(Error {
+                    rid,
+                    code,
+                    message,
+                    retry_after_ms,
+                }),
+            ),
         (prop::option::of(arb_ident()), any::<bool>()).prop_map(|(rid, regen)| {
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,

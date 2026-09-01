@@ -14,6 +14,7 @@ export type LlmError =
       usage: Usage;
       timing: Timing;
       retry_after_ms?: number;
+      timeout?: boolean;
     }
   | { kind: "missing_api_key"; var: string }
   | { kind: "provider"; message: string }

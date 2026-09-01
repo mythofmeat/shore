@@ -1,6 +1,6 @@
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
-import { isAbortError } from "./abort.ts";
+import { isAbortError, isTimeoutError } from "./abort.ts";
 import { retryAfterMsFromError } from "./retry_after.ts";
 
 export type Sdk =
@@ -163,6 +163,7 @@ export type StreamEvent =
       timing: Timing;
       aborted?: boolean;
       retry_after_ms?: number;
+      timeout?: boolean;
     };
 
 export function streamErrorEvent(
@@ -182,6 +183,7 @@ export function streamErrorEvent(
       time_to_first_token_ms: firstTokenAt === 0 ? 0 : firstTokenAt - startedAt,
     },
     ...(isAbortError(err) ? { aborted: true } : {}),
+    ...(isTimeoutError(err) ? { timeout: true } : {}),
     ...(retryAfter === undefined ? {} : { retry_after_ms: retryAfter }),
   };
 }

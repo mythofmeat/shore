@@ -6,7 +6,7 @@ import {
 } from "../../engine/tool_loop.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { describeError, isLlmError, type LlmError } from "../errors.ts";
-import { isAbortError } from "../abort.ts";
+import { isAbortError, isTimeoutError } from "../abort.ts";
 import {
   retryAfterHint,
   streamWithRetry,
@@ -368,6 +368,9 @@ export async function* genericToolLoopEvents(
 
   if (failure !== undefined) {
     const retryAfterMs = retryAfterHint(failure);
+    const timedOut =
+      isTimeoutError(failure) ||
+      (isLlmError(failure) && failure.kind === "stream_errored" && failure.timeout === true);
     yield {
       type: "error",
       message:
@@ -377,6 +380,7 @@ export async function* genericToolLoopEvents(
       usage: driver.usage,
       timing: timing(),
       ...(isAbortError(failure) || signal?.aborted === true ? { aborted: true } : {}),
+      ...(timedOut ? { timeout: true } : {}),
       ...(retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs }),
     };
     return;

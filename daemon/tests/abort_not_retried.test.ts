@@ -70,6 +70,23 @@ describe("the abort survives the flattening chain", () => {
     expect(error.kind).toBe("stream_errored");
     expect(shouldRetryError(error, 0, { max_retries: 2 })).toEqual({ decision: "retry" });
   });
+
+  test("a timeout survives the stream event flattening chain", () => {
+    const event = streamErrorEvent(
+      new DOMException("The operation timed out.", "TimeoutError"),
+      usage,
+      0,
+      0,
+      () => 1,
+    );
+    expect(event).toMatchObject({ type: "error", timeout: true });
+
+    const step = new StreamAccumulator().handle(event, false, () => {});
+    expect(step).toMatchObject({
+      kind: "error",
+      error: { kind: "stream_errored", timeout: true },
+    });
+  });
 });
 
 describe("streamWithRetry", () => {

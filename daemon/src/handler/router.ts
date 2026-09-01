@@ -1,5 +1,7 @@
 import { CharacterConfigError } from "../characters.ts";
-import { describeError } from "../llm/errors.ts";
+import { isTimeoutError } from "../llm/abort.ts";
+import { describeError, toLlmError } from "../llm/errors.ts";
+import { retryAfterHint } from "../llm/fallback.ts";
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ErrorCode } from "../protocol/ErrorCode.ts";
@@ -36,6 +38,17 @@ function generationErrorCode(error: unknown): ErrorCode {
     error instanceof ImagesUnsupportedError
   ) {
     return error.code;
+  }
+  const llmError = toLlmError(error);
+  if (isTimeoutError(error) || (llmError.kind === "stream_errored" && llmError.timeout === true)) {
+    return "timeout";
+  }
+  if (
+    llmError.kind === "http_status" ||
+    llmError.kind === "provider" ||
+    llmError.kind === "stream_errored"
+  ) {
+    return "provider_error";
   }
   return "internal_error";
 }
@@ -255,9 +268,15 @@ export class MessageHandler {
       .catch(async (error: unknown) => {
         if (controller.signal.aborted) return;
         const message = describeError(error);
+        const retryAfterMs = retryAfterHint(error);
         this.#deps.log?.error?.("error processing engine message", { error: message });
         try {
-          await send(withRid({ type: "error", code: generationErrorCode(error), message }, rid));
+          await send(withRid({
+            type: "error",
+            code: generationErrorCode(error),
+            message,
+            ...(retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs }),
+          }, rid));
         } catch (sendError) {
           this.#deps.log?.error?.("failed to deliver generation error", {
             error: sendError instanceof Error ? sendError.message : String(sendError),

@@ -4121,6 +4121,7 @@ mod redraw_tests {
                 rid: Some(rid),
                 code: ErrorCode::NotFound,
                 message: "Message index 99 out of range (conversation has 4 messages)".into(),
+                retry_after_ms: None,
             }),
         );
 
@@ -4160,6 +4161,7 @@ mod redraw_tests {
                 rid: None,
                 code: ErrorCode::InvalidRequest,
                 message: "model does not accept images".into(),
+                retry_after_ms: None,
             }),
         );
 
@@ -4196,6 +4198,7 @@ mod redraw_tests {
                 rid: Some(rid),
                 code: ErrorCode::InvalidRequest,
                 message: "No model specified and no active model set".into(),
+                retry_after_ms: None,
             }),
         );
 
@@ -4225,6 +4228,7 @@ mod redraw_tests {
                 rid: None,
                 code: ErrorCode::InvalidRequest,
                 message: "unrelated command failed".into(),
+                retry_after_ms: None,
             }),
         );
 
@@ -4279,6 +4283,7 @@ mod redraw_tests {
                 rid: Some(rid),
                 code: ErrorCode::InvalidRequest,
                 message: "No model specified and no active model set".into(),
+                retry_after_ms: None,
             }),
         );
 
@@ -4537,6 +4542,7 @@ mod redraw_tests {
                 rid: None,
                 code: ErrorCode::ProviderError,
                 message: "rate limited".into(),
+                retry_after_ms: None,
             }),
         );
 
@@ -4567,6 +4573,7 @@ mod redraw_tests {
                 rid: Some("palette_1".into()),
                 code: ErrorCode::InternalError,
                 message: "command failed".into(),
+                retry_after_ms: None,
             }),
         );
 

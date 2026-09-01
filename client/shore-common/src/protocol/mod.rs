@@ -209,6 +209,7 @@ mod tests {
             rid: Some("msg_01".into()),
             code: ErrorCode::Busy,
             message: "engine busy".into(),
+            retry_after_ms: None,
         });
         let (json, _back) = round_trip(&msg);
         assert_eq!(field(&json, "type"), "error");
