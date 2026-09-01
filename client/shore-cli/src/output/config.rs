@@ -194,8 +194,6 @@ fn write_leaf<W: Write>(out: &mut W, scoped: Option<&str>, value: &Value) {
     let secret = is_secret(&segments, &leaf);
     let display = if secret {
         redacted(value)
-    } else if let Some(summary) = is_long_text(value) {
-        summary
     } else {
         scalar(value)
     };
@@ -550,6 +548,22 @@ mod tests {
             !row.contains("memory.compaction.min_turns"),
             "the dotted path belongs in the header, not the row: {out}"
         );
+    }
+
+    #[test]
+    fn a_long_leaf_value_is_shown_in_full() {
+        let values = [
+            "x".repeat(316),
+            "Things already known\nthat bear on what is being said\nright now".to_owned(),
+        ];
+        for value in values {
+            let data = json!({"key": "memory.recall.preamble", "config": value.as_str()});
+            let out = render(&data, false);
+            assert!(
+                out.contains(value.as_str()),
+                "a targeted lookup must show the value it was asked for: {out}"
+            );
+        }
     }
 
     #[test]
