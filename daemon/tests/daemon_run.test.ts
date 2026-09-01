@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { BUILD_VERSION } from "../src/build_version.ts";
 import { defaultToolsConfig } from "../src/config/app.ts";
 import {
   bounded,
@@ -178,6 +179,7 @@ class Client {
         type: "hello",
         client_type: "tui",
         client_name: "test",
+        build_version: BUILD_VERSION,
         capabilities: [],
         token: TEST_TOKEN,
         ...(selected === null ? {} : { character: selected }),

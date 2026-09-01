@@ -290,6 +290,7 @@
             "type": "hello",
             "client_type": "tui",
             "client_name": "t",
+            "build_version": "unknown",
             "capabilities": []
           }
         },
@@ -345,13 +346,14 @@
         "type": "hello",
         "v": 1,
         "server_name": "shore",
+        "build_version": "unknown",
         "characters": [
           {
             "name": "alice"
           }
         ]
       },
-      "line": "{\"type\":\"hello\",\"v\":1,\"server_name\":\"shore\",\"characters\":[{\"name\":\"alice\"}]}\n"
+      "line": "{\"type\":\"hello\",\"v\":1,\"server_name\":\"shore\",\"build_version\":\"unknown\",\"characters\":[{\"name\":\"alice\"}]}\n"
     },
     {
       "name": "history",
@@ -990,6 +992,7 @@
           "type": "hello",
           "v": 1,
           "server_name": "shore-test",
+          "build_version": "unknown",
           "characters": [
             {
               "name": "alice"
@@ -1052,6 +1055,7 @@
           "type": "hello",
           "v": 1,
           "server_name": "shore-test",
+          "build_version": "unknown",
           "characters": [
             {
               "name": "alice"
@@ -1108,6 +1112,7 @@
           "type": "hello",
           "v": 1,
           "server_name": "shore-test",
+          "build_version": "unknown",
           "characters": [
             {
               "name": "alice"
@@ -1163,6 +1168,7 @@
           "type": "hello",
           "v": 1,
           "server_name": "shore-test",
+          "build_version": "unknown",
           "characters": [
             {
               "name": "alice"
@@ -1219,6 +1225,7 @@
           "type": "hello",
           "v": 1,
           "server_name": "shore-test",
+          "build_version": "unknown",
           "characters": [
             {
               "name": "alice"
@@ -1247,6 +1254,7 @@
           "type": "hello",
           "v": 1,
           "server_name": "shore-test",
+          "build_version": "unknown",
           "characters": [
             {
               "name": "alice"
@@ -1271,6 +1279,7 @@
           "type": "hello",
           "v": 1,
           "server_name": "shore-test",
+          "build_version": "unknown",
           "characters": [
             {
               "name": "alice"

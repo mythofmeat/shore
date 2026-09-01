@@ -1724,6 +1724,7 @@ mod tests {
         let hello = ServerMessage::Hello(ServerHello {
             v: SWP_V1,
             server_name: "test-daemon".into(),
+            build_version: shore_common::BUILD_VERSION.into(),
             characters: vec![],
         });
         write_json_line(&mut w, &hello).await;

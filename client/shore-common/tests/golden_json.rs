@@ -46,6 +46,7 @@ const SERVER_HELLO_FIXTURE: &str = r#"{
     "type": "hello",
     "v": 1,
     "server_name": "shore-daemon",
+    "build_version": "test-build",
     "characters": [{"name": "alice"}, {"name": "bob"}]
 }"#;
 
@@ -57,6 +58,7 @@ fn server_hello_golden() {
     ServerMessage::Hello(h) => {
         assert_eq!(h.v, SWP_V1);
         assert_eq!(h.server_name, "shore-daemon");
+        assert_eq!(h.build_version, "test-build");
         assert_eq!(h.characters.len(), 2);
         assert_eq!(item(&h.characters, 0).name, "alice");
         assert_eq!(item(&h.characters, 0).avatar, None);
@@ -69,6 +71,7 @@ const SERVER_HELLO_WITH_AVATAR_FIXTURE: &str = r#"{
     "type": "hello",
     "v": 1,
     "server_name": "shore-daemon",
+    "build_version": "test-build",
     "characters": [{
         "name": "alice",
         "avatar": {
@@ -577,6 +580,7 @@ const CLIENT_HELLO_FIXTURE: &str = r#"{
     "type": "hello",
     "client_type": "tui",
     "client_name": "shore",
+    "build_version": "test-build",
     "capabilities": ["streaming", "images"]
 }"#;
 
@@ -588,6 +592,7 @@ fn client_hello_golden() {
     ClientMessage::Hello(h) => {
         assert_eq!(h.client_type, "tui");
         assert_eq!(h.client_name, "shore");
+        assert_eq!(h.build_version, "test-build");
         assert_eq!(h.capabilities, vec!["streaming", "images"]);
     }
     );

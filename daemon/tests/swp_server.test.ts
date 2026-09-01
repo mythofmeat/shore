@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { connect, type Socket } from "node:net";
 
+import { BUILD_VERSION } from "../src/build_version.ts";
 import { Server } from "../src/swp/server.ts";
 import type { HandshakeProvider } from "../src/swp/connection.ts";
 import type { ControlRoutedMessage } from "../src/swp/session.ts";
@@ -19,6 +20,7 @@ async function handshake(port: number, selected: string | null): Promise<Record<
         type: "hello",
         client_type: "tui",
         client_name: "test",
+        build_version: BUILD_VERSION,
         capabilities: [],
         ...(selected === null ? {} : { selected_character: selected }),
       })}\n`,
@@ -166,6 +168,7 @@ describe("stopping", () => {
           type: "hello",
           client_type: "tui",
           client_name: "test",
+          build_version: BUILD_VERSION,
           capabilities: [],
         })}\n`,
       );
@@ -252,6 +255,7 @@ describe("what a connection produces", () => {
           type: "hello",
           client_type: "tui",
           client_name: "test",
+          build_version: BUILD_VERSION,
           capabilities: [],
           selected_character: "ada",
         })}\n`,

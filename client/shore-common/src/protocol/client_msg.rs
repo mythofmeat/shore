@@ -5,12 +5,18 @@ use serde::{Deserialize, Serialize};
 pub struct ClientHello {
     pub client_type: String,
     pub client_name: String,
+    #[serde(default = "unknown_build_version")]
+    pub build_version: String,
     #[serde(default)]
     pub capabilities: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub character: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+}
+
+fn unknown_build_version() -> String {
+    "unknown".to_owned()
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]

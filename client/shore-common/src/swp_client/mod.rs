@@ -66,6 +66,7 @@ mod tests {
             let server_hello = ServerMessage::Hello(ServerHello {
                 v: SWP_V1,
                 server_name: "test-daemon".into(),
+                build_version: crate::BUILD_VERSION.into(),
                 characters: vec![CharacterInfo::new("alice")],
             });
             write_json_line(&mut w, &server_hello).await;
@@ -76,6 +77,7 @@ mod tests {
             };
             assert_eq!(h.client_type, "tui");
             assert_eq!(h.client_name, "test-client");
+            assert_eq!(h.build_version, crate::BUILD_VERSION);
             assert!(h.capabilities.contains(&"streaming".to_owned()));
             assert_eq!(h.token.as_deref(), Some("test-token"));
 
@@ -110,6 +112,7 @@ mod tests {
 
         assert_eq!(server_hello.v, SWP_V1);
         assert_eq!(server_hello.server_name, "test-daemon");
+        assert_eq!(server_hello.build_version, crate::BUILD_VERSION);
         assert_eq!(server_hello.characters.len(), 1);
         assert_eq!(history.messages.len(), 1);
         assert_eq!(
@@ -136,6 +139,7 @@ mod tests {
             let bad_hello = ServerMessage::Hello(ServerHello {
                 v: 999,
                 server_name: "bad".into(),
+                build_version: crate::BUILD_VERSION.into(),
                 characters: vec![],
             });
             write_json_line(&mut w, &bad_hello).await;
@@ -148,6 +152,42 @@ mod tests {
             format!("{err}").contains("unsupported protocol version"),
             "got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn handshake_rejects_a_different_daemon_build() {
+        with_token();
+        let (client_stream, server_stream) = duplex(8192);
+
+        let server_handle = tokio::spawn(async move {
+            let (r, mut w) = tokio::io::split(server_stream);
+            let mut reader = tokio::io::BufReader::new(r);
+            let server_hello = ServerMessage::Hello(ServerHello {
+                v: SWP_V1,
+                server_name: "test-daemon".into(),
+                build_version: "daemon-build".into(),
+                characters: vec![],
+            });
+            write_json_line(&mut w, &server_hello).await;
+
+            let client_hello: ClientMessage = read_json_line(&mut reader).await;
+            let ClientMessage::Hello(hello) = client_hello else {
+                panic!("expected client hello");
+            };
+            assert_eq!(hello.build_version, crate::BUILD_VERSION);
+        });
+
+        let result = SWPConnection::connect_raw(client_stream, "tui", "test", None).await;
+        let err = result.expect_err("a mismatched daemon build must be rejected");
+        let message = err.to_string();
+        assert!(message.contains(crate::BUILD_VERSION), "got: {message}");
+        assert!(message.contains("daemon-build"), "got: {message}");
+        assert!(
+            message.contains("must be upgraded together"),
+            "got: {message}"
+        );
+
+        server_handle.await.unwrap();
     }
 
     #[tokio::test]
@@ -184,6 +224,7 @@ mod tests {
             let server_hello = ServerMessage::Hello(ServerHello {
                 v: SWP_V1,
                 server_name: "test-daemon".into(),
+                build_version: crate::BUILD_VERSION.into(),
                 characters: vec![CharacterInfo::new("alice")],
             });
             write_json_line(&mut w, &server_hello).await;

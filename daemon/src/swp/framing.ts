@@ -1,3 +1,4 @@
+import { UNKNOWN_BUILD_VERSION } from "../build_version.ts";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ImageUpload } from "../protocol/ImageUpload";
 import type { ServerMessage } from "../protocol/ServerMessage";
@@ -176,6 +177,7 @@ function decodeClientMessage(value: unknown): ClientMessage {
         type: "hello",
         client_type: str("client_type", true) as string,
         client_name: str("client_name", true) as string,
+        build_version: str("build_version", false) ?? UNKNOWN_BUILD_VERSION,
         capabilities: strArr("capabilities"),
         ...opt("character", str("character", false)),
         ...opt("token", str("token", false)),

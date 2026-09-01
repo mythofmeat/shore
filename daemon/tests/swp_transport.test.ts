@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { UNKNOWN_BUILD_VERSION } from "../src/build_version.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage";
 import { Broadcast } from "../src/swp/broadcast";
 import {
@@ -246,6 +247,7 @@ function harness(pingIntervalMs = 3_600_000, events?: Subscriptionish): LoopHarn
     ctx: {
       clientId: 1,
       serverName: "shore-test",
+      buildVersion: UNKNOWN_BUILD_VERSION,
       router,
       events: (events ?? bus.subscribe()) as never,
       handshake: null as never,
@@ -288,6 +290,7 @@ describe("handleConnection", () => {
       {
         clientId: 1,
         serverName: "shore-test",
+        buildVersion: UNKNOWN_BUILD_VERSION,
         router,
         events: bus.subscribe(),
         authenticate: OPEN,
@@ -373,13 +376,21 @@ describe("handleConnection", () => {
         type: "hello",
         client_type: "tui",
         client_name: "x".repeat(MAX_PRE_AUTH_WIRE_MESSAGE_SIZE),
+        build_version: UNKNOWN_BUILD_VERSION,
       })}\n`,
     );
     await rejected.done.catch(() => {});
     expect(rejected.router.sessions()).toEqual([]);
 
     const accepted = connect();
-    accepted.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
+    accepted.send(
+      `${JSON.stringify({
+        type: "hello",
+        client_type: "tui",
+        client_name: "t",
+        build_version: UNKNOWN_BUILD_VERSION,
+      })}\n`,
+    );
     for (let i = 0; i < 2000 && accepted.router.sessions().length === 0; i += 1) {
       await Promise.resolve();
     }

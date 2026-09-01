@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import type { ClientMessage } from "../src/protocol/ClientMessage";
 import type { ServerMessage } from "../src/protocol/ServerMessage";
+import { UNKNOWN_BUILD_VERSION } from "../src/build_version.ts";
 import {
   MAX_CONSECUTIVE_LAGS,
   PING_INTERVAL_MS,
@@ -353,7 +354,13 @@ describe("route_client_message", () => {
       const routed = c.routed;
       const msg: ClientMessage =
         routed === null
-          ? ({ type: "hello", client_type: "tui", client_name: "t", capabilities: [] })
+          ? ({
+              type: "hello",
+              client_type: "tui",
+              client_name: "t",
+              build_version: UNKNOWN_BUILD_VERSION,
+              capabilities: [],
+            })
           : routed.kind === "command"
             ? ({ type: "command", ...(routed.cmd as object) } as ClientMessage)
             : (routed.msg as ClientMessage);
@@ -443,6 +450,7 @@ describe("handshake", () => {
           {
             clientId: 1,
             serverName: "shore-test",
+            buildVersion: UNKNOWN_BUILD_VERSION,
             router,
             events: null as never,
             handshake: provider,
@@ -477,4 +485,67 @@ describe("handshake", () => {
       }
     });
   }
+
+  test("a different client build is refused before session history", async () => {
+    const input = new TextEncoder().encode(
+      `${JSON.stringify({
+        type: "hello",
+        client_type: "tui",
+        client_name: "shore",
+        build_version: "client-build",
+        capabilities: [],
+      })}\n`,
+    );
+    const written: Uint8Array[] = [];
+    const router = new SessionRouter();
+    let historyRequested = false;
+
+    const attempt = performHandshake(
+      new WireReader(once(input)),
+      { write: (bytes) => void written.push(bytes) },
+      {
+        clientId: 1,
+        serverName: "shore-test",
+        buildVersion: "daemon-build",
+        router,
+        events: null as never,
+        handshake: {
+          hello: () => Promise.resolve({ characters: [] }),
+          history: () => {
+            historyRequested = true;
+            return Promise.reject(new Error("history must not be read"));
+          },
+        },
+        authenticate: OPEN,
+        route: async () => {},
+        shutdown: new Promise<void>(() => {}),
+      },
+    );
+
+    expect(attempt).rejects.toThrow("client and daemon must be upgraded together");
+    await attempt.catch(() => {});
+
+    const frames = Buffer.concat(written)
+      .toString("utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(frames).toEqual([
+      {
+        type: "hello",
+        v: SWP_V1,
+        server_name: "shore-test",
+        build_version: "daemon-build",
+        characters: [],
+      },
+      {
+        type: "error",
+        code: "protocol_error",
+        message:
+          'client build "client-build" does not match daemon build "daemon-build"; client and daemon must be upgraded together',
+      },
+    ]);
+    expect(historyRequested).toBe(false);
+    expect(router.sessions()).toEqual([]);
+  });
 });
