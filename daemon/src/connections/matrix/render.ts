@@ -85,7 +85,8 @@ function renderModels(data: Json): string | undefined {
       if (qualified === undefined) return undefined;
       const short = str(entry, "name") ?? qualified;
       const marker = active === qualified || active === short ? "**●** " : "";
-      let line = `- ${marker}\`${qualified}\` (${provider})`;
+      const star = entry.favorite === true ? "★ " : "";
+      let line = `- ${star}${marker}\`${qualified}\` (${provider})`;
       if (entry.hidden === true) line += " _hidden_";
       lines.push(line);
     }

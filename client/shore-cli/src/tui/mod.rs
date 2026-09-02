@@ -1704,6 +1704,19 @@ fn model_switch_name(model: &serde_json::Value) -> Option<String> {
         .map(str::to_owned)
 }
 
+fn favorite_model_names(models: &[serde_json::Value]) -> Vec<String> {
+    models
+        .iter()
+        .filter(|model| {
+            model
+                .get("favorite")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+        })
+        .filter_map(model_switch_name)
+        .collect()
+}
+
 fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Option<String> {
     let name = model.get("name").and_then(|v| v.as_str())?;
     let mut identifiers = vec![name];
@@ -1833,6 +1846,7 @@ fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
             if data.get("models").is_some_and(serde_json::Value::is_object) {
                 let models = crate::output::models_by_provider(data);
                 app.model_names = models.iter().filter_map(model_switch_name).collect();
+                app.favorite_model_names = favorite_model_names(&models);
             }
         }
         "providers" => {
@@ -2403,6 +2417,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     {
                         let models = crate::output::models_by_provider(&co.data);
                         app.model_names = models.iter().filter_map(model_switch_name).collect();
+                        app.favorite_model_names = favorite_model_names(&models);
                         let active = co
                             .data
                             .get("active")
@@ -2458,10 +2473,21 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                         .get("hidden")
                                         .and_then(serde_json::Value::as_bool)
                                         .unwrap_or(false);
-                                    let marker = if model_switch_name(m)
-                                        .is_some_and(|s| app.is_active_model_candidate(&s))
+                                    let switch_name = model_switch_name(m);
+                                    let marker = if switch_name
+                                        .as_deref()
+                                        .is_some_and(|s| app.is_active_model_candidate(s))
                                     {
                                         "*"
+                                    } else {
+                                        " "
+                                    };
+                                    let star = if m
+                                        .get("favorite")
+                                        .and_then(serde_json::Value::as_bool)
+                                        .unwrap_or(false)
+                                    {
+                                        "\u{2605}"
                                     } else {
                                         " "
                                     };
@@ -2472,7 +2498,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                     } else {
                                         String::new()
                                     };
-                                    format!("  {marker} {n:<28}{qualified}{tag}")
+                                    format!("  {marker}{star} {n:<28}{qualified}{tag}")
                                 })
                                 .collect::<Vec<_>>()
                                 .join("\n");
@@ -2539,6 +2565,27 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         app.set_status(format!("model: {name}"));
                     }
                     app.effective_sampler = None;
+                }
+                "favorite_model" => {
+                    if let Some(names) = co.data.get("favorites").and_then(|v| v.as_array()) {
+                        app.favorite_model_names = names
+                            .iter()
+                            .filter_map(|v| v.as_str())
+                            .map(str::to_owned)
+                            .collect();
+                    }
+                    let name = co
+                        .data
+                        .get("qualified_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("model");
+                    let favorite = co
+                        .data
+                        .get("favorite")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false);
+                    let verb = if favorite { "favorited" } else { "unfavorited" };
+                    app.set_status(format!("{verb} {}", crate::output::abbreviate_model(name)));
                 }
                 "reset_model" => {
                     app.set_active_model(None);

@@ -1757,6 +1757,7 @@ mod tests {
         CliCommand::Model {
             subcommand,
             all: false,
+            favorites: false,
             json: false,
             info,
             reset,

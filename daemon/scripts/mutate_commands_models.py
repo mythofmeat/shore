@@ -204,14 +204,13 @@ MUTANTS = [
 
     # --- list_models --------------------------------------------------------
     ("list: the hidden count is of what this call returned",
-     "  const hiddenCount = (includeHidden\n"
-     "    ? entries\n"
-     "    : listEffectiveModels(view, ctx.config.dirs.cache, true)\n"
-     "  ).filter((e) => e.hidden).length;",
-     "  const hiddenCount = entries.filter((e) => e.hidden).length;"),
+     "  const hiddenCount = all.filter(\n"
+     "    (e) => e.hidden && !favorites.has(e.resolved.qualifiedName),\n"
+     "  ).length;",
+     "  const hiddenCount = shown.filter((e) => e.hidden).length;"),
     ("list: hidden entries are dropped from the count entirely",
-     "  ).filter((e) => e.hidden).length;",
-     "  ).filter((e) => !e.hidden).length;"),
+     "    (e) => e.hidden && !favorites.has(e.resolved.qualifiedName),",
+     "    (e) => !e.hidden && !favorites.has(e.resolved.qualifiedName),"),
     ("list: the flag is not echoed back",
      "    include_hidden: includeHidden,",
      "    include_hidden: false,"),
@@ -219,8 +218,8 @@ MUTANTS = [
      "    sdk: m.sdk,",
      "    sdk: m.providerKey,"),
     ("list: rows are grouped under the sdk rather than the provider",
-     "    (out[entry.resolved.providerKey] ??= []).push(effectiveModelToJson(entry));",
-     "    (out[entry.resolved.sdk] ??= []).push(effectiveModelToJson(entry));"),
+     "    (out[entry.resolved.providerKey] ??= []).push(effectiveModelToJson(entry, favorites));",
+     "    (out[entry.resolved.sdk] ??= []).push(effectiveModelToJson(entry, favorites));"),
     ("list: every row claims to be static",
      "    source: entry.source,",
      '    source: "static",'),
@@ -230,22 +229,71 @@ MUTANTS = [
 
     # --- activeName ---------------------------------------------------------
     ("active name: an unresolvable string becomes no active model",
-     "    } catch {\n      return fallback;\n    }",
-     '    } catch {\n      return "";\n    }'),
+     "  } catch {\n    return fallback;\n  }",
+     '  } catch {\n    return "";\n  }'),
     ("active name: the config default is not a fallback",
      "  const fallback = ctx.config.app.defaults.model;\n"
-     '  if (fallback !== undefined && fallback !== "") {\n    try {',
+     '  if (fallback === undefined || fallback === "") {',
      "  const fallback = ctx.config.app.defaults.model;\n"
-     "  if (false as boolean) {\n    try {"),
-    ("active name: the first entry is not a fallback",
-     "  return entries[0]?.resolved.qualifiedName;",
-     "  return undefined;"),
-    ("active name: the first entry beats the config default",
+     "  if (true as boolean) {"),
+    ("active name: the first catalog entry is not a fallback",
+     "    return firstChatModel(ctx.config.models)?.qualifiedName;",
+     "    return undefined;"),
+    ("active name: the first catalog entry beats the config default",
      "  const fallback = ctx.config.app.defaults.model;\n"
-     '  if (fallback !== undefined && fallback !== "") {\n    try {',
-     "  if (entries[0] !== undefined) return entries[0].resolved.qualifiedName;\n"
+     '  if (fallback === undefined || fallback === "") {',
+     "  const first = firstChatModel(ctx.config.models);\n"
+     "  if (first !== undefined) return first.qualifiedName;\n"
      "  const fallback = ctx.config.app.defaults.model;\n"
-     '  if (fallback !== undefined && fallback !== "") {\n    try {'),
+     '  if (fallback === undefined || fallback === "") {'),
+
+    # --- favorites ----------------------------------------------------------
+    ("favorites: the mark is never set on a row",
+     "    favorite: favorites.has(m.qualifiedName),",
+     "    favorite: false,"),
+    ("favorites: every row is marked",
+     "    favorite: favorites.has(m.qualifiedName),",
+     "    favorite: true,"),
+    ("favorites: --favorites is ignored and lists everything",
+     "    if (favoritesOnly) return favorite;",
+     "    if (false as boolean) return favorite;"),
+    ("favorites: the narrowed view keeps everything but favorites",
+     "    if (favoritesOnly) return favorite;",
+     "    if (favoritesOnly) return !favorite;"),
+    ("favorites: an ignore glob buries a favorite again",
+     "    return includeHidden || !e.hidden || favorite;",
+     "    return includeHidden || !e.hidden;"),
+    ("favorites: the flag is not echoed back",
+     "    favorites_only: favoritesOnly,",
+     "    favorites_only: false,"),
+    ("favorites: the count is of the rows shown rather than what is saved",
+     "    favorite_count: favorites.size,",
+     "    favorite_count: shown.length,"),
+    ("favorites: a provider with discovery off loses its favorites",
+     "  const all = [...walked, ...favoritesOutsideTheWalk(ctx, view, favorites, walked)];",
+     "  const all = [...walked];"),
+    ("favorites: a favorite in the walk is listed a second time",
+     "      if (seen.has(resolved.qualifiedName)) continue;",
+     "      if (false as boolean) continue;"),
+    ("favorites: a favorite that resolves nowhere is surfaced as a ghost",
+     "    } catch {\n      continue;\n    }\n  }\n  return out;",
+     "    } catch {\n      out.push({ source: \"favorite\", resolved: { qualifiedName: favorite } as ResolvedModel, hidden: false });\n    }\n  }\n  return out;"),
+    ("favorites: a favorite is written to the character rather than globally",
+     "  if (changed) saveGlobal(ctx, prefs);",
+     "  if (changed) saveCharacter(ctx, requireCharacter(ctx), prefs);"),
+    ("favorites: the direction the caller asked for is ignored",
+     '  const want = asBool(args["favorite"]) ?? !isFavorite(prefs, resolved.qualifiedName);',
+     "  const want = !isFavorite(prefs, resolved.qualifiedName);"),
+    ("favorites: an already-favorited model reports a write that did not happen",
+     "  const changed = want\n"
+     "    ? addFavorite(prefs, resolved.qualifiedName)\n"
+     "    : removeFavorite(prefs, resolved.qualifiedName);",
+     "  const changed = true;\n"
+     "  if (want) addFavorite(prefs, resolved.qualifiedName);\n"
+     "  else removeFavorite(prefs, resolved.qualifiedName);"),
+    ("favorites: a hidden model cannot be favorited",
+     '  const resolved = resolve(ctx, name, true);\n  const prefs = loadGlobalPreferences(ctx);',
+     '  const resolved = resolve(ctx, name, false);\n  const prefs = loadGlobalPreferences(ctx);'),
 
     # --- model_info ---------------------------------------------------------
     ("info: the sampler view is attached without a character",
@@ -486,7 +534,11 @@ from mutation import run as _run_mutants  # noqa: E402
 def main() -> int:
     return _run_mutants(
         MUTANTS,
-        ["tests/model_commands.test.ts", "tests/subagent_model_pin.test.ts"],
+        [
+            "tests/model_commands.test.ts",
+            "tests/subagent_model_pin.test.ts",
+            "tests/model_favorites.test.ts",
+        ],
         src=SRC,
     )
 

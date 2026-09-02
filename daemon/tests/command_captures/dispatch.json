@@ -263,6 +263,8 @@
         "name": "list_models",
         "data_keys": [
           "active",
+          "favorite_count",
+          "favorites_only",
           "hidden_count",
           "include_hidden",
           "models",
@@ -273,7 +275,9 @@
           "active": "string",
           "include_hidden": "bool",
           "hidden_count": "number:0",
-          "roles": "array[6]"
+          "roles": "array[6]",
+          "favorites_only": "bool",
+          "favorite_count": "number:0"
         }
       }
     },
@@ -784,6 +788,8 @@
         "kind": "ok",
         "data_keys": [
           "active",
+          "favorite_count",
+          "favorites_only",
           "hidden_count",
           "include_hidden",
           "models",
@@ -794,7 +800,9 @@
           "active": "string",
           "include_hidden": "bool",
           "hidden_count": "number:0",
-          "roles": "array[6]"
+          "roles": "array[6]",
+          "favorites_only": "bool",
+          "favorite_count": "number:0"
         }
       }
     },

@@ -49,7 +49,7 @@ export class EffectiveCatalogError extends Error {
   }
 }
 
-export type EffectiveSource = "static" | "discovered";
+export type EffectiveSource = "static" | "discovered" | "favorite";
 
 export interface EffectiveModel {
   source: EffectiveSource;

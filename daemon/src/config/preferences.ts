@@ -140,6 +140,7 @@ export interface PreferenceDefaults {
 
 export interface ModelPreferences {
   selected: SelectedModel;
+  favorites: string[];
   defaults: PreferenceDefaults;
   models: Map<string, ModelPreference>;
   subagents: Map<string, ModelPreference>;
@@ -149,6 +150,7 @@ export interface ModelPreferences {
 export function emptyPreferences(): ModelPreferences {
   return {
     selected: {},
+    favorites: [],
     defaults: { sampler: {} },
     models: new Map(),
     subagents: new Map(),
@@ -159,11 +161,30 @@ export function emptyPreferences(): ModelPreferences {
 export function preferencesAreEmpty(prefs: ModelPreferences): boolean {
   return (
     !selectionIsSet(prefs.selected) &&
+    prefs.favorites.length === 0 &&
     samplerIsEmpty(prefs.defaults.sampler) &&
     prefs.models.size === 0 &&
     prefs.subagents.size === 0 &&
     prefs.subagentModels.size === 0
   );
+}
+
+export function isFavorite(prefs: ModelPreferences, qualifiedName: string): boolean {
+  return prefs.favorites.includes(qualifiedName);
+}
+
+export function addFavorite(prefs: ModelPreferences, qualifiedName: string): boolean {
+  if (prefs.favorites.includes(qualifiedName)) return false;
+  prefs.favorites.push(qualifiedName);
+  prefs.favorites.sort(compareByCodePoint);
+  return true;
+}
+
+export function removeFavorite(prefs: ModelPreferences, qualifiedName: string): boolean {
+  const at = prefs.favorites.indexOf(qualifiedName);
+  if (at < 0) return false;
+  prefs.favorites.splice(at, 1);
+  return true;
 }
 
 export function subagentModelPreference(
@@ -982,6 +1003,7 @@ function readThinkingReplay(value: unknown): ReadResult<ThinkingReplay> {
 function readPreferences(table: Record<string, unknown>): ReadResult<ModelPreferences> {
   const unknown = unknownField(table, [
     "selected",
+    "favorites",
     "defaults",
     "models",
     "subagents",
@@ -990,6 +1012,18 @@ function readPreferences(table: Record<string, unknown>): ReadResult<ModelPrefer
   if (unknown !== undefined) return { err: unknown };
 
   const out = emptyPreferences();
+
+  const favorites = table["favorites"];
+  if (favorites !== undefined) {
+    if (!Array.isArray(favorites)) {
+      return { err: "invalid type: expected an array for `favorites`" };
+    }
+    for (const raw of favorites) {
+      if (typeof raw !== "string") return { err: invalidType(raw, "a string") };
+      if (raw !== "" && !out.favorites.includes(raw)) out.favorites.push(raw);
+    }
+    out.favorites.sort(compareByCodePoint);
+  }
 
   const selected = table["selected"];
   if (selected !== undefined) {
@@ -1048,6 +1082,10 @@ function readPreferences(table: Record<string, unknown>): ReadResult<ModelPrefer
 
 export function serializePreferences(prefs: ModelPreferences): string {
   const blocks: string[] = [];
+
+  if (prefs.favorites.length > 0) {
+    blocks.push(`favorites = ${tomlInline(prefs.favorites)}`);
+  }
 
   const selected: string[] = ["[selected]"];
   if (prefs.selected.provider !== undefined) {
