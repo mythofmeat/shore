@@ -83,6 +83,31 @@ describe("cost calculation", () => {
     });
     close(cost.cache_write, 0.000_375);
   });
+
+  test("NanoGPT's 1h Claude cache write uses the advertised 5m rate times 1.6", () => {
+    const cost = calculateCost(anthropicPricing(), {
+      provider: "nanogpt",
+      model: "anthropic/claude-opus-4.6",
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 80,
+      cache_write_tokens: 20,
+      cache_ttl: "1h",
+    });
+    close(cost.cache_write, 0.0006);
+  });
+
+  test("NanoGPT without an explicit TTL does not invent a 1h cache write", () => {
+    const cost = calculateCost(anthropicPricing(), {
+      provider: "nanogpt",
+      model: "anthropic/claude-opus-4.6",
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 80,
+      cache_write_tokens: 20,
+    });
+    close(cost.cache_write, 0.000_375);
+  });
 });
 
 describe("model id mapping", () => {
@@ -243,6 +268,24 @@ describe("the engine", () => {
     );
     const found = required(await engine.getOrFetch("nanogpt", "gemma-4-26b-a4b-uncensored"));
     close(found.input_per_token, 0.000_000_1);
+  });
+
+  test("missing Claude cache-write metadata falls back to the documented 5m multiplier", async () => {
+    const engine = new PricingEngine(memoryStore(), async () =>
+      Response.json({
+        data: [{
+          id: "anthropic/claude-opus-4.6",
+          pricing: {
+            prompt: 5,
+            completion: 25,
+            cacheReadInputPer1kTokens: 0.0005,
+            unit: "per_million_tokens",
+          },
+        }],
+      }),
+    );
+    const found = required(await engine.getOrFetch("nanogpt", "anthropic/claude-opus-4.6"));
+    close(found.cache_write_per_token, 0.000_006_25);
   });
 
   test("a failed fetch leaves the row unpriced rather than failing the call", async () => {

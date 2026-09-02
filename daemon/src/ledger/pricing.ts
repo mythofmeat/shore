@@ -74,7 +74,13 @@ export function calculateCost(pricing: ModelPricing, request: CostRequest): Cost
   const cache_read = pricing.cache_read_per_token * request.cache_read_tokens;
 
   let cache_write = pricing.cache_write_per_token * request.cache_write_tokens;
-  if (request.provider === "anthropic" && (request.cache_ttl ?? "1h") === "1h") {
+  const oneHourCache = request.cache_ttl === "1h" ||
+    (request.provider === "anthropic" && request.cache_ttl === undefined);
+  if (
+    (request.provider === "anthropic" ||
+      (request.provider === NANOGPT_PROVIDER && request.model.startsWith("anthropic/"))) &&
+    oneHourCache
+  ) {
     cache_write *= ANTHROPIC_1H_CACHE_WRITE_MULTIPLIER;
   }
 
@@ -101,25 +107,30 @@ function openRouterPricing(p: Record<string, unknown>): ModelPricing {
   };
 }
 
-function nanoGptPricing(p: Record<string, unknown>): ModelPricing {
+function nanoGptPricing(id: string, p: Record<string, unknown>): ModelPricing {
+  const prompt = parsePrice(p["prompt"]) * PER_MILLION;
+  const advertisedWrite = p["cacheWriteInputPer1kTokens"];
+  const cacheWrite = advertisedWrite === undefined && id.startsWith("anthropic/")
+    ? prompt * 1.25
+    : parsePrice(advertisedWrite) * PER_THOUSAND;
   return {
-    input_per_token: parsePrice(p["prompt"]) * PER_MILLION,
+    input_per_token: prompt,
     output_per_token: parsePrice(p["completion"]) * PER_MILLION,
     cache_read_per_token: parsePrice(p["cacheReadInputPer1kTokens"]) * PER_THOUSAND,
-    cache_write_per_token: parsePrice(p["cacheWriteInputPer1kTokens"]) * PER_THOUSAND,
+    cache_write_per_token: cacheWrite,
   };
 }
 
 interface CatalogSource {
   url: string;
   key: (id: string) => string;
-  read: (pricing: Record<string, unknown>) => ModelPricing;
+  read: (id: string, pricing: Record<string, unknown>) => ModelPricing;
 }
 
 const OPENROUTER_SOURCE: CatalogSource = {
   url: OPENROUTER_CATALOG_URL,
   key: (id) => id,
-  read: openRouterPricing,
+  read: (_id, pricing) => openRouterPricing(pricing),
 };
 
 const NANOGPT_SOURCE: CatalogSource = {
@@ -185,7 +196,7 @@ export class PricingEngine {
     for (const entry of data) {
       const model = entry as { id?: unknown; pricing?: Record<string, unknown> };
       if (typeof model.id !== "string" || !model.pricing) continue;
-      this.#store.put(source.key(model.id), source.read(model.pricing));
+      this.#store.put(source.key(model.id), source.read(model.id, model.pricing));
     }
   }
 }
