@@ -24,6 +24,7 @@ import type {
 import { systemToText, toolResultImages, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
+import { foldInlineSystemMessages, translatesToAnthropic } from "../inline_system.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
 export class OpenAIProvider implements SidecarProvider {
@@ -171,6 +172,19 @@ export async function* openAIStreamEvents(
   };
 }
 
+export function buildOpenAIMessages(req: SidecarRequest): ChatCompletionMessageParam[] {
+  const messages: ChatCompletionMessageParam[] = [];
+  const systemText = systemToText(req.system);
+  if (systemText) messages.push({ role: "system", content: systemText });
+  const turns = translatesToAnthropic(req.model)
+    ? foldInlineSystemMessages(replayableMessages(req))
+    : replayableMessages(req);
+  for (const turn of turns) {
+    messages.push(...turnToOpenAI(toTurn(turn)));
+  }
+  return messages;
+}
+
 function buildOpenAICall(
   req: SidecarRequest,
   streaming: boolean,
@@ -181,10 +195,7 @@ function buildOpenAICall(
     ...(req.base_url ? { baseURL: req.base_url } : {}),
   });
 
-  const messages: ChatCompletionMessageParam[] = [];
-  const systemText = systemToText(req.system);
-  if (systemText) messages.push({ role: "system", content: systemText });
-  for (const turn of replayableMessages(req)) messages.push(...turnToOpenAI(toTurn(turn)));
+  const messages = buildOpenAIMessages(req);
 
   const tools = toOpenAITools(req.tools);
 
