@@ -304,7 +304,7 @@ export async function discoverOpenAiCompatible(
   apiKey: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DiscoveryResult<DiscoveredModel[]>> {
-  return await fetchModels(providerKey, baseUrl, "openai", buildModelsUrl(baseUrl), fetchImpl, {
+  return await fetchModels(providerKey, baseUrl, "openai", buildModelsUrl(baseUrl, providerKey), fetchImpl, {
     accept: "application/json",
     authorization: `Bearer ${apiKey}`,
   });
@@ -361,8 +361,9 @@ async function fetchModels(
   return parseModelsResponse(providerKey, baseUrl, sdk, body);
 }
 
-export function buildModelsUrl(baseUrl: string): string {
-  return `${trimTrailingSlashes(baseUrl)}/models`;
+export function buildModelsUrl(baseUrl: string, providerKey?: string): string {
+  const url = `${trimTrailingSlashes(baseUrl)}/models`;
+  return providerKey === "nanogpt" ? `${url}?detailed=true` : url;
 }
 
 export function buildAnthropicModelsUrl(baseUrl: string): string {
@@ -456,9 +457,18 @@ export function mapEntry(
     ...maybe("description", str(r.description)),
     ...maybe("context_length", unsignedInt(r.context_length)),
     ...maybe("max_output_tokens", maxOutputTokens(r)),
-    ...maybe("supports_tools", supportedParam(r, ["tools", "tool_use", "function_calling"])),
-    ...maybe("supports_images", modalityIncludes(r, "input", "image")),
-    ...maybe("supports_reasoning", supportedParam(r, ["reasoning", "include_reasoning"])),
+    ...maybe(
+      "supports_tools",
+      supportedParam(r, ["tools", "tool_use", "function_calling"]) ?? capabilityFlag(r, "tool_calling"),
+    ),
+    ...maybe(
+      "supports_images",
+      modalityIncludes(r, "input", "image") ?? capabilityFlag(r, "vision"),
+    ),
+    ...maybe(
+      "supports_reasoning",
+      supportedParam(r, ["reasoning", "include_reasoning"]) ?? capabilityFlag(r, "reasoning"),
+    ),
     ...maybe("supports_prompt_cache", supportedParam(r, ["prompt_cache", "cache_control"])),
     ...maybe("support", normalizeDiscoveredSupport(raw)),
     raw_provider_metadata: raw,
@@ -490,7 +500,7 @@ function maxOutputTokens(r: Record<string, unknown>): number | undefined {
     const nested = unsignedInt((top as Record<string, unknown>).max_completion_tokens);
     if (nested !== undefined) return nested;
   }
-  return unsignedInt(r.max_completion_tokens);
+  return unsignedInt(r.max_completion_tokens) ?? unsignedInt(r.max_output_tokens);
 }
 
 function stringListPreservingEmpty(v: unknown): string[] | undefined {
@@ -504,15 +514,28 @@ function capabilityBlock(r: Record<string, unknown>): Record<string, unknown> | 
   return caps as Record<string, unknown>;
 }
 
+function capabilityFlag(r: Record<string, unknown>, name: string): boolean | undefined {
+  const flag = capabilityBlock(r)?.[name];
+  return typeof flag === "boolean" ? flag : undefined;
+}
+
 function isSupported(v: unknown): boolean | undefined {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
   const flag = (v as Record<string, unknown>).supported;
   return typeof flag === "boolean" ? flag : undefined;
 }
 
+function advertisedEfforts(r: Record<string, unknown>): DiscoveredModelSupport["effort"] {
+  const named = stringListPreservingEmpty(r.reasoning_efforts)?.filter((level) => level !== "none");
+  if (named !== undefined && named.length > 0) return { supported: true, levels: named };
+  return capabilityFlag(r, "reasoning") === false ? { supported: false, levels: [] } : undefined;
+}
+
 function effortSupport(r: Record<string, unknown>): DiscoveredModelSupport["effort"] {
   const effort = capabilityBlock(r)?.effort;
-  if (typeof effort !== "object" || effort === null || Array.isArray(effort)) return undefined;
+  if (typeof effort !== "object" || effort === null || Array.isArray(effort)) {
+    return advertisedEfforts(r);
+  }
   const block = effort as Record<string, unknown>;
   const levels = Object.entries(block)
     .filter(([key]) => key !== "supported")

@@ -33,7 +33,6 @@ export function admitClientMessage(value: unknown): ClientMessage {
         type: "hello",
         client_type: stringField(raw, "client_type"),
         client_name: stringField(raw, "client_name"),
-        build_version: stringField(raw, "build_version"),
         capabilities: admitCapabilities(raw.capabilities),
         ...optionalString(raw, "character"),
         ...optionalString(raw, "token"),

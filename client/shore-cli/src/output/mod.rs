@@ -129,6 +129,14 @@ pub(crate) fn models_by_provider(data: &serde_json::Value) -> Vec<serde_json::Va
             out.push(entry);
         }
     }
+    out.sort_by_key(|entry| {
+        u8::from(
+            !entry
+                .get("favorite")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        )
+    });
     out
 }
 

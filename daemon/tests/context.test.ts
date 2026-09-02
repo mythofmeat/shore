@@ -69,7 +69,7 @@ interface ContextCase {
   system: { text: string; label: string }[];
   tool_defs: string[] | null;
   prompt_messages: FixturePromptMessage[];
-  active_after: { name: string; content: string }[] | null;
+  active_after: { name: string; content: string }[] | null | "absent";
 }
 
 const ZONE = fixture.timezone;
@@ -328,6 +328,8 @@ describe("prepareChatContext", () => {
 
       if (c.active_after === null) {
         expect((await lstat(activeDir)).isFile()).toBe(true);
+      } else if (c.active_after === "absent") {
+        expect(await lstat(activeDir).catch(() => undefined)).toBeUndefined();
       } else {
         const after = await Promise.all(
           (await readdir(activeDir)).sort().map(async (name) => ({

@@ -1,7 +1,5 @@
 import { shoreLog } from "../log.ts";
 
-import { join } from "node:path";
-
 import type { LoadedConfig } from "../config/loader.ts";
 import {
   configView,
@@ -17,7 +15,6 @@ import { formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
-import { ensureActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { DEFAULT_HEARTBEAT_TEMPLATE, renderHeartbeatPrompt } from "./heartbeat_shape.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
 import { rebuildRequestFromDisk, type RebuildDeps } from "../cache/rebuild.ts";
@@ -158,17 +155,6 @@ export async function prepareHeartbeatRequest(
       : resolveChatModelForCharacter(configView(config), character, (v, c, n, h) =>
           findEffectiveModel(v, c, n, h),
         )?.maxToolIterations;
-
-  try {
-    await ensureActivePromptSnapshot(
-      join(config.dirs.data, character),
-      config.dirs.config,
-      character,
-      config.dirs.workspace,
-    );
-  } catch (e) {
-    shoreLog.warn(`shore: heartbeat could not prepare the prompt snapshot for ${character}: ${String(e)}`);
-  }
 
   const nowMs = deps.now?.() ?? Date.now();
   const template =

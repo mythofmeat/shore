@@ -30,7 +30,7 @@ import {
   gitPushWorkspaceBestEffort,
 } from "../../tools/workspace.ts";
 import { MarkdownMemoryStore } from "../markdown_store.ts";
-import { applyDeferredEdits } from "../deferred_edits.ts";
+import { applyDeferredEdits, queueDeferredEdit } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, segmentCount } from "./archive.ts";
 import { handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
@@ -294,7 +294,6 @@ function compactionTools(ctx: ToolContext, config: LoadedConfig): CompactionTool
   };
   return {
     workspaceDir: ctx.workspaceDir,
-    configDir: ctx.configDir,
     dispatch: async (name, input) => {
       const run = await runToolUse(
         { id: `compaction_${crypto.randomUUID()}`, name, input },
@@ -303,6 +302,7 @@ function compactionTools(ctx: ToolContext, config: LoadedConfig): CompactionTool
       );
       return { output: run.window?.output ?? run.raw, isError: run.isError };
     },
+    deferEdit: async (path) => await queueDeferredEdit(ctx.characterDataDir, path),
     ensureWorkspaceGitRepo: async (workspaceDir) => {
       await ensureWorkspaceGitRepoBestEffort(workspaceDir);
     },

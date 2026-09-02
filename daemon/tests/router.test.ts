@@ -285,7 +285,6 @@ describe("routed messages", () => {
         type: "hello",
         client_type: "test-client",
         client_name: "test",
-        build_version: "test-build",
         capabilities: [],
       },
       meta: meta("Alice", 1, "r1", "message"),

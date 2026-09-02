@@ -1,5 +1,4 @@
 import { TOKEN_ENV, TOKEN_FILE } from "../config/token.ts";
-import { BUILD_VERSION } from "../build_version.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { Message } from "../protocol/Message";
@@ -60,7 +59,6 @@ export interface Duplex {
 export interface ConnectionContext {
   readonly clientId: number;
   readonly serverName: string;
-  readonly buildVersion?: string;
   readonly router: SessionRouter;
   readonly events: Subscription;
   readonly handshake: HandshakeProvider;
@@ -101,13 +99,11 @@ export async function performHandshake(
   ctx: ConnectionContext,
 ): Promise<SessionMeta> {
   const hello = await ctx.handshake.hello();
-  const buildVersion = ctx.buildVersion ?? BUILD_VERSION;
 
   await writeMessage(sink, {
     type: "hello",
     v: SWP_V1,
     server_name: ctx.serverName,
-    build_version: buildVersion,
     characters: hello.characters as CharacterInfo[],
   });
 
@@ -151,16 +147,6 @@ export async function performHandshake(
     throw new HandshakeError(e.message);
   }
   if (admitted.type !== "hello") throw new HandshakeError("Protocol error: expected hello");
-
-  if (admitted.build_version !== buildVersion) {
-    const message = `client build ${JSON.stringify(admitted.build_version)} does not match daemon build ${JSON.stringify(buildVersion)}; client and daemon must be upgraded together`;
-    ctx.log?.warn?.("Client rejected: build version mismatch", {
-      client_version: admitted.build_version,
-      daemon_version: buildVersion,
-    });
-    await writeMessage(sink, { type: "error", code: "protocol_error", message });
-    throw new HandshakeError(message);
-  }
 
   const requested = admitted.character ?? null;
   const selected = resolveHandshakeCharacter(requested, hello.characters, hello.selected ?? null);

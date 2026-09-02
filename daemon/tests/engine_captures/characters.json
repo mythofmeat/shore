@@ -62,10 +62,7 @@
               "Alice",
               "Zulu"
             ],
-            "snapshots": [
-              "Alice",
-              "Zulu"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -114,9 +111,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -139,10 +134,7 @@
               "Alice",
               "Empty"
             ],
-            "snapshots": [
-              "Alice",
-              "Empty"
-            ]
+            "snapshots": []
           }
         }
       ]
@@ -166,9 +158,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -188,10 +178,7 @@
               "Alice",
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -214,10 +201,7 @@
             "available": [
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -246,9 +230,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -307,10 +289,7 @@
               "Alice",
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -354,10 +333,7 @@
               "Alice",
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -423,10 +399,7 @@
               "Alice",
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -472,10 +445,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           },
           "summary": {
             "available_before": 2,
@@ -522,9 +492,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -545,9 +513,7 @@
           "op": "refresh",
           "state": {
             "available": [],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -568,9 +534,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -609,10 +573,7 @@
               "Alice",
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -680,9 +641,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -729,9 +688,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -764,9 +721,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -830,9 +785,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -883,9 +836,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -955,9 +906,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1021,9 +970,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1073,9 +1020,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1099,10 +1044,7 @@
               "Alice",
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           },
           "summary": {
             "available_before": 1,
@@ -1123,10 +1065,7 @@
           "op": "reload_runtime_state",
           "state": {
             "available": [],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           },
           "summary": {
             "available_before": 2,
@@ -1156,9 +1095,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1176,10 +1113,7 @@
             "available": [
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           },
           "summary": {
             "available_before": 1,
@@ -1219,11 +1153,7 @@
               "Bob",
               "Cara"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1260,11 +1190,7 @@
             "available": [
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob",
-              "Cara"
-            ]
+            "snapshots": []
           },
           "summary": {
             "available_before": 3,
@@ -1299,10 +1225,7 @@
               "Alice",
               "Bob"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1322,10 +1245,7 @@
               "Bob",
               "Cara"
             ],
-            "snapshots": [
-              "Alice",
-              "Bob"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1370,9 +1290,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1432,9 +1350,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {
@@ -1483,9 +1399,7 @@
             "available": [
               "Alice"
             ],
-            "snapshots": [
-              "Alice"
-            ]
+            "snapshots": []
           }
         },
         {

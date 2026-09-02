@@ -7,6 +7,7 @@ import {
   readdir,
   rm,
   appendFile,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -30,6 +31,8 @@ const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const
 export const MEMORY_INDEX_FILE = "MEMORY.md";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
+
+const ACTIVE_MESSAGES_FILE = "active.jsonl";
 
 const LEGACY_SNAPSHOTS = ["RECENT_MEMORY.md", "HEARTBEAT.md"];
 
@@ -76,6 +79,27 @@ const canonicalFile = (
 export const loadActivePromptFile = (characterDataDir: string, name: string) =>
   effectiveContent(activePromptFile(characterDataDir, name));
 
+export async function loadPromptFile(
+  characterDataDir: string,
+  configDir: string,
+  charName: string,
+  name: string,
+  workspaceRoot?: string,
+): Promise<string | undefined> {
+  if (await activePromptSnapshotExists(characterDataDir)) {
+    return effectiveContent(activePromptFile(characterDataDir, name));
+  }
+  return effectiveContent(canonicalFile(configDir, charName, name, workspaceRoot));
+}
+
+async function activePromptSnapshotExists(characterDataDir: string): Promise<boolean> {
+  try {
+    return (await stat(activePromptDir(characterDataDir))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export const loadCanonicalMemoryIndex = (
   configDir: string,
   charName: string,
@@ -88,8 +112,9 @@ export async function loadMemoryIndex(
   charName: string,
   workspaceRoot?: string,
 ): Promise<string | undefined> {
-  const active = activePromptFile(characterDataDir, MEMORY_INDEX_FILE);
-  if (await exists(active)) return effectiveContent(active);
+  if (await activePromptSnapshotExists(characterDataDir)) {
+    return effectiveContent(activePromptFile(characterDataDir, MEMORY_INDEX_FILE));
+  }
   return effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
 }
 
@@ -132,14 +157,6 @@ export async function queueDeferredEdit(
 
   await mkdir(characterDataDir, { recursive: true });
 
-  if (path === MEMORY_INDEX_FILE) {
-    const sentinel = activePromptFile(characterDataDir, MEMORY_INDEX_FILE);
-    if (!(await exists(sentinel))) {
-      await mkdir(activePromptDir(characterDataDir), { recursive: true });
-      await writeFile(sentinel, "", "utf8");
-    }
-  }
-
   const line = JSON.stringify({ path, timestamp: localRfc3339(new Date()) });
   await appendFile(join(characterDataDir, QUEUE_FILE), `${line}\n`, "utf8");
 }
@@ -153,6 +170,7 @@ export async function changedPromptFiles(
   charName: string,
   workspaceRoot?: string,
 ): Promise<string[]> {
+  if (!(await activePromptSnapshotExists(characterDataDir))) return [];
   const changed: string[] = [];
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
     const canonical = await effectiveContent(
@@ -264,12 +282,34 @@ export async function refreshActivePromptSnapshot(
   }
 }
 
+export async function resetActivePromptSnapshot(characterDataDir: string): Promise<void> {
+  await rm(activePromptDir(characterDataDir), { recursive: true, force: true });
+  await rm(join(characterDataDir, QUEUE_FILE), { force: true });
+}
+
+async function conversationHasMessages(characterDataDir: string): Promise<boolean> {
+  try {
+    return (await readFile(join(characterDataDir, ACTIVE_MESSAGES_FILE), "utf8")).trim() !== "";
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code !== "ENOENT";
+  }
+}
+
+export async function resetActivePromptSnapshotIfEmpty(
+  characterDataDir: string,
+): Promise<boolean> {
+  if (await conversationHasMessages(characterDataDir)) return false;
+  await resetActivePromptSnapshot(characterDataDir);
+  return true;
+}
+
 export async function applyDeferredEdits(
   characterDataDir: string,
   configDir: string,
   charName: string,
   workspaceRoot?: string,
 ): Promise<void> {
+  if (await resetActivePromptSnapshotIfEmpty(characterDataDir)) return;
   await refreshActivePromptSnapshot(characterDataDir, configDir, charName, workspaceRoot);
   await rm(join(characterDataDir, QUEUE_FILE), { force: true });
 }

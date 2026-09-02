@@ -639,6 +639,8 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
+        (KeyModifiers::CONTROL, KeyCode::Char('f')) => toggle_favorite_selection(app),
+
         (KeyModifiers::NONE, KeyCode::Enter) => {
             if app.completion.selected.is_none() && !app.completion.candidates.is_empty() {
                 app.completion.selected = Some(0);
@@ -681,6 +683,28 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
 
         _ => Action::None,
     }
+}
+
+fn toggle_favorite_selection(app: &mut App) -> Action {
+    if !app.is_submenu_open("model") {
+        return Action::None;
+    }
+    let Some(name) = app
+        .selected_completion()
+        .filter(|candidate| *candidate != "reset")
+        .map(str::to_owned)
+    else {
+        return Action::None;
+    };
+
+    let favorite = !app.is_favorite_model_candidate(&name);
+    app.set_favorite_model(&name, favorite);
+
+    Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
+        rid: None,
+        name: "favorite_model".into(),
+        args: serde_json::json!({ "name": name, "favorite": favorite }),
+    })))
 }
 
 fn handle_value_editor_mode(app: &mut App, key: KeyEvent) -> Action {
@@ -2103,6 +2127,92 @@ mod tests {
             cmd.args.get("name"),
             Some(&serde_json::json!("deepseek:deepseek-v4-pro"))
         );
+    }
+
+    #[test]
+    fn ctrl_f_favorites_the_highlighted_model_without_switching_to_it() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.model_names = vec!["deepseek:deepseek-v4-pro".into()];
+        app.enter_submenu("model");
+        app.completion.selected = Some(0);
+
+        let cmd = sent_command(handle_submenu_mode(
+            &mut app,
+            make_key(KeyModifiers::CONTROL, KeyCode::Char('f')),
+        ));
+        assert_eq!(cmd.name, "favorite_model");
+        assert_eq!(
+            cmd.args.get("name"),
+            Some(&serde_json::json!("deepseek:deepseek-v4-pro"))
+        );
+        assert_eq!(cmd.args.get("favorite"), Some(&serde_json::json!(true)));
+        assert!(
+            app.is_favorite_model_candidate("deepseek:deepseek-v4-pro"),
+            "the star must flip before the daemon answers"
+        );
+        assert!(
+            app.is_submenu_open("model"),
+            "favoriting is not a selection; the picker stays open"
+        );
+    }
+
+    #[test]
+    fn ctrl_f_on_an_already_favorited_model_removes_it() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.model_names = vec!["deepseek:deepseek-v4-pro".into()];
+        app.favorite_model_names = vec!["deepseek:deepseek-v4-pro".into()];
+        app.enter_submenu("model");
+        app.completion.selected = Some(0);
+
+        let cmd = sent_command(handle_submenu_mode(
+            &mut app,
+            make_key(KeyModifiers::CONTROL, KeyCode::Char('f')),
+        ));
+        assert_eq!(cmd.args.get("favorite"), Some(&serde_json::json!(false)));
+        assert!(!app.is_favorite_model_candidate("deepseek:deepseek-v4-pro"));
+    }
+
+    #[test]
+    fn ctrl_f_leaves_the_reset_row_alone() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.model_names = vec!["deepseek:deepseek-v4-pro".into()];
+        app.enter_submenu("model");
+        let reset = app
+            .completion
+            .candidates
+            .iter()
+            .position(|c| c == "reset")
+            .expect("the model submenu offers a reset row");
+        app.completion.selected = Some(reset);
+
+        assert!(matches!(
+            handle_submenu_mode(
+                &mut app,
+                make_key(KeyModifiers::CONTROL, KeyCode::Char('f'))
+            ),
+            Action::None
+        ));
+        assert!(app.favorite_model_names.is_empty());
+    }
+
+    #[test]
+    fn ctrl_f_does_nothing_outside_the_model_picker() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.characters = vec![shore_common::protocol::types::CharacterInfo::new("Alice")];
+        app.enter_submenu("character");
+        app.completion.selected = Some(0);
+
+        assert!(matches!(
+            handle_submenu_mode(
+                &mut app,
+                make_key(KeyModifiers::CONTROL, KeyCode::Char('f'))
+            ),
+            Action::None
+        ));
     }
 
     #[test]

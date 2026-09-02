@@ -494,6 +494,10 @@ pub(crate) enum CliCommand {
         #[arg(long)]
         all: bool,
 
+        /// List only favorited models
+        #[arg(long, short = 'f', conflicts_with = "all")]
+        favorites: bool,
+
         /// Output raw JSON
         #[arg(long)]
         json: bool,
@@ -1233,6 +1237,23 @@ pub(crate) enum ModelCommand {
         json: bool,
     },
 
+    /// Mark a model as a favorite so it sorts to the top of every list
+    ///
+    /// Favorites are global, not per-character, and are stored in the
+    /// preferences file rather than the config file, so marking one never
+    /// rewrites hand-maintained config. A favorited model stays listed even
+    /// when a `discovery.ignore` glob would otherwise hide it.
+    Fav {
+        /// Model name or provider:model_id
+        name: String,
+    },
+
+    /// Drop a model's favorite mark
+    Unfav {
+        /// Model name or provider:model_id
+        name: String,
+    },
+
     /// Drop a saved selection and fall back to what it would inherit
     ///
     /// Bare, this clears the character's chat model. Every other target clears
@@ -1667,6 +1688,12 @@ fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
                 .mut_subcommand("reset", |leaf| {
                     with_palette_values(leaf, "subagent", &subagent_values)
                 })
+                .mut_subcommand("fav", |leaf| {
+                    with_palette_values(leaf, "name", &model_values)
+                })
+                .mut_subcommand("unfav", |leaf| {
+                    with_palette_values(leaf, "name", &model_values)
+                })
         })
         .mut_subcommand("character", |subcommand| {
             subcommand.mut_subcommand("use", |leaf| {
@@ -2072,6 +2099,7 @@ complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subc
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info; and string match -q -- '--s*' (commandline -ct)\" -f -a \"--subagent\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info; and string match -q -- '--s*' (commandline -ct)\" -f -a \"(shore complete subagents 2>/dev/null | string replace -r -- '^' '--subagent=')\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from fav unfav\" -f -a \"(shore complete models 2>/dev/null)\"\n\
 \n\
 function __shore_config_key\n\
     set -l seen 0\n\
@@ -2398,6 +2426,7 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         info,
         reset,
         all,
+        favorites,
         ..
     } = cmd
     else {
@@ -2418,6 +2447,12 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         let _ignored = obj.insert("name".into(), json!(name));
         target.write_into(&mut obj);
         return Some(("switch_model", Value::Object(obj)));
+    }
+    if let Some(ModelCommand::Fav { name }) = subcommand {
+        return Some(("favorite_model", json!({ "name": name, "favorite": true })));
+    }
+    if let Some(ModelCommand::Unfav { name }) = subcommand {
+        return Some(("favorite_model", json!({ "name": name, "favorite": false })));
     }
     if let Some(ModelCommand::Reset { target }) = subcommand {
         let mut obj = Map::new();
@@ -2477,6 +2512,9 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     let mut args = Map::new();
     if *all {
         let _ignored = args.insert("include_hidden".into(), json!(true));
+    }
+    if *favorites {
+        let _ignored = args.insert("favorites_only".into(), json!(true));
     }
     Some(("list_models", Value::Object(args)))
 }
@@ -3360,6 +3398,53 @@ mod tests {
     }
 
     #[test]
+    fn parse_model_favorites_flag() {
+        for argv in [&["model", "--favorites"][..], &["model", "-f"][..]] {
+            let cli = parse(argv);
+            assert_variant!(
+                parsed_command(&cli),
+                CliCommand::Model { favorites, all, .. } => {
+                    assert!(favorites, "{argv:?}");
+                    assert!(!all, "{argv:?}");
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn favorites_and_all_are_opposite_views_not_a_combination() {
+        assert!(Cli::try_parse_from(["shore", "model", "--favorites", "--all"]).is_err());
+    }
+
+    #[test]
+    fn the_favorites_flag_narrows_the_listing_rather_than_changing_command() {
+        let cli = parse(&["model", "--favorites"]);
+        let (name, args) = to_swp_command(parsed_command(&cli), None).expect("a command");
+        assert_eq!(name, "list_models");
+        assert_eq!(args.get("favorites_only"), Some(&serde_json::json!(true)));
+        assert!(args.get("include_hidden").is_none());
+    }
+
+    #[test]
+    fn fav_and_unfav_carry_the_direction_rather_than_toggling_blind() {
+        for (verb, want) in [("fav", true), ("unfav", false)] {
+            let cli = parse(&["model", verb, "kimi-k3"]);
+            let (name, args) = to_swp_command(parsed_command(&cli), None).expect("a command");
+            assert_eq!(name, "favorite_model", "{verb}");
+            assert_eq!(
+                args.get("name"),
+                Some(&serde_json::json!("kimi-k3")),
+                "{verb}"
+            );
+            assert_eq!(
+                args.get("favorite"),
+                Some(&serde_json::json!(want)),
+                "{verb}"
+            );
+        }
+    }
+
+    #[test]
     fn parse_model_setting_show() {
         let cli = parse(&["model", "setting"]);
         assert_variant!(
@@ -4175,6 +4260,7 @@ mod tests {
             info: false,
             reset: false,
             all: false,
+            favorites: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
@@ -4189,6 +4275,7 @@ mod tests {
             info: false,
             reset: false,
             all: true,
+            favorites: false,
             json: false,
         };
         let (cmd_name, args) = to_swp_command(&cmd, None).unwrap();
@@ -4211,6 +4298,7 @@ mod tests {
             info: false,
             reset: false,
             all: false,
+            favorites: false,
             json: false,
         };
         let (name, _) = to_swp_command(&cmd, None).unwrap();
@@ -4232,6 +4320,7 @@ mod tests {
             info: false,
             reset: false,
             all: false,
+            favorites: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
@@ -4256,6 +4345,7 @@ mod tests {
             info: false,
             reset: false,
             all: false,
+            favorites: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
@@ -4278,6 +4368,7 @@ mod tests {
             info: false,
             reset: false,
             all: false,
+            favorites: false,
             json: false,
         };
         let (_, args) = to_swp_command(&cmd, None).unwrap();
@@ -4537,6 +4628,7 @@ mod tests {
             info: false,
             reset: false,
             all: false,
+            favorites: false,
             json: false,
         };
         let (_, args) = to_swp_command(&cmd, None).unwrap();
@@ -4559,6 +4651,7 @@ mod tests {
                 info: false,
                 reset: false,
                 all: false,
+                favorites: false,
                 json: false,
             };
             let (_, args) = to_swp_command(&cmd, None).unwrap();
@@ -5255,6 +5348,7 @@ mod tests {
                 reset: false,
                 all: false,
                 json: false,
+                favorites: false,
             },
             CliCommand::Model {
                 subcommand: Some(ModelCommand::Use {
@@ -5265,6 +5359,7 @@ mod tests {
                 reset: false,
                 all: false,
                 json: false,
+                favorites: false,
             },
             CliCommand::Model {
                 subcommand: Some(ModelCommand::Info {
@@ -5275,6 +5370,7 @@ mod tests {
                 reset: false,
                 all: false,
                 json: false,
+                favorites: false,
             },
             CliCommand::Model {
                 subcommand: None,
@@ -5282,6 +5378,7 @@ mod tests {
                 reset: true,
                 all: false,
                 json: false,
+                favorites: false,
             },
             CliCommand::Model {
                 subcommand: Some(ModelCommand::Setting {
@@ -5297,6 +5394,7 @@ mod tests {
                 reset: false,
                 all: false,
                 json: false,
+                favorites: false,
             },
         ]
     }

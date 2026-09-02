@@ -7,8 +7,8 @@ import {
   defaultBaseUrl,
   MissingApiKey,
   preprocessRequest,
+  hardcodedProviderBaseUrl,
   providerOptionsFor,
-  requiresReasoningReplay,
   type ResolvedModel,
 } from "../src/llm/request";
 import { defaultApiKeyEnv, type ProviderEntry } from "../src/llm/credentials";
@@ -70,25 +70,26 @@ describe("what a provider is reached at by default", () => {
   });
 });
 
-describe("which providers need prior reasoning replayed back to them", () => {
-  test("the ones that collapse without it", () => {
-    expect(requiresReasoningReplay("deepseek")).toBe(true);
-    expect(requiresReasoningReplay("moonshot")).toBe(true);
-    expect(requiresReasoningReplay("moonshotai")).toBe(true);
-  });
-
-  test("and no others, so nobody else pays to resend thinking", () => {
+describe("the two base-URL lookups cannot drift apart", () => {
+  test("every provider with a hardcoded endpoint is reachable by default", () => {
     for (const key of [
-      "anthropic",
-      "openai",
       "openrouter",
+      "moonshot",
+      "moonshotai",
+      "xai",
+      "zhipuai",
       "zai-api",
       "zai-sub",
-      "xai",
-      "unknown",
+      "nanogpt",
+      "opencode-go",
     ]) {
-      expect(requiresReasoningReplay(key), key).toBe(false);
+      expect(defaultBaseUrl(key), key).toBe(hardcodedProviderBaseUrl(key));
+      expect(defaultBaseUrl(key), key).toMatch(/^https:\/\//);
     }
+  });
+
+  test("nano-gpt discovery has an endpoint to talk to", () => {
+    expect(defaultBaseUrl("nanogpt")).toBe("https://nano-gpt.com/api/v1");
   });
 });
 

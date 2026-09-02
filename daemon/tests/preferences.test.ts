@@ -794,6 +794,42 @@ describe("findEffectiveModel", () => {
     expect(sub.baseUrl).toBe(ZAI_SUB_BASE_URL);
   });
 
+  test("NanoGPT keeps its own protocol for Anthropic-namespaced models", () => {
+    const root = tempRoot();
+    const cacheDir = join(root, "cache");
+    const providerDir = join(cacheDir, "providers", "nanogpt");
+    mkdirSync(providerDir, { recursive: true });
+    writeFileSync(join(providerDir, "models.json"), JSON.stringify({
+      version: 2,
+      provider_key: "nanogpt",
+      fetched_at: "2026-09-02T00:00:00Z",
+      base_url: "https://nano-gpt.com/api/v1",
+      models: [{
+        provider_key: "nanogpt",
+        model_id: "anthropic/claude-opus-4.6",
+        sdk: "nanogpt",
+        base_url: "https://nano-gpt.com/api/v1",
+        discovered_at: "2026-09-02T00:00:00Z",
+      }],
+    }));
+    const config = buildConfig(
+      "",
+      "[nanogpt]\n[nanogpt.discovery]\nenabled = true\n",
+      root,
+    );
+
+    const model = findEffectiveModel(
+      config,
+      cacheDir,
+      "nanogpt:anthropic/claude-opus-4.6",
+      false,
+    );
+    expect(model.providerKey).toBe("nanogpt");
+    expect(model.sdk).toBe("nanogpt");
+    expect(model.baseUrl).toBe("https://nano-gpt.com/api/v1");
+    expect(model.cacheTtl).toBeUndefined();
+  });
+
   test("a disabled provider hides its static entries too", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });

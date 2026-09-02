@@ -165,10 +165,13 @@ MUTANTS = [
      CTX,
      "    memoryIndexPath: indexPath(config.dirs.cache, charName),",
      "    memoryIndexPath: indexPath(config.dirs.config, charName),"),
-    ("context: the active-prompt snapshot is never written",
+    ("context: building the tool context writes the snapshot, ahead of the first message",
      CTX,
-     "    await ensureActivePromptSnapshot(charDataDir, configDir, charName, config.dirs.workspace);",
-     "    void ensureActivePromptSnapshot;"),
+     "  const mcp = deps.mcpRegistry;",
+     '  await (await import("node:fs/promises")).mkdir(rustJoin(charDataDir, "active_prompt"), {\n'
+     "    recursive: true,\n"
+     "  });\n"
+     "  const mcp = deps.mcpRegistry;"),
     ("context: an embedder failure fails the turn instead of degrading",
      CTX,
      "  } catch (e) {\n    shoreLog.warn(\n      `shore: embedder unavailable for ${charName}; semantic memory retrieval disabled: ${String(e)}`,\n    );\n  }",

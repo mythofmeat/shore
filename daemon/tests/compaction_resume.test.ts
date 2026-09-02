@@ -39,7 +39,6 @@ test("a failed compaction resumes after its completed tool round without replayi
   const heads = ["before-sha", "during-sha", "after-sha"];
   const tools: CompactionTools = {
     workspaceDir: workspace,
-    configDir: "",
     dispatch: async (name, input) => {
       if (name !== "edit") return { output: "ok", isError: false };
       edits += 1;
@@ -124,7 +123,6 @@ test("the tool-round ceiling pauses work in resumable slices instead of making t
   let edits = 0;
   const tools: CompactionTools = {
     workspaceDir: workspace,
-    configDir: "",
     dispatch: async (_name, input) => {
       edits += 1;
       const edit = input as { path: string; content: string };
@@ -174,7 +172,6 @@ test("an explicit keep-turns count wins over the split a stale checkpoint planne
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
-    configDir: "",
     dispatch: async (_name, input) => {
       const edit = input as { path: string; content: string };
       const path = join(workspace, edit.path);
@@ -246,7 +243,6 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
-    configDir: "",
     dispatch: async (_name, input) => {
       const edit = input as { path: string; content: string };
       const path = join(workspace, edit.path);
@@ -319,7 +315,6 @@ test("a checkpoint the workspace has moved past stays wedged until a restart thr
 
   const tools: CompactionTools = {
     workspaceDir: workspace,
-    configDir: "",
     dispatch: async (_name, input) => {
       const edit = input as { path: string; content: string };
       const path = join(workspace, edit.path);
@@ -390,7 +385,6 @@ test("a checkpoint whose source was edited out from under it is discarded instea
   let edits = 0;
   const tools: CompactionTools = {
     workspaceDir: workspace,
-    configDir: "",
     dispatch: async (_name, input) => {
       edits += 1;
       const edit = input as { path: string; content: string };

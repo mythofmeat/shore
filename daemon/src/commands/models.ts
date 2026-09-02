@@ -23,6 +23,9 @@ import {
   resolveSubagentBaseModel,
   resolveSubagentSampler,
   resolveSubagentScopes,
+  addFavorite,
+  isFavorite,
+  removeFavorite,
   samplerIsEmpty,
   saveCharacterPreferences,
   saveGlobalPreferences,
@@ -320,7 +323,7 @@ export function modelRoles(ctx: ModelsContext): ModelRole[] {
   ];
 }
 
-function effectiveModelToJson(entry: EffectiveModel): unknown {
+function effectiveModelToJson(entry: EffectiveModel, favorites: ReadonlySet<string>): unknown {
   const m = entry.resolved;
   return {
     name: m.name,
@@ -329,50 +332,109 @@ function effectiveModelToJson(entry: EffectiveModel): unknown {
     model_id: m.modelId,
     source: entry.source,
     hidden: entry.hidden,
+    favorite: favorites.has(m.qualifiedName),
   };
 }
 
-function modelsByProvider(entries: EffectiveModel[]): Record<string, unknown[]> {
+function modelsByProvider(
+  entries: EffectiveModel[],
+  favorites: ReadonlySet<string>,
+): Record<string, unknown[]> {
   const out: Record<string, unknown[]> = {};
   for (const entry of entries) {
-    (out[entry.resolved.providerKey] ??= []).push(effectiveModelToJson(entry));
+    (out[entry.resolved.providerKey] ??= []).push(effectiveModelToJson(entry, favorites));
   }
   return out;
 }
 
-function activeName(ctx: ModelsContext, entries: EffectiveModel[]): string | undefined {
+function favoriteNames(ctx: ModelsContext): Set<string> {
+  return new Set(loadGlobalPreferences(ctx).favorites);
+}
+
+function activeName(ctx: ModelsContext): string | undefined {
   const resolved = effectiveChatModel(ctx.config, ctx.characterName);
   if (resolved !== undefined) return resolved.qualifiedName;
 
   const fallback = ctx.config.app.defaults.model;
-  if (fallback !== undefined && fallback !== "") {
+  if (fallback === undefined || fallback === "") {
+    return firstChatModel(ctx.config.models)?.qualifiedName;
+  }
+  try {
+    return findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, fallback, true)
+      .qualifiedName;
+  } catch {
+    return fallback;
+  }
+}
+
+function favoritesOutsideTheWalk(
+  ctx: ModelsContext,
+  view: ReturnType<typeof configView>,
+  favorites: ReadonlySet<string>,
+  walked: EffectiveModel[],
+): EffectiveModel[] {
+  const seen = new Set(walked.map((e) => e.resolved.qualifiedName));
+  const out: EffectiveModel[] = [];
+  for (const favorite of favorites) {
     try {
-      return findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, fallback, true)
-        .qualifiedName;
+      const resolved = findEffectiveModel(view, ctx.config.dirs.cache, favorite, true);
+      if (seen.has(resolved.qualifiedName)) continue;
+      seen.add(resolved.qualifiedName);
+      out.push({ source: "favorite", resolved, hidden: false });
     } catch {
-      return fallback;
+      continue;
     }
   }
-
-  return entries[0]?.resolved.qualifiedName;
+  return out;
 }
 
 export function listModels(ctx: ModelsContext, args: Args): unknown {
+  const favoritesOnly = asBool(args["favorites_only"]) ?? false;
   const includeHidden = asBool(args["include_hidden"]) ?? false;
   const view = configView(ctx.config);
-  const entries = listEffectiveModels(view, ctx.config.dirs.cache, includeHidden);
+  const favorites = favoriteNames(ctx);
 
-  const hiddenCount = (includeHidden
-    ? entries
-    : listEffectiveModels(view, ctx.config.dirs.cache, true)
-  ).filter((e) => e.hidden).length;
+  const walked = listEffectiveModels(view, ctx.config.dirs.cache, true);
+  const all = [...walked, ...favoritesOutsideTheWalk(ctx, view, favorites, walked)];
+  const shown = all.filter((e) => {
+    const favorite = favorites.has(e.resolved.qualifiedName);
+    if (favoritesOnly) return favorite;
+    return includeHidden || !e.hidden || favorite;
+  });
+  const hiddenCount = all.filter(
+    (e) => e.hidden && !favorites.has(e.resolved.qualifiedName),
+  ).length;
 
   return {
-    models: modelsByProvider(entries),
-    active: activeName(ctx, entries) ?? null,
+    models: modelsByProvider(shown, favorites),
+    active: activeName(ctx) ?? null,
     roles: modelRoles(ctx),
     include_hidden: includeHidden,
+    favorites_only: favoritesOnly,
+    favorite_count: favorites.size,
     hidden_count: hiddenCount,
+  };
+}
+
+export function favoriteModel(ctx: ModelsContext, args: Args): unknown {
+  const name = asName(args["name"]);
+  if (name === undefined) throw invalidRequest("missing model name");
+
+  const resolved = resolve(ctx, name, true);
+  const prefs = loadGlobalPreferences(ctx);
+  const want = asBool(args["favorite"]) ?? !isFavorite(prefs, resolved.qualifiedName);
+  const changed = want
+    ? addFavorite(prefs, resolved.qualifiedName)
+    : removeFavorite(prefs, resolved.qualifiedName);
+  if (changed) saveGlobal(ctx, prefs);
+
+  return {
+    qualified_name: resolved.qualifiedName,
+    provider: resolved.providerKey,
+    model_id: resolved.modelId,
+    favorite: want,
+    changed,
+    favorites: [...prefs.favorites],
   };
 }
 

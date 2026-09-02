@@ -8,6 +8,7 @@ import type { ZhipuReasoningEffort } from "zhipu-ai-provider";
 import type { SamplerSettings } from "../config/preferences.ts";
 import { ConfigDuration } from "../config/duration.ts";
 import { parseCacheKeepalive, parseCacheKeepaliveMax } from "../config/keepalive.ts";
+import { honorsCacheTtl } from "./cache_capability.ts";
 import type { DiscoveredModelSupport } from "./discovery.ts";
 import { REASONING_OFF, SDK_VARIANTS, sdkFromWire, type Sdk } from "./types.ts";
 
@@ -201,6 +202,7 @@ const ZAI_EFFORT = ["minimal", "low", "medium", "high", "xhigh", "max"] as const
 const DEEPSEEK_EFFORT = ["low", "high", "max"] as const satisfies readonly DeepSeekEffort[];
 const MOONSHOT_EFFORT = ["low", "high", "max"] as const satisfies readonly MoonshotEffort[];
 const OPENROUTER_EFFORT = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
+const NANOGPT_EFFORT = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 const GEMINI_EFFORT = Object.values(ThinkingLevel)
   .map((v) => v.toLowerCase())
   .filter((v) => !v.startsWith("thinking_level_"));
@@ -219,6 +221,7 @@ function adapterEffortSuggestions(sdk: Sdk): readonly string[] {
     case "zai": return ZAI_EFFORT;
     case "deepseek": return DEEPSEEK_EFFORT;
     case "moonshot": return MOONSHOT_EFFORT;
+    case "nanogpt": return NANOGPT_EFFORT;
   }
 }
 
@@ -251,6 +254,10 @@ function vendor(owner: Sdk) {
   return (sdk: Sdk): SettingApplicability => sdk === owner ? "honored" : "ignored";
 }
 
+function cacheTtlApplicability(sdk: Sdk): SettingApplicability {
+  return honorsCacheTtl(sdk) ? "honored" : "ignored";
+}
+
 function budgetApplicability(sdk: Sdk, support?: DiscoveredModelSupport): SettingApplicability {
   const supportedSdk = sdk === "anthropic" || sdk === "gemini" || sdk === "moonshot";
   if (!supportedSdk) return "ignored";
@@ -281,7 +288,7 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   { key: "reasoning_effort", field: "reasoningEffort", kind: "string", suggestions: reasoningSuggestions, allowCustom: reasoningAllowsCustom, applicability: reasoningApplicability, parse: parseReasoning },
   { key: "budget_tokens", field: "budgetTokens", kind: "u32", suggestions: ["1024", "2048", "4096", "8192", "16384", "32768"], allowCustom: true, applicability: budgetApplicability, parse: parseU32("budget_tokens") },
   { key: "max_output_tokens", field: "maxOutputTokens", kind: "u32", suggestions: ["16384", "32768", "65536"], allowCustom: true, applicability: always, parse: parseU32("max_output_tokens") },
-  { key: "cache_ttl", field: "cacheTtl", kind: "duration", suggestions: ["5m", "1h"], allowCustom: true, applicability: vendor("anthropic"), parse: parseCacheTtl },
+  { key: "cache_ttl", field: "cacheTtl", kind: "duration", suggestions: ["5m", "1h"], allowCustom: true, applicability: cacheTtlApplicability, parse: parseCacheTtl },
   { key: "cache_keepalive", field: "cacheKeepalive", kind: "duration_or_off", suggestions: ["off", "55m"], allowCustom: true, applicability: always, parse: parseDuration("cache_keepalive", true), serialize: serializeKeepalive },
   { key: "cache_keepalive_max", field: "cacheKeepaliveMax", kind: "duration", suggestions: ["90m", "12h"], allowCustom: true, applicability: always, parse: parseDuration("cache_keepalive_max", false), serialize: serializeDuration },
   { key: "sdk", field: "sdk", kind: "string", suggestions: SDK_VARIANTS, allowCustom: false, applicability: always, parse: (value) => { const raw = parseString("sdk")(value); if ("error" in raw) return raw; const sdk = sdkFromWire(raw.value as string); return sdk === undefined ? { error: `sdk must be one of ${SDK_VARIANTS.map(show).join(", ")}; got ${show(raw.value)}` } : { value: raw.value }; } },

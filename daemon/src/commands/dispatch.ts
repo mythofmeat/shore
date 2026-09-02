@@ -37,6 +37,7 @@ import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.
 import { describeTool, runTool, type RunToolContext } from "./run_tool.ts";
 import {
   effectiveChatModel,
+  favoriteModel,
   listModels,
   modelInfo,
   modelSettings,
@@ -112,6 +113,7 @@ const CHARACTERLESS = new Set([
   "list_characters",
   "create_character",
   "list_models",
+  "favorite_model",
   "list_providers",
   "list_provider_models",
   "export_character",
@@ -167,6 +169,8 @@ export async function runCommand(
       return modelInfo(session, args);
     case "switch_model":
       return switchModel(session, args);
+    case "favorite_model":
+      return favoriteModel(session, args);
     case "reset_model":
       return resetModel(session, args);
     case "set_model_setting":
@@ -308,6 +312,8 @@ export function runCharacterlessCommand(
       return createCharacter(session.config.dirs.config, args, session.config.dirs.workspace);
     case "list_models":
       return listModels(session, args);
+    case "favorite_model":
+      return favoriteModel(session, args);
     case "list_providers":
       return listProviders(providersContext(session, deps));
     case "list_provider_models":

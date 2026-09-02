@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { activePromptFile, normalizePromptVisiblePath, resolvePath } from "./workspace_path";
+import { wallClockMarker } from "../engine/prompt.ts";
+import { hostZone } from "../ledger/zoned.ts";
 import type { ContentBlock, Message } from "../engine/types";
 
 export const MAX_HISTORY_MESSAGES = 100;
@@ -124,15 +126,20 @@ export function renderHistorySlice(
   arg: string,
   charName: string,
   userName: string,
+  timeZone: string = hostZone(),
 ): string {
   const n = Math.min(parseCount(arg), MAX_HISTORY_MESSAGES);
   if (n === 0 || history.length === 0) return "";
 
   const start = Math.max(0, history.length - n);
   const lines: string[] = [];
+  let previousTimestamp: string | undefined;
   for (const msg of history.slice(start)) {
     const text = messageDisplayText(msg);
     if (text.trim() === "") continue;
+    const marker = wallClockMarker(previousTimestamp, msg.timestamp, timeZone);
+    if (marker !== undefined) lines.push(marker);
+    previousTimestamp = msg.timestamp;
     lines.push(`${speakerLabel(msg.role, charName, userName)}: ${text}`);
   }
   return lines.join("\n");

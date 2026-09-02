@@ -2,6 +2,10 @@ const ANTHROPIC_1H_CACHE_WRITE_MULTIPLIER = 1.6;
 
 const OPENROUTER_CATALOG_URL = "https://openrouter.ai/api/v1/models";
 
+const NANOGPT_CATALOG_URL = "https://nano-gpt.com/api/v1/models?detailed=true";
+
+const NANOGPT_PROVIDER = "nanogpt";
+
 export interface ModelPricing {
   input_per_token: number;
   output_per_token: number;
@@ -27,7 +31,8 @@ export interface CostRequest {
   cache_ttl?: string | undefined;
 }
 
-export function toOpenRouterId(provider: string, model: string): string {
+export function catalogId(provider: string, model: string): string {
+  if (provider === NANOGPT_PROVIDER) return `${NANOGPT_PROVIDER}/${model}`;
   if (provider === "openrouter" || model.includes("/")) return model;
   if (provider === "anthropic") return `anthropic/${normalizeAnthropicModel(model)}`;
   return `${provider}/${model}`;
@@ -69,7 +74,13 @@ export function calculateCost(pricing: ModelPricing, request: CostRequest): Cost
   const cache_read = pricing.cache_read_per_token * request.cache_read_tokens;
 
   let cache_write = pricing.cache_write_per_token * request.cache_write_tokens;
-  if (request.provider === "anthropic" && (request.cache_ttl ?? "1h") === "1h") {
+  const oneHourCache = request.cache_ttl === "1h" ||
+    (request.provider === "anthropic" && request.cache_ttl === undefined);
+  if (
+    (request.provider === "anthropic" ||
+      (request.provider === NANOGPT_PROVIDER && request.model.startsWith("anthropic/"))) &&
+    oneHourCache
+  ) {
     cache_write *= ANTHROPIC_1H_CACHE_WRITE_MULTIPLIER;
   }
 
@@ -83,10 +94,59 @@ export interface PricingStore {
   put(modelId: string, pricing: ModelPricing): void;
 }
 
+const PER_MILLION = 1e-6;
+
+const PER_THOUSAND = 1e-3;
+
+function openRouterPricing(p: Record<string, unknown>): ModelPricing {
+  return {
+    input_per_token: parsePrice(p["prompt"]),
+    output_per_token: parsePrice(p["completion"]),
+    cache_read_per_token: parsePrice(p["input_cache_read"] ?? p["cache_read"]),
+    cache_write_per_token: parsePrice(p["input_cache_write"] ?? p["cache_write"]),
+  };
+}
+
+function nanoGptPricing(id: string, p: Record<string, unknown>): ModelPricing {
+  const prompt = parsePrice(p["prompt"]) * PER_MILLION;
+  const advertisedWrite = p["cacheWriteInputPer1kTokens"];
+  const cacheWrite = advertisedWrite === undefined && id.startsWith("anthropic/")
+    ? prompt * 1.25
+    : parsePrice(advertisedWrite) * PER_THOUSAND;
+  return {
+    input_per_token: prompt,
+    output_per_token: parsePrice(p["completion"]) * PER_MILLION,
+    cache_read_per_token: parsePrice(p["cacheReadInputPer1kTokens"]) * PER_THOUSAND,
+    cache_write_per_token: cacheWrite,
+  };
+}
+
+interface CatalogSource {
+  url: string;
+  key: (id: string) => string;
+  read: (id: string, pricing: Record<string, unknown>) => ModelPricing;
+}
+
+const OPENROUTER_SOURCE: CatalogSource = {
+  url: OPENROUTER_CATALOG_URL,
+  key: (id) => id,
+  read: (_id, pricing) => openRouterPricing(pricing),
+};
+
+const NANOGPT_SOURCE: CatalogSource = {
+  url: NANOGPT_CATALOG_URL,
+  key: (id) => `${NANOGPT_PROVIDER}/${id}`,
+  read: nanoGptPricing,
+};
+
+function catalogSource(provider: string): CatalogSource {
+  return provider === NANOGPT_PROVIDER ? NANOGPT_SOURCE : OPENROUTER_SOURCE;
+}
+
 export class PricingEngine {
   readonly #store: PricingStore;
   readonly #fetch: CatalogFetch;
-  #inflight: Promise<void> | undefined;
+  readonly #inflight = new Map<string, Promise<void>>();
 
   constructor(store: PricingStore, fetchImpl: CatalogFetch = (url) => globalThis.fetch(url)) {
     this.#store = store;
@@ -94,13 +154,13 @@ export class PricingEngine {
   }
 
   cached(provider: string, model: string): ModelPricing | undefined {
-    return this.#store.get(toOpenRouterId(provider, model));
+    return this.#store.get(catalogId(provider, model));
   }
 
   async getOrFetch(provider: string, model: string): Promise<ModelPricing | undefined> {
     const hit = this.cached(provider, model);
     if (hit) return hit;
-    await this.#refreshCatalog();
+    await this.#refreshCatalog(catalogSource(provider));
     return this.cached(provider, model);
   }
 
@@ -109,17 +169,21 @@ export class PricingEngine {
     return pricing ? calculateCost(pricing, request) : undefined;
   }
 
-  async #refreshCatalog(): Promise<void> {
-    this.#inflight ??= this.#fetchCatalog().finally(() => {
-      this.#inflight = undefined;
-    });
-    await this.#inflight;
+  async #refreshCatalog(source: CatalogSource): Promise<void> {
+    let pending = this.#inflight.get(source.url);
+    if (pending === undefined) {
+      pending = this.#fetchCatalog(source).finally(() => {
+        this.#inflight.delete(source.url);
+      });
+      this.#inflight.set(source.url, pending);
+    }
+    await pending;
   }
 
-  async #fetchCatalog(): Promise<void> {
+  async #fetchCatalog(source: CatalogSource): Promise<void> {
     let body: unknown;
     try {
-      const response = await this.#fetch(OPENROUTER_CATALOG_URL);
+      const response = await this.#fetch(source.url);
       if (!response.ok) return;
       body = await response.json();
     } catch {
@@ -132,14 +196,7 @@ export class PricingEngine {
     for (const entry of data) {
       const model = entry as { id?: unknown; pricing?: Record<string, unknown> };
       if (typeof model.id !== "string" || !model.pricing) continue;
-      const p = model.pricing;
-      const pricing: ModelPricing = {
-        input_per_token: parsePrice(p["prompt"]),
-        output_per_token: parsePrice(p["completion"]),
-        cache_read_per_token: parsePrice(p["input_cache_read"] ?? p["cache_read"]),
-        cache_write_per_token: parsePrice(p["input_cache_write"] ?? p["cache_write"]),
-      };
-      this.#store.put(model.id, pricing);
+      this.#store.put(source.key(model.id), source.read(model.id, model.pricing));
     }
   }
 }

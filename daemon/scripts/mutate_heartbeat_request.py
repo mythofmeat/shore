@@ -163,15 +163,6 @@ MUTANTS = [
      H,
      "  pushInlineSystem(request, prompt);",
      "  void prompt;"),
-    ("prepare: a failed prompt snapshot aborts the tick",
-     H,
-     "  } catch (e) {\n"
-     "    shoreLog.warn(`shore: heartbeat could not prepare the prompt snapshot for ${character}: ${String(e)}`);\n"
-     "  }",
-     "  } catch (e) {\n"
-     "    throw e;\n"
-     "  }"),
-
     # --- how the interval is said ---------------------------------------------
     ("interval: whole hours are said in minutes",
      H,

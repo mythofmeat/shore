@@ -179,9 +179,10 @@ export interface ToolOutput {
 
 export interface CompactionTools {
   readonly workspaceDir: string;
-  readonly configDir: string;
 
   dispatch(name: string, input: unknown): Promise<ToolOutput>;
+
+  deferEdit?(path: string): Promise<void>;
 
   ensureWorkspaceGitRepo(workspaceDir: string, charName: string, reason: string): Promise<void>;
 
@@ -195,5 +196,4 @@ export interface AppliedCompactionWrite {
   resolvedPath: string;
   previousContent?: string;
   resultingContent?: string;
-  memoryIndexTarget: boolean;
 }

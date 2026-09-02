@@ -7,14 +7,16 @@ import { VercelProvider } from "./vercel.ts";
 import { ZaiProvider } from "./zai.ts";
 
 const vercel = new VercelProvider();
+const openai = new OpenAIProvider();
 
 export const DEFAULT_PROVIDERS: Partial<Record<SidecarRequest["sdk"], SidecarProvider>> = {
   anthropic: new AnthropicProvider(),
   claude_agent: new ClaudeAgentProvider(),
   gemini: new GeminiProvider(),
   openrouter: vercel,
-  openai: new OpenAIProvider(),
+  openai,
   zai: new ZaiProvider(),
   deepseek: vercel,
   moonshot: vercel,
+  nanogpt: openai,
 };

@@ -10,6 +10,7 @@ import type {
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { REASONING_OFF } from "../types.ts";
+import { effectiveCacheTtl } from "../cache_capability.ts";
 import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
@@ -204,7 +205,23 @@ function buildOpenAICall(
       : effort) as NonNullable<ChatCompletionCreateParams["reasoning_effort"]>;
   }
 
+  applyPromptCaching(req, params);
+
   return { client, params };
+}
+
+export function applyPromptCaching(req: SidecarRequest, params: ChatCompletionCreateParams): void {
+  const requested = req.provider_options?.cache_ttl ?? "";
+  const ttl = effectiveCacheTtl(req.sdk, requested);
+  if (req.context !== undefined && ttl !== requested) {
+    if (ttl === "") delete req.context.cache_ttl;
+    else req.context.cache_ttl = ttl;
+  }
+  if (ttl === "") return;
+  (params as unknown as Record<string, unknown>)["prompt_caching"] = {
+    enabled: true,
+    ttl: ttl === "1h" ? "1h" : "5m",
+  };
 }
 
 function toOpenAITools(tools: ToolDefinition[] | undefined): ChatCompletionTool[] {
@@ -320,6 +337,8 @@ interface RawUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
   prompt_tokens_details?: { cached_tokens?: number };
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
   cost?: number;
 }
 
@@ -333,12 +352,13 @@ function emptyUsage(): Usage {
 }
 
 function extractUsage(u: RawUsage | undefined): Usage {
-  const cacheRead = u?.prompt_tokens_details?.cached_tokens ?? 0;
+  const cacheRead = u?.cache_read_input_tokens ?? u?.prompt_tokens_details?.cached_tokens ?? 0;
+  const cacheWrite = u?.cache_creation_input_tokens ?? 0;
   const usage: Usage = {
-    input_tokens: Math.max(0, (u?.prompt_tokens ?? 0) - cacheRead),
+    input_tokens: Math.max(0, (u?.prompt_tokens ?? 0) - cacheRead - cacheWrite),
     output_tokens: u?.completion_tokens ?? 0,
     cache_read_tokens: cacheRead,
-    cache_creation_tokens: 0,
+    cache_creation_tokens: cacheWrite,
   };
   if (typeof u?.cost === "number") usage.total_cost_usd = u.cost;
   return usage;

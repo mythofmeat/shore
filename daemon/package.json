@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "bun run src/daemon/run.ts",
-    "build": "bun run scripts/build.ts",
+    "build": "bun build src/daemon/run.ts --compile --outfile dist/shore-daemon",
     "typecheck": "tsc --noEmit",
     "lint:comments": "bun run scripts/check_no_comments.ts",
     "lint": "oxlint --type-aware src tests scripts",
@@ -16,18 +16,18 @@
     "postinstall": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^3.0.37",
-    "@ai-sdk/moonshotai": "^3.0.43",
-    "@anthropic-ai/claude-agent-sdk": "^0.3.252",
-    "@anthropic-ai/sdk": "^0.122.0",
+    "@ai-sdk/deepseek": "^3.0.39",
+    "@ai-sdk/moonshotai": "^3.0.45",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.258",
+    "@anthropic-ai/sdk": "^0.123.0",
     "@google/genai": "^2.20.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
-    "ai": "^7.0.88",
+    "ai": "^7.0.90",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "matrix-js-sdk": "^42.3.0",
-    "openai": "^7.8.0",
+    "openai": "^7.9.0",
     "tar": "^7.5.22",
     "zhipu-ai-provider": "^0.4.0"
   },

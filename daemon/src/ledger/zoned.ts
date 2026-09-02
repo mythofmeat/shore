@@ -146,3 +146,25 @@ export function formatLocalAmPm(rfc3339: string, timeZone: string): string {
   const meridiem = hour < 12 ? "AM" : "PM";
   return `${pad(year, 4)}-${pad(month)}-${pad(day)} ${pad(hour12)}:${pad(minute)} ${meridiem}`;
 }
+
+function offsetLabel(offsetMs: number): string {
+  const sign = offsetMs < 0 ? "-" : "+";
+  const minutes = Math.round(Math.abs(offsetMs) / MINUTE_MS);
+  return `${sign}${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+}
+
+export function toZonedRfc3339(instant: number, timeZone: string): string {
+  const wholeSecond = Math.floor(instant / SECOND_MS) * SECOND_MS;
+  const naive = naiveInZone(wholeSecond, timeZone);
+  const d = new Date(naive);
+  const ms = instant - wholeSecond;
+  const date = `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  const time = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  const frac = ms === 0 ? "" : `.${pad(ms, 3)}`;
+  return `${date}T${time}${frac}${offsetLabel(naive - wholeSecond)}`;
+}
+
+export function normalizeToZone(rfc3339: string, timeZone: string): string {
+  const instant = Date.parse(rfc3339);
+  return Number.isNaN(instant) ? rfc3339 : toZonedRfc3339(instant, timeZone);
+}

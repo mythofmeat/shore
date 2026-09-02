@@ -39,6 +39,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
             data["character"].as_str().unwrap_or("?"),
         ),
         "switch_model" => print_model_switched(data),
+        "favorite_model" => print_model_favorited(data),
         "reset_model" => print_model_reset(data),
         "set_model_setting" => print_set_model_setting(data),
         "refresh_provider_models" => print_provider_refresh(data),
@@ -1279,6 +1280,19 @@ fn print_model_switched(data: &serde_json::Value) {
     let cleared = string_list(data, "cleared");
     if !cleared.is_empty() {
         cli_out!("  cleared {}", join_names(&cleared));
+    }
+}
+
+fn print_model_favorited(data: &serde_json::Value) {
+    let model = data["qualified_name"].as_str().unwrap_or("(none)");
+    let favorite = data["favorite"].as_bool().unwrap_or(false);
+    let changed = data["changed"].as_bool().unwrap_or(false);
+    let name = abbreviate_model(model);
+    match (favorite, changed) {
+        (true, true) => cli_out!("Favorited {name}."),
+        (true, false) => cli_out!("{name} is already a favorite."),
+        (false, true) => cli_out!("Unfavorited {name}."),
+        (false, false) => cli_out!("{name} was not a favorite."),
     }
 }
 

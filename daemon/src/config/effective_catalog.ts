@@ -49,7 +49,7 @@ export class EffectiveCatalogError extends Error {
   }
 }
 
-export type EffectiveSource = "static" | "discovered";
+export type EffectiveSource = "static" | "discovered" | "favorite";
 
 export interface EffectiveModel {
   source: EffectiveSource;
@@ -219,6 +219,7 @@ function buildResolvedFromProvider(
 
   const sdk: Sdk =
     entry.sdk ??
+    (providerKey === "nanogpt" ? providerDefaults.sdk : undefined) ??
     (modelId.startsWith("anthropic/") ? "anthropic" : undefined) ??
     providerDefaults.sdk ??
     (disc === undefined ? undefined : sdkFromWire(disc.sdk)) ??

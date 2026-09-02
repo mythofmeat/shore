@@ -240,15 +240,15 @@ MUTANTS = [
 
     # --- prepareChatContext: which file lands in which slot ---------------
     ("context: SOUL and USER are swapped", CONTEXT,
-     "  const characterDefinition = await loadActivePromptFile(characterDataDir, SOUL_FILE);\n"
-     "  const userDefinition = await loadActivePromptFile(characterDataDir, USER_FILE);",
-     "  const characterDefinition = await loadActivePromptFile(characterDataDir, USER_FILE);\n"
-     "  const userDefinition = await loadActivePromptFile(characterDataDir, SOUL_FILE);"),
+     "  const characterDefinition = await promptFile(SOUL_FILE);\n"
+     "  const userDefinition = await promptFile(USER_FILE);",
+     "  const characterDefinition = await promptFile(USER_FILE);\n"
+     "  const userDefinition = await promptFile(SOUL_FILE);"),
     ("context: AGENTS and TOOLS are swapped", CONTEXT,
-     "  const systemPrompt = await loadActivePromptFile(characterDataDir, AGENTS_FILE);\n"
-     "  const toolsGuidance = await loadActivePromptFile(characterDataDir, TOOLS_FILE);",
-     "  const systemPrompt = await loadActivePromptFile(characterDataDir, TOOLS_FILE);\n"
-     "  const toolsGuidance = await loadActivePromptFile(characterDataDir, AGENTS_FILE);"),
+     "  const systemPrompt = await promptFile(AGENTS_FILE);\n"
+     "  const toolsGuidance = await promptFile(TOOLS_FILE);",
+     "  const systemPrompt = await promptFile(TOOLS_FILE);\n"
+     "  const toolsGuidance = await promptFile(AGENTS_FILE);"),
     ("context: the memory index is not loaded", CONTEXT,
      "  const memoryIndex = await loadMemoryIndex(\n"
      "    characterDataDir,\n    config.dirs.config,\n    character,\n    config.dirs.workspace,\n  );",
@@ -257,14 +257,25 @@ MUTANTS = [
      "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    config.dirs.config,",
      "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    characterDataDir,"),
     ("context: the snapshot is never ensured", CONTEXT,
-     "    await ensureActivePromptSnapshot(\n"
-     "      characterDataDir,\n      config.dirs.config,\n      character,\n      config.dirs.workspace,\n    );",
-     "    void ensureActivePromptSnapshot;"),
+     "      await ensureActivePromptSnapshot(\n"
+     "        characterDataDir,\n        config.dirs.config,\n        character,\n        config.dirs.workspace,\n      );",
+     "      void ensureActivePromptSnapshot;"),
     ("context: a failed snapshot is fatal", CONTEXT,
-     "  } catch (e) {\n"
-     "    shoreLog.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);\n"
-     "  }",
-     "  } catch (e) {\n    throw e;\n  }"),
+     "    } catch (e) {\n"
+     "      shoreLog.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);\n"
+     "    }",
+     "    } catch (e) {\n      throw e;\n    }"),
+
+    # --- prepareChatContext: the snapshot belongs to the conversation ------
+    ("context: an empty conversation keeps the snapshot it inherited", CONTEXT,
+     "      await resetActivePromptSnapshot(characterDataDir);\n",
+     ""),
+    ("context: the snapshot is prepared before the conversation has anything in it", CONTEXT,
+     "  const activeConversation = params.activeConversation ?? messages.length > 0;",
+     "  const activeConversation = true as boolean;"),
+    ("context: every conversation is treated as empty, so no turn ever holds a snapshot", CONTEXT,
+     "  const activeConversation = params.activeConversation ?? messages.length > 0;",
+     "  const activeConversation = false as boolean;"),
 
     # --- prepareChatContext: the tools fork -------------------------------
     ("context: MCP defs alone do not make tools available", CONTEXT,

@@ -10,7 +10,10 @@ import {
 } from "./config/dirs.ts";
 import { ConfigError, loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
 import { ConversationEngine, type HistoryListener } from "./engine/conversation.ts";
-import { ensureActivePromptSnapshot } from "./memory/deferred_edits.ts";
+import {
+  ensureCharacterWorkspace,
+  resetActivePromptSnapshotIfEmpty,
+} from "./memory/deferred_edits.ts";
 
 export interface RuntimeReloadSummary {
   availableBefore: number;
@@ -118,12 +121,13 @@ export class CharacterRegistry {
     const found = discoverCharacters(this.#configDir, this.#workspaceRoot());
     for (const name of found) {
       try {
-        await ensureActivePromptSnapshot(
+        await ensureCharacterWorkspace(
           characterDataDir(this.#dataDir, name),
           this.#configDir,
           name,
           this.#workspaceRoot(),
         );
+        await resetActivePromptSnapshotIfEmpty(characterDataDir(this.#dataDir, name));
       } catch (e) {
         shoreLog.warn(
           `shore: failed to prepare workspace for character ${name}: ${String(e)}`,

@@ -49,6 +49,7 @@ import {
   resolveRoots,
 } from "../src/tools/workspace_path";
 import { rustTrim } from "../src/memory/lines";
+import { queueDeferredEdit } from "../src/memory/deferred_edits";
 
 type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
@@ -661,9 +662,13 @@ class ReplayTools implements CompactionTools {
 
   constructor(
     readonly workspaceDir: string,
-    readonly configDir: string,
+    private readonly characterDataDir: string,
     private readonly records: Json[],
   ) {}
+
+  async deferEdit(path: string): Promise<void> {
+    await queueDeferredEdit(this.characterDataDir, path);
+  }
 
   async dispatch(name: string, input: unknown): Promise<ToolOutput> {
     const rec = this.records[this.#next];
@@ -921,11 +926,7 @@ async function runPass(pass: Json): Promise<void> {
     if (pass.store_elsewhere === true) await mkdir(storeDir, { recursive: true });
     const store =
       pass.with_store === true ? await MarkdownMemoryStore.open(storeDir) : undefined;
-    const tools = new ReplayTools(
-      workspace,
-      pass.config_dir_set === true ? "/some/config" : "",
-      pass.dispatches as Json[],
-    );
+    const tools = new ReplayTools(workspace, join(dataDir, "Aria"), pass.dispatches as Json[]);
     const llm = new ScriptedLlm(scriptFor(pass.name as string));
     const mgr = new RecordingMgr("new-conv-id", pass.archive_fails === true);
     const messageSets = fx["pass_message_sets"] as unknown as Record<string, Json[]>;
@@ -1157,7 +1158,6 @@ function scriptFor(name: string): GenerateResponse[] {
       ];
     case "writes_memory_index":
       return [editRound([["MEMORY.md", "# Index\n- thread\n"]]), endTurn("done")];
-    case "writes_memory_index_with_config_dir":
     case "writes_memory_index_without_data_dir":
       return [editRound([["MEMORY.md", "# Index\n"]]), endTurn("done")];
     case "no_writes_read_only":
@@ -1313,7 +1313,7 @@ function scriptFor(name: string): GenerateResponse[] {
         ]),
         endTurn("done"),
       ];
-    case "other_file_only_queues_nothing":
+    case "only_the_prompt_visible_write_is_queued":
       return [
         editRound([
           ["memory/a.md", "# A\n"],

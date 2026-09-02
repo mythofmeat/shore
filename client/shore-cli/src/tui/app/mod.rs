@@ -279,6 +279,7 @@ pub(crate) struct App {
     pub character_name: String,
     pub characters: Vec<CharacterInfo>,
     pub model_names: Vec<String>,
+    pub favorite_model_names: Vec<String>,
     pub active_model_names: Vec<String>,
     pub show_model_list: bool,
     pub model: String,
@@ -350,6 +351,7 @@ impl Default for App {
             character_name: String::new(),
             characters: Vec::new(),
             model_names: Vec::new(),
+            favorite_model_names: Vec::new(),
             active_model_names: Vec::new(),
             show_model_list: false,
             model: String::new(),
@@ -1227,6 +1229,28 @@ impl App {
             || (!self.model.is_empty() && Self::model_identifier_matches(&self.model, candidate))
     }
 
+    pub(crate) fn is_favorite_model_candidate(&self, candidate: &str) -> bool {
+        self.favorite_model_names
+            .iter()
+            .any(|favorite| Self::model_identifier_matches(favorite, candidate))
+    }
+
+    pub(crate) fn set_favorite_model(&mut self, candidate: &str, favorite: bool) {
+        if favorite {
+            if !self.is_favorite_model_candidate(candidate) {
+                self.favorite_model_names.push(candidate.to_owned());
+            }
+        } else {
+            self.favorite_model_names
+                .retain(|name| !Self::model_identifier_matches(name, candidate));
+        }
+    }
+
+    pub(crate) fn selected_completion(&self) -> Option<&str> {
+        let idx = self.completion.selected?;
+        self.completion.candidates.get(idx).map(String::as_str)
+    }
+
     pub(crate) fn command_description(&self, candidate: &str) -> Option<String> {
         self.completion.descriptions.get(candidate).cloned()
     }
@@ -1737,6 +1761,7 @@ impl App {
                 Some("setting value".into())
             }
             "view" => Some("view option".into()),
+            "model" => Some("model \u{00b7} ctrl+f favorites".into()),
             _ => None,
         };
 

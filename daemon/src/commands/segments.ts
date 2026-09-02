@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { HISTORY_DB_FILE, HistoryStore, type SegmentRecord } from "../engine/history_store.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
+import { resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { withHistoryIndexLock } from "../memory/history_index.ts";
 import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
@@ -155,6 +156,7 @@ export async function clear(
     );
 
     try {
+      await resetActivePromptSnapshot(characterDir);
       await engine.reload();
       await ctx.repoint?.(character);
     } catch (error) {

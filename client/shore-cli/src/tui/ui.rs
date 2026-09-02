@@ -2681,7 +2681,16 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
             PaletteMode::Top | PaletteMode::Submenu(_) | PaletteMode::ValueEditor(_) => false,
         };
 
-        let name_text = format!("   {c}");
+        let is_favorite = match &app.completion.mode {
+            PaletteMode::Submenu(s) if s.parent == "model" => app.is_favorite_model_candidate(c),
+            PaletteMode::Top | PaletteMode::Submenu(_) | PaletteMode::ValueEditor(_) => false,
+        };
+
+        let name_text = if is_favorite {
+            format!(" \u{2605} {c}")
+        } else {
+            format!("   {c}")
+        };
         let name_w = unicode_width::UnicodeWidthStr::width(name_text.as_str());
 
         let (gap, desc_text) = if let Some(d) = &desc {
@@ -4068,6 +4077,51 @@ pub(crate) mod scenario_tests {
                 .lines()
                 .any(|l| l.contains("Alice") && l.contains("active")),
             "active character row should still be marked; frame:\n{active_character_frame}"
+        );
+    }
+
+    #[test]
+    fn a_favorited_model_is_starred_in_the_picker() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.enter_command_mode();
+        h.app.model_names = vec!["alpha".into(), "beta".into()];
+        h.app.favorite_model_names = vec!["beta".into()];
+
+        h.app.enter_submenu("model");
+        let frame = h.render("favorite marker");
+
+        let starred = frame
+            .lines()
+            .find(|l| l.contains("beta"))
+            .unwrap_or_default();
+        assert!(
+            starred.contains('\u{2605}'),
+            "a favorite must be visible without switching views; frame:\n{frame}"
+        );
+
+        let plain = frame
+            .lines()
+            .find(|l| l.contains("alpha"))
+            .unwrap_or_default();
+        assert!(
+            !plain.contains('\u{2605}'),
+            "the star must distinguish, not decorate every row; frame:\n{frame}"
+        );
+    }
+
+    #[test]
+    fn the_picker_says_which_key_favorites() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.enter_command_mode();
+        h.app.model_names = vec!["alpha".into()];
+
+        h.app.enter_submenu("model");
+        let frame = h.render("model picker header");
+        assert!(
+            frame.contains("ctrl+f"),
+            "an unadvertised hotkey does not exist; frame:\n{frame}"
         );
     }
 

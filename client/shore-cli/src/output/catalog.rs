@@ -54,24 +54,53 @@ fn write_roles<W: Write>(out: &mut W, data: &Value) {
     blank(out);
 }
 
-pub(crate) fn write_model_list<W: Write>(out: &mut W, data: &Value) {
-    write_roles(out, data);
-    section(out, "models", None);
-    let models = super::models_by_provider(data);
-    if models.is_empty() {
-        empty(out, "no models available");
-        return;
-    }
-    let active = text(data, "active");
+fn model_rows(models: &[&Value], active: &str) -> Rows {
     let mut rows = Rows::new();
-    for model in &models {
+    for model in models {
         let name = text(model, "name");
         let is_active = !active.is_empty() && text(model, "qualified_name") == active;
         let mark = if is_active { Mark::Active } else { Mark::None };
         let tone = if is_active { Tone::Active } else { Tone::Plain };
         rows.add_marked(mark, name, text(model, "provider"), tone);
     }
-    rows.write(out);
+    rows
+}
+
+pub(crate) fn write_model_list<W: Write>(out: &mut W, data: &Value) {
+    write_roles(out, data);
+    let favorites_only = flag(data, "favorites_only");
+    let active = text(data, "active");
+    let models = super::models_by_provider(data);
+    let (favorites, rest): (Vec<&Value>, Vec<&Value>) =
+        models.iter().partition(|model| flag(model, "favorite"));
+
+    if !favorites.is_empty() {
+        section(out, "favorites", None);
+        model_rows(&favorites, active).write(out);
+        if !favorites_only {
+            blank(out);
+        }
+    }
+
+    if favorites_only {
+        if favorites.is_empty() {
+            section(out, "favorites", None);
+            empty(out, "none yet \u{00b7} shore model fav <name>");
+        }
+        return;
+    }
+
+    section(out, "models", None);
+    if rest.is_empty() {
+        let why = if favorites.is_empty() {
+            "no models available"
+        } else {
+            "nothing outside favorites"
+        };
+        empty(out, why);
+    } else {
+        model_rows(&rest, active).write(out);
+    }
 
     let hidden_count = usize::try_from(number(data, "hidden_count")).unwrap_or(0);
     if !flag(data, "include_hidden") && hidden_count > 0 {
@@ -528,6 +557,93 @@ mod tests {
         assert!(
             !out.contains("in use"),
             "an empty roles block must not print: {out}"
+        );
+    }
+
+    fn with_favorite(mut data: Value, qualified: &str) -> Value {
+        let groups = data
+            .get_mut("models")
+            .and_then(Value::as_object_mut)
+            .expect("models is a group table");
+        for models in groups.values_mut() {
+            for model in models.as_array_mut().into_iter().flatten() {
+                if text(model, "qualified_name") == qualified
+                    && let Some(fields) = model.as_object_mut()
+                {
+                    let _replaced = fields.insert("favorite".to_owned(), json!(true));
+                }
+            }
+        }
+        data
+    }
+
+    #[test]
+    fn favorites_get_their_own_section_above_the_catalog() {
+        let data = with_favorite(models(), "anthropic:claude-opus-5");
+        let out = render(|b| write_model_list(b, &data));
+        let favorites = out.find("favorites").expect("a favorites section: {out}");
+        let catalog = out
+            .find("\u{2500}\u{2500} models")
+            .expect("a models section");
+        assert!(favorites < catalog, "favorites come first: {out}");
+
+        let after = out.get(favorites..).unwrap_or_default();
+        let opus = after.find("claude-opus-5").unwrap_or(usize::MAX);
+        assert!(
+            opus < catalog.saturating_sub(favorites),
+            "a favorite belongs in the favorites section, not the catalog: {out}"
+        );
+    }
+
+    #[test]
+    fn a_model_listed_as_a_favorite_is_not_repeated_below() {
+        let data = with_favorite(models(), "anthropic:claude-opus-5");
+        let out = render(|b| write_model_list(b, &data));
+        assert_eq!(
+            out.matches("claude-opus-5").count(),
+            2,
+            "once in the roles block, once as a favorite: {out}"
+        );
+    }
+
+    #[test]
+    fn a_list_with_no_favorites_looks_exactly_as_it_did() {
+        let out = render(|b| write_model_list(b, &models()));
+        assert!(
+            !out.contains("favorites"),
+            "an empty favorites section must not print: {out}"
+        );
+        assert!(out.contains("deepseek-v4-pro"), "{out}");
+    }
+
+    #[test]
+    fn favorites_only_drops_the_catalog_and_the_hidden_footer() {
+        let mut data = with_favorite(models(), "anthropic:claude-opus-5");
+        if let Some(fields) = data.as_object_mut() {
+            let _replaced = fields.insert("favorites_only".to_owned(), json!(true));
+        }
+        let out = render(|b| write_model_list(b, &data));
+        assert!(out.contains("claude-opus-5"), "{out}");
+        assert!(
+            !out.contains("deepseek-v4-pro\n"),
+            "--favorites lists favorites only: {out}"
+        );
+        assert!(
+            !out.contains("440 hidden"),
+            "the --all footer is meaningless in a favorites-only view: {out}"
+        );
+    }
+
+    #[test]
+    fn favorites_only_with_nothing_favorited_says_how_to_fix_that() {
+        let mut data = models();
+        if let Some(fields) = data.as_object_mut() {
+            let _replaced = fields.insert("favorites_only".to_owned(), json!(true));
+        }
+        let out = render(|b| write_model_list(b, &data));
+        assert!(
+            out.contains("shore model fav"),
+            "an empty favorites view must name the command that fills it: {out}"
         );
     }
 

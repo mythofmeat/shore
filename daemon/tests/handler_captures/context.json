@@ -2164,7 +2164,7 @@
     },
     {
       "name": "a blocked active_prompt is warned about, not fatal",
-      "note": "`active_prompt` is a regular file, so the snapshot step fails. The prompt files then read as absent and the memory index falls through to its canonical copy \u2014 the one path where that fallback is reachable",
+      "note": "`active_prompt` is a regular file, so the snapshot step fails. Every prompt file then falls through to its canonical copy \u2014 the one path where that fallback is reachable",
       "input": {
         "character": "qifei",
         "display_name": "Ash",
@@ -2216,6 +2216,14 @@
         {
           "label": "system",
           "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+        },
+        {
+          "label": "tools_guidance",
+          "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+        },
+        {
+          "label": "character",
+          "text": "<qifei>\ncanonical soul\n\n</qifei>"
         },
         {
           "$ref": "s3"
@@ -2518,6 +2526,63 @@
       "active_after": {
         "$ref": "s5"
       }
+    },
+    {
+      "name": "an empty conversation carries no snapshot",
+      "note": "the snapshot belongs to the conversation: with nothing in it the stale snapshot is dropped and every prompt file is read from canonical, so the next first message starts clean",
+      "input": {
+        "character": "qifei",
+        "display_name": "Ash",
+        "active_files": [
+          {
+            "name": "SOUL.md",
+            "content": "stale soul\n"
+          }
+        ],
+        "canonical_files": [
+          {
+            "name": "SOUL.md",
+            "content": "canonical soul\n"
+          },
+          {
+            "name": "MEMORY.md",
+            "content": "- canon\n"
+          }
+        ],
+        "enabled_tools": [],
+        "enabled_subagents": [],
+        "subagents": [],
+        "mcp_tool_defs": [],
+        "has_prior_context": false,
+        "timestamps": "never",
+        "block_active_prompt": false,
+        "sdk": "anthropic",
+        "max_context_tokens": 100000,
+        "max_output_tokens": 4096,
+        "max_image_size": 1024,
+        "messages": []
+      },
+      "llm_messages": [],
+      "system": [
+        {
+          "label": "system",
+          "text": "You are qifei, in conversation with Ash.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+        },
+        {
+          "label": "tools_guidance",
+          "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+        },
+        {
+          "label": "character",
+          "text": "<qifei>\ncanonical soul\n\n</qifei>"
+        },
+        {
+          "$ref": "s3"
+        }
+      ],
+      "tool_defs": null,
+      "prompt_messages": [],
+      "active_after": "absent"
     }
   ]
 }

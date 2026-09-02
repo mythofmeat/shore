@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
@@ -184,6 +185,9 @@ describe("segment management", () => {
       join(characterDir, "active.jsonl"),
       `${active.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
     );
+    await mkdir(join(characterDir, "active_prompt"), { recursive: true });
+    await writeFile(join(characterDir, "active_prompt", "MEMORY.md"), "stale memory\n");
+    await writeFile(join(characterDir, "deferred_edits.jsonl"), '{"path":"MEMORY.md"}\n');
     let reloads = 0;
     let repoints = 0;
     let completed = 0;
@@ -204,6 +208,8 @@ describe("segment management", () => {
       segment: { index: 0, excluded: true, note: "bad branch" },
     });
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe("");
+    expect(existsSync(join(characterDir, "active_prompt"))).toBe(false);
+    expect(existsSync(join(characterDir, "deferred_edits.jsonl"))).toBe(false);
     expect({ reloads, repoints, completed }).toEqual({ reloads: 1, repoints: 1, completed: 1 });
     expect((await handleSearchHistory({ query: "risky", mode: "lexical" }, characterDir)).count)
       .toBe(0);

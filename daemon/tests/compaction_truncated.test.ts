@@ -31,15 +31,16 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
   await writeFile(join(characterDir, "active.jsonl"), activeContent, "utf8");
+  const deferred: string[] = [];
 
   const outcome = await compact(
-    options(dataDir, workspace, memoryStore, messages, activeContent, tools(workspace), scripted([
+    options(dataDir, workspace, memoryStore, messages, activeContent, tools(workspace, deferred), scripted([
       response("tool_use", [
         {
           type: "tool_use",
           id: "write-1",
           name: "edit",
-          input: { path: "memory/partial.md", content: "half a thought\n" },
+          input: { path: "MEMORY.md", content: "half a thought\n" },
         },
       ]),
       response("max_tokens", [{ type: "text", text: "the summary stops mid-sen" }]),
@@ -50,6 +51,7 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
   expect(outcome.kind).toBe("truncated");
   expect(outcome).toMatchObject({ truncatedTurns: 1 });
   expect((outcome as { partialWrites: string[] }).partialWrites.length).toBeGreaterThan(0);
+  expect(deferred).toEqual(["MEMORY.md"]);
 
   expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(activeContent);
   expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
@@ -87,10 +89,9 @@ test("a pass that ends cleanly still archives", async () => {
   expect(outcome.kind).toBe("compacted");
 });
 
-function tools(workspace: string): CompactionTools {
+function tools(workspace: string, deferred?: string[]): CompactionTools {
   return {
     workspaceDir: workspace,
-    configDir: "",
     dispatch: async (_name, input) => {
       const edit = input as { path: string; content: string };
       const path = join(workspace, edit.path);
@@ -98,6 +99,9 @@ function tools(workspace: string): CompactionTools {
       await writeFile(path, edit.content, "utf8");
       return { output: "written", isError: false };
     },
+    ...(deferred === undefined
+      ? {}
+      : { deferEdit: async (path: string) => { deferred.push(path); } }),
     ensureWorkspaceGitRepo: async () => {},
     gitCommitAll: async () => false,
   };

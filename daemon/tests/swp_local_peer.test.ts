@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createConnection, type Socket } from "node:net";
 
-import { BUILD_VERSION } from "../src/build_version.ts";
 import type { RoutedMessage } from "../src/swp/session.ts";
 import { Server } from "../src/swp/server.ts";
 import { MAX_TOTAL_ATTACHMENT_BYTES } from "../src/swp/admission.ts";
@@ -65,7 +64,6 @@ async function socketClient(addr: string): Promise<Socket> {
       type: "hello",
       client_type: "cli",
       client_name: "test",
-      build_version: BUILD_VERSION,
       capabilities: [],
       token: "anything",
     })}\n`,
@@ -169,7 +167,6 @@ describe("what the peer sends", () => {
       type: "hello",
       client_type: "bridge",
       client_name: "shore-matrix",
-      build_version: BUILD_VERSION,
       capabilities: [],
     });
     const next = await events.next();

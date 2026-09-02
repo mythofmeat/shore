@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -337,6 +345,64 @@ describe("CharacterRegistry", () => {
       }
     });
   }
+});
+
+test("registration prepares the character workspace", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  const dataDir = join(root, "data");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeCharacter(configDir, "Alice", true);
+  mkdirSync(dataDir, { recursive: true });
+
+  await CharacterRegistry.create(configDir, dataDir, loadFrom(join(configDir, "config.toml")));
+
+  expect(existsSync(join(configDir, "characters", "Alice", "workspace", "TOOLS.md"))).toBe(true);
+  expect(existsSync(join(configDir, "characters", "Alice", "workspace", "memory"))).toBe(true);
+});
+
+test("a character whose workspace cannot be prepared is warned about, not fatal", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  const dataDir = join(root, "data");
+  mkdirSync(join(configDir, "characters", "Blocked"), { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeCharacter(configDir, "Alice", true);
+  writeFileSync(join(configDir, "characters", "Blocked", "character.md"), "Blocked legacy");
+  writeFileSync(join(configDir, "characters", "Blocked", "workspace"), "not a directory");
+  mkdirSync(dataDir, { recursive: true });
+
+  const registry = await CharacterRegistry.create(
+    configDir,
+    dataDir,
+    loadFrom(join(configDir, "config.toml")),
+  );
+
+  expect([...registry.availableCharacters()]).toEqual(["Alice", "Blocked"]);
+  expect(existsSync(join(configDir, "characters", "Alice", "workspace", "TOOLS.md"))).toBe(true);
+});
+
+test("a snapshot left behind on an empty conversation is dropped at registration", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  const dataDir = join(root, "data");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+  writeCharacter(configDir, "Alice", true);
+  writeCharacter(configDir, "Bob", true);
+  for (const name of ["Alice", "Bob"]) {
+    mkdirSync(join(dataDir, name, "active_prompt"), { recursive: true });
+    writeFileSync(join(dataDir, name, "active_prompt", "MEMORY.md"), "stale index\n");
+    writeFileSync(join(dataDir, name, "deferred_edits.jsonl"), '{"path":"MEMORY.md"}\n');
+  }
+  writeFileSync(join(dataDir, "Bob", "active.jsonl"), '{"msg_id":"u1","role":"user"}\n');
+
+  await CharacterRegistry.create(configDir, dataDir, loadFrom(join(configDir, "config.toml")));
+
+  expect(snapshotsOnDisk(dataDir)).toEqual(["Bob"]);
+  expect(existsSync(join(dataDir, "Alice", "deferred_edits.jsonl"))).toBe(false);
+  expect(existsSync(join(dataDir, "Bob", "deferred_edits.jsonl"))).toBe(true);
 });
 
 test("concurrent first loads of one character resolve to the same engine", async () => {
