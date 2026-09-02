@@ -35,6 +35,7 @@ import {
 } from "../../cache/forensics.ts";
 import { recordExtraThinkingDrops, replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
+import { foldInlineSystemMessages } from "../inline_system.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
 import { parseToolArgs } from "../tool_args.ts";
@@ -237,7 +238,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     else req.context.cache_ttl = cacheTtl;
   }
 
-  const converted = convertInlineSystemMessages(replayableForAnthropic(req), req.model);
+  const converted = foldInlineSystemMessages(replayableForAnthropic(req));
   const hasExistingMarkers = messagesHaveCacheControl(converted);
 
   let messages: MessageParam[];
@@ -519,10 +520,6 @@ function applyMessageBreakpoint(content: ContentBlockParam[], cc: CacheControl):
   return false;
 }
 
-function systemMessageStrategy(_model: string): "inline" | "native" {
-  return "inline";
-}
-
 function systemToBlocks(system: SystemContent | undefined): TextBlockParam[] {
   return (system ?? []).map((b) => ({ type: "text", text: b.text }));
 }
@@ -581,33 +578,6 @@ function replayableForAnthropic(req: SidecarRequest): WireMessage[] {
     );
   }
   return messages;
-}
-
-function convertInlineSystemMessages(
-  turns: WireMessage[],
-  model: string,
-): WireMessage[] {
-  if (systemMessageStrategy(model) === "native") return turns;
-  if (!turns.some((t) => t.role === "system")) return turns;
-
-  const out: WireMessage[] = [];
-  for (const turn of turns) {
-    if (turn.role !== "system") {
-      out.push(turn);
-      continue;
-    }
-    const text = turn.content
-      .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-    const prev = out[out.length - 1];
-    if (prev && prev.role === "user") {
-      prev.content = [...prev.content, { type: "text", text }];
-      continue;
-    }
-    out.push({ role: "user", content: [{ type: "text", text }] });
-  }
-  return out;
 }
 
 function toMessageParam(m: WireMessage): MessageParam {
