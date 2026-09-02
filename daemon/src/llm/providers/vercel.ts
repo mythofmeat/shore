@@ -31,6 +31,7 @@ import type {
 import { systemToText, toolResultImages, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
+import { foldInlineSystemMessages, translatesToAnthropic } from "../inline_system.ts";
 import { REASONING_OFF } from "../types.ts";
 
 export class VercelProvider implements SidecarProvider {
@@ -270,7 +271,10 @@ function buildTools(tools: ToolDefinition[] | undefined): ToolSet | undefined {
 function buildMessages(req: SidecarRequest): ModelMessage[] {
   const messages: ModelMessage[] = [];
   const toolNames = new Map<string, string>();
-  for (const turn of replayableMessages(req)) {
+  const turns = translatesToAnthropic(req.model)
+    ? foldInlineSystemMessages(replayableMessages(req))
+    : replayableMessages(req);
+  for (const turn of turns) {
     const norm = toTurn(turn);
     messages.push(...turnToVercel(norm, toolNames, req.sdk));
     for (const b of norm.content) {
