@@ -8,14 +8,8 @@ use crate::protocol::types::{CharacterInfo, ContentBlock, Message, StreamMetadat
 pub struct ServerHello {
     pub v: u32,
     pub server_name: String,
-    #[serde(default = "unknown_build_version")]
-    pub build_version: String,
     #[serde(default)]
     pub characters: Vec<CharacterInfo>,
-}
-
-fn unknown_build_version() -> String {
-    "unknown".to_owned()
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]

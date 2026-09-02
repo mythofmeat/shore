@@ -7,7 +7,6 @@ use crate::protocol::error::ErrorCode;
 use crate::protocol::server_msg::{Error as ServerError, History, ServerHello, ServerMessage};
 use crate::protocol::{MAX_WIRE_MESSAGE_SIZE, SWP_V1};
 
-use crate::BUILD_VERSION;
 use crate::swp_client::error::{ClientError, Result};
 
 #[derive(Debug, Clone)]
@@ -81,20 +80,12 @@ impl SWPConnection {
         let hello = ClientMessage::Hello(ClientHello {
             client_type,
             client_name,
-            build_version: BUILD_VERSION.to_owned(),
             capabilities: vec!["streaming".into()],
             character,
             token: Some(token),
         });
         self.send(&hello).await?;
         debug!("sent client hello");
-
-        if server_hello.build_version != BUILD_VERSION {
-            return Err(ClientError::Protocol(format!(
-                "client build {BUILD_VERSION:?} does not match daemon build {:?}; client and daemon must be upgraded together",
-                server_hello.build_version
-            )));
-        }
 
         let history = self.recv_history().await?;
 
@@ -119,7 +110,6 @@ impl SWPConnection {
                     }
                     debug!(
                         server_name = %h.server_name,
-                        build_version = %h.build_version,
                         characters = h.characters.len(),
                         "received server hello"
                     );

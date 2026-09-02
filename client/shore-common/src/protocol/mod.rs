@@ -49,7 +49,6 @@ mod tests {
         let msg = ClientMessage::Hello(ClientHello {
             client_type: "tui".into(),
             client_name: "shore".into(),
-            build_version: crate::BUILD_VERSION.into(),
             capabilities: vec!["streaming".into()],
             character: None,
             token: Some("s3cret".into()),
@@ -123,7 +122,6 @@ mod tests {
         let msg = ServerMessage::Hello(ServerHello {
             v: SWP_V1,
             server_name: "shore-daemon".into(),
-            build_version: crate::BUILD_VERSION.into(),
             characters: vec![CharacterInfo::new("alice")],
         });
         let (json, _back) = round_trip(&msg);

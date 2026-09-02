@@ -4,7 +4,6 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { BUILD_VERSION } from "../src/build_version.ts";
 import {
   resolveDaemonToken,
   tokenMatches,
@@ -137,7 +136,6 @@ async function helloWith(
         type: "hello",
         client_type: "tui",
         client_name: "test",
-        build_version: BUILD_VERSION,
         capabilities: [],
         ...(token === undefined ? {} : { token }),
       })}\n`,
