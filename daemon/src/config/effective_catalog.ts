@@ -219,6 +219,7 @@ function buildResolvedFromProvider(
 
   const sdk: Sdk =
     entry.sdk ??
+    (providerKey === "nanogpt" ? providerDefaults.sdk : undefined) ??
     (modelId.startsWith("anthropic/") ? "anthropic" : undefined) ??
     providerDefaults.sdk ??
     (disc === undefined ? undefined : sdkFromWire(disc.sdk)) ??
