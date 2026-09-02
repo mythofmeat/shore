@@ -85,20 +85,22 @@ describe("history search index", () => {
     const after = message("u2", "user", "After paragraph.", "2026-08-13T00:03:00Z");
     const dir = await character([before, hit, invisible, after]);
 
-    const result = await handleSearchHistory({ query: "needle", mode: "lexical" }, dir);
+    const result = await handleSearchHistory({ query: "needle", mode: "lexical" }, dir, {
+      timeZone: "UTC",
+    });
     expect(result.mode).toBe("lexical");
     expect(result.results).toEqual([{
       msg_id: "a1",
       role: "assistant",
-      timestamp: "2026-08-13T00:01:00Z",
+      timestamp: "2026-08-13T00:01:00+00:00",
       model: null,
       text: "First paragraph.\n\nNeedle stays formatted.\nThird line.",
       before: [{
-        msg_id: "u1", role: "user", timestamp: "2026-08-13T00:00:00Z",
+        msg_id: "u1", role: "user", timestamp: "2026-08-13T00:00:00+00:00",
         model: null, text: "Before paragraph.",
       }],
       after: [{
-        msg_id: "u2", role: "user", timestamp: "2026-08-13T00:03:00Z",
+        msg_id: "u2", role: "user", timestamp: "2026-08-13T00:03:00+00:00",
         model: null, text: "After paragraph.",
       }],
     }]);
@@ -594,5 +596,67 @@ describe("history search index", () => {
     await service.runOnce();
     expect(attempts).toBe(2);
     await service.shutdown();
+  });
+});
+
+describe("timestamps a subagent can line up", () => {
+  const encodings = [
+    "2026-08-13T00:00:00+11:00",
+    "2026-08-13T00:10:00.656165788+00:00",
+    "2026-08-13T00:20:00.123Z",
+    "2026-08-13T00:30:00+10:00",
+  ];
+
+  test("every stored encoding comes back in one zone with an explicit offset", async () => {
+    const dir = await character(
+      encodings.map((ts, i) => message(`m${i}`, "user", `needle ${i}`, ts)),
+    );
+
+    const result = await handleSearchHistory(
+      { query: "needle", max_results: 10, mode: "lexical" },
+      dir,
+      { timeZone: "Australia/Canberra" },
+    );
+
+    expect(result.count).toBe(encodings.length);
+    expect(result.time_zone).toBe("Australia/Canberra");
+    for (const hit of result.results) {
+      expect(String(hit.timestamp)).toMatch(/\+10:00$/u);
+    }
+    const byId = new Map(result.results.map((r) => [String(r.msg_id), String(r.timestamp)]));
+    encodings.forEach((ts, i) => {
+      expect(Date.parse(required(byId.get(`m${i}`)))).toBe(Date.parse(ts));
+    });
+  });
+
+  test("the archive boundary and now let an empty window be read correctly", async () => {
+    const dir = await character(
+      encodings.map((ts, i) => message(`m${i}`, "user", `needle ${i}`, ts)),
+    );
+
+    const result = await handleSearchHistory(
+      { start_time: "2026-08-20T00:00:00Z", end_time: "2026-08-21T00:00:00Z" },
+      dir,
+      { timeZone: "UTC", now: () => Date.parse("2026-08-22T00:00:00Z") },
+    );
+
+    expect(result.count).toBe(0);
+    expect(result.now).toBe("2026-08-22T00:00:00+00:00");
+    expect(result.archive_boundary.oldest).toBe("2026-08-12T13:00:00+00:00");
+    expect(result.archive_boundary.newest).toBe("2026-08-13T00:20:00.123+00:00");
+    expect(result.time_range.start_time).toBe("2026-08-20T00:00:00+00:00");
+    expect(result.time_range.end_time).toBe("2026-08-21T00:00:00+00:00");
+  });
+
+  test("the boundary is the widest instant, not the widest string", async () => {
+    const dir = await character([
+      message("m0", "user", "alpha", "2026-08-13T00:00:00+11:00"),
+      message("m1", "user", "beta", "2026-08-12T20:00:00Z"),
+    ]);
+
+    const result = await handleSearchHistory({ query: "alpha" }, dir, { timeZone: "UTC" });
+
+    expect(result.archive_boundary.oldest).toBe("2026-08-12T13:00:00+00:00");
+    expect(result.archive_boundary.newest).toBe("2026-08-12T20:00:00+00:00");
   });
 });

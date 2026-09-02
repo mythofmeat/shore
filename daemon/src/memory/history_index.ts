@@ -292,6 +292,20 @@ export class HistorySearchIndex {
     ).all() as IndexedMessage[];
   }
 
+  timestampBounds(): { oldestMs: number; newestMs: number } | undefined {
+    const rows = this.#db.query("SELECT timestamp FROM messages").all() as { timestamp: string }[];
+    let oldestMs: number | undefined;
+    let newestMs: number | undefined;
+    for (const { timestamp } of rows) {
+      const ms = Date.parse(timestamp);
+      if (Number.isNaN(ms)) continue;
+      if (oldestMs === undefined || ms < oldestMs) oldestMs = ms;
+      if (newestMs === undefined || ms > newestMs) newestMs = ms;
+    }
+    if (oldestMs === undefined || newestMs === undefined) return undefined;
+    return { oldestMs, newestMs };
+  }
+
   rowsByIds(ids: readonly number[]): IndexedMessage[] {
     if (ids.length === 0) return [];
     const marks = ids.map(() => "?").join(",");

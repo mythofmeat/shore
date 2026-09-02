@@ -7,6 +7,7 @@ import {
   withHistoryIndexLock,
   type IndexedMessage,
 } from "../memory/history_index.ts";
+import { hostZone, normalizeToZone, toZonedRfc3339 } from "../ledger/zoned.ts";
 import { InvalidArgs, ToolIoError } from "./errors";
 
 const DEFAULT_MAX_RESULTS = 3;
@@ -279,6 +280,8 @@ export interface HistorySearchOptions {
   indexPath?: string;
   embedder?: Embedder;
   defaultMode?: HistorySearchMode;
+  timeZone?: string;
+  now?: () => number;
 }
 
 interface RankedHistoryCandidate {
@@ -301,6 +304,9 @@ export interface SearchHistoryResult {
   };
   semantic_unavailable?: string;
   query: string | null;
+  time_zone: string;
+  now: string;
+  archive_boundary: { oldest: string | null; newest: string | null };
   time_range: { start_time: string | null; end_time: string | null; inclusive: true };
   model_filter: string | null;
   results: Record<string, unknown>[];
@@ -326,6 +332,7 @@ async function handleSearchHistoryUnlocked(
   options: HistorySearchOptions,
 ): Promise<SearchHistoryResult> {
   if (characterDataDir === "") throw new InvalidArgs("conversation history is not configured");
+  const timeZone = options.timeZone ?? hostZone();
   const { query, range } = filtersFrom(input);
   const modelFilter = modelFilterFrom(input);
   if (query === undefined && rangeIsEmpty(range) && modelFilter === undefined) {
@@ -395,20 +402,31 @@ async function handleSearchHistoryUnlocked(
       const before = index.neighbor(hit.row, -1);
       const after = index.neighbor(hit.row, 1);
       return {
-        ...presentMessage(hit.row, hit.text),
-        before: before === undefined ? [] : [presentMessage(before, neighborTexts.get(before.id) ?? "")],
-        after: after === undefined ? [] : [presentMessage(after, neighborTexts.get(after.id) ?? "")],
+        ...presentMessage(hit.row, hit.text, timeZone),
+        before: before === undefined
+          ? []
+          : [presentMessage(before, neighborTexts.get(before.id) ?? "", timeZone)],
+        after: after === undefined
+          ? []
+          : [presentMessage(after, neighborTexts.get(after.id) ?? "", timeZone)],
       };
     });
+    const bounds = index.timestampBounds();
 
     return {
       mode,
       semantic_index: diagnostics,
       ...(semanticUnavailable === undefined ? {} : { semantic_unavailable: semanticUnavailable }),
       query: query ?? null,
+      time_zone: timeZone,
+      now: toZonedRfc3339((options.now ?? Date.now)(), timeZone),
+      archive_boundary: {
+        oldest: bounds === undefined ? null : toZonedRfc3339(bounds.oldestMs, timeZone),
+        newest: bounds === undefined ? null : toZonedRfc3339(bounds.newestMs, timeZone),
+      },
       time_range: {
-        start_time: range.start?.rfc3339 ?? null,
-        end_time: range.end?.rfc3339 ?? null,
+        start_time: range.start === undefined ? null : toZonedRfc3339(range.start.ms, timeZone),
+        end_time: range.end === undefined ? null : toZonedRfc3339(range.end.ms, timeZone),
         inclusive: true,
       },
       model_filter: modelFilter ?? null,
@@ -564,11 +582,15 @@ function deduplicateMessages(candidates: readonly RankedHistoryCandidate[]): Ran
   });
 }
 
-function presentMessage(row: IndexedMessage, text: string): Record<string, unknown> {
+function presentMessage(
+  row: IndexedMessage,
+  text: string,
+  timeZone: string,
+): Record<string, unknown> {
   return {
     msg_id: row.msg_id,
     role: row.role,
-    timestamp: row.timestamp,
+    timestamp: normalizeToZone(row.timestamp, timeZone),
     model: row.model,
     text,
   };

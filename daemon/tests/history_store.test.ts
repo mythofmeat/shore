@@ -153,7 +153,9 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   expect(await reader.readSegment(0)).toEqual(messages);
   reader.close();
 
-  const search = await handleSearchHistory({ query: "hello" }, characterDir);
+  const search = await handleSearchHistory({ query: "hello" }, characterDir, {
+    timeZone: "Australia/Canberra",
+  });
   expect(search.results).toEqual([
     {
       msg_id: "u1",

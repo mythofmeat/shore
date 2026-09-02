@@ -1,3 +1,4 @@
+import { hostZone, normalizeToZone } from "../ledger/zoned.ts";
 import { parseTimeBound } from "./history.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 
@@ -58,6 +59,7 @@ export function utcBound(
 
 export interface ModelHistoryResult {
   character: string;
+  time_zone: string;
   time_range: {
     start_time: string | undefined;
     end_time: string | undefined;
@@ -79,6 +81,7 @@ export async function handleModelHistory(
   input: Record<string, unknown>,
   character: string,
   query: ModelHistoryQuery | undefined,
+  timeZone: string = hostZone(),
 ): Promise<ModelHistoryResult> {
   if (query === undefined) {
     throw new ToolIoError("the usage ledger is not available in this context");
@@ -99,14 +102,19 @@ export async function handleModelHistory(
     provider: row.provider,
     call_type: row.call_type,
     kind: kindFor(row.call_type),
-    first_seen: row.first_ts,
-    last_seen: row.last_ts,
+    first_seen: normalizeToZone(row.first_ts, timeZone),
+    last_seen: normalizeToZone(row.last_ts, timeZone),
     calls: row.call_count,
   }));
 
   return {
     character,
-    time_range: { start_time: since, end_time: until, inclusive: true },
+    time_zone: timeZone,
+    time_range: {
+      start_time: since === undefined ? undefined : normalizeToZone(since, timeZone),
+      end_time: until === undefined ? undefined : normalizeToZone(until, timeZone),
+      inclusive: true,
+    },
     models,
     count: models.length,
   };
