@@ -125,9 +125,11 @@ async function callProvider(
   const startedAt = clock();
   try {
     const response = await provider.generate(request, signal);
+    await attempt.pricingReady;
     recordGenerate(request.context, request, response, attempt);
     return response;
   } catch (e) {
+    await attempt.pricingReady;
     recordGenerateError(request.context, request, startedAt, clock, attempt, e);
     throw e;
   }

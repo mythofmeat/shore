@@ -1,6 +1,6 @@
 import { shoreLog } from "../log.ts";
 
-import { Ledger, type RecordCall, type Timing, type Usage } from "./store.ts";
+import { isSubscriptionProvider, Ledger, type RecordCall, type Timing, type Usage } from "./store.ts";
 import { toolSurfaceFingerprint } from "./tool_surface.ts";
 import { estimateTokens } from "../engine/tokens.ts";
 import { describeError, toLlmError } from "../llm/errors.ts";
@@ -76,6 +76,7 @@ interface Recorded {
 export interface CallAttempt {
   ledger: Ledger;
   id: string;
+  pricingReady: Promise<void>;
 }
 
 type CallObserver = (
@@ -172,6 +173,13 @@ export function beginCallAttempt(
   const estimate = recentAttemptEstimate(ledger, provider, req.model, effectiveCallType);
   return {
     ledger,
+    pricingReady: isSubscriptionProvider(provider) || provider !== "nanogpt"
+      ? Promise.resolve()
+      : ledger.pricing.getOrFetch(provider, req.model).then(() => undefined).catch((e: unknown) => {
+          shoreLog.warn(
+            `shore: could not prepare pricing for ${provider}/${req.model}: ${String(e)}`,
+          );
+        }),
     id: ledger.beginAttempt(
       {
         provider,
@@ -266,6 +274,7 @@ export async function* recordingStream(
     for await (const event of source) {
       if (event.type === "text" || event.type === "thinking") streamedText += event.text;
       if (event.type === "call_complete") {
+        await attempt?.pricingReady;
         tryRecord(ctx, req, {
           usage: event.usage,
           timing: event.timing,
@@ -279,6 +288,7 @@ export async function* recordingStream(
         }
       } else if (event.type === "done") {
         if (recorded === 0) {
+          await attempt?.pricingReady;
           tryRecord(ctx, req, {
             usage: event.usage,
             timing: event.timing,
@@ -288,6 +298,7 @@ export async function* recordingStream(
           recorded += 1;
         }
       } else if (event.type === "error") {
+        await attempt?.pricingReady;
         const partial = partialUsage();
         const seen = recorded === 0 ? event.usage : NO_USAGE;
         const useEstimate = seen.output_tokens === 0 && partial.estimated;
@@ -305,6 +316,7 @@ export async function* recordingStream(
     }
   } finally {
     if (recorded === 0) {
+      await attempt?.pricingReady;
       const partial = partialUsage();
       tryRecord(ctx, req, {
         usage: partial.usage,

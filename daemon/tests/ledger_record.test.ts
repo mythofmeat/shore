@@ -11,6 +11,8 @@ import {
   recordGenerateError,
   recordingStream,
 } from "../src/ledger/record.ts";
+import { Ledger } from "../src/ledger/store.ts";
+import { PricingEngine, type ModelPricing, type PricingStore } from "../src/ledger/pricing.ts";
 import type { CallContext, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 
@@ -74,6 +76,61 @@ async function withLedger(body: (path: string) => Promise<void>): Promise<void> 
 }
 
 describe("what a stream records", () => {
+  test("a call waits for its model price before the ledger row is written", async () => {
+    const { path, cleanup } = freshLedger();
+    const prices = new Map<string, ModelPricing>();
+    const store: PricingStore = {
+      get: (id) => prices.get(id),
+      put: (id, pricing) => void prices.set(id, pricing),
+    };
+    const pricing = new PricingEngine(store, async () =>
+      Response.json({
+        data: [{
+          id: "anthropic/claude-opus-4.6",
+          pricing: { prompt: 5, completion: 25 },
+        }],
+      }),
+    );
+    const ledger = Ledger.open(path, pricing);
+    const nanoReq = {
+      ...REQ,
+      sdk: "nanogpt",
+      provider_key: "nanogpt",
+      model: "anthropic/claude-opus-4.6",
+    } as SidecarRequest;
+    const id = ledger.beginAttempt({
+      provider: "nanogpt",
+      model: nanoReq.model,
+      call_type: "message",
+      character: "probe",
+    });
+    try {
+      await drain(recordingStream(
+        ctx(path),
+        nanoReq,
+        events({
+          type: "done",
+          content: "answer",
+          finish_reason: "end_turn",
+          usage: usage(0, 2_000),
+          timing: TIMING,
+        }),
+        {
+          ledger,
+          id,
+          pricingReady: pricing.getOrFetch("nanogpt", nanoReq.model).then(() => undefined),
+        },
+      ));
+
+      const row = required(rowsIn(path)[0]);
+      expect(row["cost_source"]).toBe("pricing_catalog");
+      expect(row["total_cost"]).toBeGreaterThan(0);
+    } finally {
+      ledger.close();
+      cleanup();
+    }
+  });
+
   test("a single-call stream records one row and passes every event through", async () => {
     await withLedger(async (path) => {
       const seen = await drain(
