@@ -6,7 +6,7 @@ import type { LoadedConfig } from "../config/loader.ts";
 import { firstChatModel } from "../config/models.ts";
 import { configView, resolveChatModelForCharacter } from "../config/preferences.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
-import type { ThreadRecord } from "../engine/threads.ts";
+import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import type { HandshakeProvider, HelloSnapshot, HistorySnapshot } from "./connection";
 
 export interface HandshakeRegistry {
@@ -58,9 +58,6 @@ export async function buildSessionHistorySnapshot(
     selectedCharacter === null
       ? registry.globalConfig()
       : registry.effectiveConfig(selectedCharacter);
-  const resolvedModel = snapshotActiveModel(config, selectedCharacter, activeModel);
-  const configBlock = historyConfigSnapshot(config, resolvedModel);
-
   const engine =
     selectedCharacter === null
       ? undefined
@@ -73,7 +70,10 @@ export async function buildSessionHistorySnapshot(
     return {
       messages: [],
       activeStart: 0,
-      config: configBlock,
+      config: historyConfigSnapshot(
+        config,
+        snapshotActiveModel(config, selectedCharacter, activeModel, undefined),
+      ),
       selectedCharacter: null,
       selectedThread: null,
       revision: 0,
@@ -81,12 +81,23 @@ export async function buildSessionHistorySnapshot(
   }
 
   const history = engine.historySnapshot({});
+  const thread = engine.thread;
   return {
     messages: history.messages as HistorySnapshot["messages"],
     activeStart: history.active_start ?? 0,
-    config: configBlock,
+    config: historyConfigSnapshot(
+      config,
+      snapshotActiveModel(
+        config,
+        selectedCharacter,
+        activeModel,
+        selectedCharacter === null
+          ? undefined
+          : threadModelOf(registry.listThreads(selectedCharacter), thread),
+      ),
+    ),
     selectedCharacter: history.selected_character ?? selectedCharacter,
-    selectedThread: history.selected_thread ?? engine.thread,
+    selectedThread: thread,
     revision: history.revision,
   };
 }
@@ -124,9 +135,14 @@ function snapshotActiveModel(
   config: LoadedConfig,
   selectedCharacter: string | null,
   activeModel: string | undefined,
+  threadModel: string | undefined,
 ): string | undefined {
   if (activeModel !== undefined) return activeModel;
   if (selectedCharacter === null) return undefined;
-  return resolveChatModelForCharacter(configView(config), selectedCharacter, findEffectiveModel)
-    ?.qualifiedName;
+  return resolveChatModelForCharacter(
+    configView(config),
+    selectedCharacter,
+    findEffectiveModel,
+    threadModel,
+  )?.qualifiedName;
 }

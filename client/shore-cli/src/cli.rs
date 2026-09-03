@@ -1344,6 +1344,15 @@ pub(crate) enum ThreadCommand {
         label: Option<String>,
     },
 
+    /// Pin a thread to its own chat model, or clear the pin to inherit the character's
+    Model {
+        /// Thread id
+        name: String,
+
+        /// Model to pin, as `provider:model_id`; omit to clear the pin
+        model: Option<String>,
+    },
+
     /// Point the heartbeat at a thread. This is where unprompted messages arrive
     Home {
         /// Thread id
@@ -2277,6 +2286,9 @@ pub(crate) fn to_swp_command(
             )),
             ThreadCommand::Label { name, label } => {
                 Some(("thread_label", json!({ "name": name, "label": label })))
+            }
+            ThreadCommand::Model { name, model } => {
+                Some(("thread_model", json!({ "name": name, "model": model })))
             }
             ThreadCommand::Home { name } => Some(("thread_home", json!({ "name": name }))),
             ThreadCommand::Archive { name } => Some(("archive_thread", json!({ "name": name }))),
@@ -3439,6 +3451,28 @@ mod tests {
     }
 
     #[test]
+    fn a_thread_model_with_no_value_lifts_the_pin() {
+        let cli = parse(&["thread", "model", "eval"]);
+        let (name, args) = to_swp_command(parsed_command(&cli), None).expect("a command");
+        assert_eq!(name, "thread_model");
+        assert_eq!(
+            args.get("name").and_then(serde_json::Value::as_str),
+            Some("eval")
+        );
+        assert_eq!(args.get("model"), Some(&serde_json::Value::Null));
+    }
+
+    #[test]
+    fn a_thread_model_carries_the_model_it_names() {
+        let cli = parse(&["thread", "model", "eval", "claude-agent:opus5"]);
+        let (_name, args) = to_swp_command(parsed_command(&cli), None).expect("a command");
+        assert_eq!(
+            args.get("model").and_then(serde_json::Value::as_str),
+            Some("claude-agent:opus5")
+        );
+    }
+
+    #[test]
     fn thread_subcommands_that_need_a_name_say_so() {
         for args in [
             &["thread", "use"][..],
@@ -3446,6 +3480,7 @@ mod tests {
             &["thread", "home"][..],
             &["thread", "archive"][..],
             &["thread", "label"][..],
+            &["thread", "model"][..],
         ] {
             assert!(
                 Cli::try_parse_from(std::iter::once("shore").chain(args.iter().copied())).is_err(),
@@ -3481,11 +3516,12 @@ mod tests {
 
     #[test]
     fn thread_commands_reach_the_wire_under_their_own_names() {
-        let cases: [(&[&str], &str); 6] = [
+        let cases: [(&[&str], &str); 7] = [
             (&["thread"], "list_threads"),
             (&["thread", "use", "scratch"], "switch_thread"),
             (&["thread", "new", "scratch"], "create_thread"),
             (&["thread", "label", "scratch"], "thread_label"),
+            (&["thread", "model", "scratch"], "thread_model"),
             (&["thread", "home", "scratch"], "thread_home"),
             (&["thread", "archive", "scratch"], "archive_thread"),
         ];

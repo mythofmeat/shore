@@ -10,6 +10,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { queueDeferredEdit } from "../src/memory/deferred_edits.ts";
 import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
+import { createThread, setThreadModel } from "../src/engine/threads.ts";
 import {
   CompactionError,
   type CompactionErrorKind,
@@ -378,6 +379,79 @@ describe("write_memory = false", () => {
     expect(got["archived_messages"]).toBe(4);
     expect(w.completed).toEqual([]);
     expect(await listing(w.charDataDir)).toEqual(["active.jsonl"]);
+  });
+
+  test("the prefix a compaction reuses is built on the thread's own model", async () => {
+    const chatModel = (name: string, replay: string | undefined) =>
+      ({
+        name,
+        qualifiedName: `chat.${name}`,
+        category: "chat",
+        providerKey: "anthropic",
+        sdk: "anthropic",
+        modelId: `claude-${name}`,
+        apiKeyEnv: "SHORE_COMPACT_TEST_KEY",
+        maxContextTokens: 200_000,
+        maxOutputTokens: 4096,
+        ...(replay === undefined ? {} : { replayPriorThinking: replay }),
+      }) as never;
+
+    async function replayOf(
+      pins: { main?: string; scratch?: string },
+      thread?: string,
+    ): Promise<string | undefined> {
+      const w = await world(SIX);
+      w.config.models.chat.set("chat.plain", chatModel("plain", undefined));
+      w.config.models.chat.set("chat.quiet", chatModel("quiet", "none"));
+      w.config.app.defaults.model = "plain";
+      const now = "2026-09-03T12:00:00.000Z";
+      if (pins.main !== undefined) {
+        await setThreadModel(w.config.dirs.data, "ada", "main", pins.main, now);
+      }
+      if (thread !== undefined) {
+        await createThread(
+          w.config.dirs.data,
+          "ada",
+          thread,
+          now,
+          pins.scratch === undefined ? {} : { chat_model: pins.scratch },
+        );
+        await writeFile(
+          join(w.charDataDir, "threads", thread, "active.jsonl"),
+          SIX.map((m) => JSON.stringify(m)).join("\n") + "\n",
+        );
+      }
+
+      let seen: { replay_prior_thinking?: string } | undefined;
+      const engine = await ConversationEngine.load(
+        "ada",
+        w.config.dirs.data,
+        undefined,
+        thread ?? "main",
+      );
+      const ctx: CompactContext = {
+        ...w.ctx,
+        run: {
+          generate: (request: { replay_prior_thinking?: string }) => {
+            seen = request;
+            throw new Error("captured");
+          },
+        },
+      };
+
+      await compact(engine, ctx, { keep_turns: 1 }).catch(() => undefined);
+      return seen?.replay_prior_thinking;
+    }
+
+    process.env["SHORE_COMPACT_TEST_KEY"] = "sk-test";
+    try {
+      expect(await replayOf({})).toBe("all");
+      expect(await replayOf({ main: "chat.quiet" })).toBe("none");
+      expect(await replayOf({ scratch: "chat.quiet" }, "scratch")).toBe("none");
+      expect(await replayOf({ main: "chat.quiet" }, "scratch")).toBe("all");
+    } finally {
+      delete process.env["SHORE_COMPACT_TEST_KEY"];
+    }
   });
 
   test("the character config decides, not the global one", async () => {

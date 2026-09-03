@@ -24,6 +24,8 @@ export interface DispatchRuntime {
     thread?: string,
   ): Promise<void>;
 
+  homeThread(character: string): string;
+
   applyReloadedConfig(config: LoadedConfig): Promise<ReloadSummary>;
 }
 
@@ -69,6 +71,8 @@ async function annotations(
       return await afterSwitchCharacter(data, ctx);
     case "switch_thread":
       return await afterSwitchThread(data, ctx);
+    case "thread_model":
+      return await afterThreadModelChange(args, data, ctx);
     default:
       return undefined;
   }
@@ -175,6 +179,22 @@ async function afterSwitchThread(
     selected_thread: selected,
     ...invalidated(data, { cached_request: true }),
   };
+}
+
+async function afterThreadModelChange(
+  args: unknown,
+  data: unknown,
+  ctx: DispatchContext,
+): Promise<Record<string, unknown> | undefined> {
+  const pinned = isRecord(args) ? args["name"] : undefined;
+  if (typeof pinned !== "string") return undefined;
+
+  const live =
+    ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character);
+  if (pinned !== live) return undefined;
+
+  await ctx.runtime.refreshCachedRequest(ctx.character, "model_change", pinned);
+  return invalidated(data, { cached_request: true });
 }
 
 function invalidated(data: unknown, add: Record<string, unknown>): Record<string, unknown> {

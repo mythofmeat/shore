@@ -8,6 +8,7 @@ import {
   switchThread,
   threadHome,
   threadLabel,
+  threadModel,
   type ThreadContext,
   type ThreadRegistry,
 } from "../src/commands/threads.ts";
@@ -71,6 +72,22 @@ class FakeRegistry implements ThreadRegistry {
         if (t.id !== id) return t;
         const { label: _drop, ...rest } = t;
         return label === undefined ? rest : { ...rest, label };
+      }),
+    };
+    return Promise.resolve(this.index);
+  }
+
+  setThreadModel(_c: string, id: string, model: string | undefined): Promise<ThreadsIndex> {
+    this.calls.push(`model:${id}:${model ?? "<cleared>"}`);
+    if (!this.index.threads.some((t) => t.id === id)) {
+      return Promise.reject(new ThreadError("not_found", `no thread "${id}"`));
+    }
+    this.index = {
+      ...this.index,
+      threads: this.index.threads.map((t) => {
+        if (t.id !== id) return t;
+        const { chat_model: _drop, ...rest } = t;
+        return model === undefined ? rest : { ...rest, chat_model: model };
       }),
     };
     return Promise.resolve(this.index);
@@ -242,5 +259,49 @@ describe("archiving, home and labels", () => {
     const registry = new FakeRegistry([record(MAIN_THREAD)]);
     await threadLabel(ctx(registry), { name: MAIN_THREAD, label: "  Brian  " });
     expect(registry.calls).toEqual([`label:${MAIN_THREAD}:Brian`]);
+  });
+});
+
+describe("pinning a thread to a model", () => {
+  test("the pin lands on the thread and comes back in the listing", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    const out = await threadModel(ctx(registry), { name: "eval", model: "claude-agent:opus5" });
+
+    expect(registry.calls).toEqual(["model:eval:claude-agent:opus5"]);
+    expect(out.threads.find((t) => t.id === "eval")?.chat_model).toBe("claude-agent:opus5");
+  });
+
+  test("no model clears the pin so the thread inherits the character's", async () => {
+    const registry = new FakeRegistry([record("eval", { chat_model: "anthropic:opus" })]);
+    const out = await threadModel(ctx(registry, "eval"), { name: "eval" });
+
+    expect(registry.calls).toEqual(["model:eval:<cleared>"]);
+    expect(out.threads[0]).not.toHaveProperty("chat_model");
+  });
+
+  test("the model name is trimmed before it is stored", async () => {
+    const registry = new FakeRegistry([record("eval")]);
+    await threadModel(ctx(registry, "eval"), { name: "eval", model: "  anthropic:opus  " });
+    expect(registry.calls).toEqual(["model:eval:anthropic:opus"]);
+  });
+
+  test("pinning an unknown thread is not found", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD)]);
+    try {
+      await threadModel(ctx(registry), { name: "ghost", model: "anthropic:opus" });
+      throw new Error("expected a rejection");
+    } catch (e) {
+      expect((e as CommandError).code).toBe("not_found");
+    }
+  });
+
+  test("a non-string model is an invalid request", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD)]);
+    try {
+      await threadModel(ctx(registry), { name: MAIN_THREAD, model: 7 });
+      throw new Error("expected a rejection");
+    } catch (e) {
+      expect((e as CommandError).code).toBe("invalid_request");
+    }
   });
 });

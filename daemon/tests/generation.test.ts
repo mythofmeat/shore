@@ -947,6 +947,98 @@ test("the turn tells the provider which thread it belongs to", async () => {
   expect(requests[0]?.context?.character).toBe("ada");
 });
 
+test("a turn in a pinned thread runs on that thread's model, not the character's", async () => {
+  const root = await tempRoot("thread-pin");
+  const config = await loadedConfig(root, { with_model: true });
+  config.models.chat.set("chat.other", {
+    ...model(),
+    name: "other",
+    qualifiedName: "chat.other",
+    modelId: "claude-other",
+  });
+  setTestEnv(MODEL_KEY_ENV, "fixture-key");
+
+  await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
+  await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada");
+  await mkdir(join(config.dirs.data, "ada", "threads", "eval"), { recursive: true });
+
+  const requests: SidecarRequest[] = [];
+  const provider: SidecarProvider = {
+    async *stream(req) {
+      requests.push(req);
+      yield { type: "start", model: req.model };
+      yield {
+        type: "done",
+        content: "ok",
+        finish_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      };
+    },
+    generate: () => {
+      throw new Error("unused");
+    },
+  };
+
+  const engine = generationEngine(
+    await ConversationEngine.load("ada", config.dirs.data, undefined, "eval"),
+  );
+
+  const roster = [
+    { id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction: true },
+    {
+      id: "eval",
+      created_at: "2026-09-03T00:00:00.000Z",
+      compaction: false,
+      chat_model: "chat.other",
+    },
+  ];
+
+  await runGeneration(
+    {
+      registry: {
+        getOrCreate: async () => engine,
+        effectiveConfig: () => config,
+        listThreads: () => roster,
+      },
+      dataDir: config.dirs.data,
+      providers: { anthropic: provider },
+      autonomy: {
+        ensureState: () => false,
+        needsActivityBackfill: () => false,
+        backfillActivity: () => {},
+        onUserMessage: () => {},
+        shouldCompactNow: () => false,
+        onCompactionComplete: () => {},
+        onCompactionFailed: () => {},
+        notifyLastRequest: () => {},
+        notifyAssistantMessage: () => {},
+      },
+      notifier: { notifyMessageComplete: () => {} } as unknown as GenerationDeps["notifier"],
+      diagnostics: { key_fallbacks: { push: () => {} } },
+      emitEvent: () => {},
+      mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
+      compaction: { run: async () => 0, applyDeferredEdits: async () => {} },
+      newlyCrossedUsageBudgetWarnings: async () => [],
+      now: () => MINTED_TS,
+      newMessageId: () => `m_${crypto.randomUUID()}`,
+      monotonicMs: () => 0,
+      sleep: async () => {},
+    },
+    {
+      meta: { session: { sessionId: 1 } } as never,
+      body: { rid: null, text: "hello", stream: true, images: [], image_data: [] },
+      regen: false,
+      charName: "ada",
+      rid: null,
+      send: async () => {},
+      signal: new AbortController().signal,
+    },
+  );
+
+  expect(requests[0]?.model).toBe("claude-other");
+});
+
 test("a turn with no model configured leaves the conversation untouched", async () => {
   const root = await tempRoot("nomodel");
   const config = await loadedConfig(root, {});

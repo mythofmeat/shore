@@ -156,6 +156,21 @@ MUTANTS = [
      "  } catch (e) {\n    ctx.router.setSelectedThread(ctx.sessionId, previous);\n    throw e;\n  }",
      "  } catch (e) {\n    throw e;\n  }"),
 
+    ("effects: pinning a thread's model leaves the warm request on the old one", DISPATCH,
+     '  await ctx.runtime.refreshCachedRequest(ctx.character, "model_change", pinned);\n',
+     ""),
+    ("effects: pinning any thread reprimes, even one nobody is in", DISPATCH,
+     "  const live =\n"
+     "    ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character);\n"
+     "  if (pinned !== live) return undefined;\n",
+     ""),
+    ("effects: a session that never chose a thread is treated as being nowhere", DISPATCH,
+     "    ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character);",
+     "    ctx.router.threadFor(ctx.sessionId);"),
+    ("effects: the pin always reprimes home, not the thread that was pinned", DISPATCH,
+     '  await ctx.runtime.refreshCachedRequest(ctx.character, "model_change", pinned);',
+     '  await ctx.runtime.refreshCachedRequest(ctx.character, "model_change");'),
+
     # --- the annotations -------------------------------------------------------
     ("annotate: `invalidated` replaces what the command wrote", DISPATCH,
      '  const prev = isRecord(data) && isRecord(data["invalidated"]) ? data["invalidated"] : {};',

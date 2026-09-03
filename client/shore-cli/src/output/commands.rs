@@ -1270,6 +1270,16 @@ fn print_model_switched(data: &serde_json::Value) {
     let model = data["active"].as_str().unwrap_or("(none)");
     let Some(role) = data["role"].as_str() else {
         cli_out!("Switched to model: {}", abbreviate_model(model));
+        if let Some(thread) = data.get("shadowed_by_thread") {
+            match thread.as_str() {
+                Some(id) => cli_out!(
+                    "  this thread ({id}) is pinned to its own model, so it keeps using that"
+                ),
+                None => {
+                    cli_out!("  this thread is pinned to its own model, so it keeps using that")
+                }
+            }
+        }
         return;
     };
     cli_out!(

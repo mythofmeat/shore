@@ -361,6 +361,8 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
       a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
     },
 
+    homeThread: (character) => runtime.registry.homeThread(character),
+
     refreshCachedRequest: async (character, reason = "model_change", thread) => {
       runtime.keepalive.disarm(character);
       runtime.cache.invalidate(character, reason);

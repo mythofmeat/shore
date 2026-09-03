@@ -20,7 +20,7 @@ import {
   rebuildRequestFromDisk,
 } from "../src/cache/rebuild.ts";
 import { LastRequestCache, reprimeDecision } from "../src/cache/last_request.ts";
-import { createThread, setHomeThread } from "../src/engine/threads.ts";
+import { createThread, setHomeThread, setThreadModel } from "../src/engine/threads.ts";
 import type { KeepalivePrefix, PingNowOutcome } from "../src/cache/keepalive.ts";
 import { classify, keepalivePingNowCommand } from "../src/commands/keepalive.ts";
 import { CommandError } from "../src/commands/errors.ts";
@@ -277,6 +277,55 @@ describe("rebuildRequestFromDisk", () => {
 
     const afterMove = await rebuildRequestFromDisk("ada", dataDir, config);
     expect(JSON.stringify(afterMove?.request.messages)).toContain("side thread");
+  });
+
+  test("the warm body is built on the thread's own model when one is pinned", async () => {
+    const turn = (role: string, msg_id: string, content: string): Message =>
+      fromShape({ role, msg_id, content, autonomous: false, tool_result_only: false });
+    const { config, dataDir } = await world([
+      turn("user", "m_u", "a turn at home"),
+      turn("assistant", "m_a", "noted"),
+    ]);
+    config.models.chat.set("chat.other", {
+      ...(FIXTURE_MODEL as object),
+      name: "other",
+      qualifiedName: "chat.other",
+      modelId: "claude-other",
+    } as never);
+    const now = "2026-09-03T12:00:00.000Z";
+    await setThreadModel(dataDir, "ada", "main", "chat.other", now);
+
+    const rebuilt = await rebuildRequestFromDisk("ada", dataDir, config);
+    expect(rebuilt?.request.model).toBe("claude-other");
+  });
+
+  test("a side thread's pin is used for that thread, not for home", async () => {
+    const turn = (role: string, msg_id: string, content: string): Message =>
+      fromShape({ role, msg_id, content, autonomous: false, tool_result_only: false });
+    const { config, dataDir } = await world([
+      turn("user", "m_u", "a turn at home"),
+      turn("assistant", "m_a", "noted"),
+    ]);
+    config.models.chat.set("chat.other", {
+      ...(FIXTURE_MODEL as object),
+      name: "other",
+      qualifiedName: "chat.other",
+      modelId: "claude-other",
+    } as never);
+    const now = "2026-09-03T12:00:00.000Z";
+    await createThread(dataDir, "ada", "scratch", now, { chat_model: "chat.other" });
+    await writeFile(
+      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
+      `${JSON.stringify(turn("user", "m_su", "a turn in the side thread"))}\n` +
+        `${JSON.stringify(turn("assistant", "m_sa", "noted"))}\n`,
+    );
+
+    expect((await rebuildRequestFromDisk("ada", dataDir, config))?.request.model).toBe(
+      "claude-fixture",
+    );
+    expect(
+      (await rebuildRequestFromDisk("ada", dataDir, config, { thread: "scratch" }))?.request.model,
+    ).toBe("claude-other");
   });
 
   test("no chat model resolves — no request, rather than one on a guessed model", async () => {

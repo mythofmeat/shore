@@ -1071,6 +1071,23 @@ describe("the command path", () => {
     }
   });
 
+  test("the home thread comes from the registry, so moving home moves the heartbeat", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-home-", () => {}, ["ada"]);
+    try {
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+
+      expect(deps.dispatchRuntime.homeThread("ada")).toBe("main");
+
+      await runtime.registry.createThread("ada", "eval");
+      await runtime.registry.setHomeThread("ada", "eval");
+
+      expect(deps.dispatchRuntime.homeThread("ada")).toBe("eval");
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("a `config` set reaches the registry and the loop", async () => {
     const { root, config, runtime } = await runtimeUnder("shore-deps-cmd-set-", () => {}, ["ada"]);
     try {

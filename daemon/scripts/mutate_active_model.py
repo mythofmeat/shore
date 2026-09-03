@@ -63,26 +63,48 @@ PREFS = "src/config/preferences.ts"
 MUTANTS = [
     # --- the chain's inputs ---------------------------------------------------
     ("chain: global preferences outrank the character's",
-     "  const resolved = resolveActiveForCharacter(\n"
-     "    config,\n"
-     "    global,\n"
-     "    charPrefs,\n",
-     "  const resolved = resolveActiveForCharacter(\n"
-     "    config,\n"
-     "    charPrefs,\n"
-     "    global,\n"),
+     "    resolveActiveForCharacter(\n"
+     "      config,\n"
+     "      global,\n"
+     "      charPrefs,\n",
+     "    resolveActiveForCharacter(\n"
+     "      config,\n"
+     "      charPrefs,\n"
+     "      global,\n"),
     ("chain: character preferences are dropped from the selection",
-     "  const resolved = resolveActiveForCharacter(\n"
-     "    config,\n"
-     "    global,\n"
-     "    charPrefs,\n",
-     "  const resolved = resolveActiveForCharacter(\n"
-     "    config,\n"
-     "    global,\n"
-     "    emptyPreferences(),\n"),
+     "    resolveActiveForCharacter(\n"
+     "      config,\n"
+     "      global,\n"
+     "      charPrefs,\n",
+     "    resolveActiveForCharacter(\n"
+     "      config,\n"
+     "      global,\n"
+     "      emptyPreferences(),\n"),
     ("chain: the configured default model is not passed through",
-     "    charPrefs,\n    config.app.defaults.model,",
-     "    charPrefs,\n    undefined,"),
+     "      charPrefs,\n      config.app.defaults.model,",
+     "      charPrefs,\n      undefined,"),
+    ("pin: a thread's pinned model is ignored, so the character's pick always wins",
+     "  const resolved =\n    pinned ??",
+     "  const resolved =\n    undefined ??"),
+    ("pin: a pin that will not resolve leaves the thread mute instead of falling back",
+     "  const resolved =\n"
+     "    pinned ??\n"
+     "    resolveActiveForCharacter(",
+     "  const resolved =\n"
+     "    threadModel !== undefined\n"
+     "      ? pinned\n"
+     "      : resolveActiveForCharacter("),
+    ("pin: a trailing colon is accepted, so the model_id half may be empty",
+     "  if (colon > 0 && colon < pinned.length - 1) {",
+     "  if (colon > 0) {"),
+    ("pin: nothing is ever read as a provider pair, only as a bare alias",
+     "  if (colon > 0 && colon < pinned.length - 1) {",
+     "  if (colon > 0 && colon < 0) {"),
+    ("pin: the provider and model_id halves of a pair are swapped",
+     "      pinned.slice(0, colon),\n"
+     "      pinned.slice(colon + 1),",
+     "      pinned.slice(colon + 1),\n"
+     "      pinned.slice(0, colon),"),
     ("chain: a preferences file that will not parse takes the character down",
      "  let global = emptyPreferences();\n"
      "  let charPrefs = emptyPreferences();\n"

@@ -19,6 +19,9 @@ import {
   readThreadsIndex,
   setHomeThread,
   setThreadLabel,
+  setThreadModel,
+  threadChatModel,
+  threadModelOf,
   touchThread,
   writeThreadsIndex,
 } from "../src/engine/threads.ts";
@@ -298,6 +301,56 @@ describe("thread lifecycle", () => {
     const later = "2026-09-04T09:00:00.000Z";
     await touchThread(root, "aria", "scratch", later);
     expect((await readThreadsIndex(root, "aria"))?.threads[1]?.last_active).toBe(later);
+  });
+
+  test("pins a thread to its own model and lets the pin be lifted", async () => {
+    const root = await dataDir();
+    await createThread(root, "aria", "eval", NOW, { chat_model: "anthropic:opus" });
+    expect(await threadChatModel(root, "aria", "eval")).toBe("anthropic:opus");
+
+    await setThreadModel(root, "aria", "eval", "claude-agent:opus5", NOW);
+    expect(await threadChatModel(root, "aria", "eval")).toBe("claude-agent:opus5");
+
+    const cleared = await setThreadModel(root, "aria", "eval", undefined, NOW);
+    expect(cleared.threads[1]).not.toHaveProperty("chat_model");
+    expect(await threadChatModel(root, "aria", "eval")).toBeUndefined();
+  });
+
+  test("a thread with no pin, and an unknown one, both read as unpinned", async () => {
+    const root = await dataDir();
+    await createThread(root, "aria", "scratch", NOW);
+
+    expect(await threadChatModel(root, "aria", "scratch")).toBeUndefined();
+    expect(await threadChatModel(root, "aria", "ghost")).toBeUndefined();
+    expect(setThreadModel(root, "aria", "ghost", "anthropic:opus", NOW)).rejects.toThrow(
+      ThreadError,
+    );
+  });
+
+  test("an omitted thread reads the home thread's pin, wherever home points", async () => {
+    const root = await dataDir();
+    await createThread(root, "aria", "eval", NOW, { chat_model: "claude-agent:opus5" });
+
+    expect(await threadChatModel(root, "aria")).toBeUndefined();
+    await setHomeThread(root, "aria", "eval", NOW);
+    expect(await threadChatModel(root, "aria")).toBe("claude-agent:opus5");
+  });
+
+  test("a character with no index at all has nothing pinned", async () => {
+    const root = await dataDir();
+    expect(await threadChatModel(root, "nobody", MAIN_THREAD)).toBeUndefined();
+  });
+
+  test("a roster is read by thread id, not by label or position", async () => {
+    const records = [
+      { id: MAIN_THREAD, created_at: NOW, compaction: true },
+      { id: "eval", label: "main", created_at: NOW, compaction: false, chat_model: "anthropic:opus" },
+    ];
+
+    expect(threadModelOf(records, "eval")).toBe("anthropic:opus");
+    expect(threadModelOf(records, MAIN_THREAD)).toBeUndefined();
+    expect(threadModelOf(records, "ghost")).toBeUndefined();
+    expect(threadModelOf([], "eval")).toBeUndefined();
   });
 });
 

@@ -206,6 +206,61 @@ MUTANTS = [
     ("archive: an unreadable active window is fatal",
      "  } catch {\n    active = \"\";\n  }",
      "  } catch (e) {\n    throw e;\n  }"),
+
+    # --- the per-thread model -------------------------------------------------
+    ("model: clearing a pin leaves the old model in place",
+     "  const record: ThreadRecord = model === undefined ? rest : { ...rest, chat_model: model };",
+     "  const record: ThreadRecord = model === undefined ? current : { ...rest, chat_model: model };"),
+    ("model: setting a pin clears it instead",
+     "  const record: ThreadRecord = model === undefined ? rest : { ...rest, chat_model: model };",
+     "  const record: ThreadRecord = rest;"),
+    ("model: pinning a thread that does not exist creates one",
+     "export async function setThreadModel(\n"
+     "  data: string,\n"
+     "  character: string,\n"
+     "  id: string,\n"
+     "  model: string | undefined,\n"
+     "  now: string,\n"
+     "): Promise<ThreadsIndex> {\n"
+     "  const index = await ensureThreads(data, character, now);\n"
+     "  const current = requireThread(index, character, id);",
+     "export async function setThreadModel(\n"
+     "  data: string,\n"
+     "  character: string,\n"
+     "  id: string,\n"
+     "  model: string | undefined,\n"
+     "  now: string,\n"
+     "): Promise<ThreadsIndex> {\n"
+     "  const index = await ensureThreads(data, character, now);\n"
+     "  const current = threadRecord(index, id) ?? { id, created_at: now, compaction: false };"),
+    ("model: the pin is never written to disk",
+     "  const next = replaceThread(index, record);\n"
+     "  await writeThreadsIndex(data, character, next);\n"
+     "  return next;\n"
+     "}\n\n"
+     "export async function threadChatModel(",
+     "  const next = replaceThread(index, record);\n"
+     "  return next;\n"
+     "}\n\n"
+     "export async function threadChatModel("),
+    ("model: an omitted thread reads main rather than wherever home points",
+     "  return threadRecord(index, thread ?? homeThread(index))?.chat_model;",
+     "  return threadRecord(index, thread ?? MAIN_THREAD)?.chat_model;"),
+    ("model: every thread reads the home thread's pin",
+     "  return threadRecord(index, thread ?? homeThread(index))?.chat_model;",
+     "  return threadRecord(index, homeThread(index))?.chat_model;"),
+    ("model: a character with no index reports the first pin it can find",
+     "  const index = await readThreadsIndex(data, character);\n"
+     "  if (index === undefined) return undefined;\n"
+     "  return threadRecord(index, thread ?? homeThread(index))?.chat_model;",
+     "  const index = await readThreadsIndex(data, character);\n"
+     "  return index?.threads.find((t) => t.chat_model !== undefined)?.chat_model;"),
+    ("model: the roster lookup matches on label rather than id",
+     "  return records.find((t) => t.id === thread)?.chat_model;",
+     "  return records.find((t) => t.label === thread)?.chat_model;"),
+    ("model: the roster lookup returns the first thread's pin whatever was asked for",
+     "  return records.find((t) => t.id === thread)?.chat_model;",
+     "  return records[0]?.chat_model;"),
 ]
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))

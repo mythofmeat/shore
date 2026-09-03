@@ -815,16 +815,54 @@ export function resolveBackgroundModel(
   return overlayForCharacter(config.dirs.data, character, base, task);
 }
 
+function pinnedModel(
+  config: LoadedConfigView,
+  pinned: string,
+  findEffective: FindEffectiveModel,
+): ResolvedModel | undefined {
+  const colon = pinned.indexOf(":");
+  if (colon > 0 && colon < pinned.length - 1) {
+    return resolveProviderModel(
+      config,
+      pinned.slice(0, colon),
+      pinned.slice(colon + 1),
+      findEffective,
+    );
+  }
+  try {
+    return findEffective(config, config.dirs.cache, pinned, true);
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveThreadPin(
+  config: LoadedConfigView,
+  character: string,
+  pinned: string,
+  findEffective: FindEffectiveModel,
+): ResolvedModel | undefined {
+  const resolved = pinnedModel(config, pinned, findEffective);
+  if (resolved !== undefined) return resolved;
+  shoreLog.warn(
+    `shore: thread model ${JSON.stringify(pinned)} for ${character} could not be resolved; ` +
+      "falling back to the character's active model",
+  );
+  return undefined;
+}
+
 export function resolveChatModelForCharacter(
   config: LoadedConfigView,
   character: string,
   findEffective: FindEffectiveModel,
+  threadModel?: string,
 ): ResolvedModel | undefined {
   const { global, charPrefs, resolved } = activeSelection(
     config,
     character,
     findEffective,
     "resolve_chat_model",
+    threadModel,
   );
   if (resolved === undefined) return undefined;
 
@@ -842,12 +880,14 @@ export function resolveActiveModelAndOverlay(
   config: LoadedConfigView,
   character: string,
   findEffective: FindEffectiveModel,
+  threadModel?: string,
 ): { model: ResolvedModel | undefined; overlay: SamplerSettings } {
   const { global, charPrefs, resolved } = activeSelection(
     config,
     character,
     findEffective,
     "resolve_active_model",
+    threadModel,
   );
   if (resolved === undefined) return { model: undefined, overlay: {} };
 
@@ -868,6 +908,7 @@ function activeSelection(
   character: string,
   findEffective: FindEffectiveModel,
   op: string,
+  threadModel?: string,
 ): { global: ModelPreferences; charPrefs: ModelPreferences; resolved: ResolvedModel | undefined } {
   let global = emptyPreferences();
   let charPrefs = emptyPreferences();
@@ -880,13 +921,20 @@ function activeSelection(
     );
   }
 
-  const resolved = resolveActiveForCharacter(
-    config,
-    global,
-    charPrefs,
-    config.app.defaults.model,
-    findEffective,
-  );
+  const pinned =
+    threadModel === undefined
+      ? undefined
+      : resolveThreadPin(config, character, threadModel, findEffective);
+
+  const resolved =
+    pinned ??
+    resolveActiveForCharacter(
+      config,
+      global,
+      charPrefs,
+      config.app.defaults.model,
+      findEffective,
+    );
   return { global, charPrefs, resolved };
 }
 

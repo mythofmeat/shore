@@ -103,6 +103,20 @@ MUTANTS = [
      "    return outcome;\n  } finally {\n    guard.release();\n  }",
      "    return outcome;\n  } finally {\n    void guard;\n  }"),
 
+    ("prefix: the rebuilt prefix ignores the thread's pinned model",
+     R,
+     "    await threadChatModel(effective.dirs.data, character, thread),\n",
+     ""),
+    ("prefix: the pin is read for home rather than the thread being compacted",
+     R,
+     "    await threadChatModel(effective.dirs.data, character, thread),",
+     "    await threadChatModel(effective.dirs.data, character),"),
+
+    ("thread: shore compact always compacts home, whatever thread you are in",
+     C,
+     "        ...(engine.thread === undefined ? {} : { thread: engine.thread }),\n",
+     ""),
+
     # --- the error mapping ----------------------------------------------------
     ("errors: insufficient messages is an internal error",
      C,

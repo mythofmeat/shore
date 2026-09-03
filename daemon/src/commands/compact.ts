@@ -17,6 +17,7 @@ const PREVIEW_CHARS = 200;
 
 export interface CompactEngine {
   readonly characterName: string;
+  readonly thread?: string;
   reload(): Promise<void>;
 }
 
@@ -66,6 +67,7 @@ export async function compact(
       {
         dryRun,
         restart,
+        ...(engine.thread === undefined ? {} : { thread: engine.thread }),
         ...(keepTurnsOverride === undefined ? {} : { keepTurnsOverride }),
       },
     );

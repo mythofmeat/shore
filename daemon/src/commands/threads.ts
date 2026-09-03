@@ -28,6 +28,7 @@ export interface ThreadRegistry {
   ): Promise<ThreadsIndex>;
   setHomeThread(character: string, id: string): Promise<ThreadsIndex>;
   setThreadLabel(character: string, id: string, label: string | undefined): Promise<ThreadsIndex>;
+  setThreadModel(character: string, id: string, model: string | undefined): Promise<ThreadsIndex>;
 }
 
 export interface ThreadContext {
@@ -143,6 +144,16 @@ export async function threadLabel(ctx: ThreadContext, args: Args): Promise<Threa
   const label = optionalText(args["label"], "label");
   try {
     return listing(ctx, await ctx.registry.setThreadLabel(ctx.character, id, label));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function threadModel(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const id = requiredId(args);
+  const model = optionalText(args["model"], "model");
+  try {
+    return listing(ctx, await ctx.registry.setThreadModel(ctx.character, id, model));
   } catch (e) {
     throw threadCommandError(e);
   }

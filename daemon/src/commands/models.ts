@@ -58,6 +58,8 @@ export interface ModelsContext {
   dataDir: string;
   characterName: string | undefined;
   activeModel: string | undefined;
+  thread?: string;
+  threadModel?: string;
   configPath?: string;
   runtime?: ConfigRuntime;
   env?: Env;
@@ -99,13 +101,14 @@ function requireCharacter(ctx: ModelsContext): string {
 export function effectiveChatModel(
   config: LoadedConfig,
   character: string | undefined,
+  threadModel?: string,
 ): ResolvedModel | undefined {
   if (character === undefined) return undefined;
-  return resolveChatModelForCharacter(configView(config), character, findEffective);
+  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel);
 }
 
 function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
   if (resolved !== undefined) return resolved;
 
   const fallback = ctx.config.app.defaults.model;
@@ -259,9 +262,13 @@ interface ModelRole {
 }
 
 function chatRole(ctx: ModelsContext): ModelRole {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
   if (resolved !== undefined) {
-    return { role: "chat", model: resolved.qualifiedName, source: "character" };
+    return {
+      role: "chat",
+      model: resolved.qualifiedName,
+      source: ctx.threadModel === undefined ? "character" : `thread ${ctx.thread ?? ""}`.trim(),
+    };
   }
   const fallback = ctx.config.app.defaults.model;
   if (fallback !== undefined && fallback !== "") {
@@ -352,7 +359,7 @@ function favoriteNames(ctx: ModelsContext): Set<string> {
 }
 
 function activeName(ctx: ModelsContext): string | undefined {
-  const resolved = effectiveChatModel(ctx.config, ctx.characterName);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);
   if (resolved !== undefined) return resolved.qualifiedName;
 
   const fallback = ctx.config.app.defaults.model;
@@ -666,7 +673,10 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
 
   const name = asStr(args["name"]);
   if (name === undefined) {
-    return { active: effectiveChatModel(ctx.config, ctx.characterName)?.qualifiedName ?? null };
+    return {
+      active:
+        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel)?.qualifiedName ?? null,
+    };
   }
 
   const includeHidden = asBool(args["include_hidden"]) ?? false;
@@ -684,6 +694,7 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
     provider: resolved.providerKey,
     model_id: resolved.modelId,
     changed: true,
+    ...(ctx.threadModel === undefined ? {} : { shadowed_by_thread: ctx.thread ?? null }),
   };
 }
 

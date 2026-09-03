@@ -80,7 +80,12 @@ MUTANTS = [
      "    );"),
     ("engine: an empty snapshot drops the config block the client renders from",
      H,
-     "      messages: [],\n      activeStart: 0,\n      config: configBlock,",
+     "      messages: [],\n"
+     "      activeStart: 0,\n"
+     "      config: historyConfigSnapshot(\n"
+     "        config,\n"
+     "        snapshotActiveModel(config, selectedCharacter, activeModel, undefined),\n"
+     "      ),",
      "      messages: [],\n      activeStart: 0,\n      config: {},"),
 
     # --- what a live snapshot carries -----------------------------------------
@@ -94,8 +99,12 @@ MUTANTS = [
      "      selectedCharacter,\n      selectedThread: null,\n      revision: 0,"),
     ("snapshot: the thread the engine is on is not reported back",
      H,
-     "    selectedThread: history.selected_thread ?? engine.thread,\n",
-     ""),
+     "  const thread = engine.thread;",
+     '  const thread = "main";'),
+    ("snapshot: the thread is dropped from what the session is told it is on",
+     H,
+     "    selectedThread: thread,\n",
+     "    selectedThread: null,\n"),
     ("snapshot: a session's stale thread is opened rather than falling back to home",
      H,
      "  return registry.listThreads(character).some((t) => t.id === selected) ? selected : undefined;",
@@ -124,9 +133,21 @@ MUTANTS = [
      "?.qualifiedName ?? undefined,"),
     ("model: preferences are never consulted, so a character's own pick is invisible",
      H,
-     "  return resolveChatModelForCharacter(configView(config), selectedCharacter, findEffectiveModel)\n"
-     "    ?.qualifiedName;",
+     "  return resolveChatModelForCharacter(\n"
+     "    configView(config),\n"
+     "    selectedCharacter,\n"
+     "    findEffectiveModel,\n"
+     "    threadModel,\n"
+     "  )?.qualifiedName;",
      "  return undefined;"),
+    ("model: the thread's pin never reaches the resolver, so a side thread reports the character's",
+     H,
+     "    findEffectiveModel,\n    threadModel,\n  )?.qualifiedName;",
+     "    findEffectiveModel,\n  )?.qualifiedName;"),
+    ("model: the pin is read for home rather than the thread the engine opened",
+     H,
+     "          : threadModelOf(registry.listThreads(selectedCharacter), thread),",
+     "          : undefined,"),
 ]
 
 

@@ -67,7 +67,7 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
-import type { ThreadRecord } from "../engine/threads.ts";
+import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
@@ -279,6 +279,7 @@ async function runGenerationCore(
     charName,
     (view, cacheDir, name, includeHidden) =>
       findEffectiveModel(view, cacheDir, name, includeHidden),
+    threadModelOf(deps.registry.listThreads(charName), engine.thread),
   );
   const resolved = resolveGenerationModel(activeModel, config, overlay);
 

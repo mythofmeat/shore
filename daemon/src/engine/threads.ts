@@ -81,6 +81,13 @@ export function threadRecord(index: ThreadsIndex, id: string): ThreadRecord | un
   return index.threads.find((t) => t.id === id);
 }
 
+export function threadModelOf(
+  records: readonly ThreadRecord[],
+  thread: string,
+): string | undefined {
+  return records.find((t) => t.id === thread)?.chat_model;
+}
+
 export function homeThread(index: ThreadsIndex | undefined): string {
   if (index === undefined) return MAIN_THREAD;
   return threadRecord(index, index.home) === undefined ? MAIN_THREAD : index.home;
@@ -257,6 +264,32 @@ export async function setThreadLabel(
   const next = replaceThread(index, record);
   await writeThreadsIndex(data, character, next);
   return next;
+}
+
+export async function setThreadModel(
+  data: string,
+  character: string,
+  id: string,
+  model: string | undefined,
+  now: string,
+): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  const current = requireThread(index, character, id);
+  const { chat_model: _dropped, ...rest } = current;
+  const record: ThreadRecord = model === undefined ? rest : { ...rest, chat_model: model };
+  const next = replaceThread(index, record);
+  await writeThreadsIndex(data, character, next);
+  return next;
+}
+
+export async function threadChatModel(
+  data: string,
+  character: string,
+  thread?: string,
+): Promise<string | undefined> {
+  const index = await readThreadsIndex(data, character);
+  if (index === undefined) return undefined;
+  return threadRecord(index, thread ?? homeThread(index))?.chat_model;
 }
 
 export async function touchThread(

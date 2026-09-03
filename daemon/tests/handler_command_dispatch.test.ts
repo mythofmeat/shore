@@ -57,6 +57,7 @@ function fakes(
     snapshot?: Partial<HistorySnapshot>;
     historyFails?: Error;
     rid?: string;
+    home?: string;
   } = {},
 ): Fakes {
   const log: Log = {
@@ -95,6 +96,7 @@ function fakes(
       log.refreshed.push(character);
       log.refreshArgs.push({ character, ...(reason === undefined ? {} : { reason }), ...(thread === undefined ? {} : { thread }) });
     },
+    homeThread: () => opts.home ?? "main",
     applyReloadedConfig: async (cfg) => {
       log.order.push("adopt");
       log.adopted.push(cfg);
@@ -566,5 +568,58 @@ describe("a switch_thread", () => {
       expect(f.ctx.router.threadFor(SESSION)).toBe(null);
       expect(f.log.sent).toEqual([]);
     }
+  });
+});
+
+describe("pinning a thread to a model", () => {
+  test("rebuilds the cached request when the pin lands on the thread in use", async () => {
+    const f = fakes();
+    f.ctx.router.setSelectedThread(SESSION, "eval");
+
+    const out = await afterCommand(
+      "thread_model",
+      { name: "eval", model: "anthropic:opus" },
+      { character: CHARACTER, threads: [] },
+      f.ctx,
+    );
+
+    expect(out).toEqual({
+      character: CHARACTER,
+      threads: [],
+      invalidated: { cached_request: true },
+    });
+    expect(f.log.refreshArgs).toEqual([
+      { character: CHARACTER, reason: "model_change", thread: "eval" },
+    ]);
+  });
+
+  test("a session that never chose a thread is on home, and home counts", async () => {
+    const f = fakes({ home: "main" });
+
+    await afterCommand("thread_model", { name: "main", model: "anthropic:opus" }, {}, f.ctx);
+
+    expect(f.log.refreshArgs).toEqual([
+      { character: CHARACTER, reason: "model_change", thread: "main" },
+    ]);
+  });
+
+  test("pinning a thread nobody is in leaves the warm request alone", async () => {
+    const f = fakes({ home: "main" });
+
+    const out = await afterCommand(
+      "thread_model",
+      { name: "eval", model: "anthropic:opus" },
+      { character: CHARACTER },
+      f.ctx,
+    );
+
+    expect(out).toEqual({ character: CHARACTER });
+    expect(f.log.refreshed).toEqual([]);
+  });
+
+  test("a pin with no thread named touches nothing", async () => {
+    const f = fakes();
+    await afterCommand("thread_model", {}, {}, f.ctx);
+    expect(f.log.refreshed).toEqual([]);
   });
 });

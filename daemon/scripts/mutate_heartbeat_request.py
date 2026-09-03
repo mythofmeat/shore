@@ -52,8 +52,11 @@ BUILD_INPUTS = (
 CAP = (
     "    override !== undefined\n"
     "      ? override.maxToolIterations\n"
-    "      : resolveChatModelForCharacter(configView(config), character, (v, c, n, h) =>\n"
-    "          findEffectiveModel(v, c, n, h),\n"
+    "      : resolveChatModelForCharacter(\n"
+    "          configView(config),\n"
+    "          character,\n"
+    "          (v, c, n, h) => findEffectiveModel(v, c, n, h),\n"
+    "          await threadChatModel(config.dirs.data, character),\n"
     "        )?.maxToolIterations;"
 )
 
@@ -154,9 +157,16 @@ MUTANTS = [
      "    } else {"),
     ("prepare: the round cap always comes from the chat model, not the one running",
      H, CAP,
-     "    resolveChatModelForCharacter(configView(config), character, (v, c, n, h) =>\n"
-     "      findEffectiveModel(v, c, n, h),\n"
+     "    resolveChatModelForCharacter(\n"
+     "      configView(config),\n"
+     "      character,\n"
+     "      (v, c, n, h) => findEffectiveModel(v, c, n, h),\n"
+     "      await threadChatModel(config.dirs.data, character),\n"
      "    )?.maxToolIterations;"),
+    ("prepare: the round cap ignores the home thread's pinned model",
+     H,
+     "          await threadChatModel(config.dirs.data, character),\n",
+     ""),
     ("prepare: the round cap is unlimited whenever no override applies",
      H, CAP, "    override?.maxToolIterations;"),
     ("prepare: the prompt is never pinned, so the tick is an ordinary chat turn",

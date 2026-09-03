@@ -161,6 +161,58 @@ describe("the history snapshot", () => {
     expect(snapshot.selectedThread).toBe("scratch");
   });
 
+  test("the active model in the snapshot is the one the thread is pinned to", async () => {
+    const root = await mkdtemp(testTmp("shore-handshake-pin-"));
+    const config = configFor(root, { model: "chat.fixture" });
+    config.models.chat.set("chat.other", {
+      ...(MODEL as object),
+      qualifiedName: "chat.other",
+      name: "other",
+    } as never);
+
+    const pinned = threadRecords(MAIN_THREAD, "eval");
+    pinned[1] = { ...(pinned[1] as ThreadRecord), chat_model: "chat.other" };
+
+    const snapshot = await buildSessionHistorySnapshot(
+      registry({
+        globalConfig: () => config,
+        listThreads: () => pinned,
+        getOrCreate: (_name, thread) =>
+          Promise.resolve(engineWith({ selected_character: "ada" }, thread ?? MAIN_THREAD)),
+      }),
+      "ada",
+      "eval",
+    );
+
+    expect((snapshot.config as { active_model: string }).active_model).toBe("chat.other");
+  });
+
+  test("an unpinned thread reports the character's own model, not the last pin seen", async () => {
+    const root = await mkdtemp(testTmp("shore-handshake-unpinned-"));
+    const config = configFor(root, { model: "chat.fixture" });
+    config.models.chat.set("chat.other", {
+      ...(MODEL as object),
+      qualifiedName: "chat.other",
+      name: "other",
+    } as never);
+
+    const pinned = threadRecords(MAIN_THREAD, "eval");
+    pinned[1] = { ...(pinned[1] as ThreadRecord), chat_model: "chat.other" };
+
+    const snapshot = await buildSessionHistorySnapshot(
+      registry({
+        globalConfig: () => config,
+        listThreads: () => pinned,
+        getOrCreate: (_name, thread) =>
+          Promise.resolve(engineWith({ selected_character: "ada" }, thread ?? MAIN_THREAD)),
+      }),
+      "ada",
+      MAIN_THREAD,
+    );
+
+    expect((snapshot.config as { active_model: string }).active_model).toBe("chat.fixture");
+  });
+
   test("a session pointed at a thread that no longer exists falls back to home", async () => {
     const root = await mkdtemp(testTmp("shore-handshake-stale-"));
     const config = configFor(root, { model: "chat.fixture" });

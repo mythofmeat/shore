@@ -458,6 +458,65 @@ test("the active model is the one generation resolves, not the session's", async
   );
 });
 
+test("a thread's pin is the active model, and switching the character's does not unseat it", async () => {
+  const ctx = {
+    ...(await buildContext({
+      catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
+        '[chat.anthropic.beta]\nmodel_id = "beta-id"\n',
+      defaults: "",
+      discovery: [],
+      character: "ada",
+      global_prefs: null,
+      character_prefs: '[selected]\nprovider = "anthropic"\nmodel_id = "beta-id"\n',
+      active_model: null,
+    })),
+    thread: "eval",
+    threadModel: "chat.anthropic.alpha",
+  };
+
+  const listed = listModels(ctx, {}) as {
+    active: string;
+    roles: { role: string; model: string | null; source: string | null }[];
+  };
+  expect(listed.active).toBe("chat.anthropic.alpha");
+  expect(listed.roles.find((r) => r.role === "chat")).toEqual({
+    role: "chat",
+    model: "chat.anthropic.alpha",
+    source: "thread eval",
+  });
+  expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
+    "chat.anthropic.alpha",
+  );
+
+  const switched = switchModel(ctx, { name: "chat.anthropic.beta" }) as Record<string, unknown>;
+  expect(switched["shadowed_by_thread"]).toBe("eval");
+  expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.alpha");
+});
+
+test("with no pin the character's own pick is active and no shadow is reported", async () => {
+  const ctx = await buildContext({
+    catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
+      '[chat.anthropic.beta]\nmodel_id = "beta-id"\n',
+    defaults: "",
+    discovery: [],
+    character: "ada",
+    global_prefs: null,
+    character_prefs: '[selected]\nprovider = "anthropic"\nmodel_id = "beta-id"\n',
+    active_model: null,
+  });
+
+  const listed = listModels(ctx, {}) as {
+    active: string;
+    roles: { role: string; model: string | null; source: string | null }[];
+  };
+  expect(listed.active).toBe("chat.anthropic.beta");
+  expect(listed.roles.find((r) => r.role === "chat")?.source).toBe("character");
+  expect(switchModel(ctx, { name: "chat.anthropic.alpha" })).not.toHaveProperty(
+    "shadowed_by_thread",
+  );
+  expect((switchModel(ctx, {}) as { active: string }).active).toBe("chat.anthropic.alpha");
+});
+
 async function rolesFor(defaults: string) {
   const ctx = await buildContext({
     catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +

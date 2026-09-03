@@ -74,6 +74,7 @@ import {
   switchThread,
   threadHome,
   threadLabel,
+  threadModel,
   type ThreadContext,
   type ThreadRegistry,
 } from "./threads.ts";
@@ -96,6 +97,8 @@ export interface CommandSession {
   dataDir: string;
   characterName: string | undefined;
   activeModel: string | undefined;
+  thread?: string;
+  threadModel?: string;
   runtime: ConfigRuntime;
   env?: NodeJS.ProcessEnv;
   emit?: FrameSink;
@@ -167,6 +170,8 @@ export async function runCommand(
       return await threadHome(threadContext(deps, engine), args);
     case "thread_label":
       return await threadLabel(threadContext(deps, engine), args);
+    case "thread_model":
+      return await threadModel(threadContext(deps, engine), args);
 
     case "log":
       return await log(engine, args);
@@ -387,7 +392,8 @@ function statusContext(
   return {
     characterName: engine.characterName,
     turnCount: engine.turnCount(),
-    activeModel: effectiveChatModel(session.config, engine.characterName)?.qualifiedName,
+    activeModel: effectiveChatModel(session.config, engine.characterName, session.threadModel)
+      ?.qualifiedName,
     config: { app: { defaults: { model: session.config.app.defaults.model } }, dirs: session.config.dirs },
     conversationTokens: conversationTokens(
       deps.ledgerPath,

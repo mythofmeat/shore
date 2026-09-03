@@ -18,6 +18,7 @@ import {
   homeThread,
   setHomeThread,
   setThreadLabel,
+  setThreadModel,
   threadRecord,
   touchThread,
   ThreadError,
@@ -244,6 +245,13 @@ export class CharacterRegistry {
     return this.#remember(
       name,
       await setThreadLabel(this.#dataDir, name, id, label, new Date().toISOString()),
+    );
+  }
+
+  async setThreadModel(name: string, id: string, model: string | undefined): Promise<ThreadsIndex> {
+    return this.#remember(
+      name,
+      await setThreadModel(this.#dataDir, name, id, model, new Date().toISOString()),
     );
   }
 

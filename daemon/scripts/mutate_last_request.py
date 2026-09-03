@@ -183,6 +183,15 @@ MUTANTS = [
      "      await rebuildRequestFromDisk(character, dataDir, config, { ...deps, thread }),",
      "      await rebuildRequestFromDisk(character, dataDir, config, deps),"),
 
+    ("rebuild: the warm body ignores the thread's pinned model",
+     B,
+     "    await threadChatModel(dataDir, character, thread),\n",
+     ""),
+    ("rebuild: the pin is read for home rather than the thread being rebuilt",
+     B,
+     "    await threadChatModel(dataDir, character, thread),",
+     "    await threadChatModel(dataDir, character),"),
+
     # --- the cache ------------------------------------------------------------
     ("cache: invalidating also disarms, collapsing the two decisions",
      L,
