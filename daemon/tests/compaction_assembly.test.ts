@@ -59,23 +59,23 @@ describe("archiveAndRetain", () => {
       const out = c.output as Record<string, unknown>;
       const root = await tempRoot();
       const characterDir = join(root, "ada");
-      await mkdir(characterDir, { recursive: true });
+      await mkdir(join(characterDir, "threads", "main"), { recursive: true });
 
       await writeFile(
-        join(characterDir, "active.jsonl"),
+        join(characterDir, "threads", "main", "active.jsonl"),
         input["on_disk_differs"] === true
           ? `${input["active_content"] as string}${extraLine()}`
           : (input["active_content"] as string),
       );
       if (input["existing_manifest"] !== null) {
         await writeFile(
-          join(characterDir, "compaction.json"),
+          join(characterDir, "threads", "main", "compaction.json"),
           JSON.stringify(input["existing_manifest"], null, 2),
         );
       }
 
       const id = await archiveAndRetain(
-        characterDir,
+        join(characterDir, "threads", "main"),
         input["keep_last_n"] as number,
         input["active_content"] as string,
         () => STAMP,
@@ -86,7 +86,7 @@ describe("archiveAndRetain", () => {
       expect(out["returns_uuid"]).toBe(true);
       expect(id).toBe(NEW_ID);
 
-      const segmentsDir = join(characterDir, "segments");
+      const segmentsDir = join(characterDir, "threads", "main", "segments");
       let files: string[] = [];
       try {
         files = (await readdir(segmentsDir)).sort();
@@ -101,14 +101,14 @@ describe("archiveAndRetain", () => {
       );
       expect(segments).toEqual(out["segments"] as { file: string; lines: string[] }[]);
 
-      const manifestRaw = await readFile(join(characterDir, "compaction.json"), "utf8").catch(
+      const manifestRaw = await readFile(join(characterDir, "threads", "main", "compaction.json"), "utf8").catch(
         () => undefined,
       );
       const manifest =
         manifestRaw === undefined ? null : normaliseStamps(JSON.parse(manifestRaw) as unknown);
       expect(manifest).toEqual(out["manifest"] ?? null);
 
-      const raw = await readFile(join(characterDir, "active.jsonl"), "utf8");
+      const raw = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
       expect(msgIds(raw)).toEqual(out["retained"] as string[]);
       expect(raw).toBe(out["retained_raw"] as string);
     });

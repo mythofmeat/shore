@@ -23,7 +23,7 @@ afterEach(async () => {
 async function workspace(): Promise<{ dir: string; path: string }> {
   const dir = await mkdtemp(join(tmpdir(), "shore-message-transaction-"));
   cleanups.push(async () => await rm(dir, { recursive: true, force: true }));
-  return { dir, path: join(dir, "active.jsonl") };
+  return { dir, path: join(dir, "threads", "main", "active.jsonl") };
 }
 
 function message(id: string, role: Role, content: string, minute: number): Message {
@@ -235,12 +235,12 @@ describe("concurrent message mutations", () => {
 test("a failed store commit does not advance the conversation revision", async () => {
   const { dir } = await workspace();
   const characterDir = join(dir, "ada");
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   const engine = await ConversationEngine.load("ada", dir);
   await engine.appendMessage(message("u1", "user", "saved", 1));
   const beforeMessages = structuredClone(engine.messages());
   const beforeRevision = engine.currentRevision();
-  const beforeFile = await readFile(join(characterDir, "active.jsonl"), "utf8");
+  const beforeFile = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
 
   const movedCharacterDir = join(dir, "ada-before-failure");
   await rename(characterDir, movedCharacterDir);
@@ -252,5 +252,5 @@ test("a failed store commit does not advance the conversation revision", async (
 
   expect(engine.currentRevision()).toBe(beforeRevision);
   expect(wire(engine.messages())).toEqual(wire(beforeMessages));
-  expect(await readFile(join(movedCharacterDir, "active.jsonl"), "utf8")).toBe(beforeFile);
+  expect(await readFile(join(movedCharacterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(beforeFile);
 });

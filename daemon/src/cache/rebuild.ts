@@ -2,7 +2,12 @@ import { shoreLog } from "../log.ts";
 
 import { randomUUID } from "node:crypto";
 
-import { activeJsonlIn, characterDataDir } from "../config/dirs.ts";
+import {
+  activeJsonlIn,
+  characterDataDir,
+  MAIN_THREAD,
+  threadDataDir,
+} from "../config/dirs.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { configView, resolveChatModelForCharacter } from "../config/preferences.ts";
@@ -83,10 +88,11 @@ export async function rebuildRequestFromDisk(
   deps: RebuildDeps = {},
 ): Promise<BuiltRequest | undefined> {
   const characterDir = characterDataDir(dataDir, character);
+  const conversationDir = threadDataDir(dataDir, character, MAIN_THREAD);
 
   let store: MessageStore;
   try {
-    store = await MessageStore.load(activeJsonlIn(characterDir));
+    store = await MessageStore.load(activeJsonlIn(conversationDir));
   } catch (e) {
     shoreLog.warn(`shore: heartbeat rebuild for ${character} could not load messages: ${String(e)}`);
     return undefined;
@@ -105,7 +111,7 @@ export async function rebuildRequestFromDisk(
   );
   if (resolved === undefined) return undefined;
 
-  const hasPriorContext = (await segmentCount(conversationRef(dataDir, character, false))) > 0;
+  const hasPriorContext = (await segmentCount(conversationRef(dataDir, character, MAIN_THREAD, false))) > 0;
   const mcpToolDefs = deps.mcpRegistry?.toolDefsFiltered(config.app.tools.enabled_tools) ?? [];
 
   try {

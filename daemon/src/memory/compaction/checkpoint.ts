@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
-import { characterDataDir } from "../../config/dirs.ts";
+import { MAIN_THREAD, threadDataDir } from "../../config/dirs.ts";
 
 import { atomicWrite } from "../../engine/atomic.ts";
 import type { GenerateResponse, SidecarRequest } from "../../llm/types.ts";
@@ -49,7 +49,7 @@ export interface CompactionCheckpoint {
 }
 
 export function checkpointPath(dataDir: string, character: string): string {
-  return join(characterDataDir(dataDir, character), CHECKPOINT_FILE);
+  return join(threadDataDir(dataDir, character, MAIN_THREAD), CHECKPOINT_FILE);
 }
 
 export function hashCompactionSource(content: string): string {

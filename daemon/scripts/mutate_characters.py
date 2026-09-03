@@ -56,16 +56,28 @@ MUTANTS = [
      "      } catch (e) {\n        shoreLog.warn(\n          `shore: failed to prepare workspace for character ${name}: ${String(e)}`,\n        );\n      }",
      "      } catch (e) {\n        throw e;\n      }"),
     ("scan: an empty conversation keeps the snapshot it inherited",
-     "        await resetActivePromptSnapshotIfEmpty(characterDataDir(this.#dataDir, name));",
+     "        await resetActivePromptSnapshotIfEmpty(\n"
+     "          characterDataDir(this.#dataDir, name),\n"
+     "          threadDataDir(this.#dataDir, name, MAIN_THREAD),\n"
+     "        );",
      "        void resetActivePromptSnapshotIfEmpty;"),
     ("scan: every character's snapshot is dropped, live conversation or not",
-     "        await resetActivePromptSnapshotIfEmpty(characterDataDir(this.#dataDir, name));",
+     "        await resetActivePromptSnapshotIfEmpty(\n"
+     "          characterDataDir(this.#dataDir, name),\n"
+     "          threadDataDir(this.#dataDir, name, MAIN_THREAD),\n"
+     "        );",
      '        await (await import("./memory/deferred_edits.ts")).resetActivePromptSnapshot(\n'
      "          characterDataDir(this.#dataDir, name),\n"
      "        );"),
     ("scan: the snapshot is reset under the config dir, not the data dir",
-     "        await resetActivePromptSnapshotIfEmpty(characterDataDir(this.#dataDir, name));",
-     "        await resetActivePromptSnapshotIfEmpty(characterDataDir(this.#configDir, name));"),
+     "        await resetActivePromptSnapshotIfEmpty(\n"
+     "          characterDataDir(this.#dataDir, name),\n"
+     "          threadDataDir(this.#dataDir, name, MAIN_THREAD),\n"
+     "        );",
+     "        await resetActivePromptSnapshotIfEmpty(\n"
+     "          characterDataDir(this.#configDir, name),\n"
+     "          threadDataDir(this.#dataDir, name, MAIN_THREAD),\n"
+     "        );"),
     ("available: membership is case insensitive",
      "    return this.#available.includes(name);",
      "    return this.#available.some((n) => n.toLowerCase() === name.toLowerCase());"),

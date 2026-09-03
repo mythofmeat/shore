@@ -108,7 +108,7 @@ interface CanonicalCorpus {
 }
 
 export interface HistoryIndexOpenOptions {
-  characterDataDir: string;
+  conversationDir: string;
   character: string;
   dbPath: string;
   path?: string;
@@ -137,15 +137,15 @@ export async function withHistoryIndexLock<T>(path: string, run: () => Promise<T
 
 export class HistorySearchIndex {
   readonly path: string;
-  readonly characterDataDir: string;
+  readonly conversationDir: string;
   readonly ref: ConversationRef;
   #db: Database;
 
   private constructor(options: HistoryIndexOpenOptions, db: Database) {
-    this.path = options.path ?? join(options.characterDataDir, HISTORY_SEARCH_DB_FILE);
-    this.characterDataDir = options.characterDataDir;
+    this.path = options.path ?? join(options.conversationDir, HISTORY_SEARCH_DB_FILE);
+    this.conversationDir = options.conversationDir;
     this.ref = {
-      dir: options.characterDataDir,
+      dir: options.conversationDir,
       dbPath: options.dbPath,
       character: options.character,
       createHistoryDb: false,
@@ -154,7 +154,7 @@ export class HistorySearchIndex {
   }
 
   static open(options: HistoryIndexOpenOptions): HistorySearchIndex {
-    const path = options.path ?? join(options.characterDataDir, HISTORY_SEARCH_DB_FILE);
+    const path = options.path ?? join(options.conversationDir, HISTORY_SEARCH_DB_FILE);
     mkdirSync(dirname(path), { recursive: true });
     let db: Database | undefined;
     try {

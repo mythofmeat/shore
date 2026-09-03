@@ -14,6 +14,8 @@ const MEMORY_DIR = "memory";
 const ACTIVE_JSONL_FILE = "active.jsonl";
 const SEGMENTS_DIR = "segments";
 const COMPACTION_MANIFEST_FILE = "compaction.json";
+const THREADS_DIR = "threads";
+const THREADS_INDEX_FILE = "threads.json";
 const PLUGINS_DIR = "plugins";
 
 const LEGACY_CHARACTER_FILE = "character.md";
@@ -163,23 +165,40 @@ export const characterMemoryDir = (
 
 export const characterDataDir = (data: string, name: string): string => rustJoin(data, name);
 
-export const activeJsonlIn = (characterDir: string): string =>
-  rustJoin(characterDir, ACTIVE_JSONL_FILE);
+export const MAIN_THREAD = "main";
 
-export const segmentsDirIn = (characterDir: string): string =>
-  rustJoin(characterDir, SEGMENTS_DIR);
+export const characterThreadsDir = (data: string, name: string): string =>
+  rustJoin(characterDataDir(data, name), THREADS_DIR);
 
-export const compactionManifestIn = (characterDir: string): string =>
-  rustJoin(characterDir, COMPACTION_MANIFEST_FILE);
+export const characterThreadsIndex = (data: string, name: string): string =>
+  rustJoin(characterDataDir(data, name), THREADS_INDEX_FILE);
 
-export const characterActiveJsonl = (data: string, name: string): string =>
-  activeJsonlIn(characterDataDir(data, name));
+export const threadDataDir = (data: string, name: string, thread: string): string =>
+  rustJoin(characterThreadsDir(data, name), thread);
 
-export const characterSegmentsDir = (data: string, name: string): string =>
-  segmentsDirIn(characterDataDir(data, name));
+export const threadDirIn = (characterDir: string, thread: string): string =>
+  rustJoin(characterDir, THREADS_DIR, thread);
 
-export const characterCompactionManifest = (data: string, name: string): string =>
-  compactionManifestIn(characterDataDir(data, name));
+export const activeJsonlIn = (conversationDir: string): string =>
+  rustJoin(conversationDir, ACTIVE_JSONL_FILE);
+
+export const segmentsDirIn = (conversationDir: string): string =>
+  rustJoin(conversationDir, SEGMENTS_DIR);
+
+export const compactionManifestIn = (conversationDir: string): string =>
+  rustJoin(conversationDir, COMPACTION_MANIFEST_FILE);
+
+export const characterActiveJsonl = (data: string, name: string, thread: string): string =>
+  activeJsonlIn(threadDataDir(data, name, thread));
+
+export const characterSegmentsDir = (data: string, name: string, thread: string): string =>
+  segmentsDirIn(threadDataDir(data, name, thread));
+
+export const characterCompactionManifest = (
+  data: string,
+  name: string,
+  thread: string,
+): string => compactionManifestIn(threadDataDir(data, name, thread));
 
 export function isFile(path: string): boolean {
   try {

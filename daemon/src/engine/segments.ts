@@ -5,9 +5,9 @@ import { basename, join } from "node:path";
 
 import {
   activeJsonlIn,
-  characterDataDir,
   compactionManifestIn,
   segmentsDirIn,
+  threadDataDir,
 } from "../config/dirs.ts";
 
 import {
@@ -34,10 +34,11 @@ export interface ConversationRef {
 export function conversationRef(
   dataDir: string,
   character: string,
+  thread: string,
   createHistoryDb: boolean,
 ): ConversationRef {
   return {
-    dir: characterDataDir(dataDir, character),
+    dir: threadDataDir(dataDir, character, thread),
     dbPath: join(dataDir, HISTORY_DB_FILE),
     character,
     createHistoryDb,

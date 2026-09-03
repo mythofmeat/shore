@@ -9,7 +9,7 @@ import { HISTORY_DB_FILE } from "../../engine/history_store.ts";
 import { conversationRef } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
-import { characterMemoryDir } from "../../config/dirs.ts";
+import { characterDataDir, characterMemoryDir, MAIN_THREAD } from "../../config/dirs.ts";
 import { resolveDisplayName } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { configView } from "../../config/preferences.ts";
@@ -110,7 +110,7 @@ async function rotateWithoutMemoryWrite(
 
   if (!dryRun) {
     await conversationManager(
-      loaded.characterDir,
+      loaded.conversationDir,
       deps.now ?? (() => new Date().toISOString()),
       deps.newId ?? (() => crypto.randomUUID()),
       {
@@ -170,7 +170,7 @@ export async function runCompactionPass(
         userName: resolved.displayName,
         llm: resolved.llm,
         conversationMgr: conversationManager(
-          loaded.characterDir,
+          loaded.conversationDir,
           deps.now ?? (() => new Date().toISOString()),
           deps.newId ?? (() => crypto.randomUUID()),
           {
@@ -337,10 +337,10 @@ async function resolveChatRequest(
   }
 
   const hasPriorContext =
-    (await segmentCount(conversationRef(effective.dirs.data, character, false))) > 0;
+    (await segmentCount(conversationRef(effective.dirs.data, character, MAIN_THREAD, false))) > 0;
   const built = await buildChatShapeRequestFromDisk(
     character,
-    loaded.characterDir,
+    characterDataDir(effective.dirs.data, character),
     effective,
     chatModel,
     [...loaded.store.messages()],

@@ -2,7 +2,12 @@ import { shoreLog } from "../log.ts";
 
 import { join } from "node:path";
 
-import { activeJsonlIn, characterDataDir } from "../config/dirs.ts";
+import {
+  activeJsonlIn,
+  characterDataDir,
+  MAIN_THREAD,
+  threadDataDir,
+} from "../config/dirs.ts";
 
 import { HISTORY_DB_FILE } from "./history_store.ts";
 import { mergeToolLoopMessages } from "./merge";
@@ -49,6 +54,7 @@ const historyEncoder = new TextEncoder();
 export class ConversationEngine {
   readonly #characterName: string;
   readonly #characterDir: string;
+  readonly #conversationDir: string;
   readonly #historyDbPath: string;
   #messages: MessageStore;
   #segments: SegmentReader;
@@ -59,6 +65,7 @@ export class ConversationEngine {
   private constructor(
     characterName: string,
     characterDir: string,
+    conversationDir: string,
     historyDbPath: string,
     messages: MessageStore,
     segments: SegmentReader,
@@ -66,6 +73,7 @@ export class ConversationEngine {
   ) {
     this.#characterName = characterName;
     this.#characterDir = characterDir;
+    this.#conversationDir = conversationDir;
     this.#historyDbPath = historyDbPath;
     this.#messages = messages;
     this.#segments = segments;
@@ -78,10 +86,11 @@ export class ConversationEngine {
     onHistory?: HistoryListener,
   ): Promise<ConversationEngine> {
     const characterDir = characterDataDir(dataDir, characterName);
+    const conversationDir = threadDataDir(dataDir, characterName, MAIN_THREAD);
     const historyDbPath = join(dataDir, HISTORY_DB_FILE);
-    const messages = await MessageStore.load(activeJsonlIn(characterDir));
+    const messages = await MessageStore.load(activeJsonlIn(conversationDir));
     const segments = await SegmentReader.load({
-      dir: characterDir,
+      dir: conversationDir,
       dbPath: historyDbPath,
       character: characterName,
       createHistoryDb: true,
@@ -89,6 +98,7 @@ export class ConversationEngine {
     return new ConversationEngine(
       characterName,
       characterDir,
+      conversationDir,
       historyDbPath,
       messages,
       segments,
@@ -102,6 +112,10 @@ export class ConversationEngine {
 
   get characterDir(): string {
     return this.#characterDir;
+  }
+
+  get conversationDir(): string {
+    return this.#conversationDir;
   }
 
   messages(): readonly Message[] {
@@ -315,10 +329,10 @@ export class ConversationEngine {
   }
 
   async reload(): Promise<void> {
-    this.#messages = await MessageStore.load(activeJsonlIn(this.#characterDir));
+    this.#messages = await MessageStore.load(activeJsonlIn(this.#conversationDir));
     this.#segments.close();
     this.#segments = await SegmentReader.load({
-      dir: this.#characterDir,
+      dir: this.#conversationDir,
       dbPath: this.#historyDbPath,
       character: this.#characterName,
       createHistoryDb: true,

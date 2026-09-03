@@ -65,9 +65,9 @@ async function world(
   await mkdir(join(dirs.config, "characters", "ada", "workspace", "memory"), { recursive: true });
 
   const characterDir = join(dirs.data, "ada");
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   await writeFile(
-    join(characterDir, "active.jsonl"),
+    join(characterDir, "threads", "main", "active.jsonl"),
     messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
   );
 
@@ -120,7 +120,7 @@ function deps(config: LoadedConfig, over: Partial<IdleCompactionDeps> = {}): Idl
 }
 
 async function activeIds(characterDir: string): Promise<string[]> {
-  const raw = await readFile(join(characterDir, "active.jsonl"), "utf8");
+  const raw = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
   return raw
     .split("\n")
     .filter((l) => l.trim() !== "")
@@ -129,7 +129,7 @@ async function activeIds(characterDir: string): Promise<string[]> {
 
 async function segmentNames(characterDir: string): Promise<string[]> {
   try {
-    return (await readdir(join(characterDir, "segments"))).sort();
+    return (await readdir(join(characterDir, "threads", "main", "segments"))).sort();
   } catch {
     return [];
   }
@@ -262,14 +262,14 @@ describe("runIdleCompaction: reporting", () => {
   test("a pass that threw reports failed and does not throw", async () => {
     const { config, characterDir } = await world();
     config.models.chat.delete("chat.fixture");
-    const before = await readFile(join(characterDir, "active.jsonl"), "utf8");
+    const before = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
 
     const result = await runIdleCompaction("ada", deps(config));
 
     expect(result.failed).toBeDefined();
     expect(result.turnCount).toBeUndefined();
     expect(result.events).toEqual([]);
-    expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(before);
+    expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(before);
     expect(await segmentNames(characterDir)).toEqual([]);
   });
 

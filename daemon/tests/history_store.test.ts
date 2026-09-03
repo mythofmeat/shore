@@ -132,12 +132,12 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   const dataDir = testTmp(`history-durable-${crypto.randomUUID()}`);
   const characterDir = join(dataDir, "ada");
   const dbPath = join(dataDir, HISTORY_DB_FILE);
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   const messages = [message("u1", "hello"), message("a1", "hi")];
   const active = messages.map((entry) => JSON.stringify(entry)).join("\n") + "\n";
 
   await archiveAndRetain(
-    characterDir,
+    join(characterDir, "threads", "main"),
     0,
     active,
     () => "2026-08-13T10:01:00+10:00",
@@ -146,9 +146,14 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
     { dbPath, character: "ada" },
   );
 
-  expect(access(join(characterDir, "segments"))).rejects.toThrow();
-  expect(access(join(characterDir, "compaction.json"))).rejects.toThrow();
-  const reader = await SegmentReader.load({ dir: characterDir, dbPath, character: "ada", createHistoryDb: true });
+  expect(access(join(characterDir, "threads", "main", "segments"))).rejects.toThrow();
+  expect(access(join(characterDir, "threads", "main", "compaction.json"))).rejects.toThrow();
+  const reader = await SegmentReader.load({
+    dir: join(characterDir, "threads", "main"),
+    dbPath,
+    character: "ada",
+    createHistoryDb: true,
+  });
   expect(reader.segmentCount()).toBe(1);
   expect(await reader.readSegment(0)).toEqual(messages);
   reader.close();
@@ -182,13 +187,13 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
 test("legacy segments import lazily and survive removal of the source files", async () => {
   const dataDir = testTmp(`history-import-${crypto.randomUUID()}`);
   const characterDir = join(dataDir, "ada");
-  const segmentsDir = join(characterDir, "segments");
+  const segmentsDir = join(characterDir, "threads", "main", "segments");
   const dbPath = join(dataDir, HISTORY_DB_FILE);
   await mkdir(segmentsDir, { recursive: true });
   const messages = [message("u1", "old hello")];
   await writeFile(join(segmentsDir, "0001.jsonl"), `${JSON.stringify(messages[0])}\n`);
   await writeFile(
-    join(characterDir, "compaction.json"),
+    join(characterDir, "threads", "main", "compaction.json"),
     JSON.stringify({
       segments: [
         {
@@ -201,13 +206,23 @@ test("legacy segments import lazily and survive removal of the source files", as
     }),
   );
 
-  const importing = await SegmentReader.load({ dir: characterDir, dbPath, character: "ada", createHistoryDb: true });
+  const importing = await SegmentReader.load({
+    dir: join(characterDir, "threads", "main"),
+    dbPath,
+    character: "ada",
+    createHistoryDb: true,
+  });
   expect(await importing.readSegment(0)).toEqual(messages);
   importing.close();
 
   expect(access(segmentsDir)).rejects.toThrow();
-  expect(access(join(characterDir, "compaction.json"))).rejects.toThrow();
-  const durable = await SegmentReader.load({ dir: characterDir, dbPath, character: "ada", createHistoryDb: true });
+  expect(access(join(characterDir, "threads", "main", "compaction.json"))).rejects.toThrow();
+  const durable = await SegmentReader.load({
+    dir: join(characterDir, "threads", "main"),
+    dbPath,
+    character: "ada",
+    createHistoryDb: true,
+  });
   expect(await durable.readSegment(0)).toEqual(messages);
   durable.close();
 });

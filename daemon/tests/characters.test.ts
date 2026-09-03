@@ -396,7 +396,8 @@ test("a snapshot left behind on an empty conversation is dropped at registration
     writeFileSync(join(dataDir, name, "active_prompt", "MEMORY.md"), "stale index\n");
     writeFileSync(join(dataDir, name, "deferred_edits.jsonl"), '{"path":"MEMORY.md"}\n');
   }
-  writeFileSync(join(dataDir, "Bob", "active.jsonl"), '{"msg_id":"u1","role":"user"}\n');
+  mkdirSync(join(dataDir, "Bob", "threads", "main"), { recursive: true });
+  writeFileSync(join(dataDir, "Bob", "threads", "main", "active.jsonl"), '{"msg_id":"u1","role":"user"}\n');
 
   await CharacterRegistry.create(configDir, dataDir, loadFrom(join(configDir, "config.toml")));
 
@@ -412,7 +413,7 @@ test("concurrent first loads of one character resolve to the same engine", async
   mkdirSync(configDir, { recursive: true });
   writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
   writeCharacter(configDir, "Alice", true);
-  mkdirSync(join(dataDir, "Alice"), { recursive: true });
+  mkdirSync(join(dataDir, "Alice", "threads", "main"), { recursive: true });
 
   const registry = await CharacterRegistry.create(
     configDir,
@@ -437,9 +438,9 @@ test("opening a character seals tool calls interrupted by a daemon restart", asy
   mkdirSync(configDir, { recursive: true });
   writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
   writeCharacter(configDir, "Alice", true);
-  mkdirSync(join(dataDir, "Alice"), { recursive: true });
+  mkdirSync(join(dataDir, "Alice", "threads", "main"), { recursive: true });
   writeFileSync(
-    join(dataDir, "Alice", "active.jsonl"),
+    join(dataDir, "Alice", "threads", "main", "active.jsonl"),
     [
       {
         msg_id: "u1",

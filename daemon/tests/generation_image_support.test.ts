@@ -95,7 +95,7 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
   await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
   await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada");
   const charDir = join(config.dirs.data, "ada");
-  await mkdir(charDir, { recursive: true });
+  await mkdir(join(charDir, "threads", "main"), { recursive: true });
 
   if (inputs.learnRejection === true) {
     recordImageRejection(config.dirs.cache, "opencode-go", "glm-5.3");
@@ -104,7 +104,7 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
   const history = inputs.history ?? [];
   if (history.length > 0) {
     await writeFile(
-      join(charDir, "active.jsonl"),
+      join(charDir, "threads", "main", "active.jsonl"),
       history.map((m) => JSON.stringify(m)).join("\n") + "\n",
     );
   }

@@ -68,18 +68,18 @@ async function layout(
   segmentFiles: Record<string, string>,
   activeJsonl?: string,
 ): Promise<void> {
-  await mkdir(dir, { recursive: true });
+  await mkdir(join(dir, "threads", "main"), { recursive: true });
   if (Object.keys(segmentFiles).length > 0 || manifest !== null) {
-    await mkdir(join(dir, "segments"), { recursive: true });
+    await mkdir(join(dir, "threads", "main", "segments"), { recursive: true });
   }
   for (const [name, body] of Object.entries(segmentFiles)) {
-    await writeFile(join(dir, "segments", name), body);
+    await writeFile(join(dir, "threads", "main", "segments", name), body);
   }
   if (manifest !== null) {
-    await writeFile(join(dir, "compaction.json"), JSON.stringify(manifest, null, 2));
+    await writeFile(join(dir, "threads", "main", "compaction.json"), JSON.stringify(manifest, null, 2));
   }
   if (activeJsonl !== undefined) {
-    await writeFile(join(dir, "active.jsonl"), activeJsonl);
+    await writeFile(join(dir, "threads", "main", "active.jsonl"), activeJsonl);
   }
 }
 
@@ -133,7 +133,7 @@ describe("reading a conversation back off disk", () => {
       const dir = await scratch();
       await layout(dir, c.manifest, c.segment_files);
       const reader = await SegmentReader.load({
-        dir,
+        dir: join(dir, "threads", "main"),
         dbPath: join(dir, "history.db"),
         character: "ada",
         createHistoryDb: false,
@@ -267,14 +267,14 @@ async function applyOp(
     case "load":
       return;
     case "external_write": {
-      await mkdir(join(charDir, "segments"), { recursive: true });
+      await mkdir(join(charDir, "threads", "main", "segments"), { recursive: true });
       for (const [name, body] of Object.entries(
         (op["segment_files"] ?? {}) as Record<string, string>,
       )) {
-        await writeFile(join(charDir, "segments", name), body);
+        await writeFile(join(charDir, "threads", "main", "segments", name), body);
       }
       await writeFile(
-        join(charDir, "compaction.json"),
+        join(charDir, "threads", "main", "compaction.json"),
         JSON.stringify(op["manifest"], null, 2),
       );
       return;

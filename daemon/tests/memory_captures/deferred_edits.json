@@ -534,7 +534,7 @@
       },
       "before": {
         "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-        "data/active.jsonl": "e30K",
+        "data/threads/main/active.jsonl": "e30K",
         "data/active_prompt/SOUL.md": "c3RhbGUK",
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCJ9Cg=="
       },
@@ -551,7 +551,7 @@
       },
       "before": {
         "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-        "data/active.jsonl": "e30K"
+        "data/threads/main/active.jsonl": "e30K"
       },
       "after": {
         "$ref": "s1"
@@ -566,13 +566,13 @@
       },
       "before": {
         "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-        "data/active.jsonl": "",
+        "data/threads/main/active.jsonl": "",
         "data/active_prompt/SOUL.md": "c3RhbGUK",
         "data/deferred_edits.jsonl": "eyJwYXRoIjoiU09VTC5tZCJ9Cg=="
       },
       "after": {
         "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
-        "data/active.jsonl": ""
+        "data/threads/main/active.jsonl": ""
       },
       "returns": null,
       "err": null
@@ -706,7 +706,7 @@
     "s1": {
       "config/characters/Iris/workspace/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
       "config/characters/Iris/workspace/TOOLS.md": "IyBUT09MUwoKVXNlIHRvb2xzIHdoZW4gdGhleSBtYXRlcmlhbGx5IGhlbHAuCgotIFJlYWQgZmlsZXMgYmVmb3JlIGVkaXRpbmcgdGhlbS4KLSBTZWFyY2ggbWVtb3J5IGZpbGVzIGJlZm9yZSBndWVzc2luZyBmYWN0cyBhYm91dCB0aGUgdXNlciBvciBwYXN0IGV2ZW50cy4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg==",
-      "data/active.jsonl": "e30K",
+      "data/threads/main/active.jsonl": "e30K",
       "data/active_prompt/SOUL.md": "Y2Fub25pY2FsIHNvdWwK",
       "data/active_prompt/TOOLS.md": "IyBUT09MUwoKVXNlIHRvb2xzIHdoZW4gdGhleSBtYXRlcmlhbGx5IGhlbHAuCgotIFJlYWQgZmlsZXMgYmVmb3JlIGVkaXRpbmcgdGhlbS4KLSBTZWFyY2ggbWVtb3J5IGZpbGVzIGJlZm9yZSBndWVzc2luZyBmYWN0cyBhYm91dCB0aGUgdXNlciBvciBwYXN0IGV2ZW50cy4KLSBQcmVmZXIgY29uY2lzZSwgZGlyZWN0IHRvb2wgdXNlIG92ZXIgYnVzeXdvcmsuCg=="
     }

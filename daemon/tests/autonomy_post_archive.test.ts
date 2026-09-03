@@ -67,9 +67,9 @@ async function world(): Promise<{ config: LoadedConfig; characterDir: string }> 
   await writeFile(join(workspace, "SOUL.md"), "# Ada\n");
 
   const characterDir = join(dirs.data, "ada");
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   await writeFile(
-    join(characterDir, "active.jsonl"),
+    join(characterDir, "threads", "main", "active.jsonl"),
     conversation()
       .map((m) => JSON.stringify(m))
       .join("\n") + "\n",
@@ -117,7 +117,7 @@ function writingProvider(): SidecarProvider {
 }
 
 async function activeIds(characterDir: string): Promise<string[]> {
-  const raw = await readFile(join(characterDir, "active.jsonl"), "utf8");
+  const raw = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
   return raw
     .split("\n")
     .filter((l) => l.trim() !== "")

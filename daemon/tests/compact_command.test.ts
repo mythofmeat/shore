@@ -44,6 +44,7 @@ interface World {
   ctx: CompactContext;
   completed: [string, number][];
   charDataDir: string;
+  conversationDir: string;
 }
 
 async function world(messages: unknown[]): Promise<World> {
@@ -57,12 +58,13 @@ async function world(messages: unknown[]): Promise<World> {
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
 
   const charDataDir = join(dirs.data, "ada");
-  await mkdir(charDataDir, { recursive: true });
+  const conversationDir = join(charDataDir, "threads", "main");
+  await mkdir(join(charDataDir, "threads", "main"), { recursive: true });
   const workspace = join(dirs.config, "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "# ada");
   await writeFile(
-    join(charDataDir, "active.jsonl"),
+    join(charDataDir, "threads", "main", "active.jsonl"),
     messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
   );
 
@@ -82,6 +84,7 @@ async function world(messages: unknown[]): Promise<World> {
     engine,
     completed,
     charDataDir,
+    conversationDir,
     ctx: {
       config,
       autonomy: {
@@ -98,10 +101,16 @@ async function world(messages: unknown[]): Promise<World> {
 
 async function listing(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
-  return entries
-    .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
-    .filter((name) => name !== "autonomy_state.json")
-    .sort();
+  const names: string[] = [];
+  for (const e of entries) {
+    if (e.name === "threads") {
+      const inner = await readdir(join(dir, "threads", "main"), { withFileTypes: true });
+      names.push(...inner.map((i) => (i.isDirectory() ? `${i.name}/` : i.name)));
+      continue;
+    }
+    names.push(e.isDirectory() ? `${e.name}/` : e.name);
+  }
+  return names.filter((name) => name !== "autonomy_state.json").sort();
 }
 
 async function refusal(call: () => Promise<unknown>): Promise<Record<string, unknown>> {
@@ -279,7 +288,7 @@ describe("buildCompactionResponse", () => {
 
   test("a deferred-edit failure only warns; the pass still succeeded", async () => {
     const w = await world(SEEDED);
-    w.ctx.config.dirs.config = join(w.charDataDir, "active.jsonl");
+    w.ctx.config.dirs.config = join(w.charDataDir, "threads", "main", "active.jsonl");
 
     const got = await buildCompactionResponse(w.engine, w.ctx, "ada", outcomeFor({
       status: "compacted",

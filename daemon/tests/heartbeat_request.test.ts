@@ -220,12 +220,12 @@ function message(role: "user" | "assistant", id: string, text: string): Message 
 
 async function withConversation(config: LoadedConfig): Promise<void> {
   const characterDir = join(config.dirs.data, "alice");
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   await mkdir(join(config.dirs.config, "characters", "alice", "workspace", "memory"), {
     recursive: true,
   });
   await writeFile(
-    join(characterDir, "active.jsonl"),
+    join(characterDir, "threads", "main", "active.jsonl"),
     [message("user", "m_1", "hi"), message("assistant", "m_2", "hello")]
       .map((m) => JSON.stringify(m))
       .join("\n") + "\n",
@@ -381,9 +381,9 @@ describe("preparing a heartbeat body", () => {
   test("skips the tick when the conversation is mid-turn", async () => {
     const config = await baseConfig();
     const characterDir = join(config.dirs.data, "alice");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       JSON.stringify(message("user", "m_1", "you there?")) + "\n",
     );
 

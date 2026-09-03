@@ -74,9 +74,9 @@ function message(timestamp: string): Message {
 async function engineWith(timestamps: string[]): Promise<ConversationEngine> {
   const root = mkdtempSync(testTmp("shore-conversation-spend-"));
   const charDir = join(root, "aria");
-  mkdirSync(charDir, { recursive: true });
+  mkdirSync(join(charDir, "threads", "main"), { recursive: true });
   writeFileSync(
-    join(charDir, "active.jsonl"),
+    join(charDir, "threads", "main", "active.jsonl"),
     timestamps.map((t) => JSON.stringify(message(t))).join("\n") + (timestamps.length ? "\n" : ""),
   );
   return await ConversationEngine.load("aria", root);

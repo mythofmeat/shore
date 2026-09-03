@@ -8,7 +8,7 @@ import { join } from "node:path";
 import rawFixture from "./handler_captures/generation.json" with { type: "json" };
 const fixture = expandShared<typeof rawFixture>(rawFixture);
 import { ConversationEngine } from "../src/engine/conversation.ts";
-import { characterActiveJsonl } from "../src/config/dirs.ts";
+import { characterActiveJsonl, MAIN_THREAD } from "../src/config/dirs.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import {
@@ -358,13 +358,13 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
   await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada system prompt");
   const charDir = join(config.dirs.data, "ada");
-  await mkdir(charDir, { recursive: true });
+  await mkdir(join(charDir, "threads", "main"), { recursive: true });
 
   const history = turnInput.history;
   seededTimestamps = new Set(history.map((m) => m.timestamp));
   if (history.length > 0) {
     await writeFile(
-      join(charDir, "active.jsonl"),
+      join(charDir, "threads", "main", "active.jsonl"),
       history.map((m) => JSON.stringify(m)).join("\n") + "\n",
     );
   }
@@ -764,7 +764,7 @@ test("a failed tool loop is durable before the final answer and repaired after r
   });
 
   expect(run.error).toBeDefined();
-  const raw = await Bun.file(characterActiveJsonl(run.dataDir, "ada")).text();
+  const raw = await Bun.file(characterActiveJsonl(run.dataDir, "ada", MAIN_THREAD)).text();
   const durable = raw.trim().split("\n").map((line) => JSON.parse(line) as Message);
   expect(durable.map((message) => message.role)).toEqual(["user", "assistant"]);
   expect(durable[1]?.content_blocks).toEqual([
@@ -924,7 +924,7 @@ test("a turn with no model configured leaves the conversation untouched", async 
 
   expect(run).rejects.toThrow(NO_CHAT_MODELS_MESSAGE);
 
-  expect(existsSync(characterActiveJsonl(config.dirs.data, "ada"))).toBe(false);
+  expect(existsSync(characterActiveJsonl(config.dirs.data, "ada", MAIN_THREAD))).toBe(false);
   expect(engine.messages()).toEqual([]);
   expect(broadcast).toEqual([]);
   expect(direct).toEqual([]);

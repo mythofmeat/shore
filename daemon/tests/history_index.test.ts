@@ -59,8 +59,9 @@ function archive(characterDir: string, index: number, messages: Message[]): void
 }
 
 async function activeWindow(characterDir: string, messages: Message[]): Promise<void> {
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   await writeFile(
-    join(characterDir, "active.jsonl"),
+    join(characterDir, "threads", "main", "active.jsonl"),
     messages.map((item) => JSON.stringify(item)).join("\n") + "\n",
   );
 }
@@ -163,7 +164,7 @@ describe("history search index", () => {
     ]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
     const embedder = new FakeEmbedder();
-    const index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
+    const index = HistorySearchIndex.open({ conversationDir: dir, ...identity(dir), path });
     await index.reconcile();
     expect(await index.embedPending(embedder)).toBe(2);
     index.close();
@@ -196,7 +197,7 @@ describe("history search index", () => {
         `2026-08-13T00:${String(index % 60).padStart(2, "0")}:00Z`,
       ),
     ));
-    const index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir) });
+    const index = HistorySearchIndex.open({ conversationDir: dir, ...identity(dir) });
     const embedder = new FakeEmbedder();
     await index.reconcile();
     let embedded: number;
@@ -344,13 +345,13 @@ describe("history search index", () => {
     const dir = await character([first]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
     const embedder = new FakeEmbedder();
-    let index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
+    let index = HistorySearchIndex.open({ conversationDir: dir, ...identity(dir), path });
     await index.reconcile();
     await index.embedPending(embedder);
     index.close();
 
     archive(dir, 0, [first, message("u2", "user", "new note", "2026-08-13T00:01:00Z")]);
-    index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
+    index = HistorySearchIndex.open({ conversationDir: dir, ...identity(dir), path });
     await index.reconcile();
     expect(index.diagnostics(embedder)).toEqual({
       indexed_chunks: 1,
@@ -364,7 +365,7 @@ describe("history search index", () => {
     const dir = await character([message("u1", "user", "stable orchard", "2026-08-13T00:00:00Z")]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
     const first = new FakeEmbedder();
-    let index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
+    let index = HistorySearchIndex.open({ conversationDir: dir, ...identity(dir), path });
     await index.reconcile();
     await index.embedPending(first);
     expect(index.diagnostics(first).pending_chunks).toBe(0);
@@ -375,7 +376,7 @@ describe("history search index", () => {
       dimensions: 2,
       embed: async (inputs) => inputs.map(() => [0, 1]),
     };
-    index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
+    index = HistorySearchIndex.open({ conversationDir: dir, ...identity(dir), path });
     expect(index.diagnostics(second).pending_chunks).toBe(1);
     await index.embedPending(second);
     expect(index.diagnostics(second).pending_chunks).toBe(0);
@@ -392,7 +393,7 @@ describe("history search index", () => {
     ]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
     const embedder = new FakeEmbedder();
-    const index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
+    const index = HistorySearchIndex.open({ conversationDir: dir, ...identity(dir), path });
     await index.reconcile();
     const total = index.diagnostics(embedder).total_chunks;
     expect(total).toBeGreaterThan(2);
@@ -429,20 +430,20 @@ describe("history search index", () => {
     const service = new HistoryIndexService({ now: () => now, idleDelayMs: 30_000, batchPauseMs: 1 });
     service.register({
       character: "one",
-      characterDataDir: firstDir,
+      conversationDir: firstDir,
       dbPath: dbPathFor(firstDir),
       indexPath: join(firstDir, HISTORY_SEARCH_DB_FILE),
       embedder: embedderFor("one"),
     });
     service.register({
       character: "two",
-      characterDataDir: secondDir,
+      conversationDir: secondDir,
       dbPath: dbPathFor(secondDir),
       indexPath: join(secondDir, HISTORY_SEARCH_DB_FILE),
       embedder: embedderFor("two"),
     });
     const settled = HistorySearchIndex.open({
-      characterDataDir: firstDir,
+      conversationDir: firstDir,
       ...identity(firstDir),
       path: join(firstDir, HISTORY_SEARCH_DB_FILE),
     });
@@ -476,7 +477,7 @@ describe("history search index", () => {
     });
     service.register({
       character: "ada",
-      characterDataDir: dir,
+      conversationDir: dir,
       dbPath: dbPathFor(dir),
       indexPath: path,
       embedder,
@@ -504,7 +505,7 @@ describe("history search index", () => {
     const service = new HistoryIndexService({ now: () => 0, idleDelayMs: 0, batchPauseMs: 1 });
     service.register({
       character: "ada",
-      characterDataDir: dir,
+      conversationDir: dir,
       dbPath: dbPathFor(dir),
       indexPath: join(dir, HISTORY_SEARCH_DB_FILE),
       embedder: {
@@ -535,7 +536,7 @@ describe("history search index", () => {
     });
     service.register({
       character: "ada",
-      characterDataDir: dir,
+      conversationDir: dir,
       dbPath: dbPathFor(dir),
       indexPath: path,
       embedder: new FakeEmbedder(),
@@ -577,7 +578,7 @@ describe("history search index", () => {
     const service = new HistoryIndexService({ now: () => now, idleDelayMs: 30_000, batchPauseMs: 1 });
     service.register({
       character: "ada",
-      characterDataDir: dir,
+      conversationDir: dir,
       dbPath: dbPathFor(dir),
       indexPath: path,
       embedder,
@@ -616,7 +617,7 @@ describe("history search index", () => {
     const service = new HistoryIndexService({ now: () => now, idleDelayMs: 30_000 });
     service.register({
       character: "ada",
-      characterDataDir: dir,
+      conversationDir: dir,
       dbPath: dbPathFor(dir),
       indexPath: path,
       embedder,

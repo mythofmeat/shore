@@ -41,7 +41,7 @@ function user(text: string): Message {
 async function inTemp<T>(fn: (path: string) => Promise<T>): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), "shore-altthink-"));
   try {
-    return await fn(join(dir, "active.jsonl"));
+    return await fn(join(dir, "threads", "main", "active.jsonl"));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
