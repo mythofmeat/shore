@@ -15,6 +15,7 @@ pub enum ConnEvent {
         active_start: usize,
         config: serde_json::Value,
         selected_character: Option<String>,
+        selected_thread: Option<String>,
     },
     Message(ServerMessage),
     SendFailed(ClientMessage),
@@ -33,6 +34,7 @@ pub fn spawn_connection(
     client_id: &str,
     app_name: &str,
     character: Option<String>,
+    thread: Option<String>,
 ) -> (mpsc::Sender<ConnCommand>, mpsc::Receiver<ConnEvent>) {
     let (event_tx, event_rx) = mpsc::channel(256);
     let (cmd_tx, cmd_rx) = mpsc::channel(64);
@@ -41,10 +43,29 @@ pub fn spawn_connection(
     let owned_app = app_name.to_owned();
 
     let _ignored = tokio::spawn(connection_loop(
-        addr, config, owned_id, owned_app, character, event_tx, cmd_rx,
+        addr,
+        config,
+        owned_id,
+        owned_app,
+        SessionTarget { character, thread },
+        event_tx,
+        cmd_rx,
     ));
 
     (cmd_tx, event_rx)
+}
+
+#[derive(Debug, Clone, Default)]
+struct SessionTarget {
+    character: Option<String>,
+    thread: Option<String>,
+}
+
+impl SessionTarget {
+    fn follow(&mut self, sync_state: &SyncState) {
+        self.character = reconnect_target(sync_state, self.character.take());
+        self.thread = reconnect_thread(sync_state, self.thread.take());
+    }
 }
 
 fn next_backoff(current: Duration, max: Duration) -> Duration {
@@ -65,6 +86,10 @@ fn reconnect_target(sync_state: &SyncState, previous: Option<String>) -> Option<
         .or(previous)
 }
 
+fn reconnect_thread(sync_state: &SyncState, previous: Option<String>) -> Option<String> {
+    sync_state.selected_thread().map(str::to_owned).or(previous)
+}
+
 enum SessionOutcome {
     Exit,
     Reconnect,
@@ -75,13 +100,12 @@ async fn connection_loop(
     config: Option<String>,
     client_id: String,
     app_name: String,
-    character: Option<String>,
+    mut target: SessionTarget,
     event_tx: mpsc::Sender<ConnEvent>,
     mut cmd_rx: mpsc::Receiver<ConnCommand>,
 ) {
     let mut backoff = Duration::from_millis(500);
     let max_backoff = Duration::from_secs(15);
-    let mut target_character = character;
 
     loop {
         let resolved = match resolve_addr(addr.as_deref(), config.as_deref()) {
@@ -100,8 +124,14 @@ async fn connection_loop(
         };
         info!(addr = ?resolved, client = %app_name, "attempting connection");
 
-        match SWPConnection::connect(&resolved, &client_id, &app_name, target_character.clone())
-            .await
+        match SWPConnection::connect_in_thread(
+            &resolved,
+            &client_id,
+            &app_name,
+            target.character.clone(),
+            target.thread.clone(),
+        )
+        .await
         {
             Ok((mut conn, hello, history)) => {
                 info!(
@@ -111,8 +141,11 @@ async fn connection_loop(
                     "connected to daemon"
                 );
                 backoff = Duration::from_millis(500);
-                let mut sync_state =
-                    SyncState::new(history.revision, history.selected_character.as_deref());
+                let mut sync_state = SyncState::new(
+                    history.revision,
+                    history.selected_character.as_deref(),
+                    history.selected_thread.as_deref(),
+                );
 
                 let _connected_sent = event_tx
                     .send(ConnEvent::Connected {
@@ -122,13 +155,14 @@ async fn connection_loop(
                         active_start: history.active_start,
                         config: history.config,
                         selected_character: history.selected_character,
+                        selected_thread: history.selected_thread,
                     })
                     .await;
 
                 let outcome =
                     run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync_state).await;
 
-                target_character = reconnect_target(&sync_state, target_character);
+                target.follow(&sync_state);
 
                 match outcome {
                     SessionOutcome::Exit => return,
@@ -266,7 +300,7 @@ mod tests {
 
     #[test]
     fn reconnect_target_follows_the_session() {
-        let sync = SyncState::new(3, Some("poppy"));
+        let sync = SyncState::new(3, Some("poppy"), Some("eval"));
         assert_eq!(
             reconnect_target(&sync, Some("Yuna".into())),
             Some("poppy".into())
@@ -275,12 +309,28 @@ mod tests {
 
     #[test]
     fn reconnect_target_keeps_the_startup_character_when_none_was_selected() {
-        let sync = SyncState::new(0, None);
+        let sync = SyncState::new(0, None, None);
         assert_eq!(
             reconnect_target(&sync, Some("Yuna".into())),
             Some("Yuna".into())
         );
         assert_eq!(reconnect_target(&sync, None), None);
+    }
+
+    #[test]
+    fn reconnect_thread_follows_the_session_then_falls_back_to_the_startup_thread() {
+        let sync = SyncState::new(3, Some("poppy"), Some("eval"));
+        assert_eq!(
+            reconnect_thread(&sync, Some("main".into())),
+            Some("eval".into())
+        );
+
+        let unselected = SyncState::new(0, None, None);
+        assert_eq!(
+            reconnect_thread(&unselected, Some("eval".into())),
+            Some("eval".into())
+        );
+        assert_eq!(reconnect_thread(&unselected, None), None);
     }
 
     #[tokio::test]
@@ -290,7 +340,7 @@ mod tests {
         let mut conn = SWPConnection::from_raw_stream(client);
         let (event_tx, mut event_rx) = mpsc::channel(1);
         let (cmd_tx, mut cmd_rx) = mpsc::channel(1);
-        let mut sync_state = SyncState::new(0, None);
+        let mut sync_state = SyncState::new(0, None, None);
         let message = ClientMessage::Message(ClientMessageBody {
             rid: None,
             text: "keep this".into(),

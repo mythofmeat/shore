@@ -1292,6 +1292,14 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .borders(Borders::TOP)
         .title(mode_label)
         .border_style(Style::default().fg(border_color));
+    if app.in_side_thread() {
+        block = block.title(Span::styled(
+            format!(" \u{2387} {} ", app.thread_name),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
     let mut indicators: Vec<(String, Color)> = Vec::new();
     if img_count > 0 {
         indicators.push((
@@ -5366,6 +5374,50 @@ pub(crate) mod scenario_tests {
         assert!(f.contains("▶"), "tool call arrow present");
         assert!(f.contains("web_search"), "tool name present");
         assert!(f.contains("◀"), "tool result arrow present");
+    }
+
+    #[test]
+    fn a_side_thread_is_named_on_the_input_border() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "qifei".into();
+        h.app.home_thread = "main".into();
+        h.app.thread_name = "eval".into();
+
+        let f = h.render("in a side thread");
+
+        assert!(
+            f.contains("eval"),
+            "the thread you are in has to be visible"
+        );
+    }
+
+    #[test]
+    fn the_home_thread_adds_no_chrome() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "qifei".into();
+        h.app.home_thread = "main".into();
+        h.app.thread_name = "main".into();
+
+        let f = h.render("at home");
+
+        assert!(
+            !f.contains("\u{2387}"),
+            "home is the default and earns no badge",
+        );
+    }
+
+    #[test]
+    fn a_thread_with_no_known_home_stays_quiet_rather_than_guessing() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "qifei".into();
+        h.app.thread_name = "eval".into();
+
+        let f = h.render("home not yet known");
+
+        assert!(!f.contains("\u{2387}"));
     }
 
     #[test]

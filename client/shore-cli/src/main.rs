@@ -88,7 +88,7 @@ fn main() -> ExitCode {
             .block_on(run::execute(cli.character, cli.thread, cli.addr, command))
             .map(|()| ExitCode::SUCCESS),
         None => rt
-            .block_on(tui::run(cli.addr, cli.character))
+            .block_on(tui::run(cli.addr, cli.character, cli.thread))
             .map_err(Into::into),
     };
     match outcome {

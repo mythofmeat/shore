@@ -9,14 +9,20 @@ pub(crate) enum SyncDecision {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SyncState {
     selected_character: Option<String>,
+    selected_thread: Option<String>,
     message_revision: u64,
     snapshot_revision: u64,
 }
 
 impl SyncState {
-    pub(crate) fn new(initial_revision: u64, selected_character: Option<&str>) -> Self {
+    pub(crate) fn new(
+        initial_revision: u64,
+        selected_character: Option<&str>,
+        selected_thread: Option<&str>,
+    ) -> Self {
         Self {
             selected_character: selected_character.map(str::to_owned),
+            selected_thread: selected_thread.map(str::to_owned),
             message_revision: initial_revision,
             snapshot_revision: initial_revision,
         }
@@ -26,6 +32,10 @@ impl SyncState {
         self.selected_character.as_deref()
     }
 
+    pub(crate) fn selected_thread(&self) -> Option<&str> {
+        self.selected_thread.as_deref()
+    }
+
     pub(crate) fn latest_revision(&self) -> u64 {
         self.message_revision.max(self.snapshot_revision)
     }
@@ -33,9 +43,13 @@ impl SyncState {
     pub(crate) fn observe(&mut self, msg: &ServerMessage) -> SyncDecision {
         match msg {
             ServerMessage::History(history) => {
-                if history.selected_character != self.selected_character {
+                let moved = history.selected_character != self.selected_character
+                    || (history.selected_thread.is_some()
+                        && history.selected_thread != self.selected_thread);
+                if moved {
                     self.selected_character
                         .clone_from(&history.selected_character);
+                    self.selected_thread.clone_from(&history.selected_thread);
                     self.message_revision = history.revision;
                     self.snapshot_revision = history.revision;
                     return SyncDecision::Deliver;
@@ -104,7 +118,7 @@ mod tests {
 
     #[test]
     fn drops_stale_history_snapshots() {
-        let mut sync = SyncState::new(5, Some("alice"));
+        let mut sync = SyncState::new(5, Some("alice"), None);
         let stale = ServerMessage::History(History {
             rid: None,
             messages: vec![message("m1")],
@@ -121,7 +135,7 @@ mod tests {
 
     #[test]
     fn accepts_newer_history_snapshots() {
-        let mut sync = SyncState::new(5, Some("alice"));
+        let mut sync = SyncState::new(5, Some("alice"), None);
         let newer = ServerMessage::History(History {
             rid: None,
             messages: vec![message("m1")],
@@ -138,7 +152,7 @@ mod tests {
 
     #[test]
     fn drops_new_message_when_snapshot_already_covers_it() {
-        let mut sync = SyncState::new(6, Some("alice"));
+        let mut sync = SyncState::new(6, Some("alice"), None);
         let message = ServerMessage::NewMessage(NewMessage {
             revision: 6,
             character: Some("alice".into()),
@@ -170,7 +184,7 @@ mod tests {
 
     #[test]
     fn history_does_not_shadow_paired_new_message_at_same_revision() {
-        let mut sync = SyncState::new(5, Some("alice"));
+        let mut sync = SyncState::new(5, Some("alice"), None);
 
         assert_eq!(sync.observe(&history(6)), SyncDecision::Deliver);
         assert_eq!(sync.observe(&new_message(6)), SyncDecision::Deliver);
@@ -181,7 +195,7 @@ mod tests {
 
     #[test]
     fn new_message_dedupes_against_delivered_messages() {
-        let mut sync = SyncState::new(5, Some("alice"));
+        let mut sync = SyncState::new(5, Some("alice"), None);
 
         assert_eq!(sync.observe(&new_message(6)), SyncDecision::Deliver);
         assert_eq!(sync.observe(&new_message(6)), SyncDecision::DropStale);
@@ -190,7 +204,7 @@ mod tests {
 
     #[test]
     fn switching_character_resets_independent_revision_watermarks() {
-        let mut sync = SyncState::new(650, Some("poppy"));
+        let mut sync = SyncState::new(650, Some("poppy"), None);
         let switched = ServerMessage::History(History {
             rid: None,
             messages: vec![message("y1")],
@@ -206,8 +220,60 @@ mod tests {
     }
 
     #[test]
+    fn switching_thread_resets_the_watermark_even_when_the_new_thread_is_behind() {
+        let mut sync = SyncState::new(40, Some("alice"), Some("main"));
+        let switched = ServerMessage::History(History {
+            rid: None,
+            messages: vec![message("e1")],
+            active_start: 0,
+            config: serde_json::json!({}),
+            selected_character: Some("alice".into()),
+            selected_thread: Some("eval".into()),
+            revision: 2,
+        });
+
+        assert_eq!(sync.observe(&switched), SyncDecision::Deliver);
+        assert_eq!(sync.latest_revision(), 2);
+        assert_eq!(sync.selected_thread(), Some("eval"));
+    }
+
+    #[test]
+    fn staying_in_the_same_thread_still_drops_a_stale_snapshot() {
+        let mut sync = SyncState::new(5, Some("alice"), Some("eval"));
+        let stale = ServerMessage::History(History {
+            rid: None,
+            messages: vec![message("m1")],
+            active_start: 0,
+            config: serde_json::json!({}),
+            selected_character: Some("alice".into()),
+            selected_thread: Some("eval".into()),
+            revision: 4,
+        });
+
+        assert_eq!(sync.observe(&stale), SyncDecision::DropStale);
+        assert_eq!(sync.latest_revision(), 5);
+    }
+
+    #[test]
+    fn a_daemon_that_names_no_thread_never_looks_like_a_move() {
+        let mut sync = SyncState::new(5, Some("alice"), Some("eval"));
+        let quiet = ServerMessage::History(History {
+            rid: None,
+            messages: vec![message("m1")],
+            active_start: 0,
+            config: serde_json::json!({}),
+            selected_character: Some("alice".into()),
+            selected_thread: None,
+            revision: 4,
+        });
+
+        assert_eq!(sync.observe(&quiet), SyncDecision::DropStale);
+        assert_eq!(sync.selected_thread(), Some("eval"));
+    }
+
+    #[test]
     fn drops_new_messages_for_another_character() {
-        let mut sync = SyncState::new(5, Some("alice"));
+        let mut sync = SyncState::new(5, Some("alice"), None);
         let foreign = ServerMessage::NewMessage(NewMessage {
             revision: 99,
             character: Some("bob".into()),
