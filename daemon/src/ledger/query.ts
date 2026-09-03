@@ -223,6 +223,31 @@ export function usageSummary(
   }));
 }
 
+export interface CostSourceTotals {
+  cost_source: string;
+  calls: number;
+  unpriced_calls: number;
+  total_cost: number;
+}
+
+export function costSourceTotals(db: Database, filter: QueryFilter): CostSourceTotals[] {
+  const { where, values } = buildWhere(filter);
+  const sql = `SELECT COALESCE(cost_source, 'unknown') AS source,
+                      COUNT(*) AS calls,
+                      COALESCE(SUM(CASE WHEN total_cost IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+                      TOTAL(total_cost) AS total_cost
+                 FROM calls
+                 ${where}
+                GROUP BY source
+                ORDER BY total_cost DESC, calls DESC, source ASC`;
+  return rows(db, sql, values).map((r) => ({
+    cost_source: text(r["source"]),
+    calls: count(r["calls"]),
+    unpriced_calls: count(r["unpriced"]),
+    total_cost: typeof r["total_cost"] === "number" ? r["total_cost"] : 0,
+  }));
+}
+
 export interface AnomalyCount {
   anomaly: string;
   calls: number;
@@ -276,7 +301,8 @@ export type UsageDimension =
   | "provider"
   | "call_type"
   | "kind"
-  | "api_key";
+  | "api_key"
+  | "cost_source";
 
 export interface GroupedUsage extends UsageTotals {
   group: string;
@@ -288,6 +314,7 @@ const DIMENSION_EXPR: Record<UsageDimension, string> = {
   call_type: "call_type",
   kind: USAGE_KIND_EXPR,
   api_key: "provider || ' ' || COALESCE(api_key_name, 'unknown')",
+  cost_source: "COALESCE(cost_source, 'unknown')",
 };
 
 export function isUsageDimension(value: string): value is UsageDimension {

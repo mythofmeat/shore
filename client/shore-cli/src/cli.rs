@@ -963,6 +963,7 @@ pub(crate) enum UsageDimension {
     CallType,
     Kind,
     ApiKey,
+    CostSource,
 }
 
 impl UsageDimension {
@@ -973,13 +974,14 @@ impl UsageDimension {
             Self::CallType => "call_type",
             Self::Kind => "kind",
             Self::ApiKey => "api_key",
+            Self::CostSource => "cost_source",
         }
     }
 }
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum UsageCommand {
-    /// Group spend by a dimension: model, provider, call-type, kind, api-key
+    /// Group spend by a dimension: model, provider, call-type, kind, api-key, cost-source
     By {
         /// What to group by
         #[arg(value_enum)]
@@ -5564,6 +5566,7 @@ mod tests {
             ("call-type", "call_type"),
             ("kind", "kind"),
             ("api-key", "api_key"),
+            ("cost-source", "cost_source"),
         ] {
             let (cmd, args) =
                 to_swp_command(parsed_command(&parse(&["usage", "by", typed])), None).unwrap();

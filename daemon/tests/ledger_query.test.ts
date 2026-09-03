@@ -6,6 +6,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import {
   activeAnthropicCharacters,
   allCostRows,
+  costSourceTotals,
   exportTsv,
   modelUsageSummary,
   nullCostRows,
@@ -326,5 +327,55 @@ describe("cache health readers", () => {
       { ...BASE, ts: "2026-04-05T10:03:00Z", finish_reason: "end_turn", total_cost: null },
     ]);
     expect(warmStreak(db, "aria")).toBe(3);
+  });
+});
+
+describe("where a cost came from", () => {
+  test("spend is split by cost source, and unpriced rows are counted", () => {
+    const db = ledgerWith([
+      BASE,
+      { ...BASE, ts: "2026-04-05T10:01:00Z", cost_source: "provider_reported", total_cost: 0.5 },
+      {
+        ...BASE,
+        ts: "2026-04-05T10:02:00Z",
+        cost_source: "pricing_catalog",
+        input_cost: null,
+        output_cost: null,
+        cache_read_cost: null,
+        cache_write_cost: null,
+        total_cost: null,
+      },
+      { ...BASE, ts: "2026-04-05T10:03:00Z", cost_source: "subscription", total_cost: 0 },
+    ]);
+    const bySource = new Map(
+      costSourceTotals(db, {}).map((r) => [r.cost_source, r]),
+    );
+
+    expect(required(bySource.get("provider_reported")).total_cost).toBe(0.5);
+    expect(required(bySource.get("provider_reported")).unpriced_calls).toBe(0);
+
+    const catalog = required(bySource.get("pricing_catalog"));
+    expect(catalog.calls).toBe(2);
+    expect(catalog.unpriced_calls).toBe(1);
+    expect(catalog.total_cost).toBe(0.005745);
+
+    expect(required(bySource.get("subscription")).calls).toBe(1);
+  });
+
+  test("a row with no cost source is reported rather than dropped", () => {
+    const db = ledgerWith([{ ...BASE, cost_source: null, total_cost: 0.25 }]);
+    const rows = costSourceTotals(db, {});
+    expect(rows).toHaveLength(1);
+    expect(required(rows[0]).cost_source).toBe("unknown");
+    expect(required(rows[0]).total_cost).toBe(0.25);
+  });
+
+  test("cost source groups like any other usage dimension", () => {
+    const db = ledgerWith([
+      BASE,
+      { ...BASE, ts: "2026-04-05T10:01:00Z", cost_source: "provider_reported", total_cost: 0.5 },
+    ]);
+    const groups = usageSummaryBy(db, {}, "cost_source").map((g) => g.group);
+    expect(groups.sort()).toEqual(["pricing_catalog", "provider_reported"]);
   });
 });
