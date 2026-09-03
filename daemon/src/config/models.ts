@@ -26,6 +26,7 @@ import {
   ZAI_SUB_PROVIDER,
   ZAI_SUBSCRIPTION_SETTING_MIGRATION,
 } from "../llm/providers/zai_config.ts";
+import { NANOGPT_BASE_URL, NANOGPT_PROVIDER } from "../llm/providers/nanogpt_config.ts";
 
 export type { Sdk };
 export { SDK_VARIANTS, sdkFromWire };
@@ -666,13 +667,13 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
           zaiClearThinking: false,
         },
       };
-    case "nanogpt":
+    case NANOGPT_PROVIDER:
       return {
         fields: {
           ...base,
           sdk: "nanogpt",
           apiKeyEnv: "NANOGPT_API_KEY",
-          baseUrl: "https://nano-gpt.com/api/v1",
+          baseUrl: NANOGPT_BASE_URL,
         },
       };
     case "opencode-go":

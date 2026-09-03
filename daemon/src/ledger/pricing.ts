@@ -1,14 +1,13 @@
 import { shoreLog } from "../log.ts";
 
+import { NANOGPT_MODELS_URL, NANOGPT_PROVIDER } from "../llm/providers/nanogpt_config.ts";
+
 const ANTHROPIC_1H_CACHE_WRITE_MULTIPLIER = 1.6;
 
 const ANTHROPIC_5M_CACHE_WRITE_RATIO = 1.25;
 
 const OPENROUTER_CATALOG_URL = "https://openrouter.ai/api/v1/models";
 
-const NANOGPT_CATALOG_URL = "https://nano-gpt.com/api/v1/models?detailed=true";
-
-const NANOGPT_PROVIDER = "nanogpt";
 
 export interface ModelPricing {
   input_per_token: number;
@@ -167,7 +166,7 @@ const OPENROUTER_SOURCE: CatalogSource = {
 };
 
 const NANOGPT_SOURCE: CatalogSource = {
-  url: NANOGPT_CATALOG_URL,
+  url: NANOGPT_MODELS_URL,
   key: (id) => `${NANOGPT_PROVIDER}/${id}`,
   read: nanoGptPricing,
 };

@@ -1,6 +1,7 @@
 import { shoreLog } from "../log.ts";
 
 import { toRfc3339 } from "../ledger/zoned.ts";
+import { isNanoGptProvider, NANOGPT_MODELS_QUERY } from "./providers/nanogpt_config.ts";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -363,7 +364,7 @@ async function fetchModels(
 
 export function buildModelsUrl(baseUrl: string, providerKey?: string): string {
   const url = `${trimTrailingSlashes(baseUrl)}/models`;
-  return providerKey === "nanogpt" ? `${url}?detailed=true` : url;
+  return isNanoGptProvider(providerKey ?? "") ? `${url}${NANOGPT_MODELS_QUERY}` : url;
 }
 
 export function buildAnthropicModelsUrl(baseUrl: string): string {
