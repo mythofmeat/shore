@@ -116,8 +116,8 @@ MUTANTS = [
 
     # --- the rid --------------------------------------------------------------
     ("rid: the character path drops it, as the Rust's characterless path did",
-     "  return frameWithRid(frame, rid);\n}\n\nasync function switchCharacterCommand(",
-     "  return frame;\n}\n\nasync function switchCharacterCommand("),
+     "  return frameWithRid(frame, rid);\n}\n\nexport function liveThread(",
+     "  return frame;\n}\n\nexport function liveThread("),
     ("rid: the switch_character path drops it",
      "  return frameWithRid(frame, rid);\n}\n\nasync function characterlessCommand(",
      "  return frame;\n}\n\nasync function characterlessCommand("),

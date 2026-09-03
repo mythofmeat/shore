@@ -56,12 +56,28 @@ MUTANTS = [
     # --- what is not an error -------------------------------------------------
     ("engine: a character that is gone refuses the handshake instead of answering empty",
      H,
-     "    selectedCharacter === null ? undefined : await engineIfCharacterExists(registry, selectedCharacter);",
+     "    selectedCharacter === null\n"
+     "      ? undefined\n"
+     "      : await engineIfCharacterExists(\n"
+     "          registry,\n"
+     "          selectedCharacter,\n"
+     "          liveThread(registry, selectedCharacter, selectedThread),\n"
+     "        );",
      "    selectedCharacter === null ? undefined : await registry.getOrCreate(selectedCharacter);"),
     ("engine: no character selected still asks the registry for one",
      H,
-     "    selectedCharacter === null ? undefined : await engineIfCharacterExists(registry, selectedCharacter);",
-     "    await engineIfCharacterExists(registry, selectedCharacter as string);"),
+     "    selectedCharacter === null\n"
+     "      ? undefined\n"
+     "      : await engineIfCharacterExists(\n"
+     "          registry,\n"
+     "          selectedCharacter,\n"
+     "          liveThread(registry, selectedCharacter, selectedThread),\n"
+     "        );",
+     "    await engineIfCharacterExists(\n"
+     "      registry,\n"
+     "      selectedCharacter as string,\n"
+     "      liveThread(registry, selectedCharacter as string, selectedThread),\n"
+     "    );"),
     ("engine: an empty snapshot drops the config block the client renders from",
      H,
      "      messages: [],\n      activeStart: 0,\n      config: configBlock,",
@@ -74,8 +90,16 @@ MUTANTS = [
      "    revision: 0,"),
     ("snapshot: a missing character is echoed back rather than cleared",
      H,
-     "      selectedCharacter: null,\n      revision: 0,",
-     "      selectedCharacter,\n      revision: 0,"),
+     "      selectedCharacter: null,\n      selectedThread: null,\n      revision: 0,",
+     "      selectedCharacter,\n      selectedThread: null,\n      revision: 0,"),
+    ("snapshot: the thread the engine is on is not reported back",
+     H,
+     "    selectedThread: history.selected_thread ?? engine.thread,\n",
+     ""),
+    ("snapshot: a session's stale thread is opened rather than falling back to home",
+     H,
+     "  return registry.listThreads(character).some((t) => t.id === selected) ? selected : undefined;",
+     "  return selected;"),
     ("snapshot: an unset active_start becomes NaN rather than zero",
      H,
      "    activeStart: history.active_start ?? 0,",

@@ -1,4 +1,5 @@
 import type { LoadedConfig } from "../config/loader.ts";
+import type { InvalidationReason } from "../cache/last_request.ts";
 import { restartRequiredChanges } from "../config/restart.ts";
 import { historyMessage, type HandshakeProvider, type HistorySnapshot } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
@@ -17,7 +18,11 @@ export interface DispatchRuntime {
 
   reloadRuntimeConfig(config: LoadedConfig): void;
 
-  refreshCachedRequest(character: string): Promise<void>;
+  refreshCachedRequest(
+    character: string,
+    reason?: InvalidationReason,
+    thread?: string,
+  ): Promise<void>;
 
   applyReloadedConfig(config: LoadedConfig): Promise<ReloadSummary>;
 }
@@ -62,6 +67,8 @@ async function annotations(
       return await afterChatModelChange(name, args, data, ctx);
     case "switch_character":
       return await afterSwitchCharacter(data, ctx);
+    case "switch_thread":
+      return await afterSwitchThread(data, ctx);
     default:
       return undefined;
   }
@@ -139,6 +146,34 @@ async function afterSwitchCharacter(
   return {
     selected_character: selected,
     active_model: (isRecord(config) ? config["active_model"] : undefined) ?? null,
+  };
+}
+
+async function afterSwitchThread(
+  data: unknown,
+  ctx: DispatchContext,
+): Promise<Record<string, unknown> | undefined> {
+  const selected = isRecord(data) ? data["thread"] : undefined;
+  if (typeof selected !== "string") return undefined;
+  if (isRecord(data) && data["changed"] !== true) return undefined;
+
+  const previous = ctx.router.threadFor(ctx.sessionId);
+  ctx.router.setSelectedThread(ctx.sessionId, selected);
+
+  let snapshot: HistorySnapshot;
+  try {
+    snapshot = await ctx.handshake.history(ctx.character, selected);
+  } catch (e) {
+    ctx.router.setSelectedThread(ctx.sessionId, previous);
+    throw e;
+  }
+
+  await ctx.router.sendToSession(ctx.sessionId, historyMessage(snapshot, ctx.rid));
+  await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", selected);
+
+  return {
+    selected_thread: selected,
+    ...invalidated(data, { cached_request: true }),
   };
 }
 

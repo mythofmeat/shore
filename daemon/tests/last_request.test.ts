@@ -508,6 +508,28 @@ describe("LastRequestCache", () => {
     expect(k.armed[1]?.context?.thread).toBe("scratch");
   });
 
+  test("a caller that names a thread gets that one, not home", async () => {
+    const k = spy();
+    const cache = new LastRequestCache(k.service as never);
+    const pair = (id: string, text: string) => [
+      fromShape({ role: "user", msg_id: `m_${id}_u`, content: text, autonomous: false, tool_result_only: false }),
+      fromShape({ role: "assistant", msg_id: `m_${id}_a`, content: "hi", autonomous: false, tool_result_only: false }),
+    ];
+    const { config, dataDir } = await world(pair("home", "a turn in the home thread"));
+    await createThread(dataDir, "ada", "scratch", "2026-09-03T12:00:00.000Z");
+    await writeFile(
+      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
+      `${pair("scratch", "a turn in the side thread").map((m) => JSON.stringify(m)).join("\n")}\n`,
+    );
+
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config, { thread: "scratch" });
+
+    expect(k.armed[0]?.context?.thread).toBe("scratch");
+    expect(JSON.stringify(decision.kind === "push" && decision.request.messages)).toContain(
+      "side thread",
+    );
+  });
+
   test("repriming a mid-turn conversation disarms rather than leaving the old body armed", async () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);

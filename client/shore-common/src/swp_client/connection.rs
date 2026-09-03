@@ -82,6 +82,7 @@ impl SWPConnection {
             client_name,
             capabilities: vec!["streaming".into()],
             character,
+            thread: None,
             token: Some(token),
         });
         self.send(&hello).await?;

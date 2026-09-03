@@ -66,6 +66,7 @@ function providerNaming(names: readonly string[]): HandshakeProvider {
         activeStart: 0,
         config: {},
         selectedCharacter: null,
+        selectedThread: null,
         revision: 0,
       }),
   };

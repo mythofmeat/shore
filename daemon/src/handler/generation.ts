@@ -67,6 +67,8 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
+import type { ThreadRecord } from "../engine/threads.ts";
+import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
   emitPostPersistStreamEnd,
@@ -106,8 +108,9 @@ export function generationEngine(engine: ConversationEngine): GenerationEngine {
 }
 
 export interface GenerationRegistry {
-  getOrCreate(name: string): Promise<GenerationEngine>;
+  getOrCreate(name: string, thread?: string): Promise<GenerationEngine>;
   effectiveConfig(name: string): LoadedConfig;
+  listThreads(name: string): readonly ThreadRecord[];
 }
 
 export interface GenerationDiagnostics {
@@ -252,7 +255,10 @@ async function runGenerationCore(
   const { charName, regen } = params;
 
   const config = deps.registry.effectiveConfig(charName);
-  const engine = await deps.registry.getOrCreate(charName);
+  const engine = await deps.registry.getOrCreate(
+    charName,
+    liveThread(deps.registry, charName, params.meta.session.selectedThread),
+  );
 
   const turnCtx: TurnContext = {
     emitEvent: deps.emitEvent,

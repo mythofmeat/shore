@@ -14,7 +14,9 @@ import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
+import { MAIN_THREAD } from "../src/config/dirs.ts";
 import type { ConversationEngine, History } from "../src/engine/conversation.ts";
+import type { ThreadRecord } from "../src/engine/threads.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const MODEL = {
@@ -53,8 +55,9 @@ function configFor(
   };
 }
 
-function engineWith(history: Partial<History>): ConversationEngine {
+function engineWith(history: Partial<History>, thread = MAIN_THREAD): ConversationEngine {
   return {
+    thread,
     historySnapshot: () => ({
       messages: [],
       config: {},
@@ -64,6 +67,10 @@ function engineWith(history: Partial<History>): ConversationEngine {
   } as unknown as ConversationEngine;
 }
 
+function threadRecords(...ids: string[]): ThreadRecord[] {
+  return ids.map((id) => ({ id, created_at: "2026-09-03T00:00:00.000Z", compaction: false }));
+}
+
 function registry(
   parts: Partial<HandshakeRegistry> & { globalConfig: () => LoadedConfig },
 ): HandshakeRegistry {
@@ -71,6 +78,7 @@ function registry(
     availableCharacters: () => [],
     effectiveConfig: parts.globalConfig,
     getOrCreate: () => Promise.reject(new Error("character not found")),
+    listThreads: () => [],
     ...parts,
   };
 }
@@ -129,6 +137,50 @@ describe("the history snapshot", () => {
 
     expect(snapshot.messages).toEqual([]);
     expect(snapshot.selectedCharacter).toBeNull();
+  });
+
+  test("the snapshot names the thread the engine is actually on", async () => {
+    const root = await mkdtemp(testTmp("shore-handshake-thread-"));
+    const config = configFor(root, { model: "chat.fixture" });
+    const opened: Array<string | undefined> = [];
+
+    const snapshot = await buildSessionHistorySnapshot(
+      registry({
+        globalConfig: () => config,
+        listThreads: () => threadRecords(MAIN_THREAD, "scratch"),
+        getOrCreate: (_name, thread) => {
+          opened.push(thread);
+          return Promise.resolve(engineWith({ selected_character: "ada" }, thread ?? MAIN_THREAD));
+        },
+      }),
+      "ada",
+      "scratch",
+    );
+
+    expect(opened).toEqual(["scratch"]);
+    expect(snapshot.selectedThread).toBe("scratch");
+  });
+
+  test("a session pointed at a thread that no longer exists falls back to home", async () => {
+    const root = await mkdtemp(testTmp("shore-handshake-stale-"));
+    const config = configFor(root, { model: "chat.fixture" });
+    const opened: Array<string | undefined> = [];
+
+    const snapshot = await buildSessionHistorySnapshot(
+      registry({
+        globalConfig: () => config,
+        listThreads: () => threadRecords(MAIN_THREAD),
+        getOrCreate: (_name, thread) => {
+          opened.push(thread);
+          return Promise.resolve(engineWith({ selected_character: "ada" }));
+        },
+      }),
+      "ada",
+      "archived",
+    );
+
+    expect(opened).toEqual([undefined]);
+    expect(snapshot.selectedThread).toBe(MAIN_THREAD);
   });
 
   test("a character that fails to load is an error, not an empty conversation", async () => {
@@ -246,6 +298,7 @@ describe("which model the config block reports", () => {
         getOrCreate: () => Promise.resolve(engineWith({ selected_character: "ada" })),
       }),
       "ada",
+      null,
       "chat.just-selected",
     );
 

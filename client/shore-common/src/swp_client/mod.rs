@@ -98,6 +98,7 @@ mod tests {
                 active_start: 0,
                 config: serde_json::json!({}),
                 selected_character: Some("alice".into()),
+                selected_thread: None,
                 revision: 4,
             });
             write_json_line(&mut w, &history).await;
@@ -199,6 +200,7 @@ mod tests {
                 active_start: 0,
                 config: serde_json::json!({}),
                 selected_character: Some("alice".into()),
+                selected_thread: None,
                 revision: 1,
             });
             write_json_line(&mut w, &history).await;

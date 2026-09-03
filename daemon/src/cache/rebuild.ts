@@ -79,6 +79,7 @@ export interface RebuildDeps {
   newId?: () => string;
   now?: () => string;
   timeZone?: string;
+  thread?: string;
 }
 
 export async function rebuildRequestFromDisk(
@@ -88,7 +89,7 @@ export async function rebuildRequestFromDisk(
   deps: RebuildDeps = {},
 ): Promise<BuiltRequest | undefined> {
   const characterDir = characterDataDir(dataDir, character);
-  const thread = await homeThreadOf(dataDir, character);
+  const thread = deps.thread ?? (await homeThreadOf(dataDir, character));
   const conversationDir = threadDataDir(dataDir, character, thread);
 
   let store: MessageStore;

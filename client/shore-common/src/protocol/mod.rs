@@ -51,6 +51,7 @@ mod tests {
             client_name: "shore".into(),
             capabilities: vec!["streaming".into()],
             character: None,
+            thread: None,
             token: Some("s3cret".into()),
         });
         let (json, _back) = round_trip(&msg);
@@ -150,6 +151,7 @@ mod tests {
             active_start: 0,
             config: json!({}),
             selected_character: Some("alice".into()),
+            selected_thread: None,
             revision: 7,
         });
         let (json, _back) = round_trip(&msg);
@@ -168,6 +170,7 @@ mod tests {
             active_start: 0,
             config: json!({}),
             selected_character: Some("alice".into()),
+            selected_thread: None,
             revision: 8,
         });
         let (json, _back) = round_trip(&msg);

@@ -342,6 +342,7 @@ const CAPTURED_SESSION: SessionMeta = {
   clientName: "t",
   capabilities: ["images"],
   selectedCharacter: "captured-at-handshake",
+  selectedThread: null,
 };
 
 describe("route_client_message", () => {
@@ -408,6 +409,7 @@ describe("handshake", () => {
                 activeStart: 0,
                 config: {},
                 selectedCharacter: "forced-by-history",
+                selectedThread: null,
                 revision: 1,
               })
           : (selected) =>
@@ -425,6 +427,7 @@ describe("handshake", () => {
             activeStart: 0,
             config: { defaults: true },
             selectedCharacter: selected,
+            selectedThread: null,
             revision: 42,
           }),
       };
@@ -477,4 +480,39 @@ describe("handshake", () => {
       }
     });
   }
+});
+
+describe("history is routed to the thread that asked for it", () => {
+  const history = (thread?: string): ServerMessage => ({
+      type: "history",
+      messages: [],
+      active_start: 0,
+      config: {},
+      selected_character: "poppy",
+      ...(thread === undefined ? {} : { selected_thread: thread }),
+      revision: 1,
+    });
+
+  test("a session on one thread does not see another thread's conversation", () => {
+    expect(eventMatchesSession(history("main"), "poppy", true, false, "main")).toBe(true);
+    expect(eventMatchesSession(history("scratch"), "poppy", true, false, "main")).toBe(false);
+    expect(eventMatchesSession(history("main"), "poppy", true, false, "scratch")).toBe(false);
+  });
+
+  test("a session that has not picked a thread still sees the character's history", () => {
+    expect(eventMatchesSession(history("main"), "poppy", true, false, null)).toBe(true);
+    expect(eventMatchesSession(history("scratch"), "poppy", true, false, null)).toBe(true);
+  });
+
+  test("a broadcast from before threads existed reaches everyone on the character", () => {
+    expect(eventMatchesSession(history(), "poppy", true, false, "scratch")).toBe(true);
+  });
+
+  test("the character check still comes first", () => {
+    expect(eventMatchesSession(history("main"), "Yuna", true, false, "main")).toBe(false);
+  });
+
+  test("an all-characters subscriber is not filtered by thread either", () => {
+    expect(eventMatchesSession(history("scratch"), "poppy", true, true, "main")).toBe(true);
+  });
 });

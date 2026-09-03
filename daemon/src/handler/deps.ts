@@ -108,8 +108,10 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
 
 export function generationRegistry(registry: CharacterRegistry): GenerationRegistry {
   return {
-    getOrCreate: async (name) => generationEngine(await registry.getOrCreate(name)),
+    getOrCreate: async (name, thread) =>
+      generationEngine(await registry.getOrCreate(name, thread)),
     effectiveConfig: (name) => registry.effectiveConfig(name),
+    listThreads: (name) => registry.listThreads(name),
   };
 }
 
@@ -359,15 +361,18 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
       a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
     },
 
-    refreshCachedRequest: async (character) => {
+    refreshCachedRequest: async (character, reason = "model_change", thread) => {
       runtime.keepalive.disarm(character);
-      runtime.cache.invalidate(character, "model_change");
+      runtime.cache.invalidate(character, reason);
       try {
         await runtime.cache.reprimeFromDisk(
           character,
           runtime.config.dirs.data,
           runtime.registry.effectiveConfig(character),
-          { mcpRegistry: runtime.mcp.current },
+          {
+            mcpRegistry: runtime.mcp.current,
+            ...(thread === undefined ? {} : { thread }),
+          },
         );
       } catch (e) {
         shoreLog.warn(
@@ -537,6 +542,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
   const { runtime } = a;
   const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");
   return {
+    threads: runtime.registry,
     autonomy: runtime.autonomy,
     diagnostics: a.diagnostics,
     callStore: runtime.callStore,

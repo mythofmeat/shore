@@ -67,6 +67,16 @@ import {
   status,
 } from "./status.ts";
 import { usage } from "./usage.ts";
+import {
+  archiveThread,
+  listThreads,
+  newThread,
+  switchThread,
+  threadHome,
+  threadLabel,
+  type ThreadContext,
+  type ThreadRegistry,
+} from "./threads.ts";
 import { conversationTokens } from "../ledger/conversation_spend.ts";
 import { estimateHistoryTokens } from "../engine/prompt.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
@@ -92,6 +102,7 @@ export interface CommandSession {
 }
 
 export interface CommandDeps {
+  threads?: ThreadRegistry;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
   callStore: CallStore | undefined;
@@ -143,6 +154,19 @@ export async function runCommand(
         { configDir, dataDir: session.dataDir, active: character, workspaceRoot },
         args,
       );
+
+    case "list_threads":
+      return listThreads(threadContext(deps, engine));
+    case "switch_thread":
+      return switchThread(threadContext(deps, engine), args);
+    case "create_thread":
+      return await newThread(threadContext(deps, engine), args);
+    case "archive_thread":
+      return await archiveThread(threadContext(deps, engine), args);
+    case "thread_home":
+      return await threadHome(threadContext(deps, engine), args);
+    case "thread_label":
+      return await threadLabel(threadContext(deps, engine), args);
 
     case "log":
       return await log(engine, args);
@@ -327,6 +351,14 @@ export function runCharacterlessCommand(
     default:
       throw invalidRequest(`Command '${cmd.name}' requires a character`);
   }
+}
+
+function threadContext(deps: CommandDeps, engine: ConversationEngine): ThreadContext {
+  const registry = deps.threads;
+  if (registry === undefined) {
+    throw internalError("thread commands need a character registry, and this one has none");
+  }
+  return { registry, character: engine.characterName, current: engine.thread };
 }
 
 export function isCharacterless(name: string): boolean {

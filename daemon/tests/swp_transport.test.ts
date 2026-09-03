@@ -21,6 +21,7 @@ const SESSION: SessionMeta = {
   clientName: "t",
   capabilities: [],
   selectedCharacter: "alice",
+  selectedThread: null,
 };
 
 const PING: ServerMessage = { type: "ping" };
@@ -131,7 +132,7 @@ describe("session router", () => {
     const router = new SessionRouter();
     for (const id of [1, 2]) {
       router.registerSession(
-        { id, clientType: "tui", clientName: "t", capabilities: [], character: null },
+        { id, clientType: "tui", clientName: "t", capabilities: [], character: null, thread: null },
         async () => {},
       );
     }
@@ -147,7 +148,7 @@ describe("session router", () => {
   test("the live character survives a mid-session move", () => {
     const router = new SessionRouter();
     router.registerSession(
-      { id: 1, clientType: "tui", clientName: "t", capabilities: [], character: "alice" },
+      { id: 1, clientType: "tui", clientName: "t", capabilities: [], character: "alice", thread: null },
       async () => {},
     );
     expect(router.setSelectedCharacter(1, "bob")).toBe(true);
@@ -230,7 +231,7 @@ function harness(pingIntervalMs = 3_600_000, events?: Subscriptionish): LoopHarn
   const bus = new Broadcast(4);
   const router = new SessionRouter();
   router.registerSession(
-    { id: 1, clientType: "tui", clientName: "t", capabilities: [], character: "alice" },
+    { id: 1, clientType: "tui", clientName: "t", capabilities: [], character: "alice", thread: null },
     async (m) => {
       await Promise.resolve();
       void m;
@@ -299,6 +300,7 @@ describe("handleConnection", () => {
               activeStart: 0,
               config: {},
               selectedCharacter: selected,
+              selectedThread: null,
               revision: 1,
             }),
         },

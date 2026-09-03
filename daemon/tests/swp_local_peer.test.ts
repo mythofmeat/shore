@@ -24,6 +24,7 @@ async function fixture(characters: string[] = ["ada", "bee"]) {
           activeStart: 0,
           config: { active_model: "test:model" },
           selectedCharacter: selected,
+          selectedThread: null,
           revision: 3,
         }),
     },

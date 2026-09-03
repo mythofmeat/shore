@@ -424,6 +424,7 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
     registry: {
       getOrCreate: async () => engine,
       effectiveConfig: () => config,
+      listThreads: () => [{ id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction: true }],
     },
     dataDir: config.dirs.data,
     providers: { anthropic: provider },
@@ -823,7 +824,11 @@ test("a sampler preference set for the character reaches the outgoing request", 
 
   await runGeneration(
     {
-      registry: { getOrCreate: async () => engine, effectiveConfig: () => config },
+      registry: {
+      getOrCreate: async () => engine,
+      effectiveConfig: () => config,
+      listThreads: () => [{ id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction: true }],
+    },
       dataDir: config.dirs.data,
       providers: { anthropic: provider },
       autonomy: {
@@ -898,7 +903,11 @@ test("the turn tells the provider which thread it belongs to", async () => {
 
   await runGeneration(
     {
-      registry: { getOrCreate: async () => engine, effectiveConfig: () => config },
+      registry: {
+      getOrCreate: async () => engine,
+      effectiveConfig: () => config,
+      listThreads: () => [{ id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction: true }],
+    },
       dataDir: config.dirs.data,
       providers: { anthropic: provider },
       autonomy: {
@@ -951,7 +960,11 @@ test("a turn with no model configured leaves the conversation untouched", async 
 
   const run = runGeneration(
     {
-      registry: { getOrCreate: async () => engine, effectiveConfig: () => config },
+      registry: {
+      getOrCreate: async () => engine,
+      effectiveConfig: () => config,
+      listThreads: () => [{ id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction: true }],
+    },
       dataDir: config.dirs.data,
       providers: {
         anthropic: {

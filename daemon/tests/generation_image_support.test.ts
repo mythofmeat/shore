@@ -138,7 +138,11 @@ async function run(inputs: RunInputs): Promise<RunOutcome> {
   );
 
   const deps: GenerationDeps = {
-    registry: { getOrCreate: async () => engine, effectiveConfig: () => config },
+    registry: {
+      getOrCreate: async () => engine,
+      effectiveConfig: () => config,
+      listThreads: () => [{ id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction: true }],
+    },
     dataDir: config.dirs.data,
     providers: { anthropic: provider },
     autonomy,

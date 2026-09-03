@@ -111,6 +111,7 @@ mod tests {
             active_start: 0,
             config: serde_json::json!({}),
             selected_character: Some("alice".into()),
+            selected_thread: None,
             revision: 4,
         });
 
@@ -127,6 +128,7 @@ mod tests {
             active_start: 0,
             config: serde_json::json!({}),
             selected_character: Some("alice".into()),
+            selected_thread: None,
             revision: 6,
         });
 
@@ -161,6 +163,7 @@ mod tests {
             active_start: 0,
             config: serde_json::json!({}),
             selected_character: Some("alice".into()),
+            selected_thread: None,
             revision,
         })
     }
@@ -194,6 +197,7 @@ mod tests {
             active_start: 0,
             config: serde_json::json!({}),
             selected_character: Some("Yuna".into()),
+            selected_thread: None,
             revision: 12,
         });
 

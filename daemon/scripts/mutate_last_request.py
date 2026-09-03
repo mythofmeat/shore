@@ -164,12 +164,24 @@ MUTANTS = [
     ("reprime: the rebuilt body is not re-cached",
      L,
      "      this.#bodies.set(character, decision.request);\n"
-     "      this.#keepalive?.arm(\n",
-     "      this.#keepalive?.arm(\n"),
-    ("reprime: the prefix is armed on main rather than on the home thread",
+     "      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepalive, thread));",
+     "      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepalive, thread));"),
+    ("reprime: the prefix is armed on main rather than on the thread it rebuilt",
      L,
-     "          await homeThreadOf(dataDir, character),\n",
-     '          "main",\n'),
+     "    const thread = deps.thread ?? (await homeThreadOf(dataDir, character));",
+     '    const thread = "main";'),
+    ("reprime: the caller's thread is ignored in favour of home",
+     L,
+     "    const thread = deps.thread ?? (await homeThreadOf(dataDir, character));",
+     "    const thread = await homeThreadOf(dataDir, character);"),
+    ("reprime: the body is rebuilt from a different thread than the prefix names "
+     "(EQUIVALENT — rebuildRequestFromDisk falls back to the same homeThreadOf when deps.thread "
+     "is absent, so both spellings resolve identically today; the explicit pass-through is kept "
+     "so the thread is resolved once and the prefix and the body cannot drift apart if either "
+     "fallback ever changes)",
+     L,
+     "      await rebuildRequestFromDisk(character, dataDir, config, { ...deps, thread }),",
+     "      await rebuildRequestFromDisk(character, dataDir, config, deps),"),
 
     # --- the cache ------------------------------------------------------------
     ("cache: invalidating also disarms, collapsing the two decisions",

@@ -86,6 +86,7 @@ function registerTestSession(
       clientName: `test-${id}`,
       capabilities: ["streaming"],
       character: null,
+      thread: null,
     },
     (msg) => {
       received.push(msg);
@@ -108,6 +109,7 @@ function meta(
       clientName: `test-${sessionId}`,
       capabilities: ["streaming"],
       selectedCharacter: character,
+      selectedThread: null,
     },
     rid,
     kind,
