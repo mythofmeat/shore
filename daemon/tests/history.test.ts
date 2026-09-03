@@ -3,7 +3,7 @@ import { required } from "../src/util/required.ts";
 import { describe, expect, test } from "bun:test";
 
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { handleSearchHistory } from "../src/tools/history";
 import { testTmp } from "./support/tmp.ts";
@@ -137,6 +137,8 @@ describe("searching a conversation's history", () => {
       let thrown: unknown;
       try {
         got = await handleSearchHistory(c.input, dir, {
+          character: basename(dir),
+          dbPath: join(dirname(dir), "history.db"),
           defaultMode: "lexical",
           timeZone: "UTC",
           now: () => Date.parse("2026-01-05T00:00:00Z"),

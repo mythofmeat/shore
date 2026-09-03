@@ -17,6 +17,7 @@ import type { ContentBlock } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
 import { rustLines, rustTrim } from "../lines";
 import { hasCompactionOperation } from "./archive.ts";
+import { conversationRef } from "../../engine/segments.ts";
 import {
   normalizePromptVisiblePath,
   pathComponents,
@@ -592,7 +593,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   );
   checkpoint.request.api_key = initialRequest.api_key;
   const alreadyArchived = opts.resumable === true && opts.dataDir !== undefined
-    ? await hasCompactionOperation(characterDataDir(opts.dataDir, opts.charName), checkpoint.id)
+    ? await hasCompactionOperation(conversationRef(opts.dataDir, opts.charName, false), checkpoint.id)
     : false;
   if (alreadyArchived && !checkpointSourceIsCompatible(checkpoint, await currentActiveContent(opts))) {
     const liveContent = await currentActiveContent(opts);

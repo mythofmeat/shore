@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { segmentCount } from "../src/memory/compaction/archive.ts";
+import { conversationRef } from "../src/engine/segments.ts";
 import { testTmp } from "./support/tmp.ts";
 
 let counter = 0;
@@ -74,23 +75,23 @@ describe("segmentCount", () => {
     const charDir = await characterDir(root, "ada");
     await writeManifest(charDir, ["0001.jsonl", "0002.jsonl"]);
 
-    expect(await segmentCount(charDir)).toBe(2);
+    expect(await segmentCount(conversationRef(root, "ada", false))).toBe(2);
   });
 
   test("counts database segments after the manifest is gone", async () => {
     const root = await dataDir();
-    const charDir = await characterDir(root, "ada");
+    await characterDir(root, "ada");
     seedDatabase(root, "ada", 3);
 
-    expect(await segmentCount(charDir)).toBe(3);
+    expect(await segmentCount(conversationRef(root, "ada", false))).toBe(3);
   });
 
   test("ignores segments belonging to another character", async () => {
     const root = await dataDir();
-    const charDir = await characterDir(root, "ada");
+    await characterDir(root, "ada");
     seedDatabase(root, "grace", 4);
 
-    expect(await segmentCount(charDir)).toBe(0);
+    expect(await segmentCount(conversationRef(root, "ada", false))).toBe(0);
   });
 
   test("takes the larger of a partially imported manifest and the database", async () => {
@@ -99,13 +100,13 @@ describe("segmentCount", () => {
     await writeManifest(charDir, ["0001.jsonl"]);
     seedDatabase(root, "ada", 5);
 
-    expect(await segmentCount(charDir)).toBe(5);
+    expect(await segmentCount(conversationRef(root, "ada", false))).toBe(5);
   });
 
   test("returns zero for a character with no history at all", async () => {
     const root = await dataDir();
-    const charDir = await characterDir(root, "ada");
+    await characterDir(root, "ada");
 
-    expect(await segmentCount(charDir)).toBe(0);
+    expect(await segmentCount(conversationRef(root, "ada", false))).toBe(0);
   });
 });

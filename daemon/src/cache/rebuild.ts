@@ -12,6 +12,7 @@ import type { Message } from "../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import type { BuiltRequest } from "../llm/request.ts";
 import { segmentCount } from "../memory/compaction/archive.ts";
+import { conversationRef } from "../engine/segments.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 
@@ -104,7 +105,7 @@ export async function rebuildRequestFromDisk(
   );
   if (resolved === undefined) return undefined;
 
-  const hasPriorContext = (await segmentCount(characterDir)) > 0;
+  const hasPriorContext = (await segmentCount(conversationRef(dataDir, character, false))) > 0;
   const mcpToolDefs = deps.mcpRegistry?.toolDefsFiltered(config.app.tools.enabled_tools) ?? [];
 
   try {

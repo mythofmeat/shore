@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { activeJsonlIn, compactionManifestIn, segmentsDirIn } from "../../config/dirs.ts";
 
 import { atomicWrite } from "../../engine/atomic.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
 import { normalizeMessage } from "../../engine/message_store.ts";
-import { SegmentReader, type CompactionManifest } from "../../engine/segments.ts";
+import { SegmentReader, type CompactionManifest, type ConversationRef } from "../../engine/segments.ts";
 import type { Message } from "../../engine/types.ts";
 import { rustLines, rustTrim } from "../lines.ts";
 import { CompactionError } from "./types.ts";
@@ -107,9 +107,11 @@ async function archiveToDatabase(
   >,
 ): Promise<void> {
   const messages = archived.map((line) => normalizeMessage(JSON.parse(line) as Message));
-  const reader = await SegmentReader.load(characterDir, {
+  const reader = await SegmentReader.load({
+    dir: characterDir,
     dbPath: history.dbPath,
     character: history.character,
+    createHistoryDb: true,
   });
   reader.close();
   const store = HistoryStore.open(history.dbPath);
@@ -220,32 +222,31 @@ async function readManifest(path: string): Promise<CompactionManifest> {
   };
 }
 
-export async function segmentCount(characterDir: string): Promise<number> {
-  return Math.max(await manifestSegmentCount(characterDir), durableSegmentCount(characterDir));
+export async function segmentCount(ref: ConversationRef): Promise<number> {
+  return Math.max(await manifestSegmentCount(ref.dir), durableSegmentCount(ref));
 }
 
-async function manifestSegmentCount(characterDir: string): Promise<number> {
+async function manifestSegmentCount(conversationDir: string): Promise<number> {
   try {
-    return (await readManifest(compactionManifestIn(characterDir))).segments.length;
+    return (await readManifest(compactionManifestIn(conversationDir))).segments.length;
   } catch {
     return 0;
   }
 }
 
-function durableSegmentCount(characterDir: string): number {
-  return withHistoryStore(characterDir, (store, character) => store.segmentCount(character)) ?? 0;
+function durableSegmentCount(ref: ConversationRef): number {
+  return withHistoryStore(ref, (store, character) => store.segmentCount(character)) ?? 0;
 }
 
 function withHistoryStore<T>(
-  characterDir: string,
+  ref: ConversationRef,
   read: (store: HistoryStore, character: string) => T,
 ): T | undefined {
-  const dbPath = join(dirname(characterDir), HISTORY_DB_FILE);
-  if (!existsSync(dbPath)) return undefined;
+  if (!existsSync(ref.dbPath)) return undefined;
   let store: HistoryStore | undefined;
   try {
-    store = HistoryStore.open(dbPath);
-    return read(store, basename(characterDir));
+    store = HistoryStore.open(ref.dbPath);
+    return read(store, ref.character);
   } catch {
     return undefined;
   } finally {
@@ -254,29 +255,29 @@ function withHistoryStore<T>(
 }
 
 export async function hasCompactionOperation(
-  characterDir: string,
+  ref: ConversationRef,
   operationId: string,
 ): Promise<boolean> {
   return (
-    (await manifestHasCompactionOperation(characterDir, operationId)) ||
-    durableHasCompactionOperation(characterDir, operationId)
+    (await manifestHasCompactionOperation(ref.dir, operationId)) ||
+    durableHasCompactionOperation(ref, operationId)
   );
 }
 
 async function manifestHasCompactionOperation(
-  characterDir: string,
+  conversationDir: string,
   operationId: string,
 ): Promise<boolean> {
   try {
-    const manifest = await readManifest(compactionManifestIn(characterDir));
+    const manifest = await readManifest(compactionManifestIn(conversationDir));
     return manifest.segments.some((segment) => segment.compaction_id === operationId);
   } catch {
     return false;
   }
 }
 
-function durableHasCompactionOperation(characterDir: string, operationId: string): boolean {
-  return withHistoryStore(characterDir, (store, character) =>
+function durableHasCompactionOperation(ref: ConversationRef, operationId: string): boolean {
+  return withHistoryStore(ref, (store, character) =>
     store.hasCompactionOperation(character, operationId),
   ) ?? false;
 }

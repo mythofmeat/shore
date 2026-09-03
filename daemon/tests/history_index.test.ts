@@ -32,9 +32,17 @@ function message(
   };
 }
 
-async function character(messages: Message[]): Promise<string> {
+function dbPathFor(dir: string): string {
+  return join(dirname(dir), HISTORY_DB_FILE);
+}
+
+function identity(dir: string): { character: string; dbPath: string } {
+  return { character: basename(dir), dbPath: dbPathFor(dir) };
+}
+
+async function character(messages: Message[], name = "ada"): Promise<string> {
   const dataDir = testTmp(`history-index-${crypto.randomUUID()}`);
-  const dir = join(dataDir, "ada");
+  const dir = join(dataDir, name);
   await mkdir(dir, { recursive: true });
   archive(dir, 0, messages);
   return dir;
@@ -85,7 +93,7 @@ describe("history search index", () => {
     const after = message("u2", "user", "After paragraph.", "2026-08-13T00:03:00Z");
     const dir = await character([before, hit, invisible, after]);
 
-    const result = await handleSearchHistory({ query: "needle", mode: "lexical" }, dir, {
+    const result = await handleSearchHistory({ query: "needle", mode: "lexical" }, dir, { ...identity(dir),
       timeZone: "UTC",
     });
     expect(result.mode).toBe("lexical");
@@ -104,15 +112,15 @@ describe("history search index", () => {
         model: null, text: "After paragraph.",
       }],
     }]);
-    expect((await handleSearchHistory({ query: "private-never-find-this" }, dir)).count).toBe(0);
-    expect((await handleSearchHistory({ query: "secret-result" }, dir)).count).toBe(0);
+    expect((await handleSearchHistory({ query: "private-never-find-this" }, dir, identity(dir))).count).toBe(0);
+    expect((await handleSearchHistory({ query: "secret-result" }, dir, identity(dir))).count).toBe(0);
   });
 
   test("defaults to three matches and ignores excerpt_chars compatibility input", async () => {
     const dir = await character(Array.from({ length: 6 }, (_, i) =>
       message(`u${i}`, "user", `full text match ${i}\nsecond line`, `2026-08-13T00:0${i}:00Z`),
     ));
-    const result = await handleSearchHistory({ query: "match", excerpt_chars: 1 }, dir);
+    const result = await handleSearchHistory({ query: "match", excerpt_chars: 1 }, dir, identity(dir));
     expect(result.count).toBe(3);
     expect((result.results[0]?.text as string)).toContain("\nsecond line");
   });
@@ -131,11 +139,11 @@ describe("history search index", () => {
     );
     const dir = await character([phrase, separated, punctuation]);
 
-    expect((await handleSearchHistory({ query: "alpha beta", mode: "lexical" }, dir)).results[0]?.msg_id)
+    expect((await handleSearchHistory({ query: "alpha beta", mode: "lexical" }, dir, identity(dir))).results[0]?.msg_id)
       .toBe("a1");
-    expect((await handleSearchHistory({ query: "café", mode: "lexical" }, dir)).results[0]?.msg_id)
+    expect((await handleSearchHistory({ query: "café", mode: "lexical" }, dir, identity(dir))).results[0]?.msg_id)
       .toBe("a1");
-    expect((await handleSearchHistory({ query: "\"punctuation\" 東京", mode: "lexical" }, dir)).results[0]?.msg_id)
+    expect((await handleSearchHistory({ query: "\"punctuation\" 東京", mode: "lexical" }, dir, identity(dir))).results[0]?.msg_id)
       .toBe("u1");
 
     const filtered = await handleSearchHistory({
@@ -144,7 +152,7 @@ describe("history search index", () => {
       model: "gpt-5.6",
       start_time: "2026-08-12T23:59:00Z",
       end_time: "2026-08-13T00:30:00Z",
-    }, dir);
+    }, dir, identity(dir));
     expect(filtered.results.map((result) => result.msg_id)).toEqual(["a1"]);
   });
 
@@ -155,7 +163,7 @@ describe("history search index", () => {
     ]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
     const embedder = new FakeEmbedder();
-    const index = HistorySearchIndex.open({ characterDataDir: dir, path });
+    const index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
     await index.reconcile();
     expect(await index.embedPending(embedder)).toBe(2);
     index.close();
@@ -172,7 +180,7 @@ describe("history search index", () => {
     const result = await handleSearchHistory(
       { query: "fruit grove", mode: "hybrid" },
       dir,
-      { indexPath: path, embedder },
+      { ...identity(dir), indexPath: path, embedder },
     );
     expect(result.results[0]?.msg_id).toBe("u1");
     expect(result.semantic_index.pending_chunks).toBe(0);
@@ -188,7 +196,7 @@ describe("history search index", () => {
         `2026-08-13T00:${String(index % 60).padStart(2, "0")}:00Z`,
       ),
     ));
-    const index = HistorySearchIndex.open({ characterDataDir: dir });
+    const index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir) });
     const embedder = new FakeEmbedder();
     await index.reconcile();
     let embedded: number;
@@ -208,7 +216,7 @@ describe("history search index", () => {
       embed: () => Promise.reject(new Error("offline")),
     };
     const result = await handleSearchHistory(
-      { query: "reliable", mode: "hybrid" }, dir, { embedder: failing },
+      { query: "reliable", mode: "hybrid" }, dir, { ...identity(dir), embedder: failing },
     );
     expect(result.mode).toBe("lexical");
     expect(result.results[0]?.msg_id).toBe("u1");
@@ -218,7 +226,7 @@ describe("history search index", () => {
   test("explicit vector mode reports partial semantic coverage", async () => {
     const dir = await character([message("u1", "user", "an orchard note", "2026-08-13T00:00:00Z")]);
     const result = await handleSearchHistory(
-      { query: "fruit grove", mode: "vector" }, dir, { embedder: new FakeEmbedder() },
+      { query: "fruit grove", mode: "vector" }, dir, { ...identity(dir), embedder: new FakeEmbedder() },
     );
     expect(result.mode).toBe("vector");
     expect(result.results).toEqual([]);
@@ -228,17 +236,17 @@ describe("history search index", () => {
 
   test("a deleted cache is rebuilt without touching canonical history", async () => {
     const dir = await character([message("u1", "user", "persistent words", "2026-08-13T00:00:00Z")]);
-    await handleSearchHistory({ query: "persistent" }, dir);
+    await handleSearchHistory({ query: "persistent" }, dir, identity(dir));
     await unlink(join(dir, HISTORY_SEARCH_DB_FILE));
-    expect((await handleSearchHistory({ query: "persistent" }, dir)).count).toBe(1);
+    expect((await handleSearchHistory({ query: "persistent" }, dir, identity(dir))).count).toBe(1);
   });
 
   test("a corrupt cache is discarded and rebuilt", async () => {
     const dir = await character([message("u1", "user", "recoverable words", "2026-08-13T00:00:00Z")]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
-    await handleSearchHistory({ query: "recoverable" }, dir);
+    await handleSearchHistory({ query: "recoverable" }, dir, identity(dir));
     await writeFile(path, "not a sqlite database");
-    expect((await handleSearchHistory({ query: "recoverable" }, dir)).count).toBe(1);
+    expect((await handleSearchHistory({ query: "recoverable" }, dir, identity(dir))).count).toBe(1);
   });
 
   test("the active conversation is not searchable and cannot be asked for", async () => {
@@ -249,10 +257,10 @@ describe("history search index", () => {
       message("u2", "user", "live needle in the active window", "2026-08-13T00:01:00Z"),
     ]);
 
-    const result = await handleSearchHistory({ query: "needle" }, dir);
+    const result = await handleSearchHistory({ query: "needle" }, dir, identity(dir));
     expect(result.results.map((hit) => hit.msg_id)).toEqual(["a1"]);
     expect(result.searched_messages).toBe(1);
-    expect((await handleSearchHistory({ query: "live", include_alternatives: true }, dir)).count)
+    expect((await handleSearchHistory({ query: "live", include_alternatives: true }, dir, identity(dir))).count)
       .toBe(0);
   });
 
@@ -263,7 +271,7 @@ describe("history search index", () => {
     ]);
     archive(dir, 1, [message("u2", "user", "next segment after", "2026-08-13T00:03:00Z")]);
 
-    const result = await handleSearchHistory({ query: "needle" }, dir);
+    const result = await handleSearchHistory({ query: "needle" }, dir, identity(dir));
     const found = result.results[0];
     const before = found?.before as Record<string, unknown>[] | undefined;
     const after = found?.after as Record<string, unknown>[] | undefined;
@@ -283,10 +291,10 @@ describe("history search index", () => {
     }];
     const dir = await character([selected]);
 
-    expect((await handleSearchHistory({ query: "alternate" }, dir)).count).toBe(0);
-    expect((await handleSearchHistory({ query: "alternate", include_alternatives: true }, dir)).count)
+    expect((await handleSearchHistory({ query: "alternate" }, dir, identity(dir))).count).toBe(0);
+    expect((await handleSearchHistory({ query: "alternate", include_alternatives: true }, dir, identity(dir))).count)
       .toBe(0);
-    const canonical = await handleSearchHistory({ query: "selected" }, dir);
+    const canonical = await handleSearchHistory({ query: "selected" }, dir, identity(dir));
     expect(canonical.results[0]).toMatchObject({ model: "selected-model", text: "selected response" });
     expect(canonical.results[0]).not.toHaveProperty("alternative_index");
   });
@@ -303,7 +311,7 @@ describe("history search index", () => {
       return row?.value ?? "";
     };
 
-    await handleSearchHistory({ query: "archived" }, dir);
+    await handleSearchHistory({ query: "archived" }, dir, identity(dir));
     const settled = fingerprint();
     expect(settled).not.toBe("");
 
@@ -311,12 +319,12 @@ describe("history search index", () => {
       await activeWindow(dir, Array.from({ length: turn + 1 }, (_, i) =>
         message(`u${i}`, "user", `live turn ${i}`, `2026-08-16T0${i}:00:00Z`),
       ));
-      await handleSearchHistory({ query: "archived" }, dir);
+      await handleSearchHistory({ query: "archived" }, dir, identity(dir));
       expect(fingerprint()).toBe(settled);
     }
 
     archive(dir, 1, [message("a2", "assistant", "newly archived note", "2026-08-16T04:00:00Z")]);
-    await handleSearchHistory({ query: "archived" }, dir);
+    await handleSearchHistory({ query: "archived" }, dir, identity(dir));
     expect(fingerprint()).not.toBe(settled);
   });
 
@@ -324,11 +332,11 @@ describe("history search index", () => {
     const dir = await character([
       message("a1", "assistant", "original answer", "2026-08-13T00:00:00Z"),
     ]);
-    expect((await handleSearchHistory({ query: "original" }, dir)).count).toBe(1);
+    expect((await handleSearchHistory({ query: "original" }, dir, identity(dir))).count).toBe(1);
 
     archive(dir, 0, [message("a1", "assistant", "replacement answer", "2026-08-13T00:00:00Z")]);
-    expect((await handleSearchHistory({ query: "original" }, dir)).count).toBe(0);
-    expect((await handleSearchHistory({ query: "replacement" }, dir)).count).toBe(1);
+    expect((await handleSearchHistory({ query: "original" }, dir, identity(dir))).count).toBe(0);
+    expect((await handleSearchHistory({ query: "replacement" }, dir, identity(dir))).count).toBe(1);
   });
 
   test("reconciliation preserves vectors for unchanged content hashes", async () => {
@@ -336,13 +344,13 @@ describe("history search index", () => {
     const dir = await character([first]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
     const embedder = new FakeEmbedder();
-    let index = HistorySearchIndex.open({ characterDataDir: dir, path });
+    let index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
     await index.reconcile();
     await index.embedPending(embedder);
     index.close();
 
     archive(dir, 0, [first, message("u2", "user", "new note", "2026-08-13T00:01:00Z")]);
-    index = HistorySearchIndex.open({ characterDataDir: dir, path });
+    index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
     await index.reconcile();
     expect(index.diagnostics(embedder)).toEqual({
       indexed_chunks: 1,
@@ -356,7 +364,7 @@ describe("history search index", () => {
     const dir = await character([message("u1", "user", "stable orchard", "2026-08-13T00:00:00Z")]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
     const first = new FakeEmbedder();
-    let index = HistorySearchIndex.open({ characterDataDir: dir, path });
+    let index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
     await index.reconcile();
     await index.embedPending(first);
     expect(index.diagnostics(first).pending_chunks).toBe(0);
@@ -367,7 +375,7 @@ describe("history search index", () => {
       dimensions: 2,
       embed: async (inputs) => inputs.map(() => [0, 1]),
     };
-    index = HistorySearchIndex.open({ characterDataDir: dir, path });
+    index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
     expect(index.diagnostics(second).pending_chunks).toBe(1);
     await index.embedPending(second);
     expect(index.diagnostics(second).pending_chunks).toBe(0);
@@ -384,7 +392,7 @@ describe("history search index", () => {
     ]);
     const path = join(dir, HISTORY_SEARCH_DB_FILE);
     const embedder = new FakeEmbedder();
-    const index = HistorySearchIndex.open({ characterDataDir: dir, path });
+    const index = HistorySearchIndex.open({ characterDataDir: dir, ...identity(dir), path });
     await index.reconcile();
     const total = index.diagnostics(embedder).total_chunks;
     expect(total).toBeGreaterThan(2);
@@ -400,8 +408,14 @@ describe("history search index", () => {
   });
 
   test("a stalled character does not starve the others", async () => {
-    const firstDir = await character([message("u1", "user", "first corpus", "2026-08-13T00:00:00Z")]);
-    const secondDir = await character([message("u2", "user", "second corpus", "2026-08-13T00:00:00Z")]);
+    const firstDir = await character(
+      [message("u1", "user", "first corpus", "2026-08-13T00:00:00Z")],
+      "one",
+    );
+    const secondDir = await character(
+      [message("u2", "user", "second corpus", "2026-08-13T00:00:00Z")],
+      "two",
+    );
     const seen: string[] = [];
     const embedderFor = (name: string): Embedder => ({
       modelId: "fan-model",
@@ -416,17 +430,20 @@ describe("history search index", () => {
     service.register({
       character: "one",
       characterDataDir: firstDir,
+      dbPath: dbPathFor(firstDir),
       indexPath: join(firstDir, HISTORY_SEARCH_DB_FILE),
       embedder: embedderFor("one"),
     });
     service.register({
       character: "two",
       characterDataDir: secondDir,
+      dbPath: dbPathFor(secondDir),
       indexPath: join(secondDir, HISTORY_SEARCH_DB_FILE),
       embedder: embedderFor("two"),
     });
     const settled = HistorySearchIndex.open({
       characterDataDir: firstDir,
+      ...identity(firstDir),
       path: join(firstDir, HISTORY_SEARCH_DB_FILE),
     });
     await settled.reconcile();
@@ -457,7 +474,13 @@ describe("history search index", () => {
       batchPauseMs: 1_000,
       maxBatchPauseMs: 60_000,
     });
-    service.register({ character: "ada", characterDataDir: dir, indexPath: path, embedder });
+    service.register({
+      character: "ada",
+      characterDataDir: dir,
+      dbPath: dbPathFor(dir),
+      indexPath: path,
+      embedder,
+    });
     await service.reconcileAll();
 
     now = 31_000;
@@ -482,6 +505,7 @@ describe("history search index", () => {
     service.register({
       character: "ada",
       characterDataDir: dir,
+      dbPath: dbPathFor(dir),
       indexPath: join(dir, HISTORY_SEARCH_DB_FILE),
       embedder: {
         modelId: "fake-history-v1",
@@ -512,6 +536,7 @@ describe("history search index", () => {
     service.register({
       character: "ada",
       characterDataDir: dir,
+      dbPath: dbPathFor(dir),
       indexPath: path,
       embedder: new FakeEmbedder(),
     });
@@ -550,7 +575,13 @@ describe("history search index", () => {
     const embedder = new FakeEmbedder();
     let now = 0;
     const service = new HistoryIndexService({ now: () => now, idleDelayMs: 30_000, batchPauseMs: 1 });
-    service.register({ character: "ada", characterDataDir: dir, indexPath: path, embedder });
+    service.register({
+      character: "ada",
+      characterDataDir: dir,
+      dbPath: dbPathFor(dir),
+      indexPath: path,
+      embedder,
+    });
     await service.reconcileAll();
     const end = service.beginForeground();
     now = 31_000;
@@ -583,7 +614,13 @@ describe("history search index", () => {
     };
     let now = 0;
     const service = new HistoryIndexService({ now: () => now, idleDelayMs: 30_000 });
-    service.register({ character: "ada", characterDataDir: dir, indexPath: path, embedder });
+    service.register({
+      character: "ada",
+      characterDataDir: dir,
+      dbPath: dbPathFor(dir),
+      indexPath: path,
+      embedder,
+    });
     await service.reconcileAll();
 
     now = 31_000;
@@ -615,7 +652,7 @@ describe("timestamps a subagent can line up", () => {
     const result = await handleSearchHistory(
       { query: "needle", max_results: 10, mode: "lexical" },
       dir,
-      { timeZone: "Australia/Canberra" },
+      { ...identity(dir), timeZone: "Australia/Canberra" },
     );
 
     expect(result.count).toBe(encodings.length);
@@ -637,7 +674,7 @@ describe("timestamps a subagent can line up", () => {
     const result = await handleSearchHistory(
       { start_time: "2026-08-20T00:00:00Z", end_time: "2026-08-21T00:00:00Z" },
       dir,
-      { timeZone: "UTC", now: () => Date.parse("2026-08-22T00:00:00Z") },
+      { ...identity(dir), timeZone: "UTC", now: () => Date.parse("2026-08-22T00:00:00Z") },
     );
 
     expect(result.count).toBe(0);
@@ -654,7 +691,7 @@ describe("timestamps a subagent can line up", () => {
       message("m1", "user", "beta", "2026-08-12T20:00:00Z"),
     ]);
 
-    const result = await handleSearchHistory({ query: "alpha" }, dir, { timeZone: "UTC" });
+    const result = await handleSearchHistory({ query: "alpha" }, dir, { ...identity(dir), timeZone: "UTC" });
 
     expect(result.archive_boundary.oldest).toBe("2026-08-12T13:00:00+00:00");
     expect(result.archive_boundary.newest).toBe("2026-08-12T20:00:00+00:00");

@@ -9,6 +9,7 @@ import { AutonomyService, startAutonomyTimer } from "./autonomy/service.ts";
 import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";
 import { characterDataDir, characterWorkspaceDir, pluginsDir, rustJoin } from "./config/dirs.ts";
+import { HISTORY_DB_FILE } from "./engine/history_store.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
@@ -156,6 +157,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       historyIndex?.register({
         character,
         characterDataDir: characterDataDir(effective.dirs.data, character),
+        dbPath: rustJoin(effective.dirs.data, HISTORY_DB_FILE),
         indexPath: historyIndexPath(effective.dirs.cache, character),
         ...(embedder === undefined ? {} : { embedder }),
       });

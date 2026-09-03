@@ -132,7 +132,12 @@ describe("reading a conversation back off disk", () => {
     test(c.name, async () => {
       const dir = await scratch();
       await layout(dir, c.manifest, c.segment_files);
-      const reader = await SegmentReader.load(dir);
+      const reader = await SegmentReader.load({
+        dir,
+        dbPath: join(dir, "history.db"),
+        character: "ada",
+        createHistoryDb: false,
+      });
 
       expect(reader.segmentCount()).toBe(c.segment_count);
       expect(reader.totalMessageCount()).toBe(c.total_message_count);
