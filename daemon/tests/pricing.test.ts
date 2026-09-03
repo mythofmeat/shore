@@ -294,4 +294,89 @@ describe("the engine", () => {
     });
     expect(await engine.getOrFetch("openai", "gpt-4o")).toBeUndefined();
   });
+
+  test("an explicit null cache-write price falls back like a missing one", async () => {
+    const engine = new PricingEngine(memoryStore(), async () =>
+      Response.json({
+        data: [{
+          id: "anthropic/claude-opus-4.6",
+          pricing: {
+            prompt: 5,
+            completion: 25,
+            cacheReadInputPer1kTokens: 0.0005,
+            cacheWriteInputPer1kTokens: null,
+          },
+        }],
+      }),
+    );
+    const found = required(await engine.getOrFetch("nanogpt", "anthropic/claude-opus-4.6"));
+    close(found.cache_write_per_token, 0.000_006_25);
+  });
+
+  test("an advertised cache-write price of zero falls back for a Claude model", async () => {
+    const engine = new PricingEngine(memoryStore(), async () =>
+      Response.json({
+        data: [{
+          id: "anthropic/claude-opus-4.6",
+          pricing: {
+            prompt: 5,
+            completion: 25,
+            cacheReadInputPer1kTokens: 0.0005,
+            cacheWriteInputPer1kTokens: 0,
+          },
+        }],
+      }),
+    );
+    const found = required(await engine.getOrFetch("nanogpt", "anthropic/claude-opus-4.6"));
+    close(found.cache_write_per_token, 0.000_006_25);
+  });
+
+  test("a non-Claude model keeps a genuinely free cache write", async () => {
+    const engine = new PricingEngine(memoryStore(), async () =>
+      Response.json({
+        data: [{ id: "gemma-4-26b", pricing: { prompt: 0.1, completion: 0.2 } }],
+      }),
+    );
+    const found = required(await engine.getOrFetch("nanogpt", "gemma-4-26b"));
+    expect(found.cache_write_per_token).toBe(0);
+  });
+
+  test("a cached Claude row that charges nothing to write is discarded, not served", () => {
+    const engine = new PricingEngine(
+      memoryStore({
+        "nanogpt/anthropic/claude-opus-4.6": {
+          input_per_token: 0.000_005,
+          output_per_token: 0.000_025,
+          cache_read_per_token: 0.000_000_5,
+          cache_write_per_token: 0,
+        },
+      }),
+    );
+    expect(engine.cached("nanogpt", "anthropic/claude-opus-4.6")).toBeUndefined();
+    expect(
+      engine.cost({
+        provider: "nanogpt",
+        model: "anthropic/claude-opus-4.6",
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_tokens: 0,
+        cache_write_tokens: 20_000,
+        cache_ttl: "1h",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("a non-Anthropic row priced at zero for writes is still served", () => {
+    const engine = new PricingEngine(
+      memoryStore({
+        "openai/gpt-4o": {
+          input_per_token: 0.000_005,
+          output_per_token: 0.000_015,
+          cache_read_per_token: 0,
+          cache_write_per_token: 0,
+        },
+      }),
+    );
+    expect(engine.cached("openai", "gpt-4o")).toBeDefined();
+  });
 });
