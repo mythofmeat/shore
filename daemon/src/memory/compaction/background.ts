@@ -1,7 +1,7 @@
 import { shoreLog } from "../../log.ts";
 
 
-import { activeJsonlIn, characterDataDir } from "../../config/dirs.ts";
+import { activeJsonlIn, MAIN_THREAD, threadDataDir } from "../../config/dirs.ts";
 
 import { MessageStore, isToolResultOnly } from "../../engine/message_store";
 import type { Message } from "../../engine/types";
@@ -10,7 +10,7 @@ import type { CompactionOutcome, ConversationMessage } from "./types";
 
 export interface LoadedConversation {
   store: MessageStore;
-  characterDir: string;
+  conversationDir: string;
   rawContent: string;
   messages: ConversationMessage[];
 }
@@ -29,11 +29,11 @@ export async function loadMessagesForCompaction(
   dataDir: string,
   character: string,
 ): Promise<LoadedConversation> {
-  const characterDir = characterDataDir(dataDir, character);
-  const { store, raw } = await MessageStore.loadWithRaw(activeJsonlIn(characterDir));
+  const conversationDir = threadDataDir(dataDir, character, MAIN_THREAD);
+  const { store, raw } = await MessageStore.loadWithRaw(activeJsonlIn(conversationDir));
   return {
     store,
-    characterDir,
+    conversationDir,
     rawContent: raw,
     messages: store.messages().map(toConversationMessage),
   };

@@ -87,7 +87,8 @@ function contextIn(root: string): ToolContext {
     imageDir: join(root, "images"),
     workspaceDir: join(root, "config", "characters", "ada", "workspace"),
     characterDataDir: join(root, "data", "ada"),
-    historyDbPath: "/tmp/history.db",
+    conversationDir: "",
+  historyDbPath: "/tmp/history.db",
   characterName: "ada",
     configDir: join(root, "config"),
     searchConfig: app.tools.web_search,
@@ -131,7 +132,7 @@ async function run(
   frames: ServerMessage[] = [],
   toolUseId?: string,
 ): Promise<string> {
-  await mkdir(join(root, "data", "ada"), { recursive: true });
+  await mkdir(join(root, "data", "ada", "threads", "main"), { recursive: true });
   return await runSubagent(
     {
       config,
@@ -390,7 +391,7 @@ describe("the trace", () => {
 
     await run(config, root, "researcher", dicerollingProvider(), [], "toolu_parent");
 
-    const active = await readFile(join(root, "data", "ada", "active.jsonl"), "utf8").catch(
+    const active = await readFile(join(root, "data", "ada", "threads", "main", "active.jsonl"), "utf8").catch(
       () => undefined,
     );
     expect(active).toBeUndefined();
@@ -489,7 +490,7 @@ describe("the forwarder", () => {
 
   test("with no client channel the frames are dropped, and the sub-agent still runs", async () => {
     const { config, root } = await configWith({ researcher: spec() });
-    await mkdir(join(root, "data", "ada"), { recursive: true });
+    await mkdir(join(root, "data", "ada", "threads", "main"), { recursive: true });
 
     const answer = await runSubagent(
       {
@@ -514,7 +515,7 @@ describe("the prompt macros", () => {
     const { config, root } = await configWith({
       researcher: spec({ prompt: "Notes:\n{{active_history: 5}}" }),
     });
-    await mkdir(join(root, "data", "ada"), { recursive: true });
+    await mkdir(join(root, "data", "ada", "threads", "main"), { recursive: true });
     await writeFile(join(root, "data", "ada", "secret.txt"), "SHOULD NOT APPEAR");
 
     await runSubagent(

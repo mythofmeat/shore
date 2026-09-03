@@ -76,9 +76,9 @@ async function world(
   await mkdir(join(dirs.config, "characters", "ada", "workspace", "memory"), { recursive: true });
 
   const characterDir = join(dirs.data, "ada");
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   await writeFile(
-    join(characterDir, "active.jsonl"),
+    join(characterDir, "threads", "main", "active.jsonl"),
     messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
   );
 

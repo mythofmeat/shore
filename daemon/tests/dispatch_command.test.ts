@@ -76,7 +76,7 @@ async function harness(): Promise<{
     runtime: join(root, "runtime"),
   };
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
-  await mkdir(join(dirs.data, "ada"), { recursive: true });
+  await mkdir(join(dirs.data, "ada", "threads", "main"), { recursive: true });
 
   for (const name of ["aaron", "ada", "bob"]) {
     const workspace = join(dirs.config, "characters", name, "workspace");
@@ -88,7 +88,7 @@ async function harness(): Promise<{
   await writeFile(join(memoryDir, "daily", "2026-01-01.md"), "# a day\n\nsomething happened\n");
   await writeFile(join(memoryDir, "boats.md"), "# boats\n\nthey float\n");
   await writeFile(
-    join(dirs.data, "ada", "active.jsonl"),
+    join(dirs.data, "ada", "threads", "main", "active.jsonl"),
     SEEDED.map((m) => JSON.stringify(m)).join("\n") + "\n",
   );
 

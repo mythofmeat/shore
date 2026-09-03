@@ -412,11 +412,11 @@
           "content": "v = 2"
         },
         {
-          "path": "conf.d/🎵.toml",
+          "path": "conf.d/\ud83c\udfb5.toml",
           "content": "u = 1\nv = 9"
         },
         {
-          "path": "conf.d/ﬀ.toml",
+          "path": "conf.d/\ufb00.toml",
           "content": "u = 2"
         }
       ],
@@ -558,11 +558,11 @@
       "name": "names sort by code point, not UTF-16 order",
       "files": [
         {
-          "path": "characters/🎵drum/workspace/SOUL.md",
+          "path": "characters/\ud83c\udfb5drum/workspace/SOUL.md",
           "content": "a"
         },
         {
-          "path": "characters/ﬀute/workspace/SOUL.md",
+          "path": "characters/\ufb00ute/workspace/SOUL.md",
           "content": "b"
         },
         {
@@ -574,8 +574,8 @@
       "probe": "zed",
       "discovered": [
         "zed",
-        "ﬀute",
-        "🎵drum"
+        "\ufb00ute",
+        "\ud83c\udfb5drum"
       ],
       "definition": "c",
       "user": null,
@@ -758,9 +758,9 @@
       "character_workspace_file": "/base/characters/aria/workspace/SOUL.md",
       "character_memory_dir": "/base/characters/aria/workspace/memory",
       "character_data_dir": "/base/aria",
-      "character_active_jsonl": "/base/aria/active.jsonl",
-      "character_segments_dir": "/base/aria/segments",
-      "character_compaction_manifest": "/base/aria/compaction.json",
+      "character_active_jsonl": "/base/aria/threads/main/active.jsonl",
+      "character_segments_dir": "/base/aria/threads/main/segments",
+      "character_compaction_manifest": "/base/aria/threads/main/compaction.json",
       "plugins_dir": "/base/plugins"
     },
     {
@@ -771,9 +771,9 @@
       "character_workspace_file": "/base/characters/../workspace/SOUL.md",
       "character_memory_dir": "/base/characters/../workspace/memory",
       "character_data_dir": "/base/..",
-      "character_active_jsonl": "/base/../active.jsonl",
-      "character_segments_dir": "/base/../segments",
-      "character_compaction_manifest": "/base/../compaction.json",
+      "character_active_jsonl": "/base/../threads/main/active.jsonl",
+      "character_segments_dir": "/base/../threads/main/segments",
+      "character_compaction_manifest": "/base/../threads/main/compaction.json",
       "plugins_dir": "/base/plugins"
     },
     {
@@ -784,9 +784,9 @@
       "character_workspace_file": "/base/characters/a/b/workspace/SOUL.md",
       "character_memory_dir": "/base/characters/a/b/workspace/memory",
       "character_data_dir": "/base/a/b",
-      "character_active_jsonl": "/base/a/b/active.jsonl",
-      "character_segments_dir": "/base/a/b/segments",
-      "character_compaction_manifest": "/base/a/b/compaction.json",
+      "character_active_jsonl": "/base/a/b/threads/main/active.jsonl",
+      "character_segments_dir": "/base/a/b/threads/main/segments",
+      "character_compaction_manifest": "/base/a/b/threads/main/compaction.json",
       "plugins_dir": "/base/plugins"
     },
     {
@@ -797,9 +797,9 @@
       "character_workspace_file": "/etc/workspace/SOUL.md",
       "character_memory_dir": "/etc/workspace/memory",
       "character_data_dir": "/etc",
-      "character_active_jsonl": "/etc/active.jsonl",
-      "character_segments_dir": "/etc/segments",
-      "character_compaction_manifest": "/etc/compaction.json",
+      "character_active_jsonl": "/etc/threads/main/active.jsonl",
+      "character_segments_dir": "/etc/threads/main/segments",
+      "character_compaction_manifest": "/etc/threads/main/compaction.json",
       "plugins_dir": "/base/plugins"
     },
     {
@@ -810,22 +810,22 @@
       "character_workspace_file": "/base/characters/workspace/SOUL.md",
       "character_memory_dir": "/base/characters/workspace/memory",
       "character_data_dir": "/base/",
-      "character_active_jsonl": "/base/active.jsonl",
-      "character_segments_dir": "/base/segments",
-      "character_compaction_manifest": "/base/compaction.json",
+      "character_active_jsonl": "/base/threads/main/active.jsonl",
+      "character_segments_dir": "/base/threads/main/segments",
+      "character_compaction_manifest": "/base/threads/main/compaction.json",
       "plugins_dir": "/base/plugins"
     },
     {
       "base": "/base",
-      "name": "🎵",
-      "character_config_dir": "/base/characters/🎵",
-      "character_workspace_dir": "/base/characters/🎵/workspace",
-      "character_workspace_file": "/base/characters/🎵/workspace/SOUL.md",
-      "character_memory_dir": "/base/characters/🎵/workspace/memory",
-      "character_data_dir": "/base/🎵",
-      "character_active_jsonl": "/base/🎵/active.jsonl",
-      "character_segments_dir": "/base/🎵/segments",
-      "character_compaction_manifest": "/base/🎵/compaction.json",
+      "name": "\ud83c\udfb5",
+      "character_config_dir": "/base/characters/\ud83c\udfb5",
+      "character_workspace_dir": "/base/characters/\ud83c\udfb5/workspace",
+      "character_workspace_file": "/base/characters/\ud83c\udfb5/workspace/SOUL.md",
+      "character_memory_dir": "/base/characters/\ud83c\udfb5/workspace/memory",
+      "character_data_dir": "/base/\ud83c\udfb5",
+      "character_active_jsonl": "/base/\ud83c\udfb5/threads/main/active.jsonl",
+      "character_segments_dir": "/base/\ud83c\udfb5/threads/main/segments",
+      "character_compaction_manifest": "/base/\ud83c\udfb5/threads/main/compaction.json",
       "plugins_dir": "/base/plugins"
     },
     {
@@ -836,9 +836,9 @@
       "character_workspace_file": "rel/base/characters/aria/workspace/SOUL.md",
       "character_memory_dir": "rel/base/characters/aria/workspace/memory",
       "character_data_dir": "rel/base/aria",
-      "character_active_jsonl": "rel/base/aria/active.jsonl",
-      "character_segments_dir": "rel/base/aria/segments",
-      "character_compaction_manifest": "rel/base/aria/compaction.json",
+      "character_active_jsonl": "rel/base/aria/threads/main/active.jsonl",
+      "character_segments_dir": "rel/base/aria/threads/main/segments",
+      "character_compaction_manifest": "rel/base/aria/threads/main/compaction.json",
       "plugins_dir": "rel/base/plugins"
     },
     {
@@ -849,9 +849,9 @@
       "character_workspace_file": "/base/characters/aria/workspace/SOUL.md",
       "character_memory_dir": "/base/characters/aria/workspace/memory",
       "character_data_dir": "/base/aria",
-      "character_active_jsonl": "/base/aria/active.jsonl",
-      "character_segments_dir": "/base/aria/segments",
-      "character_compaction_manifest": "/base/aria/compaction.json",
+      "character_active_jsonl": "/base/aria/threads/main/active.jsonl",
+      "character_segments_dir": "/base/aria/threads/main/segments",
+      "character_compaction_manifest": "/base/aria/threads/main/compaction.json",
       "plugins_dir": "/base/plugins"
     }
   ]

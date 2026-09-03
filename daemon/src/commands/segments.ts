@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { activeJsonlIn, characterDataDir } from "../config/dirs.ts";
+import {
+  activeJsonlIn,
+  characterDataDir,
+  MAIN_THREAD,
+  threadDataDir,
+} from "../config/dirs.ts";
 
 import { HISTORY_DB_FILE, HistoryStore, type SegmentRecord } from "../engine/history_store.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
@@ -127,9 +132,10 @@ export async function clear(
 
   try {
     const characterDir = characterDataDir(ctx.dataDir, character);
+    const conversationDir = threadDataDir(ctx.dataDir, character, MAIN_THREAD);
     let activeContent: string;
     try {
-      activeContent = await readFile(activeJsonlIn(characterDir), "utf8");
+      activeContent = await readFile(activeJsonlIn(conversationDir), "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") activeContent = "";
       else throw error;
@@ -139,7 +145,7 @@ export async function clear(
     const excluded = args["exclude"] === true;
     const note = nullableOptionalText(args["note"], "note");
     await archiveAndRetain(
-      characterDir,
+      conversationDir,
       0,
       activeContent,
       ctx.now ?? (() => new Date().toISOString()),

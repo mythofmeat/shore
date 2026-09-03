@@ -82,7 +82,7 @@ async function buildScenario(
 ): Promise<{ engine: ConversationEngine; pushes: () => number; root: string }> {
   const root = await mkdtemp(testTmp("shore-conv-"));
   const characterDir = join(root, "TestChar");
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
 
   for (const file of scenario.files) {
     await writeFile(join(root, file.name), file.bytes_utf8);
@@ -96,10 +96,10 @@ async function buildScenario(
   const active = substitute(scenario.active);
   if (scenario.archived.length > 0) {
     const archived = substitute(scenario.archived);
-    await mkdir(join(characterDir, "segments"), { recursive: true });
-    await writeFile(join(characterDir, "segments", "0001.jsonl"), jsonl(archived));
+    await mkdir(join(characterDir, "threads", "main", "segments"), { recursive: true });
+    await writeFile(join(characterDir, "threads", "main", "segments", "0001.jsonl"), jsonl(archived));
     await writeFile(
-      join(characterDir, "compaction.json"),
+      join(characterDir, "threads", "main", "compaction.json"),
       JSON.stringify(
         {
           segments: [
@@ -116,7 +116,7 @@ async function buildScenario(
       ),
     );
   }
-  await writeFile(join(characterDir, "active.jsonl"), jsonl(active));
+  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), jsonl(active));
 
   let count = 0;
   const engine = await ConversationEngine.load("TestChar", root, () => {
@@ -635,7 +635,7 @@ describe("log stops at 64 user turns unless told otherwise", () => {
   async function engineOf(userTurns: number): Promise<ConversationEngine> {
     const root = await mkdtemp(testTmp("shore-bound-"));
     const characterDir = join(root, "TestChar");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     const messages = Array.from({ length: userTurns }, (_, i) => ({
       msg_id: `m${i + 1}`,
       role: "user" as const,
@@ -645,7 +645,7 @@ describe("log stops at 64 user turns unless told otherwise", () => {
       timestamp: "2026-01-01T00:00:00Z",
     }));
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
     );
     return await ConversationEngine.load("TestChar", root, () => {});
@@ -680,9 +680,9 @@ describe("which page an argument asks for", () => {
   async function engineOf(messages: Message[]): Promise<ConversationEngine> {
     const root = await mkdtemp(testTmp("shore-args-"));
     const characterDir = join(root, "TestChar");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
     );
     return await ConversationEngine.load("TestChar", root, () => {});
@@ -740,8 +740,8 @@ describe("storage-native conversation paging", () => {
   test("every page reads bounded rows independent of lifetime history", async () => {
     const root = await mkdtemp(testTmp("shore-bounded-history-"));
     const characterDir = join(root, "TestChar");
-    await mkdir(characterDir, { recursive: true });
-    await writeFile(join(characterDir, "active.jsonl"), "");
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+    await writeFile(join(characterDir, "threads", "main", "active.jsonl"), "");
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
     const expected: string[] = [];
     for (let segment = 0; segment < 200; segment += 1) {
@@ -787,7 +787,7 @@ describe("storage-native conversation paging", () => {
   test("a numeric cursor survives active appends and compaction movement", async () => {
     const root = await mkdtemp(testTmp("shore-stable-history-"));
     const characterDir = join(root, "TestChar");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     const archived = [archivedMessage("u0", "user"), archivedMessage("a0", "assistant")];
     const active = [
       archivedMessage("u1", "user"),
@@ -808,7 +808,7 @@ describe("storage-native conversation paging", () => {
       archived,
     );
     store.close();
-    await writeFile(join(characterDir, "active.jsonl"), jsonl(active));
+    await writeFile(join(characterDir, "threads", "main", "active.jsonl"), jsonl(active));
 
     const engine = await ConversationEngine.load("TestChar", root, () => {});
     const before = 4;
@@ -833,7 +833,7 @@ describe("storage-native conversation paging", () => {
     );
     compactionStore.close();
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       jsonl([...active.slice(2), archivedMessage("u3", "user")]),
     );
     await engine.reload();
@@ -852,7 +852,7 @@ describe("which alternate an argument selects", () => {
   async function threeAnswers(): Promise<ConversationEngine> {
     const root = await mkdtemp(testTmp("shore-alt-"));
     const characterDir = join(root, "TestChar");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     const answer = (text: string) => ({
       content: text,
       images: [],
@@ -881,7 +881,7 @@ describe("which alternate an argument selects", () => {
       },
     ];
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
     );
     return await ConversationEngine.load("TestChar", root, () => {});
@@ -987,9 +987,9 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
   async function engineOver(messages: Message[]): Promise<ConversationEngine> {
     const root = await mkdtemp(testTmp("shore-orphan-"));
     const characterDir = join(root, "TestChar");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
     );
     return await ConversationEngine.load("TestChar", root, () => {});
@@ -1086,23 +1086,23 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
     async () => {
       const root = await mkdtemp(testTmp("shore-readonly-"));
       const characterDir = join(root, "TestChar");
-      await mkdir(characterDir, { recursive: true });
+      await mkdir(join(characterDir, "threads", "main"), { recursive: true });
       await writeFile(
-        join(characterDir, "active.jsonl"),
+        join(characterDir, "threads", "main", "active.jsonl"),
         [msg("m_1", "user", [{ type: "text", text: "go" }]), msg("m_2", "user", [{ type: "text", text: "stay" }])]
           .map((m) => JSON.stringify(m))
           .join("\n") + "\n",
       );
       const engine = await ConversationEngine.load("TestChar", root, () => {});
 
-      await chmod(characterDir, 0o555);
+      await chmod(join(characterDir, "threads", "main"), 0o555);
       let thrown: unknown;
       try {
         await deleteMessages(engine, { refs: ["m_1"] });
       } catch (e) {
         thrown = e;
       } finally {
-        await chmod(characterDir, 0o755);
+        await chmod(join(characterDir, "threads", "main"), 0o755);
       }
 
       expect(thrown, "a store that refused the write is an error, not a silent success").toBeInstanceOf(
@@ -1139,7 +1139,7 @@ describe("paging when the legacy import could not finish", () => {
   async function engineWhoseLegacyImportAborted(): Promise<ConversationEngine> {
     const root = await mkdtemp(testTmp("shore-fallback-page-"));
     const characterDir = join(root, "TestChar");
-    await mkdir(join(characterDir, "segments"), { recursive: true });
+    await mkdir(join(characterDir, "threads", "main", "segments"), { recursive: true });
 
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
     store.putSegment(
@@ -1156,7 +1156,7 @@ describe("paging when the legacy import could not finish", () => {
     store.close();
 
     await writeFile(
-      join(characterDir, "compaction.json"),
+      join(characterDir, "threads", "main", "compaction.json"),
       JSON.stringify({
         segments: [
           { file: "0001.jsonl", message_count: 4, compacted_at: "2026-01-01T00:00:00Z" },
@@ -1165,9 +1165,9 @@ describe("paging when the legacy import could not finish", () => {
         total_compacted_messages: 6,
       }),
     );
-    await writeFile(join(characterDir, "segments", "0002.jsonl"), "{ not json at all\n");
+    await writeFile(join(characterDir, "threads", "main", "segments", "0002.jsonl"), "{ not json at all\n");
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       [msg("u3", "user"), msg("a3", "assistant"), msg("u4", "user"), msg("a4", "assistant")]
         .map((m) => JSON.stringify(m))
         .join("\n") + "\n",
@@ -1234,7 +1234,7 @@ describe("a turn budget spent across the archive boundary", () => {
   async function engineOf(): Promise<ConversationEngine> {
     const root = await mkdtemp(testTmp("shore-boundary-page-"));
     const characterDir = join(root, "TestChar");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
 
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
     for (const segment of [0, 1]) {
@@ -1253,7 +1253,7 @@ describe("a turn budget spent across the archive boundary", () => {
     store.close();
 
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       [msg("ux", "user"), msg("ax", "assistant")].map((m) => JSON.stringify(m)).join("\n") + "\n",
     );
     return await ConversationEngine.load("TestChar", root, () => {});

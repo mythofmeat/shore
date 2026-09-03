@@ -319,21 +319,21 @@ export interface SearchHistoryResult {
 
 export async function handleSearchHistory(
   input: Record<string, unknown>,
-  characterDataDir: string,
+  conversationDir: string,
   options: HistorySearchOptions,
 ): Promise<SearchHistoryResult> {
-  const path = options.indexPath ?? join(characterDataDir, "history_search.db");
+  const path = options.indexPath ?? join(conversationDir, "history_search.db");
   return await withHistoryIndexLock(path, async () =>
-    await handleSearchHistoryUnlocked(input, characterDataDir, options),
+    await handleSearchHistoryUnlocked(input, conversationDir, options),
   );
 }
 
 async function handleSearchHistoryUnlocked(
   input: Record<string, unknown>,
-  characterDataDir: string,
+  conversationDir: string,
   options: HistorySearchOptions,
 ): Promise<SearchHistoryResult> {
-  if (characterDataDir === "") throw new InvalidArgs("conversation history is not configured");
+  if (conversationDir === "") throw new InvalidArgs("conversation history is not configured");
   const timeZone = options.timeZone ?? hostZone();
   const { query, range } = filtersFrom(input);
   const modelFilter = modelFilterFrom(input);
@@ -351,14 +351,14 @@ async function handleSearchHistoryUnlocked(
     mode = "lexical";
   }
 
-  const index = await openAndReconcile(characterDataDir, options, options.indexPath);
+  const index = await openAndReconcile(conversationDir, options, options.indexPath);
   try {
     const diagnostics = index.diagnostics(options.embedder);
     const stats = { skipped: 0 };
     const matcher = query === undefined ? undefined : new QueryMatcher(query);
     let lexical: RankedHistoryCandidate[] = [];
     if (mode !== "vector") {
-      lexical = await lexicalCandidates(index, characterDataDir, matcher, range, modelFilter, stats);
+      lexical = await lexicalCandidates(index, conversationDir, matcher, range, modelFilter, stats);
     }
 
     let vector: RankedHistoryCandidate[] = [];
@@ -369,7 +369,7 @@ async function handleSearchHistoryUnlocked(
         if (queryVector === undefined) throw new Error("embedding response did not include query vector");
         vector = await vectorCandidates(
           index,
-          characterDataDir,
+          conversationDir,
           queryVector,
           options.embedder,
           range,
@@ -380,7 +380,7 @@ async function handleSearchHistoryUnlocked(
         semanticUnavailable = `query_embedding_failed: ${describeFailure(error)}`;
         mode = "lexical";
         if (lexical.length === 0) {
-          lexical = await lexicalCandidates(index, characterDataDir, matcher, range, modelFilter, stats);
+          lexical = await lexicalCandidates(index, conversationDir, matcher, range, modelFilter, stats);
         }
       }
     }
@@ -443,12 +443,12 @@ async function handleSearchHistoryUnlocked(
 }
 
 async function openAndReconcile(
-  characterDataDir: string,
+  conversationDir: string,
   identity: { character: string; dbPath: string },
   path: string | undefined,
 ): Promise<HistorySearchIndex> {
   const open = () => HistorySearchIndex.open({
-    characterDataDir,
+    conversationDir,
     character: identity.character,
     dbPath: identity.dbPath,
     ...(path === undefined ? {} : { path }),
@@ -461,7 +461,7 @@ async function openAndReconcile(
     index.close();
     try {
       const fs = await import("node:fs/promises");
-      await fs.unlink(path ?? join(characterDataDir, "history_search.db"));
+      await fs.unlink(path ?? join(conversationDir, "history_search.db"));
     } catch {}
     index = open();
     try {
@@ -483,7 +483,7 @@ function searchModeFrom(input: Record<string, unknown>, fallback: HistorySearchM
 
 async function lexicalCandidates(
   index: HistorySearchIndex,
-  characterDataDir: string,
+  conversationDir: string,
   matcher: QueryMatcher | undefined,
   range: TimeRange,
   modelFilter: string | undefined,
@@ -534,7 +534,7 @@ async function lexicalCandidates(
 
 async function vectorCandidates(
   index: HistorySearchIndex,
-  characterDataDir: string,
+  conversationDir: string,
   queryVector: readonly number[],
   embedder: Embedder,
   range: TimeRange,

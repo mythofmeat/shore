@@ -8,7 +8,7 @@ import { HistorySearchIndex, withHistoryIndexLock } from "./history_index.ts";
 
 export interface HistoryIndexRegistration {
   character: string;
-  characterDataDir: string;
+  conversationDir: string;
   dbPath: string;
   indexPath: string;
   embedder?: Embedder;
@@ -24,7 +24,7 @@ export interface HistoryIndexServiceOptions {
 
 export interface HistoryIndexProgress {
   character: string;
-  characterDataDir: string;
+  conversationDir: string;
   dbPath: string;
   indexPath: string;
   embedder: Embedder | undefined;
@@ -68,7 +68,7 @@ export class HistoryIndexService {
 
   register(registration: HistoryIndexRegistration): void {
     const previous = this.#entries.get(registration.character);
-    const locationChanged = previous?.characterDataDir !== registration.characterDataDir ||
+    const locationChanged = previous?.conversationDir !== registration.conversationDir ||
       previous?.indexPath !== registration.indexPath;
     const identityChanged = previous?.embedder?.identity !== registration.embedder?.identity ||
       previous?.embedder?.modelId !== registration.embedder?.modelId ||
@@ -97,7 +97,7 @@ export class HistoryIndexService {
     if (entry === undefined) return undefined;
     return {
       character,
-      characterDataDir: entry.characterDataDir,
+      conversationDir: entry.conversationDir,
       dbPath: entry.dbPath,
       indexPath: entry.indexPath,
       embedder: entry.embedder,
@@ -178,7 +178,7 @@ export class HistoryIndexService {
       try {
         const embedded = await withHistoryIndexLock(entry.indexPath, async () => {
           const index = HistorySearchIndex.open({
-            characterDataDir: entry.characterDataDir,
+            conversationDir: entry.conversationDir,
             character: entry.character,
             dbPath: entry.dbPath,
             path: entry.indexPath,
@@ -211,7 +211,7 @@ export class HistoryIndexService {
     try {
       await withHistoryIndexLock(entry.indexPath, async () => {
         const index = HistorySearchIndex.open({
-          characterDataDir: entry.characterDataDir,
+          conversationDir: entry.conversationDir,
           character: entry.character,
           dbPath: entry.dbPath,
           path: entry.indexPath,

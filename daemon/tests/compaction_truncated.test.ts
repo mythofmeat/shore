@@ -25,12 +25,12 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
   const characterDir = join(dataDir, "ada");
   const workspace = join(root, "workspace");
   await mkdir(join(workspace, "memory"), { recursive: true });
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "active.jsonl"), activeContent, "utf8");
+  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
   const deferred: string[] = [];
 
   const outcome = await compact(
@@ -53,8 +53,8 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
   expect((outcome as { partialWrites: string[] }).partialWrites.length).toBeGreaterThan(0);
   expect(deferred).toEqual(["MEMORY.md"]);
 
-  expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(activeContent);
-  expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+  expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
+  expect(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
 test("a pass that ends cleanly still archives", async () => {
@@ -64,12 +64,12 @@ test("a pass that ends cleanly still archives", async () => {
   const characterDir = join(dataDir, "ada");
   const workspace = join(root, "workspace");
   await mkdir(join(workspace, "memory"), { recursive: true });
-  await mkdir(characterDir, { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
 
   const messages = conversation();
   const activeContent = messages.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "active.jsonl"), activeContent, "utf8");
+  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
 
   const outcome = await compact(
     options(dataDir, workspace, memoryStore, messages, activeContent, tools(workspace), scripted([
@@ -125,7 +125,7 @@ function options(
     charName: "ada",
     userName: "user",
     llm,
-    conversationMgr: conversationManager(join(dataDir, "ada")),
+    conversationMgr: conversationManager(join(dataDir, "ada", "threads", "main")),
     markdownStore: memoryStore,
     dryRun: false,
     retainTrailingAutonomous: false,

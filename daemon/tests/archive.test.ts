@@ -41,7 +41,7 @@ describe("character archives", () => {
     expect(refreshed).toBe(true);
     expect(await readFile(join(target.workspace as string, "ada", "SOUL.md"), "utf8"))
       .toBe("You are ada.\n");
-    expect(await readFile(join(target.data, "ada", "active.jsonl"), "utf8"))
+    expect(await readFile(join(target.data, "ada", "threads", "main", "active.jsonl"), "utf8"))
       .toContain("hello from ada");
     const history = new Database(join(target.data, "history.db"), { readonly: true });
     expect(history.query("SELECT DISTINCT character FROM history_messages").values()).toEqual([
@@ -60,7 +60,7 @@ describe("character archives", () => {
     await seedCharacter(target, "ada", "keep me");
     expect(importCharacter(context(target, new Set(["ada"])), { archive: output }))
       .rejects.toThrow("Refusing to overwrite");
-    expect(await readFile(join(target.data, "ada", "active.jsonl"), "utf8")).toContain("keep me");
+    expect(await readFile(join(target.data, "ada", "threads", "main", "active.jsonl"), "utf8")).toContain("keep me");
   });
 
   test("a hidden history conflict is preserved when import rolls back", async () => {
@@ -109,12 +109,12 @@ async function seedCharacter(dirs: ShoreDirs, character: string, text: string): 
   const workspace = join(dirs.workspace as string, character);
   const data = join(dirs.data, character);
   await mkdir(workspace, { recursive: true });
-  await mkdir(data, { recursive: true });
+  await mkdir(join(data, "threads", "main"), { recursive: true });
   await mkdir(join(dirs.config, "characters", character), { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), `You are ${character}.\n`);
   await writeFile(join(dirs.config, "characters", character, "config.toml"), "[defaults]\nstream = true\n");
   const message = userMessage(character, text);
-  await writeFile(join(data, "active.jsonl"), `${JSON.stringify(message)}\n`);
+  await writeFile(join(data, "threads", "main", "active.jsonl"), `${JSON.stringify(message)}\n`);
   const history = HistoryStore.open(join(dirs.data, "history.db"));
   history.putSegment(
     character,

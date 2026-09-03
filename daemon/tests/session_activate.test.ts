@@ -80,9 +80,9 @@ async function world(
   await writeFile(join(workspace, "MEMORY.md"), "- nothing yet\n");
 
   const charDir = join(dirs.data, CHARACTER);
-  await mkdir(charDir, { recursive: true });
+  await mkdir(join(charDir, "threads", "main"), { recursive: true });
   await writeFile(
-    join(charDir, "active.jsonl"),
+    join(charDir, "threads", "main", "active.jsonl"),
     messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
   );
 

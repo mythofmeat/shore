@@ -41,7 +41,8 @@ async function runMcpTool(
     imageDir,
     workspaceDir: "",
     characterDataDir: "",
-    historyDbPath: "/tmp/history.db",
+    conversationDir: "",
+  historyDbPath: "/tmp/history.db",
   characterName: "",
     configDir: "",
     searchConfig: {
@@ -160,7 +161,8 @@ describe("mcp media reaches the model", () => {
       imageDir: "/proc/shore-cannot-write-here",
       workspaceDir: "",
       characterDataDir: "",
-      historyDbPath: "/tmp/history.db",
+      conversationDir: "",
+  historyDbPath: "/tmp/history.db",
   characterName: "",
       configDir: "",
       searchConfig: {

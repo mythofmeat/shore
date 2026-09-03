@@ -130,10 +130,10 @@ function recorder(overrides: Partial<TurnAutonomy> = {}): Recorder {
 async function seedCharacter(root: string, history: unknown[]): Promise<string> {
   const dataDir = join(root, "data");
   const charDir = join(dataDir, "ada");
-  await mkdir(charDir, { recursive: true });
+  await mkdir(join(charDir, "threads", "main"), { recursive: true });
   if (history.length > 0) {
     await writeFile(
-      join(charDir, "active.jsonl"),
+      join(charDir, "threads", "main", "active.jsonl"),
       history.map((m) => JSON.stringify(m)).join("\n") + "\n",
     );
   }
@@ -231,13 +231,13 @@ describe("ensureAndBackfillAutonomy", () => {
 
         const archived = rehydrate(input["archived"]);
         if (archived.length > 0) {
-          await mkdir(join(charDir, "segments"), { recursive: true });
+          await mkdir(join(charDir, "threads", "main", "segments"), { recursive: true });
           await writeFile(
-            join(charDir, "segments", "0001.jsonl"),
+            join(charDir, "threads", "main", "segments", "0001.jsonl"),
             archived.map((m) => JSON.stringify(m)).join("\n") + "\n",
           );
           await writeFile(
-            join(charDir, "compaction.json"),
+            join(charDir, "threads", "main", "compaction.json"),
             JSON.stringify({
               segments: [
                 {

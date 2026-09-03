@@ -77,25 +77,25 @@ async function world(
   await writeFile(join(workspace, "SOUL.md"), "# ada\n\nA fixture character.\n");
   await writeFile(join(workspace, "MEMORY.md"), "- nothing yet\n");
   const charDir = join(dirs.data, "ada");
-  await mkdir(charDir, { recursive: true });
+  await mkdir(join(charDir, "threads", "main"), { recursive: true });
   await writeFile(
-    join(charDir, "active.jsonl"),
+    join(charDir, "threads", "main", "active.jsonl"),
     messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length === 0 ? "" : "\n"),
   );
 
   const [files, listed] = segments;
   if (files > 0) {
-    await mkdir(join(charDir, "segments"), { recursive: true });
+    await mkdir(join(charDir, "threads", "main", "segments"), { recursive: true });
     const entries = [];
     for (let n = 1; n <= files; n += 1) {
       const file = `${String(n).padStart(4, "0")}.jsonl`;
-      await writeFile(join(charDir, "segments", file), "");
+      await writeFile(join(charDir, "threads", "main", "segments", file), "");
       if (n <= listed) {
         entries.push({ file, message_count: 4, compacted_at: "2025-12-01T09:00:00-05:00" });
       }
     }
     await writeFile(
-      join(charDir, "compaction.json"),
+      join(charDir, "threads", "main", "compaction.json"),
       JSON.stringify({ segments: entries, total_compacted_messages: listed * 4 }, null, 2),
     );
   }
@@ -135,7 +135,7 @@ afterEach(() => {
 async function loadThroughStore(shapes: Parameters<typeof fromShape>[0][]): Promise<Message[]> {
   const { dataDir } = await world(shapes.map(fromShape));
   const { MessageStore } = await import("../src/engine/message_store.ts");
-  const store = await MessageStore.load(join(dataDir, "ada", "active.jsonl"));
+  const store = await MessageStore.load(join(dataDir, "ada", "threads", "main", "active.jsonl"));
   return [...store.messages()];
 }
 

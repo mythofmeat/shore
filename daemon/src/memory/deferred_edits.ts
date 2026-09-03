@@ -15,6 +15,8 @@ import { join } from "node:path";
 import {
   activeJsonlIn,
   characterConfigDir,
+  MAIN_THREAD,
+  threadDirIn,
   characterMemoryDir,
   characterWorkspaceDir,
   characterWorkspaceFile,
@@ -287,9 +289,9 @@ export async function resetActivePromptSnapshot(characterDataDir: string): Promi
   await rm(join(characterDataDir, QUEUE_FILE), { force: true });
 }
 
-async function conversationHasMessages(characterDataDir: string): Promise<boolean> {
+async function conversationHasMessages(conversationDir: string): Promise<boolean> {
   try {
-    return (await readFile(activeJsonlIn(characterDataDir), "utf8")).trim() !== "";
+    return (await readFile(activeJsonlIn(conversationDir), "utf8")).trim() !== "";
   } catch (e) {
     return (e as NodeJS.ErrnoException).code !== "ENOENT";
   }
@@ -297,8 +299,9 @@ async function conversationHasMessages(characterDataDir: string): Promise<boolea
 
 export async function resetActivePromptSnapshotIfEmpty(
   characterDataDir: string,
+  conversationDir: string,
 ): Promise<boolean> {
-  if (await conversationHasMessages(characterDataDir)) return false;
+  if (await conversationHasMessages(conversationDir)) return false;
   await resetActivePromptSnapshot(characterDataDir);
   return true;
 }
@@ -309,7 +312,12 @@ export async function applyDeferredEdits(
   charName: string,
   workspaceRoot?: string,
 ): Promise<void> {
-  if (await resetActivePromptSnapshotIfEmpty(characterDataDir)) return;
+  if (
+    await resetActivePromptSnapshotIfEmpty(
+      characterDataDir,
+      threadDirIn(characterDataDir, MAIN_THREAD),
+    )
+  ) return;
   await refreshActivePromptSnapshot(characterDataDir, configDir, charName, workspaceRoot);
   await rm(join(characterDataDir, QUEUE_FILE), { force: true });
 }

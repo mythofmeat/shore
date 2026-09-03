@@ -427,9 +427,9 @@ describe("loading a conversation", () => {
     const rec = fx.load_messages as unknown as Record<string, unknown>;
     const root = await mkdtemp(join(tmpdir(), "shore-compaction-load-"));
     try {
-      await mkdir(join(root, "Aria"), { recursive: true });
+      await mkdir(join(root, "Aria", "threads", "main"), { recursive: true });
       await writeFile(
-        join(root, "Aria", "active.jsonl"),
+        join(root, "Aria", "threads", "main", "active.jsonl"),
         rec.active_jsonl as string,
         "utf8",
       );

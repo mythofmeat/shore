@@ -28,6 +28,7 @@ export interface ToolContext {
   imageDir: string;
   workspaceDir: string;
   characterDataDir: string;
+  conversationDir: string;
   characterName: string;
   historyDbPath: string;
   configDir: string;
@@ -141,7 +142,7 @@ export async function dispatchTool(
 
   switch (name) {
     case "search_chat_logs":
-      return await handleSearchHistory(args, ctx.characterDataDir, {
+      return await handleSearchHistory(args, ctx.conversationDir, {
         character: ctx.characterName,
         dbPath: ctx.historyDbPath,
         ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),

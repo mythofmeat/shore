@@ -62,7 +62,7 @@ describe("segment management", () => {
   test("shows the complete contents of an individual segment", async () => {
     const root = testTmp(`segments-show-${crypto.randomUUID()}`);
     const characterDir = join(root, "ada");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     put(characterDir, 0, [message("u0", "the opening", 0), message("a0", "the reply", 1)]);
     await segments(root, "ada", { action: "exclude", index: 0 });
 
@@ -80,7 +80,7 @@ describe("segment management", () => {
   test("exclude removes a whole segment and its false adjacency, then include reuses vectors", async () => {
     const root = testTmp(`segments-search-${crypto.randomUUID()}`);
     const characterDir = join(root, "ada");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     put(characterDir, 0, [message("a0", "first needle", 0)]);
     put(characterDir, 1, [message("u1", "disowned orchard", 1)]);
     put(characterDir, 2, [message("a2", "unrelated tail", 2)]);
@@ -92,7 +92,7 @@ describe("segment management", () => {
       embed: async (inputs) => inputs.map(() => [1, 0]),
     };
     let index = HistorySearchIndex.open({
-      characterDataDir: characterDir,
+      conversationDir: characterDir,
       character: "ada",
       dbPath: join(root, "history.db"),
       path,
@@ -122,7 +122,7 @@ describe("segment management", () => {
 
     await segments(root, "ada", { action: "include", index: 1 });
     index = HistorySearchIndex.open({
-      characterDataDir: characterDir,
+      conversationDir: characterDir,
       character: "ada",
       dbPath: join(root, "history.db"),
       path,
@@ -140,7 +140,7 @@ describe("segment management", () => {
   test("excluding a pre-existing segment schedules hindsight cleanup when retain is managed", async () => {
     const root = testTmp(`segments-retain-exclude-${crypto.randomUUID()}`);
     const characterDir = join(root, "ada");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     put(characterDir, 0, [message("u0", "old import", 0)]);
 
     await segments(root, "ada", { action: "exclude", index: 0 }, undefined, true);
@@ -155,7 +155,7 @@ describe("segment management", () => {
   test("shows an exhausted hindsight operation and explicitly requeues it", async () => {
     const root = testTmp(`segments-retain-retry-${crypto.randomUUID()}`);
     const characterDir = join(root, "ada");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
     store.putSegment("ada", 0, {
       file: HISTORY_DB_FILE,
@@ -195,10 +195,10 @@ describe("segment management", () => {
   test("clear archives without memory work and can exclude and annotate atomically", async () => {
     const root = testTmp(`segments-clear-${crypto.randomUUID()}`);
     const characterDir = join(root, "ada");
-    await mkdir(characterDir, { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
     const active = [message("u0", "risky experiment", 0), message("a0", "result", 1)];
     await writeFile(
-      join(characterDir, "active.jsonl"),
+      join(characterDir, "threads", "main", "active.jsonl"),
       `${active.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
     );
     await mkdir(join(characterDir, "active_prompt"), { recursive: true });
@@ -223,7 +223,7 @@ describe("segment management", () => {
       message_count: 2,
       segment: { index: 0, excluded: true, note: "bad branch" },
     });
-    expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe("");
+    expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe("");
     expect(existsSync(join(characterDir, "active_prompt"))).toBe(false);
     expect(existsSync(join(characterDir, "deferred_edits.jsonl"))).toBe(false);
     expect({ reloads, repoints, completed }).toEqual({ reloads: 1, repoints: 1, completed: 1 });

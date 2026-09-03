@@ -121,12 +121,12 @@ describe("searching a conversation's history", () => {
 
   async function characterDir(): Promise<string> {
     const dir = await mkdtemp(testTmp("shore-history-"));
-    await mkdir(join(dir, "segments"), { recursive: true });
+    await mkdir(join(dir, "threads", "main", "segments"), { recursive: true });
     for (const segment of corpus.segments) {
-      await writeFile(join(dir, "segments", segment.file), segment.body);
+      await writeFile(join(dir, "threads", "main", "segments", segment.file), segment.body);
     }
-    await writeFile(join(dir, "compaction.json"), corpus["compaction.json"]);
-    await writeFile(join(dir, "active.jsonl"), corpus["active.jsonl"]);
+    await writeFile(join(dir, "threads", "main", "compaction.json"), corpus["compaction.json"]);
+    await writeFile(join(dir, "threads", "main", "active.jsonl"), corpus["active.jsonl"]);
     return dir;
   }
 
@@ -136,7 +136,7 @@ describe("searching a conversation's history", () => {
       let got: Awaited<ReturnType<typeof handleSearchHistory>> | undefined;
       let thrown: unknown;
       try {
-        got = await handleSearchHistory(c.input, dir, {
+        got = await handleSearchHistory(c.input, join(dir, "threads", "main"), {
           character: basename(dir),
           dbPath: join(dirname(dir), "history.db"),
           defaultMode: "lexical",

@@ -239,7 +239,7 @@ async function harness(script: Scripted[]): Promise<Harness> {
   const fake = serving(script);
   const resolved = model(fake.url);
   process.env[KEY_ENV] = "test-key";
-  const store = MessageStore.create(join(root, "data", "poppy", "active.jsonl"));
+  const store = MessageStore.create(join(root, "data", "poppy", "threads", "main", "active.jsonl"));
 
   const request = async (regen: boolean): Promise<SidecarRequest> => {
     const built = await buildGenerationRequest({

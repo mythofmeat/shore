@@ -3,6 +3,8 @@ import { shoreLog } from "./log.ts";
 import {
   characterDataDir,
   characterWorkspaceFile,
+  MAIN_THREAD,
+  threadDataDir,
   discoverCharacters,
   loadCharacterDefinition,
   resolveUserDefinition,
@@ -10,6 +12,7 @@ import {
 } from "./config/dirs.ts";
 import { ConfigError, loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
 import { ConversationEngine, type HistoryListener } from "./engine/conversation.ts";
+import { ensureThreads } from "./engine/threads.ts";
 import {
   ensureCharacterWorkspace,
   resetActivePromptSnapshotIfEmpty,
@@ -121,13 +124,17 @@ export class CharacterRegistry {
     const found = discoverCharacters(this.#configDir, this.#workspaceRoot());
     for (const name of found) {
       try {
+        await ensureThreads(this.#dataDir, name, new Date().toISOString());
         await ensureCharacterWorkspace(
           characterDataDir(this.#dataDir, name),
           this.#configDir,
           name,
           this.#workspaceRoot(),
         );
-        await resetActivePromptSnapshotIfEmpty(characterDataDir(this.#dataDir, name));
+        await resetActivePromptSnapshotIfEmpty(
+          characterDataDir(this.#dataDir, name),
+          threadDataDir(this.#dataDir, name, MAIN_THREAD),
+        );
       } catch (e) {
         shoreLog.warn(
           `shore: failed to prepare workspace for character ${name}: ${String(e)}`,

@@ -2,7 +2,7 @@ import { shoreLog } from "../log.ts";
 
 import { join } from "node:path";
 
-import { activeJsonlIn, characterDataDir } from "../config/dirs.ts";
+import { activeJsonlIn, MAIN_THREAD, threadDataDir } from "../config/dirs.ts";
 
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
@@ -63,7 +63,7 @@ export async function runDeepIdleArchive(
   coveredTurnCount: number,
 ): Promise<AutonomyActionResult> {
   const dataDir = deps.config.dirs.data;
-  const characterDir = characterDataDir(dataDir, character);
+  const characterDir = threadDataDir(dataDir, character, MAIN_THREAD);
 
   let loaded: { store: MessageStore; raw: string };
   try {
@@ -115,7 +115,7 @@ async function pureArchive(
   }
 
   try {
-    const characterDir = characterDataDir(dataDir, character);
+    const characterDir = threadDataDir(dataDir, character, MAIN_THREAD);
     await conversationManager(
       characterDir,
       deps.now ?? (() => new Date().toISOString()),
