@@ -4,6 +4,7 @@ import type { LoadedConfig } from "../config/loader.ts";
 import type { BuiltRequest } from "../llm/request.ts";
 import type { CallContext, SidecarRequest } from "../llm/types.ts";
 import type { KeepalivePrefix, KeepaliveService } from "./keepalive.ts";
+import { homeThreadOf } from "../engine/threads.ts";
 import { rebuildRequestFromDisk, type RebuildDeps } from "./rebuild.ts";
 
 export type InvalidationReason =
@@ -11,6 +12,7 @@ export type InvalidationReason =
   | "idle_compaction"
   | "deep_idle_archive"
   | "model_change"
+  | "thread_change"
   | "prompt_reload"
   | "mcp_reload"
   | "mcp_recovery";
@@ -83,7 +85,14 @@ export class LastRequestCache {
     );
     if (decision.kind === "push") {
       this.#bodies.set(character, decision.request);
-      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepalive));
+      this.#keepalive?.arm(
+        toPrefix(
+          character,
+          decision.request,
+          decision.keepalive,
+          await homeThreadOf(dataDir, character),
+        ),
+      );
     } else {
       this.#keepalive?.disarm(character);
     }
@@ -95,11 +104,17 @@ function toPrefix(
   character: string,
   request: SidecarRequest,
   keepalive: KeepaliveArming,
+  thread?: string,
 ): KeepalivePrefix {
   const context = request.context;
   const base: CallContext =
     context === undefined
-      ? { character, call_type: "keepalive", thinking_enabled: false }
+      ? {
+          character,
+          call_type: "keepalive",
+          thinking_enabled: false,
+          ...(thread === undefined ? {} : { thread }),
+        }
       : { ...context, character };
   return {
     ...request,

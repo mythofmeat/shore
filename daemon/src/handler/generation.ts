@@ -85,10 +85,13 @@ import { schemasFrom } from "../tools/validate.ts";
 import type { MemoryRecallRunner } from "../memory/recall.ts";
 import type { MemoryRecallEntry } from "../diagnostics.ts";
 
-export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {}
+export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {
+  readonly thread: string;
+}
 
 export function generationEngine(engine: ConversationEngine): GenerationEngine {
   return {
+    thread: engine.thread,
     messages: () => engine.messages(),
     messagesThroughLastUserTurn: () => engine.messagesThroughLastUserTurn(),
     segmentCount: () => engine.segments().segmentCount(),
@@ -338,7 +341,7 @@ async function runGenerationCore(
       ),
       regen ? params.body.guidance : undefined,
     ),
-    context: callContext(deps, config, charName, params.rid, built.keepalive_max_secs, (built.request.provider_options === undefined
+    context: callContext(deps, config, charName, engine.thread, params.rid, built.keepalive_max_secs, (built.request.provider_options === undefined
         ? {}
         : { options: built.request.provider_options })),
   };
@@ -727,6 +730,7 @@ function callContext(
   deps: GenerationDeps,
   config: LoadedConfig,
   charName: string,
+  thread: string,
   rid: string | null,
   modelKeepaliveMaxSecs: number | undefined,
   call: { options?: ProviderOptions },
@@ -738,6 +742,7 @@ function callContext(
   return {
     ...(deps.ledgerPath === undefined ? {} : { ledger: deps.ledgerPath }),
     character: charName,
+    thread,
     call_type: "message",
     thinking_enabled: thinkingEnabled(call.options),
     ...(call.options?.cache_ttl === undefined ? {} : { cache_ttl: call.options.cache_ttl }),

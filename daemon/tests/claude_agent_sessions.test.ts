@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import {
   agentEffort,
+  conversationKey,
   nextEntries,
   planTurn,
   type SessionRecord,
 } from "../src/llm/providers/claude_agent.ts";
-import type { WireMessage } from "../src/llm/types.ts";
+import type { CallContext, SidecarRequest, WireMessage } from "../src/llm/types.ts";
 
 function msg(role: WireMessage["role"], text: string): WireMessage {
   return { role, content: [{ type: "text", text }] };
@@ -178,5 +179,51 @@ describe("agentEffort", () => {
     expect(agentEffort("off")).toBeUndefined();
     expect(agentEffort("adaptive")).toBeUndefined();
     expect(agentEffort(undefined)).toBeUndefined();
+  });
+});
+
+describe("conversationKey", () => {
+  function request(context: CallContext | undefined): SidecarRequest {
+    return {
+      sdk: "claude_agent",
+      model: "claude-opus-5",
+      api_key: "",
+      messages: [],
+      max_tokens: 100,
+      replay_prior_thinking: "all",
+      ...(context === undefined ? {} : { context }),
+    };
+  }
+  const context = (thread?: string): CallContext => ({
+    character: "qifei",
+    ledger: "/data/ledger.db",
+    call_type: "message",
+    thinking_enabled: false,
+    ...(thread === undefined ? {} : { thread }),
+  });
+
+  test("a thread of its own gets a session of its own", () => {
+    expect(conversationKey(request(context("scratch")))).not.toBe(
+      conversationKey(request(context("eval"))),
+    );
+  });
+
+  test("main keeps the key it had before threads existed, so live sessions survive", () => {
+    const beforeThreads = conversationKey(request(context()));
+    expect(conversationKey(request(context("main")))).toBe(beforeThreads);
+    expect(beforeThreads).toBe("qifei\u0000/data/ledger.db");
+  });
+
+  test("the key still separates characters and ledgers", () => {
+    expect(conversationKey(request({ ...context("scratch"), character: "aria" }))).not.toBe(
+      conversationKey(request(context("scratch"))),
+    );
+    expect(conversationKey(request({ ...context("scratch"), ledger: "/other.db" }))).not.toBe(
+      conversationKey(request(context("scratch"))),
+    );
+  });
+
+  test("no context at all is still a usable key", () => {
+    expect(conversationKey(request(undefined))).toBe("default\u0000");
   });
 });

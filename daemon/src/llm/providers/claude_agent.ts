@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-import { resolveShoreDirs, rustJoin } from "../../config/dirs.ts";
+import { MAIN_THREAD, resolveShoreDirs, rustJoin } from "../../config/dirs.ts";
 import { shoreLog } from "../../log.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import {
@@ -204,10 +204,12 @@ export function nextEntries(plan: TurnPlan, pendingAssistantUuid: string | undef
   return entries;
 }
 
-function conversationKey(req: SidecarRequest): string {
+export function conversationKey(req: SidecarRequest): string {
   const character = req.context?.character ?? "default";
   const ledger = req.context?.ledger ?? "";
-  return `${character}${SEPARATOR}${ledger}`;
+  const thread = req.context?.thread ?? MAIN_THREAD;
+  const base = `${character}${SEPARATOR}${ledger}`;
+  return thread === MAIN_THREAD ? base : `${base}${SEPARATOR}${thread}`;
 }
 
 function buildOptions(req: SidecarRequest, plan: TurnPlan): Options {

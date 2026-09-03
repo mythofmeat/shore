@@ -240,6 +240,16 @@ MUTANTS = [
      '    case "budget_blocked":\n    case "aborted":\n      return "not_credential_failure";',
      '    case "budget_blocked":\n      return "quota_exhausted";\n'
      '    case "aborted":\n      return "not_credential_failure";'),
+
+    # --- which conversation the turn says it belongs to ------------------------
+    ("context: the turn is stamped with main rather than the engine's thread",
+     GEN,
+     "    context: callContext(deps, config, charName, engine.thread, params.rid,",
+     '    context: callContext(deps, config, charName, "main", params.rid,'),
+    ("context: the thread never reaches the provider",
+     GEN,
+     '    character: charName,\n    thread,\n    call_type: "message",',
+     '    character: charName,\n    call_type: "message",'),
 ]
 
 

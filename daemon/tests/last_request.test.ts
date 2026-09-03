@@ -20,6 +20,7 @@ import {
   rebuildRequestFromDisk,
 } from "../src/cache/rebuild.ts";
 import { LastRequestCache, reprimeDecision } from "../src/cache/last_request.ts";
+import { createThread, setHomeThread } from "../src/engine/threads.ts";
 import type { KeepalivePrefix, PingNowOutcome } from "../src/cache/keepalive.ts";
 import { classify, keepalivePingNowCommand } from "../src/commands/keepalive.ts";
 import { CommandError } from "../src/commands/errors.ts";
@@ -252,6 +253,32 @@ describe("rebuildRequestFromDisk", () => {
     });
   }
 
+  test("the rebuild follows the home thread, so a moved home moves the keepalive", async () => {
+    const turn = (role: string, msg_id: string, content: string): Message =>
+      fromShape({ role, msg_id, content, autonomous: false, tool_result_only: false });
+    const conversation = (id: string, text: string): Message[] => [
+      turn("user", `m_${id}_u`, text),
+      turn("assistant", `m_${id}_a`, "noted"),
+    ];
+    const { config, dataDir } = await world(conversation("home", "a turn in the home thread"));
+    const now = "2026-09-03T12:00:00.000Z";
+    await createThread(dataDir, "ada", "scratch", now);
+    await writeFile(
+      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
+      `${conversation("scratch", "a turn in the side thread")
+        .map((m) => JSON.stringify(m))
+        .join("\n")}\n`,
+    );
+
+    const beforeMove = await rebuildRequestFromDisk("ada", dataDir, config);
+    expect(JSON.stringify(beforeMove?.request.messages)).not.toContain("side thread");
+
+    await setHomeThread(dataDir, "ada", "scratch", now);
+
+    const afterMove = await rebuildRequestFromDisk("ada", dataDir, config);
+    expect(JSON.stringify(afterMove?.request.messages)).toContain("side thread");
+  });
+
   test("no chat model resolves — no request, rather than one on a guessed model", async () => {
     const { config, dataDir } = await world([]);
     config.models = emptyCatalog();
@@ -456,6 +483,29 @@ describe("LastRequestCache", () => {
 
     await cache.reprimeFromDisk("ada", dataDir, config);
     expect("keepalive_max_secs" in (k.armed[0]?.context ?? {})).toBe(false);
+  });
+
+  test("the armed prefix names the home thread, so the warm session is the live one", async () => {
+    const k = spy();
+    const cache = new LastRequestCache(k.service as never);
+    const pair = (id: string) => [
+      fromShape({ role: "user", msg_id: `m_${id}_u`, content: "hello", autonomous: false, tool_result_only: false }),
+      fromShape({ role: "assistant", msg_id: `m_${id}_a`, content: "hi", autonomous: false, tool_result_only: false }),
+    ];
+    const { config, dataDir } = await world(pair("home"));
+    const now = "2026-09-03T12:00:00.000Z";
+    await createThread(dataDir, "ada", "scratch", now);
+    await writeFile(
+      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
+      `${pair("scratch").map((m) => JSON.stringify(m)).join("\n")}\n`,
+    );
+
+    await cache.reprimeFromDisk("ada", dataDir, config);
+    expect(k.armed[0]?.context?.thread).toBe("main");
+
+    await setHomeThread(dataDir, "ada", "scratch", now);
+    await cache.reprimeFromDisk("ada", dataDir, config);
+    expect(k.armed[1]?.context?.thread).toBe("scratch");
   });
 
   test("repriming a mid-turn conversation disarms rather than leaving the old body armed", async () => {

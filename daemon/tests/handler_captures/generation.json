@@ -245,6 +245,7 @@
             "replay_prior_thinking": "all",
             "context": {
               "character": "ada",
+              "thread": "main",
               "call_type": "message",
               "api_key_name": "default",
               "thinking_enabled": false,
@@ -498,6 +499,7 @@
             "replay_prior_thinking": "all",
             "context": {
               "character": "ada",
+              "thread": "main",
               "call_type": "message",
               "api_key_name": "default",
               "thinking_enabled": false,
@@ -596,6 +598,7 @@
             "replay_prior_thinking": "all",
             "context": {
               "character": "ada",
+              "thread": "main",
               "call_type": "message",
               "api_key_name": "default",
               "thinking_enabled": false,
@@ -708,6 +711,7 @@
             "replay_prior_thinking": "all",
             "context": {
               "character": "ada",
+              "thread": "main",
               "call_type": "message",
               "api_key_name": "default",
               "thinking_enabled": false,
@@ -891,6 +895,7 @@
             "replay_prior_thinking": "all",
             "context": {
               "character": "ada",
+              "thread": "main",
               "call_type": "message",
               "api_key_name": "default",
               "thinking_enabled": false
@@ -1184,6 +1189,7 @@
             "max_tool_iterations": 4,
             "context": {
               "character": "ada",
+              "thread": "main",
               "call_type": "message",
               "api_key_name": "default",
               "thinking_enabled": false,
@@ -1386,6 +1392,7 @@
             "replay_prior_thinking": "all",
             "context": {
               "character": "ada",
+              "thread": "main",
               "call_type": "message",
               "api_key_name": "default",
               "thinking_enabled": false,

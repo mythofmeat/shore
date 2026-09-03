@@ -60,8 +60,11 @@ ledger, retries, fallback and the client stream all work as they do for any othe
 The Agent SDK cannot be seeded with assistant turns — `query()` accepts user messages only — so
 the SDK owns history and shore tracks which session corresponds to which conversation.
 
-`$SHORE_DATA_DIR/claude_agent_sessions.json` maps a conversation (character + ledger) to a
-session id plus a hash of every message delivered so far. Each turn:
+`$SHORE_DATA_DIR/claude_agent_sessions.json` maps a conversation (character + ledger + thread)
+to a session id plus a hash of every message delivered so far. The main thread is keyed exactly
+as it was before threads existed, so an in-flight session survives the upgrade; a side thread
+gets a session of its own, which is what makes running this provider in one thread while the
+main conversation stays on another possible at all. Each turn:
 
 | Situation | Action |
 |---|---|
@@ -118,8 +121,9 @@ be worth keeping.
 - **Packaging.** `@anthropic-ai/claude-agent-sdk` pulls a ~205 MB native Claude Code binary and
   spawns it as a subprocess. That has not been reconciled with `bun --compile`, makepkg, or the
   brew tap yet, so treat this as dev-only until it has.
-- **Session book is not garbage collected.** Entries accumulate per character + ledger. It is a
-  small JSON file, but nothing prunes it.
+- **Session book is not garbage collected.** Entries accumulate per character + ledger + thread,
+  and every fork mints a new session id. It is a small JSON file, but nothing prunes it, and
+  archiving a thread does not yet drop its entry.
 - **Compaction desync.** Shore compacting a conversation changes the message prefix, so the next
   turn falls back to a cold start with a text replay. Correct, but it pays a full cache write.
 

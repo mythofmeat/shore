@@ -164,8 +164,12 @@ MUTANTS = [
     ("reprime: the rebuilt body is not re-cached",
      L,
      "      this.#bodies.set(character, decision.request);\n"
-     "      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepalive));",
-     "      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepalive));"),
+     "      this.#keepalive?.arm(\n",
+     "      this.#keepalive?.arm(\n"),
+    ("reprime: the prefix is armed on main rather than on the home thread",
+     L,
+     "          await homeThreadOf(dataDir, character),\n",
+     '          "main",\n'),
 
     # --- the cache ------------------------------------------------------------
     ("cache: invalidating also disarms, collapsing the two decisions",
