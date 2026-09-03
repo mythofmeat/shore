@@ -3,6 +3,8 @@ import { shoreLog } from "../log.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { characterDataDir } from "./dirs.ts";
+
 import {
   firstChatModel,
   hardcodedProviderDefaults,
@@ -252,7 +254,7 @@ export function globalPreferencesPath(dataDir: string): string {
 }
 
 export function characterPreferencesPath(dataDir: string, character: string): string {
-  return join(dataDir, character, PREFERENCES_DIR, PREFERENCES_FILE);
+  return join(characterDataDir(dataDir, character), PREFERENCES_DIR, PREFERENCES_FILE);
 }
 
 export function loadPreferences(path: string): ModelPreferences {

@@ -163,14 +163,23 @@ export const characterMemoryDir = (
 
 export const characterDataDir = (data: string, name: string): string => rustJoin(data, name);
 
+export const activeJsonlIn = (characterDir: string): string =>
+  rustJoin(characterDir, ACTIVE_JSONL_FILE);
+
+export const segmentsDirIn = (characterDir: string): string =>
+  rustJoin(characterDir, SEGMENTS_DIR);
+
+export const compactionManifestIn = (characterDir: string): string =>
+  rustJoin(characterDir, COMPACTION_MANIFEST_FILE);
+
 export const characterActiveJsonl = (data: string, name: string): string =>
-  rustJoin(characterDataDir(data, name), ACTIVE_JSONL_FILE);
+  activeJsonlIn(characterDataDir(data, name));
 
 export const characterSegmentsDir = (data: string, name: string): string =>
-  rustJoin(characterDataDir(data, name), SEGMENTS_DIR);
+  segmentsDirIn(characterDataDir(data, name));
 
 export const characterCompactionManifest = (data: string, name: string): string =>
-  rustJoin(characterDataDir(data, name), COMPACTION_MANIFEST_FILE);
+  compactionManifestIn(characterDataDir(data, name));
 
 export function isFile(path: string): boolean {
   try {

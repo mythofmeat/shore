@@ -2,6 +2,8 @@ import { shoreLog } from "../log.ts";
 
 import { join } from "node:path";
 
+import { activeJsonlIn, characterDataDir } from "../config/dirs.ts";
+
 import { HISTORY_DB_FILE } from "./history_store.ts";
 import { mergeToolLoopMessages } from "./merge";
 import { MessageStore, type AltSelection, type PendingAlt } from "./message_store";
@@ -9,7 +11,6 @@ import { SegmentReader } from "./segments";
 import type { Message } from "./types";
 import { embedMessagesImageData } from "./wire_images";
 
-const ACTIVE_JSONL_FILE = "active.jsonl";
 
 export interface History {
   rid?: string;
@@ -76,9 +77,9 @@ export class ConversationEngine {
     dataDir: string,
     onHistory?: HistoryListener,
   ): Promise<ConversationEngine> {
-    const characterDir = join(dataDir, characterName);
+    const characterDir = characterDataDir(dataDir, characterName);
     const historyDbPath = join(dataDir, HISTORY_DB_FILE);
-    const messages = await MessageStore.load(join(characterDir, ACTIVE_JSONL_FILE));
+    const messages = await MessageStore.load(activeJsonlIn(characterDir));
     const segments = await SegmentReader.load(characterDir, {
       dbPath: historyDbPath,
       character: characterName,
@@ -312,7 +313,7 @@ export class ConversationEngine {
   }
 
   async reload(): Promise<void> {
-    this.#messages = await MessageStore.load(join(this.#characterDir, ACTIVE_JSONL_FILE));
+    this.#messages = await MessageStore.load(activeJsonlIn(this.#characterDir));
     this.#segments.close();
     this.#segments = await SegmentReader.load(this.#characterDir, {
       dbPath: this.#historyDbPath,

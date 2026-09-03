@@ -2,7 +2,9 @@ import { required } from "../../util/required.ts";
 
 import { shoreLog } from "../../log.ts";
 
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
+
+import { characterActiveJsonl, characterDataDir } from "../../config/dirs.ts";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 
 import { pushAssistantTurn } from "../../llm/request";
@@ -50,10 +52,6 @@ const waiting = new Map<string, (() => void)[]>();
 export interface CompactionRunGuard {
   release(): void;
   [Symbol.dispose](): void;
-}
-
-export function characterDataDir(dataDir: string, character: string): string {
-  return join(dataDir, character);
 }
 
 function handOff(key: string): void {
@@ -594,7 +592,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   );
   checkpoint.request.api_key = initialRequest.api_key;
   const alreadyArchived = opts.resumable === true && opts.dataDir !== undefined
-    ? await hasCompactionOperation(join(opts.dataDir, opts.charName), checkpoint.id)
+    ? await hasCompactionOperation(characterDataDir(opts.dataDir, opts.charName), checkpoint.id)
     : false;
   if (alreadyArchived && !checkpointSourceIsCompatible(checkpoint, await currentActiveContent(opts))) {
     const liveContent = await currentActiveContent(opts);
@@ -967,7 +965,7 @@ function budgetResetAt(e: unknown): string | undefined {
 async function currentActiveContent(opts: CompactOptions): Promise<string> {
   if (opts.resumable !== true || opts.dataDir === undefined) return opts.activeContent;
   try {
-    return await readFile(join(opts.dataDir, opts.charName, "active.jsonl"), "utf8");
+    return await readFile(characterActiveJsonl(opts.dataDir, opts.charName), "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return opts.activeContent;
     throw e;

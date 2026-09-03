@@ -1,7 +1,8 @@
 import { shoreLog } from "../log.ts";
 
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+
+import { activeJsonlIn, characterDataDir } from "../config/dirs.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { configView, resolveChatModelForCharacter } from "../config/preferences.ts";
@@ -13,7 +14,6 @@ import type { BuiltRequest } from "../llm/request.ts";
 import { segmentCount } from "../memory/compaction/archive.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
-const ACTIVE_JSONL_FILE = "active.jsonl";
 
 export const IDLE_ANCHOR_TEXT =
   "[Resuming after an extended idle period — the earlier " +
@@ -81,11 +81,11 @@ export async function rebuildRequestFromDisk(
   config: LoadedConfig,
   deps: RebuildDeps = {},
 ): Promise<BuiltRequest | undefined> {
-  const characterDir = join(dataDir, character);
+  const characterDir = characterDataDir(dataDir, character);
 
   let store: MessageStore;
   try {
-    store = await MessageStore.load(join(characterDir, ACTIVE_JSONL_FILE));
+    store = await MessageStore.load(activeJsonlIn(characterDir));
   } catch (e) {
     shoreLog.warn(`shore: heartbeat rebuild for ${character} could not load messages: ${String(e)}`);
     return undefined;
