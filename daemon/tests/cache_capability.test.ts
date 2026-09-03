@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  cachingIsSilentlyOff,
   effectiveCacheTtl,
   honorsCacheTtl,
 } from "../src/llm/cache_capability.ts";
+import { shoreLog } from "../src/log.ts";
 import { buildAnthropicPlan } from "../src/llm/providers/anthropic.ts";
 import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 
@@ -55,6 +57,32 @@ describe("which protocols carry a cache TTL", () => {
   test("caching off stays off, without a warning about protocols", () => {
     expect(effectiveCacheTtl("openai", "")).toBe("");
     expect(effectiveCacheTtl("anthropic", "")).toBe("");
+  });
+
+  test("leaving caching unset is loud only where caching was available", () => {
+    for (const sdk of ["anthropic", "nanogpt"] as const) {
+      expect(cachingIsSilentlyOff(sdk, "")).toBe(true);
+      expect(cachingIsSilentlyOff(sdk, "1h")).toBe(false);
+    }
+    for (const sdk of ["openai", "openrouter", "gemini", "zai"] as const) {
+      expect(cachingIsSilentlyOff(sdk, "")).toBe(false);
+    }
+  });
+
+  test("the unset-cache warning is said once, not once per request", () => {
+    const said: string[] = [];
+    const original = shoreLog.warn.bind(shoreLog);
+    shoreLog.warn = (...args: unknown[]) => void said.push(args.join(" "));
+    try {
+      effectiveCacheTtl("anthropic", "");
+      said.length = 0;
+      effectiveCacheTtl("anthropic", "");
+      effectiveCacheTtl("anthropic", "");
+      effectiveCacheTtl("openai", "");
+    } finally {
+      shoreLog.warn = original;
+    }
+    expect(said).toEqual([]);
   });
 });
 
