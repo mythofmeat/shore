@@ -80,9 +80,11 @@ export class ConversationEngine {
     const characterDir = characterDataDir(dataDir, characterName);
     const historyDbPath = join(dataDir, HISTORY_DB_FILE);
     const messages = await MessageStore.load(activeJsonlIn(characterDir));
-    const segments = await SegmentReader.load(characterDir, {
+    const segments = await SegmentReader.load({
+      dir: characterDir,
       dbPath: historyDbPath,
       character: characterName,
+      createHistoryDb: true,
     });
     return new ConversationEngine(
       characterName,
@@ -315,9 +317,11 @@ export class ConversationEngine {
   async reload(): Promise<void> {
     this.#messages = await MessageStore.load(activeJsonlIn(this.#characterDir));
     this.#segments.close();
-    this.#segments = await SegmentReader.load(this.#characterDir, {
+    this.#segments = await SegmentReader.load({
+      dir: this.#characterDir,
       dbPath: this.#historyDbPath,
       character: this.#characterName,
+      createHistoryDb: true,
     });
     this.#advanceRewrite();
     this.broadcastHistory();

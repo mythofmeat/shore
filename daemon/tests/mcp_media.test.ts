@@ -41,7 +41,8 @@ async function runMcpTool(
     imageDir,
     workspaceDir: "",
     characterDataDir: "",
-    characterName: "",
+    historyDbPath: "/tmp/history.db",
+  characterName: "",
     configDir: "",
     searchConfig: {
       api_key_env: "TAVILY_API_KEY",
@@ -159,7 +160,8 @@ describe("mcp media reaches the model", () => {
       imageDir: "/proc/shore-cannot-write-here",
       workspaceDir: "",
       characterDataDir: "",
-      characterName: "",
+      historyDbPath: "/tmp/history.db",
+  characterName: "",
       configDir: "",
       searchConfig: {
         api_key_env: "TAVILY_API_KEY",

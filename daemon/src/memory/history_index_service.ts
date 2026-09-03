@@ -9,6 +9,7 @@ import { HistorySearchIndex, withHistoryIndexLock } from "./history_index.ts";
 export interface HistoryIndexRegistration {
   character: string;
   characterDataDir: string;
+  dbPath: string;
   indexPath: string;
   embedder?: Embedder;
 }
@@ -24,6 +25,7 @@ export interface HistoryIndexServiceOptions {
 export interface HistoryIndexProgress {
   character: string;
   characterDataDir: string;
+  dbPath: string;
   indexPath: string;
   embedder: Embedder | undefined;
   failures: number;
@@ -96,6 +98,7 @@ export class HistoryIndexService {
     return {
       character,
       characterDataDir: entry.characterDataDir,
+      dbPath: entry.dbPath,
       indexPath: entry.indexPath,
       embedder: entry.embedder,
       failures: entry.failures,
@@ -176,6 +179,8 @@ export class HistoryIndexService {
         const embedded = await withHistoryIndexLock(entry.indexPath, async () => {
           const index = HistorySearchIndex.open({
             characterDataDir: entry.characterDataDir,
+            character: entry.character,
+            dbPath: entry.dbPath,
             path: entry.indexPath,
           });
           try {
@@ -207,6 +212,8 @@ export class HistoryIndexService {
       await withHistoryIndexLock(entry.indexPath, async () => {
         const index = HistorySearchIndex.open({
           characterDataDir: entry.characterDataDir,
+          character: entry.character,
+          dbPath: entry.dbPath,
           path: entry.indexPath,
         });
         try {

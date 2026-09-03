@@ -148,12 +148,14 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
 
   expect(access(join(characterDir, "segments"))).rejects.toThrow();
   expect(access(join(characterDir, "compaction.json"))).rejects.toThrow();
-  const reader = await SegmentReader.load(characterDir, { dbPath, character: "ada" });
+  const reader = await SegmentReader.load({ dir: characterDir, dbPath, character: "ada", createHistoryDb: true });
   expect(reader.segmentCount()).toBe(1);
   expect(await reader.readSegment(0)).toEqual(messages);
   reader.close();
 
   const search = await handleSearchHistory({ query: "hello" }, characterDir, {
+    character: "ada",
+    dbPath,
     timeZone: "Australia/Canberra",
   });
   expect(search.results).toEqual([
@@ -199,13 +201,13 @@ test("legacy segments import lazily and survive removal of the source files", as
     }),
   );
 
-  const importing = await SegmentReader.load(characterDir, { dbPath, character: "ada" });
+  const importing = await SegmentReader.load({ dir: characterDir, dbPath, character: "ada", createHistoryDb: true });
   expect(await importing.readSegment(0)).toEqual(messages);
   importing.close();
 
   expect(access(segmentsDir)).rejects.toThrow();
   expect(access(join(characterDir, "compaction.json"))).rejects.toThrow();
-  const durable = await SegmentReader.load(characterDir, { dbPath, character: "ada" });
+  const durable = await SegmentReader.load({ dir: characterDir, dbPath, character: "ada", createHistoryDb: true });
   expect(await durable.readSegment(0)).toEqual(messages);
   durable.close();
 });

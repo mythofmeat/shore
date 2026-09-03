@@ -7,6 +7,8 @@ import { chmodSync, mkdirSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
+import { compactionManifestIn, segmentsDirIn } from "../config/dirs.ts";
+import type { ConversationRef } from "../engine/segments.ts";
 import { SegmentReader } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
@@ -107,6 +109,8 @@ interface CanonicalCorpus {
 
 export interface HistoryIndexOpenOptions {
   characterDataDir: string;
+  character: string;
+  dbPath: string;
   path?: string;
 }
 
@@ -134,11 +138,18 @@ export async function withHistoryIndexLock<T>(path: string, run: () => Promise<T
 export class HistorySearchIndex {
   readonly path: string;
   readonly characterDataDir: string;
+  readonly ref: ConversationRef;
   #db: Database;
 
   private constructor(options: HistoryIndexOpenOptions, db: Database) {
     this.path = options.path ?? join(options.characterDataDir, HISTORY_SEARCH_DB_FILE);
     this.characterDataDir = options.characterDataDir;
+    this.ref = {
+      dir: options.characterDataDir,
+      dbPath: options.dbPath,
+      character: options.character,
+      createHistoryDb: false,
+    };
     this.#db = db;
   }
 
@@ -179,13 +190,10 @@ export class HistorySearchIndex {
   }
 
   async reconcile(force = false): Promise<void> {
-    const before = await sourceFingerprint(this.characterDataDir);
+    const before = await sourceFingerprint(this.ref);
     if (!force && this.#metadata("source_fingerprint") === before) return;
 
-    const { corpus, fingerprint: after } = await readStableCanonicalCorpus(
-      this.characterDataDir,
-      before,
-    );
+    const { corpus, fingerprint: after } = await readStableCanonicalCorpus(this.ref, before);
     this.#db.transaction(() => {
       const existing = this.#db.query(
         "SELECT id, locator, content_hash FROM messages",
@@ -427,7 +435,7 @@ export class HistorySearchIndex {
     const texts: string[] = [];
     let chars = 0;
     let lastAttempted = cursor;
-    const loaded = await loadMessageTexts(this.characterDataDir, batchCandidates);
+    const loaded = await loadMessageTexts(this.ref, batchCandidates);
     for (const row of batchCandidates) {
       const full = loaded.get(row.id);
       const text = full === undefined ? undefined : chunkVisibleText(full)[row.chunk_ordinal];
@@ -493,7 +501,7 @@ export function chunkVisibleText(text: string): string[] {
 }
 
 export async function loadMessageTexts(
-  characterDataDir: string,
+  ref: ConversationRef,
   rows: readonly IndexedMessage[],
 ): Promise<Map<number, string>> {
   const out = new Map<number, string>();
@@ -503,7 +511,7 @@ export async function loadMessageTexts(
     group.push(row);
     bySegment.set(row.segment, group);
   }
-  const reader = await SegmentReader.load(characterDataDir);
+  const reader = await SegmentReader.load(ref);
   try {
     for (const [segment, group] of bySegment) {
       const messages = await reader.readSegment(segment);
@@ -521,10 +529,10 @@ export async function loadMessageTexts(
 }
 
 export async function loadCanonicalTexts(
-  characterDataDir: string,
+  ref: ConversationRef,
   rows: readonly IndexedMessage[],
 ): Promise<Map<number, string>> {
-  const loaded = await loadMessageTexts(characterDataDir, rows);
+  const loaded = await loadMessageTexts(ref, rows);
   const out = new Map<number, string>();
   for (const row of rows) {
     const text = loaded.get(row.id);
@@ -533,10 +541,10 @@ export async function loadCanonicalTexts(
   return out;
 }
 
-async function readCanonicalCorpus(characterDataDir: string): Promise<CanonicalCorpus> {
+async function readCanonicalCorpus(ref: ConversationRef): Promise<CanonicalCorpus> {
   const messages: CanonicalMessage[] = [];
   let selectedCount = 0;
-  const reader = await SegmentReader.load(characterDataDir);
+  const reader = await SegmentReader.load(ref);
   try {
     const excluded = new Set(
       reader.entries().filter((entry) => entry.excluded === true).map((entry) => entry.idx),
@@ -554,13 +562,13 @@ async function readCanonicalCorpus(characterDataDir: string): Promise<CanonicalC
 }
 
 async function readStableCanonicalCorpus(
-  characterDataDir: string,
+  ref: ConversationRef,
   initialFingerprint: string,
 ): Promise<{ corpus: CanonicalCorpus; fingerprint: string }> {
   let before = initialFingerprint;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const corpus = await readCanonicalCorpus(characterDataDir);
-    const after = await sourceFingerprint(characterDataDir);
+    const corpus = await readCanonicalCorpus(ref);
+    const after = await sourceFingerprint(ref);
     if (before === after) return { corpus, fingerprint: after };
     before = after;
   }
@@ -596,8 +604,8 @@ function contentHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-async function sourceFingerprint(characterDataDir: string): Promise<string> {
-  const reader = await SegmentReader.load(characterDataDir);
+async function sourceFingerprint(ref: ConversationRef): Promise<string> {
+  const reader = await SegmentReader.load(ref);
   let digest: string;
   try {
     digest = reader.archiveDigest();
@@ -605,8 +613,8 @@ async function sourceFingerprint(characterDataDir: string): Promise<string> {
     reader.close();
   }
   const legacy = [
-    join(characterDataDir, "compaction.json"),
-    join(characterDataDir, "segments"),
+    compactionManifestIn(ref.dir),
+    segmentsDirIn(ref.dir),
   ].map((path) => {
     try {
       const s = statSync(path, { bigint: true });

@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
 import { HISTORY_DB_FILE } from "../../engine/history_store.ts";
+import { conversationRef } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
 import { characterMemoryDir } from "../../config/dirs.ts";
@@ -335,7 +336,8 @@ async function resolveChatRequest(
     throw CompactionError.llm("No chat model configured for compaction prefix rebuild");
   }
 
-  const hasPriorContext = (await segmentCount(loaded.characterDir)) > 0;
+  const hasPriorContext =
+    (await segmentCount(conversationRef(effective.dirs.data, character, false))) > 0;
   const built = await buildChatShapeRequestFromDisk(
     character,
     loaded.characterDir,

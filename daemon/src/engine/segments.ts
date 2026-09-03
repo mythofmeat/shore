@@ -1,9 +1,14 @@
 import { shoreLog } from "../log.ts";
 
 import { access, readFile, rmdir, unlink } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 
-import { activeJsonlIn, compactionManifestIn, segmentsDirIn } from "../config/dirs.ts";
+import {
+  activeJsonlIn,
+  characterDataDir,
+  compactionManifestIn,
+  segmentsDirIn,
+} from "../config/dirs.ts";
 
 import {
   HISTORY_DB_FILE,
@@ -18,6 +23,26 @@ import type { Message } from "./types";
 
 
 export type { SegmentEntry, SegmentRecord } from "./history_store.ts";
+
+export interface ConversationRef {
+  dir: string;
+  dbPath: string;
+  character: string;
+  createHistoryDb: boolean;
+}
+
+export function conversationRef(
+  dataDir: string,
+  character: string,
+  createHistoryDb: boolean,
+): ConversationRef {
+  return {
+    dir: characterDataDir(dataDir, character),
+    dbPath: join(dataDir, HISTORY_DB_FILE),
+    character,
+    createHistoryDb,
+  };
+}
 
 export interface CompactionManifest {
   segments: SegmentEntry[];
@@ -50,21 +75,18 @@ export class SegmentReader {
       history !== undefined && history.segmentCount(character) >= manifest.segments.length;
   }
 
-  static async load(
-    characterDir: string,
-    durable?: { dbPath: string; character: string },
-  ): Promise<SegmentReader> {
-    const manifestPath = compactionManifestIn(characterDir);
-    const segmentsDir = segmentsDirIn(characterDir);
-    const character = durable?.character ?? basename(characterDir);
+  static async load(ref: ConversationRef): Promise<SegmentReader> {
+    const manifestPath = compactionManifestIn(ref.dir);
+    const segmentsDir = segmentsDirIn(ref.dir);
+    const character = ref.character;
 
     let raw: string;
     try {
       raw = await readFile(manifestPath, "utf8");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-        const history = await openHistory(characterDir, durable);
-        if (history !== undefined) await recoverPending(history, characterDir, character);
+        const history = await openHistory(ref);
+        if (history !== undefined) await recoverPending(history, ref.dir, character);
         return new SegmentReader(
           segmentsDir,
           EMPTY_MANIFEST,
@@ -90,9 +112,9 @@ export class SegmentReader {
         "missing field `total_compacted_messages`",
       );
     }
-    const history = await openHistory(characterDir, durable);
+    const history = await openHistory(ref);
     if (history !== undefined) {
-      await recoverPending(history, characterDir, character);
+      await recoverPending(history, ref.dir, character);
       await importLegacySegments(history, character, manifest, segmentsDir, manifestPath);
     }
     return new SegmentReader(segmentsDir, manifest, history, character);
@@ -209,15 +231,11 @@ export class SegmentReader {
   }
 }
 
-async function openHistory(
-  characterDir: string,
-  durable: { dbPath: string; character: string } | undefined,
-): Promise<HistoryStore | undefined> {
-  if (durable !== undefined) return HistoryStore.open(durable.dbPath);
-  const dbPath = join(dirname(characterDir), HISTORY_DB_FILE);
+async function openHistory(ref: ConversationRef): Promise<HistoryStore | undefined> {
+  if (ref.createHistoryDb) return HistoryStore.open(ref.dbPath);
   try {
-    await access(dbPath);
-    return HistoryStore.open(dbPath);
+    await access(ref.dbPath);
+    return HistoryStore.open(ref.dbPath);
   } catch {
     return undefined;
   }

@@ -23,6 +23,8 @@ export async function historyIndexSection(
     view = await withHistoryIndexLock(progress.indexPath, async () => {
       const index = HistorySearchIndex.open({
         characterDataDir: progress.characterDataDir,
+        character: progress.character,
+        dbPath: progress.dbPath,
         path: progress.indexPath,
       });
       try {

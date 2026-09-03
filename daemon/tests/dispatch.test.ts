@@ -38,6 +38,7 @@ function bareContext(over: Partial<ToolContext> = {}): ToolContext {
     imageDir: "/tmp/test_images",
     workspaceDir: "",
     characterDataDir: "",
+    historyDbPath: "/tmp/history.db",
     characterName: "",
     configDir: "",
     searchConfig: {

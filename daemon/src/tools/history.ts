@@ -277,6 +277,8 @@ function compareOptionalTs(a: number | undefined, b: number | undefined): number
 export type HistorySearchMode = "auto" | "lexical" | "hybrid" | "vector";
 
 export interface HistorySearchOptions {
+  character: string;
+  dbPath: string;
   indexPath?: string;
   embedder?: Embedder;
   defaultMode?: HistorySearchMode;
@@ -318,7 +320,7 @@ export interface SearchHistoryResult {
 export async function handleSearchHistory(
   input: Record<string, unknown>,
   characterDataDir: string,
-  options: HistorySearchOptions = {},
+  options: HistorySearchOptions,
 ): Promise<SearchHistoryResult> {
   const path = options.indexPath ?? join(characterDataDir, "history_search.db");
   return await withHistoryIndexLock(path, async () =>
@@ -349,7 +351,7 @@ async function handleSearchHistoryUnlocked(
     mode = "lexical";
   }
 
-  const index = await openAndReconcile(characterDataDir, options.indexPath);
+  const index = await openAndReconcile(characterDataDir, options, options.indexPath);
   try {
     const diagnostics = index.diagnostics(options.embedder);
     const stats = { skipped: 0 };
@@ -397,7 +399,7 @@ async function handleSearchHistoryUnlocked(
       if (before !== undefined) neighborRows.push(before);
       if (after !== undefined) neighborRows.push(after);
     }
-    const neighborTexts = await loadCanonicalTexts(characterDataDir, neighborRows);
+    const neighborTexts = await loadCanonicalTexts(index.ref, neighborRows);
     const results = chosen.map((hit) => {
       const before = index.neighbor(hit.row, -1);
       const after = index.neighbor(hit.row, 1);
@@ -442,10 +444,13 @@ async function handleSearchHistoryUnlocked(
 
 async function openAndReconcile(
   characterDataDir: string,
+  identity: { character: string; dbPath: string },
   path: string | undefined,
 ): Promise<HistorySearchIndex> {
   const open = () => HistorySearchIndex.open({
     characterDataDir,
+    character: identity.character,
+    dbPath: identity.dbPath,
     ...(path === undefined ? {} : { path }),
   });
   let index = open();
@@ -493,7 +498,7 @@ async function lexicalCandidates(
   const eligible = source.filter(({ row }) =>
     modelMatches(row.model ?? undefined, modelFilter) && matchesTimeRange(row.timestamp, range, stats),
   );
-  const texts = await loadCanonicalTexts(characterDataDir, eligible.map(({ row }) => row));
+  const texts = await loadCanonicalTexts(index.ref, eligible.map(({ row }) => row));
   const candidates: RankedHistoryCandidate[] = [];
   for (const { row, rank } of eligible) {
     const text = texts.get(row.id);
@@ -539,7 +544,7 @@ async function vectorCandidates(
   const raw = index.vectorRows(queryVector, embedder).filter(({ row }) =>
     modelMatches(row.model ?? undefined, modelFilter) && matchesTimeRange(row.timestamp, range, stats),
   );
-  const texts = await loadCanonicalTexts(characterDataDir, raw.map(({ row }) => row));
+  const texts = await loadCanonicalTexts(index.ref, raw.map(({ row }) => row));
   return raw.flatMap(({ row, rank }) => {
     const text = texts.get(row.id);
     return text === undefined ? [] : [{

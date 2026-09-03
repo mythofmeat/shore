@@ -3,6 +3,7 @@ import { shoreLog } from "../log.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { ProviderEntry as RegistryEntry } from "../config/providers.ts";
 import { characterDataDir, characterWorkspaceDir, rustJoin } from "../config/dirs.ts";
+import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import type { ProviderEntry } from "../llm/credentials.ts";
 import { resolveImageGenConfig } from "../llm/image_generate.ts";
 import { resolveEmbedder } from "../memory/retrieval.ts";
@@ -65,6 +66,7 @@ export async function buildToolContext(
     imageDir: rustJoin(charDataDir, "images"),
     workspaceDir,
     characterDataDir: charDataDir,
+    historyDbPath: rustJoin(dataDir, HISTORY_DB_FILE),
     characterName: charName,
     configDir,
     searchConfig: config.app.tools.web_search,
