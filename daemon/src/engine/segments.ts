@@ -3,6 +3,8 @@ import { shoreLog } from "../log.ts";
 import { access, readFile, rmdir, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
+import { activeJsonlIn, compactionManifestIn, segmentsDirIn } from "../config/dirs.ts";
+
 import {
   HISTORY_DB_FILE,
   HistoryStore,
@@ -14,9 +16,6 @@ import { MessageNotFound, JsonParseError, normalizeMessage } from "./message_sto
 import { quarantineLines } from "./backup.ts";
 import type { Message } from "./types";
 
-const SEGMENTS_DIR = "segments";
-const COMPACTION_MANIFEST_FILE = "compaction.json";
-const ACTIVE_JSONL_FILE = "active.jsonl";
 
 export type { SegmentEntry, SegmentRecord } from "./history_store.ts";
 
@@ -55,8 +54,8 @@ export class SegmentReader {
     characterDir: string,
     durable?: { dbPath: string; character: string },
   ): Promise<SegmentReader> {
-    const manifestPath = join(characterDir, COMPACTION_MANIFEST_FILE);
-    const segmentsDir = join(characterDir, SEGMENTS_DIR);
+    const manifestPath = compactionManifestIn(characterDir);
+    const segmentsDir = segmentsDirIn(characterDir);
     const character = durable?.character ?? basename(characterDir);
 
     let raw: string;
@@ -231,7 +230,7 @@ async function recoverPending(
 ): Promise<void> {
   let active = "";
   try {
-    active = await readFile(join(characterDir, ACTIVE_JSONL_FILE), "utf8");
+    active = await readFile(activeJsonlIn(characterDir), "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }

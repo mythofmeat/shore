@@ -3,6 +3,8 @@ import { shoreLog } from "../log.ts";
 import { mkdir, open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { characterDataDir } from "../config/dirs.ts";
+
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import { base64Rejection } from "../tools/images.ts";
 import { omissionNotice, resolveImage } from "../llm/images.ts";
@@ -178,7 +180,7 @@ export async function ingestImages(
   imageData: readonly ImageUpload[],
   now: Date = new Date(),
 ): Promise<{ images: ImageRef[]; blocks: ContentBlock[] }> {
-  const attachmentsDir = join(dataDir, charName, "images", "attachments");
+  const attachmentsDir = join(characterDataDir(dataDir, charName), "images", "attachments");
   const images: ImageRef[] = [];
   const blocks: ContentBlock[] = [];
 

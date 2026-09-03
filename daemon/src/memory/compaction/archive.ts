@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
+import { activeJsonlIn, compactionManifestIn, segmentsDirIn } from "../../config/dirs.ts";
+
 import { atomicWrite } from "../../engine/atomic.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
 import { normalizeMessage } from "../../engine/message_store.ts";
@@ -11,9 +13,6 @@ import { rustLines, rustTrim } from "../lines.ts";
 import { CompactionError } from "./types.ts";
 import type { ConversationManager } from "./types.ts";
 
-const ACTIVE_JSONL_FILE = "active.jsonl";
-const COMPACTION_MANIFEST_FILE = "compaction.json";
-const SEGMENTS_DIR = "segments";
 
 export interface DurableHistoryLocation {
   dbPath: string;
@@ -86,7 +85,7 @@ export async function archiveAndRetain(
   }
 
   try {
-    await atomicWrite(join(characterDir, ACTIVE_JSONL_FILE), retainedContent);
+    await atomicWrite(activeJsonlIn(characterDir), retainedContent);
   } catch (e) {
     throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
   }
@@ -134,7 +133,7 @@ async function archiveToDatabase(
       );
     }
     try {
-      await atomicWrite(join(characterDir, ACTIVE_JSONL_FILE), retainedContent);
+      await atomicWrite(activeJsonlIn(characterDir), retainedContent);
     } catch (e) {
       if (idx !== undefined) store.abortCompaction(history.character, idx);
       throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
@@ -156,7 +155,7 @@ async function writeSegment(
   now: () => string,
   operationId?: string,
 ): Promise<WrittenSegment> {
-  const manifestPath = join(characterDir, COMPACTION_MANIFEST_FILE);
+  const manifestPath = compactionManifestIn(characterDir);
   const manifest = await readManifest(manifestPath);
   if (operationId !== undefined) {
     const idx = manifest.segments.findIndex((segment) => segment.compaction_id === operationId);
@@ -166,7 +165,7 @@ async function writeSegment(
 
   const segmentIndex = manifest.segments.length + 1;
   const segmentFile = `${String(segmentIndex).padStart(4, "0")}.jsonl`;
-  const segmentsDir = join(characterDir, SEGMENTS_DIR);
+  const segmentsDir = segmentsDirIn(characterDir);
   const compactedAt = now();
 
   try {
@@ -227,7 +226,7 @@ export async function segmentCount(characterDir: string): Promise<number> {
 
 async function manifestSegmentCount(characterDir: string): Promise<number> {
   try {
-    return (await readManifest(join(characterDir, COMPACTION_MANIFEST_FILE))).segments.length;
+    return (await readManifest(compactionManifestIn(characterDir))).segments.length;
   } catch {
     return 0;
   }
@@ -269,7 +268,7 @@ async function manifestHasCompactionOperation(
   operationId: string,
 ): Promise<boolean> {
   try {
-    const manifest = await readManifest(join(characterDir, COMPACTION_MANIFEST_FILE));
+    const manifest = await readManifest(compactionManifestIn(characterDir));
     return manifest.segments.some((segment) => segment.compaction_id === operationId);
   } catch {
     return false;

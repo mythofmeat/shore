@@ -13,6 +13,7 @@ import {
 import { join } from "node:path";
 
 import {
+  activeJsonlIn,
   characterConfigDir,
   characterMemoryDir,
   characterWorkspaceDir,
@@ -32,7 +33,6 @@ export const MEMORY_INDEX_FILE = "MEMORY.md";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
 
-const ACTIVE_MESSAGES_FILE = "active.jsonl";
 
 const LEGACY_SNAPSHOTS = ["RECENT_MEMORY.md", "HEARTBEAT.md"];
 
@@ -289,7 +289,7 @@ export async function resetActivePromptSnapshot(characterDataDir: string): Promi
 
 async function conversationHasMessages(characterDataDir: string): Promise<boolean> {
   try {
-    return (await readFile(join(characterDataDir, ACTIVE_MESSAGES_FILE), "utf8")).trim() !== "";
+    return (await readFile(activeJsonlIn(characterDataDir), "utf8")).trim() !== "";
   } catch (e) {
     return (e as NodeJS.ErrnoException).code !== "ENOENT";
   }

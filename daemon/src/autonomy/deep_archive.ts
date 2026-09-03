@@ -2,6 +2,8 @@ import { shoreLog } from "../log.ts";
 
 import { join } from "node:path";
 
+import { activeJsonlIn, characterDataDir } from "../config/dirs.ts";
+
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
 import type { Message } from "../engine/types.ts";
@@ -12,7 +14,6 @@ import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_ar
 import type { AutonomyActionResult } from "./runner.ts";
 import { CompactionPaused } from "../memory/compaction/types.ts";
 
-const ACTIVE_JSONL_FILE = "active.jsonl";
 
 export type DeepArchivePlan =
   | { arm: "quiesce"; tail: number }
@@ -62,11 +63,11 @@ export async function runDeepIdleArchive(
   coveredTurnCount: number,
 ): Promise<AutonomyActionResult> {
   const dataDir = deps.config.dirs.data;
-  const characterDir = join(dataDir, character);
+  const characterDir = characterDataDir(dataDir, character);
 
   let loaded: { store: MessageStore; raw: string };
   try {
-    loaded = await MessageStore.loadWithRaw(join(characterDir, ACTIVE_JSONL_FILE));
+    loaded = await MessageStore.loadWithRaw(activeJsonlIn(characterDir));
   } catch (e) {
     shoreLog.warn(
       `shore: deep-idle archive for ${character} failed to read the active conversation: ${String(e)}`,
@@ -114,7 +115,7 @@ async function pureArchive(
   }
 
   try {
-    const characterDir = join(dataDir, character);
+    const characterDir = characterDataDir(dataDir, character);
     await conversationManager(
       characterDir,
       deps.now ?? (() => new Date().toISOString()),

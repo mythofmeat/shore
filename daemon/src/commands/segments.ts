@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { activeJsonlIn, characterDataDir } from "../config/dirs.ts";
+
 import { HISTORY_DB_FILE, HistoryStore, type SegmentRecord } from "../engine/history_store.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
@@ -9,7 +11,6 @@ import { withHistoryIndexLock } from "../memory/history_index.ts";
 import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
 
-const ACTIVE_JSONL_FILE = "active.jsonl";
 
 export interface SegmentEngine {
   readonly characterName: string;
@@ -125,10 +126,10 @@ export async function clear(
   }
 
   try {
-    const characterDir = join(ctx.dataDir, character);
+    const characterDir = characterDataDir(ctx.dataDir, character);
     let activeContent: string;
     try {
-      activeContent = await readFile(join(characterDir, ACTIVE_JSONL_FILE), "utf8");
+      activeContent = await readFile(activeJsonlIn(characterDir), "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") activeContent = "";
       else throw error;
