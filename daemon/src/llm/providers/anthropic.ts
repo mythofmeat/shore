@@ -35,7 +35,12 @@ import {
 } from "../../cache/forensics.ts";
 import { recordExtraThinkingDrops, replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
-import { foldInlineSystemMessages } from "../inline_system.ts";
+import {
+  assistantTurnStart,
+  messageBreakpoints,
+  type PlacementTurn,
+} from "../cache_placement.ts";
+import { foldInlineSystemMessagesWithTail } from "../inline_system.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
 import { parseToolArgs } from "../tool_args.ts";
@@ -238,7 +243,9 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     else req.context.cache_ttl = cacheTtl;
   }
 
-  const converted = foldInlineSystemMessages(replayableForAnthropic(req));
+  const { turns: converted, transientTail } = foldInlineSystemMessagesWithTail(
+    replayableForAnthropic(req),
+  );
   const hasExistingMarkers = messagesHaveCacheControl(converted);
 
   let messages: MessageParam[];
@@ -255,7 +262,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     const msgs = normalizeMessages(converted);
     const labelled = req.system ?? [];
     const sys = systemToBlocks(labelled);
-    const placement = applyDefaultPlacement(msgs, sys, labelled, cacheTtl);
+    const placement = applyDefaultPlacement(msgs, sys, labelled, cacheTtl, transientTail);
     const { msgBp, sysBp } = placement;
     tally = placement.tally;
     messages = msgs;
@@ -346,38 +353,19 @@ function isToolResultOnlyUser(msg: MessageParam): boolean {
   return content.every((b) => (b as { type?: string }).type === "tool_result");
 }
 
+export function toPlacementTurns(messages: readonly MessageParam[]): PlacementTurn[] {
+  return messages.map((m) => ({
+    role: m.role,
+    toolResultOnly: isToolResultOnlyUser(m),
+  }));
+}
+
 export function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
-  let lastAssistant = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === "assistant") {
-      lastAssistant = i;
-      break;
-    }
-  }
-  if (lastAssistant < 0) return messages.length;
-  let start = lastAssistant;
-  while (start > 0) {
-    const prev = messages[start - 1];
-    if (prev === undefined) break;
-    if (prev.role === "assistant" || isToolResultOnlyUser(prev)) {
-      start -= 1;
-      continue;
-    }
-    break;
-  }
-  return start;
+  return assistantTurnStart(toPlacementTurns(messages));
 }
 
 function tsMessageBreakpoints(messages: MessageParam[]): number[] {
-  if (messages.length === 0) return [];
-  const anchors = [messages.length - 1];
-  const frozenIdx = mostRecentAssistantTurnStart(messages) - 1;
-  if (frozenIdx >= 0) {
-    anchors.push(frozenIdx);
-    const prevStart = mostRecentAssistantTurnStart(messages.slice(0, frozenIdx));
-    if (prevStart < frozenIdx && prevStart - 1 >= 0) anchors.push(prevStart - 1);
-  }
-  return [...new Set(anchors)].sort((a, b) => a - b);
+  return messageBreakpoints(toPlacementTurns(messages));
 }
 
 function tsDefaultPlacement(
@@ -404,6 +392,7 @@ export function placeBreakpoints(
   cc: CacheControl,
   msgBp: number[],
   sysBp: number[],
+  transientTail: readonly number[] = [],
 ): BreakpointTally {
   const tally: BreakpointTally = {
     requested: msgBp.length + sysBp.length,
@@ -439,7 +428,7 @@ export function placeBreakpoints(
       if (placed.has(i)) break;
       const msg = messages[i];
       if (!msg || !Array.isArray(msg.content)) continue;
-      if (applyMessageBreakpoint(msg.content, cc)) {
+      if (applyMessageBreakpoint(msg.content, cc, transientTail[i] ?? 0)) {
         placed.add(i);
         tally.placed += 1;
         landed = true;
@@ -484,10 +473,11 @@ export function applyDefaultPlacement(
   system: TextBlockParam[],
   labelled: SystemContent,
   cacheTtl: string,
+  transientTail: readonly number[] = [],
 ): { msgBp: number[]; sysBp: number[]; tally: BreakpointTally } {
   const cc = makeCacheControl(cacheTtl);
   const { msgBp, sysBp } = tsDefaultPlacement(messages, labelled);
-  const tally = placeBreakpoints(messages, system, cc, msgBp, sysBp);
+  const tally = placeBreakpoints(messages, system, cc, msgBp, sysBp, transientTail);
   return { msgBp, sysBp, tally };
 }
 
@@ -496,16 +486,27 @@ export function placeContinuationBreakpoints(
   system: TextBlockParam[],
   labelled: SystemContent,
   cacheTtl: string,
+  transientTail: readonly number[] = [],
 ): { msgBp: number[]; sysBp: number[] } {
   if (cacheTtl === "") return { msgBp: [], sysBp: [] };
 
   clearCacheMarkers(messages, system);
-  const { msgBp, sysBp } = applyDefaultPlacement(messages, system, labelled, cacheTtl);
+  const { msgBp, sysBp } = applyDefaultPlacement(
+    messages,
+    system,
+    labelled,
+    cacheTtl,
+    transientTail,
+  );
   return { msgBp, sysBp };
 }
 
-function applyMessageBreakpoint(content: ContentBlockParam[], cc: CacheControl): boolean {
-  for (let i = content.length - 1; i >= 0; i--) {
+function applyMessageBreakpoint(
+  content: ContentBlockParam[],
+  cc: CacheControl,
+  transientTrailing = 0,
+): boolean {
+  for (let i = content.length - 1 - transientTrailing; i >= 0; i--) {
     const b = content[i] as ContentBlockParam & { cache_control?: unknown };
     if (b.type === "text") {
       if (((b as { text?: string }).text ?? "").trim() === "") continue;

@@ -11,6 +11,11 @@ import type {
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { REASONING_OFF } from "../types.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
+import {
+  NANOGPT_PROVIDER,
+  nanogptPromptCaching,
+  placeNanogptBreakpoints,
+} from "./nanogpt_config.ts";
 import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
@@ -24,7 +29,7 @@ import type {
 import { systemToText, toolResultImages, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
-import { foldInlineSystemMessages, translatesToAnthropic } from "../inline_system.ts";
+import { foldInlineSystemMessagesWithTail, translatesToAnthropic } from "../inline_system.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
 export class OpenAIProvider implements SidecarProvider {
@@ -172,17 +177,39 @@ export async function* openAIStreamEvents(
   };
 }
 
-export function buildOpenAIMessages(req: SidecarRequest): ChatCompletionMessageParam[] {
+export interface OpenAIMessagesWithTail {
+  messages: ChatCompletionMessageParam[];
+  transientTail: number[];
+}
+
+export function buildOpenAIMessagesWithTail(req: SidecarRequest): OpenAIMessagesWithTail {
   const messages: ChatCompletionMessageParam[] = [];
+  const transientTail: number[] = [];
   const systemText = systemToText(req.system);
-  if (systemText) messages.push({ role: "system", content: systemText });
-  const turns = translatesToAnthropic(req.model)
-    ? foldInlineSystemMessages(replayableMessages(req))
-    : replayableMessages(req);
-  for (const turn of turns) {
-    messages.push(...turnToOpenAI(toTurn(turn)));
+  if (systemText) {
+    messages.push({ role: "system", content: systemText });
+    transientTail.push(0);
   }
-  return messages;
+
+  const replayable = replayableMessages(req);
+  const folded = translatesToAnthropic(req.model)
+    ? foldInlineSystemMessagesWithTail(replayable)
+    : { turns: replayable, transientTail: replayable.map(() => 0) };
+
+  folded.turns.forEach((turn, i) => {
+    const emitted = turnToOpenAI(toTurn(turn));
+    emitted.forEach((m, j) => {
+      messages.push(m);
+      const foldedBlocksLandHere = j === emitted.length - 1 && m.role === "user";
+      transientTail.push(foldedBlocksLandHere ? (folded.transientTail[i] ?? 0) : 0);
+    });
+  });
+
+  return { messages, transientTail };
+}
+
+export function buildOpenAIMessages(req: SidecarRequest): ChatCompletionMessageParam[] {
+  return buildOpenAIMessagesWithTail(req).messages;
 }
 
 function buildOpenAICall(
@@ -195,7 +222,7 @@ function buildOpenAICall(
     ...(req.base_url ? { baseURL: req.base_url } : {}),
   });
 
-  const messages = buildOpenAIMessages(req);
+  const { messages, transientTail } = buildOpenAIMessagesWithTail(req);
 
   const tools = toOpenAITools(req.tools);
 
@@ -216,12 +243,16 @@ function buildOpenAICall(
       : effort) as NonNullable<ChatCompletionCreateParams["reasoning_effort"]>;
   }
 
-  applyPromptCaching(req, params);
+  applyPromptCaching(req, params, transientTail);
 
   return { client, params };
 }
 
-export function applyPromptCaching(req: SidecarRequest, params: ChatCompletionCreateParams): void {
+export function applyPromptCaching(
+  req: SidecarRequest,
+  params: ChatCompletionCreateParams,
+  transientTail: readonly number[] = [],
+): void {
   const requested = req.provider_options?.cache_ttl ?? "";
   const ttl = effectiveCacheTtl(req.sdk, requested);
   if (req.context !== undefined && ttl !== requested) {
@@ -229,10 +260,10 @@ export function applyPromptCaching(req: SidecarRequest, params: ChatCompletionCr
     else req.context.cache_ttl = ttl;
   }
   if (ttl === "") return;
-  (params as unknown as Record<string, unknown>)["prompt_caching"] = {
-    enabled: true,
-    ttl: ttl === "1h" ? "1h" : "5m",
-  };
+  if (req.sdk !== NANOGPT_PROVIDER) return;
+  const helper = nanogptPromptCaching({ ttl });
+  (params as unknown as Record<string, unknown>)["prompt_caching"] = helper;
+  placeNanogptBreakpoints(params.messages ?? [], helper.ttl, transientTail);
 }
 
 function toOpenAITools(tools: ToolDefinition[] | undefined): ChatCompletionTool[] {
