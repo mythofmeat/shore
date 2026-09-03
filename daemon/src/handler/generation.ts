@@ -24,6 +24,8 @@ import {
   type FallbackEvent,
 } from "../llm/fallback.ts";
 import {
+  isKeylessSdk,
+  KEYLESS_CANDIDATE,
   readCandidateEnv,
   resolveKeyCandidates,
   type KeyCandidate,
@@ -600,16 +602,18 @@ async function streamTurn(
   };
 
   const entry = config.providers.get(resolved.providerKey);
-  const candidates = resolveKeyCandidates(
-    resolved.providerKey,
-    entry === undefined ? undefined : credentialEntry(entry),
-    resolved.apiKeyEnv,
-  );
+  const candidates = isKeylessSdk(resolved.sdk)
+    ? [KEYLESS_CANDIDATE]
+    : resolveKeyCandidates(
+      resolved.providerKey,
+      entry === undefined ? undefined : credentialEntry(entry),
+      resolved.apiKeyEnv,
+    );
 
   const result = await streamWithCredentialFallback(
     resolved.providerKey,
     candidates,
-    (candidate) => readCandidateEnv(candidate, deps.env ?? process.env),
+    (candidate) => (candidate.env === "" ? "" : readCandidateEnv(candidate, deps.env ?? process.env)),
     (apiKey, candidate) => {
       if (toolsOn) return attempt(apiKey, candidate);
       return streamWithRetry(

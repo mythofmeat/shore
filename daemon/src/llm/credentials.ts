@@ -159,6 +159,18 @@ export function defaultApiKeyEnv(providerKey: string): string {
   }
 }
 
+const KEYLESS_SDKS = new Set<string>(["claude_agent"]);
+
+export const KEYLESS_CANDIDATE: KeyCandidate = {
+  name: "subscription",
+  env: "",
+  warn_on_fallback: false,
+};
+
+export function isKeylessSdk(sdk: string): boolean {
+  return KEYLESS_SDKS.has(sdk);
+}
+
 export function resolveKeyCandidates(
   providerKey: string,
   entry: ProviderEntry | undefined,

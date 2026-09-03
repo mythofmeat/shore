@@ -1,6 +1,12 @@
 import { shoreLog } from "../log.ts";
 
-import { defaultApiKeyEnv, readCandidateEnv, resolveKeyCandidates } from "./credentials";
+import {
+  defaultApiKeyEnv,
+  isKeylessSdk,
+  KEYLESS_CANDIDATE,
+  readCandidateEnv,
+  resolveKeyCandidates,
+} from "./credentials";
 import type { ProviderEntry } from "./credentials";
 import { sanitizeToolPairs } from "./sanitize";
 import type {
@@ -212,6 +218,11 @@ export function buildRequestWithProviderKeys(
   inputs: BuildInputs,
   env: NodeJS.ProcessEnv = process.env,
 ): BuiltRequest {
+  if (isKeylessSdk(model.sdk)) {
+    const built = buildRequestWithResolvedKey(model, "", inputs);
+    return { ...built, api_key_name: KEYLESS_CANDIDATE.name };
+  }
+
   const candidates = resolveKeyCandidates(model.provider_key, entry, model.api_key_env);
 
   if (candidates.length === 0) {
