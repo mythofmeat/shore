@@ -98,6 +98,72 @@ function ctx(registry: FakeRegistry, current = MAIN_THREAD): ThreadContext {
   return { registry, character: "qifei", current };
 }
 
+describe("what a listed thread says about itself", () => {
+  function counted(
+    registry: FakeRegistry,
+    turns: ReadonlyMap<string, number>,
+    warm?: string,
+  ): ThreadContext {
+    return {
+      ...ctx(registry),
+      turns,
+      ...(warm === undefined ? {} : { warm }),
+    };
+  }
+
+  test("each thread carries its own turn count", () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    const out = listThreads(
+      counted(registry, new Map([[MAIN_THREAD, 12], ["eval", 1]])),
+    );
+
+    expect(out.threads.map((t) => [t.id, t.turns])).toEqual([
+      [MAIN_THREAD, 12],
+      ["eval", 1],
+    ]);
+  });
+
+  test("a thread the count did not reach reads as zero, not as unknown", () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("brand-new")]);
+    const out = listThreads(counted(registry, new Map([[MAIN_THREAD, 3]])));
+
+    expect(out.threads.find((t) => t.id === "brand-new")?.turns).toBe(0);
+  });
+
+  test("a daemon that counted nothing omits the field rather than claiming zero", () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD)]);
+    const out = listThreads(ctx(registry));
+
+    expect(out.threads[0]).not.toHaveProperty("turns");
+  });
+
+  test("only the thread holding the cache slot is marked warm", () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    const out = listThreads(counted(registry, new Map(), "eval"));
+
+    expect(out.threads.find((t) => t.id === "eval")?.warm).toBe(true);
+    expect(out.threads.find((t) => t.id === MAIN_THREAD)).not.toHaveProperty("warm");
+  });
+
+  test("nothing warm marks nothing", () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    const out = listThreads(counted(registry, new Map()));
+
+    expect(out.threads.some((t) => t.warm === true)).toBe(false);
+  });
+
+  test("the counts survive a mutation, so a rename still reports turns", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    const out = await threadLabel(
+      counted(registry, new Map([["eval", 4]]), "eval"),
+      { name: "eval", label: "SDK eval" },
+    );
+
+    const eval_ = out.threads.find((t) => t.id === "eval");
+    expect([eval_?.label, eval_?.turns, eval_?.warm]).toEqual(["SDK eval", 4, true]);
+  });
+});
+
 describe("listing threads", () => {
   test("marks which is home and which the session is looking at", () => {
     const registry = new FakeRegistry([record(MAIN_THREAD), record("scratch")]);

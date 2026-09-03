@@ -836,6 +836,11 @@ fn absorb_thread_listing(app: &mut App, data: &serde_json::Value) {
                     .get("home")
                     .and_then(serde_json::Value::as_bool)
                     .unwrap_or(false),
+                turns: row.get("turns").and_then(serde_json::Value::as_u64),
+                warm: row
+                    .get("warm")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
             })
         })
         .collect();

@@ -14,6 +14,9 @@ import {
   threadsIndexIn,
 } from "../config/dirs.ts";
 import { HISTORY_DB_FILE } from "./history_store.ts";
+import { isToolResultOnly } from "./message_store.ts";
+import type { Message } from "./types.ts";
+import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { shoreLog } from "../log.ts";
 
@@ -86,6 +89,49 @@ export function threadModelOf(
   thread: string,
 ): string | undefined {
   return records.find((t) => t.id === thread)?.chat_model;
+}
+
+function isUserTurnLine(raw: unknown): boolean {
+  if (typeof raw !== "object" || raw === null) return false;
+  const msg = raw as Message;
+  if (msg.role !== "user") return false;
+  return !Array.isArray(msg.content_blocks) || !isToolResultOnly(msg);
+}
+
+export async function threadTurnCount(
+  data: string,
+  character: string,
+  id: string,
+): Promise<number> {
+  let raw: string;
+  try {
+    raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), "utf8");
+  } catch {
+    return 0;
+  }
+  let turns = 0;
+  for (const line of raw.split("\n")) {
+    if (line.trim() === "") continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (isUserTurnLine(parsed)) turns += 1;
+  }
+  return turns;
+}
+
+export async function threadTurnCounts(
+  data: string,
+  character: string,
+  ids: readonly string[],
+): Promise<Map<string, number>> {
+  const counted = await Promise.all(
+    ids.map(async (id) => [id, await threadTurnCount(data, character, id)] as const),
+  );
+  return new Map(counted);
 }
 
 export function homeThread(index: ThreadsIndex | undefined): string {
@@ -355,6 +401,7 @@ export async function archiveThread(
   }
 
   await rm(dir, { recursive: true, force: true });
+  forgetThreadSessions(data, character, id);
   const next: ThreadsIndex = {
     ...index,
     threads: index.threads.filter((t) => t.id !== id),

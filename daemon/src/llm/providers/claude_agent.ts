@@ -1,12 +1,18 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname } from "node:path";
 
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-import { MAIN_THREAD, resolveShoreDirs, rustJoin } from "../../config/dirs.ts";
-import { shoreLog } from "../../log.ts";
+import { MAIN_THREAD } from "../../config/dirs.ts";
+import {
+  SESSION_KEY_SEPARATOR,
+  bookPath,
+  readBook,
+  sessionKey,
+  writeBook,
+  type DeliveredEntry,
+  type SessionRecord,
+} from "./agent_sessions.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import {
   REASONING_OFF,
@@ -65,41 +71,7 @@ const BUILTIN_TOOLS = [
   "Write",
 ];
 
-const SEPARATOR = "\u0000";
-
-export interface DeliveredEntry {
-  hash: string;
-  uuid?: string;
-}
-
-export interface SessionRecord {
-  sessionId: string;
-  entries: DeliveredEntry[];
-  pendingAssistantUuid?: string;
-}
-
-type SessionBook = Record<string, SessionRecord>;
-
-function bookPath(): string {
-  return rustJoin(resolveShoreDirs().data, "claude_agent_sessions.json");
-}
-
-function readBook(path: string): SessionBook {
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as SessionBook;
-  } catch {
-    return {};
-  }
-}
-
-function writeBook(path: string, book: SessionBook): void {
-  try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(book), "utf8");
-  } catch {
-    shoreLog.warn("claude_agent: session book unwritable");
-  }
-}
+export type { DeliveredEntry, SessionRecord } from "./agent_sessions.ts";
 
 function messageText(msg: WireMessage): string {
   return msg.content
@@ -111,7 +83,7 @@ function messageText(msg: WireMessage): string {
 function messageHash(msg: WireMessage): string {
   return createHash("sha256")
     .update(msg.role)
-    .update(SEPARATOR)
+    .update(SESSION_KEY_SEPARATOR)
     .update(messageText(msg))
     .digest("hex")
     .slice(0, 32);
@@ -205,11 +177,11 @@ export function nextEntries(plan: TurnPlan, pendingAssistantUuid: string | undef
 }
 
 export function conversationKey(req: SidecarRequest): string {
-  const character = req.context?.character ?? "default";
-  const ledger = req.context?.ledger ?? "";
-  const thread = req.context?.thread ?? MAIN_THREAD;
-  const base = `${character}${SEPARATOR}${ledger}`;
-  return thread === MAIN_THREAD ? base : `${base}${SEPARATOR}${thread}`;
+  return sessionKey(
+    req.context?.character ?? "default",
+    req.context?.ledger ?? "",
+    req.context?.thread ?? MAIN_THREAD,
+  );
 }
 
 function buildOptions(req: SidecarRequest, plan: TurnPlan): Options {

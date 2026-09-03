@@ -81,6 +81,8 @@ pub(crate) struct ThreadRow {
     pub label: Option<String>,
     pub model: Option<String>,
     pub home: bool,
+    pub turns: Option<u64>,
+    pub warm: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1789,15 +1791,25 @@ impl App {
     }
 
     pub(crate) fn thread_row_label(row: &ThreadRow) -> String {
-        let mut facts: Vec<&str> = Vec::new();
+        let mut facts: Vec<String> = Vec::new();
         if row.home {
-            facts.push("home");
+            facts.push("home".to_owned());
+        }
+        if let Some(turns) = row.turns {
+            facts.push(match turns {
+                0 => "empty".to_owned(),
+                1 => "1 turn".to_owned(),
+                n => format!("{n} turns"),
+            });
+        }
+        if row.warm {
+            facts.push("warm".to_owned());
         }
         if let Some(model) = row.model.as_deref() {
-            facts.push(model);
+            facts.push(model.to_owned());
         }
         if let Some(label) = row.label.as_deref() {
-            facts.push(label);
+            facts.push(label.to_owned());
         }
         if facts.is_empty() {
             row.id.clone()

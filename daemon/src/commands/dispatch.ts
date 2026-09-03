@@ -78,6 +78,7 @@ import {
   type ThreadContext,
   type ThreadRegistry,
 } from "./threads.ts";
+import { threadTurnCounts } from "../engine/threads.ts";
 import { conversationTokens } from "../ledger/conversation_spend.ts";
 import { estimateHistoryTokens } from "../engine/prompt.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
@@ -159,19 +160,19 @@ export async function runCommand(
       );
 
     case "list_threads":
-      return listThreads(threadContext(deps, engine));
+      return listThreads(await threadListingContext(deps, engine, session));
     case "switch_thread":
       return switchThread(threadContext(deps, engine), args);
     case "create_thread":
-      return await newThread(threadContext(deps, engine), args);
+      return await newThread(await threadListingContext(deps, engine, session), args);
     case "archive_thread":
-      return await archiveThread(threadContext(deps, engine), args);
+      return await archiveThread(await threadListingContext(deps, engine, session), args);
     case "thread_home":
-      return await threadHome(threadContext(deps, engine), args);
+      return await threadHome(await threadListingContext(deps, engine, session), args);
     case "thread_label":
-      return await threadLabel(threadContext(deps, engine), args);
+      return await threadLabel(await threadListingContext(deps, engine, session), args);
     case "thread_model":
-      return await threadModel(threadContext(deps, engine), args);
+      return await threadModel(await threadListingContext(deps, engine, session), args);
 
     case "log":
       return await log(engine, args);
@@ -225,6 +226,7 @@ export async function runCommand(
       return await segments(
         session.dataDir,
         character,
+        engine.thread,
         args,
         deps.historyIndex,
         session.config.app.memory.retain.enabled,
@@ -364,6 +366,24 @@ function threadContext(deps: CommandDeps, engine: ConversationEngine): ThreadCon
     throw internalError("thread commands need a character registry, and this one has none");
   }
   return { registry, character: engine.characterName, current: engine.thread };
+}
+
+async function threadListingContext(
+  deps: CommandDeps,
+  engine: ConversationEngine,
+  session: CommandSession,
+): Promise<ThreadContext> {
+  const base = threadContext(deps, engine);
+  const warm = deps.keepalive?.keepalive.warmThread(base.character);
+  return {
+    ...base,
+    turns: await threadTurnCounts(
+      session.dataDir,
+      base.character,
+      base.registry.listThreads(base.character).map((t) => t.id),
+    ),
+    ...(warm === undefined ? {} : { warm }),
+  };
 }
 
 export function isCharacterless(name: string): boolean {

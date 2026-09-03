@@ -483,3 +483,59 @@ describe("what reaches the heartbeat log and the state file", () => {
     ).toBe(false);
   });
 });
+
+describe("which thread holds the warm slot", () => {
+  test("nothing is warm until a prefix is armed", () => {
+    const h = harness();
+    expect(h.service.warmThread(CHARACTER)).toBeUndefined();
+  });
+
+  test("the armed prefix names the thread the cache is holding", () => {
+    const h = harness();
+    h.service.arm(
+      prefix({
+        context: {
+          character: CHARACTER,
+          call_type: "message",
+          thinking_enabled: true,
+          thread: "eval",
+        },
+      }),
+    );
+    expect(h.service.warmThread(CHARACTER)).toBe("eval");
+  });
+
+  test("a prefix from before threads existed is home, not nowhere", () => {
+    const h = harness();
+    h.service.arm(prefix());
+    expect(h.service.warmThread(CHARACTER)).toBe("main");
+  });
+
+  test("disarming gives the slot up rather than leaving a stale claim", () => {
+    const h = harness();
+    h.service.arm(prefix());
+    h.service.disarm(CHARACTER);
+    expect(h.service.warmThread(CHARACTER)).toBeUndefined();
+  });
+
+  test("arming a second thread moves the slot, it does not share it", () => {
+    const h = harness();
+    h.service.arm(
+      prefix({
+        context: { character: CHARACTER, call_type: "message", thinking_enabled: true, thread: "a" },
+      }),
+    );
+    h.service.arm(
+      prefix({
+        context: { character: CHARACTER, call_type: "message", thinking_enabled: true, thread: "b" },
+      }),
+    );
+    expect(h.service.warmThread(CHARACTER)).toBe("b");
+  });
+
+  test("another character's slot is its own", () => {
+    const h = harness();
+    h.service.arm(prefix());
+    expect(h.service.warmThread("someone-else")).toBeUndefined();
+  });
+});

@@ -261,6 +261,45 @@ MUTANTS = [
     ("model: the roster lookup returns the first thread's pin whatever was asked for",
      "  return records.find((t) => t.id === thread)?.chat_model;",
      "  return records[0]?.chat_model;"),
+
+    # --- how far along a thread is ------------------------------------------
+    ("turns: tool results are counted as turns the user took",
+     "  return !Array.isArray(msg.content_blocks) || !isToolResultOnly(msg);",
+     "  return true;"),
+    ("turns: assistant replies are counted too, so every thread reads twice as long",
+     '  if (msg.role !== "user") return false;',
+     "  if (false as boolean) return false;"),
+    ("turns: a line with no blocks at all is dropped rather than counted",
+     "  return !Array.isArray(msg.content_blocks) || !isToolResultOnly(msg);",
+     "  return Array.isArray(msg.content_blocks) && !isToolResultOnly(msg);"),
+    ("turns: a thread that was never opened fails instead of counting zero",
+     "  try {\n"
+     '    raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), "utf8");\n'
+     "  } catch {\n"
+     "    return 0;\n"
+     "  }",
+     '  raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), "utf8");'),
+    ("turns: a torn tail line stops the count instead of being skipped",
+     "    try {\n"
+     "      parsed = JSON.parse(line);\n"
+     "    } catch {\n"
+     "      continue;\n"
+     "    }",
+     "    parsed = JSON.parse(line);"),
+    ("turns: every thread is counted against home's window",
+     "    raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), \"utf8\");",
+     "    raw = await readFile(activeJsonlIn(threadDataDir(data, character, MAIN_THREAD)), \"utf8\");"),
+    ("turns: the roster is counted, but every entry gets the first thread's count",
+     "    ids.map(async (id) => [id, await threadTurnCount(data, character, id)] as const),",
+     "    ids.map(async (id) => [id, await threadTurnCount(data, character, ids[0] ?? id)] as const),"),
+
+    # --- archiving lets go of the SDK session too ----------------------------
+    ("archive: the SDK session outlives the thread, so a new one of the same name resumes it",
+     "  forgetThreadSessions(data, character, id);\n",
+     ""),
+    ("archive: archiving one thread forgets home's session as well",
+     "  forgetThreadSessions(data, character, id);",
+     "  forgetThreadSessions(data, character, MAIN_THREAD);"),
 ]
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))

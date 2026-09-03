@@ -35,6 +35,8 @@ export interface ThreadContext {
   registry: ThreadRegistry;
   character: string;
   current: string;
+  turns?: ReadonlyMap<string, number>;
+  warm?: string;
 }
 
 export interface ThreadView {
@@ -46,6 +48,8 @@ export interface ThreadView {
   compaction: boolean;
   home: boolean;
   current: boolean;
+  turns?: number;
+  warm?: boolean;
 }
 
 export interface ThreadListing {
@@ -60,11 +64,13 @@ export function threadCommandError(e: unknown): unknown {
   return e.kind === "not_found" ? notFound(e.message) : invalidRequest(e.message);
 }
 
-function view(record: ThreadRecord, home: string, current: string): ThreadView {
+function view(ctx: ThreadContext, record: ThreadRecord, home: string, current: string): ThreadView {
   return {
     ...record,
     home: record.id === home,
     current: record.id === current,
+    ...(ctx.turns === undefined ? {} : { turns: ctx.turns.get(record.id) ?? 0 }),
+    ...(ctx.warm === record.id ? { warm: true } : {}),
   };
 }
 
@@ -74,7 +80,7 @@ function listing(ctx: ThreadContext, index?: ThreadsIndex): ThreadListing {
   const current = records.some((t) => t.id === ctx.current) ? ctx.current : home;
   return {
     character: ctx.character,
-    threads: records.map((record) => view(record, home, current)),
+    threads: records.map((record) => view(ctx, record, home, current)),
     home,
     current,
   };

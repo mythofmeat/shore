@@ -7,6 +7,12 @@ import {
   planTurn,
   type SessionRecord,
 } from "../src/llm/providers/claude_agent.ts";
+import {
+  sessionKey,
+  sessionKeyThread,
+  withoutThread,
+  type SessionBook,
+} from "../src/llm/providers/agent_sessions.ts";
 import type { CallContext, SidecarRequest, WireMessage } from "../src/llm/types.ts";
 
 function msg(role: WireMessage["role"], text: string): WireMessage {
@@ -225,5 +231,39 @@ describe("conversationKey", () => {
 
   test("no context at all is still a usable key", () => {
     expect(conversationKey(request(undefined))).toBe("default\u0000");
+  });
+});
+
+describe("forgetting a thread's sessions", () => {
+  const book = (): SessionBook => ({
+    [sessionKey("qifei", "/l.db", "main")]: { sessionId: "home", entries: [] },
+    [sessionKey("qifei", "/l.db", "eval")]: { sessionId: "eval", entries: [] },
+    [sessionKey("qifei", "/other.db", "eval")]: { sessionId: "eval-other", entries: [] },
+    [sessionKey("aria", "/l.db", "eval")]: { sessionId: "aria-eval", entries: [] },
+  });
+
+  test("drops every ledger's session for that character's thread", () => {
+    const kept = withoutThread(book(), "qifei", "eval");
+    expect(Object.values(kept ?? {}).map((r) => r.sessionId).sort()).toEqual([
+      "aria-eval",
+      "home",
+    ]);
+  });
+
+  test("another character's identically named thread is left alone", () => {
+    const kept = withoutThread(book(), "aria", "eval");
+    expect(kept?.[sessionKey("qifei", "/l.db", "eval")]?.sessionId).toBe("eval");
+  });
+
+  test("a book with nothing to drop says so rather than rewriting itself", () => {
+    expect(withoutThread(book(), "qifei", "nowhere")).toBeUndefined();
+  });
+
+  test("home is reachable by name even though its key does not carry one", () => {
+    expect(sessionKeyThread(sessionKey("qifei", "/l.db", "main"))).toBe("main");
+    expect(sessionKeyThread(sessionKey("qifei", "/l.db", "eval"))).toBe("eval");
+    const kept = withoutThread(book(), "qifei", "main");
+    expect(kept?.[sessionKey("qifei", "/l.db", "main")]).toBeUndefined();
+    expect(kept?.[sessionKey("qifei", "/l.db", "eval")]?.sessionId).toBe("eval");
   });
 });

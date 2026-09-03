@@ -4,6 +4,11 @@ import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { MAIN_THREAD, archiveKey } from "../src/config/dirs.ts";
+import {
+  bookPathIn,
+  sessionKey,
+  type SessionBook,
+} from "../src/llm/providers/agent_sessions.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import {
   MAX_THREAD_ID_LENGTH,
@@ -22,6 +27,8 @@ import {
   setThreadModel,
   threadChatModel,
   threadModelOf,
+  threadTurnCount,
+  threadTurnCounts,
   touchThread,
   writeThreadsIndex,
 } from "../src/engine/threads.ts";
@@ -385,6 +392,53 @@ describe("archiving a thread", () => {
     expect(existsSync(join(root, HISTORY_DB_FILE))).toBe(false);
   });
 
+  test("forgets the Agent SDK session the thread was resuming", async () => {
+    const root = await dataDir();
+    await createThread(root, "aria", "scratch", NOW);
+    const book: SessionBook = {
+      [sessionKey("aria", "shore", "scratch")]: { sessionId: "s-scratch", entries: [] },
+      [sessionKey("aria", "shore", MAIN_THREAD)]: { sessionId: "s-home", entries: [] },
+      [sessionKey("bo", "shore", "scratch")]: { sessionId: "s-other", entries: [] },
+    };
+    await writeFile(bookPathIn(root), JSON.stringify(book));
+
+    await archiveThread(root, "aria", "scratch");
+
+    expect(JSON.parse(await readFile(bookPathIn(root), "utf8"))).toEqual({
+      [sessionKey("aria", "shore", MAIN_THREAD)]: { sessionId: "s-home", entries: [] },
+      [sessionKey("bo", "shore", "scratch")]: { sessionId: "s-other", entries: [] },
+    });
+  });
+
+  test("archiving the old home forgets its session too, once home has moved", async () => {
+    const root = await dataDir();
+    await createThread(root, "aria", "scratch", NOW);
+    await setHomeThread(root, "aria", "scratch", NOW);
+    await writeFile(
+      bookPathIn(root),
+      JSON.stringify({
+        [sessionKey("aria", "shore", MAIN_THREAD)]: { sessionId: "s-home", entries: [] },
+      }),
+    );
+
+    await archiveThread(root, "aria", MAIN_THREAD);
+
+    expect(JSON.parse(await readFile(bookPathIn(root), "utf8"))).toEqual({});
+  });
+
+  test("leaves a book with nothing of this thread's in it untouched", async () => {
+    const root = await dataDir();
+    await createThread(root, "aria", "scratch", NOW);
+    const raw = JSON.stringify({
+      [sessionKey("aria", "shore", MAIN_THREAD)]: { sessionId: "s-home", entries: [] },
+    });
+    await writeFile(bookPathIn(root), raw);
+
+    await archiveThread(root, "aria", "scratch");
+
+    expect(await readFile(bookPathIn(root), "utf8")).toBe(raw);
+  });
+
   test("refuses the home thread and an unknown one", async () => {
     const root = await dataDir();
     await createThread(root, "aria", "scratch", NOW);
@@ -396,6 +450,93 @@ describe("archiving a thread", () => {
     await setHomeThread(root, "aria", "scratch", NOW);
     const index = await archiveThread(root, "aria", MAIN_THREAD);
     expect(index.threads.map((t) => t.id)).toEqual(["scratch"]);
+  });
+});
+
+describe("counting a thread's turns", () => {
+  async function writeActive(root: string, thread: string, lines: unknown[]): Promise<void> {
+    const dir = join(root, "aria", "threads", thread);
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "active.jsonl"),
+      lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
+    );
+  }
+
+  const user = (text: string) => ({
+    msg_id: text,
+    role: "user",
+    content: text,
+    content_blocks: [{ type: "text", text }],
+    timestamp: NOW,
+  });
+  const assistant = (text: string) => ({ ...user(text), role: "assistant" });
+  const toolResult = () => ({
+    msg_id: "tr",
+    role: "user",
+    content: "",
+    content_blocks: [{ type: "tool_result", tool_use_id: "t1", content: "done" }],
+    timestamp: NOW,
+  });
+
+  test("counts user turns, not messages", async () => {
+    const root = await dataDir();
+    await writeActive(root, "scratch", [
+      user("first"),
+      assistant("reply"),
+      user("second"),
+      assistant("reply"),
+    ]);
+
+    expect(await threadTurnCount(root, "aria", "scratch")).toBe(2);
+  });
+
+  test("a tool result is the model's work coming back, not a turn the user took", async () => {
+    const root = await dataDir();
+    await writeActive(root, "scratch", [user("go"), assistant("calling"), toolResult()]);
+
+    expect(await threadTurnCount(root, "aria", "scratch")).toBe(1);
+  });
+
+  test("a line from before blocks existed is still a turn the user took", async () => {
+    const root = await dataDir();
+    await writeActive(root, "scratch", [
+      { msg_id: "old", role: "user", content: "typed before blocks", timestamp: NOW },
+    ]);
+
+    expect(await threadTurnCount(root, "aria", "scratch")).toBe(1);
+  });
+
+  test("a thread with nothing said in it counts zero rather than failing", async () => {
+    const root = await dataDir();
+
+    expect(await threadTurnCount(root, "aria", "never-opened")).toBe(0);
+  });
+
+  test("a torn line is skipped, so a half-written file still counts", async () => {
+    const root = await dataDir();
+    const dir = join(root, "aria", "threads", "scratch");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "active.jsonl"),
+      `${JSON.stringify(user("kept"))}\n{"role":"user","conte\n`,
+    );
+
+    expect(await threadTurnCount(root, "aria", "scratch")).toBe(1);
+  });
+
+  test("counts every named thread on its own", async () => {
+    const root = await dataDir();
+    await writeActive(root, MAIN_THREAD, [user("one"), user("two")]);
+    await writeActive(root, "scratch", [user("only")]);
+
+    expect(await threadTurnCounts(root, "aria", [MAIN_THREAD, "scratch", "gone"])).toEqual(
+      new Map([
+        [MAIN_THREAD, 2],
+        ["scratch", 1],
+        ["gone", 0],
+      ]),
+    );
   });
 });
 

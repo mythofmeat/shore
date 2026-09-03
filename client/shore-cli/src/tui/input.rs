@@ -2240,6 +2240,8 @@ mod tests {
             label: None,
             model: None,
             home,
+            turns: None,
+            warm: false,
         }
     }
 
@@ -2279,13 +2281,15 @@ mod tests {
             label: Some("SDK eval".to_owned()),
             model: Some("claude-agent:opus5".to_owned()),
             home: false,
+            turns: Some(4),
+            warm: true,
         }];
         app.enter_submenu("thread");
         app.completion.selected = Some(0);
 
         assert_eq!(
             app.completion.candidates,
-            vec!["eval \u{2014} claude-agent:opus5 \u{b7} SDK eval"]
+            vec!["eval \u{2014} 4 turns \u{b7} warm \u{b7} claude-agent:opus5 \u{b7} SDK eval"]
         );
 
         let cmd = sent_command(handle_submenu_mode(

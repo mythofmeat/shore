@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  MAIN_THREAD,
   activeJsonlIn,
   archiveKey,
   characterDataDir,
@@ -41,13 +42,14 @@ export interface ClearContext {
 export async function segments(
   dataDir: string,
   character: string,
+  thread: string,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
   retainArchived = false,
 ): Promise<unknown> {
   const action = typeof args["action"] === "string" ? args["action"] : "list";
   const mutate = () =>
-    runSegments(dataDir, character, action, args, historyIndex, retainArchived);
+    runSegments(dataDir, character, thread, action, args, historyIndex, retainArchived);
   const indexPath =
     action === "list" || action === "show"
       ? undefined
@@ -60,61 +62,64 @@ export async function segments(
 function runSegments(
   dataDir: string,
   character: string,
+  thread: string,
   action: string,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
   retainArchived = false,
 ): unknown {
+  const key = archiveKey(character, thread);
   const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
   try {
     if (action === "list") {
-      const records = store.entries(character).map(presentSegment);
-      return { character, segments: records, count: records.length };
+      const records = store.entries(key).map(presentSegment);
+      return { character, thread, segments: records, count: records.length };
     }
 
     const idx = segmentIndex(args["index"]);
     if (action === "show") {
-      const record = store.entries(character).find((entry) => entry.idx === idx);
-      if (record === undefined) throw notFound(`segment ${String(idx)} not found for ${character}`);
+      const record = store.entries(key).find((entry) => entry.idx === idx);
+      if (record === undefined) throw notFound(missing(idx, character, thread));
       return {
         character,
+        thread,
         segment: presentSegment(record),
-        messages: store.readSegment(character, idx),
+        messages: store.readSegment(key, idx),
       };
     }
 
     let changed: boolean;
     switch (action) {
       case "exclude":
-        changed = store.setExcluded(character, idx, true, retainArchived);
+        changed = store.setExcluded(key, idx, true, retainArchived);
         break;
       case "include":
-        changed = store.setExcluded(character, idx, false, retainArchived);
+        changed = store.setExcluded(key, idx, false, retainArchived);
         break;
       case "label":
-        changed = store.setLabel(character, idx, nullableText(args["value"], "label"));
+        changed = store.setLabel(key, idx, nullableText(args["value"], "label"));
         break;
       case "note":
-        changed = store.setNote(character, idx, nullableText(args["value"], "note"));
+        changed = store.setNote(key, idx, nullableText(args["value"], "note"));
         break;
       case "retry":
-        changed = store.retryMemoryDocument(character, idx);
-        if (!changed && store.entries(character).some((entry) => entry.idx === idx)) {
+        changed = store.retryMemoryDocument(key, idx);
+        if (!changed && store.entries(key).some((entry) => entry.idx === idx)) {
           throw invalidRequest(`segment ${String(idx)} has no failed hindsight operation`);
         }
         break;
       default:
         throw invalidRequest(`unknown segment action: ${action}`);
     }
-    if (!changed) throw notFound(`segment ${String(idx)} not found for ${character}`);
+    if (!changed) throw notFound(missing(idx, character, thread));
     if (action === "exclude" || action === "include") {
       historyIndex?.noteMutation?.(character);
     } else if (action === "retry") {
       historyIndex?.noteMemoryWork?.(character);
     }
-    const record = store.entries(character).find((entry) => entry.idx === idx);
-    if (record === undefined) throw notFound(`segment ${String(idx)} not found for ${character}`);
-    return { character, action, segment: presentSegment(record) };
+    const record = store.entries(key).find((entry) => entry.idx === idx);
+    if (record === undefined) throw notFound(missing(idx, character, thread));
+    return { character, thread, action, segment: presentSegment(record) };
   } finally {
     store.close();
   }
@@ -174,10 +179,11 @@ export async function clear(
 
     const store = HistoryStore.open(join(ctx.dataDir, HISTORY_DB_FILE));
     try {
-      const record = store.entries(character).at(-1);
+      const record = store.entries(archiveKey(character, engine.thread)).at(-1);
       return {
         status: "clear",
         character,
+        thread: engine.thread,
         message_count: record?.message_count ?? 0,
         segment: record === undefined ? null : presentSegment(record),
       };
@@ -187,6 +193,11 @@ export async function clear(
   } finally {
     guard.release();
   }
+}
+
+function missing(idx: number, character: string, thread: string): string {
+  const where = thread === MAIN_THREAD ? character : `${character} thread ${thread}`;
+  return `segment ${String(idx)} not found for ${where}`;
 }
 
 function presentSegment(record: SegmentRecord): Record<string, unknown> {
