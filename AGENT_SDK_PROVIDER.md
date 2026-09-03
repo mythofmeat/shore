@@ -66,13 +66,24 @@ session id plus a hash of every message delivered so far. Each turn:
 | Situation | Action |
 |---|---|
 | Incoming history extends what was delivered | `resume` the session, send only the new user message |
-| History diverges partway (regeneration, an edit) | `resume` + `resumeSessionAt` the last kept assistant turn + `forkSession` |
-| No common prefix, or no session yet | Fresh session; prior turns replayed as text, assistant ones wrapped in `<prior_assistant_turn>` |
+| History diverges partway (an edit) | `resume` + `resumeSessionAt` the last delivered assistant turn + `forkSession`, replaying everything after it |
+| Regenerating the most recent turn | Same fork, anchored one assistant turn further back; the user turn being answered is re-sent |
+| No common prefix, no session yet, or no assistant turn to anchor on | Fresh session; prior turns replayed as text, assistant ones wrapped in `<prior_assistant_turn>` |
+
+Regeneration is the case worth understanding. Shore drops the assistant turn it is replacing, so
+the incoming history is exactly what was already delivered — there is no diverging tail to detect.
+Treating that as an ordinary extension sends the SDK an **empty prompt**, and the model answers a
+blank turn. So an empty tail is read as "regenerate": fork at the assistant turn *before* the one
+being replaced and re-send the user turn that follows it.
 
 The fork anchor **must** be an assistant uuid. The SDK does not echo a `user` message back for a
 string prompt, so user uuids are never observable; anchoring on them silently forks from the end
-of the session and the regenerated turn still sees the turn it was supposed to replace.
-`tests/claude_agent_sessions.test.ts` pins this.
+of the session and the regenerated turn still sees the turn it was supposed to replace. When no
+assistant uuid is available to anchor on, the turn cold starts rather than forking blind.
+
+A fork also resets the delivered record to the anchor. Everything after it is re-sent, because the
+forked session does not contain it — keeping those entries would claim the SDK had seen messages
+it never did. `tests/claude_agent_sessions.test.ts` pins all of this.
 
 ## What is not available yet
 

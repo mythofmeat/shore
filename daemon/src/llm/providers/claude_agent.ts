@@ -124,12 +124,11 @@ function commonPrefix(hashes: readonly string[], entries: readonly DeliveredEntr
   return i;
 }
 
-function forkUuid(entries: readonly DeliveredEntry[], upto: number): string | undefined {
+function lastAssistantEntry(entries: readonly DeliveredEntry[], upto: number): number {
   for (let i = upto - 1; i >= 0; i -= 1) {
-    const uuid = entries[i]?.uuid;
-    if (uuid !== undefined) return uuid;
+    if (entries[i]?.uuid !== undefined) return i;
   }
-  return undefined;
+  return -1;
 }
 
 function renderReplay(msgs: readonly WireMessage[]): string {
@@ -166,7 +165,7 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
 
   if (k === 0) return coldStart(msgs);
 
-  if (k === record.entries.length) {
+  if (k === record.entries.length && tail.length > 0) {
     return {
       prompt: renderReplay(tail.filter((m) => m.role !== "assistant")),
       resume: record.sessionId,
@@ -176,14 +175,18 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
     };
   }
 
-  const at = forkUuid(record.entries, k);
+  const anchor = lastAssistantEntry(record.entries, k);
+  const at = anchor < 0 ? undefined : record.entries[anchor]?.uuid;
+  if (at === undefined) return coldStart(msgs);
+
+  const resumed = msgs.slice(anchor + 1);
   return {
-    prompt: renderReplay(tail),
+    prompt: renderReplay(resumed),
     resume: record.sessionId,
-    ...(at === undefined ? {} : { resumeSessionAt: at }),
+    resumeSessionAt: at,
     fork: true,
-    keptEntries: record.entries.slice(0, k),
-    delivered: [...tail],
+    keptEntries: record.entries.slice(0, anchor + 1),
+    delivered: [...resumed],
   };
 }
 
