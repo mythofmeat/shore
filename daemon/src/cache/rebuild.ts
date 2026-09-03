@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import {
   activeJsonlIn,
   characterDataDir,
-  MAIN_THREAD,
   threadDataDir,
 } from "../config/dirs.ts";
 
@@ -18,6 +17,7 @@ import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import type { BuiltRequest } from "../llm/request.ts";
 import { segmentCount } from "../memory/compaction/archive.ts";
 import { conversationRef } from "../engine/segments.ts";
+import { homeThreadOf } from "../engine/threads.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 
@@ -88,7 +88,8 @@ export async function rebuildRequestFromDisk(
   deps: RebuildDeps = {},
 ): Promise<BuiltRequest | undefined> {
   const characterDir = characterDataDir(dataDir, character);
-  const conversationDir = threadDataDir(dataDir, character, MAIN_THREAD);
+  const thread = await homeThreadOf(dataDir, character);
+  const conversationDir = threadDataDir(dataDir, character, thread);
 
   let store: MessageStore;
   try {
@@ -111,7 +112,7 @@ export async function rebuildRequestFromDisk(
   );
   if (resolved === undefined) return undefined;
 
-  const hasPriorContext = (await segmentCount(conversationRef(dataDir, character, MAIN_THREAD, false))) > 0;
+  const hasPriorContext = (await segmentCount(conversationRef(dataDir, character, thread, false))) > 0;
   const mcpToolDefs = deps.mcpRegistry?.toolDefsFiltered(config.app.tools.enabled_tools) ?? [];
 
   try {

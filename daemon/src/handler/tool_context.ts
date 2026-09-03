@@ -5,11 +5,11 @@ import type { ProviderEntry as RegistryEntry } from "../config/providers.ts";
 import {
   characterDataDir,
   characterWorkspaceDir,
-  MAIN_THREAD,
   rustJoin,
   threadDataDir,
 } from "../config/dirs.ts";
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
+import { homeThreadOf } from "../engine/threads.ts";
 import type { ProviderEntry } from "../llm/credentials.ts";
 import { resolveImageGenConfig } from "../llm/image_generate.ts";
 import { resolveEmbedder } from "../memory/retrieval.ts";
@@ -72,7 +72,7 @@ export async function buildToolContext(
     imageDir: rustJoin(charDataDir, "images"),
     workspaceDir,
     characterDataDir: charDataDir,
-    conversationDir: threadDataDir(dataDir, charName, MAIN_THREAD),
+    conversationDir: threadDataDir(dataDir, charName, await homeThreadOf(dataDir, charName)),
     historyDbPath: rustJoin(dataDir, HISTORY_DB_FILE),
     characterName: charName,
     configDir,

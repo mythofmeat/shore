@@ -1,7 +1,7 @@
 import { shoreLog } from "../../log.ts";
 
 
-import { activeJsonlIn, MAIN_THREAD, threadDataDir } from "../../config/dirs.ts";
+import { activeJsonlIn, threadDataDir } from "../../config/dirs.ts";
 
 import { MessageStore, isToolResultOnly } from "../../engine/message_store";
 import type { Message } from "../../engine/types";
@@ -28,8 +28,9 @@ function toConversationMessage(msg: Message): ConversationMessage {
 export async function loadMessagesForCompaction(
   dataDir: string,
   character: string,
+  thread: string,
 ): Promise<LoadedConversation> {
-  const conversationDir = threadDataDir(dataDir, character, MAIN_THREAD);
+  const conversationDir = threadDataDir(dataDir, character, thread);
   const { store, raw } = await MessageStore.loadWithRaw(activeJsonlIn(conversationDir));
   return {
     store,

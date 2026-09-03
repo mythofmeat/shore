@@ -15,12 +15,12 @@ import { join } from "node:path";
 import {
   activeJsonlIn,
   characterConfigDir,
-  MAIN_THREAD,
   threadDirIn,
   characterMemoryDir,
   characterWorkspaceDir,
   characterWorkspaceFile,
 } from "../config/dirs.ts";
+import { homeThreadIn } from "../engine/threads.ts";
 
 import {
   activePromptDir,
@@ -315,7 +315,7 @@ export async function applyDeferredEdits(
   if (
     await resetActivePromptSnapshotIfEmpty(
       characterDataDir,
-      threadDirIn(characterDataDir, MAIN_THREAD),
+      threadDirIn(characterDataDir, await homeThreadIn(characterDataDir)),
     )
   ) return;
   await refreshActivePromptSnapshot(characterDataDir, configDir, charName, workspaceRoot);

@@ -209,6 +209,7 @@ describe("segment management", () => {
     let completed = 0;
     const result = await clear({
       characterName: "ada",
+      thread: "main",
       reload: () => { reloads += 1; return Promise.resolve(); },
     }, {
       dataDir: root,

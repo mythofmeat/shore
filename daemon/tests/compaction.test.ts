@@ -433,7 +433,7 @@ describe("loading a conversation", () => {
         rec.active_jsonl as string,
         "utf8",
       );
-      const loaded = await loadMessagesForCompaction(root, "Aria");
+      const loaded = await loadMessagesForCompaction(root, "Aria", "main");
       expect(loaded.rawContent).toBe(rec.raw_content as string);
       expect(loaded.messages).toEqual(
         (rec.messages as Json[]).map(toConversationMessage),

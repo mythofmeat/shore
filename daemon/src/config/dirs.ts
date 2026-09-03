@@ -170,8 +170,14 @@ export const MAIN_THREAD = "main";
 export const characterThreadsDir = (data: string, name: string): string =>
   rustJoin(characterDataDir(data, name), THREADS_DIR);
 
+export const threadsIndexIn = (characterDir: string): string =>
+  rustJoin(characterDir, THREADS_INDEX_FILE);
+
 export const characterThreadsIndex = (data: string, name: string): string =>
-  rustJoin(characterDataDir(data, name), THREADS_INDEX_FILE);
+  threadsIndexIn(characterDataDir(data, name));
+
+export const archiveKey = (character: string, thread: string): string =>
+  thread === MAIN_THREAD ? character : `${character}/${thread}`;
 
 export const threadDataDir = (data: string, name: string, thread: string): string =>
   rustJoin(characterThreadsDir(data, name), thread);

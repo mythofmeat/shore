@@ -492,6 +492,10 @@ export interface CompactionSettings {
   maxContextTokens?: number;
 }
 
+export function compactThread(opts: Pick<CompactOptions, "thread">): string {
+  return opts.thread ?? MAIN_THREAD;
+}
+
 export interface CompactOptions {
   conversationId: string;
   messages: ConversationMessage[];
@@ -499,6 +503,7 @@ export interface CompactOptions {
   systemTemplate: string;
   promptTemplate: string;
   charName: string;
+  thread?: string;
   userName: string;
   llm: CompactionLlm;
   conversationMgr: ConversationManager;
@@ -593,7 +598,10 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   );
   checkpoint.request.api_key = initialRequest.api_key;
   const alreadyArchived = opts.resumable === true && opts.dataDir !== undefined
-    ? await hasCompactionOperation(conversationRef(opts.dataDir, opts.charName, MAIN_THREAD, false), checkpoint.id)
+    ? await hasCompactionOperation(
+        conversationRef(opts.dataDir, opts.charName, compactThread(opts), false),
+        checkpoint.id,
+      )
     : false;
   if (alreadyArchived && !checkpointSourceIsCompatible(checkpoint, await currentActiveContent(opts))) {
     const liveContent = await currentActiveContent(opts);
@@ -845,7 +853,11 @@ async function resolveCheckpoint(
         abandonedBefore ?? workspaceHead,
       );
     } else {
-      const existing = await loadCompactionCheckpoint(opts.dataDir, opts.charName);
+      const existing = await loadCompactionCheckpoint(
+        opts.dataDir,
+        opts.charName,
+        compactThread(opts),
+      );
       if (existing !== undefined) {
         if (opts.keepTurnsOverride === undefined || existing.splitAt === splitAt) return existing;
         shoreLog.warn(
@@ -855,7 +867,7 @@ async function resolveCheckpoint(
             `starting a fresh pass at the requested split. The memory it already wrote ` +
             `(${JSON.stringify(existing.loop.writesApplied.map((w) => w.displayPath))}) stays on disk`,
         );
-        await removeCompactionCheckpoint(opts.dataDir, opts.charName);
+        await removeCompactionCheckpoint(opts.dataDir, opts.charName, compactThread(opts));
         return newCompactionCheckpoint(
           opts.charName,
           opts.activeContent,
@@ -881,19 +893,23 @@ async function resolveCheckpoint(
 
 async function persistCheckpoint(opts: CompactOptions, checkpoint: CompactionCheckpoint): Promise<void> {
   if (opts.resumable === true && opts.dataDir !== undefined) {
-    await saveCompactionCheckpoint(opts.dataDir, checkpoint);
+    await saveCompactionCheckpoint(opts.dataDir, checkpoint, compactThread(opts));
   }
 }
 
 async function clearCheckpoint(opts: CompactOptions): Promise<void> {
   if (opts.resumable === true && opts.dataDir !== undefined) {
-    await removeCompactionCheckpoint(opts.dataDir, opts.charName);
+    await removeCompactionCheckpoint(opts.dataDir, opts.charName, compactThread(opts));
   }
 }
 
 async function discardCheckpoint(opts: CompactOptions): Promise<string | undefined> {
   if (opts.dataDir === undefined) return undefined;
-  const abandoned = await loadCompactionCheckpoint(opts.dataDir, opts.charName).catch(
+  const abandoned = await loadCompactionCheckpoint(
+    opts.dataDir,
+    opts.charName,
+    compactThread(opts),
+  ).catch(
     () => undefined,
   );
   if (abandoned !== undefined) {
@@ -905,7 +921,7 @@ async function discardCheckpoint(opts: CompactOptions): Promise<string | undefin
         `those memory writes stay on disk, and its turns were never archived`,
     );
   }
-  await removeCompactionCheckpoint(opts.dataDir, opts.charName);
+  await removeCompactionCheckpoint(opts.dataDir, opts.charName, compactThread(opts));
   return abandoned?.memoryBefore;
 }
 
@@ -966,7 +982,10 @@ function budgetResetAt(e: unknown): string | undefined {
 async function currentActiveContent(opts: CompactOptions): Promise<string> {
   if (opts.resumable !== true || opts.dataDir === undefined) return opts.activeContent;
   try {
-    return await readFile(characterActiveJsonl(opts.dataDir, opts.charName, MAIN_THREAD), "utf8");
+    return await readFile(
+      characterActiveJsonl(opts.dataDir, opts.charName, compactThread(opts)),
+      "utf8",
+    );
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return opts.activeContent;
     throw e;

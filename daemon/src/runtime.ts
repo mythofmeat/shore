@@ -10,7 +10,6 @@ import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";
 import {
   characterWorkspaceDir,
-  MAIN_THREAD,
   pluginsDir,
   rustJoin,
   threadDataDir,
@@ -162,7 +161,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       }
       historyIndex?.register({
         character,
-        conversationDir: threadDataDir(effective.dirs.data, character, MAIN_THREAD),
+        conversationDir: threadDataDir(
+          effective.dirs.data,
+          character,
+          registry.homeThread(character),
+        ),
         dbPath: rustJoin(effective.dirs.data, HISTORY_DB_FILE),
         indexPath: historyIndexPath(effective.dirs.cache, character),
         ...(embedder === undefined ? {} : { embedder }),

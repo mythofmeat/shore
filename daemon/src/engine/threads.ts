@@ -1,15 +1,51 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename } from "node:fs/promises";
+import { mkdir, readFile, rename, rm } from "node:fs/promises";
+import { join } from "node:path";
 
 import { atomicWrite } from "./atomic.ts";
 import {
   MAIN_THREAD,
+  activeJsonlIn,
+  archiveKey,
   characterDataDir,
   characterThreadsIndex,
   rustJoin,
   threadDataDir,
+  threadsIndexIn,
 } from "../config/dirs.ts";
+import { HISTORY_DB_FILE } from "./history_store.ts";
+import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { shoreLog } from "../log.ts";
+
+export const MAX_THREAD_ID_LENGTH = 64;
+
+const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export type ThreadErrorKind = "invalid_id" | "exists" | "not_found" | "is_home";
+
+export class ThreadError extends Error {
+  constructor(
+    readonly kind: ThreadErrorKind,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ThreadError";
+  }
+}
+
+export function isValidThreadId(id: string): boolean {
+  return id.length > 0 && id.length <= MAX_THREAD_ID_LENGTH && THREAD_ID.test(id);
+}
+
+export function assertThreadId(id: string): void {
+  if (isValidThreadId(id)) return;
+  throw new ThreadError(
+    "invalid_id",
+    `invalid thread id ${JSON.stringify(id)} — use letters, digits, ` +
+      `dot, dash or underscore, starting with a letter or digit ` +
+      `(at most ${String(MAX_THREAD_ID_LENGTH)} characters)`,
+  );
+}
 
 const MIGRATED_ENTRIES = [
   "active.jsonl",
@@ -65,16 +101,30 @@ function isThreadsIndex(raw: unknown): raw is ThreadsIndex {
   return threads.every(isThreadRecord);
 }
 
-export async function readThreadsIndex(
-  data: string,
-  character: string,
+export async function readThreadsIndexIn(
+  characterDir: string,
 ): Promise<ThreadsIndex | undefined> {
   try {
-    const raw: unknown = JSON.parse(await readFile(characterThreadsIndex(data, character), "utf8"));
+    const raw: unknown = JSON.parse(await readFile(threadsIndexIn(characterDir), "utf8"));
     return isThreadsIndex(raw) ? raw : undefined;
   } catch {
     return undefined;
   }
+}
+
+export async function readThreadsIndex(
+  data: string,
+  character: string,
+): Promise<ThreadsIndex | undefined> {
+  return await readThreadsIndexIn(characterDataDir(data, character));
+}
+
+export async function homeThreadIn(characterDir: string): Promise<string> {
+  return homeThread(await readThreadsIndexIn(characterDir));
+}
+
+export async function homeThreadOf(data: string, character: string): Promise<string> {
+  return homeThread(await readThreadsIndex(data, character));
 }
 
 export async function writeThreadsIndex(
@@ -135,4 +185,147 @@ export async function ensureThreads(
     await writeThreadsIndex(data, character, fresh);
   }
   return fresh;
+}
+
+export interface NewThread {
+  label?: string;
+  chat_model?: string;
+  compaction?: boolean;
+}
+
+export async function createThread(
+  data: string,
+  character: string,
+  id: string,
+  now: string,
+  options: NewThread = {},
+): Promise<ThreadsIndex> {
+  assertThreadId(id);
+  const index = await ensureThreads(data, character, now);
+  if (threadRecord(index, id) !== undefined) {
+    throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${character}`);
+  }
+  await mkdir(threadDataDir(data, character, id), { recursive: true });
+  const record: ThreadRecord = {
+    id,
+    created_at: now,
+    compaction: options.compaction ?? false,
+    ...(options.label === undefined ? {} : { label: options.label }),
+    ...(options.chat_model === undefined ? {} : { chat_model: options.chat_model }),
+  };
+  const next: ThreadsIndex = { ...index, threads: [...index.threads, record] };
+  await writeThreadsIndex(data, character, next);
+  return next;
+}
+
+function requireThread(index: ThreadsIndex, character: string, id: string): ThreadRecord {
+  const found = threadRecord(index, id);
+  if (found === undefined) {
+    throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
+  }
+  return found;
+}
+
+function replaceThread(index: ThreadsIndex, record: ThreadRecord): ThreadsIndex {
+  return { ...index, threads: index.threads.map((t) => (t.id === record.id ? record : t)) };
+}
+
+export async function setHomeThread(
+  data: string,
+  character: string,
+  id: string,
+  now: string,
+): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  requireThread(index, character, id);
+  const next: ThreadsIndex = { ...index, home: id };
+  await writeThreadsIndex(data, character, next);
+  return next;
+}
+
+export async function setThreadLabel(
+  data: string,
+  character: string,
+  id: string,
+  label: string | undefined,
+  now: string,
+): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  const current = requireThread(index, character, id);
+  const { label: _dropped, ...rest } = current;
+  const record: ThreadRecord = label === undefined ? rest : { ...rest, label };
+  const next = replaceThread(index, record);
+  await writeThreadsIndex(data, character, next);
+  return next;
+}
+
+export async function touchThread(
+  data: string,
+  character: string,
+  id: string,
+  now: string,
+): Promise<ThreadsIndex | undefined> {
+  const index = await readThreadsIndex(data, character);
+  if (index === undefined) return undefined;
+  const current = threadRecord(index, id);
+  if (current === undefined) return index;
+  const next = replaceThread(index, { ...current, last_active: now });
+  await writeThreadsIndex(data, character, next);
+  return next;
+}
+
+export interface ArchiveThreadOptions {
+  now?: () => string;
+  newId?: () => string;
+  retain?: boolean;
+}
+
+export async function archiveThread(
+  data: string,
+  character: string,
+  id: string,
+  options: ArchiveThreadOptions = {},
+): Promise<ThreadsIndex> {
+  const now = options.now ?? (() => new Date().toISOString());
+  const index = await ensureThreads(data, character, now());
+  requireThread(index, character, id);
+  if (index.home === id) {
+    throw new ThreadError(
+      "is_home",
+      `thread ${JSON.stringify(id)} is the heartbeat home for ${character} — ` +
+        "point home at another thread first",
+    );
+  }
+
+  const dir = threadDataDir(data, character, id);
+  let active: string;
+  try {
+    active = await readFile(activeJsonlIn(dir), "utf8");
+  } catch {
+    active = "";
+  }
+
+  if (active.trim() !== "") {
+    await archiveAndRetain(
+      dir,
+      0,
+      active,
+      now,
+      options.newId ?? (() => crypto.randomUUID()),
+      `thread-archive-${crypto.randomUUID()}`,
+      {
+        dbPath: join(data, HISTORY_DB_FILE),
+        character: archiveKey(character, id),
+        ...(options.retain === undefined ? {} : { retain: options.retain }),
+      },
+    );
+  }
+
+  await rm(dir, { recursive: true, force: true });
+  const next: ThreadsIndex = {
+    ...index,
+    threads: index.threads.filter((t) => t.id !== id),
+  };
+  await writeThreadsIndex(data, character, next);
+  return next;
 }

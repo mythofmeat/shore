@@ -2,7 +2,8 @@ import { shoreLog } from "../log.ts";
 
 import { join } from "node:path";
 
-import { activeJsonlIn, MAIN_THREAD, threadDataDir } from "../config/dirs.ts";
+import { activeJsonlIn, archiveKey, threadDataDir } from "../config/dirs.ts";
+import { homeThreadOf } from "../engine/threads.ts";
 
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
@@ -63,7 +64,8 @@ export async function runDeepIdleArchive(
   coveredTurnCount: number,
 ): Promise<AutonomyActionResult> {
   const dataDir = deps.config.dirs.data;
-  const characterDir = threadDataDir(dataDir, character, MAIN_THREAD);
+  const thread = await homeThreadOf(dataDir, character);
+  const characterDir = threadDataDir(dataDir, character, thread);
 
   let loaded: { store: MessageStore; raw: string };
   try {
@@ -90,13 +92,14 @@ export async function runDeepIdleArchive(
 
   const writeMemory = effectiveConfig(character, deps.config).app.memory.compaction.write_memory;
   if (plan.arm === "pure" || !writeMemory) {
-    return await pureArchive(character, deps, loaded.raw, plan.tail, plan.archivable);
+    return await pureArchive(character, thread, deps, loaded.raw, plan.tail, plan.archivable);
   }
-  return await compactionArchive(character, deps);
+  return await compactionArchive(character, thread, deps);
 }
 
 async function pureArchive(
   character: string,
+  thread: string,
   deps: DeepArchiveDeps,
   activeContent: string,
   tail: number,
@@ -115,14 +118,13 @@ async function pureArchive(
   }
 
   try {
-    const characterDir = threadDataDir(dataDir, character, MAIN_THREAD);
     await conversationManager(
-      characterDir,
+      threadDataDir(dataDir, character, thread),
       deps.now ?? (() => new Date().toISOString()),
       deps.newId ?? (() => crypto.randomUUID()),
       {
         dbPath: join(dataDir, HISTORY_DB_FILE),
-        character,
+        character: archiveKey(character, thread),
         retain: deps.config.app.memory.retain.enabled,
       },
     ).archiveAndRetain("deep-idle", { keepLastN: tail, activeContent });
@@ -159,6 +161,7 @@ async function pureArchive(
 
 async function compactionArchive(
   character: string,
+  thread: string,
   deps: DeepArchiveDeps,
 ): Promise<AutonomyActionResult> {
   if (deps.run === undefined) {
@@ -181,7 +184,7 @@ async function compactionArchive(
         ...deps.run,
         config: deps.config,
       },
-      { keepTurnsOverride: 0, retainTrailingAutonomous: true },
+      { thread, keepTurnsOverride: 0, retainTrailingAutonomous: true },
     );
   } catch (e) {
     shoreLog.warn(

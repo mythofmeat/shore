@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   activeJsonlIn,
+  archiveKey,
   characterDataDir,
   MAIN_THREAD,
   threadDataDir,
@@ -53,6 +54,7 @@ const historyEncoder = new TextEncoder();
 
 export class ConversationEngine {
   readonly #characterName: string;
+  readonly #thread: string;
   readonly #characterDir: string;
   readonly #conversationDir: string;
   readonly #historyDbPath: string;
@@ -64,6 +66,7 @@ export class ConversationEngine {
 
   private constructor(
     characterName: string,
+    thread: string,
     characterDir: string,
     conversationDir: string,
     historyDbPath: string,
@@ -72,6 +75,7 @@ export class ConversationEngine {
     onHistory: HistoryListener | undefined,
   ) {
     this.#characterName = characterName;
+    this.#thread = thread;
     this.#characterDir = characterDir;
     this.#conversationDir = conversationDir;
     this.#historyDbPath = historyDbPath;
@@ -84,19 +88,21 @@ export class ConversationEngine {
     characterName: string,
     dataDir: string,
     onHistory?: HistoryListener,
+    thread: string = MAIN_THREAD,
   ): Promise<ConversationEngine> {
     const characterDir = characterDataDir(dataDir, characterName);
-    const conversationDir = threadDataDir(dataDir, characterName, MAIN_THREAD);
+    const conversationDir = threadDataDir(dataDir, characterName, thread);
     const historyDbPath = join(dataDir, HISTORY_DB_FILE);
     const messages = await MessageStore.load(activeJsonlIn(conversationDir));
     const segments = await SegmentReader.load({
       dir: conversationDir,
       dbPath: historyDbPath,
-      character: characterName,
+      character: archiveKey(characterName, thread),
       createHistoryDb: true,
     });
     return new ConversationEngine(
       characterName,
+      thread,
       characterDir,
       conversationDir,
       historyDbPath,
@@ -108,6 +114,10 @@ export class ConversationEngine {
 
   get characterName(): string {
     return this.#characterName;
+  }
+
+  get thread(): string {
+    return this.#thread;
   }
 
   get characterDir(): string {
@@ -334,7 +344,7 @@ export class ConversationEngine {
     this.#segments = await SegmentReader.load({
       dir: this.#conversationDir,
       dbPath: this.#historyDbPath,
-      character: this.#characterName,
+      character: archiveKey(this.#characterName, this.#thread),
       createHistoryDb: true,
     });
     this.#advanceRewrite();

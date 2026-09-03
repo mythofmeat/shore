@@ -3,8 +3,8 @@ import { join } from "node:path";
 
 import {
   activeJsonlIn,
+  archiveKey,
   characterDataDir,
-  MAIN_THREAD,
   threadDataDir,
 } from "../config/dirs.ts";
 
@@ -19,6 +19,7 @@ import type { Args } from "./navigation.ts";
 
 export interface SegmentEngine {
   readonly characterName: string;
+  readonly thread: string;
   reload(): Promise<void>;
 }
 
@@ -132,7 +133,7 @@ export async function clear(
 
   try {
     const characterDir = characterDataDir(ctx.dataDir, character);
-    const conversationDir = threadDataDir(ctx.dataDir, character, MAIN_THREAD);
+    const conversationDir = threadDataDir(ctx.dataDir, character, engine.thread);
     let activeContent: string;
     try {
       activeContent = await readFile(activeJsonlIn(conversationDir), "utf8");
@@ -153,7 +154,7 @@ export async function clear(
       `clear-${crypto.randomUUID()}`,
       {
         dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
-        character,
+        character: archiveKey(character, engine.thread),
         retain: ctx.retainArchived === true,
       },
       {

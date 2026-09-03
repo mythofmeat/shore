@@ -58,13 +58,13 @@ MUTANTS = [
     ("scan: an empty conversation keeps the snapshot it inherited",
      "        await resetActivePromptSnapshotIfEmpty(\n"
      "          characterDataDir(this.#dataDir, name),\n"
-     "          threadDataDir(this.#dataDir, name, MAIN_THREAD),\n"
+     "          threadDataDir(this.#dataDir, name, homeThread(index)),\n"
      "        );",
      "        void resetActivePromptSnapshotIfEmpty;"),
     ("scan: every character's snapshot is dropped, live conversation or not",
      "        await resetActivePromptSnapshotIfEmpty(\n"
      "          characterDataDir(this.#dataDir, name),\n"
-     "          threadDataDir(this.#dataDir, name, MAIN_THREAD),\n"
+     "          threadDataDir(this.#dataDir, name, homeThread(index)),\n"
      "        );",
      '        await (await import("./memory/deferred_edits.ts")).resetActivePromptSnapshot(\n'
      "          characterDataDir(this.#dataDir, name),\n"
@@ -72,11 +72,11 @@ MUTANTS = [
     ("scan: the snapshot is reset under the config dir, not the data dir",
      "        await resetActivePromptSnapshotIfEmpty(\n"
      "          characterDataDir(this.#dataDir, name),\n"
-     "          threadDataDir(this.#dataDir, name, MAIN_THREAD),\n"
+     "          threadDataDir(this.#dataDir, name, homeThread(index)),\n"
      "        );",
      "        await resetActivePromptSnapshotIfEmpty(\n"
      "          characterDataDir(this.#configDir, name),\n"
-     "          threadDataDir(this.#dataDir, name, MAIN_THREAD),\n"
+     "          threadDataDir(this.#dataDir, name, homeThread(index)),\n"
      "        );"),
     ("available: membership is case insensitive",
      "    return this.#available.includes(name);",
@@ -87,31 +87,34 @@ MUTANTS = [
 
     # --- engines ----------------------------------------------------------
     ("engines: no cache, a fresh engine every time",
-     "    const existing = this.#engines.get(name);\n    if (existing !== undefined) return await existing;\n",
+     "    const existing = this.#engines.get(key);\n    if (existing !== undefined) return await existing;\n",
      ""),
     ("engines: the cache is not populated",
-     "    this.#engines.set(name, loading);\n", ""),
+     "    this.#engines.set(key, loading);\n", ""),
     ("engines: the in-flight load is not shared, so a race makes two engines",
-     "    const loading = this.#load(name);\n    this.#engines.set(name, loading);",
-     "    const loading = Promise.resolve(await this.#load(name));\n    this.#engines.set(name, loading);"),
+     "    const loading = this.#load(name, id);\n    this.#engines.set(key, loading);",
+     "    const loading = Promise.resolve(await this.#load(name, id));\n    this.#engines.set(key, loading);"),
     ("engines: membership is not checked",
      "    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);\n",
      ""),
     ("engines: the cache is consulted before membership",
-     "    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);\n\n    const existing = this.#engines.get(name);\n    if (existing !== undefined) return await existing;",
-     "    const existing = this.#engines.get(name);\n    if (existing !== undefined) return await existing;\n    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);"),
+     "    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);\n\n    const id = thread ?? this.homeThread(name);",
+     "    const id = thread ?? this.homeThread(name);\n"
+     "    const cached = this.#engines.get(engineKey(name, id));\n"
+     "    if (cached !== undefined) return await cached;\n"
+     "    if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);"),
     ("engines: refresh drops them like a reload does",
      "  async refresh(): Promise<void> {\n    this.#available = await this.#scan();",
-     "  async refresh(): Promise<void> {\n    this.#available = await this.#scan();\n    for (const n of [...this.#engines.keys()]) {\n      if (!this.#available.includes(n)) this.#engines.delete(n);\n    }"),
+     "  async refresh(): Promise<void> {\n    this.#available = await this.#scan();\n    for (const n of [...this.#engines.keys()]) {\n      if (!this.#available.includes(engineCharacter(n))) this.#engines.delete(n);\n    }"),
     ("engines: reload drops all of them, not just the vanished",
-     "      if (!afterSet.has(name)) {",
+     "      if (!afterSet.has(engineCharacter(key))) {",
      "      if (true as boolean) {"),
     ("engines: reload drops none",
-     "      if (!afterSet.has(name)) {",
+     "      if (!afterSet.has(engineCharacter(key))) {",
      "      if (false as boolean) {"),
     ("engines: the drop count is the survivor count",
-     "        this.#engines.delete(name);\n        droppedEngines += 1;",
-     "        this.#engines.delete(name);"),
+     "        this.#engines.delete(key);\n        droppedEngines += 1;",
+     "        this.#engines.delete(key);"),
 
     # --- the per-character config cache -----------------------------------
     ("config: no cache",
@@ -207,9 +210,52 @@ MUTANTS = [
     ("definition: definitions are read from the data dir",
      "    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());",
      "    return loadCharacterDefinition(this.#dataDir, name, this.#workspaceRoot());"),
+    # --- threads ----------------------------------------------------------
+    ("threads: the index is not cached at scan time",
+     "        this.#threads.set(name, index);\n", ""),
+    ("threads: an unqualified call opens main rather than home",
+     "    const id = thread ?? this.homeThread(name);",
+     "    const id = thread ?? MAIN_THREAD;"),
+    ("threads: the thread is not part of the engine key",
+     "function engineKey(name: string, thread: string): string {\n"
+     "  return `${name}${ENGINE_KEY_SEPARATOR}${thread}`;\n"
+     "}",
+     "function engineKey(name: string, thread: string): string {\n"
+     "  void thread;\n"
+     "  return name;\n"
+     "}"),
+    ("threads: an unknown thread opens an empty conversation instead of failing",
+     "    if (thread !== undefined && index !== undefined && threadRecord(index, thread) === undefined) {\n"
+     "      throw new ThreadError(\"not_found\", `no thread ${JSON.stringify(thread)} for ${name}`);\n"
+     "    }\n",
+     ""),
+    ("threads: the guard also rejects the home thread when it is named",
+     "    if (thread !== undefined && index !== undefined && threadRecord(index, thread) === undefined) {",
+     "    if (thread !== undefined && index !== undefined && thread !== index.home) {"),
+    ("threads: archiving leaves the cached engine behind",
+     "    this.#engines.delete(engineKey(name, id));\n", ""),
+    ("threads: archiving does not refresh the cached index",
+     "    const index = await archiveThread(this.#dataDir, name, id, options);\n"
+     "    this.#engines.delete(engineKey(name, id));\n"
+     "    return this.#remember(name, index);",
+     "    const index = await archiveThread(this.#dataDir, name, id, options);\n"
+     "    this.#engines.delete(engineKey(name, id));\n"
+     "    return index;"),
+    ("threads: moving home does not refresh the cached index",
+     "    return this.#remember(\n"
+     "      name,\n"
+     "      await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),\n"
+     "    );",
+     "    return await setHomeThread(this.#dataDir, name, id, new Date().toISOString());"),
+    ("threads: a vanished character keeps its cached index",
+     "    for (const name of Array.from(this.#threads.keys())) {\n"
+     "      if (!afterSet.has(name)) this.#threads.delete(name);\n"
+     "    }\n",
+     ""),
+
     ("engines: the engine is opened against the config dir",
-     "    const engine = await ConversationEngine.load(name, this.#dataDir, this.#onHistory);",
-     "    const engine = await ConversationEngine.load(name, this.#configDir, this.#onHistory);"),
+     "    const engine = await ConversationEngine.load(name, this.#dataDir, this.#onHistory, thread);",
+     "    const engine = await ConversationEngine.load(name, this.#configDir, this.#onHistory, thread);"),
 ]
 
 
@@ -217,7 +263,11 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/characters.test.ts"], src=CHARACTERS)
+    return _run_mutants(
+        MUTANTS,
+        ["tests/characters.test.ts", "tests/registry_threads.test.ts"],
+        src=CHARACTERS,
+    )
 
 
 if __name__ == "__main__":

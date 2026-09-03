@@ -9,7 +9,8 @@ import { HISTORY_DB_FILE } from "../../engine/history_store.ts";
 import { conversationRef } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
-import { characterDataDir, characterMemoryDir, MAIN_THREAD } from "../../config/dirs.ts";
+import { archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
+import { homeThreadOf } from "../../engine/threads.ts";
 import { resolveDisplayName } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { configView } from "../../config/preferences.ts";
@@ -64,6 +65,7 @@ export interface CompactionRunDeps {
 }
 
 export interface CompactionRunOptions {
+  thread?: string;
   dryRun?: boolean;
   keepTurnsOverride?: number;
   restart?: boolean;
@@ -89,6 +91,7 @@ export async function runCompaction(
 
 async function rotateWithoutMemoryWrite(
   character: string,
+  thread: string,
   deps: CompactionRunDeps,
   effective: LoadedConfig,
   loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
@@ -115,7 +118,7 @@ async function rotateWithoutMemoryWrite(
       deps.newId ?? (() => crypto.randomUUID()),
       {
         dbPath: join(deps.config.dirs.data, HISTORY_DB_FILE),
-        character,
+        character: archiveKey(character, thread),
         retain: effective.app.memory.retain.enabled,
       },
     ).archiveAndRetain("archive-only", {
@@ -144,20 +147,22 @@ export async function runCompactionPass(
 ): Promise<CompactionOutcome | undefined> {
   const dataDir = deps.config.dirs.data;
 
+  const thread = options.thread ?? (await homeThreadOf(dataDir, character));
+
   const guard = tryBeginCompaction(dataDir, character);
   if (guard === undefined) throw CompactionError.busy(character);
 
   try {
-    const loaded = await loadMessagesForCompaction(dataDir, character);
+    const loaded = await loadMessagesForCompaction(dataDir, character, thread);
     if (loaded.messages.length === 0) return undefined;
 
     const effective = effectiveConfig(character, deps.config);
     if (!effective.app.memory.compaction.write_memory) {
-      return await rotateWithoutMemoryWrite(character, deps, effective, loaded, options);
+      return await rotateWithoutMemoryWrite(character, thread, deps, effective, loaded, options);
     }
 
     const resolved = await resolveDeps(character, deps, effective);
-    const chatRequest = await resolveChatRequest(character, loaded, resolved.effective);
+    const chatRequest = await resolveChatRequest(character, thread, loaded, resolved.effective);
 
     const outcome = await compact(
       {
@@ -167,6 +172,7 @@ export async function runCompactionPass(
         systemTemplate: resolved.systemTemplate,
         promptTemplate: resolved.promptTemplate,
         charName: character,
+        thread,
         userName: resolved.displayName,
         llm: resolved.llm,
         conversationMgr: conversationManager(
@@ -175,7 +181,7 @@ export async function runCompactionPass(
           deps.newId ?? (() => crypto.randomUUID()),
           {
             dbPath: join(dataDir, HISTORY_DB_FILE),
-            character,
+            character: archiveKey(character, thread),
             retain: resolved.effective.app.memory.retain.enabled,
           },
         ),
@@ -326,6 +332,7 @@ export async function renderToolOutcome(
 
 async function resolveChatRequest(
   character: string,
+  thread: string,
   loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
   effective: LoadedConfig,
 ): Promise<SidecarRequest> {
@@ -337,7 +344,7 @@ async function resolveChatRequest(
   }
 
   const hasPriorContext =
-    (await segmentCount(conversationRef(effective.dirs.data, character, MAIN_THREAD, false))) > 0;
+    (await segmentCount(conversationRef(effective.dirs.data, character, thread, false))) > 0;
   const built = await buildChatShapeRequestFromDisk(
     character,
     characterDataDir(effective.dirs.data, character),

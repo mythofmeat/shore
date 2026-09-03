@@ -3,7 +3,6 @@ import { shoreLog } from "./log.ts";
 import {
   characterDataDir,
   characterWorkspaceFile,
-  MAIN_THREAD,
   threadDataDir,
   discoverCharacters,
   loadCharacterDefinition,
@@ -12,7 +11,21 @@ import {
 } from "./config/dirs.ts";
 import { ConfigError, loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
 import { ConversationEngine, type HistoryListener } from "./engine/conversation.ts";
-import { ensureThreads } from "./engine/threads.ts";
+import {
+  archiveThread,
+  createThread,
+  ensureThreads,
+  homeThread,
+  setHomeThread,
+  setThreadLabel,
+  threadRecord,
+  touchThread,
+  ThreadError,
+  type ArchiveThreadOptions,
+  type NewThread,
+  type ThreadRecord,
+  type ThreadsIndex,
+} from "./engine/threads.ts";
 import {
   ensureCharacterWorkspace,
   resetActivePromptSnapshotIfEmpty,
@@ -93,6 +106,7 @@ export class CharacterRegistry {
   readonly #onHistory: HistoryListener | undefined;
   readonly #engines = new Map<string, Promise<ConversationEngine>>();
   readonly #charConfigs = new Map<string, LoadedConfig | undefined>();
+  readonly #threads = new Map<string, ThreadsIndex>();
   #available: string[] = [];
   #selected: string | undefined;
   #globalConfig: LoadedConfig;
@@ -124,7 +138,8 @@ export class CharacterRegistry {
     const found = discoverCharacters(this.#configDir, this.#workspaceRoot());
     for (const name of found) {
       try {
-        await ensureThreads(this.#dataDir, name, new Date().toISOString());
+        const index = await ensureThreads(this.#dataDir, name, new Date().toISOString());
+        this.#threads.set(name, index);
         await ensureCharacterWorkspace(
           characterDataDir(this.#dataDir, name),
           this.#configDir,
@@ -133,7 +148,7 @@ export class CharacterRegistry {
         );
         await resetActivePromptSnapshotIfEmpty(
           characterDataDir(this.#dataDir, name),
-          threadDataDir(this.#dataDir, name, MAIN_THREAD),
+          threadDataDir(this.#dataDir, name, homeThread(index)),
         );
       } catch (e) {
         shoreLog.warn(
@@ -156,31 +171,90 @@ export class CharacterRegistry {
     return this.#available.includes(name);
   }
 
-  async getOrCreate(name: string): Promise<ConversationEngine> {
+  threads(name: string): ThreadsIndex | undefined {
+    return this.#threads.get(name);
+  }
+
+  homeThread(name: string): string {
+    return homeThread(this.#threads.get(name));
+  }
+
+  listThreads(name: string): readonly ThreadRecord[] {
+    return this.#threads.get(name)?.threads ?? [];
+  }
+
+  async getOrCreate(name: string, thread?: string): Promise<ConversationEngine> {
     if (!this.hasCharacter(name)) throw new EngineCharacterNotFound(name);
 
-    const existing = this.#engines.get(name);
+    const id = thread ?? this.homeThread(name);
+    const index = this.#threads.get(name);
+    if (thread !== undefined && index !== undefined && threadRecord(index, thread) === undefined) {
+      throw new ThreadError("not_found", `no thread ${JSON.stringify(thread)} for ${name}`);
+    }
+    const key = engineKey(name, id);
+    const existing = this.#engines.get(key);
     if (existing !== undefined) return await existing;
 
-    const loading = this.#load(name);
-    this.#engines.set(name, loading);
+    const loading = this.#load(name, id);
+    this.#engines.set(key, loading);
     try {
       return await loading;
     } catch (e) {
-      if (this.#engines.get(name) === loading) this.#engines.delete(name);
+      if (this.#engines.get(key) === loading) this.#engines.delete(key);
       throw e;
     }
   }
 
-  async #load(name: string): Promise<ConversationEngine> {
-    const engine = await ConversationEngine.load(name, this.#dataDir, this.#onHistory);
+  async #load(name: string, thread: string): Promise<ConversationEngine> {
+    const engine = await ConversationEngine.load(name, this.#dataDir, this.#onHistory, thread);
     const recovered = await engine.recoverInterruptedToolLoop();
     if (recovered > 0) {
       shoreLog.warn(
-        `shore: recovered ${String(recovered)} interrupted tool call(s) for ${name}`,
+        `shore: recovered ${String(recovered)} interrupted tool call(s) for ${name}/${thread}`,
       );
     }
     return engine;
+  }
+
+  async createThread(name: string, id: string, options: NewThread = {}): Promise<ThreadsIndex> {
+    return this.#remember(
+      name,
+      await createThread(this.#dataDir, name, id, new Date().toISOString(), options),
+    );
+  }
+
+  async archiveThread(
+    name: string,
+    id: string,
+    options: ArchiveThreadOptions = {},
+  ): Promise<ThreadsIndex> {
+    const index = await archiveThread(this.#dataDir, name, id, options);
+    this.#engines.delete(engineKey(name, id));
+    return this.#remember(name, index);
+  }
+
+  async setHomeThread(name: string, id: string): Promise<ThreadsIndex> {
+    return this.#remember(
+      name,
+      await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),
+    );
+  }
+
+  async setThreadLabel(name: string, id: string, label: string | undefined): Promise<ThreadsIndex> {
+    return this.#remember(
+      name,
+      await setThreadLabel(this.#dataDir, name, id, label, new Date().toISOString()),
+    );
+  }
+
+  async touchThread(name: string, id: string): Promise<void> {
+    const index = await touchThread(this.#dataDir, name, id, new Date().toISOString());
+    if (index !== undefined) this.#threads.set(name, index);
+  }
+
+  #remember(name: string, index: ThreadsIndex): ThreadsIndex {
+    this.#threads.set(name, index);
+    return index;
   }
 
   #workspaceRoot(): string | undefined {
@@ -229,11 +303,14 @@ export class CharacterRegistry {
     const afterSet = new Set(after);
 
     let droppedEngines = 0;
-    for (const name of Array.from(this.#engines.keys())) {
-      if (!afterSet.has(name)) {
-        this.#engines.delete(name);
+    for (const key of Array.from(this.#engines.keys())) {
+      if (!afterSet.has(engineCharacter(key))) {
+        this.#engines.delete(key);
         droppedEngines += 1;
       }
+    }
+    for (const name of Array.from(this.#threads.keys())) {
+      if (!afterSet.has(name)) this.#threads.delete(name);
     }
 
     this.#globalConfig = config;
@@ -274,6 +351,16 @@ export class CharacterRegistry {
     }
     throw CharacterError.ambiguous(this.#available);
   }
+}
+
+const ENGINE_KEY_SEPARATOR = "\u0000";
+
+function engineKey(name: string, thread: string): string {
+  return `${name}${ENGINE_KEY_SEPARATOR}${thread}`;
+}
+
+function engineCharacter(key: string): string {
+  return key.split(ENGINE_KEY_SEPARATOR)[0] ?? key;
 }
 
 function sameList(a: readonly string[], b: readonly string[]): boolean {

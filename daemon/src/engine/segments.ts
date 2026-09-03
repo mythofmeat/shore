@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 
 import {
   activeJsonlIn,
+  archiveKey,
   compactionManifestIn,
   segmentsDirIn,
   threadDataDir,
@@ -40,7 +41,7 @@ export function conversationRef(
   return {
     dir: threadDataDir(dataDir, character, thread),
     dbPath: join(dataDir, HISTORY_DB_FILE),
-    character,
+    character: archiveKey(character, thread),
     createHistoryDb,
   };
 }
