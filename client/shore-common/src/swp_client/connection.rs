@@ -49,12 +49,23 @@ impl SWPConnection {
         client_name: N,
         character: Option<String>,
     ) -> Result<(Self, ServerHello, History)> {
+        Self::connect_in_thread(addr, client_type, client_name, character, None).await
+    }
+
+    pub async fn connect_in_thread<T: Into<String>, N: Into<String>>(
+        addr: &ServerAddr,
+        client_type: T,
+        client_name: N,
+        character: Option<String>,
+        thread: Option<String>,
+    ) -> Result<(Self, ServerHello, History)> {
         let mut conn = Self::open(addr).await?;
         let (server_hello, history) = conn
             .do_handshake(
                 client_type.into(),
                 client_name.into(),
                 character,
+                thread,
                 Some(&addr.0),
             )
             .await?;
@@ -66,9 +77,10 @@ impl SWPConnection {
         client_type: String,
         client_name: String,
         character: Option<String>,
+        thread: Option<String>,
         addr: Option<&str>,
     ) -> Result<(ServerHello, History)> {
-        debug!(client_type = %client_type, client_name = %client_name, character = ?character, "starting SWP handshake");
+        debug!(client_type = %client_type, client_name = %client_name, character = ?character, thread = ?thread, "starting SWP handshake");
 
         let token = crate::token::resolve_client_token(
             addr.and_then(crate::swp_client::discovery::config_dir_for_addr),
@@ -82,7 +94,7 @@ impl SWPConnection {
             client_name,
             capabilities: vec!["streaming".into()],
             character,
-            thread: None,
+            thread,
             token: Some(token),
         });
         self.send(&hello).await?;
@@ -343,7 +355,13 @@ impl SWPConnection {
     {
         let mut conn = Self::from_raw_stream(stream);
         let (server_hello, history) = conn
-            .do_handshake(client_type.into(), client_name.into(), character, None)
+            .do_handshake(
+                client_type.into(),
+                client_name.into(),
+                character,
+                None,
+                None,
+            )
             .await?;
         Ok((conn, server_hello, history))
     }

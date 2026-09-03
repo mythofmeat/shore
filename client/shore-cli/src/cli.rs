@@ -21,6 +21,15 @@ pub(crate) struct Cli {
     )]
     pub character: Option<String>,
 
+    /// Conversation thread to talk in (overrides SHORE_THREAD env var)
+    #[arg(
+        long,
+        short = 't',
+        env = "SHORE_THREAD",
+        help_heading = LEADING_HEADING
+    )]
+    pub thread: Option<String>,
+
     /// TCP address of the daemon (overrides discovery)
     #[arg(long, env = "SHORE_ADDR", help_heading = LEADING_HEADING)]
     pub addr: Option<String>,
@@ -29,9 +38,11 @@ pub(crate) struct Cli {
     pub command: Option<CliCommand>,
 }
 
-const LEADING_FLAGS: [(&str, &str); 3] = [
+const LEADING_FLAGS: [(&str, &str); 5] = [
     ("--character", "--character"),
     ("-c", "--character"),
+    ("--thread", "--thread"),
+    ("-t", "--thread"),
     ("--addr", "--addr"),
 ];
 
@@ -56,7 +67,7 @@ const RETIRED_FLAGS: [(&str, &str); 6] = [
     ),
 ];
 
-const NAMED_BY_USE: [&str; 2] = ["model", "character"];
+const NAMED_BY_USE: [&str; 3] = ["model", "character", "thread"];
 
 const PROMOTED: [(&str, &str); 1] = [("memory compact", "compact")];
 
@@ -431,6 +442,17 @@ pub(crate) enum CliCommand {
         /// Superseded by `shore character info`
         #[arg(long, hide = true)]
         info: bool,
+
+        /// Output raw JSON
+        #[arg(long, global = true)]
+        json: bool,
+    },
+
+    /// List conversation threads, or switch to another one
+    #[command(display_order = 4)]
+    Thread {
+        #[command(subcommand)]
+        subcommand: Option<ThreadCommand>,
 
         /// Output raw JSON
         #[arg(long, global = true)]
@@ -1288,6 +1310,54 @@ pub(crate) enum CharacterCommand {
 }
 
 #[derive(Subcommand, Debug)]
+pub(crate) enum ThreadCommand {
+    /// Talk in another thread. Unknown names are an error, never a fallback
+    Use {
+        /// Thread id
+        name: String,
+    },
+
+    /// Start a new thread. It begins empty and does not compact on a schedule
+    New {
+        /// Thread id: letters, digits, dot, dash or underscore
+        name: String,
+
+        /// Human-readable label
+        #[arg(long)]
+        label: Option<String>,
+
+        /// Chat model for this thread alone
+        #[arg(long)]
+        model: Option<String>,
+
+        /// Let the idle timer compact this thread, as it does the home thread
+        #[arg(long)]
+        compaction: bool,
+    },
+
+    /// Set or clear a thread's label
+    Label {
+        /// Thread id
+        name: String,
+
+        /// New label; omit to clear it
+        label: Option<String>,
+    },
+
+    /// Point the heartbeat at a thread. This is where unprompted messages arrive
+    Home {
+        /// Thread id
+        name: String,
+    },
+
+    /// Retire a thread: its messages go to the archive and stay searchable
+    Archive {
+        /// Thread id
+        name: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 pub(crate) enum ProviderCommand {
     /// List discovered + statically configured models for one provider.
     Models {
@@ -1517,7 +1587,7 @@ const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
     ),
     (
         "Configuration",
-        &["character", "model", "provider", "config"],
+        &["character", "thread", "model", "provider", "config"],
     ),
     ("Inspection", &["status", "usage", "trace"]),
     ("Shell", &["completions"]),
@@ -2182,6 +2252,35 @@ pub(crate) fn to_swp_command(
                 None
             }
         }
+
+        CliCommand::Thread {
+            subcommand: None, ..
+        } => Some(("list_threads", json!({}))),
+        CliCommand::Thread {
+            subcommand: Some(subcommand),
+            ..
+        } => match subcommand {
+            ThreadCommand::Use { name } => Some(("switch_thread", json!({ "name": name }))),
+            ThreadCommand::New {
+                name,
+                label,
+                model,
+                compaction,
+            } => Some((
+                "create_thread",
+                json!({
+                    "name": name,
+                    "label": label,
+                    "model": model,
+                    "compaction": compaction,
+                }),
+            )),
+            ThreadCommand::Label { name, label } => {
+                Some(("thread_label", json!({ "name": name, "label": label })))
+            }
+            ThreadCommand::Home { name } => Some(("thread_home", json!({ "name": name }))),
+            ThreadCommand::Archive { name } => Some(("archive_thread", json!({ "name": name }))),
+        },
 
         CliCommand::Export {
             character: export_character,
@@ -3250,6 +3349,182 @@ mod tests {
                     Some(CharacterCommand::New { name }) if name == "alice"
                 ));
             }
+        );
+    }
+
+    #[test]
+    fn parse_thread_list() {
+        let cli = parse(&["thread"]);
+        assert_variant!(
+            parsed_command(&cli),
+            CliCommand::Thread { subcommand, json } => {
+                assert!(subcommand.is_none());
+                assert!(!json);
+            }
+        );
+    }
+
+    #[test]
+    fn parse_thread_use() {
+        let cli = parse(&["thread", "use", "scratch"]);
+        assert_variant!(
+            parsed_command(&cli),
+            CliCommand::Thread { subcommand, .. } => {
+                assert!(matches!(
+                    subcommand,
+                    Some(ThreadCommand::Use { name }) if name == "scratch"
+                ));
+            }
+        );
+    }
+
+    #[test]
+    fn parse_thread_new_carries_its_options() {
+        let cli = parse(&[
+            "thread",
+            "new",
+            "eval",
+            "--label",
+            "Agent SDK eval",
+            "--model",
+            "claude-agent:opus5",
+            "--compaction",
+        ]);
+        assert_variant!(
+            parsed_command(&cli),
+            CliCommand::Thread { subcommand, .. } => {
+                assert_variant!(
+                    subcommand.as_ref().expect("a subcommand"),
+                    ThreadCommand::New { name, label, model, compaction } => {
+                        assert_eq!(name, "eval");
+                        assert_eq!(label.as_deref(), Some("Agent SDK eval"));
+                        assert_eq!(model.as_deref(), Some("claude-agent:opus5"));
+                        assert!(compaction);
+                    }
+                );
+            }
+        );
+    }
+
+    #[test]
+    fn a_new_thread_does_not_compact_unless_asked() {
+        let cli = parse(&["thread", "new", "eval"]);
+        assert_variant!(
+            parsed_command(&cli),
+            CliCommand::Thread { subcommand, .. } => {
+                assert_variant!(
+                    subcommand.as_ref().expect("a subcommand"),
+                    ThreadCommand::New { compaction, label, model, .. } => {
+                        assert!(!compaction);
+                        assert!(label.is_none());
+                        assert!(model.is_none());
+                    }
+                );
+            }
+        );
+    }
+
+    #[test]
+    fn a_thread_label_with_no_value_clears_it() {
+        let cli = parse(&["thread", "label", "scratch"]);
+        assert_variant!(
+            parsed_command(&cli),
+            CliCommand::Thread { subcommand, .. } => {
+                assert!(matches!(
+                    subcommand,
+                    Some(ThreadCommand::Label { name, label: None }) if name == "scratch"
+                ));
+            }
+        );
+    }
+
+    #[test]
+    fn thread_subcommands_that_need_a_name_say_so() {
+        for args in [
+            &["thread", "use"][..],
+            &["thread", "new"][..],
+            &["thread", "home"][..],
+            &["thread", "archive"][..],
+            &["thread", "label"][..],
+        ] {
+            assert!(
+                Cli::try_parse_from(std::iter::once("shore").chain(args.iter().copied())).is_err(),
+                "{args:?} must not parse without a name"
+            );
+        }
+    }
+
+    #[test]
+    fn the_thread_flag_leads_the_command() {
+        let cli = parse(&["--thread", "scratch", "log"]);
+        assert_eq!(cli.thread.as_deref(), Some("scratch"));
+
+        let short = parse(&["-t", "scratch", "log"]);
+        assert_eq!(short.thread.as_deref(), Some("scratch"));
+    }
+
+    #[test]
+    fn a_trailing_thread_flag_is_caught_as_misplaced() {
+        assert_eq!(
+            misplaced(&["log", "--thread", "scratch"]),
+            Some(FlagProblem::Misplaced("--thread"))
+        );
+    }
+
+    #[test]
+    fn a_bare_thread_name_is_pointed_at_use() {
+        assert_eq!(
+            misplaced(&["thread", "scratch"]),
+            Some(FlagProblem::BareName("thread", "scratch".to_owned()))
+        );
+    }
+
+    #[test]
+    fn thread_commands_reach_the_wire_under_their_own_names() {
+        let cases: [(&[&str], &str); 6] = [
+            (&["thread"], "list_threads"),
+            (&["thread", "use", "scratch"], "switch_thread"),
+            (&["thread", "new", "scratch"], "create_thread"),
+            (&["thread", "label", "scratch"], "thread_label"),
+            (&["thread", "home", "scratch"], "thread_home"),
+            (&["thread", "archive", "scratch"], "archive_thread"),
+        ];
+        for (args, expected) in cases {
+            let cli = parse(args);
+            let (name, _args) = to_swp_command(parsed_command(&cli), None)
+                .unwrap_or_else(|| panic!("{args:?} produced no command"));
+            assert_eq!(name, expected, "{args:?}");
+        }
+    }
+
+    #[test]
+    fn a_new_thread_sends_every_option_it_was_given() {
+        let cli = parse(&[
+            "thread",
+            "new",
+            "eval",
+            "--label",
+            "Eval",
+            "--model",
+            "x:y",
+            "--compaction",
+        ]);
+        let (_name, args) = to_swp_command(parsed_command(&cli), None).expect("a command");
+        assert_eq!(
+            args.get("name").and_then(serde_json::Value::as_str),
+            Some("eval")
+        );
+        assert_eq!(
+            args.get("label").and_then(serde_json::Value::as_str),
+            Some("Eval")
+        );
+        assert_eq!(
+            args.get("model").and_then(serde_json::Value::as_str),
+            Some("x:y")
+        );
+        assert_eq!(
+            args.get("compaction").and_then(serde_json::Value::as_bool),
+            Some(true)
         );
     }
 

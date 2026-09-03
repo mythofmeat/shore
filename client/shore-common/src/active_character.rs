@@ -18,6 +18,48 @@ pub fn write_active_character(name: &str) -> std::io::Result<()> {
     write_to(&active_character_path(), name)
 }
 
+fn thread_state_path(character: &str) -> Option<PathBuf> {
+    if character.is_empty()
+        || character.contains('/')
+        || character.contains('\\')
+        || character == "."
+        || character == ".."
+    {
+        return None;
+    }
+    Some(
+        crate::dirs::data_dir()
+            .join("active_thread")
+            .join(character),
+    )
+}
+
+pub fn read_active_thread(character: &str) -> Option<String> {
+    let path = thread_state_path(character)?;
+    let content = std::fs::read_to_string(&path).ok()?;
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    debug!(
+        character,
+        thread = trimmed,
+        "Read active thread from state file"
+    );
+    Some(trimmed.to_owned())
+}
+
+pub fn write_active_thread(character: &str, thread: &str) -> std::io::Result<()> {
+    let Some(path) = thread_state_path(character) else {
+        return Ok(());
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    debug!(character, thread, "Writing active thread to state file");
+    std::fs::write(path, thread)
+}
+
 fn read_from(primary: &Path, legacy: &Path) -> Option<String> {
     let content = std::fs::read_to_string(primary)
         .or_else(|_| std::fs::read_to_string(legacy))

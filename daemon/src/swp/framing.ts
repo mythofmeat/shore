@@ -178,6 +178,7 @@ function decodeClientMessage(value: unknown): ClientMessage {
         client_name: str("client_name", true) as string,
         capabilities: strArr("capabilities"),
         ...opt("character", str("character", false)),
+        ...opt("thread", str("thread", false)),
         ...opt("token", str("token", false)),
       };
     case "message":

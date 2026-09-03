@@ -1383,6 +1383,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Clear { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Character { .. }
+        | CliCommand::Thread { .. }
         | CliCommand::Export { .. }
         | CliCommand::Import { .. }
         | CliCommand::Status { .. }
@@ -1530,6 +1531,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Clear { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Character { .. }
+        | CliCommand::Thread { .. }
         | CliCommand::Export { .. }
         | CliCommand::Import { .. }
         | CliCommand::Status { .. }
