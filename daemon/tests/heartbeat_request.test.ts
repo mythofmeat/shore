@@ -432,4 +432,58 @@ describe("preparing a heartbeat body", () => {
     expect(prepared?.override).toBeUndefined();
     expect(prepared?.maxToolIterations).toBe(4);
   });
+
+  test("the home thread's pinned model sets the cap the tick runs under", async () => {
+    const config = await baseConfig();
+    await withConversation(config);
+    await writeFile(
+      join(config.dirs.data, "alice", "threads.json"),
+      JSON.stringify({
+        version: 1,
+        home: "main",
+        threads: [
+          {
+            id: "main",
+            created_at: "2026-07-30T00:00:00.000Z",
+            compaction: true,
+            chat_model: "chat.anthropic.slowthink",
+          },
+        ],
+      }),
+    );
+    const cache = new LastRequestCache();
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
+
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+
+    expect(prepared?.override).toBeUndefined();
+    expect(prepared?.maxToolIterations).toBe(9);
+  });
+
+  test("a side thread's pin does not reach the heartbeat, which lives at home", async () => {
+    const config = await baseConfig();
+    await withConversation(config);
+    await writeFile(
+      join(config.dirs.data, "alice", "threads.json"),
+      JSON.stringify({
+        version: 1,
+        home: "main",
+        threads: [
+          { id: "main", created_at: "2026-07-30T00:00:00.000Z", compaction: true },
+          {
+            id: "eval",
+            created_at: "2026-07-30T00:00:00.000Z",
+            compaction: false,
+            chat_model: "chat.anthropic.slowthink",
+          },
+        ],
+      }),
+    );
+    const cache = new LastRequestCache();
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
+
+    const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
+
+    expect(prepared?.maxToolIterations).toBe(4);
+  });
 });

@@ -17,7 +17,7 @@ import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import type { BuiltRequest } from "../llm/request.ts";
 import { segmentCount } from "../memory/compaction/archive.ts";
 import { conversationRef } from "../engine/segments.ts";
-import { homeThreadOf } from "../engine/threads.ts";
+import { homeThreadOf, threadChatModel } from "../engine/threads.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 
@@ -79,6 +79,7 @@ export interface RebuildDeps {
   newId?: () => string;
   now?: () => string;
   timeZone?: string;
+  thread?: string;
 }
 
 export async function rebuildRequestFromDisk(
@@ -88,7 +89,7 @@ export async function rebuildRequestFromDisk(
   deps: RebuildDeps = {},
 ): Promise<BuiltRequest | undefined> {
   const characterDir = characterDataDir(dataDir, character);
-  const thread = await homeThreadOf(dataDir, character);
+  const thread = deps.thread ?? (await homeThreadOf(dataDir, character));
   const conversationDir = threadDataDir(dataDir, character, thread);
 
   let store: MessageStore;
@@ -107,8 +108,11 @@ export async function rebuildRequestFromDisk(
   );
   if (selected === undefined) return undefined;
 
-  const resolved = resolveChatModelForCharacter(configView(config), character, (v, c, n, h) =>
-    findEffectiveModel(v, c, n, h),
+  const resolved = resolveChatModelForCharacter(
+    configView(config),
+    character,
+    (v, c, n, h) => findEffectiveModel(v, c, n, h),
+    await threadChatModel(dataDir, character, thread),
   );
   if (resolved === undefined) return undefined;
 

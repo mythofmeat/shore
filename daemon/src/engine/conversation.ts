@@ -24,6 +24,7 @@ export interface History {
   active_start?: number;
   config: unknown;
   selected_character?: string;
+  selected_thread?: string;
   revision: number;
 }
 
@@ -358,6 +359,7 @@ export class ConversationEngine {
       messages,
       config,
       selected_character: this.#characterName,
+      selected_thread: this.#thread,
       revision: this.#revision,
     };
     return history;

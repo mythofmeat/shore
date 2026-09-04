@@ -39,6 +39,7 @@ interface Log {
   readonly schedulers: LoadedConfig[];
   readonly adopted: LoadedConfig[];
   readonly refreshed: string[];
+  readonly refreshArgs: Array<{ character: string; reason?: string; thread?: string }>;
   readonly sent: ServerMessage[];
 }
 
@@ -56,6 +57,7 @@ function fakes(
     snapshot?: Partial<HistorySnapshot>;
     historyFails?: Error;
     rid?: string;
+    home?: string;
   } = {},
 ): Fakes {
   const log: Log = {
@@ -64,6 +66,7 @@ function fakes(
     schedulers: [],
     adopted: [],
     refreshed: [],
+    refreshArgs: [],
     sent: [],
   };
   const summary = opts.summary ?? { characterDiscoveryChanged: false, droppedEngines: 0 };
@@ -88,10 +91,12 @@ function fakes(
       log.order.push("schedulers");
       log.schedulers.push(cfg);
     },
-    refreshCachedRequest: async (character) => {
+    refreshCachedRequest: async (character, reason, thread) => {
       log.order.push("refresh-cache");
       log.refreshed.push(character);
+      log.refreshArgs.push({ character, ...(reason === undefined ? {} : { reason }), ...(thread === undefined ? {} : { thread }) });
     },
+    homeThread: () => opts.home ?? "main",
     applyReloadedConfig: async (cfg) => {
       log.order.push("adopt");
       log.adopted.push(cfg);
@@ -103,14 +108,17 @@ function fakes(
   const router = new SessionRouter();
 
   const handshake: HandshakeProvider = {
-    history: (selectedCharacter) => {
-      log.order.push(`history@${router.characterFor(SESSION)}`);
+    history: (selectedCharacter, selectedThread) => {
+      log.order.push(
+        `history@${router.characterFor(SESSION)}${selectedThread === undefined || selectedThread === null ? "" : `/${selectedThread}`}`,
+      );
       if (opts.historyFails !== undefined) return Promise.reject(opts.historyFails);
       return Promise.resolve({
         messages: [],
         activeStart: 0,
         config: { active_model: "anthropic:opus" },
         selectedCharacter,
+        selectedThread: selectedThread ?? null,
         revision: 3,
         ...opts.snapshot,
       });
@@ -119,7 +127,14 @@ function fakes(
   };
 
   router.registerSession(
-    { id: SESSION, clientType: "tui", clientName: "test", capabilities: [], character: CHARACTER },
+    {
+      id: SESSION,
+      clientType: "tui",
+      clientName: "test",
+      capabilities: [],
+      character: CHARACTER,
+      thread: null,
+    },
     async (msg) => {
       log.order.push("send");
       log.sent.push(msg);
@@ -467,5 +482,144 @@ describe("every other command", () => {
 
     expect(await afterCommand("config", { value: "false" }, ["a", "b"], f.ctx)).toEqual(["a", "b"]);
     expect(f.log.order).toEqual(["effective", "schedulers"]);
+  });
+});
+
+describe("a switch_thread", () => {
+  test("moves the session and pushes it the new thread's history", async () => {
+    const f = fakes({ rid: "r-1" });
+
+    const out = await afterCommand(
+      "switch_thread",
+      { name: "scratch" },
+      { character: CHARACTER, thread: "scratch", changed: true },
+      f.ctx,
+    );
+
+    expect(out).toEqual({
+      character: CHARACTER,
+      thread: "scratch",
+      changed: true,
+      selected_thread: "scratch",
+      invalidated: { cached_request: true },
+    });
+    expect(f.ctx.router.threadFor(SESSION)).toBe("scratch");
+    expect(f.log.sent).toEqual([
+      {
+        type: "history",
+        rid: "r-1",
+        messages: [],
+        config: { active_model: "anthropic:opus" },
+        selected_thread: "scratch",
+        selected_character: CHARACTER,
+        revision: 3,
+      },
+    ]);
+    expect(f.log.order).toEqual([`history@${CHARACTER}/scratch`, "send", "refresh-cache"]);
+  });
+
+  test("the cache is repointed at the new thread, and says why", async () => {
+    const f = fakes();
+    await afterCommand(
+      "switch_thread",
+      { name: "scratch" },
+      { character: CHARACTER, thread: "scratch", changed: true },
+      f.ctx,
+    );
+
+    expect(f.log.refreshArgs).toEqual([
+      { character: CHARACTER, reason: "thread_change", thread: "scratch" },
+    ]);
+  });
+
+  test("a snapshot that will not load leaves the session on the thread it was", async () => {
+    const f = fakes({ historyFails: new Error("active.jsonl: unexpected end of JSON input") });
+
+    const attempt = afterCommand(
+      "switch_thread",
+      { name: "scratch" },
+      { character: CHARACTER, thread: "scratch", changed: true },
+      f.ctx,
+    );
+
+    expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
+    expect(f.ctx.router.threadFor(SESSION)).toBe(null);
+    expect(f.log.sent).toEqual([]);
+  });
+
+  test("switching to the thread already in use pushes nothing", async () => {
+    const f = fakes();
+    const out = await afterCommand(
+      "switch_thread",
+      { name: "main" },
+      { character: CHARACTER, thread: "main", changed: false },
+      f.ctx,
+    );
+
+    expect(out).toEqual({ character: CHARACTER, thread: "main", changed: false });
+    expect(f.log.sent).toEqual([]);
+    expect(f.log.refreshed).toEqual([]);
+  });
+
+  test("a refused switch moves nothing", async () => {
+    for (const data of [{}, { thread: null }, { err: "no such thread" }]) {
+      const f = fakes();
+      await afterCommand("switch_thread", { name: "scratch" }, data, f.ctx);
+      expect(f.ctx.router.threadFor(SESSION)).toBe(null);
+      expect(f.log.sent).toEqual([]);
+    }
+  });
+});
+
+describe("pinning a thread to a model", () => {
+  test("rebuilds the cached request when the pin lands on the thread in use", async () => {
+    const f = fakes();
+    f.ctx.router.setSelectedThread(SESSION, "eval");
+
+    const out = await afterCommand(
+      "thread_model",
+      { name: "eval", model: "anthropic:opus" },
+      { character: CHARACTER, threads: [] },
+      f.ctx,
+    );
+
+    expect(out).toEqual({
+      character: CHARACTER,
+      threads: [],
+      invalidated: { cached_request: true },
+    });
+    expect(f.log.refreshArgs).toEqual([
+      { character: CHARACTER, reason: "model_change", thread: "eval" },
+    ]);
+  });
+
+  test("a session that never chose a thread is on home, and home counts", async () => {
+    const f = fakes({ home: "main" });
+
+    await afterCommand("thread_model", { name: "main", model: "anthropic:opus" }, {}, f.ctx);
+
+    expect(f.log.refreshArgs).toEqual([
+      { character: CHARACTER, reason: "model_change", thread: "main" },
+    ]);
+  });
+
+  test("pinning a thread nobody is in leaves the warm request alone", async () => {
+    const f = fakes({ home: "main" });
+
+    const out = await afterCommand(
+      "thread_model",
+      { name: "eval", model: "anthropic:opus" },
+      { character: CHARACTER },
+      f.ctx,
+    );
+
+    expect(out).toEqual({ character: CHARACTER });
+    expect(f.log.refreshed).toEqual([]);
+  });
+
+  test("a pin with no thread named touches nothing", async () => {
+    const f = fakes();
+    await afterCommand("thread_model", {}, {}, f.ctx);
+    expect(f.log.refreshed).toEqual([]);
   });
 });

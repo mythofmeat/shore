@@ -72,13 +72,22 @@ export function eventMatchesSession(
   selectedCharacter: string | null,
   sessionRegistered: boolean,
   receivesAllCharacters = false,
+  selectedThread: string | null = null,
 ): boolean {
   if (UNROUTABLE_EVENTS.has(msg.type)) return false;
   if (UNCONDITIONAL_EVENTS.has(msg.type)) return true;
   if (!sessionRegistered) return false;
   if (receivesAllCharacters) return true;
   if (selectedCharacter === null) return false;
-  if (msg.type === "history") return msg.selected_character === selectedCharacter;
+  if (msg.type === "history") {
+    return msg.selected_character === selectedCharacter && threadMatches(msg.selected_thread, selectedThread);
+  }
   if (msg.type === "new_message") return msg.character === selectedCharacter;
   return true;
+}
+
+function threadMatches(broadcast: string | null | undefined, selected: string | null): boolean {
+  if (broadcast === undefined || broadcast === null) return true;
+  if (selected === null) return true;
+  return broadcast === selected;
 }

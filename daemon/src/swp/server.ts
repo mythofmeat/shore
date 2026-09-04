@@ -75,6 +75,7 @@ export interface LocalClientOptions {
   readonly clientName: string;
   readonly capabilities?: readonly string[];
   readonly character?: string | undefined;
+  readonly thread?: string | undefined;
   readonly onLag?: (skipped: number) => void;
 }
 
@@ -171,7 +172,10 @@ export class Server {
     const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
     const hello = await provider.hello();
     const requested = options.character ?? null;
-    const history = await provider.history(resolveHandshakeCharacter(requested, hello.characters));
+    const history = await provider.history(
+      resolveHandshakeCharacter(requested, hello.characters),
+      options.thread ?? null,
+    );
 
     const clientId = this.#nextId;
     this.#nextId += 1;
@@ -182,6 +186,7 @@ export class Server {
       clientName: options.clientName,
       capabilities,
       character: history.selectedCharacter,
+      thread: history.selectedThread,
     };
 
     const inbox = new Inbox();
@@ -210,6 +215,7 @@ export class Server {
             this.#router.characterFor(clientId),
             this.#router.has(clientId),
             this.#router.receivesAllCharacters(clientId),
+            this.#router.threadFor(clientId),
           )
         ) {
           inbox.push(result.msg);

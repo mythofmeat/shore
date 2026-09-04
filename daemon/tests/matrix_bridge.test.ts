@@ -151,6 +151,7 @@ async function harness(
           activeStart: 0,
           config: {},
           selectedCharacter: selected,
+          selectedThread: null,
           revision: 1,
         }),
     },

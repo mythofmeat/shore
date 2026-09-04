@@ -12,6 +12,7 @@ export interface ClientInfo {
   readonly clientName: string;
   readonly capabilities: readonly string[];
   character: string | null;
+  thread: string | null;
 }
 
 export interface SessionMeta {
@@ -21,6 +22,7 @@ export interface SessionMeta {
   readonly clientName: string;
   readonly capabilities: readonly string[];
   readonly selectedCharacter: string | null;
+  readonly selectedThread: string | null;
 }
 
 export interface RequestMeta {
@@ -55,6 +57,7 @@ export function sessionMetaOf(client: ClientInfo): SessionMeta {
     clientName: client.clientName,
     capabilities: [...client.capabilities],
     selectedCharacter: client.character,
+    selectedThread: client.thread,
   };
 }
 
@@ -62,7 +65,9 @@ export function withSelectedCharacter(
   session: SessionMeta,
   selectedCharacter: string | null,
 ): SessionMeta {
-  return { ...session, selectedCharacter };
+  return session.selectedCharacter === selectedCharacter
+    ? session
+    : { ...session, selectedCharacter, selectedThread: null };
 }
 
 export type DirectSender = (msg: ServerMessage) => Promise<void>;
@@ -94,6 +99,10 @@ export class SessionRouter {
     return this.#clients.get(sessionId)?.character ?? null;
   }
 
+  threadFor(sessionId: number): string | null {
+    return this.#clients.get(sessionId)?.thread ?? null;
+  }
+
   receivesAllCharacters(sessionId: number): boolean {
     return this.#clients.get(sessionId)?.capabilities.includes(ALL_CHARACTERS_CAPABILITY) ?? false;
   }
@@ -109,7 +118,15 @@ export class SessionRouter {
   setSelectedCharacter(sessionId: number, selectedCharacter: string | null): boolean {
     const client = this.#clients.get(sessionId);
     if (client === undefined) return false;
+    if (client.character !== selectedCharacter) client.thread = null;
     client.character = selectedCharacter;
+    return true;
+  }
+
+  setSelectedThread(sessionId: number, selectedThread: string | null): boolean {
+    const client = this.#clients.get(sessionId);
+    if (client === undefined) return false;
+    client.thread = selectedThread;
     return true;
   }
 

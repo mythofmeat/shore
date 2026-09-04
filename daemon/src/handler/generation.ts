@@ -32,6 +32,7 @@ import {
 } from "../llm/credentials.ts";
 import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
 import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
+import { claudeAgentToolLoopEvents } from "../llm/providers/claude_agent.ts";
 import {
   genericToolLoopEvents,
   type ModelCallRetryOptions,
@@ -67,6 +68,8 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
+import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
+import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
   emitPostPersistStreamEnd,
@@ -106,8 +109,9 @@ export function generationEngine(engine: ConversationEngine): GenerationEngine {
 }
 
 export interface GenerationRegistry {
-  getOrCreate(name: string): Promise<GenerationEngine>;
+  getOrCreate(name: string, thread?: string): Promise<GenerationEngine>;
   effectiveConfig(name: string): LoadedConfig;
+  listThreads(name: string): readonly ThreadRecord[];
 }
 
 export interface GenerationDiagnostics {
@@ -252,7 +256,10 @@ async function runGenerationCore(
   const { charName, regen } = params;
 
   const config = deps.registry.effectiveConfig(charName);
-  const engine = await deps.registry.getOrCreate(charName);
+  const engine = await deps.registry.getOrCreate(
+    charName,
+    liveThread(deps.registry, charName, params.meta.session.selectedThread),
+  );
 
   const turnCtx: TurnContext = {
     emitEvent: deps.emitEvent,
@@ -273,6 +280,7 @@ async function runGenerationCore(
     charName,
     (view, cacheDir, name, includeHidden) =>
       findEffectiveModel(view, cacheDir, name, includeHidden),
+    threadModelOf(deps.registry.listThreads(charName), engine.thread),
   );
   const resolved = resolveGenerationModel(activeModel, config, overlay);
 
@@ -471,6 +479,7 @@ export function turnEvents(
       anthropicToolLoopEvents(call, phase, signal, Date.now, retry),
     );
   }
+  if (call.sdk === "claude_agent") return claudeAgentToolLoopEvents(call, phase, signal);
   return genericToolLoopEvents(provider, call, phase, signal, Date.now, retry);
 }
 

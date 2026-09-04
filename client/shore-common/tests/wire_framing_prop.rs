@@ -216,6 +216,7 @@ fn arb_client_message() -> BoxedStrategy<ClientMessage> {
                     client_name,
                     capabilities,
                     character,
+                    thread: None,
                     token,
                 })
             },
@@ -338,6 +339,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
                         active_start,
                         config,
                         selected_character,
+                        selected_thread: None,
                         revision,
                     })
                 }

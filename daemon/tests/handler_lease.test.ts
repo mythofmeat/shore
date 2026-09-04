@@ -9,7 +9,7 @@ import { SessionRouter, type ClientInfo, type DirectSender } from "../src/swp/se
 const T0 = 1_700_000_000_000;
 
 function client(id: number): ClientInfo {
-  return { id, clientType: "tui", clientName: `test-${id}`, capabilities: [], character: "Alice" };
+  return { id, clientType: "tui", clientName: `test-${id}`, capabilities: [], character: "Alice", thread: null };
 }
 
 function probe(name: string): ServerMessage {

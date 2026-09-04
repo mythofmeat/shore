@@ -180,8 +180,12 @@ MUTANTS = [
      D,
      "    reloadRuntimeConfig: () => {\n"
      "      a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));\n    },\n\n"
-     "    refreshCachedRequest:",
-     "    reloadRuntimeConfig: () => {},\n\n    refreshCachedRequest:"),
+     "    homeThread:",
+     "    reloadRuntimeConfig: () => {},\n\n    homeThread:"),
+    ("home: the heartbeat's thread is guessed rather than asked of the registry",
+     D,
+     "    homeThread: (character) => runtime.registry.homeThread(character),",
+     '    homeThread: () => "main",'),
     ("adopt: the registry never re-scans, so a character added at runtime stays invisible",
      D,
      "  const summary = await a.runtime.registry.reloadRuntimeState(config);",

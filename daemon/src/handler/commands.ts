@@ -16,6 +16,7 @@ import {
 import { internalError, invalidRequest } from "../commands/errors.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
 import { switchCharacter, type Args } from "../commands/navigation.ts";
+import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
 import type { HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
@@ -24,8 +25,9 @@ import type { RequestMeta } from "../swp/session.ts";
 
 export interface CommandRegistry {
   resolveCharacter(selected: string | undefined): string;
-  getOrCreate(name: string): Promise<ConversationEngine>;
+  getOrCreate(name: string, thread?: string): Promise<ConversationEngine>;
   effectiveConfig(name: string): LoadedConfig;
+  listThreads(name: string): readonly ThreadRecord[];
 }
 
 export interface CommandPathDeps {
@@ -75,15 +77,16 @@ export async function dispatchCommand(
   }
 
   const config = deps.registry.effectiveConfig(character);
+  const thread = liveThread(deps.registry, character, meta.session.selectedThread);
   let engine: ConversationEngine;
   try {
-    engine = await deps.registry.getOrCreate(character);
+    engine = await deps.registry.getOrCreate(character, thread);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: internalError(message) }), rid);
   }
 
-  const session = characterSession(deps, character, config, sessionId, rid);
+  const session = characterSession(deps, character, config, sessionId, rid, engine.thread);
 
   let frame: ServerMessage;
   try {
@@ -103,6 +106,15 @@ export async function dispatchCommand(
   }
 
   return frameWithRid(frame, rid);
+}
+
+export function liveThread(
+  registry: Pick<CommandRegistry, "listThreads">,
+  character: string,
+  selected: string | null,
+): string | undefined {
+  if (selected === null) return undefined;
+  return registry.listThreads(character).some((t) => t.id === selected) ? selected : undefined;
 }
 
 async function switchCharacterCommand(
@@ -191,6 +203,7 @@ function characterSession(
   config: LoadedConfig,
   sessionId: number,
   rid: string | undefined,
+  thread?: string,
 ): CommandSession {
   const saved = savedModelForCharacter(
     configView(config),
@@ -199,12 +212,19 @@ function characterSession(
       findEffectiveModel(view, cacheDir, name, includeHidden),
   );
 
+  const threadModel =
+    thread === undefined
+      ? undefined
+      : threadModelOf(deps.registry.listThreads(character), thread);
+
   return {
     config,
     configPath: deps.configPath,
     dataDir: deps.dataDir,
     characterName: character,
     activeModel: saved?.qualifiedName,
+    ...(thread === undefined ? {} : { thread }),
+    ...(threadModel === undefined ? {} : { threadModel }),
     runtime: deps.runtime,
     ...(deps.env === undefined ? {} : { env: deps.env }),
     emit: sessionEmitter(deps.router, sessionId, rid),

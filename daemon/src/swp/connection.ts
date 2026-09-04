@@ -37,18 +37,26 @@ export interface HistorySnapshot {
   readonly activeStart: number;
   readonly config: unknown;
   readonly selectedCharacter: string | null;
+  readonly selectedThread: string | null;
   readonly revision: number;
 }
 
 export interface HandshakeProvider {
   hello(): Promise<HelloSnapshot>;
-  history(selectedCharacter: string | null): Promise<HistorySnapshot>;
+  history(selectedCharacter: string | null, selectedThread?: string | null): Promise<HistorySnapshot>;
 }
 
 export const DEFAULT_HANDSHAKE: HandshakeProvider = {
   hello: () => Promise.resolve({ characters: [{ name: "default" }] }),
   history: (selectedCharacter) =>
-    Promise.resolve({ messages: [], activeStart: 0, config: {}, selectedCharacter, revision: 0 }),
+    Promise.resolve({
+      messages: [],
+      activeStart: 0,
+      config: {},
+      selectedCharacter,
+      selectedThread: null,
+      revision: 0,
+    }),
 };
 
 export interface Duplex {
@@ -154,9 +162,11 @@ export async function performHandshake(
     ctx.log?.warn?.("Connect-time character selection is not available", { requested });
   }
 
+  const requestedThread = admitted.thread ?? null;
+
   let history: HistorySnapshot;
   try {
-    history = await ctx.handshake.history(selected);
+    history = await ctx.handshake.history(selected, requestedThread);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     ctx.log?.warn?.("Could not build the connect-time history snapshot", {
@@ -173,6 +183,7 @@ export async function performHandshake(
     clientName: admitted.client_name,
     capabilities: admitted.capabilities,
     character: history.selectedCharacter,
+    thread: history.selectedThread,
   };
   ctx.router.registerSession(client, (msg) => writeMessage(sink, msg));
 
@@ -188,6 +199,7 @@ export function historyMessage(history: HistorySnapshot, rid?: string): ServerMe
     messages: history.messages as Message[],
     ...(history.activeStart === 0 ? {} : { active_start: history.activeStart }),
     config: history.config,
+    ...(history.selectedThread === null ? {} : { selected_thread: history.selectedThread }),
     ...(history.selectedCharacter === null
       ? {}
       : { selected_character: history.selectedCharacter }),
@@ -314,6 +326,7 @@ export async function messageLoop(
             ctx.router.characterFor(session.sessionId),
             ctx.router.has(session.sessionId),
             ctx.router.receivesAllCharacters(session.sessionId),
+            ctx.router.threadFor(session.sessionId),
           )
         ) {
           await writeMessage(sink, result.msg);

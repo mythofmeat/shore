@@ -56,15 +56,36 @@ MUTANTS = [
     # --- what is not an error -------------------------------------------------
     ("engine: a character that is gone refuses the handshake instead of answering empty",
      H,
-     "    selectedCharacter === null ? undefined : await engineIfCharacterExists(registry, selectedCharacter);",
+     "    selectedCharacter === null\n"
+     "      ? undefined\n"
+     "      : await engineIfCharacterExists(\n"
+     "          registry,\n"
+     "          selectedCharacter,\n"
+     "          liveThread(registry, selectedCharacter, selectedThread),\n"
+     "        );",
      "    selectedCharacter === null ? undefined : await registry.getOrCreate(selectedCharacter);"),
     ("engine: no character selected still asks the registry for one",
      H,
-     "    selectedCharacter === null ? undefined : await engineIfCharacterExists(registry, selectedCharacter);",
-     "    await engineIfCharacterExists(registry, selectedCharacter as string);"),
+     "    selectedCharacter === null\n"
+     "      ? undefined\n"
+     "      : await engineIfCharacterExists(\n"
+     "          registry,\n"
+     "          selectedCharacter,\n"
+     "          liveThread(registry, selectedCharacter, selectedThread),\n"
+     "        );",
+     "    await engineIfCharacterExists(\n"
+     "      registry,\n"
+     "      selectedCharacter as string,\n"
+     "      liveThread(registry, selectedCharacter as string, selectedThread),\n"
+     "    );"),
     ("engine: an empty snapshot drops the config block the client renders from",
      H,
-     "      messages: [],\n      activeStart: 0,\n      config: configBlock,",
+     "      messages: [],\n"
+     "      activeStart: 0,\n"
+     "      config: historyConfigSnapshot(\n"
+     "        config,\n"
+     "        snapshotActiveModel(config, selectedCharacter, activeModel, undefined),\n"
+     "      ),",
      "      messages: [],\n      activeStart: 0,\n      config: {},"),
 
     # --- what a live snapshot carries -----------------------------------------
@@ -74,8 +95,20 @@ MUTANTS = [
      "    revision: 0,"),
     ("snapshot: a missing character is echoed back rather than cleared",
      H,
-     "      selectedCharacter: null,\n      revision: 0,",
-     "      selectedCharacter,\n      revision: 0,"),
+     "      selectedCharacter: null,\n      selectedThread: null,\n      revision: 0,",
+     "      selectedCharacter,\n      selectedThread: null,\n      revision: 0,"),
+    ("snapshot: the thread the engine is on is not reported back",
+     H,
+     "  const thread = engine.thread;",
+     '  const thread = "main";'),
+    ("snapshot: the thread is dropped from what the session is told it is on",
+     H,
+     "    selectedThread: thread,\n",
+     "    selectedThread: null,\n"),
+    ("snapshot: a session's stale thread is opened rather than falling back to home",
+     H,
+     "  return registry.listThreads(character).some((t) => t.id === selected) ? selected : undefined;",
+     "  return selected;"),
     ("snapshot: an unset active_start becomes NaN rather than zero",
      H,
      "    activeStart: history.active_start ?? 0,",
@@ -100,9 +133,21 @@ MUTANTS = [
      "?.qualifiedName ?? undefined,"),
     ("model: preferences are never consulted, so a character's own pick is invisible",
      H,
-     "  return resolveChatModelForCharacter(configView(config), selectedCharacter, findEffectiveModel)\n"
-     "    ?.qualifiedName;",
+     "  return resolveChatModelForCharacter(\n"
+     "    configView(config),\n"
+     "    selectedCharacter,\n"
+     "    findEffectiveModel,\n"
+     "    threadModel,\n"
+     "  )?.qualifiedName;",
      "  return undefined;"),
+    ("model: the thread's pin never reaches the resolver, so a side thread reports the character's",
+     H,
+     "    findEffectiveModel,\n    threadModel,\n  )?.qualifiedName;",
+     "    findEffectiveModel,\n  )?.qualifiedName;"),
+    ("model: the pin is read for home rather than the thread the engine opened",
+     H,
+     "          : threadModelOf(registry.listThreads(selectedCharacter), thread),",
+     "          : undefined,"),
 ]
 
 

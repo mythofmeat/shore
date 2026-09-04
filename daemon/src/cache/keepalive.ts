@@ -4,6 +4,7 @@ import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
 import { KEEPALIVE_REWRITE_TOKENS } from "./tracker.ts";
 import { reportsCacheWrites } from "../llm/cache_capability.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
+import { MAIN_THREAD } from "../config/dirs.ts";
 import {
   beginCallAttempt,
   prepareCallAccounting,
@@ -264,6 +265,12 @@ export class KeepaliveService {
 
   nextPingAt(character: string): number | undefined {
     return this.#entries.get(character)?.keepalive.nextPingAt;
+  }
+
+  warmThread(character: string): string | undefined {
+    const prefix = this.#entries.get(character)?.prefix;
+    if (prefix === undefined) return undefined;
+    return prefix.context?.thread ?? MAIN_THREAD;
   }
 
   intervalFor(character: string): number | undefined {

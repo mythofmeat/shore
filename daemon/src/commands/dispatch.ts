@@ -67,6 +67,18 @@ import {
   status,
 } from "./status.ts";
 import { usage } from "./usage.ts";
+import {
+  archiveThread,
+  listThreads,
+  newThread,
+  switchThread,
+  threadHome,
+  threadLabel,
+  threadModel,
+  type ThreadContext,
+  type ThreadRegistry,
+} from "./threads.ts";
+import { threadTurnCounts } from "../engine/threads.ts";
 import { conversationTokens } from "../ledger/conversation_spend.ts";
 import { estimateHistoryTokens } from "../engine/prompt.ts";
 import type { HistoryIndexSource } from "./history_index.ts";
@@ -86,12 +98,15 @@ export interface CommandSession {
   dataDir: string;
   characterName: string | undefined;
   activeModel: string | undefined;
+  thread?: string;
+  threadModel?: string;
   runtime: ConfigRuntime;
   env?: NodeJS.ProcessEnv;
   emit?: FrameSink;
 }
 
 export interface CommandDeps {
+  threads?: ThreadRegistry;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
   callStore: CallStore | undefined;
@@ -143,6 +158,21 @@ export async function runCommand(
         { configDir, dataDir: session.dataDir, active: character, workspaceRoot },
         args,
       );
+
+    case "list_threads":
+      return listThreads(await threadListingContext(deps, engine, session));
+    case "switch_thread":
+      return switchThread(threadContext(deps, engine), args);
+    case "create_thread":
+      return await newThread(await threadListingContext(deps, engine, session), args);
+    case "archive_thread":
+      return await archiveThread(await threadListingContext(deps, engine, session), args);
+    case "thread_home":
+      return await threadHome(await threadListingContext(deps, engine, session), args);
+    case "thread_label":
+      return await threadLabel(await threadListingContext(deps, engine, session), args);
+    case "thread_model":
+      return await threadModel(await threadListingContext(deps, engine, session), args);
 
     case "log":
       return await log(engine, args);
@@ -196,6 +226,7 @@ export async function runCommand(
       return await segments(
         session.dataDir,
         character,
+        engine.thread,
         args,
         deps.historyIndex,
         session.config.app.memory.retain.enabled,
@@ -329,6 +360,32 @@ export function runCharacterlessCommand(
   }
 }
 
+function threadContext(deps: CommandDeps, engine: ConversationEngine): ThreadContext {
+  const registry = deps.threads;
+  if (registry === undefined) {
+    throw internalError("thread commands need a character registry, and this one has none");
+  }
+  return { registry, character: engine.characterName, current: engine.thread };
+}
+
+async function threadListingContext(
+  deps: CommandDeps,
+  engine: ConversationEngine,
+  session: CommandSession,
+): Promise<ThreadContext> {
+  const base = threadContext(deps, engine);
+  const warm = deps.keepalive?.keepalive.warmThread(base.character);
+  return {
+    ...base,
+    turns: await threadTurnCounts(
+      session.dataDir,
+      base.character,
+      base.registry.listThreads(base.character).map((t) => t.id),
+    ),
+    ...(warm === undefined ? {} : { warm }),
+  };
+}
+
 export function isCharacterless(name: string): boolean {
   return CHARACTERLESS.has(name);
 }
@@ -355,7 +412,8 @@ function statusContext(
   return {
     characterName: engine.characterName,
     turnCount: engine.turnCount(),
-    activeModel: effectiveChatModel(session.config, engine.characterName)?.qualifiedName,
+    activeModel: effectiveChatModel(session.config, engine.characterName, session.threadModel)
+      ?.qualifiedName,
     config: { app: { defaults: { model: session.config.app.defaults.model } }, dirs: session.config.dirs },
     conversationTokens: conversationTokens(
       deps.ledgerPath,

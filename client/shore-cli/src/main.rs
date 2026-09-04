@@ -85,10 +85,10 @@ fn main() -> ExitCode {
 
     let outcome: Result<ExitCode, Box<dyn std::error::Error>> = match cli.command {
         Some(command) => rt
-            .block_on(run::execute(cli.character, cli.addr, command))
+            .block_on(run::execute(cli.character, cli.thread, cli.addr, command))
             .map(|()| ExitCode::SUCCESS),
         None => rt
-            .block_on(tui::run(cli.addr, cli.character))
+            .block_on(tui::run(cli.addr, cli.character, cli.thread))
             .map_err(Into::into),
     };
     match outcome {

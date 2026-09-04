@@ -12,6 +12,7 @@ import { resolveDisplayName } from "../config/app.ts";
 import { resolvePromptTemplate } from "../config/dirs.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { formatWallClock } from "../engine/prompt.ts";
+import { threadChatModel } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
@@ -152,8 +153,11 @@ export async function prepareHeartbeatRequest(
   const maxToolIterations =
     override !== undefined
       ? override.maxToolIterations
-      : resolveChatModelForCharacter(configView(config), character, (v, c, n, h) =>
-          findEffectiveModel(v, c, n, h),
+      : resolveChatModelForCharacter(
+          configView(config),
+          character,
+          (v, c, n, h) => findEffectiveModel(v, c, n, h),
+          await threadChatModel(config.dirs.data, character),
         )?.maxToolIterations;
 
   const nowMs = deps.now?.() ?? Date.now();

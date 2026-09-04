@@ -790,6 +790,7 @@ fn submenu_fetch_action(app: &mut App, parent: &str) -> Action {
     let (name, rid) = match parent {
         "model" => ("list_models", None),
         "character" => ("list_characters", None),
+        "thread" => ("list_threads", None),
         "setting" => ("model_settings", Some(app.begin_sampler_settings_refresh())),
         "view" => return Action::Redraw,
         _ => return Action::Redraw,
@@ -801,7 +802,7 @@ fn submenu_fetch_action(app: &mut App, parent: &str) -> Action {
     })))
 }
 
-const PALETTE_ALIASES: [(&str, &str); 13] = [
+const PALETTE_ALIASES: [(&str, &str); 14] = [
     ("regen", "msg regen"),
     ("edit", "msg edit"),
     ("delete", "msg delete"),
@@ -812,6 +813,7 @@ const PALETTE_ALIASES: [(&str, &str); 13] = [
     ("setting", "model setting"),
     ("reasoning", "model setting reasoning_effort"),
     ("characters", "character"),
+    ("threads", "thread"),
     ("cancel", "ui cancel"),
     ("help", "ui help"),
     ("image", "ui image"),
@@ -1383,6 +1385,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Clear { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Character { .. }
+        | CliCommand::Thread { .. }
         | CliCommand::Export { .. }
         | CliCommand::Import { .. }
         | CliCommand::Status { .. }
@@ -1530,6 +1533,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Clear { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Character { .. }
+        | CliCommand::Thread { .. }
         | CliCommand::Export { .. }
         | CliCommand::Import { .. }
         | CliCommand::Status { .. }
@@ -2228,6 +2232,123 @@ mod tests {
             make_key(KeyModifiers::NONE, KeyCode::Enter),
         ));
         assert_eq!(cmd.name, "reset_model");
+    }
+
+    fn thread_row(id: &str, home: bool) -> crate::tui::app::ThreadRow {
+        crate::tui::app::ThreadRow {
+            id: id.to_owned(),
+            label: None,
+            model: None,
+            home,
+            turns: None,
+            warm: false,
+        }
+    }
+
+    #[test]
+    fn picking_a_thread_from_the_submenu_switches_to_it() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.threads = vec![thread_row("main", true), thread_row("eval", false)];
+        app.enter_submenu("thread");
+        app.completion.selected = Some(1);
+
+        let cmd = sent_command(handle_submenu_mode(
+            &mut app,
+            make_key(KeyModifiers::NONE, KeyCode::Enter),
+        ));
+        assert_eq!(cmd.name, "switch_thread");
+        assert_eq!(cmd.args.get("name"), Some(&serde_json::json!("eval")));
+    }
+
+    #[test]
+    fn the_thread_submenu_opens_on_the_thread_in_use() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.threads = vec![thread_row("main", true), thread_row("eval", false)];
+        app.thread_name = "eval".into();
+        app.enter_submenu("thread");
+
+        assert_eq!(app.completion.selected, Some(1));
+    }
+
+    #[test]
+    fn a_thread_row_carries_its_facts_but_the_command_carries_only_the_id() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.threads = vec![crate::tui::app::ThreadRow {
+            id: "eval".to_owned(),
+            label: Some("SDK eval".to_owned()),
+            model: Some("claude-agent:opus5".to_owned()),
+            home: false,
+            turns: Some(4),
+            warm: true,
+        }];
+        app.enter_submenu("thread");
+        app.completion.selected = Some(0);
+
+        assert_eq!(
+            app.completion.candidates,
+            vec!["eval \u{2014} 4 turns \u{b7} warm \u{b7} claude-agent:opus5 \u{b7} SDK eval"]
+        );
+
+        let cmd = sent_command(handle_submenu_mode(
+            &mut app,
+            make_key(KeyModifiers::NONE, KeyCode::Enter),
+        ));
+        assert_eq!(cmd.args.get("name"), Some(&serde_json::json!("eval")));
+    }
+
+    #[test]
+    fn the_config_palette_offers_the_thread_beside_the_model_and_character() {
+        let mut app = App {
+            model: "anthropic:opus".into(),
+            character_name: "qifei".into(),
+            thread_name: "eval".into(),
+            ..App::default()
+        };
+        app.input.enter_command_mode();
+        app.enter_submenu("config");
+
+        assert!(
+            app.completion
+                .candidates
+                .iter()
+                .any(|c| c == "thread = eval"),
+            "the thread you are in belongs beside the model and character: {:?}",
+            app.completion.candidates,
+        );
+    }
+
+    #[test]
+    fn choosing_the_thread_row_opens_the_picker_and_fetches_the_roster() {
+        let mut app = App {
+            thread_name: "eval".into(),
+            ..App::default()
+        };
+        app.input.enter_command_mode();
+        app.enter_submenu("config");
+        app.completion.selected = app
+            .completion
+            .candidates
+            .iter()
+            .position(|c| c == "thread = eval");
+        assert!(app.completion.selected.is_some());
+
+        let action = handle_submenu_mode(&mut app, make_key(KeyModifiers::NONE, KeyCode::Enter));
+
+        assert!(app.is_submenu_open("thread"), "the picker opened");
+        assert_eq!(sent_command(action).name, "list_threads");
+    }
+
+    #[test]
+    fn opening_the_thread_submenu_asks_the_daemon_for_the_roster() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.enter_submenu("thread");
+
+        let cmd = sent_command(submenu_fetch_action(&mut app, "thread"));
+        assert_eq!(cmd.name, "list_threads");
     }
 
     #[test]

@@ -432,6 +432,88 @@ pub(crate) fn write_character_list<W: Write>(out: &mut W, data: &Value, active: 
     rows.write(out);
 }
 
+fn thread_turns(turns: u64) -> String {
+    match turns {
+        0 => "empty".to_owned(),
+        1 => "1 turn".to_owned(),
+        n => format!("{n} turns"),
+    }
+}
+
+fn thread_facts(row: &Value) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if flag(row, "home") {
+        parts.push("home".to_owned());
+    }
+    if let Some(turns) = row.get("turns").and_then(Value::as_u64) {
+        parts.push(thread_turns(turns));
+    }
+    if flag(row, "warm") {
+        parts.push("warm".to_owned());
+    }
+    parts.push(
+        if flag(row, "compaction") {
+            "compacts"
+        } else {
+            "on demand"
+        }
+        .to_owned(),
+    );
+    let model = text(row, "chat_model");
+    if !model.is_empty() {
+        parts.push(model.to_owned());
+    }
+    parts.join(" \u{b7} ")
+}
+
+pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
+    let character = text(data, "character");
+    section(
+        out,
+        "threads",
+        if character.is_empty() {
+            None
+        } else {
+            Some(character)
+        },
+    );
+    let threads = rows_of(data, "threads");
+    if threads.is_empty() {
+        empty(out, "no threads");
+        return;
+    }
+
+    let mut rows = Rows::new();
+    for thread in threads {
+        let current = flag(thread, "current");
+        rows.add_marked_noted(
+            if current { Mark::Active } else { Mark::None },
+            text(thread, "id"),
+            &thread_facts(thread),
+            text(thread, "label"),
+            if current { Tone::Active } else { Tone::Plain },
+        );
+    }
+    rows.write(out);
+    blank(out);
+    note(
+        out,
+        "home is where unprompted messages arrive; other threads speak only when spoken to",
+    );
+    if threads.iter().any(|thread| flag(thread, "warm")) {
+        note(
+            out,
+            "warm is the thread holding the cache slot; a turn anywhere else pays to rebuild it",
+        );
+    }
+}
+
+pub(crate) fn print_thread_list(data: &Value) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_thread_list(&mut out, data);
+}
+
 pub(crate) fn print_model_list(data: &Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -969,6 +1051,120 @@ mod tests {
         assert!(!row.contains("(active)"), "{row:?}");
     }
 
+    fn threads() -> Value {
+        json!({
+            "character": "qifei",
+            "home": "main",
+            "current": "eval",
+            "threads": [
+                {"id": "main", "created_at": "2026-09-01T00:00:00Z", "compaction": true,
+                 "home": true, "current": false, "turns": 12},
+                {"id": "eval", "label": "Agent SDK eval", "chat_model": "claude-agent:opus5",
+                 "created_at": "2026-09-03T00:00:00Z", "compaction": false,
+                 "home": false, "current": true, "turns": 1, "warm": true}
+            ]
+        })
+    }
+
+    #[test]
+    fn the_thread_list_names_the_character_it_belongs_to() {
+        let out = render(|b| write_thread_list(b, &threads()));
+        assert!(out.contains("threads"), "{out}");
+        assert!(out.contains("qifei"), "{out}");
+    }
+
+    #[test]
+    fn the_home_thread_is_marked_as_such_rather_than_left_to_guess() {
+        let out = render(|b| write_thread_list(b, &threads()));
+        let row = out.lines().find(|l| l.contains("main")).unwrap_or_default();
+        assert!(row.contains("home"), "{row:?}");
+        assert!(row.contains("compacts"), "{row:?}");
+    }
+
+    #[test]
+    fn a_thread_shows_its_label_and_its_own_model() {
+        let out = render(|b| write_thread_list(b, &threads()));
+        let row = out.lines().find(|l| l.contains("eval")).unwrap_or_default();
+        assert!(row.contains("Agent SDK eval"), "{row:?}");
+        assert!(row.contains("claude-agent:opus5"), "{row:?}");
+        assert!(!row.contains("home"), "{row:?}");
+    }
+
+    #[test]
+    fn a_thread_says_how_far_along_its_conversation_is() {
+        let out = render(|b| write_thread_list(b, &threads()));
+        let main = out.lines().find(|l| l.contains("main")).unwrap_or_default();
+        assert!(main.contains("12 turns"), "{main:?}");
+        let eval = out.lines().find(|l| l.contains("eval")).unwrap_or_default();
+        assert!(
+            eval.contains("1 turn") && !eval.contains("1 turns"),
+            "{eval:?}"
+        );
+    }
+
+    #[test]
+    fn a_thread_that_has_said_nothing_yet_reads_as_empty_rather_than_zero() {
+        let out = render(|b| {
+            write_thread_list(
+                b,
+                &json!({"character": "qifei", "threads": [
+                    {"id": "main", "compaction": true, "home": true, "turns": 0}
+                ]}),
+            );
+        });
+        assert!(out.contains("empty"), "{out}");
+        assert!(!out.contains("0 turns"), "{out}");
+    }
+
+    #[test]
+    fn a_daemon_that_does_not_count_turns_says_nothing_rather_than_claiming_empty() {
+        let out = render(|b| {
+            write_thread_list(
+                b,
+                &json!({"character": "qifei", "threads": [
+                    {"id": "main", "compaction": true, "home": true}
+                ]}),
+            );
+        });
+        assert!(!out.contains("empty"), "{out}");
+        assert!(!out.contains("turn"), "{out}");
+    }
+
+    #[test]
+    fn only_the_thread_holding_the_cache_slot_is_marked_warm() {
+        let out = render(|b| write_thread_list(b, &threads()));
+        let main = out.lines().find(|l| l.contains("main")).unwrap_or_default();
+        assert!(!main.contains("warm"), "{main:?}");
+        let eval = out.lines().find(|l| l.contains("eval")).unwrap_or_default();
+        assert!(eval.contains("warm"), "{eval:?}");
+        assert!(out.contains("pays to rebuild"), "{out}");
+    }
+
+    #[test]
+    fn nothing_warm_means_no_explanation_of_what_warm_would_mean() {
+        let out = render(|b| {
+            write_thread_list(
+                b,
+                &json!({"character": "qifei", "threads": [
+                    {"id": "main", "compaction": true, "home": true, "turns": 3}
+                ]}),
+            );
+        });
+        assert!(!out.contains("pays to rebuild"), "{out}");
+    }
+
+    #[test]
+    fn the_list_explains_what_home_means() {
+        let out = render(|b| write_thread_list(b, &threads()));
+        assert!(out.contains("unprompted"), "{out}");
+    }
+
+    #[test]
+    fn no_threads_says_so_rather_than_printing_a_bare_header() {
+        let out = render(|b| write_thread_list(b, &json!({"character": "qifei", "threads": []})));
+        assert!(out.contains("(no threads)"), "{out}");
+    }
+
     #[test]
     fn an_empty_catalog_says_so_instead_of_printing_a_bare_header() {
         let out = render(|b| write_model_list(b, &json!({"models": {}})));
@@ -980,6 +1176,7 @@ mod tests {
         let surfaces = [
             render(|b| write_model_list(b, &models())),
             render(|b| write_character_list(b, &json!({"characters": ["a"]}), Some("a"))),
+            render(|b| write_thread_list(b, &threads())),
         ];
         for out in &surfaces {
             for line in out.lines() {

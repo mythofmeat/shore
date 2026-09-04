@@ -304,6 +304,27 @@ describe("choosing among a provider's configured keys", () => {
     }
   });
 
+  test("a subscription sdk is billed to the subscription, not to a key that happens to be set", () => {
+    const built = buildRequestWithProviderKeys(
+      model({ provider_key: "anthropic", sdk: "claude_agent" }),
+      entry([key("primary", "ANTHROPIC_API_KEY")]),
+      INPUTS,
+      { ...env, ANTHROPIC_API_KEY: "sk-ant-would-be-billed" },
+    );
+    expect(built.request.api_key).toBe("");
+    expect(built.api_key_name).toBe("subscription");
+  });
+
+  test("a key-using sdk on the same provider still takes the key", () => {
+    const built = buildRequestWithProviderKeys(
+      model({ provider_key: "anthropic", sdk: "anthropic" }),
+      entry([key("primary", "ANTHROPIC_API_KEY")]),
+      INPUTS,
+      { ...env, ANTHROPIC_API_KEY: "sk-ant-would-be-billed" },
+    );
+    expect(built.request.api_key).toBe("sk-ant-would-be-billed");
+  });
+
   test("with no registry entry at all, the model's own variable still seeds the lookup", () => {
     const built = buildRequestWithProviderKeys(
       model({ api_key_env: "FIX_LEGACY" }),

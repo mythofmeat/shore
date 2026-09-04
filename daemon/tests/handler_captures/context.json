@@ -1545,6 +1545,16 @@
       "sdk": "moonshot",
       "has_tool_defs": false,
       "mode": "text_standin"
+    },
+    {
+      "sdk": "claude_agent",
+      "has_tool_defs": true,
+      "mode": "tool_pair"
+    },
+    {
+      "sdk": "claude_agent",
+      "has_tool_defs": false,
+      "mode": "text_standin"
     }
   ],
   "prepare_chat_context": [

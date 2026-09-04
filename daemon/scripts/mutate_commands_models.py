@@ -119,9 +119,15 @@ MUTANTS = [
 
     # --- resolveActiveModel -------------------------------------------------
     ("active: the character's saved model is ignored, so the config default wins",
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName);\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);\n"
      "  if (resolved !== undefined) return resolved;",
-     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName);\n  void resolved;"),
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);\n"
+     "  void resolved;"),
+    ("active: the thread's pin is dropped, so a side thread reports the character's model",
+     "function resolveActiveModel(ctx: ModelsContext): ResolvedModel {\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);",
+     "function resolveActiveModel(ctx: ModelsContext): ResolvedModel {\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined);"),
     ("active: the config default is never consulted",
      "  const fallback = ctx.config.app.defaults.model;\n"
      "  if (fallback !== undefined) return resolve(ctx, fallback, true);",
@@ -191,6 +197,26 @@ MUTANTS = [
     ("rows: the source always says blanket",
      '    return { role: task, model: qualify(ctx, perTask), source: `defaults.background.${task}` };',
      '    return { role: task, model: qualify(ctx, perTask), source: "defaults.background.model" };'),
+    ("rows: the chat row hides the pin, so a side thread reads as the character's",
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);\n"
+     "  if (resolved !== undefined) {\n"
+     "    return {\n"
+     "      role: \"chat\",",
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined);\n"
+     "  if (resolved !== undefined) {\n"
+     "    return {\n"
+     "      role: \"chat\","),
+    ("rows: the chat row credits the character even when a thread pinned it",
+     "      source: ctx.threadModel === undefined ? \"character\" : `thread ${ctx.thread ?? \"\"}`.trim(),",
+     "      source: \"character\","),
+    ("active: the listing's active name ignores the thread's pin",
+     "function activeName(ctx: ModelsContext): string | undefined {\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel);",
+     "function activeName(ctx: ModelsContext): string | undefined {\n"
+     "  const resolved = effectiveChatModel(ctx.config, ctx.characterName, undefined);"),
+    ("switch: a shadowed switch is reported as if it took effect",
+     "    ...(ctx.threadModel === undefined ? {} : { shadowed_by_thread: ctx.thread ?? null }),",
+     "    ...{},"),
     ("rows: the source always says per-task",
      '    return { role: task, model: qualify(ctx, bg.model), source: "defaults.background.model" };',
      '    return { role: task, model: qualify(ctx, bg.model), source: `defaults.background.${task}` };'),
@@ -199,8 +225,11 @@ MUTANTS = [
      '  return { role: task, model: chat.model, source: "inherits chat" };'),
     ("rows: a characterless session still inherits",
      "  if (character === undefined) return undefined;\n"
-     "  return resolveChatModelForCharacter(configView(config), character, findEffective);",
-     '  return resolveChatModelForCharacter(configView(config), character ?? "", findEffective);'),
+     "  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel);",
+     '  return resolveChatModelForCharacter(configView(config), character ?? "", findEffective, threadModel);'),
+    ("rows: the pin never reaches the resolver, so it can only ever be the character's",
+     "  return resolveChatModelForCharacter(configView(config), character, findEffective, threadModel);",
+     "  return resolveChatModelForCharacter(configView(config), character, findEffective);"),
 
     # --- list_models --------------------------------------------------------
     ("list: the hidden count is of what this call returned",
@@ -326,7 +355,10 @@ MUTANTS = [
     ("switch: a missing name is an error rather than a report",
      '  const name = asStr(args["name"]);\n'
      "  if (name === undefined) {\n"
-     "    return { active: effectiveChatModel(ctx.config, ctx.characterName)?.qualifiedName ?? null };\n"
+     "    return {\n"
+     "      active:\n"
+     "        effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel)?.qualifiedName ?? null,\n"
+     "    };\n"
      "  }",
      '  const name = asStr(args["name"]);\n'
      '  if (name === undefined) throw invalidRequest("Missing required argument: name");'),

@@ -59,11 +59,13 @@ pub(crate) fn already_reported(err: &(dyn std::error::Error + 'static)) -> bool 
 #[instrument(skip(cli_command))]
 pub(crate) async fn execute(
     requested_character: Option<String>,
+    requested_thread: Option<String>,
     requested_addr: Option<String>,
     cli_command: CliCommand,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli {
         character: requested_character,
+        thread: requested_thread,
         addr: requested_addr,
         command: Some(cli_command),
     };
@@ -78,11 +80,21 @@ pub(crate) async fn execute(
     let addr = resolve_addr(&cli)?;
 
     let character = cli.character.clone().or_else(state::read_active_character);
+    let thread = cli
+        .thread
+        .clone()
+        .or_else(|| character.as_deref().and_then(state::read_active_thread));
 
-    info!(character = ?character, "CLI executing command");
+    info!(character = ?character, thread = ?thread, "CLI executing command");
 
-    let (mut conn, _server_hello, history) =
-        SWPConnection::connect(&addr, "cli", "shore-cli", character.clone()).await?;
+    let (mut conn, _server_hello, history) = SWPConnection::connect_in_thread(
+        &addr,
+        "cli",
+        "shore-cli",
+        character.clone(),
+        thread.clone(),
+    )
+    .await?;
 
     let display_character = state::resolve_display_character(
         history.selected_character.as_deref(),
@@ -101,6 +113,17 @@ pub(crate) async fn execute(
                     "no character named {requested:?}; the daemon is serving {serving:?}. Run `shore character` to list them."
                 )
                 .into());
+    }
+
+    if let Some(requested) = thread.as_deref().filter(|r| !r.is_empty())
+        && let Some(serving) = history.selected_thread.as_deref().filter(|s| !s.is_empty())
+        && serving != requested
+    {
+        return Err(format!(
+            "no thread named {requested:?} for {display_character}; talking in {serving:?}. \
+             Run `shore thread` to list them."
+        )
+        .into());
     }
 
     match command_ref {
@@ -129,6 +152,13 @@ pub(crate) async fn execute(
             info: false,
             json,
         } => handle_list_characters(&mut conn, *json).await?,
+        CliCommand::Thread {
+            subcommand: Some(crate::cli::ThreadCommand::Use { name }),
+            ..
+        } => handle_switch_thread(&mut conn, name, &display_character).await?,
+        CliCommand::Thread { subcommand, json } => {
+            handle_thread_command(&mut conn, command_ref, subcommand.is_none(), *json).await?;
+        }
         CliCommand::Trace { subcommand: None } => {
             output::vocab::print_index(
                 "trace",
@@ -206,6 +236,7 @@ pub(crate) async fn execute(
 
 pub(crate) fn wants_json(other: &CliCommand) -> bool {
     match other {
+        CliCommand::Thread { json, .. } => *json,
         CliCommand::Model {
             json, subcommand, ..
         } => *json || matches!(subcommand, Some(ModelCommand::Setting { json: true, .. })),
@@ -959,6 +990,45 @@ async fn handle_switch_character(
     state::write_active_character(name)?;
     cli_out!("Switched to character: {name}");
     cli_out!("To override per-terminal: export SHORE_CHARACTER={name}");
+    Ok(())
+}
+
+async fn handle_switch_thread(
+    conn: &mut SWPConnection,
+    name: &str,
+    character: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!(thread = name, "Switching active thread");
+    let _ignored = conn
+        .send_command("switch_thread", serde_json::json!({ "name": name }))
+        .await?;
+    _ = recv_command_data(conn).await?;
+    state::write_active_thread(character, name)?;
+    cli_out!("Talking in thread: {name}");
+    cli_out!("To override per-terminal: export SHORE_THREAD={name}");
+    Ok(())
+}
+
+async fn handle_thread_command(
+    conn: &mut SWPConnection,
+    command: &CliCommand,
+    listing: bool,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some((name, args)) = crate::cli::to_swp_command(command, None) else {
+        return Ok(());
+    };
+    let _ignored = conn.send_command(name, args).await?;
+    let data = recv_command_data(conn).await?;
+
+    if json {
+        cli_out!("{}", serde_json::to_string_pretty(&data)?);
+        return Ok(());
+    }
+    if !listing {
+        cli_out!("");
+    }
+    output::catalog::print_thread_list(&data);
     Ok(())
 }
 
@@ -1736,6 +1806,7 @@ mod tests {
             active_start: 0,
             config: serde_json::json!({}),
             selected_character: None,
+            selected_thread: None,
             revision: 0,
         });
         write_json_line(&mut w, &history).await;
@@ -1842,6 +1913,7 @@ mod tests {
         Cli {
             addr: None,
             character: None,
+            thread: None,
             command: Some(command),
         }
     }
@@ -1900,6 +1972,7 @@ mod tests {
             | CliCommand::Log { .. }
             | CliCommand::Trace { .. }
             | CliCommand::Character { .. }
+            | CliCommand::Thread { .. }
             | CliCommand::Export { .. }
             | CliCommand::Import { .. }
             | CliCommand::Status { .. }

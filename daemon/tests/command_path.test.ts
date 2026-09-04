@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import fixture from "./handler_captures/command_path.json" with { type: "json" };
 import { CharacterError } from "../src/characters.ts";
+import { MAIN_THREAD } from "../src/config/dirs.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -90,6 +91,7 @@ async function harness(characters: readonly string[]): Promise<Harness> {
         return engine;
       },
       effectiveConfig: () => config,
+      listThreads: () => [{ id: MAIN_THREAD, created_at: "2026-09-03T00:00:00.000Z", compaction: true }],
     },
     globalConfig: () => config,
     configPath: join(dirs.config, "config.toml"),
@@ -115,6 +117,7 @@ async function harness(characters: readonly string[]): Promise<Harness> {
       setEffectiveConfig: async () => {},
       reloadRuntimeConfig: () => {},
       refreshCachedRequest: async () => {},
+      homeThread: () => MAIN_THREAD,
       applyReloadedConfig: async () => ({
         characterDiscoveryChanged: false,
         droppedEngines: 0,
@@ -179,6 +182,7 @@ function meta(selected: string | null, rid: string | null): RequestMeta {
       clientName: "test-1",
       capabilities: ["streaming"],
       selectedCharacter: selected,
+      selectedThread: null,
     },
     rid,
     kind: "command",
@@ -306,6 +310,7 @@ test("switch_character establishes an ambiguous unpinned session", async () => {
       activeStart: 0,
       config: {},
       selectedCharacter: character,
+      selectedThread: null,
       revision: 0,
     }),
   };

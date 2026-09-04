@@ -35,6 +35,7 @@ export function admitClientMessage(value: unknown): ClientMessage {
         client_name: stringField(raw, "client_name"),
         capabilities: admitCapabilities(raw.capabilities),
         ...optionalString(raw, "character"),
+        ...optionalString(raw, "thread"),
         ...optionalString(raw, "token"),
       };
 

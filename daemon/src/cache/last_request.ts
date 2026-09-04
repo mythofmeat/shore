@@ -80,19 +80,13 @@ export class LastRequestCache {
     config: LoadedConfig,
     deps: RebuildDeps = {},
   ): Promise<KeepaliveReprime> {
+    const thread = deps.thread ?? (await homeThreadOf(dataDir, character));
     const decision = reprimeDecision(
-      await rebuildRequestFromDisk(character, dataDir, config, deps),
+      await rebuildRequestFromDisk(character, dataDir, config, { ...deps, thread }),
     );
     if (decision.kind === "push") {
       this.#bodies.set(character, decision.request);
-      this.#keepalive?.arm(
-        toPrefix(
-          character,
-          decision.request,
-          decision.keepalive,
-          await homeThreadOf(dataDir, character),
-        ),
-      );
+      this.#keepalive?.arm(toPrefix(character, decision.request, decision.keepalive, thread));
     } else {
       this.#keepalive?.disarm(character);
     }

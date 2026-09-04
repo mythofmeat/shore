@@ -212,7 +212,7 @@ describe("assistantImageModeForRequest", () => {
   }
 
   test("covers every sdk", () => {
-    expect(new Set(modeCases.map((c) => c.sdk)).size).toBe(7);
+    expect(new Set(modeCases.map((c) => c.sdk)).size).toBe(8);
   });
 });
 

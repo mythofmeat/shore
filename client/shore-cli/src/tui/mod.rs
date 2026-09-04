@@ -81,6 +81,7 @@ impl UiEffect {
 pub(crate) async fn run(
     addr: Option<String>,
     character: Option<String>,
+    thread: Option<String>,
 ) -> io::Result<std::process::ExitCode> {
     let debug = TuiDebugConfig::from_env()?;
 
@@ -99,7 +100,7 @@ pub(crate) async fn run(
         init_logging()?;
     }
 
-    run_tui(addr, character, debug).await
+    run_tui(addr, character, thread, debug).await
 }
 
 fn init_logging() -> io::Result<()> {
@@ -804,6 +805,64 @@ pub(crate) fn subagent_trace_fetch(app: &mut App) -> Vec<ConnCommand> {
     vec![subagent_trace_conn_command(&ids)]
 }
 
+fn thread_refresh_command(app: &mut App) -> ConnCommand {
+    let rid = app.begin_thread_refresh();
+    ConnCommand::Send(ClientMessage::Command(Command {
+        rid: Some(rid),
+        name: "list_threads".into(),
+        args: serde_json::json!({}),
+    }))
+}
+
+fn absorb_thread_listing(app: &mut App, data: &serde_json::Value) {
+    let Some(rows) = data.get("threads").and_then(|v| v.as_array()) else {
+        return;
+    };
+    app.threads = rows
+        .iter()
+        .filter_map(|row| {
+            let id = row.get("id").and_then(serde_json::Value::as_str)?;
+            Some(app::ThreadRow {
+                id: id.to_owned(),
+                label: row
+                    .get("label")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+                model: row
+                    .get("chat_model")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+                home: row
+                    .get("home")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+                turns: row.get("turns").and_then(serde_json::Value::as_u64),
+                warm: row
+                    .get("warm")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+            })
+        })
+        .collect();
+    if let Some(home) = data.get("home").and_then(serde_json::Value::as_str) {
+        app.home_thread = home.to_owned();
+    }
+    if let Some(current) = data.get("current").and_then(serde_json::Value::as_str) {
+        app.thread_name = current.to_owned();
+    }
+}
+
+fn thread_listing_text(app: &App) -> String {
+    app.threads
+        .iter()
+        .map(|row| {
+            let mark = if row.id == app.thread_name { "*" } else { " " };
+            format!("  {mark} {}", App::thread_row_label(row))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn absorb_subagent_traces(app: &mut App, data: &serde_json::Value) {
     if data
         .get("character")
@@ -1043,6 +1102,7 @@ async fn handle_action(
 async fn run_tui(
     addr: Option<String>,
     character: Option<String>,
+    thread: Option<String>,
     debug: TuiDebugConfig,
 ) -> io::Result<std::process::ExitCode> {
     enable_raw_mode()?;
@@ -1056,6 +1116,11 @@ async fn run_tui(
     let mut terminal = Terminal::new(backend)?;
 
     let resolved_character = resolve_character(character);
+    let resolved_thread = thread.or_else(|| {
+        resolved_character
+            .as_deref()
+            .and_then(crate::state::read_active_thread)
+    });
     let fixture_mode = debug.fixture_enabled();
     info!(character = ?resolved_character, fixture_mode, "TUI starting");
 
@@ -1081,7 +1146,7 @@ async fn run_tui(
         let (_event_tx, event_rx) = tokio::sync::mpsc::channel::<ConnEvent>(1);
         (cmd_tx, event_rx)
     } else {
-        connection::spawn_connection(addr, resolved_character)
+        connection::spawn_connection(addr, resolved_character, resolved_thread)
     };
 
     let mut input_poll = tokio::time::interval(INPUT_POLL_INTERVAL);
@@ -1248,6 +1313,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             active_start,
             config,
             selected_character,
+            selected_thread,
             ..
         } => {
             let has_selected_character = selected_character.is_some();
@@ -1266,6 +1332,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.characters.clone_from(&characters);
 
             app.character_name = next_character;
+            app.thread_name = selected_thread.unwrap_or_default();
 
             if let Some(private) = config.get("private").and_then(serde_json::Value::as_bool) {
                 app.is_private = private;
@@ -1278,7 +1345,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             app.set_status("connected");
             let mut cmds = if has_selected_character {
-                vec![usage_budget_conn_command()]
+                vec![usage_budget_conn_command(), thread_refresh_command(app)]
             } else {
                 vec![]
             };
@@ -2385,6 +2452,63 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         }
                     }
                 }
+                "list_threads" => {
+                    let quiet = app.take_thread_refresh(co.rid.as_deref());
+                    absorb_thread_listing(app, &co.data);
+                    if quiet {
+                        return UiEffect::redraw(RedrawEffect::Immediate);
+                    }
+                    if app.is_submenu_open("thread") {
+                        app.update_completions();
+                        return UiEffect::redraw(RedrawEffect::Immediate);
+                    }
+                    if !palette_character_json {
+                        app.entries.push(ConversationEntry::System {
+                            msg_id: None,
+                            content: format!("Threads:\n{}", thread_listing_text(app)),
+                            count: 1,
+                            timestamp: String::new(),
+                        });
+                        if app.auto_scroll {
+                            app.scroll_to_bottom();
+                        }
+                    }
+                }
+                "create_thread" | "archive_thread" | "thread_home" | "thread_label"
+                | "thread_model" => {
+                    absorb_thread_listing(app, &co.data);
+                }
+                "switch_thread" => {
+                    let Some(name) = co
+                        .data
+                        .get("thread")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                    else {
+                        return UiEffect::redraw(RedrawEffect::Immediate);
+                    };
+                    let changed =
+                        co.data.get("changed").and_then(serde_json::Value::as_bool) == Some(true);
+                    app.thread_name.clone_from(&name);
+                    if !app.character_name.is_empty() {
+                        let _persisted =
+                            crate::state::write_active_thread(&app.character_name, &name);
+                    }
+                    app.set_status(if changed {
+                        format!("thread: {name}")
+                    } else {
+                        format!("already in {name}")
+                    });
+                    if changed {
+                        app.subagent_traces.clear();
+                        app.pending_subagent_trace_ids.clear();
+                        app.effective_sampler = None;
+                        return UiEffect {
+                            cmds: vec![thread_refresh_command(app)],
+                            redraw: RedrawEffect::Immediate,
+                        };
+                    }
+                }
                 "switch_character" => {
                     if let Some(name) = co.data.get("character").and_then(|v| v.as_str()) {
                         app.character_name = name.to_owned();
@@ -2828,6 +2952,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if let Some(selected) = hist.selected_character {
                 app.character_name = selected;
             }
+            if let Some(thread) = hist.selected_thread {
+                app.thread_name = thread;
+            }
             app.image_cache.clear();
             reconcile_streaming_turn(app, hist.messages, hist.active_start);
             reset_history_paging(app);
@@ -2904,6 +3031,201 @@ mod redraw_tests {
         });
         unset_env("SHORE_RUNTIME_DIR");
         result.unwrap();
+    }
+
+    fn thread_listing() -> serde_json::Value {
+        serde_json::json!({
+            "character": "qifei",
+            "home": "main",
+            "current": "eval",
+            "threads": [
+                {"id": "main", "compaction": true, "home": true, "current": false},
+                {
+                    "id": "eval",
+                    "label": "SDK eval",
+                    "chat_model": "claude-agent:opus5",
+                    "compaction": false,
+                    "home": false,
+                    "current": true,
+                },
+            ],
+        })
+    }
+
+    #[test]
+    fn a_thread_listing_fills_the_picker_and_says_where_home_is() {
+        let mut app = App::default();
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "list_threads".into(),
+                data: thread_listing(),
+            }),
+        );
+
+        assert_eq!(app.home_thread, "main");
+        assert_eq!(app.thread_name, "eval");
+        assert_eq!(
+            app.threads.iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
+            vec!["main", "eval"]
+        );
+        assert_eq!(
+            app.threads.get(1).and_then(|t| t.model.clone()).as_deref(),
+            Some("claude-agent:opus5")
+        );
+        assert!(app.in_side_thread(), "eval is not home");
+    }
+
+    #[test]
+    fn the_startup_roster_refresh_stays_out_of_the_transcript() {
+        let mut app = App::default();
+        let rid = app.begin_thread_refresh();
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(rid),
+                name: "list_threads".into(),
+                data: thread_listing(),
+            }),
+        );
+
+        assert_eq!(app.home_thread, "main");
+        assert!(
+            app.entries.is_empty(),
+            "a refresh nobody asked for must not print a listing",
+        );
+    }
+
+    #[test]
+    fn a_listing_the_user_asked_for_is_printed() {
+        let mut app = App::default();
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "list_threads".into(),
+                data: thread_listing(),
+            }),
+        );
+
+        assert_eq!(app.entries.len(), 1, "the listing reaches the transcript");
+    }
+
+    #[test]
+    fn switching_threads_is_persisted_and_refetches_the_roster() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        set_env("SHORE_RUNTIME_DIR", &tmp.path().join("shore"));
+        let result = std::panic::catch_unwind(|| {
+            let mut app = App {
+                character_name: "qifei".into(),
+                thread_name: "main".into(),
+                ..App::default()
+            };
+
+            let effect = handle_server_message(
+                &mut app,
+                ServerMessage::CommandOutput(CommandOutput {
+                    rid: None,
+                    name: "switch_thread".into(),
+                    data: serde_json::json!({
+                        "character": "qifei",
+                        "thread": "eval",
+                        "changed": true,
+                    }),
+                }),
+            );
+
+            assert_eq!(app.thread_name, "eval");
+            assert_eq!(
+                shore_common::active_character::read_active_thread("qifei").as_deref(),
+                Some("eval"),
+                "the switch has to reach the file the next client reads",
+            );
+            assert_eq!(effect.cmds.len(), 1, "the roster is refetched");
+        });
+        unset_env("SHORE_RUNTIME_DIR");
+        result.unwrap();
+    }
+
+    #[test]
+    fn a_switch_that_changed_nothing_asks_for_nothing() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        set_env("SHORE_RUNTIME_DIR", &tmp.path().join("shore"));
+        let result = std::panic::catch_unwind(|| {
+            let mut app = App {
+                character_name: "qifei".into(),
+                thread_name: "eval".into(),
+                ..App::default()
+            };
+
+            let effect = handle_server_message(
+                &mut app,
+                ServerMessage::CommandOutput(CommandOutput {
+                    rid: None,
+                    name: "switch_thread".into(),
+                    data: serde_json::json!({
+                        "character": "qifei",
+                        "thread": "eval",
+                        "changed": false,
+                    }),
+                }),
+            );
+
+            assert_eq!(app.thread_name, "eval");
+            assert!(effect.cmds.is_empty());
+        });
+        unset_env("SHORE_RUNTIME_DIR");
+        result.unwrap();
+    }
+
+    #[test]
+    fn a_pushed_history_moves_the_client_to_the_thread_it_names() {
+        let mut app = App {
+            thread_name: "main".into(),
+            ..App::default()
+        };
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::History(History {
+                rid: None,
+                messages: vec![],
+                active_start: 0,
+                config: serde_json::json!({}),
+                selected_character: Some("qifei".into()),
+                selected_thread: Some("eval".into()),
+                revision: 1,
+            }),
+        );
+
+        assert_eq!(app.thread_name, "eval");
+    }
+
+    #[test]
+    fn a_daemon_that_names_no_thread_leaves_the_client_where_it_is() {
+        let mut app = App {
+            thread_name: "eval".into(),
+            ..App::default()
+        };
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::History(History {
+                rid: None,
+                messages: vec![],
+                active_start: 0,
+                config: serde_json::json!({}),
+                selected_character: Some("qifei".into()),
+                selected_thread: None,
+                revision: 1,
+            }),
+        );
+
+        assert_eq!(app.thread_name, "eval");
     }
 
     #[test]
@@ -3079,6 +3401,7 @@ mod redraw_tests {
                 active_start: 0,
                 config: serde_json::json!({}),
                 selected_character: None,
+                selected_thread: None,
                 revision: 0,
             }),
         );

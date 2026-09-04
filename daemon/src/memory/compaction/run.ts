@@ -10,7 +10,7 @@ import { conversationRef } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
 import { archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
-import { homeThreadOf } from "../../engine/threads.ts";
+import { homeThreadOf, threadChatModel } from "../../engine/threads.ts";
 import { resolveDisplayName } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { configView } from "../../config/preferences.ts";
@@ -336,8 +336,11 @@ async function resolveChatRequest(
   loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
   effective: LoadedConfig,
 ): Promise<SidecarRequest> {
-  const chatModel = resolveChatModelForCharacter(configView(effective), character, (v, c, n, h) =>
-    findEffectiveModel(v, c, n, h),
+  const chatModel = resolveChatModelForCharacter(
+    configView(effective),
+    character,
+    (v, c, n, h) => findEffectiveModel(v, c, n, h),
+    await threadChatModel(effective.dirs.data, character, thread),
   );
   if (chatModel === undefined) {
     throw CompactionError.llm("No chat model configured for compaction prefix rebuild");

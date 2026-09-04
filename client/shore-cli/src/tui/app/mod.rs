@@ -76,6 +76,16 @@ pub(crate) enum ValueEditorKind {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ThreadRow {
+    pub id: String,
+    pub label: Option<String>,
+    pub model: Option<String>,
+    pub home: bool,
+    pub turns: Option<u64>,
+    pub warm: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct EffectiveSamplerField {
     pub value: Option<String>,
     pub scope: Option<String>,
@@ -278,6 +288,11 @@ pub(crate) struct App {
     pub connection_status: ConnectionStatus,
     pub character_name: String,
     pub characters: Vec<CharacterInfo>,
+    pub thread_name: String,
+    pub home_thread: String,
+    pub threads: Vec<ThreadRow>,
+    pub pending_thread_refresh_rid: Option<String>,
+    pub thread_refresh_seq: u64,
     pub model_names: Vec<String>,
     pub favorite_model_names: Vec<String>,
     pub subscription_model_names: Vec<String>,
@@ -351,6 +366,11 @@ impl Default for App {
             connection_status: ConnectionStatus::Disconnected,
             character_name: String::new(),
             characters: Vec::new(),
+            thread_name: String::new(),
+            home_thread: String::new(),
+            threads: Vec::new(),
+            pending_thread_refresh_rid: None,
+            thread_refresh_seq: 0,
             model_names: Vec::new(),
             favorite_model_names: Vec::new(),
             subscription_model_names: Vec::new(),
@@ -1200,6 +1220,29 @@ impl App {
         rid
     }
 
+    pub(crate) fn begin_thread_refresh(&mut self) -> String {
+        self.thread_refresh_seq = self.thread_refresh_seq.wrapping_add(1);
+        let rid = format!("tui_threads_{}", self.thread_refresh_seq);
+        self.pending_thread_refresh_rid = Some(rid.clone());
+        rid
+    }
+
+    pub(crate) fn take_thread_refresh(&mut self, rid: Option<&str>) -> bool {
+        match (self.pending_thread_refresh_rid.as_deref(), rid) {
+            (Some(pending), Some(response_rid)) if pending == response_rid => {
+                self.pending_thread_refresh_rid = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn in_side_thread(&self) -> bool {
+        !self.thread_name.is_empty()
+            && !self.home_thread.is_empty()
+            && self.thread_name != self.home_thread
+    }
+
     pub(crate) fn sampler_settings_rid_matches(&self, rid: Option<&str>) -> bool {
         match (self.pending_sampler_settings_rid.as_deref(), rid) {
             (Some(pending), Some(response_rid)) => pending == response_rid,
@@ -1755,6 +1798,38 @@ impl App {
             .map(|(_, binding)| (binding.command.clone(), binding.needs_more_input))
     }
 
+    pub(crate) fn thread_row_label(row: &ThreadRow) -> String {
+        let mut facts: Vec<String> = Vec::new();
+        if row.home {
+            facts.push("home".to_owned());
+        }
+        if let Some(turns) = row.turns {
+            facts.push(match turns {
+                0 => "empty".to_owned(),
+                1 => "1 turn".to_owned(),
+                n => format!("{n} turns"),
+            });
+        }
+        if row.warm {
+            facts.push("warm".to_owned());
+        }
+        if let Some(model) = row.model.as_deref() {
+            facts.push(model.to_owned());
+        }
+        if let Some(label) = row.label.as_deref() {
+            facts.push(label.to_owned());
+        }
+        if facts.is_empty() {
+            row.id.clone()
+        } else {
+            format!("{} \u{2014} {}", row.id, facts.join(" \u{b7} "))
+        }
+    }
+
+    pub(crate) fn thread_id_from_row(row: &str) -> &str {
+        row.split(" \u{2014} ").next().unwrap_or(row).trim()
+    }
+
     fn update_submenu_candidates(&mut self) {
         let parent = match &self.completion.mode {
             PaletteMode::Submenu(s) => s.parent.clone(),
@@ -1770,6 +1845,7 @@ impl App {
             }
             "view" => Some("view option".into()),
             "model" => Some("model \u{00b7} ctrl+f favorites".into()),
+            "thread" => Some("thread \u{00b7} home takes the heartbeat".into()),
             _ => None,
         };
 
@@ -1800,6 +1876,14 @@ impl App {
                     .iter()
                     .filter(|c| filter.is_empty() || c.name.to_lowercase().starts_with(&filter))
                     .map(|c| c.name.clone())
+                    .collect();
+            }
+            "thread" => {
+                self.completion.candidates = self
+                    .threads
+                    .iter()
+                    .filter(|t| filter.is_empty() || t.id.to_lowercase().starts_with(&filter))
+                    .map(Self::thread_row_label)
                     .collect();
             }
             "setting" => {
@@ -1839,6 +1923,7 @@ impl App {
                 for (label, value) in [
                     ("model", self.model.clone()),
                     ("character", self.character_name.clone()),
+                    ("thread", self.thread_name.clone()),
                 ] {
                     if filter.is_empty() || label.starts_with(&filter) {
                         let shown = if value.is_empty() {
@@ -1896,6 +1981,9 @@ impl App {
                 .candidates
                 .iter()
                 .position(|c| !self.character_name.is_empty() && c == &self.character_name),
+            "thread" => self.completion.candidates.iter().position(|c| {
+                !self.thread_name.is_empty() && Self::thread_id_from_row(c) == self.thread_name
+            }),
             "setting" => self.completion.candidates.iter().position(|c| {
                 let key = Self::setting_key_from_row(c);
                 self.setting_scope_is_override(key)
@@ -2137,7 +2225,7 @@ impl App {
 
         if parent == "config" {
             let head = chosen.split(' ').next().unwrap_or_default().to_owned();
-            if head == "model" || head == "character" {
+            if head == "model" || head == "character" || head == "thread" {
                 self.switch_submenu(&head);
                 return None;
             }
@@ -2230,6 +2318,9 @@ impl App {
 
         self.completion.clear();
         self.input.exit_command_mode();
+        if parent == "thread" {
+            return Some(format!("thread use {}", Self::thread_id_from_row(&chosen)));
+        }
         if (parent == "model" || parent == "character") && chosen != "reset" {
             return Some(format!("{parent} use {chosen}"));
         }

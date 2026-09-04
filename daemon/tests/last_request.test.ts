@@ -20,7 +20,7 @@ import {
   rebuildRequestFromDisk,
 } from "../src/cache/rebuild.ts";
 import { LastRequestCache, reprimeDecision } from "../src/cache/last_request.ts";
-import { createThread, setHomeThread } from "../src/engine/threads.ts";
+import { createThread, setHomeThread, setThreadModel } from "../src/engine/threads.ts";
 import type { KeepalivePrefix, PingNowOutcome } from "../src/cache/keepalive.ts";
 import { classify, keepalivePingNowCommand } from "../src/commands/keepalive.ts";
 import { CommandError } from "../src/commands/errors.ts";
@@ -279,6 +279,55 @@ describe("rebuildRequestFromDisk", () => {
     expect(JSON.stringify(afterMove?.request.messages)).toContain("side thread");
   });
 
+  test("the warm body is built on the thread's own model when one is pinned", async () => {
+    const turn = (role: string, msg_id: string, content: string): Message =>
+      fromShape({ role, msg_id, content, autonomous: false, tool_result_only: false });
+    const { config, dataDir } = await world([
+      turn("user", "m_u", "a turn at home"),
+      turn("assistant", "m_a", "noted"),
+    ]);
+    config.models.chat.set("chat.other", {
+      ...(FIXTURE_MODEL as object),
+      name: "other",
+      qualifiedName: "chat.other",
+      modelId: "claude-other",
+    } as never);
+    const now = "2026-09-03T12:00:00.000Z";
+    await setThreadModel(dataDir, "ada", "main", "chat.other", now);
+
+    const rebuilt = await rebuildRequestFromDisk("ada", dataDir, config);
+    expect(rebuilt?.request.model).toBe("claude-other");
+  });
+
+  test("a side thread's pin is used for that thread, not for home", async () => {
+    const turn = (role: string, msg_id: string, content: string): Message =>
+      fromShape({ role, msg_id, content, autonomous: false, tool_result_only: false });
+    const { config, dataDir } = await world([
+      turn("user", "m_u", "a turn at home"),
+      turn("assistant", "m_a", "noted"),
+    ]);
+    config.models.chat.set("chat.other", {
+      ...(FIXTURE_MODEL as object),
+      name: "other",
+      qualifiedName: "chat.other",
+      modelId: "claude-other",
+    } as never);
+    const now = "2026-09-03T12:00:00.000Z";
+    await createThread(dataDir, "ada", "scratch", now, { chat_model: "chat.other" });
+    await writeFile(
+      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
+      `${JSON.stringify(turn("user", "m_su", "a turn in the side thread"))}\n` +
+        `${JSON.stringify(turn("assistant", "m_sa", "noted"))}\n`,
+    );
+
+    expect((await rebuildRequestFromDisk("ada", dataDir, config))?.request.model).toBe(
+      "claude-fixture",
+    );
+    expect(
+      (await rebuildRequestFromDisk("ada", dataDir, config, { thread: "scratch" }))?.request.model,
+    ).toBe("claude-other");
+  });
+
   test("no chat model resolves — no request, rather than one on a guessed model", async () => {
     const { config, dataDir } = await world([]);
     config.models = emptyCatalog();
@@ -506,6 +555,28 @@ describe("LastRequestCache", () => {
     await setHomeThread(dataDir, "ada", "scratch", now);
     await cache.reprimeFromDisk("ada", dataDir, config);
     expect(k.armed[1]?.context?.thread).toBe("scratch");
+  });
+
+  test("a caller that names a thread gets that one, not home", async () => {
+    const k = spy();
+    const cache = new LastRequestCache(k.service as never);
+    const pair = (id: string, text: string) => [
+      fromShape({ role: "user", msg_id: `m_${id}_u`, content: text, autonomous: false, tool_result_only: false }),
+      fromShape({ role: "assistant", msg_id: `m_${id}_a`, content: "hi", autonomous: false, tool_result_only: false }),
+    ];
+    const { config, dataDir } = await world(pair("home", "a turn in the home thread"));
+    await createThread(dataDir, "ada", "scratch", "2026-09-03T12:00:00.000Z");
+    await writeFile(
+      join(dataDir, "ada", "threads", "scratch", "active.jsonl"),
+      `${pair("scratch", "a turn in the side thread").map((m) => JSON.stringify(m)).join("\n")}\n`,
+    );
+
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config, { thread: "scratch" });
+
+    expect(k.armed[0]?.context?.thread).toBe("scratch");
+    expect(JSON.stringify(decision.kind === "push" && decision.request.messages)).toContain(
+      "side thread",
+    );
   });
 
   test("repriming a mid-turn conversation disarms rather than leaving the old body armed", async () => {

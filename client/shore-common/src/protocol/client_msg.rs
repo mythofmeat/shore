@@ -10,6 +10,8 @@ pub struct ClientHello {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub character: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
 }
 
@@ -82,6 +84,35 @@ mod tests {
 
     fn field<'val>(value: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
         value.get(key).expect("expected JSON field")
+    }
+
+    #[test]
+    fn hello_carries_the_thread_when_one_is_asked_for() {
+        let msg = ClientMessage::Hello(ClientHello {
+            client_type: "cli".to_owned(),
+            client_name: "shore-cli".to_owned(),
+            capabilities: vec!["streaming".to_owned()],
+            character: Some("ada".to_owned()),
+            thread: Some("eval".to_owned()),
+            token: Some("t".to_owned()),
+        });
+        let json = serde_json::to_value(&msg).unwrap();
+        assert_eq!(field(&json, "thread"), "eval");
+        assert_eq!(field(&json, "character"), "ada");
+    }
+
+    #[test]
+    fn hello_omits_the_thread_when_none_is_asked_for() {
+        let msg = ClientMessage::Hello(ClientHello {
+            client_type: "cli".to_owned(),
+            client_name: "shore-cli".to_owned(),
+            capabilities: vec![],
+            character: None,
+            thread: None,
+            token: None,
+        });
+        let json = serde_json::to_value(&msg).unwrap();
+        assert!(json.get("thread").is_none(), "{json}");
     }
 
     #[test]

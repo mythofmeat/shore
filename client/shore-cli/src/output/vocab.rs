@@ -257,8 +257,19 @@ impl Rows {
     }
 
     pub(crate) fn add_noted(&mut self, label: &str, value: &str, note: &str, tone: Tone) {
+        self.add_marked_noted(Mark::None, label, value, note, tone);
+    }
+
+    pub(crate) fn add_marked_noted(
+        &mut self,
+        mark: Mark,
+        label: &str,
+        value: &str,
+        note: &str,
+        tone: Tone,
+    ) {
         self.entries.push(Row {
-            mark: Mark::None,
+            mark,
             label: label.to_owned(),
             value: value.to_owned(),
             note: note.to_owned(),

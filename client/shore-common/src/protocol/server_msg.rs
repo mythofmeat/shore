@@ -25,6 +25,8 @@ pub struct History {
     pub config: serde_json::Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_character: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_thread: Option<String>,
     #[serde(default)]
     #[ts(type = "number")]
     pub revision: u64,

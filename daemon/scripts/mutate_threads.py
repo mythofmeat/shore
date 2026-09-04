@@ -206,6 +206,100 @@ MUTANTS = [
     ("archive: an unreadable active window is fatal",
      "  } catch {\n    active = \"\";\n  }",
      "  } catch (e) {\n    throw e;\n  }"),
+
+    # --- the per-thread model -------------------------------------------------
+    ("model: clearing a pin leaves the old model in place",
+     "  const record: ThreadRecord = model === undefined ? rest : { ...rest, chat_model: model };",
+     "  const record: ThreadRecord = model === undefined ? current : { ...rest, chat_model: model };"),
+    ("model: setting a pin clears it instead",
+     "  const record: ThreadRecord = model === undefined ? rest : { ...rest, chat_model: model };",
+     "  const record: ThreadRecord = rest;"),
+    ("model: pinning a thread that does not exist creates one",
+     "export async function setThreadModel(\n"
+     "  data: string,\n"
+     "  character: string,\n"
+     "  id: string,\n"
+     "  model: string | undefined,\n"
+     "  now: string,\n"
+     "): Promise<ThreadsIndex> {\n"
+     "  const index = await ensureThreads(data, character, now);\n"
+     "  const current = requireThread(index, character, id);",
+     "export async function setThreadModel(\n"
+     "  data: string,\n"
+     "  character: string,\n"
+     "  id: string,\n"
+     "  model: string | undefined,\n"
+     "  now: string,\n"
+     "): Promise<ThreadsIndex> {\n"
+     "  const index = await ensureThreads(data, character, now);\n"
+     "  const current = threadRecord(index, id) ?? { id, created_at: now, compaction: false };"),
+    ("model: the pin is never written to disk",
+     "  const next = replaceThread(index, record);\n"
+     "  await writeThreadsIndex(data, character, next);\n"
+     "  return next;\n"
+     "}\n\n"
+     "export async function threadChatModel(",
+     "  const next = replaceThread(index, record);\n"
+     "  return next;\n"
+     "}\n\n"
+     "export async function threadChatModel("),
+    ("model: an omitted thread reads main rather than wherever home points",
+     "  return threadRecord(index, thread ?? homeThread(index))?.chat_model;",
+     "  return threadRecord(index, thread ?? MAIN_THREAD)?.chat_model;"),
+    ("model: every thread reads the home thread's pin",
+     "  return threadRecord(index, thread ?? homeThread(index))?.chat_model;",
+     "  return threadRecord(index, homeThread(index))?.chat_model;"),
+    ("model: a character with no index reports the first pin it can find",
+     "  const index = await readThreadsIndex(data, character);\n"
+     "  if (index === undefined) return undefined;\n"
+     "  return threadRecord(index, thread ?? homeThread(index))?.chat_model;",
+     "  const index = await readThreadsIndex(data, character);\n"
+     "  return index?.threads.find((t) => t.chat_model !== undefined)?.chat_model;"),
+    ("model: the roster lookup matches on label rather than id",
+     "  return records.find((t) => t.id === thread)?.chat_model;",
+     "  return records.find((t) => t.label === thread)?.chat_model;"),
+    ("model: the roster lookup returns the first thread's pin whatever was asked for",
+     "  return records.find((t) => t.id === thread)?.chat_model;",
+     "  return records[0]?.chat_model;"),
+
+    # --- how far along a thread is ------------------------------------------
+    ("turns: tool results are counted as turns the user took",
+     "  return !Array.isArray(msg.content_blocks) || !isToolResultOnly(msg);",
+     "  return true;"),
+    ("turns: assistant replies are counted too, so every thread reads twice as long",
+     '  if (msg.role !== "user") return false;',
+     "  if (false as boolean) return false;"),
+    ("turns: a line with no blocks at all is dropped rather than counted",
+     "  return !Array.isArray(msg.content_blocks) || !isToolResultOnly(msg);",
+     "  return Array.isArray(msg.content_blocks) && !isToolResultOnly(msg);"),
+    ("turns: a thread that was never opened fails instead of counting zero",
+     "  try {\n"
+     '    raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), "utf8");\n'
+     "  } catch {\n"
+     "    return 0;\n"
+     "  }",
+     '  raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), "utf8");'),
+    ("turns: a torn tail line stops the count instead of being skipped",
+     "    try {\n"
+     "      parsed = JSON.parse(line);\n"
+     "    } catch {\n"
+     "      continue;\n"
+     "    }",
+     "    parsed = JSON.parse(line);"),
+    ("turns: every thread is counted against home's window",
+     "    raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), \"utf8\");",
+     "    raw = await readFile(activeJsonlIn(threadDataDir(data, character, MAIN_THREAD)), \"utf8\");"),
+    ("turns: the roster is counted, but every entry gets the first thread's count",
+     "    ids.map(async (id) => [id, await threadTurnCount(data, character, id)] as const),",
+     "    ids.map(async (id) => [id, await threadTurnCount(data, character, ids[0] ?? id)] as const),"),
+
+    # --- archiving lets go of the SDK session too ----------------------------
+    ("archive: the SDK session outlives the thread, so a new one of the same name resumes it",
+     "  forgetThreadSessions(data, character, id);\n",
+     ""),
+    ("archive: archiving one thread forgets home's session as well",
+     "  forgetThreadSessions(data, character, id);",
+     "  forgetThreadSessions(data, character, MAIN_THREAD);"),
 ]
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))

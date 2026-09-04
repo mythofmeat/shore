@@ -30,6 +30,7 @@ import {
   preferencesAreEmpty,
   resolveActiveForCharacter,
   resolveBackgroundModel,
+  resolveActiveModelAndOverlay,
   resolveChatModelForCharacter,
   resolveSamplerScopes,
   resolveSamplerSettings,
@@ -1402,5 +1403,130 @@ describe("settings shared by every sub-agent on a model", () => {
     expect(reloaded.subagentModels.get("opencode-go:glm-5.3")?.sampler.temperature).toBe(0.3);
     expect(reloaded.subagents.get("music")?.sampler.temperature).toBe(0.9);
     expect(reloaded.models.size).toBe(0);
+  });
+});
+
+describe("a thread's pinned model", () => {
+  function pinnedRoot(selected?: string): { root: string; config: LoadedConfigView } {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });
+    if (selected !== undefined) {
+      writeFileSync(
+        join(root, "data", "ashe", "preferences", "models.toml"),
+        `[selected]\nprovider = "anthropic"\nmodel_id = "${selected}"\n`,
+      );
+    }
+    return { root, config: buildConfig(STATIC_CHAT, "", root) };
+  }
+
+  test("outranks the character's own selection", () => {
+    const { config } = pinnedRoot("claude-opus-4-6");
+
+    expect(resolveChatModelForCharacter(config, "ashe", findEffectiveModel)?.modelId).toBe(
+      "claude-opus-4-6",
+    );
+    expect(
+      resolveChatModelForCharacter(config, "ashe", findEffectiveModel, "anthropic:claude-sonnet-4-6")
+        ?.modelId,
+    ).toBe("claude-sonnet-4-6");
+  });
+
+  test("an unpinned thread leaves the character's selection alone", () => {
+    const { config } = pinnedRoot("claude-opus-4-6");
+
+    expect(
+      resolveChatModelForCharacter(config, "ashe", findEffectiveModel, undefined)?.modelId,
+    ).toBe("claude-opus-4-6");
+  });
+
+  test("a pin that resolves to nothing falls back rather than leaving the thread mute", () => {
+    const { config } = pinnedRoot("claude-opus-4-6");
+
+    expect(
+      resolveChatModelForCharacter(config, "ashe", findEffectiveModel, "nowhere:nothing")?.modelId,
+    ).toBe("claude-opus-4-6");
+  });
+
+  test("a pin under a registered provider resolves to that provider's model", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });
+    const config = buildConfig(STATIC_CHAT, '[anthropic]\napi_key_env = "K"\n', root);
+
+    const pinned = resolveChatModelForCharacter(
+      config,
+      "ashe",
+      findEffectiveModel,
+      "anthropic:claude-haiku-9",
+    );
+    expect(pinned?.providerKey).toBe("anthropic");
+    expect(pinned?.modelId).toBe("claude-haiku-9");
+  });
+
+  test("half a pair is not a pin — a trailing colon falls back instead of naming nothing", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });
+    writeFileSync(
+      join(root, "data", "ashe", "preferences", "models.toml"),
+      '[selected]\nprovider = "anthropic"\nmodel_id = "claude-opus-4-6"\n',
+    );
+    const config = buildConfig(STATIC_CHAT, '[anthropic]\napi_key_env = "K"\n', root);
+
+    const pinned = resolveChatModelForCharacter(config, "ashe", findEffectiveModel, "anthropic:");
+    expect(pinned?.modelId).toBe("claude-opus-4-6");
+  });
+
+  test("a bare alias is honoured the same as a qualified pin", () => {
+    const { config } = pinnedRoot("claude-opus-4-6");
+
+    expect(resolveChatModelForCharacter(config, "ashe", findEffectiveModel, "sonnet")?.modelId).toBe(
+      "claude-sonnet-4-6",
+    );
+  });
+
+  test("the saved settings that apply are the pinned model's, not the character's", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });
+    writeFileSync(
+      join(root, "data", "ashe", "preferences", "models.toml"),
+      '[selected]\nprovider = "anthropic"\nmodel_id = "claude-opus-4-6"\n\n' +
+        '[models."anthropic:claude-opus-4-6"]\nmax_output_tokens = 32000\n\n' +
+        '[models."anthropic:claude-sonnet-4-6"]\nmax_output_tokens = 4096\n',
+    );
+    const config = buildConfig(STATIC_CHAT, "", root);
+
+    expect(
+      resolveChatModelForCharacter(config, "ashe", findEffectiveModel)?.maxOutputTokens,
+    ).toBe(32000);
+    expect(
+      resolveChatModelForCharacter(config, "ashe", findEffectiveModel, "anthropic:claude-sonnet-4-6")
+        ?.maxOutputTokens,
+    ).toBe(4096);
+  });
+
+  test("the overlay a turn is built with follows the pin too", () => {
+    const { config } = pinnedRoot("claude-opus-4-6");
+
+    const plain = resolveActiveModelAndOverlay(config, "ashe", findEffectiveModel);
+    const pinned = resolveActiveModelAndOverlay(
+      config,
+      "ashe",
+      findEffectiveModel,
+      "anthropic:claude-sonnet-4-6",
+    );
+
+    expect(plain.model?.modelId).toBe("claude-opus-4-6");
+    expect(pinned.model?.modelId).toBe("claude-sonnet-4-6");
+  });
+
+  test("background work stays on the character's model, pin or no pin", () => {
+    const { config } = pinnedRoot("claude-opus-4-6");
+
+    expect(
+      resolveBackgroundModel(config, "heartbeat", "ashe", findEffectiveModel)?.modelId,
+    ).toBe("claude-opus-4-6");
   });
 });
