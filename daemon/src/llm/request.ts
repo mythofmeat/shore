@@ -20,6 +20,7 @@ import type {
 import type { ContentBlock } from "../engine/types";
 import { rustTrim } from "../memory/lines";
 import { zaiBaseUrl, ZAI_API_PROVIDER, ZAI_SUB_PROVIDER } from "./providers/zai_config";
+import { NANOGPT_BASE_URL, NANOGPT_PROVIDER } from "./providers/nanogpt_config";
 
 const DEFAULT_MAX_TOKENS = 32768;
 
@@ -94,8 +95,8 @@ export function hardcodedProviderBaseUrl(providerKey: string): string | undefine
     case ZAI_API_PROVIDER:
     case ZAI_SUB_PROVIDER:
       return zaiBaseUrl(providerKey);
-    case "nanogpt":
-      return "https://nano-gpt.com/api/v1";
+    case NANOGPT_PROVIDER:
+      return NANOGPT_BASE_URL;
     case "opencode-go":
       return "https://opencode.ai/zen/go/v1";
     default:
