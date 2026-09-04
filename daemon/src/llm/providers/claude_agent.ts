@@ -238,8 +238,10 @@ export function nextEntries(
   plan: TurnPlan,
   pendingAssistantUuids: readonly string[] | undefined,
 ): DeliveredEntry[] {
-  const entries = [...plan.keptEntries];
-  const pending = [...(pendingAssistantUuids ?? [])];
+  const entries: DeliveredEntry[] = plan.keptEntries.map((entry) =>
+    plan.fork ? { hash: entry.hash } : { ...entry },
+  );
+  const pending = plan.fork ? [] : [...(pendingAssistantUuids ?? [])];
   for (const m of plan.delivered) {
     const entry: DeliveredEntry = { hash: messageHash(m) };
     if (m.role === "assistant") {
@@ -249,6 +251,43 @@ export function nextEntries(
     entries.push(entry);
   }
   return entries;
+}
+
+const MISSING_RESUME_ANCHOR = "No message found with message.uuid of:";
+
+function errorChainContains(error: unknown, text: string): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (!seen.has(current)) {
+    seen.add(current);
+    if (typeof current === "string") return current.includes(text);
+    if (!(current instanceof Error)) return false;
+    if (current.message.includes(text)) return true;
+    current = current.cause;
+  }
+  return false;
+}
+
+function discardMissingAnchor(
+  path: string,
+  key: string,
+  record: SessionRecord | undefined,
+  plan: TurnPlan,
+  error: unknown,
+): void {
+  if (
+    record === undefined ||
+    plan.resumeSessionAt === undefined ||
+    !errorChainContains(error, MISSING_RESUME_ANCHOR)
+  ) {
+    return;
+  }
+
+  const latest = readBook(path);
+  if (canonicalJson(latest[key]) !== canonicalJson(record)) return;
+  delete latest[key];
+  writeBook(path, latest);
+  shoreLog.warn("claude_agent: discarded a session with a missing resume anchor");
 }
 
 export function conversationKey(req: SidecarRequest): string {
@@ -574,6 +613,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
       };
     } catch (e) {
       abort.abort();
+      discardMissingAnchor(path, key, record, plan, e);
       yield streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now);
     }
   }
@@ -774,6 +814,7 @@ export async function* claudeAgentToolLoopEvents(
       },
     };
   } catch (e) {
+    discardMissingAnchor(path, key, record, plan, e);
     yield streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now);
   } finally {
     abort.abort();

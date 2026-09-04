@@ -138,8 +138,8 @@ MUTANTS = [
      "  if (record === undefined || record.version === undefined) return coldStart(msgs);"),
     ("version: the book is stamped with the version it is not",
      SESSIONS,
-     "export const SESSION_BOOK_VERSION = 3;",
-     "export const SESSION_BOOK_VERSION = 2;"),
+     "export const SESSION_BOOK_VERSION = 4;",
+     "export const SESSION_BOOK_VERSION = 3;"),
 
     # --- reading a stream the provider does not own ---------------------------
     ("stream: the model's own events are ignored, so nothing streams at all",

@@ -162,6 +162,20 @@ describe("planTurn fork bookkeeping", () => {
     expect(plan.prompt).toContain("different nudge");
     expect(plan.prompt).not.toContain("still there?");
   });
+
+  test("a fork drops parent UUIDs because the SDK remints the copied transcript", () => {
+    const record: SessionRecord = {
+      version: SESSION_BOOK_VERSION,
+      sessionId: "session-1",
+      entries: nextEntries(planTurn(undefined, [user1, asst1, user2]), ["asst-uuid-1"]),
+      pendingAssistantUuids: ["asst-uuid-2"],
+    };
+    const plan = planTurn(record, [user1, asst1, user2b]);
+    const entries = nextEntries(plan, record.pendingAssistantUuids);
+
+    expect(plan.fork).toBe(true);
+    expect(entries.every((entry) => entry.uuid === undefined)).toBe(true);
+  });
 });
 
 describe("nextEntries", () => {
@@ -353,6 +367,11 @@ describe("the session book version", () => {
 
   test("a book from before rounds were anchored one by one is not trusted", () => {
     const stale = { ...seed([user1]), version: 2 };
+    expect(planTurn(stale, [user1, asst1, user2]).resume).toBeUndefined();
+  });
+
+  test("a book from before forked UUIDs were dropped is not trusted", () => {
+    const stale = { ...seed([user1]), version: 3 };
     expect(planTurn(stale, [user1, asst1, user2]).resume).toBeUndefined();
   });
 

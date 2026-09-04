@@ -125,7 +125,11 @@ assistant uuid is available to anchor on, the turn cold starts rather than forki
 
 A fork also resets the delivered record to the anchor. Everything after it is re-sent, because the
 forked session does not contain it — keeping those entries would claim the SDK had seen messages
-it never did. `tests/claude_agent_sessions.test.ts` pins all of this.
+it never did. The SDK remints the UUID of every entry copied into a fork, so the new record drops
+all parent UUIDs as well; only assistant frames observed after the fork are valid anchors in that
+session. If the CLI nevertheless reports that a requested anchor is missing, shore discards that
+record so a retry cold-starts instead of repeating the same deterministic failure.
+`tests/claude_agent_sessions.test.ts` pins all of this.
 
 ## Tools
 

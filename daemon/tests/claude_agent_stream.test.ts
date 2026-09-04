@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
+import {
+  ClaudeAgentProvider,
+  nextEntries,
+  planTurn,
+} from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent, type FakeScript } from "../src/testing/fake_agent_query.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import {
@@ -277,6 +281,51 @@ describe("what the turn leaves behind", () => {
     });
     const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
     expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_0_asst_1"]);
+  });
+
+  test("a missing resume anchor discards the stale record so the next attempt starts cold", async () => {
+    const dir = await bookDir();
+    const path = join(dir, "sessions.json");
+    const key = "default\u0000";
+    const opening = request().messages[0];
+    if (opening === undefined) throw new Error("request fixture has no opening message");
+    const history = [
+      opening,
+      { role: "assistant" as const, content: [{ type: "text" as const, text: "hi" }] },
+      { role: "user" as const, content: [{ type: "text" as const, text: "first question" }] },
+    ];
+    const stale: SessionBook = {
+      [key]: {
+        version: SESSION_BOOK_VERSION,
+        sessionId: "forked-session",
+        entries: nextEntries(planTurn(undefined, history), ["missing-parent-uuid"]),
+      },
+    };
+    await writeFile(path, JSON.stringify(stale), "utf8");
+    const agent = fakeAgent({
+      rounds: [],
+      throwOn: new Error(
+        "Claude Code returned an error result: No message found with message.uuid of: missing-parent-uuid",
+      ),
+    });
+    const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
+    const req = request({
+      messages: [
+        ...history.slice(0, 2),
+        { role: "user", content: [{ type: "text", text: "edited question" }] },
+      ],
+    });
+
+    for await (const _event of provider.stream(req)) {
+      void _event;
+    }
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({});
+
+    for await (const _event of provider.stream(req)) {
+      void _event;
+    }
+    expect(agent.calls[1]?.options.resume).toBeUndefined();
+    expect(agent.calls[1]?.options.resumeSessionAt).toBeUndefined();
   });
 });
 

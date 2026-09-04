@@ -13,7 +13,7 @@ export interface DeliveredEntry {
   uuid?: string;
 }
 
-export const SESSION_BOOK_VERSION = 3;
+export const SESSION_BOOK_VERSION = 4;
 
 export interface SessionRecord {
   version: number;
