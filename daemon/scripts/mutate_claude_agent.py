@@ -69,12 +69,15 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 AGENT = "src/llm/providers/claude_agent.ts"
 SESSIONS = "src/llm/providers/agent_sessions.ts"
 TOOLS = "src/llm/providers/claude_agent_tools.ts"
+CREDENTIALS = "src/llm/credentials.ts"
+REQUEST = "src/llm/request.ts"
 
 TESTS = [
     "tests/claude_agent_sessions.test.ts",
     "tests/claude_agent_stream.test.ts",
     "tests/claude_agent_tools.test.ts",
     "tests/claude_agent_loop.test.ts",
+    "tests/request.test.ts",
 ]
 
 # (label, file, find, replace)
@@ -367,6 +370,24 @@ MUTANTS = [
      AGENT,
      "      attached.push(block);\n",
      ""),
+    # --- what the turn is billed to ------------------------------------------
+    ("billing: the subprocess inherits the daemon's environment, key included",
+     AGENT,
+     "  const env: Record<string, string> = {\n    PATH: process.env.PATH ?? \"\",",
+     "  const env: Record<string, string> = {\n    ...(process.env as Record<string, string>),\n    PATH: process.env.PATH ?? \"\","),
+    ("billing: a key is forwarded even when the turn asked for none",
+     AGENT,
+     "  if (req.api_key !== \"\") env.ANTHROPIC_API_KEY = req.api_key;",
+     "  env.ANTHROPIC_API_KEY = req.api_key;"),
+    ("billing: no sdk runs on a subscription, so the key is spent instead",
+     CREDENTIALS,
+     "const KEYLESS_SDKS = new Set<string>([\"claude_agent\"]);",
+     "const KEYLESS_SDKS = new Set<string>([]);"),
+    ("billing: the subscription sdk is routed through the key lookup anyway",
+     REQUEST,
+     "  if (isKeylessSdk(model.sdk)) {",
+     "  if (false as boolean) {"),
+
     ("images: every turn is sent in the streaming form, not only the ones with pictures",
      AGENT,
      "  if (plan.images.length === 0) return plan.prompt;\n",

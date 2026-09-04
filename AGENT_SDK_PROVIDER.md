@@ -38,9 +38,22 @@ Then select `claude-agent:claude-opus-5` (or the bare `opus5` alias) as a charac
 There is no model discovery endpoint, so models must be declared statically. `[chat.*]` is
 deprecated but still honored; move to whatever replaces it when that lands.
 
-**Credentials.** With no API key configured the SDK uses the Claude Code OAuth credentials found
-via `CLAUDE_CONFIG_DIR` — that is the subscription path, and the point of the exercise. Setting a
-key for the provider makes it use that key (and bill normally) instead.
+**Credentials.** This sdk is *keyless*: `isKeylessSdk` (`daemon/src/llm/credentials.ts`) short-
+circuits the key lookup, so a turn is always built with `api_key: ""` under the candidate name
+`subscription`. Configuring a key for the provider does not change that — the key is ignored, not
+preferred. The CLI subprocess therefore authenticates with the Claude Code OAuth credentials at
+`<CLAUDE_CONFIG_DIR>/.credentials.json`, which is the subscription path and the point of the
+exercise.
+
+The daemon's own environment is *not* inherited by the subprocess. `buildOptions` constructs
+`Options.env` from scratch, forwarding only `PATH`, `HOME`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`
+and `CLAUDE_CONFIG_DIR` when set. So an `ANTHROPIC_API_KEY` exported for shore's other providers
+cannot reach this one and cannot silently move a character onto API billing. Two independent
+guards have to fail for that to happen, and both are covered in `mutate_claude_agent.py` under
+`billing:`.
+
+Because `CLAUDE_CONFIG_DIR` is forwarded, it also selects *which* Claude account a character bills
+against when several are logged in under separate config directories.
 
 ## What it does
 

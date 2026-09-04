@@ -216,6 +216,41 @@ describe("the options the SDK is run with", () => {
   });
 });
 
+describe("the environment the subprocess is given", () => {
+  async function envOf(req: SidecarRequest): Promise<Record<string, string>> {
+    const { agent } = await collect({ rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] }, req);
+    return (agent.calls[0]?.options.env ?? {}) as Record<string, string>;
+  }
+
+  test("the daemon's own Anthropic key is not inherited, so a subscription turn stays one", async () => {
+    const had = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-daemon-key";
+    try {
+      expect(await envOf(request({ api_key: "" }))).not.toHaveProperty("ANTHROPIC_API_KEY");
+    } finally {
+      if (had === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = had;
+    }
+  });
+
+  test("a key the request actually carries is passed on", async () => {
+    expect((await envOf(request({ api_key: "sk-ant-asked-for" }))).ANTHROPIC_API_KEY).toBe(
+      "sk-ant-asked-for",
+    );
+  });
+
+  test("nothing else of the daemon's environment leaks in", async () => {
+    const had = process.env.SHORE_SECRET_FIXTURE;
+    process.env.SHORE_SECRET_FIXTURE = "do-not-forward";
+    try {
+      expect(Object.keys(await envOf(request()))).not.toContain("SHORE_SECRET_FIXTURE");
+    } finally {
+      if (had === undefined) delete process.env.SHORE_SECRET_FIXTURE;
+      else process.env.SHORE_SECRET_FIXTURE = had;
+    }
+  });
+});
+
 describe("what the turn leaves behind", () => {
   test("the session is written under the current book version", async () => {
     const { path } = await collect({
