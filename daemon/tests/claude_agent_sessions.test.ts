@@ -364,14 +364,35 @@ describe("the session book version", () => {
 });
 
 describe("replaying a history that is not all text", () => {
+  const withImage: WireMessage = {
+    role: "user",
+    content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AA" } }],
+  };
+
   test("an image-only turn is named rather than silently deleted", () => {
-    const withImage: WireMessage = {
-      role: "user",
-      content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AA" } }],
-    };
     const plan = planTurn(undefined, [withImage, asst1, user2]);
-    expect(plan.prompt).toContain("image omitted");
+    expect(plan.prompt).toContain("image attached");
     expect(plan.prompt).toContain("image/png");
+  });
+
+  test("the image itself is carried alongside the text, not just described", () => {
+    const plan = planTurn(undefined, [withImage, asst1, user2]);
+    expect(plan.images).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "AA" } },
+    ]);
+  });
+
+  test("a history with no pictures carries none", () => {
+    expect(planTurn(undefined, [user1, asst1, user2]).images).toEqual([]);
+  });
+
+  test("images are carried in the order they were sent", () => {
+    const second: WireMessage = {
+      role: "user",
+      content: [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: "BB" } }],
+    };
+    const plan = planTurn(undefined, [withImage, asst1, second]);
+    expect(plan.images.map((b) => (b.type === "image" ? b.source.data : ""))).toEqual(["AA", "BB"]);
   });
 });
 

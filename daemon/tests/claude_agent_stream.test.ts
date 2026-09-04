@@ -270,3 +270,54 @@ describe("generate", () => {
     ]);
   });
 });
+
+describe("sending a picture", () => {
+  const withImage = request({
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "what is this?" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+        ],
+      },
+    ],
+  });
+
+  test("a turn carrying no images is still sent as plain text", async () => {
+    const { agent } = await collect({ rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] });
+    expect(typeof agent.calls[0]?.prompt).toBe("string");
+  });
+
+  test("the image reaches the model rather than only being described", async () => {
+    const { agent } = await collect(
+      { rounds: [{ blocks: [{ kind: "text", text: "a freezer" }] }] },
+      withImage,
+    );
+    const prompt = agent.calls[0]?.prompt;
+    expect(typeof prompt).not.toBe("string");
+    const sent = [];
+    for await (const turn of prompt as AsyncIterable<{ message: { content: unknown } }>) {
+      sent.push(turn.message.content);
+    }
+    expect(sent).toEqual([
+      [
+        { type: "text", text: expect.stringContaining("what is this?") as unknown as string },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+      ],
+    ]);
+  });
+
+  test("the text still says where the picture was", async () => {
+    const { agent } = await collect(
+      { rounds: [{ blocks: [{ kind: "text", text: "a freezer" }] }] },
+      withImage,
+    );
+    const prompt = agent.calls[0]?.prompt as AsyncIterable<{
+      message: { content: { type: string; text?: string }[] };
+    }>;
+    const sent = [];
+    for await (const turn of prompt) sent.push(turn.message.content[0]?.text ?? "");
+    expect(sent[0]).toContain("[image attached: image/png]");
+  });
+});

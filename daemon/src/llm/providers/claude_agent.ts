@@ -6,6 +6,7 @@ import {
   type CanUseTool,
   type Options,
   type SDKMessage,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RawMessageStreamEvent } from "@anthropic-ai/sdk/resources/messages";
@@ -122,12 +123,13 @@ function resultText(content: string | ContentBlock[]): string {
     .join("\n");
 }
 
-function replayBlock(block: ContentBlock): string {
+function replayBlock(block: ContentBlock, attached: ContentBlock[]): string {
   switch (block.type) {
     case "text":
       return block.text;
     case "image":
-      return omissionNotice(block.source.media_type, "this provider replays history as text");
+      attached.push(block);
+      return `[image attached: ${block.source.media_type}]`;
     case "tool_use":
       return (
         `<prior_tool_call name="${block.name}">\n` +
@@ -144,28 +146,38 @@ function replayBlock(block: ContentBlock): string {
   }
 }
 
-function replayText(msg: WireMessage): string {
+function replayText(msg: WireMessage, attached: ContentBlock[]): string {
   return hashableBlocks(msg)
-    .map(replayBlock)
+    .map((block) => replayBlock(block, attached))
     .filter((text) => text !== "")
     .join("\n");
 }
 
 
-function renderReplay(msgs: readonly WireMessage[]): string {
-  return msgs
+export interface Replay {
+  text: string;
+  images: ContentBlock[];
+}
+
+function renderReplay(msgs: readonly WireMessage[]): Replay {
+  const images: ContentBlock[] = [];
+  const text = msgs
     .map((m) => {
-      const text = replayText(m);
-      if (text.trim() === "") return "";
-      if (m.role === "assistant") return `<prior_assistant_turn>\n${text}\n</prior_assistant_turn>`;
-      return text;
+      const rendered = replayText(m, images);
+      if (rendered.trim() === "") return "";
+      if (m.role === "assistant") {
+        return `<prior_assistant_turn>\n${rendered}\n</prior_assistant_turn>`;
+      }
+      return rendered;
     })
     .filter((t) => t !== "")
     .join("\n\n");
+  return { text, images };
 }
 
 export interface TurnPlan {
   prompt: string;
+  images: ContentBlock[];
   resume?: string;
   resumeSessionAt?: string;
   fork: boolean;
@@ -174,7 +186,14 @@ export interface TurnPlan {
 }
 
 function coldStart(msgs: readonly WireMessage[]): TurnPlan {
-  return { prompt: renderReplay(msgs), fork: false, keptEntries: [], delivered: [...msgs] };
+  const replay = renderReplay(msgs);
+  return {
+    prompt: replay.text,
+    images: replay.images,
+    fork: false,
+    keptEntries: [],
+    delivered: [...msgs],
+  };
 }
 
 export function planTurn(record: SessionRecord | undefined, msgs: readonly WireMessage[]): TurnPlan {
@@ -187,8 +206,10 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
   if (k === 0) return coldStart(msgs);
 
   if (k === record.entries.length && tail.length > 0) {
+    const replay = renderReplay(tail.filter((m) => m.role !== "assistant"));
     return {
-      prompt: renderReplay(tail.filter((m) => m.role !== "assistant")),
+      prompt: replay.text,
+      images: replay.images,
       resume: record.sessionId,
       fork: false,
       keptEntries: record.entries.slice(0, k),
@@ -201,8 +222,10 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
   if (at === undefined) return coldStart(msgs);
 
   const resumed = msgs.slice(anchor + 1);
+  const replay = renderReplay(resumed);
   return {
-    prompt: renderReplay(resumed),
+    prompt: replay.text,
+    images: replay.images,
     resume: record.sessionId,
     resumeSessionAt: at,
     fork: true,
@@ -465,10 +488,25 @@ export class BlockAssembler {
   }
 }
 
+export type AgentPrompt = string | AsyncIterable<SDKUserMessage>;
+
 export type AgentQuery = (params: {
-  prompt: string;
+  prompt: AgentPrompt;
   options: Options;
 }) => AsyncIterable<SDKMessage>;
+
+async function* oneUserTurn(content: ContentBlock[]): AsyncIterable<SDKUserMessage> {
+  yield {
+    type: "user",
+    message: { role: "user", content },
+    parent_tool_use_id: null,
+  } as SDKUserMessage;
+}
+
+export function agentPrompt(plan: TurnPlan): AgentPrompt {
+  if (plan.images.length === 0) return plan.prompt;
+  return oneUserTurn([{ type: "text", text: plan.prompt }, ...plan.images]);
+}
 
 export interface ClaudeAgentDeps {
   runQuery?: AgentQuery;
@@ -503,7 +541,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     try {
       yield { type: "start", model: req.model };
 
-      const run = this.#runQuery({ prompt: plan.prompt, options: buildOptions(req, plan, abort) });
+      const run = this.#runQuery({ prompt: agentPrompt(plan), options: buildOptions(req, plan, abort) });
 
       for await (const event of anthropicContentEvents(rawEventsOf(run, seen), acc)) {
         if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
@@ -685,7 +723,7 @@ export async function* claudeAgentToolLoopEvents(
     yield { type: "start", model: req.model };
 
     const run = (deps.runQuery ?? query)({
-      prompt: plan.prompt,
+      prompt: agentPrompt(plan),
       options: buildOptions(req, plan, abort, {
         instance,
         canUseTool,

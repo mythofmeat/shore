@@ -2,7 +2,7 @@ import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import type { AgentQuery } from "../llm/providers/claude_agent.ts";
+import type { AgentPrompt, AgentQuery } from "../llm/providers/claude_agent.ts";
 
 export type FakeBlock =
   | { kind: "text"; text: string }
@@ -42,7 +42,7 @@ export interface FakeScript {
 }
 
 export interface FakeCall {
-  prompt: string;
+  prompt: AgentPrompt;
   options: Options;
 }
 

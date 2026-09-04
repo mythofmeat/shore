@@ -7,8 +7,10 @@ import { buildContent, encodeImageBlock } from "./images.ts";
 
 export type AssistantImageMode = "tool_pair" | "text_standin";
 
+const TOOL_PAIR_SDKS: readonly Sdk[] = ["anthropic", "claude_agent"];
+
 export function assistantImageModeForRequest(sdk: Sdk, hasToolDefs: boolean): AssistantImageMode {
-  return sdk === "anthropic" && hasToolDefs ? "tool_pair" : "text_standin";
+  return TOOL_PAIR_SDKS.includes(sdk) && hasToolDefs ? "tool_pair" : "text_standin";
 }
 
 interface AssistantImageRender {

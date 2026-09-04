@@ -66,17 +66,23 @@ CONTEXT = ROOT / "src/handler/context.ts"
 # (label, file, find, replace)
 MUTANTS = [
     # --- mode selection ---------------------------------------------------
-    ("mode: anthropic alone is enough, tool defs are not required", WIRE,
-     'return sdk === "anthropic" && hasToolDefs ? "tool_pair" : "text_standin";',
-     'return sdk === "anthropic" ? "tool_pair" : "text_standin";'),
+    ("mode: the sdk alone is enough, tool defs are not required", WIRE,
+     'return TOOL_PAIR_SDKS.includes(sdk) && hasToolDefs ? "tool_pair" : "text_standin";',
+     'return TOOL_PAIR_SDKS.includes(sdk) ? "tool_pair" : "text_standin";'),
     ("mode: tool defs alone are enough, the sdk is not checked", WIRE,
-     'return sdk === "anthropic" && hasToolDefs ? "tool_pair" : "text_standin";',
+     'return TOOL_PAIR_SDKS.includes(sdk) && hasToolDefs ? "tool_pair" : "text_standin";',
      'return hasToolDefs ? "tool_pair" : "text_standin";'),
+    ("mode: only the Anthropic API pairs images with a tool call", WIRE,
+     'const TOOL_PAIR_SDKS: readonly Sdk[] = ["anthropic", "claude_agent"];',
+     'const TOOL_PAIR_SDKS: readonly Sdk[] = ["anthropic"];'),
+    ("mode: every sdk pairs images with a tool call", WIRE,
+     'const TOOL_PAIR_SDKS: readonly Sdk[] = ["anthropic", "claude_agent"];',
+     'const TOOL_PAIR_SDKS: readonly Sdk[] = ["anthropic", "claude_agent", "openai", "gemini"];'),
     ("mode: always the tool pair", WIRE,
-     'return sdk === "anthropic" && hasToolDefs ? "tool_pair" : "text_standin";',
+     'return TOOL_PAIR_SDKS.includes(sdk) && hasToolDefs ? "tool_pair" : "text_standin";',
      'return "tool_pair";'),
     ("mode: always the stand-in", WIRE,
-     'return sdk === "anthropic" && hasToolDefs ? "tool_pair" : "text_standin";',
+     'return TOOL_PAIR_SDKS.includes(sdk) && hasToolDefs ? "tool_pair" : "text_standin";',
      'return "text_standin";'),
 
     # --- synthetic ids ----------------------------------------------------

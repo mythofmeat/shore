@@ -56,6 +56,9 @@ ledger, retries, fallback and the client stream all work as they do for any othe
 - **Finish reasons** come from the model's `message_delta`, falling back to the run's result when
   the stream never said how it ended, so a turn truncated at `max_tokens` is not reported as a
   clean stop.
+- **Images** are sent rather than described. History replays as text, so each picture leaves an
+  `[image attached: <type>]` marker where it was and the image itself rides along with the prompt.
+  Assistant-attached images use the same `tool_pair` encoding as the Anthropic provider.
 - **Reasoning effort** passes through: `low` / `medium` / `high` / `xhigh` / `max`. `off` and
   `adaptive` are dropped, because the SDK takes a named level or nothing.
 - **Harness suppression**: `settingSources: []`, `tools: []` and `skills: []` (omitting either is
@@ -165,9 +168,12 @@ the model reaching for the bare name.
 
 ### Other gaps
 
-- **Images still do not reach the model.** The prompt is a string, so an attached image is
-  announced as an omission notice rather than sent. `assistantImageModeForRequest` also still
-  hardcodes `anthropic`, so assistant-attached images degrade to `[sent an image]` stand-ins.
+- **The streaming-input prompt form is only exercised on image turns.** `query()` takes either a
+  string or an `AsyncIterable<SDKUserMessage>`, and only the latter can carry an image. A turn
+  with no images still goes as a string, so the common path is unchanged; a turn with one switches
+  form. The SDK documents some behaviour as differing between the two (`result.usage` is described
+  as per-turn "in streaming-input sessions"), and that difference has not been checked against the
+  real CLI.
 
 - **`total_cost_usd` is deliberately unset** — though so is Anthropic's. Cost comes from shore's
   own pricing catalogue, and `subscription = true` already suppresses it, so this is not a

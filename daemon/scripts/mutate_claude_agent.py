@@ -360,9 +360,25 @@ MUTANTS = [
     # --- what a text-only replay says about the rest -------------------------
     ("replay: an image-only turn is dropped again, so the history skips it in silence",
      AGENT,
-     "    case \"image\":\n"
-     "      return omissionNotice(block.source.media_type, \"this provider replays history as text\");",
-     "    case \"image\":\n      return \"\";"),
+     "      attached.push(block);\n"
+     "      return `[image attached: ${block.source.media_type}]`;",
+     '      return "";'),
+    ("images: the picture is described but never sent",
+     AGENT,
+     "      attached.push(block);\n",
+     ""),
+    ("images: every turn is sent in the streaming form, not only the ones with pictures",
+     AGENT,
+     "  if (plan.images.length === 0) return plan.prompt;\n",
+     ""),
+    ("images: the text is dropped when a picture rides along",
+     AGENT,
+     "  return oneUserTurn([{ type: \"text\", text: plan.prompt }, ...plan.images]);",
+     "  return oneUserTurn(plan.images);"),
+    ("images: the pictures are dropped when the text rides along",
+     AGENT,
+     "  return oneUserTurn([{ type: \"text\", text: plan.prompt }, ...plan.images]);",
+     "  return oneUserTurn([{ type: \"text\", text: plan.prompt }]);"),
 ]
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
