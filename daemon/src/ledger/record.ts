@@ -1,12 +1,82 @@
 import { shoreLog } from "../log.ts";
 
-import { isSubscriptionProvider, Ledger, type RecordCall, type Timing, type Usage } from "./store.ts";
+import {
+  isSubscriptionCall,
+  Ledger,
+  setNanoGptSubscriptionState,
+  type RecordCall,
+  type Timing,
+  type Usage,
+} from "./store.ts";
 import { toolSurfaceFingerprint } from "./tool_surface.ts";
 import { estimateTokens } from "../engine/tokens.ts";
+import { describeDiscoveryError } from "../llm/discovery.ts";
 import { describeError, toLlmError } from "../llm/errors.ts";
+import {
+  fetchNanoGptSubscription,
+  nanoGptSubscriptionFresh,
+  nanoGptSubscriptionPath,
+  readNanoGptSubscription,
+  writeNanoGptSubscription,
+} from "../llm/nanogpt_subscription.ts";
+import { NANOGPT_BASE_URL, isNanoGptProvider } from "../llm/providers/nanogpt_config.ts";
 import type { CallContext, GenerateResponse, SidecarRequest, StreamEvent } from "../llm/types.ts";
 
 const ledgers = new Map<string, Ledger | null>();
+let nanoGptCacheDir: string | undefined;
+let nanoGptRefresh: Promise<void> | undefined;
+
+export function setNanoGptSubscriptionCacheDir(cacheDir: string | undefined): void {
+  nanoGptCacheDir = cacheDir;
+}
+
+export async function prepareCallAccounting(
+  req: SidecarRequest,
+  fetchImpl: typeof fetch = fetch,
+  now: number = Date.now(),
+): Promise<void> {
+  const provider = req.provider_key ?? req.sdk;
+  if (!isNanoGptProvider(provider) || nanoGptCacheDir === undefined) return;
+  const path = nanoGptSubscriptionPath(nanoGptCacheDir);
+  let cached;
+  try {
+    cached = await readNanoGptSubscription(path);
+  } catch (e) {
+    shoreLog.warn(`shore: could not read NanoGPT subscription state: ${String(e)}`);
+  }
+  setNanoGptSubscriptionState(cached);
+  if (nanoGptSubscriptionFresh(cached, now)) return;
+  nanoGptRefresh ??= refreshNanoGptSubscription(req, path, fetchImpl, now).finally(() => {
+    nanoGptRefresh = undefined;
+  });
+  await nanoGptRefresh;
+}
+
+async function refreshNanoGptSubscription(
+  req: SidecarRequest,
+  path: string,
+  fetchImpl: typeof fetch,
+  now: number,
+): Promise<void> {
+  const result = await fetchNanoGptSubscription(
+    req.base_url ?? NANOGPT_BASE_URL,
+    req.api_key,
+    fetchImpl,
+    now,
+  );
+  if ("err" in result) {
+    shoreLog.warn(
+      `shore: could not refresh NanoGPT subscription state: ${describeDiscoveryError(result.err)}`,
+    );
+    return;
+  }
+  try {
+    await writeNanoGptSubscription(path, result.ok);
+    setNanoGptSubscriptionState(result.ok);
+  } catch (e) {
+    shoreLog.warn(`shore: could not cache NanoGPT subscription state: ${String(e)}`);
+  }
+}
 
 export function ledgerFor(path: string): Ledger | null {
   const existing = ledgers.get(path);
@@ -173,13 +243,19 @@ export function beginCallAttempt(
   const estimate = recentAttemptEstimate(ledger, provider, req.model, effectiveCallType);
   return {
     ledger,
-    pricingReady: isSubscriptionProvider(provider) || provider !== "nanogpt"
+    pricingReady: !isNanoGptProvider(provider) || isSubscriptionCall(provider, req.model)
       ? Promise.resolve()
-      : ledger.pricing.getOrFetch(provider, req.model).then(() => undefined).catch((e: unknown) => {
-          shoreLog.warn(
-            `shore: could not prepare pricing for ${provider}/${req.model}: ${String(e)}`,
-          );
-        }),
+      : prepareCallAccounting(req)
+          .then(async () => {
+            if (!isSubscriptionCall(provider, req.model)) {
+              await ledger.pricing.getOrFetch(provider, req.model);
+            }
+          })
+          .catch((e: unknown) => {
+            shoreLog.warn(
+              `shore: could not prepare accounting for ${provider}/${req.model}: ${String(e)}`,
+            );
+          }),
     id: ledger.beginAttempt(
       {
         provider,

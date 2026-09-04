@@ -333,6 +333,9 @@ function effectiveModelToJson(entry: EffectiveModel, favorites: ReadonlySet<stri
     source: entry.source,
     hidden: entry.hidden,
     favorite: favorites.has(m.qualifiedName),
+    ...(entry.subscriptionIncluded === undefined
+      ? {}
+      : { subscription_included: entry.subscriptionIncluded }),
   };
 }
 

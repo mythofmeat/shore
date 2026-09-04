@@ -6,6 +6,7 @@ import type { Args, Json } from "./conversation.ts";
 
 export interface UsageContext {
   ledger: string;
+  cacheDir?: string;
   usage: UsageConfig;
   callStore?: CallStore | undefined;
 }
@@ -15,6 +16,7 @@ export async function usage(ctx: UsageContext, args: Args): Promise<Json> {
     const store = ctx.callStore;
     return await usageReport({
       ledger: ctx.ledger,
+      ...(ctx.cacheDir === undefined ? {} : { cacheDir: ctx.cacheDir }),
       args,
       usage: ctx.usage,
       ...(store === undefined ? {} : { rateLimits: () => store.latestRateLimits() }),

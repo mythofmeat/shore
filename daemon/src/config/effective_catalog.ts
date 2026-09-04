@@ -55,6 +55,7 @@ export interface EffectiveModel {
   source: EffectiveSource;
   resolved: ResolvedModel;
   hidden: boolean;
+  subscriptionIncluded?: boolean;
 }
 
 export function findEffectiveModel(
@@ -128,6 +129,7 @@ export function listEffectiveModels(
     source: "static" as const,
     resolved,
     hidden: false,
+    ...optionalSubscription(readProviderDiscovery(cacheDir, resolved.providerKey, resolved.modelId)),
   }));
 
   for (const [providerKey, entry] of config.providers.entries()) {
@@ -144,10 +146,19 @@ export function listEffectiveModels(
         source: "discovered",
         resolved: buildResolvedFromProvider(providerKey, entry, disc.model_id, disc),
         hidden,
+        ...optionalSubscription(disc),
       });
     }
   }
   return out;
+}
+
+function optionalSubscription(
+  model: DiscoveredModel | undefined,
+): { subscriptionIncluded?: boolean } {
+  return model?.subscription_included === undefined
+    ? {}
+    : { subscriptionIncluded: model.subscription_included };
 }
 
 function compareBytes(a: string, b: string): number {

@@ -4,7 +4,7 @@ import type { Database } from "bun:sqlite";
 
 import type { UsageConfig as AppUsageConfig } from "../config/app.ts";
 
-import { isSubscriptionProvider } from "./store.ts";
+import { isSubscriptionCall } from "./store.ts";
 import { usageCostEntries, usageTotals, type QueryFilter } from "./query.ts";
 import {
   atHour,
@@ -889,7 +889,7 @@ export function enforceBudgetForCall(
     return undefined;
   }
 
-  if (isSubscriptionProvider(call.provider)) {
+  if (isSubscriptionCall(call.provider, call.model, now)) {
     return undefined;
   }
 

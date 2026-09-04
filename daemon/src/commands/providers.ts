@@ -9,6 +9,13 @@ import {
   type DiscoveredModel,
   type ProviderModelsCache,
 } from "../llm/discovery.ts";
+import {
+  fetchNanoGptSubscription,
+  nanoGptSubscriptionPath,
+  writeNanoGptSubscription,
+  type NanoGptSubscriptionState,
+} from "../llm/nanogpt_subscription.ts";
+import { isNanoGptProvider } from "../llm/providers/nanogpt_config.ts";
 import { defaultBaseUrl } from "../llm/request.ts";
 import { readLearnedImageSupport } from "../llm/image_support.ts";
 import { toRfc3339 } from "../ledger/zoned.ts";
@@ -16,6 +23,7 @@ import { defaultSdk } from "../config/models.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { enabledKeys, isVisible, type ProviderEntry } from "../config/providers.ts";
 import { internalError, invalidRequest, notFound, providerError } from "./errors.ts";
+import { setNanoGptSubscription } from "../ledger/store.ts";
 
 export type Args = Record<string, unknown>;
 
@@ -114,6 +122,13 @@ export async function refreshOne(
     throw internalError(describeDiscoveryError(discovered.err));
   }
 
+  let subscription: NanoGptSubscriptionState | undefined;
+  if (isNanoGptProvider(provider)) {
+    const result = await fetchNanoGptSubscription(baseUrl, key, fetchImpl);
+    if ("err" in result) throw internalError(describeDiscoveryError(result.err));
+    subscription = result.ok;
+  }
+
   const cache: ProviderModelsCache = {
     version: CACHE_VERSION,
     provider_key: provider,
@@ -125,6 +140,13 @@ export async function refreshOne(
   const path = cachePath(cacheDir, provider);
   try {
     await writeCache(path, cache);
+    if (subscription !== undefined) {
+      await writeNanoGptSubscription(nanoGptSubscriptionPath(cacheDir), subscription);
+      setNanoGptSubscription(
+        cache.models.filter((model) => model.subscription_included === true).map((model) => model.model_id),
+        subscription,
+      );
+    }
   } catch (e) {
     throw internalError(`failed to write provider cache: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -194,6 +216,12 @@ function discoveredToJson(m: DiscoveredModel, learned: Record<string, boolean>):
     supports_images: m.supports_images ?? learned[m.model_id] ?? null,
     supports_reasoning: m.supports_reasoning ?? null,
     supports_prompt_cache: m.supports_prompt_cache ?? null,
+    ...(m.subscription_included === undefined
+      ? {}
+      : { subscription_included: m.subscription_included }),
+    ...(m.subscription_input_multiplier === undefined
+      ? {}
+      : { subscription_input_multiplier: m.subscription_input_multiplier }),
     discovered_at: m.discovered_at,
   };
 }

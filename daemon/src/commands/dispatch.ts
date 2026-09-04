@@ -400,6 +400,7 @@ function usageContext(
   }
   return {
     ledger: deps.ledgerPath,
+    cacheDir: session.config.dirs.cache,
     usage: usageConfigView(session.config.app.usage),
     callStore: deps.callStore,
   };

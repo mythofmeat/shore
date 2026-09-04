@@ -1717,6 +1717,19 @@ fn favorite_model_names(models: &[serde_json::Value]) -> Vec<String> {
         .collect()
 }
 
+fn subscription_model_names(models: &[serde_json::Value]) -> Vec<String> {
+    models
+        .iter()
+        .filter(|model| {
+            model
+                .get("subscription_included")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+        })
+        .filter_map(model_switch_name)
+        .collect()
+}
+
 fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Option<String> {
     let name = model.get("name").and_then(|v| v.as_str())?;
     let mut identifiers = vec![name];
@@ -1847,6 +1860,7 @@ fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
                 let models = crate::output::models_by_provider(data);
                 app.model_names = models.iter().filter_map(model_switch_name).collect();
                 app.favorite_model_names = favorite_model_names(&models);
+                app.subscription_model_names = subscription_model_names(&models);
             }
         }
         "providers" => {
@@ -2418,6 +2432,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         let models = crate::output::models_by_provider(&co.data);
                         app.model_names = models.iter().filter_map(model_switch_name).collect();
                         app.favorite_model_names = favorite_model_names(&models);
+                        app.subscription_model_names = subscription_model_names(&models);
                         let active = co
                             .data
                             .get("active")

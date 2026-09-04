@@ -531,3 +531,157 @@ describe("reading the cache back", () => {
     expect(readCache(cachePath(dir, "openrouter"))).rejects.toThrow();
   });
 });
+
+describe("nano-gpt subscription coverage", () => {
+  const NANOGPT_BASE = "https://nano-gpt.com/api/v1";
+  const SUB_URL = "https://nano-gpt.com/api/subscription/v1/models?detailed=true";
+  const PAID_URL = "https://nano-gpt.com/api/paid/v1/models?detailed=true";
+
+  function roster(ids: string[]): string {
+    return JSON.stringify({ data: ids.map((id) => ({ id })) });
+  }
+
+  function split(bodies: Record<string, string>) {
+    const calls: string[] = [];
+    const impl = (async (url: string | URL | Request) => {
+      const href = requestUrl(url);
+      calls.push(href);
+      return new Response(bodies[href] ?? '{"data":[]}', { status: 200 });
+    }) as unknown as typeof fetch;
+    return { impl, calls };
+  }
+
+  async function discovered(bodies: Record<string, string>): Promise<DiscoveredModel[]> {
+    const { impl } = split(bodies);
+    const got = await discoverOpenAiCompatible("nanogpt", NANOGPT_BASE, "k", impl);
+    return (got as { ok: DiscoveredModel[] }).ok;
+  }
+
+  const coverage = (models: readonly DiscoveredModel[]): Record<string, boolean | undefined> =>
+    Object.fromEntries(models.map((m) => [m.model_id, m.subscription_included]));
+
+  async function cacheWith(models: unknown[]): Promise<string> {
+    const dir = await scratch();
+    const path = cachePath(dir, "nanogpt");
+    await mkdir(join(dir, "providers", "nanogpt"), { recursive: true });
+    await writeFile(path, JSON.stringify({ ...cacheOf({ provider_key: "nanogpt" }), models }));
+    return path;
+  }
+
+  test("asks both documented endpoints, never the preference-sensitive canonical one", async () => {
+    const { impl, calls } = split({});
+    await discoverOpenAiCompatible("nanogpt", NANOGPT_BASE, "k", impl);
+    expect(calls, "the canonical list silently restricts once a subscription is live").toEqual([
+      SUB_URL,
+      PAID_URL,
+    ]);
+  });
+
+  test("the union is the whole catalog, not either half", async () => {
+    const models = await discovered({ [SUB_URL]: roster(["a", "b"]), [PAID_URL]: roster(["c"]) });
+    expect(models.map((m) => m.model_id).sort()).toEqual(["a", "b", "c"]);
+  });
+
+  test("membership follows the endpoint that returned the model", async () => {
+    const models = await discovered({
+      [SUB_URL]: roster(["covered"]),
+      [PAID_URL]: roster(["paygo"]),
+    });
+    expect(coverage(models)).toEqual({ covered: true, paygo: false });
+  });
+
+  test("a model both endpoints claim is not covered, since its route is unknowable", async () => {
+    const models = await discovered({
+      [SUB_URL]: roster(["auto-model", "covered"]),
+      [PAID_URL]: roster(["auto-model", "paygo"]),
+    });
+    expect(coverage(models)).toEqual({ "auto-model": false, covered: true, paygo: false });
+  });
+
+  test("every entry carries an explicit verdict, so none is costed on an absent field", async () => {
+    const models = await discovered({ [SUB_URL]: roster(["a"]), [PAID_URL]: roster(["b"]) });
+    for (const m of models) expect(typeof m.subscription_included, m.model_id).toBe("boolean");
+  });
+
+  test("the input multiplier is read where the payload carries it", async () => {
+    const models = await discovered({
+      [SUB_URL]: JSON.stringify({
+        data: [
+          { id: "double", subscription: { included: true, inputTokenMultiplier: 2 } },
+          { id: "plain" },
+        ],
+      }),
+    });
+    expect(models[0]?.subscription_input_multiplier).toBe(2);
+    expect(models[1]?.subscription_input_multiplier).toBeUndefined();
+  });
+
+  test("a failure on either half fails the refresh rather than shrinking the roster", async () => {
+    for (const failing of [SUB_URL, PAID_URL]) {
+      const impl = (async (url: string | URL | Request) => {
+        const href = requestUrl(url);
+        return new Response(href === failing ? "boom" : '{"data":[]}', {
+          status: href === failing ? 500 : 200,
+        });
+      }) as unknown as typeof fetch;
+      const got = await discoverOpenAiCompatible("nanogpt", NANOGPT_BASE, "k", impl);
+      expect(got, failing).toHaveProperty("err");
+    }
+  });
+
+  test("coverage survives the cache round trip", async () => {
+    const models = await discovered({
+      [SUB_URL]: roster(["covered"]),
+      [PAID_URL]: roster(["paygo"]),
+    });
+    const dir = await scratch();
+    const path = cachePath(dir, "nanogpt");
+    await writeCache(path, cacheOf({ provider_key: "nanogpt", models }));
+    expect(coverage((await readCache(path))?.models ?? [])).toEqual({
+      covered: true,
+      paygo: false,
+    });
+  });
+
+  test("a cache written before the field existed falls back to the inline block", async () => {
+    const path = await cacheWith([
+      {
+        provider_key: "nanogpt",
+        model_id: "covered",
+        sdk: "openai",
+        discovered_at: NOW,
+        raw_provider_metadata: {
+          id: "covered",
+          subscription: { included: true, inputTokenMultiplier: 2 },
+        },
+      },
+      {
+        provider_key: "nanogpt",
+        model_id: "paygo",
+        sdk: "openai",
+        discovered_at: NOW,
+        raw_provider_metadata: { id: "paygo", subscription: { included: false } },
+      },
+    ]);
+    const models = (await readCache(path))?.models ?? [];
+    expect(coverage(models), "an old cache must not read as uncovered across the board").toEqual({
+      covered: true,
+      paygo: false,
+    });
+    expect(models[0]?.subscription_input_multiplier).toBe(2);
+  });
+
+  test("an explicit field wins over a stale inline block", async () => {
+    const path = await cacheWith([
+      {
+        provider_key: "nanogpt",
+        model_id: "auto-model",
+        sdk: "openai",
+        discovered_at: NOW,
+        subscription_included: false,
+        raw_provider_metadata: { id: "auto-model", subscription: { included: true } },
+      },
+    ]);
+    expect(coverage((await readCache(path))?.models ?? [])).toEqual({ "auto-model": false });
+  });
+});

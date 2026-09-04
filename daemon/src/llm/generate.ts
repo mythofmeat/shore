@@ -1,7 +1,13 @@
 import { shoreLog } from "../log.ts";
 
 import { budgetBlockFor } from "../ledger/gate.ts";
-import { beginCallAttempt, recordGenerate, recordGenerateError, recordingStream } from "../ledger/record.ts";
+import {
+  beginCallAttempt,
+  prepareCallAccounting,
+  recordGenerate,
+  recordGenerateError,
+  recordingStream,
+} from "../ledger/record.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
@@ -117,6 +123,7 @@ async function callProvider(
   const provider = providerFor(request, deps);
   ensureCallContext(request, deps);
 
+  await prepareCallAccounting(request);
   const blocked = budgetBlockFor(request);
   if (blocked) throw BudgetBlocked.from(blocked);
   const attempt = beginCallAttempt(request.context, request);
@@ -239,6 +246,7 @@ export async function generateViaStream(
     request.api_key = apiKey;
     if (request.context !== undefined) request.context.api_key_name = candidate.name;
 
+    await prepareCallAccounting(request);
     const blocked = budgetBlockFor(request);
     if (blocked) throw BudgetBlocked.from(blocked);
     const started = beginCallAttempt(request.context, request);

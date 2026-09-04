@@ -26,9 +26,9 @@ import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
 import { Ledger } from "./ledger/store.ts";
 import { backfillLedgerCosts } from "./ledger/usage.ts";
-import { setSubscriptionProviders } from "./ledger/store.ts";
+import { setNanoGptSubscription, setSubscriptionProviders } from "./ledger/store.ts";
 import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
-import { ledgerFor } from "./ledger/record.ts";
+import { ledgerFor, setNanoGptSubscriptionCacheDir } from "./ledger/record.ts";
 import { closeLedgers, setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
 import { captureProviders } from "./llm/capture.ts";
@@ -58,6 +58,12 @@ import {
   type ConnectMemoryBackend,
 } from "./memory/backend.ts";
 import { SnapshotGate } from "./snapshot_gate.ts";
+import { cachePath, readCacheSync } from "./llm/discovery.ts";
+import {
+  nanoGptSubscriptionPath,
+  readNanoGptSubscriptionSync,
+} from "./llm/nanogpt_subscription.ts";
+import { NANOGPT_PROVIDER } from "./llm/providers/nanogpt_config.ts";
 
 const CALL_STORE_RETENTION_DAYS = 14;
 const CALL_STORE_MAX_BYTES = 536_870_912;
@@ -539,6 +545,16 @@ export function applySubscriptionProviders(registry: CharacterRegistry): void {
     }
   }
   setSubscriptionProviders(flat);
+  const config = registry.globalConfig();
+  const models = readCacheSync(cachePath(config.dirs.cache, NANOGPT_PROVIDER));
+  const state = readNanoGptSubscriptionSync(nanoGptSubscriptionPath(config.dirs.cache));
+  setNanoGptSubscription(
+    (models?.models ?? [])
+      .filter((model) => model.subscription_included === true)
+      .map((model) => model.model_id),
+    state,
+  );
+  setNanoGptSubscriptionCacheDir(config.dirs.cache);
 }
 
 function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () => void } {

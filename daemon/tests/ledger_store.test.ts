@@ -6,7 +6,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Ledger, type RecordCall } from "../src/ledger/store.ts";
+import {
+  Ledger,
+  setNanoGptSubscription,
+  type RecordCall,
+} from "../src/ledger/store.ts";
 import { PricingEngine, type ModelPricing, type PricingStore } from "../src/ledger/pricing.ts";
 import { setSubscriptionProviders } from "../src/ledger/store.ts";
 import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "../src/config/providers.ts";
@@ -152,6 +156,64 @@ describe("writing rows the daemon's schema accepts", () => {
       ).not.toBe("subscription");
     } finally {
       setSubscriptionProviders(DEFAULT_SUBSCRIPTION_PROVIDERS);
+      cleanup();
+    }
+  });
+
+  test("NanoGPT subscription costing needs covered, active, and fresh at once", () => {
+    const { path, cleanup } = freshLedger();
+    const now = Date.parse("2026-09-04T06:00:00.000Z");
+    const state = (active: boolean, fetchedAt: number) => ({
+      version: 1 as const,
+      fetched_at: new Date(fetchedAt).toISOString(),
+      active,
+      state: active ? "active" as const : "inactive" as const,
+    });
+    const pricing = new Map<string, ModelPricing>([
+      ["nanogpt/covered", {
+        input_per_token: 0.01,
+        output_per_token: 0.01,
+        cache_read_per_token: 0,
+        cache_write_per_token: 0,
+      }],
+      ["nanogpt/uncovered", {
+        input_per_token: 0.01,
+        output_per_token: 0.01,
+        cache_read_per_token: 0,
+        cache_write_per_token: 0,
+      }],
+    ]);
+    const engine = new PricingEngine(
+      { get: (id) => pricing.get(id), put: () => {} },
+      async () => { throw new Error("no network in tests"); },
+    );
+    try {
+      const ledger = Ledger.open(path, engine);
+      const record = (model: string) => ledger.record(
+        call({ provider: "nanogpt", model }),
+        () => new Date(now),
+      );
+
+      setNanoGptSubscription(["covered"], state(true, now));
+      expect(record("covered")).toMatchObject({
+        cost_source: "subscription",
+        total_cost: 0,
+      });
+
+      setNanoGptSubscription(["covered"], state(true, now - 5 * 60 * 1000));
+      expect(record("covered")).toMatchObject({
+        cost_source: "pricing_catalog",
+        total_cost: 1.5,
+      });
+
+      setNanoGptSubscription(["covered"], state(false, now));
+      expect(record("covered").cost_source).toBe("pricing_catalog");
+
+      setNanoGptSubscription(["covered"], state(true, now));
+      expect(record("uncovered").cost_source).toBe("pricing_catalog");
+      ledger.close();
+    } finally {
+      setNanoGptSubscription([], undefined);
       cleanup();
     }
   });

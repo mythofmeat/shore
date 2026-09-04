@@ -7,17 +7,27 @@ import {
   closeLedgers,
   ledgerFor,
   continuationOf,
+  prepareCallAccounting,
   recordGenerate,
   recordGenerateError,
   recordingStream,
+  setNanoGptSubscriptionCacheDir,
 } from "../src/ledger/record.ts";
-import { Ledger } from "../src/ledger/store.ts";
+import {
+  isSubscriptionCall,
+  Ledger,
+  setNanoGptSubscription,
+} from "../src/ledger/store.ts";
 import { PricingEngine, type ModelPricing, type PricingStore } from "../src/ledger/pricing.ts";
 import type { CallContext, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
+import { dirname } from "node:path";
+import { requestUrl } from "./support/fetch.ts";
 
 afterEach(() => {
   closeLedgers();
+  setNanoGptSubscription([], undefined);
+  setNanoGptSubscriptionCacheDir(undefined);
 });
 
 const REQ = {
@@ -74,6 +84,58 @@ async function withLedger(body: (path: string) => Promise<void>): Promise<void> 
     cleanup();
   }
 }
+
+test("NanoGPT accounting refreshes stale state before a budget can inspect it", async () => {
+  const { path, cleanup } = freshLedger();
+  const now = Date.parse("2026-09-04T06:00:00.000Z");
+  const nano = {
+    ...REQ,
+    sdk: "nanogpt",
+    provider_key: "nanogpt",
+    model: "covered",
+  } as SidecarRequest;
+  const calls: string[] = [];
+  const fetchImpl = (async (url: string | URL | Request) => {
+    calls.push(requestUrl(url));
+    return Response.json({
+      active: true,
+      state: "active",
+      weeklyInputTokens: { used: 1, remaining: 9, resetAt: now + 60_000 },
+    });
+  }) as unknown as typeof fetch;
+  try {
+    setNanoGptSubscription(["covered"], undefined);
+    setNanoGptSubscriptionCacheDir(dirname(path));
+    await prepareCallAccounting(nano, fetchImpl, now);
+    expect(calls).toEqual(["https://nano-gpt.com/api/subscription/v1/usage"]);
+    expect(isSubscriptionCall("nanogpt", "covered", now)).toBe(true);
+  } finally {
+    cleanup();
+  }
+});
+
+test("a failed NanoGPT state refresh leaves the call billable", async () => {
+  const { path, cleanup } = freshLedger();
+  const now = Date.parse("2026-09-04T06:00:00.000Z");
+  const nano = {
+    ...REQ,
+    sdk: "nanogpt",
+    provider_key: "nanogpt",
+    model: "covered",
+  } as SidecarRequest;
+  try {
+    setNanoGptSubscription(["covered"], undefined);
+    setNanoGptSubscriptionCacheDir(dirname(path));
+    await prepareCallAccounting(
+      nano,
+      (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch,
+      now,
+    );
+    expect(isSubscriptionCall("nanogpt", "covered", now)).toBe(false);
+  } finally {
+    cleanup();
+  }
+});
 
 describe("what a stream records", () => {
   test("a call waits for its model price before the ledger row is written", async () => {

@@ -41,7 +41,7 @@ import { describeError } from "../llm/errors.ts";
 import { BudgetBlocked } from "../llm/generate.ts";
 import { consumeStream, type StreamResult } from "../llm/stream.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
-import { beginCallAttempt, recordingStream } from "../ledger/record.ts";
+import { beginCallAttempt, prepareCallAccounting, recordingStream } from "../ledger/record.ts";
 import type {
   CallContext,
   ProviderOptions,
@@ -546,6 +546,7 @@ async function streamTurn(
         : { context: { ...request.context, api_key_name: candidate.name } }),
     };
 
+    await prepareCallAccounting(call);
     const blocked = budgetBlockFor(call);
     if (blocked) throw BudgetBlocked.from(blocked);
     const initialAttempt = call.context?.ledger === undefined

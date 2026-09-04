@@ -21,7 +21,7 @@ import {
   DEFAULT_BACKOFF_BASE_MS,
   DEFAULT_MAX_RETRIES,
 } from "../llm/fallback.ts";
-import { beginCallAttempt, recordingStream } from "../ledger/record.ts";
+import { beginCallAttempt, prepareCallAccounting, recordingStream } from "../ledger/record.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { BudgetBlocked } from "../llm/generate.ts";
@@ -232,6 +232,7 @@ export async function runSubagent(
         )
       : genericToolLoopEvents(provider, request, phase, signal, Date.now, retry);
 
+  await prepareCallAccounting(request);
   const blocked = budgetBlockFor(request);
   if (blocked) {
     await trace({ error: blocked.message });

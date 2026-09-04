@@ -1,7 +1,12 @@
 import { shoreLog } from "../log.ts";
 
 import { toRfc3339 } from "../ledger/zoned.ts";
-import { isNanoGptProvider, NANOGPT_MODELS_QUERY } from "./providers/nanogpt_config.ts";
+import {
+  isNanoGptProvider,
+  NANOGPT_MODELS_QUERY,
+  NANOGPT_PAID_MODELS_URL,
+  NANOGPT_SUBSCRIPTION_MODELS_URL,
+} from "./providers/nanogpt_config.ts";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -42,6 +47,8 @@ export interface DiscoveredModel {
   supports_reasoning?: boolean;
   supports_prompt_cache?: boolean;
   support?: DiscoveredModelSupport;
+  subscription_included?: boolean;
+  subscription_input_multiplier?: number;
   raw_provider_metadata?: unknown;
   discovered_at: string;
 }
@@ -159,6 +166,18 @@ function asModel(value: unknown, cacheVersion: number): DiscoveredModel | undefi
     ...optionalBoolean("supports_reasoning", v),
     ...optionalBoolean("supports_prompt_cache", v),
     ...maybe("support", support),
+    ...maybe(
+      "subscription_included",
+      typeof v.subscription_included === "boolean"
+        ? v.subscription_included
+        : inlineSubscriptionIncluded(rawMetadata),
+    ),
+    ...maybe(
+      "subscription_input_multiplier",
+      typeof v.subscription_input_multiplier === "number"
+        ? v.subscription_input_multiplier
+        : inlineSubscriptionMultiplier(rawMetadata),
+    ),
     ...(rawMetadata === undefined ? {} : { raw_provider_metadata: rawMetadata }),
     discovered_at: v.discovered_at,
   };
@@ -196,6 +215,26 @@ function asSupport(value: unknown): DiscoveredModelSupport | undefined {
     ...maybe("effort", effort),
     ...maybe("thinking", thinking),
   };
+}
+
+function inlineSubscriptionBlock(raw: unknown): Record<string, unknown> | undefined {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+  const block = (raw as Record<string, unknown>).subscription;
+  if (typeof block !== "object" || block === null || Array.isArray(block)) return undefined;
+  return block as Record<string, unknown>;
+}
+
+export function inlineSubscriptionIncluded(raw: unknown): boolean | undefined {
+  const block = inlineSubscriptionBlock(raw);
+  if (block === undefined) return undefined;
+  return typeof block.included === "boolean" ? block.included : undefined;
+}
+
+export function inlineSubscriptionMultiplier(raw: unknown): number | undefined {
+  const block = inlineSubscriptionBlock(raw);
+  if (block === undefined) return undefined;
+  const value = block.inputTokenMultiplier;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 function optionalString(key: string, v: Record<string, unknown>): Record<string, string> {
@@ -267,6 +306,8 @@ function serializeModel(m: DiscoveredModel): Record<string, unknown> {
     supports_reasoning: m.supports_reasoning,
     supports_prompt_cache: m.supports_prompt_cache,
     support: m.support,
+    subscription_included: m.subscription_included,
+    subscription_input_multiplier: m.subscription_input_multiplier,
     raw_provider_metadata: m.raw_provider_metadata ?? undefined,
     discovered_at: m.discovered_at,
   };
@@ -305,10 +346,62 @@ export async function discoverOpenAiCompatible(
   apiKey: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DiscoveryResult<DiscoveredModel[]>> {
+  if (isNanoGptProvider(providerKey)) {
+    return await discoverNanoGpt(providerKey, baseUrl, apiKey, fetchImpl);
+  }
   return await fetchModels(providerKey, baseUrl, "openai", buildModelsUrl(baseUrl, providerKey), fetchImpl, {
     accept: "application/json",
     authorization: `Bearer ${apiKey}`,
   });
+}
+
+async function discoverNanoGpt(
+  providerKey: string,
+  baseUrl: string,
+  apiKey: string,
+  fetchImpl: typeof fetch,
+): Promise<DiscoveryResult<DiscoveredModel[]>> {
+  const headers = { accept: "application/json", authorization: `Bearer ${apiKey}` };
+  const covered = await fetchModels(
+    providerKey,
+    baseUrl,
+    "openai",
+    NANOGPT_SUBSCRIPTION_MODELS_URL,
+    fetchImpl,
+    headers,
+  );
+  if ("err" in covered) return covered;
+  const paid = await fetchModels(
+    providerKey,
+    baseUrl,
+    "openai",
+    NANOGPT_PAID_MODELS_URL,
+    fetchImpl,
+    headers,
+  );
+  if ("err" in paid) return paid;
+  return { ok: mergeNanoGptRosters(covered.ok, paid.ok) };
+}
+
+export function mergeNanoGptRosters(
+  covered: readonly DiscoveredModel[],
+  paid: readonly DiscoveredModel[],
+): DiscoveredModel[] {
+  const coveredIds = new Set(covered.map((m) => m.model_id));
+  const paidIds = new Set(paid.map((m) => m.model_id));
+  const merged = new Map<string, DiscoveredModel>();
+  for (const m of [...covered, ...paid]) {
+    if (merged.has(m.model_id)) continue;
+    merged.set(m.model_id, {
+      ...m,
+      subscription_included: coveredIds.has(m.model_id) && !paidIds.has(m.model_id),
+      ...maybe(
+        "subscription_input_multiplier",
+        m.subscription_input_multiplier ?? inlineSubscriptionMultiplier(m.raw_provider_metadata),
+      ),
+    });
+  }
+  return [...merged.values()];
 }
 
 export async function discoverAnthropic(

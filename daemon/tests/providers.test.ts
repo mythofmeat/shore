@@ -22,6 +22,10 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { catalogFromSections, emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { cachePath } from "../src/llm/discovery.ts";
+import {
+  nanoGptSubscriptionPath,
+  readNanoGptSubscription,
+} from "../src/llm/nanogpt_subscription.ts";
 import { ZAI_SUB_BASE_URL } from "../src/llm/providers/zai_config.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -448,6 +452,46 @@ describe("refreshProviderModels guards", () => {
 });
 
 describe("refreshProviderModels over the wire", () => {
+  test("NanoGPT refresh writes the complete roster and subscription state together", async () => {
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+      if (url.includes("/subscription/v1/models")) {
+        return Response.json({ data: [{ id: "covered" }, { id: "auto-model" }] });
+      }
+      if (url.includes("/paid/v1/models")) {
+        return Response.json({ data: [{ id: "paid" }, { id: "auto-model" }] });
+      }
+      if (url.endsWith("/subscription/v1/usage")) {
+        return Response.json({ active: false, state: "inactive" });
+      }
+      return Response.json({ error: "unexpected URL" }, { status: 500 });
+    }) as typeof fetch;
+    const world = await build(
+      `[nanogpt]\napi_key_env = "${KEY_SET}"\n` +
+        `[nanogpt.discovery]\nenabled = true\n`,
+      "",
+      [],
+      fetchImpl,
+    );
+
+    await refreshProviderModels(world.ctx, { provider: "nanogpt" });
+    const listed = listProviderModels(world.ctx, { provider: "nanogpt" }) as {
+      discovered: Array<{ model_id: string; subscription_included: boolean }>;
+    };
+    expect(
+      Object.fromEntries(
+        listed.discovered.map((model) => [model.model_id, model.subscription_included]),
+      ),
+    ).toEqual({ covered: true, "auto-model": false, paid: false });
+    expect(
+      await readNanoGptSubscription(nanoGptSubscriptionPath(world.cacheDir)),
+    ).toMatchObject({ active: false, state: "inactive" });
+  });
+
   test("a successful refresh writes the cache", async () => {
     const world = await build(
       `[alpha]\nbase_url = "<upstream>"\n` +

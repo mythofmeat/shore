@@ -7,7 +7,12 @@ import { CommandError } from "../src/commands/errors.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
 import { PRICING_TTL_MS } from "../src/ledger/store.ts";
+import {
+  nanoGptSubscriptionPath,
+  writeNanoGptSubscription,
+} from "../src/llm/nanogpt_subscription.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
+import { dirname } from "node:path";
 
 const cleanups: Array<() => void> = [];
 const realFetch = globalThis.fetch;
@@ -169,4 +174,26 @@ test("the call store's rate-limit readings reach the report", async () => {
 
   const without = (await usage(ctxFor(ledger), {})) as { rate_limits: unknown[] };
   expect(without.rate_limits, "no store is an empty list, not a missing key").toEqual([]);
+});
+
+test("the NanoGPT quota is a local cache read and never reaches the network", async () => {
+  const ledger = ledgerWithOneCall();
+  const cacheDir = dirname(ledger);
+  await writeNanoGptSubscription(nanoGptSubscriptionPath(cacheDir), {
+    version: 1,
+    fetched_at: "2026-09-04T06:00:00.000Z",
+    active: true,
+    state: "active",
+    weeklyInputTokens: {
+      used: 12_000_000,
+      remaining: 48_000_000,
+      limit: 60_000_000,
+      resetAt: "2026-09-07T00:00:00.000Z",
+    },
+  });
+  refuseCatalog();
+  const result = (await usage({ ledger, cacheDir, usage: {} }, {})) as {
+    nanogpt_subscription: { weeklyInputTokens: { remaining: number } };
+  };
+  expect(result.nanogpt_subscription.weeklyInputTokens.remaining).toBe(48_000_000);
 });

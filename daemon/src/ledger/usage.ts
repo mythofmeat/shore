@@ -30,8 +30,13 @@ import {
   type QueryFilter,
 } from "./query.ts";
 import { ledgerFor } from "./record.ts";
-import { isSubscriptionProvider } from "./store.ts";
+import { isSubscriptionCall } from "./store.ts";
 import type { Ledger } from "./store.ts";
+import {
+  nanoGptSubscriptionPath,
+  readNanoGptSubscriptionSync,
+  type NanoGptSubscriptionState,
+} from "../llm/nanogpt_subscription.ts";
 import {
   daysFromMonday,
   DAY_MS,
@@ -52,6 +57,7 @@ const ANOMALY_LOOKBACK = "7d";
 
 export interface UsageRequest {
   ledger: string;
+  cacheDir?: string;
   args?: Record<string, unknown> | undefined;
   usage?: UsageConfig | undefined;
   rateLimits?: () => unknown[];
@@ -240,6 +246,9 @@ export async function usageReport(
     opts,
     now,
     request.rateLimits?.() ?? [],
+    request.cacheDir === undefined
+      ? undefined
+      : readNanoGptSubscriptionSync(nanoGptSubscriptionPath(request.cacheDir)),
   );
 }
 
@@ -308,6 +317,7 @@ function summaryPayload(
   opts: UsageOptions,
   now: number,
   rateLimits: unknown[],
+  nanoGptSubscription: NanoGptSubscriptionState | undefined,
 ): unknown {
   const cacheHealth = activeAnthropicCharacters(db, filter).map(([character, lastRow]) => ({
     character,
@@ -336,6 +346,7 @@ function summaryPayload(
     cache_coverage: cacheCoverage(db, filter),
     cost_sources: costSourceTotals(db, filter),
     rate_limits: rateLimits,
+    nanogpt_subscription: nanoGptSubscription ?? null,
     call_attempts: callAttemptStatus(db),
     budgets: budgetStatuses(db, config, now, opts),
   };
@@ -389,7 +400,7 @@ export async function backfillMissingCosts(
 
   const fetched = new Map<string, string | undefined>();
   for (const row of rows) {
-    if (isSubscriptionProvider(row.provider)) continue;
+    if (isSubscriptionCall(row.provider, row.model)) continue;
     const key = `${row.provider}/${row.model}`;
     if (fetched.has(key)) {
       continue;
@@ -406,7 +417,7 @@ export async function backfillMissingCosts(
 
   let updated = 0;
   for (const row of rows) {
-    if (isSubscriptionProvider(row.provider)) {
+    if (isSubscriptionCall(row.provider, row.model)) {
       try {
         updateCosts(db, row.id, FLAT_PLAN_COST);
         updated += 1;

@@ -6,6 +6,7 @@ import { reportsCacheWrites } from "../llm/cache_capability.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import {
   beginCallAttempt,
+  prepareCallAccounting,
   recordGenerate,
   recordGenerateError,
   type CallAttempt,
@@ -291,6 +292,7 @@ export class KeepaliveService {
       return { status: "skipped", cold: false, reason: "no_prefix", detail: "no cached request" };
     }
     const ping = buildKeepalivePing(prefix, this.#labels(entry));
+    await prepareCallAccounting(ping, fetch, this.#now());
     const blocked = budgetBlockFor(ping, this.#now());
     if (blocked !== undefined) {
       return {
@@ -305,6 +307,7 @@ export class KeepaliveService {
     try {
       attempt = ping.context?.ledger === undefined ? undefined : beginCallAttempt(ping.context, ping);
       const response = await this.#send(ping);
+      await attempt?.pricingReady;
       recordGenerate(ping.context, ping, response, attempt);
       return {
         status: "sent",
@@ -312,6 +315,7 @@ export class KeepaliveService {
         usage: response.usage,
       };
     } catch (e) {
+      await attempt?.pricingReady;
       recordGenerateError(ping.context, ping, startedAt, this.#now, attempt);
       return { status: "failed", cold: false, detail: truncate(String(e), 160) };
     }
@@ -403,6 +407,7 @@ export class KeepaliveService {
 
     const ping = buildKeepalivePing(prefix, this.#labels(entry));
 
+    await prepareCallAccounting(ping, fetch, this.#now());
     const blocked = budgetBlockFor(ping, this.#now());
     if (blocked !== undefined) {
       this.#skip(character, entry, `usage budget "${blocked.budget_name}"`);
@@ -416,6 +421,7 @@ export class KeepaliveService {
       attempt = ping.context?.ledger === undefined ? undefined : beginCallAttempt(ping.context, ping);
       response = await this.#send(ping);
     } catch (e) {
+      await attempt?.pricingReady;
       recordGenerateError(ping.context, ping, startedAt, this.#now, attempt);
       entry.keepalive.onPingFailed(this.#now());
       this.#push({
@@ -427,6 +433,7 @@ export class KeepaliveService {
       return;
     }
 
+    await attempt?.pricingReady;
     recordGenerate(ping.context, ping, response, attempt);
 
     const usage = response.usage;

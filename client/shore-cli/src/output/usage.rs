@@ -163,11 +163,43 @@ pub(crate) fn write_summary<W: Write>(out: &mut W, data: &Value) {
         }
     }
 
+    if let Some(subscription) = data
+        .get("nanogpt_subscription")
+        .filter(|value| value.is_object())
+    {
+        blank(out);
+        write_nanogpt_subscription(out, subscription);
+    }
+
     let mut headline = Rows::new();
     add_cache_rows(&mut headline, data);
     if !headline.is_empty() {
         blank(out);
         headline.write(out);
+    }
+}
+
+fn write_nanogpt_subscription<W: Write>(out: &mut W, subscription: &Value) {
+    let state = text(subscription, "state");
+    let tone = match state {
+        "active" => Tone::Good,
+        "grace" => Tone::Warn,
+        _ => Tone::Muted,
+    };
+    let weekly = subscription.get("weeklyInputTokens");
+    let reset = weekly.map_or("", |value| text(value, "resetAt"));
+    let value = if reset.is_empty() {
+        state.to_owned()
+    } else {
+        format!("{state} · resets {}", short_when(reset))
+    };
+    let mut header = Rows::new();
+    header.add_toned("NanoGPT subscription", &value, tone);
+    header.write(out);
+    if let Some(row) = weekly {
+        let mut rows = Rows::new();
+        quota(&mut rows, row, "weekly input", "remaining", "limit");
+        rows.write(out);
     }
 }
 
@@ -688,6 +720,48 @@ mod tests {
         let out = render(|buf| write_limits(buf, &payload));
         assert!(out.contains("api.anthropic.com"), "{out}");
         assert!(out.contains("left of"), "{out}");
+    }
+
+    #[test]
+    fn summary_reports_the_nanogpt_weekly_subscription_quota() {
+        let mut payload = summary_payload();
+        if let Some(fields) = payload.as_object_mut() {
+            drop(fields.insert(
+                "nanogpt_subscription".into(),
+                json!({
+                    "active": true,
+                    "state": "active",
+                    "weeklyInputTokens": {
+                        "used": 12_000_000,
+                        "remaining": 48_000_000,
+                        "limit": 60_000_000,
+                        "resetAt": "2026-09-07T00:00:00+00:00"
+                    }
+                }),
+            ));
+        }
+        let out = render(|buf| write_summary(buf, &payload));
+        assert!(out.contains("NanoGPT subscription"), "{out}");
+        assert!(out.contains("48.0M left of 60.0M"), "{out}");
+        assert!(out.contains("resets"), "{out}");
+    }
+
+    #[test]
+    fn summary_reports_an_inactive_nanogpt_subscription_without_a_quota() {
+        let mut payload = summary_payload();
+        if let Some(fields) = payload.as_object_mut() {
+            drop(fields.insert(
+                "nanogpt_subscription".into(),
+                json!({
+                    "active": false,
+                    "state": "inactive"
+                }),
+            ));
+        }
+        let out = render(|buf| write_summary(buf, &payload));
+        assert!(out.contains("NanoGPT subscription"), "{out}");
+        assert!(out.contains("inactive"), "{out}");
+        assert!(!out.contains("weekly input"), "{out}");
     }
 
     #[test]

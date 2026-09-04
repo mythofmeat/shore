@@ -376,11 +376,19 @@ pub(crate) fn write_provider_models<W: Write>(out: &mut W, data: &Value) {
     if shown.is_empty() {
         empty(out, "nothing discovered yet");
     } else {
-        let mut table = Table::new(&["model id", "name"], &[Align::Left, Align::Left]);
+        let mut table = Table::new(
+            &["model id", "name", "subscription"],
+            &[Align::Left, Align::Left, Align::Left],
+        );
         for model in shown {
             table.row(&[
                 text(model, "model_id").to_owned(),
                 text(model, "display_name").to_owned(),
+                match model.get("subscription_included").and_then(Value::as_bool) {
+                    Some(true) => "included".to_owned(),
+                    Some(false) => "paid".to_owned(),
+                    None => String::new(),
+                },
             ]);
         }
         table.write(out);
@@ -497,6 +505,24 @@ mod tests {
             "include_hidden": false,
             "hidden_count": 440
         })
+    }
+
+    #[test]
+    fn provider_models_distinguish_subscription_and_paid_entries() {
+        let data = json!({
+            "provider": "nanogpt",
+            "discovered": [
+                {"model_id": "covered", "display_name": "Covered",
+                 "subscription_included": true},
+                {"model_id": "extra", "display_name": "Extra",
+                 "subscription_included": false}
+            ],
+            "hidden": []
+        });
+        let out = render(|buf| write_provider_models(buf, &data));
+        assert!(out.contains("SUBSCRIPTION"), "{out}");
+        assert!(out.contains("included"), "{out}");
+        assert!(out.contains("paid"), "{out}");
     }
 
     #[test]

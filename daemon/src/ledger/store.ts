@@ -9,6 +9,11 @@ import {
   type Observation,
 } from "../cache/tracker.ts";
 import { isAnthropicPricing, PricingEngine, type ModelPricing, type PricingStore } from "./pricing.ts";
+import { NANOGPT_PROVIDER } from "../llm/providers/nanogpt_config.ts";
+import {
+  nanoGptSubscriptionFresh,
+  type NanoGptSubscriptionState,
+} from "../llm/nanogpt_subscription.ts";
 
 export const PRICING_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -170,6 +175,35 @@ export function setSubscriptionProviders(names: Iterable<string>): void {
 
 export const isSubscriptionProvider = (provider: string): boolean =>
   subscriptionProviders.has(provider);
+
+let nanoGptCoveredModels = new Set<string>();
+let nanoGptSubscriptionState: NanoGptSubscriptionState | undefined;
+
+export function setNanoGptSubscription(
+  models: Iterable<string>,
+  state: NanoGptSubscriptionState | undefined,
+): void {
+  nanoGptCoveredModels = new Set(models);
+  nanoGptSubscriptionState = state;
+}
+
+export function setNanoGptSubscriptionState(
+  state: NanoGptSubscriptionState | undefined,
+): void {
+  nanoGptSubscriptionState = state;
+}
+
+export function isSubscriptionCall(
+  provider: string,
+  model: string,
+  now: number = Date.now(),
+): boolean {
+  if (provider !== NANOGPT_PROVIDER) return isSubscriptionProvider(provider);
+  return nanoGptCoveredModels.has(model) &&
+    nanoGptSubscriptionState?.active === true &&
+    nanoGptSubscriptionState.state === "active" &&
+    nanoGptSubscriptionFresh(nanoGptSubscriptionState, now);
+}
 
 export interface Usage {
   input_tokens: number;
@@ -518,7 +552,7 @@ export class Ledger {
 
   #buildRow(record: RecordCall, ts: string, classified: CacheClassification): CallRow {
     const { state: cache_state, anomaly: cache_anomaly } = classified;
-    const subscription = isSubscriptionProvider(record.provider);
+    const subscription = isSubscriptionCall(record.provider, record.model, Date.parse(ts));
 
     const priced = subscription
       ? undefined

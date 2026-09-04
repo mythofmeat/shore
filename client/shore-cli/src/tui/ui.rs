@@ -2686,11 +2686,16 @@ fn draw_completions_inline(frame: &mut Frame<'_>, app: &App, area: Rect) {
             PaletteMode::Top | PaletteMode::Submenu(_) | PaletteMode::ValueEditor(_) => false,
         };
 
-        let name_text = if is_favorite {
-            format!(" \u{2605} {c}")
-        } else {
-            format!("   {c}")
+        let is_subscription = match &app.completion.mode {
+            PaletteMode::Submenu(s) if s.parent == "model" => {
+                app.is_subscription_model_candidate(c)
+            }
+            PaletteMode::Top | PaletteMode::Submenu(_) | PaletteMode::ValueEditor(_) => false,
         };
+
+        let favorite_marker = if is_favorite { '\u{2605}' } else { ' ' };
+        let subscription_marker = if is_subscription { '\u{25c6}' } else { ' ' };
+        let name_text = format!(" {favorite_marker}{subscription_marker} {c}");
         let name_w = unicode_width::UnicodeWidthStr::width(name_text.as_str());
 
         let (gap, desc_text) = if let Some(d) = &desc {
@@ -4107,6 +4112,35 @@ pub(crate) mod scenario_tests {
         assert!(
             !plain.contains('\u{2605}'),
             "the star must distinguish, not decorate every row; frame:\n{frame}"
+        );
+    }
+
+    #[test]
+    fn a_subscription_model_is_marked_in_the_picker() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.enter_command_mode();
+        h.app.model_names = vec!["covered".into(), "paid".into()];
+        h.app.subscription_model_names = vec!["covered".into()];
+
+        h.app.enter_submenu("model");
+        let frame = h.render("subscription marker");
+
+        let covered = frame
+            .lines()
+            .find(|line| line.contains("covered"))
+            .unwrap_or_default();
+        assert!(
+            covered.contains('\u{25c6}'),
+            "subscription coverage must be visible before selection; frame:\n{frame}"
+        );
+        let paid = frame
+            .lines()
+            .find(|line| line.contains("paid"))
+            .unwrap_or_default();
+        assert!(
+            !paid.contains('\u{25c6}'),
+            "the marker must distinguish covered models; frame:\n{frame}"
         );
     }
 
