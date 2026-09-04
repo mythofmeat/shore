@@ -40,8 +40,18 @@ back on, or letting the harness compact the history behind shore's back, costs
 tokens and correctness on every turn while every test still passes unless the
 options themselves are asserted.
 
+The last group is the tool name table. The CLI namespaces every MCP tool as
+`mcp__<server>__<tool>` and there is no way to advertise a bare one, so a shore
+tool is known by two names at once: the one the model calls and the one
+`tools/dispatch.ts` switches on. Getting the translation wrong is quiet in a
+particular way — `runToolUse` looks up a tool's schema, its result cap and its
+timeout by name and falls back to defaults on a miss, so a leaked prefix means a
+subagent runs with no argument validation and the global timeout rather than its
+configured hour, and nothing is logged.
+
 A mutant is KILLED if `bun test tests/claude_agent_sessions.test.ts
-tests/claude_agent_stream.test.ts` fails with it applied.
+tests/claude_agent_stream.test.ts tests/claude_agent_tools.test.ts` fails with it
+applied.
 
 Run from the repository root:
     python3 daemon/scripts/mutate_claude_agent.py
@@ -52,8 +62,13 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 AGENT = "src/llm/providers/claude_agent.ts"
 SESSIONS = "src/llm/providers/agent_sessions.ts"
+TOOLS = "src/llm/providers/claude_agent_tools.ts"
 
-TESTS = ["tests/claude_agent_sessions.test.ts", "tests/claude_agent_stream.test.ts"]
+TESTS = [
+    "tests/claude_agent_sessions.test.ts",
+    "tests/claude_agent_stream.test.ts",
+    "tests/claude_agent_tools.test.ts",
+]
 
 # (label, file, find, replace)
 MUTANTS = [
@@ -187,6 +202,56 @@ MUTANTS = [
      AGENT,
      "      seen.assistantUuid = msg.uuid;",
      "      seen.assistantUuid ??= msg.uuid;"),
+
+    # --- the two names every tool has ----------------------------------------
+    ("names: tools are advertised bare, under names the CLI cannot route",
+     TOOLS,
+     "      const wire = `mcp__${SHORE_MCP_SERVER}__${sanitize(def.name)}`;",
+     "      const wire = sanitize(def.name);"),
+    ("names: a call arrives under the name the model used, not the one shore dispatches",
+     TOOLS,
+     "  bareOf(wire: string): string | undefined {\n    return this.#bareOf.get(wire);\n  }",
+     "  bareOf(wire: string): string | undefined {\n    return wire;\n  }"),
+    ("names: the prefix is stripped by hand, so shore's own MCP tools lose theirs too",
+     TOOLS,
+     "  bareOf(wire: string): string | undefined {\n    return this.#bareOf.get(wire);\n  }",
+     "  bareOf(wire: string): string | undefined {\n"
+     "    return wire.replace(`mcp__${SHORE_MCP_SERVER}__`, \"\");\n  }"),
+    ("names: two tools that sanitize alike are merged, so one runs in the other's place",
+     TOOLS,
+     "      const clash = this.#bareOf.get(wire);\n"
+     "      if (clash !== undefined) throw new DuplicateToolName(wire, clash, def.name);\n",
+     ""),
+    ("names: a name too long to advertise is sent anyway",
+     TOOLS,
+     "      if (wire.length > MAX_MCP_NAME) throw new ToolNameTooLong(def.name, wire);\n",
+     ""),
+    ("names: a tool nobody advertised is dispatched rather than refused",
+     TOOLS,
+     "    if (bare === undefined) throw new UnknownShoreTool(request.params.name);",
+     "    const name = bare ?? request.params.name;\n    if (false) throw new UnknownShoreTool(name);"),
+
+    # --- what the model is shown of a tool -----------------------------------
+    ("surface: the schema is replaced by an empty one, so arguments are unexplained",
+     TOOLS,
+     "      inputSchema: def.input_schema as { type: \"object\" },",
+     "      inputSchema: { type: \"object\" } as { type: \"object\" },"),
+    ("surface: descriptions are dropped, so the model is told only the names",
+     TOOLS,
+     "      description: def.description,",
+     '      description: "",'),
+
+    # --- what comes back from a tool -----------------------------------------
+    ("result: a failed tool reads to the model as one that succeeded",
+     TOOLS,
+     "      ...(block.is_error === true ? { isError: true } : {}),\n    };\n  }\n\n  const content",
+     "    };\n  }\n\n  const content"),
+    ("result: an image a tool produced never reaches the model",
+     TOOLS,
+     "    } else if (inner.type === \"image\") {\n"
+     "      content.push({ type: \"image\", data: inner.source.data, mimeType: inner.source.media_type });\n"
+     "    }",
+     "    }"),
 
     # --- what a text-only replay says about the rest -------------------------
     ("replay: an image-only turn is dropped again, so the history skips it in silence",

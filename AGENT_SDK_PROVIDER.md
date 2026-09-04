@@ -147,7 +147,9 @@ be worth keeping.
 
 1. Delete `daemon/src/llm/providers/claude_agent.ts`,
    `daemon/src/llm/providers/agent_sessions.ts`,
+   `daemon/src/llm/providers/claude_agent_tools.ts`,
    `daemon/src/testing/fake_agent_query.ts`,
+   `daemon/tests/claude_agent_tools.test.ts`,
    `daemon/tests/claude_agent_sessions.test.ts`,
    `daemon/tests/claude_agent_stream.test.ts` and
    `daemon/scripts/mutate_claude_agent.py`.
