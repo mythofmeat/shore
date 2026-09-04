@@ -47,13 +47,22 @@ key for the provider makes it use that key (and bill normally) instead.
 Implements the ordinary `SidecarProvider` contract (`stream` / `generate`), so budgets, the
 ledger, retries, fallback and the client stream all work as they do for any other provider.
 
-- **Streaming** via `includePartialMessages`; text and thinking deltas are forwarded as they
-  arrive.
-- **Usage** (`input`, `output`, `cache_read`, `cache_creation`) is reported to the ledger.
+- **Streaming** via `includePartialMessages`. The SDK forwards the model's own Anthropic stream
+  events, so they are parsed by the same code the Anthropic provider uses
+  (`anthropicContentEvents`): text, thinking, thinking signatures, redacted thinking and tool
+  calls all arrive as they do on any other Anthropic-backed model.
+- **Usage** (`input`, `output`, `cache_read`, `cache_creation`) is reported to the ledger, taken
+  from the run's own result — one row per turn.
+- **Finish reasons** come from the model's `message_delta`, falling back to the run's result when
+  the stream never said how it ended, so a turn truncated at `max_tokens` is not reported as a
+  clean stop.
 - **Reasoning effort** passes through: `low` / `medium` / `high` / `xhigh` / `max`. `off` and
   `adaptive` are dropped, because the SDK takes a named level or nothing.
-- **Harness suppression**: `settingSources: []`, every built-in tool disallowed, and
-  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` so a turn costs one API request rather than two.
+- **Harness suppression**: `settingSources: []`, `tools: []` and `skills: []` (omitting either is
+  not the same as turning it off), `settings: { autoCompactEnabled: false }` so the harness cannot
+  summarise history shore believes is intact, and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` so
+  a turn costs one API request rather than two. Frames belonging to an agent the SDK ran by itself
+  are ignored, and a mid-turn compaction is raised rather than absorbed.
 
 ### Conversation history
 
@@ -120,9 +129,10 @@ be worth keeping.
 
 ### Other gaps
 
-- **`total_cost_usd` is deliberately unset.** The SDK computes it locally from a bundled price
-  table; on a subscription it is not real money. Feeding it to the ledger would show spend that
-  never happened.
+- **`total_cost_usd` is deliberately unset** — though so is Anthropic's. Cost comes from shore's
+  own pricing catalogue, and `subscription = true` already suppresses it, so this is not a
+  difference from the other providers. The SDK does compute a figure locally from a bundled price
+  table, and it is not fed to the ledger: on a subscription it is not real money.
 - **No `temperature` / `top_p`.** The SDK exposes no sampling controls.
 - **Packaging.** `@anthropic-ai/claude-agent-sdk` pulls a ~205 MB native Claude Code binary and
   spawns it as a subprocess. That has not been reconciled with `bun --compile`, makepkg, or the
@@ -137,7 +147,9 @@ be worth keeping.
 
 1. Delete `daemon/src/llm/providers/claude_agent.ts`,
    `daemon/src/llm/providers/agent_sessions.ts`,
-   `daemon/tests/claude_agent_sessions.test.ts` and
+   `daemon/src/testing/fake_agent_query.ts`,
+   `daemon/tests/claude_agent_sessions.test.ts`,
+   `daemon/tests/claude_agent_stream.test.ts` and
    `daemon/scripts/mutate_claude_agent.py`.
 2. Revert the four one-line touches: the `Sdk` union and `SDK_VARIANTS` in `daemon/src/llm/types.ts`,
    the import and table entry in `daemon/src/llm/providers/table.ts`, the effort case in

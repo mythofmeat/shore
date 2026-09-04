@@ -27,8 +27,21 @@ The version mutants guard the upgrade itself: a book written under the old hash
 must not be read under the new one, because its entries would never match and
 the mismatch would look like a divergence rather than a stale book.
 
-A mutant is KILLED if `bun test tests/claude_agent_sessions.test.ts` fails with
-it applied.
+The second half of the pass covers the turn itself. The provider reads a stream
+it does not own: the SDK emits raw Anthropic events for the model's own output,
+assistant frames that are one content block each, frames belonging to agents the
+SDK ran by itself, and a final result. Each mutant here confuses one of those for
+another, and none of them throws — a dropped signature, a stop reason read from
+the wrong place, or a nested agent's words taken for the reply all produce a turn
+that looks finished.
+
+The options group is the one that fails open. Turning a built-in tool surface
+back on, or letting the harness compact the history behind shore's back, costs
+tokens and correctness on every turn while every test still passes unless the
+options themselves are asserted.
+
+A mutant is KILLED if `bun test tests/claude_agent_sessions.test.ts
+tests/claude_agent_stream.test.ts` fails with it applied.
 
 Run from the repository root:
     python3 daemon/scripts/mutate_claude_agent.py
@@ -40,7 +53,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 AGENT = "src/llm/providers/claude_agent.ts"
 SESSIONS = "src/llm/providers/agent_sessions.ts"
 
-TESTS = ["tests/claude_agent_sessions.test.ts"]
+TESTS = ["tests/claude_agent_sessions.test.ts", "tests/claude_agent_stream.test.ts"]
 
 # (label, file, find, replace)
 MUTANTS = [
@@ -102,6 +115,78 @@ MUTANTS = [
      SESSIONS,
      "export const SESSION_BOOK_VERSION = 2;",
      "export const SESSION_BOOK_VERSION = 1;"),
+
+    # --- reading a stream the provider does not own ---------------------------
+    ("stream: the model's own events are ignored, so nothing streams at all",
+     AGENT,
+     "      const event = msg.event as RawMessageStreamEvent;\n"
+     "      if (endsATurn(event)) seen.sawStopReason = true;\n"
+     "      yield event;\n",
+     "      continue;\n"),
+    ("stream: an agent the SDK ran on its own is read as part of the reply",
+     AGENT,
+     "  const parent = (msg as { parent_tool_use_id?: string | null }).parent_tool_use_id;\n  return typeof parent === \"string\";",
+     "  return false;"),
+    ("stream: the SDK compacting mid-turn is absorbed rather than raised",
+     AGENT,
+     "    if (msg.type === \"system\" && msg.subtype === \"compact_boundary\") {\n"
+     "      throw new Error(\n"
+     "        \"claude_agent: the SDK compacted mid-turn, so its history no longer matches shore's\",\n"
+     "      );\n"
+     "    }",
+     ""),
+
+    # --- how the turn says it ended -------------------------------------------
+    ("finish: a failed run still reports a stop reason, so the failure is hidden",
+     AGENT,
+     "  if (seen.subtype !== \"success\") return seen.subtype;\n  if (seen.sawStopReason === true) return streamed;",
+     "  if (seen.sawStopReason === true) return streamed;"),
+    ("finish: a stream that never said how it ended is called a clean stop anyway",
+     AGENT,
+     "  if (seen.sawStopReason === true) return streamed;\n  return seen.stopReason ?? streamed;",
+     "  return streamed;"),
+    ("finish: the run's word overrides the model's, so a later frame rewrites the turn",
+     AGENT,
+     "  if (seen.sawStopReason === true) return streamed;\n  return seen.stopReason ?? streamed;",
+     "  return seen.stopReason ?? streamed;"),
+    ("finish: a message that stopped for no reason counts as having said how it ended",
+     AGENT,
+     "  return event.type === \"message_delta\" && event.delta.stop_reason !== null;",
+     "  return event.type === \"message_delta\";"),
+
+    # --- what gets billed ------------------------------------------------------
+    ("usage: the cache columns are dropped, so a cached turn bills as a cold one",
+     AGENT,
+     "    cache_read_tokens: u.cache_read_input_tokens ?? 0,\n    cache_creation_tokens: u.cache_creation_input_tokens ?? 0,",
+     "    cache_read_tokens: 0,\n    cache_creation_tokens: 0,"),
+
+    # --- options that fail open ------------------------------------------------
+    ("options: the built-in tool surface comes back, at roughly 12.8k tokens a turn",
+     AGENT,
+     "    tools: [],\n    skills: [],",
+     "    skills: [],"),
+    ("options: skills are left to the CLI's own defaults rather than turned off",
+     AGENT,
+     "    tools: [],\n    skills: [],",
+     "    tools: [],"),
+    ("options: the harness may compact behind shore's back",
+     AGENT,
+     "    settings: { autoCompactEnabled: false },\n",
+     ""),
+    ("options: the tools that spawn a loop of their own are allowed again",
+     AGENT,
+     'const NESTED_LOOP_TOOLS = ["Task", "Agent", "Skill"];',
+     "const NESTED_LOOP_TOOLS: string[] = [];"),
+    ("options: the run is not given a controller, so an abort cannot reach it",
+     AGENT,
+     "    abortController: abort,\n",
+     ""),
+
+    # --- what the turn leaves behind -------------------------------------------
+    ("book: the uuid recorded is the first frame of the turn rather than the last",
+     AGENT,
+     "      seen.assistantUuid = msg.uuid;",
+     "      seen.assistantUuid ??= msg.uuid;"),
 
     # --- what a text-only replay says about the rest -------------------------
     ("replay: an image-only turn is dropped again, so the history skips it in silence",

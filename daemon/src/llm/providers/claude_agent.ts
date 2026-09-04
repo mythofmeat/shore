@@ -2,6 +2,14 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { RawMessageStreamEvent } from "@anthropic-ai/sdk/resources/messages";
+
+import { shoreLog } from "../../log.ts";
+import {
+  anthropicContentEvents,
+  marksFirstToken,
+  newTurnAccumulator,
+} from "./anthropic.ts";
 
 import { MAIN_THREAD } from "../../config/dirs.ts";
 import {
@@ -29,50 +37,7 @@ import {
   type WireMessage,
 } from "../types.ts";
 
-const BUILTIN_TOOLS = [
-  "Agent",
-  "Artifact",
-  "AskUserQuestion",
-  "Bash",
-  "BashOutput",
-  "CronCreate",
-  "CronDelete",
-  "CronList",
-  "DesignSync",
-  "Edit",
-  "EndConversation",
-  "EnterPlanMode",
-  "EnterWorktree",
-  "ExitPlanMode",
-  "ExitWorktree",
-  "Glob",
-  "Grep",
-  "KillShell",
-  "ListAgents",
-  "ListMcpResources",
-  "Monitor",
-  "NotebookEdit",
-  "NotebookRead",
-  "PushNotification",
-  "Read",
-  "ReadMcpResource",
-  "RemoteTrigger",
-  "ReportFindings",
-  "ScheduleWakeup",
-  "SendFeedback",
-  "SendMessage",
-  "Skill",
-  "SlashCommand",
-  "Task",
-  "TaskOutput",
-  "TaskStop",
-  "TodoWrite",
-  "ToolSearch",
-  "WebFetch",
-  "WebSearch",
-  "Workflow",
-  "Write",
-];
+const NESTED_LOOP_TOOLS = ["Task", "Agent", "Skill"];
 
 export type { DeliveredEntry, SessionRecord } from "./agent_sessions.ts";
 
@@ -227,7 +192,7 @@ export function conversationKey(req: SidecarRequest): string {
   );
 }
 
-function buildOptions(req: SidecarRequest, plan: TurnPlan): Options {
+function buildOptions(req: SidecarRequest, plan: TurnPlan, abort: AbortController): Options {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
@@ -247,12 +212,16 @@ function buildOptions(req: SidecarRequest, plan: TurnPlan): Options {
     ...(effort === undefined ? {} : { effort }),
     ...(system === "" ? {} : { systemPrompt: system }),
     settingSources: [],
+    tools: [],
+    skills: [],
     allowedTools: [],
-    disallowedTools: BUILTIN_TOOLS,
+    disallowedTools: NESTED_LOOP_TOOLS,
+    settings: { autoCompactEnabled: false },
     includePartialMessages: true,
     maxTurns: 1,
     cwd: tmpdir(),
     env,
+    abortController: abort,
     ...(plan.resume === undefined ? {} : { resume: plan.resume }),
     ...(plan.resumeSessionAt === undefined ? {} : { resumeSessionAt: plan.resumeSessionAt }),
     ...(plan.fork ? { forkSession: true } : {}),
@@ -282,98 +251,213 @@ function emptyUsage(): Usage {
   return { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
 }
 
+interface SdkTurnFacts {
+  subtype: string;
+  sessionId?: string;
+  assistantUuid?: string;
+  stopReason?: string;
+  usage?: Usage;
+  sawStopReason?: boolean;
+  warnedNested?: boolean;
+}
+
+function finishReasonOf(seen: SdkTurnFacts, streamed: string): string {
+  if (seen.subtype !== "success") return seen.subtype;
+  if (seen.sawStopReason === true) return streamed;
+  return seen.stopReason ?? streamed;
+}
+
+function endsATurn(event: RawMessageStreamEvent): boolean {
+  return event.type === "message_delta" && event.delta.stop_reason !== null;
+}
+
+async function* rawEventsOf(
+  run: AsyncIterable<SDKMessage>,
+  seen: SdkTurnFacts,
+): AsyncIterable<RawMessageStreamEvent> {
+  for await (const msg of run) {
+    const sid = (msg as { session_id?: string }).session_id;
+    if (sid !== undefined) seen.sessionId = sid;
+
+    if (isNestedFrame(msg)) {
+      if (seen.warnedNested !== true) {
+        seen.warnedNested = true;
+        shoreLog.warn("claude_agent: ignoring nested frames — the SDK ran an agent of its own");
+      }
+      continue;
+    }
+
+    if (msg.type === "assistant") {
+      seen.assistantUuid = msg.uuid;
+      continue;
+    }
+
+    if (msg.type === "stream_event") {
+      const event = msg.event as RawMessageStreamEvent;
+      if (endsATurn(event)) seen.sawStopReason = true;
+      yield event;
+      continue;
+    }
+
+    if (msg.type === "system" && msg.subtype === "compact_boundary") {
+      throw new Error(
+        "claude_agent: the SDK compacted mid-turn, so its history no longer matches shore's",
+      );
+    }
+
+    if (msg.type === "result") {
+      seen.subtype = msg.subtype;
+      seen.usage = usageFrom(msg.usage);
+      if (msg.subtype === "success" && msg.stop_reason !== null) {
+        seen.stopReason = msg.stop_reason;
+      }
+    }
+  }
+}
+
+function isNestedFrame(msg: SDKMessage): msg is SDKMessage & { parent_tool_use_id: string } {
+  const parent = (msg as { parent_tool_use_id?: string | null }).parent_tool_use_id;
+  return typeof parent === "string";
+}
+
+class GeneratedBlocks {
+  readonly #blocks: ContentBlock[] = [];
+  #text = "";
+  #thinking = "";
+  #signature: string | undefined;
+
+  absorb(event: StreamEvent): void {
+    switch (event.type) {
+      case "text":
+        this.#flushThinking();
+        this.#text += event.text;
+        break;
+      case "thinking":
+        this.#flushText();
+        this.#thinking += event.text;
+        break;
+      case "thinking_signature":
+        this.#signature = event.signature;
+        break;
+      case "redacted_thinking":
+        this.#flushText();
+        this.#flushThinking();
+        this.#blocks.push({ type: "redacted_thinking", data: event.data });
+        break;
+      case "tool_use":
+        this.#flushText();
+        this.#flushThinking();
+        this.#blocks.push({
+          type: "tool_use",
+          id: event.id,
+          name: event.name,
+          input: event.input,
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  finish(): ContentBlock[] {
+    this.#flushText();
+    this.#flushThinking();
+    return this.#blocks;
+  }
+
+  #flushText(): void {
+    if (this.#text === "") return;
+    this.#blocks.push({ type: "text", text: this.#text });
+    this.#text = "";
+  }
+
+  #flushThinking(): void {
+    if (this.#thinking === "") return;
+    this.#blocks.push({
+      type: "thinking",
+      thinking: this.#thinking,
+      ...(this.#signature === undefined ? {} : { signature: this.#signature }),
+    });
+    this.#thinking = "";
+    this.#signature = undefined;
+  }
+}
+
+export type AgentQuery = (params: {
+  prompt: string;
+  options: Options;
+}) => AsyncIterable<SDKMessage>;
+
+export interface ClaudeAgentDeps {
+  runQuery?: AgentQuery;
+  bookPath?: () => string;
+}
+
 export class ClaudeAgentProvider implements SidecarProvider {
+  readonly #runQuery: AgentQuery;
+  readonly #bookPath: () => string;
+
+  constructor(deps: ClaudeAgentDeps = {}) {
+    this.#runQuery = deps.runQuery ?? query;
+    this.#bookPath = deps.bookPath ?? bookPath;
+  }
+
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
     const startedAt = Date.now();
     let firstTokenAt = 0;
-    let usage = emptyUsage();
-    let text = "";
-    let thinking = "";
-    let finish = "end_turn";
-    let sessionId: string | undefined;
-    let assistantUuid: string | undefined;
+    const acc = newTurnAccumulator();
+    const seen: SdkTurnFacts = { subtype: "success" };
 
-    const path = bookPath();
+    const path = this.#bookPath();
     const key = conversationKey(req);
     const book = readBook(path);
     const record = book[key];
     const plan = planTurn(record, req.messages);
 
+    const abort = new AbortController();
+    if (signal?.aborted) abort.abort();
+    signal?.addEventListener("abort", () => abort.abort(), { once: true });
+
     try {
       yield { type: "start", model: req.model };
 
-      const run = query({ prompt: plan.prompt, options: buildOptions(req, plan) });
-      if (signal !== undefined) {
-        signal.addEventListener("abort", () => void run.interrupt?.(), { once: true });
+      const run = this.#runQuery({ prompt: plan.prompt, options: buildOptions(req, plan, abort) });
+
+      for await (const event of anthropicContentEvents(rawEventsOf(run, seen), acc)) {
+        if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
+        yield event;
       }
 
-      for await (const msg of run as AsyncIterable<SDKMessage>) {
-        const sid = (msg as { session_id?: string }).session_id;
-        if (sid !== undefined) sessionId = sid;
-
-        if (msg.type === "assistant") {
-          const uuid = (msg as { uuid?: string }).uuid;
-          if (uuid !== undefined) assistantUuid = uuid;
-          continue;
-        }
-
-        if (msg.type === "stream_event") {
-          const event = msg.event as {
-            type: string;
-            delta?: { type?: string; text?: string; thinking?: string };
-          };
-          if (event.type !== "content_block_delta") continue;
-          if (firstTokenAt === 0) firstTokenAt = Date.now();
-          if (event.delta?.type === "text_delta" && event.delta.text !== undefined) {
-            text += event.delta.text;
-            yield { type: "text", text: event.delta.text };
-          } else if (event.delta?.type === "thinking_delta" && event.delta.thinking !== undefined) {
-            thinking += event.delta.thinking;
-            yield { type: "thinking", text: event.delta.thinking };
-          }
-          continue;
-        }
-
-        if (msg.type === "result") {
-          usage = usageFrom((msg as { usage?: unknown }).usage);
-          const subtype = (msg as { subtype?: string }).subtype ?? "success";
-          if (subtype !== "success") finish = subtype;
-        }
-      }
-
-      if (sessionId !== undefined) {
+      if (seen.sessionId !== undefined) {
         book[key] = {
           version: SESSION_BOOK_VERSION,
-          sessionId,
+          sessionId: seen.sessionId,
           entries: nextEntries(plan, record?.pendingAssistantUuid),
-          ...(assistantUuid === undefined ? {} : { pendingAssistantUuid: assistantUuid }),
+          ...(seen.assistantUuid === undefined ? {} : { pendingAssistantUuid: seen.assistantUuid }),
         };
         writeBook(path, book);
       }
 
-      const content_blocks: unknown[] = [];
-      if (thinking !== "") content_blocks.push({ type: "thinking", thinking });
-      content_blocks.push({ type: "text", text });
-
+      const total = Date.now() - startedAt;
       yield {
         type: "done",
-        content: text,
-        finish_reason: finish,
-        content_blocks,
-        usage,
+        content: acc.text,
+        finish_reason: finishReasonOf(seen, acc.stopReason),
+        usage: seen.usage ?? acc.usage,
         timing: {
-          total_ms: Date.now() - startedAt,
-          time_to_first_token_ms: firstTokenAt === 0 ? 0 : firstTokenAt - startedAt,
+          total_ms: total,
+          time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
         },
       };
     } catch (e) {
-      yield streamErrorEvent(e, usage, startedAt, firstTokenAt, Date.now);
+      abort.abort();
+      yield streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now);
     }
   }
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
+    const blocks = new GeneratedBlocks();
     let content = "";
-    let content_blocks: ContentBlock[] = [];
     let finish_reason = "end_turn";
     let usage = emptyUsage();
     let timing = { total_ms: 0, time_to_first_token_ms: 0 };
@@ -381,15 +465,23 @@ export class ClaudeAgentProvider implements SidecarProvider {
     for await (const event of this.stream(req, signal)) {
       if (event.type === "done") {
         content = event.content;
-        content_blocks = (event.content_blocks ?? []) as ContentBlock[];
         finish_reason = event.finish_reason;
         usage = event.usage;
         timing = event.timing;
       } else if (event.type === "error") {
         throw new Error(event.message);
+      } else {
+        blocks.absorb(event);
       }
     }
 
-    return { content, content_blocks, finish_reason, usage, timing, model: req.model };
+    return {
+      content,
+      content_blocks: blocks.finish(),
+      finish_reason,
+      usage,
+      timing,
+      model: req.model,
+    };
   }
 }
