@@ -135,8 +135,8 @@ MUTANTS = [
      "  if (record === undefined || record.version === undefined) return coldStart(msgs);"),
     ("version: the book is stamped with the version it is not",
      SESSIONS,
-     "export const SESSION_BOOK_VERSION = 2;",
-     "export const SESSION_BOOK_VERSION = 1;"),
+     "export const SESSION_BOOK_VERSION = 3;",
+     "export const SESSION_BOOK_VERSION = 2;"),
 
     # --- reading a stream the provider does not own ---------------------------
     ("stream: the model's own events are ignored, so nothing streams at all",
@@ -204,10 +204,57 @@ MUTANTS = [
      ""),
 
     # --- what the turn leaves behind -------------------------------------------
-    ("book: the uuid recorded is the first frame of the turn rather than the last",
+    ("book: every frame of a round opens a new anchor, so a turn has more than it made",
      AGENT,
-     "      seen.assistantUuid = msg.uuid;",
-     "      seen.assistantUuid ??= msg.uuid;"),
+     "  if (seen.lastMessageId === messageId && last >= 0) {\n"
+     "    seen.assistantUuids[last] = uuid;\n"
+     "    return;\n"
+     "  }\n",
+     ""),
+    ("book: a round is anchored on its first frame rather than where it ended",
+     AGENT,
+     "    seen.assistantUuids[last] = uuid;\n    return;",
+     "    return;"),
+    ("book: every assistant turn is anchored on the same frame",
+     AGENT,
+     "    if (m.role === \"assistant\") {\n"
+     "      const uuid = pending.shift();\n"
+     "      if (uuid !== undefined) entry.uuid = uuid;\n"
+     "    }",
+     "    if (m.role === \"assistant\" && pending[0] !== undefined) entry.uuid = pending[0];"),
+    ("book: an assistant turn with no frame is anchored on nothing at all "
+     "(EQUIVALENT — assigning undefined and leaving the key off read the same everywhere, "
+     "including through JSON)",
+     AGENT,
+     "      const uuid = pending.shift();\n      if (uuid !== undefined) entry.uuid = uuid;",
+     "      entry.uuid = pending.shift() as string;"),
+
+    # --- replaying a history that used tools ---------------------------------
+    ("replay: what the assistant did is dropped, leaving only what it said",
+     AGENT,
+     "    case \"tool_use\":\n"
+     "      return (\n"
+     "        `<prior_tool_call name=\"${block.name}\">\\n` +\n"
+     "        `${JSON.stringify(block.input)}\\n</prior_tool_call>`\n"
+     "      );",
+     "    case \"tool_use\":\n      return \"\";"),
+    ("replay: a tool call is named but not what it was asked for",
+     AGENT,
+     "        `${JSON.stringify(block.input)}\\n</prior_tool_call>`",
+     "        `</prior_tool_call>`"),
+    ("replay: what came back from a tool is dropped",
+     AGENT,
+     "    case \"tool_result\":\n"
+     "      return (\n"
+     "        `<prior_tool_result${block.is_error === true ? ' failed=\"true\"' : \"\"}>\\n` +\n"
+     "        `${resultText(block.content)}\\n</prior_tool_result>`\n"
+     "      );",
+     "    case \"tool_result\":\n      return \"\";"),
+    ("replay: a call that failed is replayed as one that worked",
+     AGENT,
+     "        `<prior_tool_result${block.is_error === true ? ' failed=\"true\"' : \"\"}>\\n` +",
+     "        `<prior_tool_result>\\n` +"),
+
 
     # --- the two names every tool has ----------------------------------------
     ("names: tools are advertised bare, under names the CLI cannot route",
@@ -313,10 +360,9 @@ MUTANTS = [
     # --- what a text-only replay says about the rest -------------------------
     ("replay: an image-only turn is dropped again, so the history skips it in silence",
      AGENT,
-     "      if (block.type === \"image\") {\n"
-     "        return omissionNotice(block.source.media_type, \"this provider replays history as text\");\n"
-     "      }",
-     ""),
+     "    case \"image\":\n"
+     "      return omissionNotice(block.source.media_type, \"this provider replays history as text\");",
+     "    case \"image\":\n      return \"\";"),
 ]
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))

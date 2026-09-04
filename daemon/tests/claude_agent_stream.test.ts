@@ -6,7 +6,10 @@ import { join } from "node:path";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent, type FakeScript } from "../src/testing/fake_agent_query.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
-import type { SessionBook } from "../src/llm/providers/agent_sessions.ts";
+import {
+  SESSION_BOOK_VERSION,
+  type SessionBook,
+} from "../src/llm/providers/agent_sessions.ts";
 
 async function bookDir(): Promise<string> {
   return await mkdtemp(join(tmpdir(), "shore-agent-book-"));
@@ -222,7 +225,7 @@ describe("what the turn leaves behind", () => {
     const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
     const record = Object.values(book)[0];
     expect(record?.sessionId).toBe("s-1");
-    expect(record?.version).toBe(2);
+    expect(record?.version).toBe(SESSION_BOOK_VERSION);
   });
 
   test("the last assistant frame is what a later fork would anchor on", async () => {
@@ -238,7 +241,7 @@ describe("what the turn leaves behind", () => {
       ],
     });
     const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
-    expect(Object.values(book)[0]?.pendingAssistantUuid).toBe("msg_0_asst_1");
+    expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_0_asst_1"]);
   });
 });
 

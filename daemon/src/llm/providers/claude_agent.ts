@@ -108,18 +108,49 @@ function lastAssistantEntry(entries: readonly DeliveredEntry[], upto: number): n
   return -1;
 }
 
-function replayText(msg: WireMessage): string {
-  return hashableBlocks(msg)
-    .map((block) => {
-      if (block.type === "text") return block.text;
-      if (block.type === "image") {
-        return omissionNotice(block.source.media_type, "this provider replays history as text");
+function resultText(content: string | ContentBlock[]): string {
+  if (typeof content === "string") return content;
+  return content
+    .map((inner) => {
+      if (inner.type === "text") return inner.text;
+      if (inner.type === "image") {
+        return omissionNotice(inner.source.media_type, "this provider replays history as text");
       }
       return "";
     })
     .filter((text) => text !== "")
     .join("\n");
 }
+
+function replayBlock(block: ContentBlock): string {
+  switch (block.type) {
+    case "text":
+      return block.text;
+    case "image":
+      return omissionNotice(block.source.media_type, "this provider replays history as text");
+    case "tool_use":
+      return (
+        `<prior_tool_call name="${block.name}">\n` +
+        `${JSON.stringify(block.input)}\n</prior_tool_call>`
+      );
+    case "tool_result":
+      return (
+        `<prior_tool_result${block.is_error === true ? ' failed="true"' : ""}>\n` +
+        `${resultText(block.content)}\n</prior_tool_result>`
+      );
+    case "thinking":
+    case "redacted_thinking":
+      return "";
+  }
+}
+
+function replayText(msg: WireMessage): string {
+  return hashableBlocks(msg)
+    .map(replayBlock)
+    .filter((text) => text !== "")
+    .join("\n");
+}
+
 
 function renderReplay(msgs: readonly WireMessage[]): string {
   return msgs
@@ -180,14 +211,17 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
   };
 }
 
-export function nextEntries(plan: TurnPlan, pendingAssistantUuid: string | undefined): DeliveredEntry[] {
+export function nextEntries(
+  plan: TurnPlan,
+  pendingAssistantUuids: readonly string[] | undefined,
+): DeliveredEntry[] {
   const entries = [...plan.keptEntries];
-  let pending = pendingAssistantUuid;
+  const pending = [...(pendingAssistantUuids ?? [])];
   for (const m of plan.delivered) {
     const entry: DeliveredEntry = { hash: messageHash(m) };
-    if (m.role === "assistant" && pending !== undefined) {
-      entry.uuid = pending;
-      pending = undefined;
+    if (m.role === "assistant") {
+      const uuid = pending.shift();
+      if (uuid !== undefined) entry.uuid = uuid;
     }
     entries.push(entry);
   }
@@ -289,7 +323,8 @@ function emptyUsage(): Usage {
 interface SdkTurnFacts {
   subtype: string;
   sessionId?: string;
-  assistantUuid?: string;
+  assistantUuids: string[];
+  lastMessageId?: string;
   stopReason?: string;
   usage?: Usage;
   sawStopReason?: boolean;
@@ -324,7 +359,7 @@ async function* rawEventsOf(
     }
 
     if (msg.type === "assistant") {
-      seen.assistantUuid = msg.uuid;
+      noteAssistant(seen, msg.message.id, msg.uuid);
       continue;
     }
 
@@ -350,6 +385,16 @@ async function* rawEventsOf(
       }
     }
   }
+}
+
+function noteAssistant(seen: SdkTurnFacts, messageId: string, uuid: string): void {
+  const last = seen.assistantUuids.length - 1;
+  if (seen.lastMessageId === messageId && last >= 0) {
+    seen.assistantUuids[last] = uuid;
+    return;
+  }
+  seen.lastMessageId = messageId;
+  seen.assistantUuids.push(uuid);
 }
 
 function isNestedFrame(msg: SDKMessage): msg is SDKMessage & { parent_tool_use_id: string } {
@@ -443,7 +488,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     const startedAt = Date.now();
     let firstTokenAt = 0;
     const acc = newTurnAccumulator();
-    const seen: SdkTurnFacts = { subtype: "success" };
+    const seen: SdkTurnFacts = { subtype: "success", assistantUuids: [] };
 
     const path = this.#bookPath();
     const key = conversationKey(req);
@@ -469,8 +514,10 @@ export class ClaudeAgentProvider implements SidecarProvider {
         book[key] = {
           version: SESSION_BOOK_VERSION,
           sessionId: seen.sessionId,
-          entries: nextEntries(plan, record?.pendingAssistantUuid),
-          ...(seen.assistantUuid === undefined ? {} : { pendingAssistantUuid: seen.assistantUuid }),
+          entries: nextEntries(plan, record?.pendingAssistantUuids),
+          ...(seen.assistantUuids.length === 0
+            ? {}
+            : { pendingAssistantUuids: seen.assistantUuids }),
         };
         writeBook(path, book);
       }
@@ -595,7 +642,7 @@ export async function* claudeAgentToolLoopEvents(
   const startedAt = Date.now();
   let firstTokenAt = 0;
   const acc = newTurnAccumulator();
-  const seen: SdkTurnFacts = { subtype: "success" };
+  const seen: SdkTurnFacts = { subtype: "success", assistantUuids: [] };
 
   const path = (deps.bookPath ?? bookPath)();
   const key = conversationKey(req);
@@ -662,8 +709,10 @@ export async function* claudeAgentToolLoopEvents(
       book[key] = {
         version: SESSION_BOOK_VERSION,
         sessionId: seen.sessionId,
-        entries: nextEntries(plan, record?.pendingAssistantUuid),
-        ...(seen.assistantUuid === undefined ? {} : { pendingAssistantUuid: seen.assistantUuid }),
+        entries: nextEntries(plan, record?.pendingAssistantUuids),
+        ...(seen.assistantUuids.length === 0
+          ? {}
+          : { pendingAssistantUuids: seen.assistantUuids }),
       };
       writeBook(path, book);
     }

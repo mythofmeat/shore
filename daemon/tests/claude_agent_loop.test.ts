@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,6 +9,7 @@ import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
 import type { SidecarRequest, StreamEvent, ToolDefinition } from "../src/llm/types.ts";
+import type { SessionBook } from "../src/llm/providers/agent_sessions.ts";
 
 const SCHEMA: Record<string, unknown> = { type: "object" };
 
@@ -65,16 +66,17 @@ async function drive(
   script: FakeScript,
   tools: Phase,
   req: SidecarRequest = request(),
-): Promise<{ events: StreamEvent[]; agent: ReturnType<typeof fakeAgent> }> {
+): Promise<{ events: StreamEvent[]; agent: ReturnType<typeof fakeAgent>; path: string }> {
   const dir = await mkdtemp(join(tmpdir(), "shore-agent-loop-"));
+  const path = join(dir, "sessions.json");
   const agent = fakeAgent(script);
   const events: StreamEvent[] = [];
   const stream = claudeAgentToolLoopEvents(req, tools, undefined, {
     runQuery: agent.query,
-    bookPath: () => join(dir, "sessions.json"),
+    bookPath: () => path,
   });
   for await (const event of stream) events.push(event);
-  return { events, agent };
+  return { events, agent, path };
 }
 
 function done(events: readonly StreamEvent[]): Extract<StreamEvent, { type: "done" }> {
@@ -262,5 +264,28 @@ describe("what the SDK is handed", () => {
     expect(agent.calls[0]?.options.mcpServers).toBeUndefined();
     expect(agent.calls[0]?.options.maxTurns).toBe(1);
     expect(done(events).content).toBe("just talking");
+  });
+});
+
+describe("what a tool-using turn leaves in the session book", () => {
+  test("each round is anchored on its own frame, not all on the last", async () => {
+    const tools = phase();
+    const { path } = await drive(ONE_CALL, tools);
+    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual([
+      "msg_0_asst_1",
+      "msg_1_asst_0",
+    ]);
+  });
+
+  test("a turn with no tools still records the one round it had", async () => {
+    const tools = phase();
+    const { path } = await drive(
+      { rounds: [{ blocks: [{ kind: "text", text: "just talking" }] }] },
+      tools,
+      request({ tools: [] }),
+    );
+    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_0_asst_0"]);
   });
 });

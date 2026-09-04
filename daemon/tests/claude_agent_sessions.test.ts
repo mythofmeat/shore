@@ -35,7 +35,7 @@ function seed(history: readonly WireMessage[], assistantUuid?: string): SessionR
     version: SESSION_BOOK_VERSION,
     sessionId: "session-1",
     entries: nextEntries(plan, undefined),
-    ...(assistantUuid === undefined ? {} : { pendingAssistantUuid: assistantUuid }),
+    ...(assistantUuid === undefined ? {} : { pendingAssistantUuids: [assistantUuid] }),
   };
 }
 
@@ -72,10 +72,10 @@ describe("planTurn", () => {
         { hash: "h-asst1", uuid: "asst-uuid-1" },
         { hash: "h-user2" },
       ],
-      pendingAssistantUuid: "asst-uuid-2",
+      pendingAssistantUuids: ["asst-uuid-2"],
     };
     const seeded = planTurn(undefined, [user1, asst1, user2]);
-    record.entries = nextEntries(seeded, "asst-uuid-1");
+    record.entries = nextEntries(seeded, ["asst-uuid-1"]);
 
     const plan = planTurn(record, [user1, asst1, user2b]);
     expect(plan.fork).toBe(true);
@@ -100,8 +100,8 @@ describe("planTurn regeneration", () => {
     return {
       version: SESSION_BOOK_VERSION,
     sessionId: "session-1",
-      entries: nextEntries(second, "asst-uuid-1"),
-      pendingAssistantUuid: "asst-uuid-2",
+      entries: nextEntries(second, ["asst-uuid-1"]),
+      pendingAssistantUuids: ["asst-uuid-2"],
     };
   }
 
@@ -122,7 +122,7 @@ describe("planTurn regeneration", () => {
     const plan = planTurn(afterTwoTurns(), [user1, asst1, user2]);
     expect(plan.keptEntries).toHaveLength(2);
     expect(plan.delivered).toHaveLength(1);
-    expect(nextEntries(plan, "asst-uuid-2")).toHaveLength(3);
+    expect(nextEntries(plan, ["asst-uuid-2"])).toHaveLength(3);
   });
 
   test("regenerating the very first reply cold starts, since nothing can anchor a fork", () => {
@@ -131,7 +131,7 @@ describe("planTurn regeneration", () => {
       version: SESSION_BOOK_VERSION,
     sessionId: "session-1",
       entries: nextEntries(cold, undefined),
-      pendingAssistantUuid: "asst-uuid-1",
+      pendingAssistantUuids: ["asst-uuid-1"],
     };
     const plan = planTurn(record, [user1]);
     expect(plan.resume).toBeUndefined();
@@ -168,7 +168,7 @@ describe("nextEntries", () => {
   test("anchors the assistant entry to the uuid captured on the previous turn", () => {
     const record = seed([user1], "asst-uuid-1");
     const plan = planTurn(record, [user1, asst1, user2]);
-    const entries = nextEntries(plan, "asst-uuid-1");
+    const entries = nextEntries(plan, ["asst-uuid-1"]);
 
     expect(entries).toHaveLength(3);
     expect(entries[1]?.uuid).toBe("asst-uuid-1");
@@ -178,7 +178,7 @@ describe("nextEntries", () => {
 
   test("consumes the pending uuid once so later assistants stay unanchored", () => {
     const plan = planTurn(undefined, [user1, asst1, msg("assistant", "second")]);
-    const entries = nextEntries(plan, "asst-uuid-1");
+    const entries = nextEntries(plan, ["asst-uuid-1"]);
     expect(entries[1]?.uuid).toBe("asst-uuid-1");
     expect(entries[2]?.uuid).toBeUndefined();
   });
@@ -351,6 +351,11 @@ describe("the session book version", () => {
     expect(plan.prompt).toContain("Brian");
   });
 
+  test("a book from before rounds were anchored one by one is not trusted", () => {
+    const stale = { ...seed([user1]), version: 2 };
+    expect(planTurn(stale, [user1, asst1, user2]).resume).toBeUndefined();
+  });
+
   test("a book with no version at all is not trusted either", () => {
     const { version: _dropped, ...legacy } = seed([user1]);
     const plan = planTurn(legacy as SessionRecord, [user1, asst1, user2]);
@@ -367,5 +372,96 @@ describe("replaying a history that is not all text", () => {
     const plan = planTurn(undefined, [withImage, asst1, user2]);
     expect(plan.prompt).toContain("image omitted");
     expect(plan.prompt).toContain("image/png");
+  });
+});
+
+describe("replaying a history that used tools", () => {
+  const toolTurn: WireMessage[] = [
+    { role: "user", content: [{ type: "text", text: "what does SOUL.md say?" }] },
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "let me look." },
+        { type: "tool_use", id: "t1", name: "read", input: { path: "SOUL.md" } },
+      ],
+    },
+    {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "t1", content: "his name is Brian" }],
+    },
+    { role: "assistant", content: [{ type: "text", text: "it says Brian." }] },
+    { role: "user", content: [{ type: "text", text: "and the freezer?" }] },
+  ];
+
+  test("a cold start keeps what the assistant did, not only what it said", () => {
+    const plan = planTurn(undefined, toolTurn);
+    expect(plan.prompt).toContain("<prior_tool_call");
+    expect(plan.prompt).toContain('name="read"');
+    expect(plan.prompt).toContain('{"path":"SOUL.md"}');
+  });
+
+  test("the answers those calls came back with survive too", () => {
+    const plan = planTurn(undefined, toolTurn);
+    expect(plan.prompt).toContain("<prior_tool_result>");
+    expect(plan.prompt).toContain("his name is Brian");
+  });
+
+  test("a tool result is not replayed as though the user had typed it", () => {
+    const plan = planTurn(undefined, toolTurn);
+    const beforeResult = plan.prompt.slice(0, plan.prompt.indexOf("his name is Brian"));
+    expect(beforeResult.endsWith("<prior_tool_result>\n")).toBe(true);
+  });
+
+  test("a failed call is replayed as one", () => {
+    const failed: WireMessage[] = [
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "t1", content: "no such file", is_error: true },
+        ],
+      },
+      { role: "user", content: [{ type: "text", text: "try again" }] },
+    ];
+    expect(planTurn(undefined, failed).prompt).toContain('failed="true"');
+  });
+
+  test("an extension past a tool round still resumes rather than replaying it", () => {
+    const record = seed(toolTurn.slice(0, 4));
+    const plan = planTurn(record, toolTurn);
+    expect(plan.resume).toBe("session-1");
+    expect(plan.prompt).toBe("and the freezer?");
+  });
+});
+
+describe("anchoring several rounds in one turn", () => {
+  test("each assistant turn is given its own frame, in order", () => {
+    const plan = planTurn(undefined, [
+      user1,
+      { role: "assistant", content: [{ type: "text", text: "one" }] },
+      { role: "user", content: [{ type: "text", text: "next" }] },
+      { role: "assistant", content: [{ type: "text", text: "two" }] },
+    ]);
+    const entries = nextEntries(plan, ["uuid-one", "uuid-two"]);
+    expect(entries.map((e) => e.uuid)).toEqual([
+      undefined,
+      "uuid-one",
+      undefined,
+      "uuid-two",
+    ]);
+  });
+
+  test("an assistant turn with no frame to anchor on is left unanchored", () => {
+    const plan = planTurn(undefined, [
+      user1,
+      { role: "assistant", content: [{ type: "text", text: "one" }] },
+      { role: "user", content: [{ type: "text", text: "next" }] },
+      { role: "assistant", content: [{ type: "text", text: "two" }] },
+    ]);
+    expect(nextEntries(plan, ["uuid-one"]).map((e) => e.uuid)).toEqual([
+      undefined,
+      "uuid-one",
+      undefined,
+      undefined,
+    ]);
   });
 });

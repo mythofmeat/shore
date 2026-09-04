@@ -70,7 +70,10 @@ The Agent SDK cannot be seeded with assistant turns — `query()` accepts user m
 the SDK owns history and shore tracks which session corresponds to which conversation.
 
 `$SHORE_DATA_DIR/claude_agent_sessions.json` maps a conversation (character + ledger + thread)
-to a session id plus a hash of every message delivered so far. The hash covers every content
+to a session id plus a hash of every message delivered so far, and the SDK frame each assistant
+turn ended on — one per round, so a turn that used tools anchors each of its rounds rather than
+stamping the whole turn on the first. Getting that wrong is quiet: resuming and extending still
+work, and only an edit-and-regenerate forks in the wrong place. The hash covers every content
 block, not just text — an image, a tool call's arguments and a tool result's output each change
 it — so two turns that differ only in what was attached are not read as one. Whitespace-only text
 blocks are dropped first, mirroring `daemon/src/handler/wire_messages.ts`, so a turn hashes the
@@ -87,6 +90,11 @@ main conversation stays on another possible at all. Each turn:
 | History diverges partway (an edit) | `resume` + `resumeSessionAt` the last delivered assistant turn + `forkSession`, replaying everything after it |
 | Regenerating the most recent turn | Same fork, anchored one assistant turn further back; the user turn being answered is re-sent |
 | No common prefix, no session yet, or no assistant turn to anchor on | Fresh session; prior turns replayed as text, assistant ones wrapped in `<prior_assistant_turn>` |
+
+A replay is lossy but not silent: tool calls and their results come back as
+`<prior_tool_call name=…>` / `<prior_tool_result>` pairs rather than being dropped, so a cold
+start — which shore compacting a conversation forces — does not tell the model it said things it
+has no record of doing.
 
 Regeneration is the case worth understanding. Shore drops the assistant turn it is replacing, so
 the incoming history is exactly what was already delivered — there is no diverging tail to detect.
@@ -157,14 +165,6 @@ the model reaching for the bare name.
 
 ### Other gaps
 
-- **The fork anchor drifts once a turn has tool rounds.** `nextEntries` stamps the single
-  `pendingAssistantUuid` on the *first* assistant message in the delivered tail. A tool-using turn
-  puts several there — the `tool_use` turn and the final prose turn — so the uuid lands on the
-  wrong one and the skew grows with every such turn. An edit-and-regenerate then forks the SDK
-  session after content shore believes it forked before. Resuming and extending are unaffected.
-- **A cold start erases tool history.** `renderReplay` emits text only, so replayed turns lose
-  every `tool_use` and `tool_result`: the model is told it said things with no record of what it
-  did. Cold starts are not rare — shore compacting a conversation forces one.
 - **Images still do not reach the model.** The prompt is a string, so an attached image is
   announced as an omission notice rather than sent. `assistantImageModeForRequest` also still
   hardcodes `anthropic`, so assistant-attached images degrade to `[sent an image]` stand-ins.
