@@ -172,7 +172,7 @@ function requestedBlocks(round: FakeRound, index: number): FakeBlock[] {
   const asked = (round.toolCalls ?? []).map<FakeBlock>((call, n) => ({
     kind: "tool_use",
     id: `toolu_${String(index)}_${String(n)}`,
-    name: call.name,
+    name: `mcp__shore__${call.name}`,
     input: call.input ?? {},
   }));
   return [...round.blocks, ...asked];
@@ -231,6 +231,10 @@ function* roundFrames(
   yield wrap({ type: "message_stop" }, `${messageId}_ms`);
 }
 
+function wireName(bare: string): string {
+  return `mcp__shore__${bare}`;
+}
+
 async function shoreClient(options: Options): Promise<Client | undefined> {
   const server = options.mcpServers?.["shore"];
   if (server === undefined || server.type !== "sdk") return undefined;
@@ -263,14 +267,14 @@ export function fakeAgent(script: FakeScript): FakeAgent {
       const results: unknown[] = [];
       for (const [n, call] of asked.entries()) {
         const input = call.input ?? {};
-        const verdict = await options.canUseTool?.(call.name, input, {
+        const verdict = await options.canUseTool?.(wireName(call.name), input, {
           signal: new AbortController().signal,
           toolUseID: `toolu_${String(index)}_${String(n)}`,
           requestId: `req_${String(index)}_${String(n)}`,
         });
         if (verdict?.behavior === "deny") {
           const denial = verdict.message;
-          toolOutcomes.push({ name: call.name, allowed: false, denial });
+          toolOutcomes.push({ name: wireName(call.name), allowed: false, denial });
           if (verdict.interrupt === true) interrupted = true;
           results.push({
             type: "tool_result",
@@ -281,7 +285,7 @@ export function fakeAgent(script: FakeScript): FakeAgent {
           continue;
         }
         const output = await client.callTool({ name: call.name, arguments: input });
-        toolOutcomes.push({ name: call.name, allowed: true, output: output.content });
+        toolOutcomes.push({ name: wireName(call.name), allowed: true, output: output.content });
         results.push({
           type: "tool_result",
           tool_use_id: `toolu_${String(index)}_${String(n)}`,

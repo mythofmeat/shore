@@ -87,7 +87,7 @@ function done(events: readonly StreamEvent[]): Extract<StreamEvent, { type: "don
 
 const ONE_CALL: FakeScript = {
   rounds: [
-    { blocks: [{ kind: "text", text: "let me look." }], toolCalls: [{ name: "mcp__shore__read" }] },
+    { blocks: [{ kind: "text", text: "let me look." }], toolCalls: [{ name: "read" }] },
     { blocks: [{ kind: "text", text: "it says Brian." }] },
   ],
 };
@@ -110,7 +110,7 @@ describe("running shore's tools through the SDK", () => {
     await drive(
       {
         rounds: [
-          { blocks: [], toolCalls: [{ name: "mcp__shore__ask_internet", input: { query: "hi" } }] },
+          { blocks: [], toolCalls: [{ name: "ask_internet", input: { query: "hi" } }] },
           { blocks: [{ kind: "text", text: "done" }] },
         ],
       },
@@ -125,7 +125,7 @@ describe("running shore's tools through the SDK", () => {
     await drive(
       {
         rounds: [
-          { blocks: [], toolCalls: [{ name: "mcp__shore__read", input: { path: "SOUL.md" } }] },
+          { blocks: [], toolCalls: [{ name: "read", input: { path: "SOUL.md" } }] },
           { blocks: [{ kind: "text", text: "done" }] },
         ],
       },
@@ -190,8 +190,8 @@ describe("the shape of what gets written to the conversation", () => {
     await drive(
       {
         rounds: [
-          { blocks: [], toolCalls: [{ name: "mcp__shore__read" }] },
-          { blocks: [], toolCalls: [{ name: "mcp__shore__read" }] },
+          { blocks: [], toolCalls: [{ name: "read" }] },
+          { blocks: [], toolCalls: [{ name: "read" }] },
           { blocks: [{ kind: "text", text: "done" }] },
         ],
       },
@@ -207,8 +207,8 @@ describe("the tool budget", () => {
     const { events, agent } = await drive(
       {
         rounds: [
-          { blocks: [], toolCalls: [{ name: "mcp__shore__read" }] },
-          { blocks: [], toolCalls: [{ name: "mcp__shore__read" }] },
+          { blocks: [], toolCalls: [{ name: "read" }] },
+          { blocks: [], toolCalls: [{ name: "read" }] },
           { blocks: [{ kind: "text", text: "what I have is enough" }] },
         ],
       },
@@ -226,7 +226,7 @@ describe("the tool budget", () => {
     const { agent } = await drive(
       {
         rounds: [
-          { blocks: [], toolCalls: [{ name: "mcp__shore__rm" }] },
+          { blocks: [], toolCalls: [{ name: "rm" }] },
           { blocks: [{ kind: "text", text: "not allowed" }] },
         ],
       },
@@ -287,5 +287,44 @@ describe("what a tool-using turn leaves in the session book", () => {
     );
     const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
     expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_0_asst_0"]);
+  });
+});
+
+describe("what the finished turn says it was", () => {
+  test("a tool round is not repeated in the final turn, which would duplicate the call", async () => {
+    const tools = phase();
+    const { events } = await drive({
+      rounds: [
+        { blocks: [], toolCalls: [{ name: "read", input: { path: "SOUL.md" } }] },
+        { blocks: [{ kind: "text", text: "it says hello" }] },
+      ],
+    }, tools);
+    const finished = events.find((e) => e.type === "done");
+    const kinds = ((finished?.content_blocks ?? []) as ContentBlock[]).map((b) => b.type);
+    expect(kinds).toEqual(["text"]);
+    expect(tools.recorded.map((r) => r.role)).toEqual(["assistant", "user"]);
+  });
+
+  test("the round shore recorded is the one that holds the call", async () => {
+    const tools = phase();
+    await drive({
+      rounds: [
+        { blocks: [], toolCalls: [{ name: "read", input: { path: "SOUL.md" } }] },
+        { blocks: [{ kind: "text", text: "it says hello" }] },
+      ],
+    }, tools);
+    expect((tools.recorded[0]?.blocks ?? []).map((b) => b.type)).toEqual(["tool_use"]);
+  });
+});
+
+describe("what the CLI is told about result size", () => {
+  test("the CLI's own output ceiling is lifted, so shore's truncation is the only one", async () => {
+    const tools = phase();
+    const { agent } = await drive(
+      { rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] },
+      tools,
+    );
+    const env = (agent.calls[0]?.options.env ?? {}) as Record<string, string>;
+    expect(Number(env.MAX_MCP_OUTPUT_TOKENS)).toBeGreaterThan(25_000);
   });
 });

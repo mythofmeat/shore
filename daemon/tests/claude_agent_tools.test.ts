@@ -8,6 +8,8 @@ import {
   ToolNameTooLong,
   ToolNames,
   UnknownShoreTool,
+  MCP_RESULT_CEILING_BYTES,
+  SHORE_MCP_SERVER,
   shoreToolServer,
   toCallToolResult,
 } from "../src/llm/providers/claude_agent_tools.ts";
@@ -48,7 +50,7 @@ describe("what the model is shown", () => {
   test("shore's tools are advertised under the server's namespace", async () => {
     const client = await connected([def("read"), def("git")], () => Promise.resolve(ok("")));
     const listed = await client.listTools();
-    expect(listed.tools.map((t) => t.name)).toEqual(["mcp__shore__read", "mcp__shore__git"]);
+    expect(listed.tools.map((t) => t.name)).toEqual(["read", "git"]);
   });
 
   test("the schema reaches the model exactly as shore wrote it", async () => {
@@ -60,7 +62,7 @@ describe("what the model is shown", () => {
   test("a subagent is advertised like any other tool", async () => {
     const client = await connected([def("ask_internet")], () => Promise.resolve(ok("")));
     const listed = await client.listTools();
-    expect(listed.tools[0]?.name).toBe("mcp__shore__ask_internet");
+    expect(listed.tools[0]?.name).toBe("ask_internet");
   });
 
   test("descriptions are carried through so the model knows what a tool is for", async () => {
@@ -77,7 +79,7 @@ describe("the name a call comes back under", () => {
       seen.push(bare);
       return Promise.resolve(ok("contents"));
     });
-    await client.callTool({ name: "mcp__shore__read", arguments: { path: "SOUL.md" } });
+    await client.callTool({ name: "read", arguments: { path: "SOUL.md" } });
     expect(seen).toEqual(["read"]);
   });
 
@@ -94,7 +96,7 @@ describe("the name a call comes back under", () => {
       seen = input;
       return Promise.resolve(ok("contents"));
     });
-    await client.callTool({ name: "mcp__shore__read", arguments: { path: "SOUL.md", limit: 5 } });
+    await client.callTool({ name: "read", arguments: { path: "SOUL.md", limit: 5 } });
     expect(seen).toEqual({ path: "SOUL.md", limit: 5 });
   });
 
@@ -106,7 +108,7 @@ describe("the name a call comes back under", () => {
     });
     let refusal = "";
     try {
-      await client.callTool({ name: "mcp__shore__rm", arguments: { path: "/" } });
+      await client.callTool({ name: "rm", arguments: { path: "/" } });
     } catch (e) {
       refusal = e instanceof Error ? e.message : String(e);
     }
@@ -178,7 +180,88 @@ describe("what a tool result becomes", () => {
         ],
       } satisfies ContentBlock),
     );
-    const result = await client.callTool({ name: "mcp__shore__generate_image", arguments: {} });
+    const result = await client.callTool({ name: "generate_image", arguments: {} });
     expect(result.content).toEqual([{ type: "image", data: "AAAA", mimeType: "image/png" }]);
+  });
+});
+
+describe("the name the CLI actually uses at each boundary", () => {
+  test("shore advertises the bare name, because the CLI adds the namespace itself", async () => {
+    const client = await connected([def("read")], () => Promise.resolve(ok("")));
+    const listed = await client.listTools();
+    const advertised = listed.tools[0]?.name ?? "";
+    expect(advertised).toBe("read");
+    expect(`mcp__${SHORE_MCP_SERVER}__${advertised}`).toBe(
+      new ToolNames([def("read")]).wireOf("read") ?? "",
+    );
+  });
+
+  test("a call comes back under the advertised name, not the namespaced one", async () => {
+    const seen: string[] = [];
+    const client = await connected([def("read")], (bare) => {
+      seen.push(bare);
+      return Promise.resolve(ok("done"));
+    });
+    await client.callTool({ name: "read", arguments: {} });
+    expect(seen).toEqual(["read"]);
+  });
+
+  test("the namespaced name is refused, so a double prefix cannot slip through", async () => {
+    const client = await connected([def("read")], () => Promise.resolve(ok("")));
+    try {
+      await client.callTool({ name: "mcp__shore__read", arguments: {} });
+      throw new Error("should have been refused");
+    } catch (e) {
+      expect((e as Error).message).toContain("not one of shore's tools");
+    }
+  });
+
+  test("shore's own MCP tools keep their prefix through the round trip", async () => {
+    const seen: string[] = [];
+    const client = await connected([def("mcp__github__get_issue")], (bare) => {
+      seen.push(bare);
+      return Promise.resolve(ok("done"));
+    });
+    const listed = await client.listTools();
+    expect(listed.tools[0]?.name).toBe("mcp__github__get_issue");
+    await client.callTool({ name: "mcp__github__get_issue", arguments: {} });
+    expect(seen).toEqual(["mcp__github__get_issue"]);
+  });
+});
+
+describe("staying under what the CLI will inline", () => {
+  const big = (n: number): ContentBlock => ({
+    type: "tool_result",
+    tool_use_id: "toolu_1",
+    content: "x".repeat(n),
+  });
+
+  const bytesOf = (result: ReturnType<typeof toCallToolResult>): number =>
+    Buffer.byteLength(
+      result.content.map((c) => (c.type === "text" ? c.text : "")).join(""),
+      "utf8",
+    );
+
+  test("a result the CLI would spill to a file is windowed by shore first", () => {
+    expect(bytesOf(toCallToolResult(big(400_000)))).toBeLessThanOrEqual(MCP_RESULT_CEILING_BYTES);
+  });
+
+  test("shore says it truncated, rather than letting the model guess", () => {
+    const text = toCallToolResult(big(400_000)).content[0];
+    expect(text?.type === "text" ? text.text : "").toContain("tool_result truncated");
+  });
+
+  test("a result that already fits is passed through untouched", () => {
+    const text = toCallToolResult(big(100)).content[0];
+    expect(text?.type === "text" ? text.text : "").toBe("x".repeat(100));
+  });
+
+  test("multi-byte text is measured in bytes, not characters", () => {
+    const wide: ContentBlock = {
+      type: "tool_result",
+      tool_use_id: "toolu_1",
+      content: "\u3042".repeat(200_000),
+    };
+    expect(bytesOf(toCallToolResult(wide))).toBeLessThanOrEqual(MCP_RESULT_CEILING_BYTES);
   });
 });

@@ -280,6 +280,7 @@ function buildOptions(
   if (process.env.CLAUDE_CONFIG_DIR !== undefined) {
     env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
   }
+  if (surface !== undefined) env.MAX_MCP_OUTPUT_TOKENS = String(MCP_OUTPUT_CEILING_TOKENS);
   if (req.base_url !== undefined) env.ANTHROPIC_BASE_URL = req.base_url;
   if (req.api_key !== "") env.ANTHROPIC_API_KEY = req.api_key;
 
@@ -609,6 +610,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
 }
 
 const MCP_TOOL_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+const MCP_OUTPUT_CEILING_TOKENS = 1_000_000;
 
 const TURN_BACKSTOP = 64;
 
@@ -650,6 +652,10 @@ class RoundLog {
 
   addResult(block: ContentBlock): void {
     this.#results.push(block);
+  }
+
+  finalBlocks(): ContentBlock[] {
+    return this.#assembler.finish();
   }
 
   async close(acc: TurnAccumulator): Promise<void> {
@@ -760,6 +766,7 @@ export async function* claudeAgentToolLoopEvents(
       type: "done",
       content: acc.text,
       finish_reason: finishReasonOf(seen, acc.stopReason),
+      content_blocks: round.finalBlocks(),
       usage: seen.usage ?? acc.usage,
       timing: {
         total_ms: total,

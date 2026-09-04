@@ -141,19 +141,46 @@ own. `turnEvents` (`daemon/src/handler/generation.ts`) already picks a loop per 
 has an independent switch of the same shape; both are wired, or a subagent on this provider
 would silently get no tools.
 
-Shore's tools reach the SDK as one in-process MCP server built from `req.tools`. The CLI
-namespaces MCP tools as `mcp__<server>__<tool>` and offers no way to advertise a bare one, so
-every tool has two names, translated through a table built per turn:
+Shore's tools reach the SDK as one in-process MCP server built from `req.tools`. **The CLI applies
+the `mcp__<server>__` namespace itself**, to whatever the server advertises — so shore advertises
+the bare name and the prefixed form only ever exists on the model's side of the boundary. Getting
+this backwards costs nothing at registration and fails on every call, so the four boundaries are
+worth stating plainly (all four are verified against the real binary):
 
-| Boundary | Name |
-|---|---|
-| `req.tools`, and the ledger's tool-surface fingerprint | bare |
-| what the model is shown, and `canUseTool` | `mcp__shore__read` |
-| `dispatchTool`, and every block written to `active.jsonl` | bare |
+| Boundary | Name | Who chooses it |
+|---|---|---|
+| `req.tools`, and the ledger's tool-surface fingerprint | `read` | shore |
+| MCP `tools/list` | `read` | shore |
+| what the model is shown, and `canUseTool` | `mcp__shore__read` | the CLI |
+| the model's own `tool_use` block, as streamed | `mcp__shore__read` | the model |
+| MCP `tools/call` | `read` | the CLI |
+| `dispatchTool`, and every block written to `active.jsonl` | `read` | shore |
 
-The bare name is what gets persisted, so a conversation stays replayable if the character is
-later moved to another provider. Names that collide after sanitizing, or that are too long to
-advertise, are refused rather than merged or truncated.
+So the table translates in exactly two places: `canUseTool` maps prefixed to bare to decide, and a
+streamed `tool_use` is renamed back to bare before it is either matched to a call or persisted.
+The bare name is what gets written down, so a conversation stays replayable if the character is
+later moved to another provider — persisting the prefixed name would 400 every subsequent turn on
+the Anthropic provider, and nothing before that point would look wrong.
+
+Shore's own external MCP tools already arrive as `mcp__probe__echo_back`, so the model sees
+`mcp__shore__mcp__probe__echo_back`. The table round-trips that; string surgery would not.
+
+Names that collide after sanitizing, or that are too long to advertise, are refused rather than
+merged or truncated.
+
+**Result size.** The CLI will not inline an MCP result over **50,000 characters**: past that it
+writes the result to a file and substitutes a pointer to it — either an `exceeds maximum allowed
+tokens` error or a `<persisted-output>` block with a 2 KB preview. Both are useless here, because
+the file can only be opened with the CLI's own `Read` tool, which this provider disables. The
+result is not truncated, it is *gone*.
+
+There are two separate gates and only one is tunable, so shore handles them separately: the token
+gate (`MAX_MCP_OUTPUT_TOKENS`, default 25,000) is lifted in the subprocess environment, and shore
+windows every result to `MCP_RESULT_CEILING_BYTES` (48,000 bytes, measured in bytes because the
+CLI's limit is on encoded size) before handing it over. What the model then sees is shore's own
+head/tail window and its `[tool_result truncated: …]` notice — the same treatment as every other
+provider, just with a lower effective ceiling than a character's configured `max_result_chars`
+when that is set above ~48 KB.
 
 **The loop is the SDK's.** shore does not drive it, so:
 
@@ -176,8 +203,15 @@ advertise, are refused rather than merged or truncated.
   deliberately not wrapped around this arm — `/calls` inspection is blind here. Use the
   `ANTHROPIC_BASE_URL` proxy trick described above instead.
 
-Shore's prompts name tools bare (`read`, `search`), while the model sees them prefixed. Watch for
-the model reaching for the bare name.
+Shore's prompts name tools bare (`read`, `search`), while the model sees them prefixed. In practice
+the model follows the prefixed names it is given without trouble, but watch for it reaching for the
+bare one.
+
+**Verified against the real CLI.** A scratch daemon on this provider was driven through `read`,
+`search`, `git`, an external stdio MCP server and an `ask_*` subagent — including all three kinds
+called in parallel in one round. Tool frames render, the subagent trace lands in `subagents.jsonl`,
+the ledger takes one `message` row per turn plus a separate `subagent` row, and a regenerate after
+a tool-using turn resumed the session rather than cold-starting (input tokens stayed at 4).
 
 ### Other gaps
 

@@ -282,11 +282,6 @@ MUTANTS = [
      TOOLS,
      "      if (wire.length > MAX_MCP_NAME) throw new ToolNameTooLong(def.name, wire);\n",
      ""),
-    ("names: a tool nobody advertised is dispatched rather than refused",
-     TOOLS,
-     "    if (bare === undefined) throw new UnknownShoreTool(request.params.name);",
-     "    const name = bare ?? request.params.name;\n    if (false) throw new UnknownShoreTool(name);"),
-
     # --- what the model is shown of a tool -----------------------------------
     ("surface: the schema is replaced by an empty one, so arguments are unexplained",
      TOOLS,
@@ -370,6 +365,44 @@ MUTANTS = [
      AGENT,
      "      attached.push(block);\n",
      ""),
+    # --- the name at each boundary -------------------------------------------
+    ("names: the namespaced name is advertised, so the CLI prefixes it twice",
+     TOOLS,
+     "      name: def.name,",
+     "      name: names.wireOf(def.name) ?? def.name,"),
+    ("names: a call is looked up as though the CLI namespaced it",
+     TOOLS,
+     "    const bare = request.params.name;\n    if (names.wireOf(bare) === undefined) throw new UnknownShoreTool(bare);",
+     "    const bare = names.bareOf(request.params.name) ?? request.params.name;"),
+    ("names: any name at all is dispatched, advertised or not",
+     TOOLS,
+     "    if (names.wireOf(bare) === undefined) throw new UnknownShoreTool(bare);\n",
+     ""),
+
+    # --- what the CLI is allowed to do to a result ----------------------------
+    ("size: a result goes out whole, so the CLI spills it to a file instead",
+     TOOLS,
+     "  let budget = MCP_RESULT_CEILING_BYTES;",
+     "  return text;\n  let budget = MCP_RESULT_CEILING_BYTES;"),
+    ("size: the ceiling is raised past what the CLI will inline",
+     TOOLS,
+     "export const MCP_RESULT_CEILING_BYTES = 48_000;",
+     "export const MCP_RESULT_CEILING_BYTES = 480_000;"),
+    ("size: width is counted in characters, so multi-byte text still overflows",
+     TOOLS,
+     "    const bytes = Buffer.byteLength(windowed, \"utf8\");",
+     "    const bytes = windowed.length;"),
+    ("size: the CLI keeps its own token ceiling, which truncates twice",
+     AGENT,
+     "  if (surface !== undefined) env.MAX_MCP_OUTPUT_TOKENS = String(MCP_OUTPUT_CEILING_TOKENS);\n",
+     ""),
+
+    # --- what the finished turn contains --------------------------------------
+    ("rounds: the whole turn is returned as the final blocks, repeating each call",
+     AGENT,
+     "      content_blocks: round.finalBlocks(),\n",
+     ""),
+
     # --- what the turn is billed to ------------------------------------------
     ("billing: the subprocess inherits the daemon's environment, key included",
      AGENT,

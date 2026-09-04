@@ -5,10 +5,13 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { windowToolResult } from "../../tools/dispatch.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type { ToolDefinition } from "../types.ts";
 
 export const SHORE_MCP_SERVER = "shore";
+
+export const MCP_RESULT_CEILING_BYTES = 48_000;
 
 const MAX_MCP_NAME = 128;
 
@@ -70,14 +73,25 @@ function textOf(block: ContentBlock): string {
   return block.type === "text" ? block.text : "";
 }
 
+function underCeiling(text: string): string {
+  let budget = MCP_RESULT_CEILING_BYTES;
+  for (let pass = 0; pass < 4; pass += 1) {
+    const windowed = windowToolResult(text, budget).output;
+    const bytes = Buffer.byteLength(windowed, "utf8");
+    if (bytes <= MCP_RESULT_CEILING_BYTES) return windowed;
+    budget = Math.max(1, Math.floor((budget * MCP_RESULT_CEILING_BYTES) / bytes));
+  }
+  return windowToolResult(text, budget).output;
+}
+
 export function toCallToolResult(block: ContentBlock): CallToolResult {
   if (block.type !== "tool_result") {
-    return { content: [{ type: "text", text: textOf(block) }] };
+    return { content: [{ type: "text", text: underCeiling(textOf(block)) }] };
   }
 
   if (typeof block.content === "string") {
     return {
-      content: [{ type: "text", text: block.content }],
+      content: [{ type: "text", text: underCeiling(block.content) }],
       ...(block.is_error === true ? { isError: true } : {}),
     };
   }
@@ -85,7 +99,7 @@ export function toCallToolResult(block: ContentBlock): CallToolResult {
   const content: CallToolResult["content"] = [];
   for (const inner of block.content) {
     if (inner.type === "text") {
-      content.push({ type: "text", text: inner.text });
+      content.push({ type: "text", text: underCeiling(inner.text) });
     } else if (inner.type === "image") {
       content.push({ type: "image", data: inner.source.data, mimeType: inner.source.media_type });
     }
@@ -115,15 +129,15 @@ export function shoreToolServer(
 
   server.server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: defs.map((def) => ({
-      name: names.wireOf(def.name) ?? def.name,
+      name: def.name,
       description: def.description,
       inputSchema: def.input_schema as { type: "object" },
     })),
   }));
 
   server.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const bare = names.bareOf(request.params.name);
-    if (bare === undefined) throw new UnknownShoreTool(request.params.name);
+    const bare = request.params.name;
+    if (names.wireOf(bare) === undefined) throw new UnknownShoreTool(bare);
     return toCallToolResult(await run(bare, request.params.arguments ?? {}));
   });
 
