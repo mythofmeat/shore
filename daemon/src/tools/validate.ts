@@ -1,7 +1,8 @@
-import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
+import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
+import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-const ajv = new Ajv2020({
+const ajvOptions = {
   addUsedSchema: false,
   allowUnionTypes: true,
   allErrors: true,
@@ -10,8 +11,12 @@ const ajv = new Ajv2020({
   strict: true,
   useDefaults: false,
   validateFormats: true,
-});
-addFormats(ajv);
+} as const;
+
+const ajvDraft07 = new Ajv(ajvOptions);
+const ajv202012 = new Ajv2020(ajvOptions);
+addFormats(ajvDraft07);
+addFormats(ajv202012);
 
 export class InvalidToolSchema extends Error {
   constructor(tool: string, reason: string) {
@@ -42,13 +47,40 @@ export function compileToolSchema(tool: string, schema: unknown): CompiledToolSc
   const cached = compiledSchemas.get(schema);
   if (cached !== undefined) return cached;
 
+  const validator = validatorFor(tool, schema);
   try {
-    const compiled = new CompiledToolSchema(schema, ajv.compile(schema));
+    const compiled = new CompiledToolSchema(schema, validator.compile(schema));
     compiledSchemas.set(schema, compiled);
     return compiled;
   } catch (error) {
     throw new InvalidToolSchema(tool, error instanceof Error ? error.message : String(error));
   }
+}
+
+function validatorFor(tool: string, schema: Record<string, unknown>): Ajv | Ajv2020 {
+  const dialect = schema.$schema;
+  if (dialect === undefined || is202012Dialect(dialect)) return ajv202012;
+  if (isDraft07Dialect(dialect)) return ajvDraft07;
+
+  const declared = typeof dialect === "string" ? JSON.stringify(dialect) : describeJson(dialect);
+  throw new InvalidToolSchema(
+    tool,
+    `unsupported JSON Schema dialect ${declared}; supported dialects are draft-07 and 2020-12`,
+  );
+}
+
+function isDraft07Dialect(dialect: unknown): boolean {
+  return (
+    dialect === "http://json-schema.org/draft-07/schema" ||
+    dialect === "http://json-schema.org/draft-07/schema#"
+  );
+}
+
+function is202012Dialect(dialect: unknown): boolean {
+  return (
+    dialect === "https://json-schema.org/draft/2020-12/schema" ||
+    dialect === "https://json-schema.org/draft/2020-12/schema#"
+  );
 }
 
 export function schemasFrom(

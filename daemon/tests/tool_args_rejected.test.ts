@@ -120,17 +120,74 @@ describe("schema registration", () => {
     expect(BUILTIN_TOOL_SCHEMAS.size).toBe(ALL_TOOLS.length);
   });
 
+  test("draft-07 schemas compile with their dialect and validate arguments", () => {
+    const schema = compileToolSchema("draft-seven", {
+      $schema: "http://json-schema.org/draft-07/schema#",
+      type: "object",
+      properties: {
+        pair: {
+          type: "array",
+          items: [{ type: "string" }, { type: "integer" }],
+          additionalItems: false,
+          minItems: 2,
+          maxItems: 2,
+        },
+      },
+      required: ["pair"],
+    });
+
+    expect(schemaViolation(schema, { pair: ["one", 2] })).toBeUndefined();
+    expect(schemaViolation(schema, { pair: ["one", "two"] })).toContain("`pair[1]`");
+    expect(schemaViolation(schema, { pair: ["one", 2, 3] })).toContain("`pair`");
+  });
+
+  test("2020-12 declarations and the default retain 2020-12 validation", () => {
+    for (const dialect of [undefined, "https://json-schema.org/draft/2020-12/schema"]) {
+      const schema = compileToolSchema("modern", {
+        ...(dialect === undefined ? {} : { $schema: dialect }),
+        type: "object",
+        properties: {
+          pair: {
+            type: "array",
+            prefixItems: [{ type: "string" }, { type: "integer" }],
+            items: false,
+            minItems: 2,
+            maxItems: 2,
+          },
+        },
+        required: ["pair"],
+      });
+
+      expect(schemaViolation(schema, { pair: ["one", 2] })).toBeUndefined();
+      expect(schemaViolation(schema, { pair: ["one", "two"] })).toContain("`pair[1]`");
+      expect(schemaViolation(schema, { pair: ["one", 2, 3] })).toContain("`pair`");
+    }
+  });
+
   test("invalid and unsupported schemas are rejected instead of partially interpreted", () => {
     expect(() => compileToolSchema("broken", null)).toThrow(InvalidToolSchema);
     expect(() => compileToolSchema("future", { type: "object", mysteryKeyword: true })).toThrow(
       "unknown keyword",
     );
     expect(() =>
+      compileToolSchema("strict-draft-seven", {
+        $schema: "http://json-schema.org/draft-07/schema#",
+        type: "object",
+        mysteryKeyword: true,
+      }),
+    ).toThrow("unknown keyword");
+    expect(() =>
       compileToolSchema("format", {
         type: "object",
         properties: { value: { type: "string", format: "made-up-format" } },
       }),
     ).toThrow("unknown format");
+    expect(() =>
+      compileToolSchema("old", {
+        $schema: "http://json-schema.org/draft-04/schema#",
+        type: "object",
+      }),
+    ).toThrow("supported dialects are draft-07 and 2020-12");
   });
 
   test("duplicate names cannot replace an already compiled contract", () => {
