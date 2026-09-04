@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { MAIN_THREAD, archiveKey } from "../src/config/dirs.ts";
 import {
+  SESSION_BOOK_VERSION,
   bookPathIn,
   sessionKey,
   type SessionBook,
@@ -396,17 +397,17 @@ describe("archiving a thread", () => {
     const root = await dataDir();
     await createThread(root, "aria", "scratch", NOW);
     const book: SessionBook = {
-      [sessionKey("aria", "shore", "scratch")]: { sessionId: "s-scratch", entries: [] },
-      [sessionKey("aria", "shore", MAIN_THREAD)]: { sessionId: "s-home", entries: [] },
-      [sessionKey("bo", "shore", "scratch")]: { sessionId: "s-other", entries: [] },
+      [sessionKey("aria", "shore", "scratch")]: { version: SESSION_BOOK_VERSION, sessionId: "s-scratch", entries: [] },
+      [sessionKey("aria", "shore", MAIN_THREAD)]: { version: SESSION_BOOK_VERSION, sessionId: "s-home", entries: [] },
+      [sessionKey("bo", "shore", "scratch")]: { version: SESSION_BOOK_VERSION, sessionId: "s-other", entries: [] },
     };
     await writeFile(bookPathIn(root), JSON.stringify(book));
 
     await archiveThread(root, "aria", "scratch");
 
     expect(JSON.parse(await readFile(bookPathIn(root), "utf8"))).toEqual({
-      [sessionKey("aria", "shore", MAIN_THREAD)]: { sessionId: "s-home", entries: [] },
-      [sessionKey("bo", "shore", "scratch")]: { sessionId: "s-other", entries: [] },
+      [sessionKey("aria", "shore", MAIN_THREAD)]: { version: SESSION_BOOK_VERSION, sessionId: "s-home", entries: [] },
+      [sessionKey("bo", "shore", "scratch")]: { version: SESSION_BOOK_VERSION, sessionId: "s-other", entries: [] },
     });
   });
 
@@ -417,7 +418,7 @@ describe("archiving a thread", () => {
     await writeFile(
       bookPathIn(root),
       JSON.stringify({
-        [sessionKey("aria", "shore", MAIN_THREAD)]: { sessionId: "s-home", entries: [] },
+        [sessionKey("aria", "shore", MAIN_THREAD)]: { version: SESSION_BOOK_VERSION, sessionId: "s-home", entries: [] },
       }),
     );
 
@@ -430,7 +431,7 @@ describe("archiving a thread", () => {
     const root = await dataDir();
     await createThread(root, "aria", "scratch", NOW);
     const raw = JSON.stringify({
-      [sessionKey("aria", "shore", MAIN_THREAD)]: { sessionId: "s-home", entries: [] },
+      [sessionKey("aria", "shore", MAIN_THREAD)]: { version: SESSION_BOOK_VERSION, sessionId: "s-home", entries: [] },
     });
     await writeFile(bookPathIn(root), raw);
 

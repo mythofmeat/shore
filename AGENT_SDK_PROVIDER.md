@@ -61,7 +61,13 @@ The Agent SDK cannot be seeded with assistant turns — `query()` accepts user m
 the SDK owns history and shore tracks which session corresponds to which conversation.
 
 `$SHORE_DATA_DIR/claude_agent_sessions.json` maps a conversation (character + ledger + thread)
-to a session id plus a hash of every message delivered so far. The main thread is keyed exactly
+to a session id plus a hash of every message delivered so far. The hash covers every content
+block, not just text — an image, a tool call's arguments and a tool result's output each change
+it — so two turns that differ only in what was attached are not read as one. Whitespace-only text
+blocks are dropped first, mirroring `daemon/src/handler/wire_messages.ts`, so a turn hashes the
+same when it is recorded as it does when it comes back on the wire. The book carries a `version`;
+one written under an older hash is ignored rather than compared against, which costs a single cold
+start on upgrade. The main thread is keyed exactly
 as it was before threads existed, so an in-flight session survives the upgrade; a side thread
 gets a session of its own, which is what makes running this provider in one thread while the
 main conversation stays on another possible at all. Each turn:
@@ -130,8 +136,9 @@ be worth keeping.
 ## Removing it
 
 1. Delete `daemon/src/llm/providers/claude_agent.ts`,
-   `daemon/src/llm/providers/agent_sessions.ts` and
-   `daemon/tests/claude_agent_sessions.test.ts`.
+   `daemon/src/llm/providers/agent_sessions.ts`,
+   `daemon/tests/claude_agent_sessions.test.ts` and
+   `daemon/scripts/mutate_claude_agent.py`.
 2. Revert the four one-line touches: the `Sdk` union and `SDK_VARIANTS` in `daemon/src/llm/types.ts`,
    the import and table entry in `daemon/src/llm/providers/table.ts`, the effort case in
    `daemon/src/llm/settings.ts`, and the sdk-picker suggestion list in

@@ -13,7 +13,10 @@ export interface DeliveredEntry {
   uuid?: string;
 }
 
+export const SESSION_BOOK_VERSION = 2;
+
 export interface SessionRecord {
+  version: number;
   sessionId: string;
   entries: DeliveredEntry[];
   pendingAssistantUuid?: string;

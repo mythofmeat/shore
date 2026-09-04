@@ -5,6 +5,7 @@ import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent
 
 import { MAIN_THREAD } from "../../config/dirs.ts";
 import {
+  SESSION_BOOK_VERSION,
   SESSION_KEY_SEPARATOR,
   bookPath,
   readBook,
@@ -14,6 +15,8 @@ import {
   type SessionRecord,
 } from "./agent_sessions.ts";
 import type { ContentBlock } from "../../engine/types.ts";
+import { compareByCodePoint } from "../../util/sort.ts";
+import { omissionNotice } from "../images.ts";
 import {
   REASONING_OFF,
   streamErrorEvent,
@@ -73,20 +76,47 @@ const BUILTIN_TOOLS = [
 
 export type { DeliveredEntry, SessionRecord } from "./agent_sessions.ts";
 
-function messageText(msg: WireMessage): string {
-  return msg.content
-    .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+function digest(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 32);
+}
+
+function canonicalJson(value: unknown): string {
+  if (typeof value !== "object" || value === null) return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => compareByCodePoint(a, b));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
+}
+
+function blockFingerprint(block: ContentBlock): string {
+  switch (block.type) {
+    case "text":
+      return `text:${block.text}`;
+    case "image":
+      return `image:${block.source.media_type}:${digest(block.source.data)}`;
+    case "tool_use":
+      return `tool_use:${block.id}:${block.name}:${canonicalJson(block.input)}`;
+    case "tool_result": {
+      const body =
+        typeof block.content === "string"
+          ? block.content
+          : block.content.map(blockFingerprint).join(SESSION_KEY_SEPARATOR);
+      return `tool_result:${block.tool_use_id}:${block.is_error === true ? "1" : "0"}:${digest(body)}`;
+    }
+    case "thinking":
+      return `thinking:${block.signature ?? ""}:${digest(block.thinking)}`;
+    case "redacted_thinking":
+      return `redacted_thinking:${digest(block.data)}`;
+  }
+}
+
+function hashableBlocks(msg: WireMessage): ContentBlock[] {
+  return msg.content.filter((b) => !(b.type === "text" && b.text.trim() === ""));
 }
 
 function messageHash(msg: WireMessage): string {
-  return createHash("sha256")
-    .update(msg.role)
-    .update(SESSION_KEY_SEPARATOR)
-    .update(messageText(msg))
-    .digest("hex")
-    .slice(0, 32);
+  return digest([msg.role, ...hashableBlocks(msg).map(blockFingerprint)].join(SESSION_KEY_SEPARATOR));
 }
 
 function commonPrefix(hashes: readonly string[], entries: readonly DeliveredEntry[]): number {
@@ -103,10 +133,23 @@ function lastAssistantEntry(entries: readonly DeliveredEntry[], upto: number): n
   return -1;
 }
 
+function replayText(msg: WireMessage): string {
+  return hashableBlocks(msg)
+    .map((block) => {
+      if (block.type === "text") return block.text;
+      if (block.type === "image") {
+        return omissionNotice(block.source.media_type, "this provider replays history as text");
+      }
+      return "";
+    })
+    .filter((text) => text !== "")
+    .join("\n");
+}
+
 function renderReplay(msgs: readonly WireMessage[]): string {
   return msgs
     .map((m) => {
-      const text = messageText(m);
+      const text = replayText(m);
       if (text.trim() === "") return "";
       if (m.role === "assistant") return `<prior_assistant_turn>\n${text}\n</prior_assistant_turn>`;
       return text;
@@ -129,7 +172,7 @@ function coldStart(msgs: readonly WireMessage[]): TurnPlan {
 }
 
 export function planTurn(record: SessionRecord | undefined, msgs: readonly WireMessage[]): TurnPlan {
-  if (record === undefined) return coldStart(msgs);
+  if (record === undefined || record.version !== SESSION_BOOK_VERSION) return coldStart(msgs);
 
   const hashes = msgs.map(messageHash);
   const k = commonPrefix(hashes, record.entries);
@@ -300,6 +343,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
 
       if (sessionId !== undefined) {
         book[key] = {
+          version: SESSION_BOOK_VERSION,
           sessionId,
           entries: nextEntries(plan, record?.pendingAssistantUuid),
           ...(assistantUuid === undefined ? {} : { pendingAssistantUuid: assistantUuid }),

@@ -8,6 +8,7 @@ import {
   type SessionRecord,
 } from "../src/llm/providers/claude_agent.ts";
 import {
+  SESSION_BOOK_VERSION,
   sessionKey,
   sessionKeyThread,
   withoutThread,
@@ -31,6 +32,7 @@ function messageHashOf(m: WireMessage): string {
 function seed(history: readonly WireMessage[], assistantUuid?: string): SessionRecord {
   const plan = planTurn(undefined, history);
   return {
+    version: SESSION_BOOK_VERSION,
     sessionId: "session-1",
     entries: nextEntries(plan, undefined),
     ...(assistantUuid === undefined ? {} : { pendingAssistantUuid: assistantUuid }),
@@ -63,7 +65,8 @@ describe("planTurn", () => {
 
   test("a diverged tail forks at the last kept assistant uuid", () => {
     const record: SessionRecord = {
-      sessionId: "session-1",
+      version: SESSION_BOOK_VERSION,
+    sessionId: "session-1",
       entries: [
         { hash: "h-user1" },
         { hash: "h-asst1", uuid: "asst-uuid-1" },
@@ -92,10 +95,11 @@ describe("planTurn", () => {
 describe("planTurn regeneration", () => {
   function afterTwoTurns(): SessionRecord {
     const cold = planTurn(undefined, [user1]);
-    const first: SessionRecord = { sessionId: "session-1", entries: nextEntries(cold, undefined) };
+    const first: SessionRecord = { version: SESSION_BOOK_VERSION, sessionId: "session-1", entries: nextEntries(cold, undefined) };
     const second = planTurn(first, [user1, asst1, user2]);
     return {
-      sessionId: "session-1",
+      version: SESSION_BOOK_VERSION,
+    sessionId: "session-1",
       entries: nextEntries(second, "asst-uuid-1"),
       pendingAssistantUuid: "asst-uuid-2",
     };
@@ -124,7 +128,8 @@ describe("planTurn regeneration", () => {
   test("regenerating the very first reply cold starts, since nothing can anchor a fork", () => {
     const cold = planTurn(undefined, [user1]);
     const record: SessionRecord = {
-      sessionId: "session-1",
+      version: SESSION_BOOK_VERSION,
+    sessionId: "session-1",
       entries: nextEntries(cold, undefined),
       pendingAssistantUuid: "asst-uuid-1",
     };
@@ -139,7 +144,8 @@ describe("planTurn fork bookkeeping", () => {
   test("a fork does not keep entries the forked session cannot contain", () => {
     const nudge = msg("user", "still there?");
     const record: SessionRecord = {
-      sessionId: "session-1",
+      version: SESSION_BOOK_VERSION,
+    sessionId: "session-1",
       entries: [
         { hash: messageHashOf(user1) },
         { hash: messageHashOf(asst1), uuid: "asst-uuid-1" },
@@ -236,10 +242,10 @@ describe("conversationKey", () => {
 
 describe("forgetting a thread's sessions", () => {
   const book = (): SessionBook => ({
-    [sessionKey("qifei", "/l.db", "main")]: { sessionId: "home", entries: [] },
-    [sessionKey("qifei", "/l.db", "eval")]: { sessionId: "eval", entries: [] },
-    [sessionKey("qifei", "/other.db", "eval")]: { sessionId: "eval-other", entries: [] },
-    [sessionKey("aria", "/l.db", "eval")]: { sessionId: "aria-eval", entries: [] },
+    [sessionKey("qifei", "/l.db", "main")]: { version: SESSION_BOOK_VERSION, sessionId: "home", entries: [] },
+    [sessionKey("qifei", "/l.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "eval", entries: [] },
+    [sessionKey("qifei", "/other.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "eval-other", entries: [] },
+    [sessionKey("aria", "/l.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "aria-eval", entries: [] },
   });
 
   test("drops every ledger's session for that character's thread", () => {
@@ -265,5 +271,101 @@ describe("forgetting a thread's sessions", () => {
     const kept = withoutThread(book(), "qifei", "main");
     expect(kept?.[sessionKey("qifei", "/l.db", "main")]).toBeUndefined();
     expect(kept?.[sessionKey("qifei", "/l.db", "eval")]?.sessionId).toBe("eval");
+  });
+});
+
+describe("what a message hash is taken over", () => {
+  const withBlocks = (role: WireMessage["role"], content: WireMessage["content"]): WireMessage => ({
+    role,
+    content,
+  });
+
+  const image = (data: string, media_type = "image/png"): WireMessage =>
+    withBlocks("user", [{ type: "image", source: { type: "base64", media_type, data } }]);
+
+  test("two turns differing only by the image attached no longer collide", () => {
+    expect(messageHashOf(image("AAAA"))).not.toBe(messageHashOf(image("BBBB")));
+  });
+
+  test("the same image under a different media type is a different turn", () => {
+    expect(messageHashOf(image("AAAA"))).not.toBe(messageHashOf(image("AAAA", "image/jpeg")));
+  });
+
+  test("a caption alongside an image is not the whole of what is hashed", () => {
+    const captioned = (data: string): WireMessage =>
+      withBlocks("user", [
+        { type: "text", text: "look at this" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data } },
+      ]);
+    expect(messageHashOf(captioned("AAAA"))).not.toBe(messageHashOf(captioned("BBBB")));
+  });
+
+  test("two tool calls to the same tool with different arguments are told apart", () => {
+    const call = (path: string): WireMessage =>
+      withBlocks("assistant", [{ type: "tool_use", id: "t1", name: "read", input: { path } }]);
+    expect(messageHashOf(call("SOUL.md"))).not.toBe(messageHashOf(call("USER.md")));
+  });
+
+  test("the same arguments in a different key order are the same call", () => {
+    const call = (input: unknown): WireMessage =>
+      withBlocks("assistant", [{ type: "tool_use", id: "t1", name: "read", input }]);
+    expect(messageHashOf(call({ path: "SOUL.md", limit: 10 }))).toBe(
+      messageHashOf(call({ limit: 10, path: "SOUL.md" })),
+    );
+  });
+
+  test("two tool results carrying different output are told apart", () => {
+    const result = (content: string): WireMessage =>
+      withBlocks("user", [{ type: "tool_result", tool_use_id: "t1", content }]);
+    expect(messageHashOf(result("ok"))).not.toBe(messageHashOf(result("no such file")));
+  });
+
+  test("a failed tool result is not the same as a successful one with the same text", () => {
+    const result = (is_error: boolean): WireMessage =>
+      withBlocks("user", [{ type: "tool_result", tool_use_id: "t1", content: "no", is_error }]);
+    expect(messageHashOf(result(true))).not.toBe(messageHashOf(result(false)));
+  });
+
+  test("a whitespace-only text block is ignored, so recording and replay agree", () => {
+    const recorded = withBlocks("assistant", [
+      { type: "text", text: "   " },
+      { type: "tool_use", id: "t1", name: "read", input: { path: "SOUL.md" } },
+    ]);
+    const replayed = withBlocks("assistant", [
+      { type: "tool_use", id: "t1", name: "read", input: { path: "SOUL.md" } },
+    ]);
+    expect(messageHashOf(recorded)).toBe(messageHashOf(replayed));
+  });
+
+  test("the role is still part of the hash", () => {
+    expect(messageHashOf(msg("user", "same"))).not.toBe(messageHashOf(msg("assistant", "same")));
+  });
+});
+
+describe("the session book version", () => {
+  test("a book written before the hash changed is not trusted", () => {
+    const stale = { ...seed([user1]), version: 1 };
+    const plan = planTurn(stale, [user1, asst1, user2]);
+    expect(plan.resume).toBeUndefined();
+    expect(plan.fork).toBe(false);
+    expect(plan.prompt).toContain("Brian");
+  });
+
+  test("a book with no version at all is not trusted either", () => {
+    const { version: _dropped, ...legacy } = seed([user1]);
+    const plan = planTurn(legacy as SessionRecord, [user1, asst1, user2]);
+    expect(plan.resume).toBeUndefined();
+  });
+});
+
+describe("replaying a history that is not all text", () => {
+  test("an image-only turn is named rather than silently deleted", () => {
+    const withImage: WireMessage = {
+      role: "user",
+      content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AA" } }],
+    };
+    const plan = planTurn(undefined, [withImage, asst1, user2]);
+    expect(plan.prompt).toContain("image omitted");
+    expect(plan.prompt).toContain("image/png");
   });
 });
