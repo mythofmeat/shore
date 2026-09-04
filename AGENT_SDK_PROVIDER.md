@@ -121,21 +121,25 @@ be worth keeping.
 - **Packaging.** `@anthropic-ai/claude-agent-sdk` pulls a ~205 MB native Claude Code binary and
   spawns it as a subprocess. That has not been reconciled with `bun --compile`, makepkg, or the
   brew tap yet, so treat this as dev-only until it has.
-- **Session book is not garbage collected.** Entries accumulate per character + ledger + thread,
-  and every fork mints a new session id. It is a small JSON file, but nothing prunes it, and
-  archiving a thread does not yet drop its entry.
+- **Session book is only partly garbage collected.** Archiving a thread drops its entry, but
+  nothing else does: entries accumulate per character + ledger + thread, and every fork mints a
+  new session id. Deleting a character leaves its sessions behind. It is a small JSON file.
 - **Compaction desync.** Shore compacting a conversation changes the message prefix, so the next
   turn falls back to a cold start with a text replay. Correct, but it pays a full cache write.
 
 ## Removing it
 
-1. Delete `daemon/src/llm/providers/claude_agent.ts` and
+1. Delete `daemon/src/llm/providers/claude_agent.ts`,
+   `daemon/src/llm/providers/agent_sessions.ts` and
    `daemon/tests/claude_agent_sessions.test.ts`.
 2. Revert the four one-line touches: the `Sdk` union and `SDK_VARIANTS` in `daemon/src/llm/types.ts`,
    the import and table entry in `daemon/src/llm/providers/table.ts`, the effort case in
    `daemon/src/llm/settings.ts`, and the sdk-picker suggestion list in
    `client/shore-cli/src/tui/ui.rs`.
-3. Restore the expected variant list in `daemon/tests/config_captures/model_resolution.json`.
-4. `bun remove @anthropic-ai/claude-agent-sdk`.
+3. Drop the `forgetThreadSessions` import and its call in `archiveThread`
+   (`daemon/src/engine/threads.ts`), and the two mutants and three tests that cover it.
+4. Restore the expected variant list in `daemon/tests/config_captures/model_resolution.json`.
+5. `bun remove @anthropic-ai/claude-agent-sdk`.
 
-Nothing else in shore refers to it.
+`engine/threads.ts` is the only module outside the provider that reaches into it, which is why the
+session book lives in its own file: pruning on archive does not drag the SDK into the thread path.
