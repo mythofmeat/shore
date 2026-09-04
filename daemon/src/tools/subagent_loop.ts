@@ -14,7 +14,11 @@ import { resolvedReplayPriorThinking, toRequestModel } from "../config/models.ts
 import { renderTemplate } from "../engine/prompt.ts";
 import type { Message } from "../engine/types.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
-import { genericToolLoopEvents } from "../llm/providers/generic_loop.ts";
+import {
+  genericToolLoopEvents,
+  type ModelCallRetryOptions,
+} from "../llm/providers/generic_loop.ts";
+import { claudeAgentToolLoopEvents } from "../llm/providers/claude_agent.ts";
 import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
 import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
 import {
@@ -43,7 +47,7 @@ import {
   type ToolContext,
   type ToolLimitsView,
 } from "./dispatch.ts";
-import { toolPhase } from "./execute.ts";
+import { toolPhase, type ToolPhase } from "./execute.ts";
 import type { McpRegistry, McpToolDef } from "./mcp_registry.ts";
 import { ALL_TOOLS } from "./registry.ts";
 import {
@@ -225,12 +229,14 @@ export async function runSubagent(
       );
     },
   };
-  const events: AsyncIterable<StreamEvent> =
-    request.sdk === "anthropic" || provider === undefined
-      ? capturedEvents(deps.callStore, request, () =>
-          anthropicToolLoopEvents(request, phase, signal, Date.now, retry),
-        )
-      : genericToolLoopEvents(provider, request, phase, signal, Date.now, retry);
+  const events: AsyncIterable<StreamEvent> = subagentEvents(
+    deps,
+    request,
+    provider,
+    phase,
+    signal,
+    retry,
+  );
 
   const blocked = budgetBlockFor(request);
   if (blocked) {
@@ -302,4 +308,21 @@ function describe(err: { kind: string; message?: string }): string {
 
 function toolLimits(config: LoadedConfig): ToolLimitsView {
   return toolLimitsFrom(config.app.tools, config.app.subagents);
+}
+
+function subagentEvents(
+  deps: Pick<SubagentDeps, "callStore">,
+  request: SidecarRequest,
+  provider: SidecarProvider | undefined,
+  phase: ToolPhase,
+  signal: AbortSignal | undefined,
+  retry?: ModelCallRetryOptions,
+): AsyncIterable<StreamEvent> {
+  if (request.sdk === "anthropic" || provider === undefined) {
+    return capturedEvents(deps.callStore, request, () =>
+      anthropicToolLoopEvents(request, phase, signal, Date.now, retry),
+    );
+  }
+  if (request.sdk === "claude_agent") return claudeAgentToolLoopEvents(request, phase, signal);
+  return genericToolLoopEvents(provider, request, phase, signal, Date.now, retry);
 }

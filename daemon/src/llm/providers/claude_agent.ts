@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 
-import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import {
+  query,
+  type CanUseTool,
+  type Options,
+  type SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RawMessageStreamEvent } from "@anthropic-ai/sdk/resources/messages";
 
 import { shoreLog } from "../../log.ts";
@@ -9,6 +15,7 @@ import {
   anthropicContentEvents,
   marksFirstToken,
   newTurnAccumulator,
+  type TurnAccumulator,
 } from "./anthropic.ts";
 
 import { MAIN_THREAD } from "../../config/dirs.ts";
@@ -25,6 +32,9 @@ import {
 import type { ContentBlock } from "../../engine/types.ts";
 import { compareByCodePoint } from "../../util/sort.ts";
 import { omissionNotice } from "../images.ts";
+import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
+import type { ToolPhase } from "../../tools/execute.ts";
+import { budgetBlockFor } from "../../ledger/gate.ts";
 import {
   REASONING_OFF,
   streamErrorEvent,
@@ -192,7 +202,19 @@ export function conversationKey(req: SidecarRequest): string {
   );
 }
 
-function buildOptions(req: SidecarRequest, plan: TurnPlan, abort: AbortController): Options {
+export interface AgentToolSurface {
+  instance: McpServer;
+  canUseTool: CanUseTool;
+  maxTurns: number;
+  timeoutMs: number;
+}
+
+function buildOptions(
+  req: SidecarRequest,
+  plan: TurnPlan,
+  abort: AbortController,
+  surface?: AgentToolSurface,
+): Options {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
@@ -218,10 +240,23 @@ function buildOptions(req: SidecarRequest, plan: TurnPlan, abort: AbortControlle
     disallowedTools: NESTED_LOOP_TOOLS,
     settings: { autoCompactEnabled: false },
     includePartialMessages: true,
-    maxTurns: 1,
     cwd: tmpdir(),
     env,
     abortController: abort,
+    ...(surface === undefined
+      ? { maxTurns: 1 }
+      : {
+          maxTurns: surface.maxTurns,
+          canUseTool: surface.canUseTool,
+          mcpServers: {
+            [SHORE_MCP_SERVER]: {
+              type: "sdk" as const,
+              name: SHORE_MCP_SERVER,
+              instance: surface.instance,
+              timeout: surface.timeoutMs,
+            },
+          },
+        }),
     ...(plan.resume === undefined ? {} : { resume: plan.resume }),
     ...(plan.resumeSessionAt === undefined ? {} : { resumeSessionAt: plan.resumeSessionAt }),
     ...(plan.fork ? { forkSession: true } : {}),
@@ -274,6 +309,7 @@ function endsATurn(event: RawMessageStreamEvent): boolean {
 async function* rawEventsOf(
   run: AsyncIterable<SDKMessage>,
   seen: SdkTurnFacts,
+  onRoundStart?: () => Promise<void>,
 ): AsyncIterable<RawMessageStreamEvent> {
   for await (const msg of run) {
     const sid = (msg as { session_id?: string }).session_id;
@@ -295,6 +331,7 @@ async function* rawEventsOf(
     if (msg.type === "stream_event") {
       const event = msg.event as RawMessageStreamEvent;
       if (endsATurn(event)) seen.sawStopReason = true;
+      if (event.type === "message_start" && onRoundStart !== undefined) await onRoundStart();
       yield event;
       continue;
     }
@@ -320,7 +357,7 @@ function isNestedFrame(msg: SDKMessage): msg is SDKMessage & { parent_tool_use_i
   return typeof parent === "string";
 }
 
-class GeneratedBlocks {
+export class BlockAssembler {
   readonly #blocks: ContentBlock[] = [];
   #text = "";
   #thinking = "";
@@ -456,7 +493,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
   }
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
-    const blocks = new GeneratedBlocks();
+    const blocks = new BlockAssembler();
     let content = "";
     let finish_reason = "end_turn";
     let usage = emptyUsage();
@@ -483,5 +520,168 @@ export class ClaudeAgentProvider implements SidecarProvider {
       timing,
       model: req.model,
     };
+  }
+}
+
+const MCP_TOOL_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+
+const TURN_BACKSTOP = 64;
+
+const TOOL_BUDGET_SPENT =
+  "You have used the tool budget for this turn. Answer with what you already have.";
+
+function withBareName(event: StreamEvent, names: ToolNames): StreamEvent {
+  if (event.type !== "tool_use") return event;
+  const bare = names.bareOf(event.name);
+  return bare === undefined ? event : { ...event, name: bare };
+}
+
+class RoundLog {
+  readonly #phase: ToolPhase;
+  readonly #pending = new Map<string, string[]>();
+  #assembler = new BlockAssembler();
+  #results: ContentBlock[] = [];
+  #minted = 0;
+  iterations = 0;
+
+  constructor(phase: ToolPhase) {
+    this.#phase = phase;
+  }
+
+  absorb(event: StreamEvent): void {
+    this.#assembler.absorb(event);
+    if (event.type !== "tool_use") return;
+    const queue = this.#pending.get(event.name) ?? [];
+    queue.push(event.id);
+    this.#pending.set(event.name, queue);
+  }
+
+  claimId(bare: string): string {
+    const claimed = this.#pending.get(bare)?.shift();
+    if (claimed !== undefined) return claimed;
+    this.#minted += 1;
+    return `toolu_shore_${String(this.#minted)}`;
+  }
+
+  addResult(block: ContentBlock): void {
+    this.#results.push(block);
+  }
+
+  async close(acc: TurnAccumulator): Promise<void> {
+    const blocks = this.#assembler.finish();
+    this.#assembler = new BlockAssembler();
+    acc.text = "";
+    if (this.#results.length === 0) return;
+    const results = this.#results;
+    this.#results = [];
+    this.iterations += 1;
+    await this.#phase.recordTurn("assistant", blocks);
+    await this.#phase.recordTurn("user", results);
+  }
+}
+
+export async function* claudeAgentToolLoopEvents(
+  req: SidecarRequest,
+  tools: ToolPhase,
+  signal?: AbortSignal,
+  deps: ClaudeAgentDeps = {},
+): AsyncIterable<StreamEvent> {
+  const defs = req.tools ?? [];
+  if (defs.length === 0) {
+    yield* new ClaudeAgentProvider(deps).stream(req, signal);
+    return;
+  }
+
+  const startedAt = Date.now();
+  let firstTokenAt = 0;
+  const acc = newTurnAccumulator();
+  const seen: SdkTurnFacts = { subtype: "success" };
+
+  const path = (deps.bookPath ?? bookPath)();
+  const key = conversationKey(req);
+  const book = readBook(path);
+  const record = book[key];
+  const plan = planTurn(record, req.messages);
+
+  const abort = new AbortController();
+  if (signal?.aborted) abort.abort();
+  signal?.addEventListener("abort", () => abort.abort(), { once: true });
+
+  const names = new ToolNames(defs);
+  const round = new RoundLog(tools);
+  const cap = req.max_tool_iterations;
+
+  const instance = shoreToolServer(defs, names, async (bare, input) => {
+    const block = await tools.runTool({ id: round.claimId(bare), name: bare, input });
+    round.addResult(block);
+    return block;
+  });
+
+  const canUseTool: CanUseTool = (toolName) => {
+    if (names.bareOf(toolName) === undefined) {
+      return Promise.resolve({
+        behavior: "deny",
+        message: `${toolName} is not one of shore's tools`,
+      });
+    }
+    if (cap !== undefined && round.iterations >= cap) {
+      return Promise.resolve({ behavior: "deny", message: TOOL_BUDGET_SPENT });
+    }
+    const blocked = budgetBlockFor(req);
+    if (blocked !== undefined) {
+      return Promise.resolve({ behavior: "deny", message: blocked.message });
+    }
+    return Promise.resolve({ behavior: "allow" });
+  };
+
+  try {
+    yield { type: "start", model: req.model };
+
+    const run = (deps.runQuery ?? query)({
+      prompt: plan.prompt,
+      options: buildOptions(req, plan, abort, {
+        instance,
+        canUseTool,
+        maxTurns: cap === undefined ? TURN_BACKSTOP : cap + 2,
+        timeoutMs: MCP_TOOL_TIMEOUT_MS,
+      }),
+    });
+
+    const events = anthropicContentEvents(
+      rawEventsOf(run, seen, () => round.close(acc)),
+      acc,
+    );
+    for await (const streamed of events) {
+      const event = withBareName(streamed, names);
+      if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
+      round.absorb(event);
+      yield event;
+    }
+
+    if (seen.sessionId !== undefined) {
+      book[key] = {
+        version: SESSION_BOOK_VERSION,
+        sessionId: seen.sessionId,
+        entries: nextEntries(plan, record?.pendingAssistantUuid),
+        ...(seen.assistantUuid === undefined ? {} : { pendingAssistantUuid: seen.assistantUuid }),
+      };
+      writeBook(path, book);
+    }
+
+    const total = Date.now() - startedAt;
+    yield {
+      type: "done",
+      content: acc.text,
+      finish_reason: finishReasonOf(seen, acc.stopReason),
+      usage: seen.usage ?? acc.usage,
+      timing: {
+        total_ms: total,
+        time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
+      },
+    };
+  } catch (e) {
+    yield streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now);
+  } finally {
+    abort.abort();
   }
 }

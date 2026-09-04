@@ -32,6 +32,7 @@ import {
 } from "../llm/credentials.ts";
 import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
 import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
+import { claudeAgentToolLoopEvents } from "../llm/providers/claude_agent.ts";
 import {
   genericToolLoopEvents,
   type ModelCallRetryOptions,
@@ -478,6 +479,7 @@ export function turnEvents(
       anthropicToolLoopEvents(call, phase, signal, Date.now, retry),
     );
   }
+  if (call.sdk === "claude_agent") return claudeAgentToolLoopEvents(call, phase, signal);
   return genericToolLoopEvents(provider, call, phase, signal, Date.now, retry);
 }
 

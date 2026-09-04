@@ -1,4 +1,6 @@
 import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import type { AgentQuery } from "../llm/providers/claude_agent.ts";
 
@@ -15,8 +17,14 @@ export interface FakeUsage {
   cache_creation_input_tokens?: number;
 }
 
+export interface FakeToolCall {
+  name: string;
+  input?: Record<string, unknown>;
+}
+
 export interface FakeRound {
   blocks: FakeBlock[];
+  toolCalls?: FakeToolCall[];
   stopReason?: string | null;
   startUsage?: FakeUsage;
   deltaUsage?: FakeUsage;
@@ -38,9 +46,17 @@ export interface FakeCall {
   options: Options;
 }
 
+export interface FakeToolOutcome {
+  name: string;
+  allowed: boolean;
+  denial?: string;
+  output?: unknown;
+}
+
 export interface FakeAgent {
   query: AgentQuery;
   calls: FakeCall[];
+  toolOutcomes: FakeToolOutcome[];
 }
 
 function messageStart(id: string, usage: FakeUsage): unknown {
@@ -138,6 +154,11 @@ function finishedBlock(block: FakeBlock): unknown {
   }
 }
 
+function stopReasonOf(round: FakeRound): string | null {
+  if (round.stopReason !== undefined) return round.stopReason;
+  return (round.toolCalls ?? []).length > 0 ? "tool_use" : "end_turn";
+}
+
 function usageBlock(usage: FakeUsage): unknown {
   return {
     input_tokens: usage.input_tokens ?? 0,
@@ -145,6 +166,16 @@ function usageBlock(usage: FakeUsage): unknown {
     cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
     cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
   };
+}
+
+function requestedBlocks(round: FakeRound, index: number): FakeBlock[] {
+  const asked = (round.toolCalls ?? []).map<FakeBlock>((call, n) => ({
+    kind: "tool_use",
+    id: `toolu_${String(index)}_${String(n)}`,
+    name: call.name,
+    input: call.input ?? {},
+  }));
+  return [...round.blocks, ...asked];
 }
 
 function* roundFrames(
@@ -164,7 +195,7 @@ function* roundFrames(
 
   yield wrap(messageStart(messageId, round.startUsage ?? {}), `${messageId}_start`);
 
-  for (const [at, block] of round.blocks.entries()) {
+  for (const [at, block] of requestedBlocks(round, index).entries()) {
     yield wrap(blockStart(at, block), `${messageId}_bs_${String(at)}`);
     for (const [n, delta] of blockDeltas(at, block).entries()) {
       yield wrap(delta, `${messageId}_bd_${String(at)}_${String(n)}`);
@@ -192,7 +223,7 @@ function* roundFrames(
   yield wrap(
     {
       type: "message_delta",
-      delta: { stop_reason: round.stopReason === undefined ? "end_turn" : round.stopReason, stop_sequence: null },
+      delta: { stop_reason: stopReasonOf(round), stop_sequence: null },
       usage: usageBlock(round.deltaUsage ?? {}),
     },
     `${messageId}_md`,
@@ -200,16 +231,73 @@ function* roundFrames(
   yield wrap({ type: "message_stop" }, `${messageId}_ms`);
 }
 
+async function shoreClient(options: Options): Promise<Client | undefined> {
+  const server = options.mcpServers?.["shore"];
+  if (server === undefined || server.type !== "sdk") return undefined;
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "fake-cli", version: "1.0.0" });
+  await Promise.all([server.instance.connect(serverSide), client.connect(clientSide)]);
+  return client;
+}
+
 export function fakeAgent(script: FakeScript): FakeAgent {
   const calls: FakeCall[] = [];
+  const toolOutcomes: FakeToolOutcome[] = [];
   const sessionId = script.sessionId ?? "session-fake";
 
-  const run = async function* (): AsyncIterable<SDKMessage> {
+  const run = async function* (options: Options): AsyncIterable<SDKMessage> {
+    let client: Client | undefined;
+    let interrupted = false;
+
     for (const [index, round] of script.rounds.entries()) {
       for (const frame of roundFrames(round, index, sessionId)) {
         yield frame as unknown as SDKMessage;
         await Promise.resolve();
       }
+
+      const asked = round.toolCalls ?? [];
+      if (asked.length === 0) continue;
+      client ??= await shoreClient(options);
+      if (client === undefined) continue;
+
+      const results: unknown[] = [];
+      for (const [n, call] of asked.entries()) {
+        const input = call.input ?? {};
+        const verdict = await options.canUseTool?.(call.name, input, {
+          signal: new AbortController().signal,
+          toolUseID: `toolu_${String(index)}_${String(n)}`,
+          requestId: `req_${String(index)}_${String(n)}`,
+        });
+        if (verdict?.behavior === "deny") {
+          const denial = verdict.message;
+          toolOutcomes.push({ name: call.name, allowed: false, denial });
+          if (verdict.interrupt === true) interrupted = true;
+          results.push({
+            type: "tool_result",
+            tool_use_id: `toolu_${String(index)}_${String(n)}`,
+            content: denial,
+            is_error: true,
+          });
+          continue;
+        }
+        const output = await client.callTool({ name: call.name, arguments: input });
+        toolOutcomes.push({ name: call.name, allowed: true, output: output.content });
+        results.push({
+          type: "tool_result",
+          tool_use_id: `toolu_${String(index)}_${String(n)}`,
+          content: output.content,
+        });
+      }
+
+      yield {
+        type: "user",
+        message: { role: "user", content: results },
+        parent_tool_use_id: null,
+        uuid: `msg_${String(index)}_results`,
+        session_id: sessionId,
+      } as unknown as SDKMessage;
+
+      if (interrupted) break;
     }
 
     if (script.compactMidTurn === true) {
@@ -243,9 +331,10 @@ export function fakeAgent(script: FakeScript): FakeAgent {
 
   return {
     calls,
+    toolOutcomes,
     query: (params) => {
       calls.push({ prompt: params.prompt, options: params.options });
-      return run();
+      return run(params.options);
     },
   };
 }

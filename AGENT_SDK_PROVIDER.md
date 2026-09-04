@@ -103,31 +103,71 @@ A fork also resets the delivered record to the anchor. Everything after it is re
 forked session does not contain it — keeping those entries would claim the SDK had seen messages
 it never did. `tests/claude_agent_sessions.test.ts` pins all of this.
 
-## What is not available yet
+## Tools
 
-### Tools — none
+A character on this provider gets shore's own tools — the built-ins, whatever external MCP
+servers are configured, and the `ask_*` subagents — running through shore's dispatcher, with
+shore's argument validation, per-tool timeouts, result windowing, media handling and
+`tool_call` / `tool_result` frames. There is no second implementation.
 
-**This is the big one. A character on this provider has no tools at all.** For qifei that means
-no `read`, `edit`, `search`, `git` or `activity_heatmap`, and none of the `internet`, `memory`,
-`music` or `lights` subagents. Judge the provider knowing that is missing.
+The bridge is that shore's tool loop lives *outside* the provider while the Agent SDK runs its
+own. `turnEvents` (`daemon/src/handler/generation.ts`) already picks a loop per `sdk`, so
+`claude_agent` gets its own arm alongside the Anthropic one, and that arm is handed the
+`ToolPhase` the `SidecarProvider` contract deliberately withholds. `daemon/src/tools/subagent_loop.ts`
+has an independent switch of the same shape; both are wired, or a subagent on this provider
+would silently get no tools.
 
-The obstacle is structural rather than fiddly. Shore's tool loop lives *outside* the provider —
-`genericToolLoopEvents` drives it, and the provider only ever streams a `tool_use` event and gets
-called again later with the result. The Agent SDK runs its own loop and expects to execute tools
-itself through handlers it owns. Bridging them means one of:
+Shore's tools reach the SDK as one in-process MCP server built from `req.tools`. The CLI
+namespaces MCP tools as `mcp__<server>__<tool>` and offers no way to advertise a bare one, so
+every tool has two names, translated through a table built per turn:
 
-1. Register shore's tools as SDK MCP tools (`createSdkMcpServer`) whose handlers call back into
-   shore's dispatcher. This needs the provider to reach the tool executor, which the
-   `SidecarProvider` contract deliberately does not hand it, and it moves the loop into the SDK —
-   bypassing shore's dispatch, permission and tracing paths.
-2. Let the SDK use its *own* built-in tools (`Read`/`Edit`/`Grep`/`Bash`) with `cwd` pointed at
-   the character workspace. Cheap, and a decent fit for qifei's file tools, but it is a second
-   tool implementation with different semantics and no shore subagents.
+| Boundary | Name |
+|---|---|
+| `req.tools`, and the ledger's tool-surface fingerprint | bare |
+| what the model is shown, and `canUseTool` | `mcp__shore__read` |
+| `dispatchTool`, and every block written to `active.jsonl` | bare |
 
-Neither is a small change, and which one is right depends on whether this provider turns out to
-be worth keeping.
+The bare name is what gets persisted, so a conversation stays replayable if the character is
+later moved to another provider. Names that collide after sanitizing, or that are too long to
+advertise, are refused rather than merged or truncated.
+
+**The loop is the SDK's.** shore does not drive it, so:
+
+- Each round is written down as the assistant's `tool_use` blocks followed by their
+  `tool_result`s, in that order, which is what `engine/merge.ts` needs to fold a tool-using turn
+  back into one logical turn for regeneration and alt-switching. The final reply is not recorded
+  as a round — it leaves in the finished turn.
+- `max_tool_iterations` is enforced in `canUseTool` rather than through the SDK's `maxTurns`.
+  Exceeding `maxTurns` ends a turn on a dangling `tool_use` with no prose; denying without
+  `interrupt` lets the model answer with what it has, which is what shore's own cap does.
+  `maxTurns` is left as an unreachable backstop.
+- Budgets are checked in the same place, so a budget that trips mid-turn stops further tools
+  instead of being noticed only at the end.
+- Usage is **one ledger row per turn**, taken from the run's own result — the SDK reports it
+  per-turn for the main loop, which is exactly one row's worth. `ask_*` subagents still bill
+  separately through their own rows, because they run shore's loop. There is no per-round
+  accounting, so a report cannot break a turn down by round on this provider as it can on the
+  others.
+- The wire is not captured. The SDK's HTTP happens in a subprocess, so `capturedEvents` is
+  deliberately not wrapped around this arm — `/calls` inspection is blind here. Use the
+  `ANTHROPIC_BASE_URL` proxy trick described above instead.
+
+Shore's prompts name tools bare (`read`, `search`), while the model sees them prefixed. Watch for
+the model reaching for the bare name.
 
 ### Other gaps
+
+- **The fork anchor drifts once a turn has tool rounds.** `nextEntries` stamps the single
+  `pendingAssistantUuid` on the *first* assistant message in the delivered tail. A tool-using turn
+  puts several there — the `tool_use` turn and the final prose turn — so the uuid lands on the
+  wrong one and the skew grows with every such turn. An edit-and-regenerate then forks the SDK
+  session after content shore believes it forked before. Resuming and extending are unaffected.
+- **A cold start erases tool history.** `renderReplay` emits text only, so replayed turns lose
+  every `tool_use` and `tool_result`: the model is told it said things with no record of what it
+  did. Cold starts are not rare — shore compacting a conversation forces one.
+- **Images still do not reach the model.** The prompt is a string, so an attached image is
+  announced as an omission notice rather than sent. `assistantImageModeForRequest` also still
+  hardcodes `anthropic`, so assistant-attached images degrade to `[sent an image]` stand-ins.
 
 - **`total_cost_usd` is deliberately unset** — though so is Anthropic's. Cost comes from shore's
   own pricing catalogue, and `subscription = true` already suppresses it, so this is not a
@@ -146,6 +186,7 @@ be worth keeping.
 ## Removing it
 
 1. Delete `daemon/src/llm/providers/claude_agent.ts`,
+   `daemon/tests/claude_agent_loop.test.ts`,
    `daemon/src/llm/providers/agent_sessions.ts`,
    `daemon/src/llm/providers/claude_agent_tools.ts`,
    `daemon/src/testing/fake_agent_query.ts`,
@@ -154,7 +195,9 @@ be worth keeping.
    `daemon/tests/claude_agent_stream.test.ts` and
    `daemon/scripts/mutate_claude_agent.py`.
 2. Revert the four one-line touches: the `Sdk` union and `SDK_VARIANTS` in `daemon/src/llm/types.ts`,
-   the import and table entry in `daemon/src/llm/providers/table.ts`, the effort case in
+   the import and table entry in `daemon/src/llm/providers/table.ts`, the `claude_agent` arm
+   in `turnEvents` (`daemon/src/handler/generation.ts`) and in `subagentEvents`
+   (`daemon/src/tools/subagent_loop.ts`), the effort case in
    `daemon/src/llm/settings.ts`, and the sdk-picker suggestion list in
    `client/shore-cli/src/tui/ui.rs`.
 3. Drop the `forgetThreadSessions` import and its call in `archiveThread`

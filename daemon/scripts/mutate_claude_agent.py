@@ -49,9 +49,15 @@ timeout by name and falls back to defaults on a miss, so a leaked prefix means a
 subagent runs with no argument validation and the global timeout rather than its
 configured hour, and nothing is logged.
 
-A mutant is KILLED if `bun test tests/claude_agent_sessions.test.ts
-tests/claude_agent_stream.test.ts tests/claude_agent_tools.test.ts` fails with it
-applied.
+The loop group is about the shape of what a tool-using turn writes down.
+`engine/merge.ts` folds an assistant turn holding tool_use blocks, a user turn
+holding their results, and a final assistant turn back into one logical turn, and
+regeneration and alt-switching both rest on that grouping. Recording the pair out
+of order, recording the final reply twice, or letting an earlier round's prose
+into the finished turn each produce a conversation that reads correctly once and
+comes apart when it is edited.
+
+A mutant is KILLED if the tests listed in TESTS fail with it applied.
 
 Run from the repository root:
     python3 daemon/scripts/mutate_claude_agent.py
@@ -68,6 +74,7 @@ TESTS = [
     "tests/claude_agent_sessions.test.ts",
     "tests/claude_agent_stream.test.ts",
     "tests/claude_agent_tools.test.ts",
+    "tests/claude_agent_loop.test.ts",
 ]
 
 # (label, file, find, replace)
@@ -134,10 +141,9 @@ MUTANTS = [
     # --- reading a stream the provider does not own ---------------------------
     ("stream: the model's own events are ignored, so nothing streams at all",
      AGENT,
-     "      const event = msg.event as RawMessageStreamEvent;\n"
-     "      if (endsATurn(event)) seen.sawStopReason = true;\n"
+     "      if (event.type === \"message_start\" && onRoundStart !== undefined) await onRoundStart();\n"
      "      yield event;\n",
-     "      continue;\n"),
+     "      if (event.type === \"message_start\" && onRoundStart !== undefined) await onRoundStart();\n"),
     ("stream: an agent the SDK ran on its own is read as part of the reply",
      AGENT,
      "  const parent = (msg as { parent_tool_use_id?: string | null }).parent_tool_use_id;\n  return typeof parent === \"string\";",
@@ -252,6 +258,57 @@ MUTANTS = [
      "      content.push({ type: \"image\", data: inner.source.data, mimeType: inner.source.media_type });\n"
      "    }",
      "    }"),
+
+    # --- the shape a tool round is written down in ---------------------------
+    ("loop: the tool call is written down under the name the SDK advertised it as",
+     AGENT,
+     "  const bare = names.bareOf(event.name);\n  return bare === undefined ? event : { ...event, name: bare };",
+     "  return event;"),
+    ("loop: the result is recorded before the call it answers",
+     AGENT,
+     "    await this.#phase.recordTurn(\"assistant\", blocks);\n"
+     "    await this.#phase.recordTurn(\"user\", results);",
+     "    await this.#phase.recordTurn(\"user\", results);\n"
+     "    await this.#phase.recordTurn(\"assistant\", blocks);"),
+    ("loop: the final reply is recorded as a round as well, so the turn says it twice",
+     AGENT,
+     "    if (this.#results.length === 0) return;\n",
+     ""),
+    ("loop: prose from an earlier round is carried into the finished turn",
+     AGENT,
+     "    acc.text = \"\";\n    if (this.#results.length === 0) return;",
+     "    if (this.#results.length === 0) return;"),
+    ("loop: a round is not counted, so the tool budget is never spent",
+     AGENT,
+     "    this.iterations += 1;\n",
+     ""),
+    ("loop: every result is given a fresh id rather than the call's own",
+     AGENT,
+     "    const claimed = this.#pending.get(bare)?.shift();\n    if (claimed !== undefined) return claimed;",
+     "",),
+    ("loop: a spent tool budget still allows the call",
+     AGENT,
+     "    if (cap !== undefined && round.iterations >= cap) {\n"
+     "      return Promise.resolve({ behavior: \"deny\", message: TOOL_BUDGET_SPENT });\n"
+     "    }",
+     ""),
+    ("loop: the budget denial interrupts, so the turn ends without an answer",
+     AGENT,
+     "      return Promise.resolve({ behavior: \"deny\", message: TOOL_BUDGET_SPENT });",
+     "      return Promise.resolve({ behavior: \"deny\", message: TOOL_BUDGET_SPENT, interrupt: true });"),
+    ("loop: a tool shore never advertised is allowed through to the dispatcher",
+     AGENT,
+     "    if (names.bareOf(toolName) === undefined) {\n"
+     "      return Promise.resolve({\n"
+     "        behavior: \"deny\",\n"
+     "        message: `${toolName} is not one of shore's tools`,\n"
+     "      });\n"
+     "    }",
+     ""),
+    ("loop: the tool surface is never handed over, so a tool turn has no tools",
+     AGENT,
+     "  const defs = req.tools ?? [];\n  if (defs.length === 0) {",
+     "  const defs = req.tools ?? [];\n  if (true) {"),
 
     # --- what a text-only replay says about the rest -------------------------
     ("replay: an image-only turn is dropped again, so the history skips it in silence",
