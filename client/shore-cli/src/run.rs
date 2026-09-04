@@ -118,12 +118,18 @@ pub(crate) async fn execute(
     if let Some(requested) = thread.as_deref().filter(|r| !r.is_empty())
         && let Some(serving) = history.selected_thread.as_deref().filter(|s| !s.is_empty())
         && serving != requested
+        && reads_the_selected_thread(command_ref)
     {
-        return Err(format!(
-            "no thread named {requested:?} for {display_character}; talking in {serving:?}. \
-             Run `shore thread` to list them."
-        )
-        .into());
+        return Err(report_unresolved_thread(
+            requested,
+            serving,
+            &display_character,
+            thread_source(
+                cli.thread.as_deref(),
+                std::env::var("SHORE_THREAD").ok().as_deref(),
+                requested,
+            ),
+        ));
     }
 
     match command_ref {
@@ -156,6 +162,13 @@ pub(crate) async fn execute(
             subcommand: Some(crate::cli::ThreadCommand::Use { name }),
             ..
         } => handle_switch_thread(&mut conn, name, &display_character).await?,
+        CliCommand::Thread {
+            subcommand: Some(crate::cli::ThreadCommand::Archive { name }),
+            json,
+        } => {
+            handle_thread_command(&mut conn, command_ref, false, *json).await?;
+            forget_archived_thread(&display_character, name);
+        }
         CliCommand::Thread { subcommand, json } => {
             handle_thread_command(&mut conn, command_ref, subcommand.is_none(), *json).await?;
         }
@@ -945,6 +958,79 @@ async fn apply_model_change(
     Ok(())
 }
 
+fn reads_the_selected_thread(command: &CliCommand) -> bool {
+    match command {
+        CliCommand::Msg { .. }
+        | CliCommand::Log { .. }
+        | CliCommand::Compact { .. }
+        | CliCommand::Clear { .. }
+        | CliCommand::Segments { .. } => true,
+
+        CliCommand::Thread { .. }
+        | CliCommand::Character { .. }
+        | CliCommand::Status { .. }
+        | CliCommand::Model { .. }
+        | CliCommand::Provider { .. }
+        | CliCommand::Config { .. }
+        | CliCommand::Usage { .. }
+        | CliCommand::Trace { .. }
+        | CliCommand::Debug { .. }
+        | CliCommand::Export { .. }
+        | CliCommand::Import { .. }
+        | CliCommand::View { .. }
+        | CliCommand::Ui { .. }
+        | CliCommand::Completions { .. }
+        | CliCommand::Complete { .. } => false,
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ThreadSource {
+    Flag,
+    Env,
+    Saved,
+}
+
+fn thread_source(from_cli: Option<&str>, from_env: Option<&str>, requested: &str) -> ThreadSource {
+    if from_cli != Some(requested) {
+        return ThreadSource::Saved;
+    }
+    if from_env == Some(requested) {
+        ThreadSource::Env
+    } else {
+        ThreadSource::Flag
+    }
+}
+
+fn report_unresolved_thread(
+    requested: &str,
+    serving: &str,
+    character: &str,
+    source: ThreadSource,
+) -> Box<dyn std::error::Error> {
+    output::print_error(&format!("no thread named {requested:?} for {character}"));
+    cli_err!();
+    match source {
+        ThreadSource::Flag => cli_err!("  you asked for it with --thread"),
+        ThreadSource::Env => cli_err!("  SHORE_THREAD names it in this shell"),
+        ThreadSource::Saved => {
+            cli_err!("  it is the thread `shore thread use` saved for {character}");
+        }
+    }
+    cli_err!("  the daemon is serving {serving:?}");
+    cli_err!();
+    cli_err!("  shore thread             list the threads that do exist");
+    cli_err!("  shore thread new {requested}   create it");
+    match source {
+        ThreadSource::Flag => cli_err!("  shore thread use {requested}   make it the saved choice"),
+        ThreadSource::Env => cli_err!("  set -e SHORE_THREAD      drop the override"),
+        ThreadSource::Saved => cli_err!("  shore thread use {serving}      go back to {serving}"),
+    }
+    Box::new(ReportedError::new(format!(
+        "no thread named {requested:?} for {character}"
+    )))
+}
+
 async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::error::Error>>> {
     if matches!(&cli.command, Some(CliCommand::Config { path: true, .. })) {
         return Some(print_config_path(cli).await);
@@ -1007,6 +1093,18 @@ async fn handle_switch_thread(
     cli_out!("Talking in thread: {name}");
     cli_out!("To override per-terminal: export SHORE_THREAD={name}");
     Ok(())
+}
+
+fn forget_archived_thread(character: &str, archived: &str) {
+    if state::read_active_thread(character).as_deref() == Some(archived) {
+        match state::clear_active_thread(character) {
+            Ok(()) => cli_out!("{archived} was your saved thread; back to the home thread"),
+            Err(e) => output::print_error(&format!("could not forget thread {archived}: {e}")),
+        }
+    }
+    if std::env::var("SHORE_THREAD").ok().as_deref() == Some(archived) {
+        cli_err!("SHORE_THREAD still names {archived} in this shell — unset it");
+    }
 }
 
 async fn handle_thread_command(
@@ -1752,6 +1850,76 @@ mod tests {
     use shore_common::protocol::types::*;
 
     use crate::cli::{Cli, CliCommand, MsgCommand};
+
+    #[test]
+    fn thread_commands_survive_a_thread_name_that_no_longer_resolves() {
+        for args in [
+            vec!["thread"],
+            vec!["thread", "new", "eval"],
+            vec!["thread", "use", "main"],
+            vec!["thread", "archive", "eval"],
+            vec!["thread", "label", "eval", "Agent SDK"],
+            vec!["thread", "home", "main"],
+            vec!["character"],
+            vec!["status"],
+            vec!["model"],
+        ] {
+            let mut full = vec!["shore"];
+            full.extend_from_slice(&args);
+            let cli = <Cli as clap::Parser>::parse_from(full);
+            let command = cli.command.as_ref().expect("a command");
+            assert!(
+                !super::reads_the_selected_thread(command),
+                "`shore {}` must run even when the selected thread is gone",
+                args.join(" "),
+            );
+        }
+    }
+
+    #[test]
+    fn conversation_commands_still_refuse_the_wrong_thread() {
+        for args in [
+            vec!["msg", "send", "hi"],
+            vec!["log"],
+            vec!["compact"],
+            vec!["clear"],
+            vec!["segments"],
+        ] {
+            let mut full = vec!["shore"];
+            full.extend_from_slice(&args);
+            let cli = <Cli as clap::Parser>::parse_from(full);
+            let command = cli.command.as_ref().expect("a command");
+            assert!(
+                super::reads_the_selected_thread(command),
+                "`shore {}` reads the thread, so a wrong one has to be an error",
+                args.join(" "),
+            );
+        }
+    }
+
+    #[test]
+    fn an_unresolved_thread_is_traced_to_where_it_was_named() {
+        use super::{ThreadSource, thread_source};
+
+        assert_eq!(
+            thread_source(None, None, "eval"),
+            ThreadSource::Saved,
+            "nothing on the command line means it came off disk",
+        );
+        assert_eq!(
+            thread_source(Some("eval"), Some("eval"), "eval"),
+            ThreadSource::Env,
+        );
+        assert_eq!(
+            thread_source(Some("eval"), None, "eval"),
+            ThreadSource::Flag,
+        );
+        assert_eq!(
+            thread_source(Some("eval"), Some("other"), "eval"),
+            ThreadSource::Flag,
+            "the flag beats the environment, so name the flag",
+        );
+    }
 
     macro_rules! assert_variant {
         ($value:expr, $pattern:pat => $body:expr $(,)?) => {{

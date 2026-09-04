@@ -60,6 +60,21 @@ pub fn write_active_thread(character: &str, thread: &str) -> std::io::Result<()>
     std::fs::write(path, thread)
 }
 
+pub fn clear_active_thread(character: &str) -> std::io::Result<()> {
+    let Some(path) = thread_state_path(character) else {
+        return Ok(());
+    };
+    debug!(character, "Clearing active thread state file");
+    remove_at(&path)
+}
+
+fn remove_at(path: &Path) -> std::io::Result<()> {
+    match std::fs::remove_file(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
+}
+
 fn read_from(primary: &Path, legacy: &Path) -> Option<String> {
     let content = std::fs::read_to_string(primary)
         .or_else(|_| std::fs::read_to_string(legacy))
@@ -130,6 +145,29 @@ mod tests {
 
         std::fs::write(&p.primary, "  carol  \n").unwrap();
         assert_eq!(read_from(&p.primary, &p.legacy).as_deref(), Some("carol"));
+    }
+
+    #[test]
+    fn clearing_a_choice_removes_it_and_forgives_a_missing_file() {
+        let p = paths();
+        write_to(&p.primary, "eval").unwrap();
+        remove_at(&p.primary).unwrap();
+        assert!(
+            read_from(&p.primary, &p.legacy).is_none(),
+            "the choice is gone",
+        );
+        remove_at(&p.primary).expect("clearing twice is not an error");
+    }
+
+    #[test]
+    fn a_thread_path_refuses_a_character_that_could_escape_the_dir() {
+        for name in ["", "..", ".", "a/b", "a\\b"] {
+            assert!(
+                thread_state_path(name).is_none(),
+                "{name:?} must not name a state file",
+            );
+        }
+        assert!(thread_state_path("qifei").is_some());
     }
 
     #[test]

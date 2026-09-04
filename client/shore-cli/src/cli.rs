@@ -69,6 +69,9 @@ const RETIRED_FLAGS: [(&str, &str); 6] = [
 
 const NAMED_BY_USE: [&str; 3] = ["model", "character", "thread"];
 
+/// Words people reach for when the bare command is already the listing.
+const LISTING_VERBS: [&str; 4] = ["list", "ls", "all", "show"];
+
 const PROMOTED: [(&str, &str); 1] = [("memory compact", "compact")];
 
 const FOLDED_IN: [(&str, &str); 1] = [(
@@ -89,6 +92,7 @@ pub(crate) enum FlagProblem {
     Misplaced(&'static str),
     Retired(&'static str, &'static str),
     BareName(&'static str, String),
+    AlreadyLists(&'static str, String),
     Promoted(&'static str, &'static str),
     NeedsEquals(&'static str, String),
 }
@@ -276,6 +280,9 @@ fn bare_name(words: &[String], flagged: bool) -> Option<FlagProblem> {
     if names_a_subcommand(command, name) {
         return None;
     }
+    if LISTING_VERBS.contains(&name.as_str()) {
+        return Some(FlagProblem::AlreadyLists(known, name.clone()));
+    }
     Some(FlagProblem::BareName(known, name.clone()))
 }
 
@@ -304,6 +311,13 @@ pub(crate) fn report_flag_problem(problem: &FlagProblem) -> std::process::ExitCo
             crate::output::print_error(&format!("`shore {command}` no longer takes a name"));
             cli_err!();
             cli_err!("  shore {command} use {name}");
+        }
+        FlagProblem::AlreadyLists(command, ref name) => {
+            crate::output::print_error(&format!(
+                "`shore {command}` has no `{name}` — it is already the listing"
+            ));
+            cli_err!();
+            cli_err!("  shore {command}");
         }
         FlagProblem::Promoted(old, now) => {
             crate::output::print_error(&format!("`shore {old}` is now a command of its own"));
@@ -3512,6 +3526,22 @@ mod tests {
             misplaced(&["thread", "scratch"]),
             Some(FlagProblem::BareName("thread", "scratch".to_owned()))
         );
+    }
+
+    #[test]
+    fn a_guessed_listing_verb_is_not_read_as_a_name() {
+        for (command, verb) in [
+            ("thread", "list"),
+            ("thread", "ls"),
+            ("model", "all"),
+            ("character", "show"),
+        ] {
+            assert_eq!(
+                misplaced(&[command, verb]),
+                Some(FlagProblem::AlreadyLists(command, verb.to_owned())),
+                "`shore {command} {verb}` must not be answered with `use {verb}`",
+            );
+        }
     }
 
     #[test]
