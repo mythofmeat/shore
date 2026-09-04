@@ -180,14 +180,55 @@ the model reaching for the bare name.
   difference from the other providers. The SDK does compute a figure locally from a bundled price
   table, and it is not fed to the ledger: on a subscription it is not real money.
 - **No `temperature` / `top_p`.** The SDK exposes no sampling controls.
-- **Packaging.** `@anthropic-ai/claude-agent-sdk` pulls a ~205 MB native Claude Code binary and
-  spawns it as a subprocess. That has not been reconciled with `bun --compile`, makepkg, or the
-  brew tap yet, so treat this as dev-only until it has.
+- **Packaging.** The compiled daemon cannot find the CLI this provider spawns. See
+  [Packaging](#packaging) — it is the one thing keeping this dev-only.
 - **Session book is only partly garbage collected.** Archiving a thread drops its entry, but
   nothing else does: entries accumulate per character + ledger + thread, and every fork mints a
   new session id. Deleting a character leaves its sessions behind. It is a small JSON file.
 - **Compaction desync.** Shore compacting a conversation changes the message prefix, so the next
   turn falls back to a cold start with a text replay. Correct, but it pays a full cache write.
+
+## Packaging
+
+**This is what keeps the provider dev-only.** Measured against 0.3.260 on 2026-09-04.
+
+The native CLI is not downloaded at runtime, as was previously assumed here. It ships as
+platform-specific **optional npm dependencies** — `@anthropic-ai/claude-agent-sdk-linux-x64` and
+friends — so `bun install` places it in `node_modules` like any other package. On this machine
+that is 405 MB, because both the glibc and musl linux-x64 variants resolve; the SDK package
+itself is 4.9 MB.
+
+At runtime `sdk.mjs` finds the binary with `createRequire(import.meta.url).resolve(...)`, i.e.
+ordinary `node_modules` resolution relative to its own file. That is exactly what
+`bun build --compile` takes away: inside the compiled executable `import.meta.url` points into the
+bundle, so resolution fails. Confirmed by compiling a probe and running it away from any
+`node_modules`:
+
+```
+Native CLI binary for linux-x64 not found. Reinstall @anthropic-ai/claude-agent-sdk
+without --omit=optional, or set options.pathToClaudeCodeExecutable.
+```
+
+`daemon/Dockerfile` is unaffected — it runs from source with `node_modules` present, which is why
+Docker already works.
+
+### The options
+
+1. **Point at an installed Claude Code.** `Options.pathToClaudeCodeExecutable` overrides the
+   resolution entirely, and the same probe compiled with it set reaches the SDK normally. This is
+   the cheapest fix and arguably the right one: the subscription path already assumes the user has
+   Claude Code installed and logged in, because that is where `CLAUDE_CONFIG_DIR` credentials come
+   from. Cost is a config knob, a resolution order (explicit setting → `PATH` → the platform's
+   usual install location), and an error that names the setting when nothing is found. Ships
+   nothing, so makepkg and the brew tap need no change beyond declaring the dependency.
+2. **Ship `node_modules` beside the binary.** Abandons the single-executable property that
+   `--compile` exists for, and puts 200 MB into every package.
+3. **Docker only.** Already works; just say so and stop offering the compiled path for this
+   provider.
+4. **Leave it dev-only.** Also a real answer while the provider is still being judged.
+
+Option 1 is small and self-contained, but it is a decision about what shore requires of a host, so
+it is written down rather than taken.
 
 ## Removing it
 
