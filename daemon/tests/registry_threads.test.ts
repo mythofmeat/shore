@@ -11,6 +11,8 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import { ThreadError } from "../src/engine/threads.ts";
+import { ForkBusy } from "../src/engine/fork.ts";
+import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
 
 const roots: string[] = [];
 
@@ -154,6 +156,53 @@ describe("the registry as the thread authority", () => {
 
     await registry.touchThread("aria", "scratch");
     expect(registry.listThreads("aria")[1]?.last_active).toBeDefined();
+  });
+
+  test("forking through the registry publishes the child and caches its engine apart", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    const home = await registry.getOrCreate("aria");
+    await home.appendMessage({
+      msg_id: "u1",
+      role: "user",
+      content: "first",
+      images: [],
+      content_blocks: [{ type: "text", text: "first" }],
+      timestamp: "2026-09-05T00:00:00.000Z",
+    });
+
+    const result = await registry.forkThread("aria", MAIN_THREAD, "spin");
+
+    expect(result.fork.message_count).toBe(1);
+    expect(registry.listThreads("aria").map((t) => t.id)).toEqual([MAIN_THREAD, "spin"]);
+    expect(registry.homeThread("aria")).toBe(MAIN_THREAD);
+    const child = await registry.getOrCreate("aria", "spin");
+    expect(child).not.toBe(home);
+    expect(child.conversationDir).toBe(join(dataDir, "aria", "threads", "spin"));
+    expect(child.messages().map((m) => m.content)).toEqual(["first"]);
+  });
+
+  test("a fork while that character is compacting answers busy rather than half-copying", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    const guard = tryBeginCompaction(dataDir, "aria");
+    expect(guard).toBeDefined();
+    try {
+      await registry.forkThread("aria", MAIN_THREAD, "spin").then(
+        () => {
+          throw new Error("expected the fork to be refused");
+        },
+        (e: unknown) => {
+          expect(e).toBeInstanceOf(ForkBusy);
+        },
+      );
+    } finally {
+      guard?.release();
+    }
+
+    expect(registry.listThreads("aria").map((t) => t.id)).toEqual([MAIN_THREAD]);
+    expect(existsSync(join(dataDir, "aria", "threads", "spin"))).toBe(false);
+
+    await registry.forkThread("aria", MAIN_THREAD, "spin");
+    expect(registry.listThreads("aria").map((t) => t.id)).toEqual([MAIN_THREAD, "spin"]);
   });
 
   test("threads of two characters stay separate", async () => {

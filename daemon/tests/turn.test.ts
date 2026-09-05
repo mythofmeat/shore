@@ -37,6 +37,7 @@ function normalisePath(p: string): string {
 }
 
 const MINTED_ID_RE = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MINTED_VERSION_RE = /^mv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalise(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(normalise);
@@ -47,6 +48,8 @@ function normalise(v: unknown): unknown {
         out[k] = "<minted_id>";
       } else if (k === "timestamp" && val === MINTED_TS) {
         out[k] = "<minted_timestamp>";
+      } else if (k === "version" && typeof val === "string" && MINTED_VERSION_RE.test(val)) {
+        out[k] = "<minted_version>";
       } else if (k === "path" && typeof val === "string") {
         out[k] = normalisePath(val);
       } else {

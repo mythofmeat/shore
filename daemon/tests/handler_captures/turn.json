@@ -29,7 +29,8 @@
                 "text": "hello"
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>"
           }
         ],
         "revision": 1,
@@ -86,7 +87,8 @@
               }
             ],
             "content_blocks": [],
-            "timestamp": "<minted_timestamp>"
+            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>"
           }
         ],
         "revision": 1,
@@ -148,7 +150,8 @@
                 "text": "look"
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>"
           }
         ],
         "revision": 1,
@@ -408,7 +411,8 @@
               }
             ],
             "content_blocks": [],
-            "timestamp": "<minted_timestamp>"
+            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>"
           }
         ],
         "revision": 1,
@@ -480,7 +484,8 @@
                 "text": "both"
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>"
           }
         ],
         "revision": 1,
@@ -545,7 +550,8 @@
                 "text": "   "
               }
             ],
-            "timestamp": "<minted_timestamp>"
+            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>"
           }
         ],
         "revision": 1,

@@ -17,6 +17,8 @@ export const invalidRequest = (message: string): CommandError =>
 
 export const notFound = (message: string): CommandError => new CommandError("not_found", message);
 
+export const busy = (message: string): CommandError => new CommandError("busy", message);
+
 export const internalError = (message: string): CommandError =>
   new CommandError("internal_error", message);
 

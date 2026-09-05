@@ -28,6 +28,7 @@ import type { FrameSink } from "../../llm/stream.ts";
 import {
   COMPACTION_SUBAGENT,
   CompactionError,
+  type CompactionCoverage,
   type AppliedCompactionWrite,
   type CompactionLlm,
   type CompactionOutcome,
@@ -517,6 +518,7 @@ export interface CompactOptions {
   tools: CompactionTools;
   maxToolIterations?: number;
   resumable?: boolean;
+  coverage?: CompactionCoverage;
   emit?: FrameSink;
 }
 
@@ -761,6 +763,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     checkpoint.id,
     checkpoint.memoryBefore,
     memoryAfter,
+    opts.coverage?.claim,
   );
   await clearCheckpoint(opts);
 
@@ -781,9 +784,23 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   };
 }
 
+export function backgroundCoverageNotice(coverage: CompactionCoverage): string | undefined {
+  if (coverage.background === 0) return undefined;
+  const fresh = coverage.claimed + coverage.unversioned;
+  return (
+    `\n\nBackground: the oldest ${String(coverage.background)} message(s) of this range were ` +
+    `already written to memory from another branch of this conversation. They are here so the ` +
+    `newer material reads in context — do not write them up again. Write memory for the ` +
+    `${String(fresh)} message(s) that follow them.`
+  );
+}
+
 function buildCompactLlmRequest(opts: CompactOptions): SidecarRequest {
   const system = buildSystem(opts.systemTemplate, opts.charName, opts.userName);
-  const finalMsg = buildFinalMessage(opts.promptTemplate, opts.charName, opts.userName);
+  const notice =
+    opts.coverage === undefined ? undefined : backgroundCoverageNotice(opts.coverage);
+  const finalMsg =
+    buildFinalMessage(opts.promptTemplate, opts.charName, opts.userName) + (notice ?? "");
   const compactNowUser: WireMessage = {
     role: "user",
     content: [{ type: "text", text: finalMsg }],
@@ -803,6 +820,7 @@ async function archiveCompactPrefix(
   operationId?: string,
   memoryBefore?: string,
   memoryAfter?: string,
+  coverageClaim?: string,
 ): Promise<string> {
   try {
     return await conversationMgr.archiveAndRetain(conversationId, {
@@ -811,6 +829,7 @@ async function archiveCompactPrefix(
       ...(operationId === undefined ? {} : { operationId }),
       ...(memoryBefore === undefined ? {} : { memoryBefore }),
       ...(memoryAfter === undefined ? {} : { memoryAfter }),
+      ...(coverageClaim === undefined ? {} : { coverageClaim }),
     });
   } catch (e) {
     await rollbackCompaction(writesApplied);

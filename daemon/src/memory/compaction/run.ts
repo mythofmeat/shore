@@ -50,9 +50,12 @@ import {
   CompactionError,
   CompactionPaused,
   tagCompactionFrames,
+  type CompactionCoverage,
   type CompactionOutcome,
   type CompactionTools,
 } from "./types.ts";
+import { claimUncovered, coverageIsRedundant, withCoverageStore } from "../coverage.ts";
+import { loadCompactionCheckpoint } from "./checkpoint.ts";
 
 export interface CompactionRunDeps {
   config: LoadedConfig;
@@ -96,6 +99,7 @@ async function rotateWithoutMemoryWrite(
   effective: LoadedConfig,
   loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
   options: CompactionRunOptions,
+  note = "archive-only rotation; automatic memory writes disabled",
 ): Promise<CompactionOutcome> {
   const compaction = effective.app.memory.compaction;
   const keepTurns =
@@ -124,7 +128,7 @@ async function rotateWithoutMemoryWrite(
     ).archiveAndRetain("archive-only", {
       keepLastN: retained,
       activeContent: loaded.rawContent,
-      note: "archive-only rotation; automatic memory writes disabled",
+      note,
     });
   }
 
@@ -159,6 +163,23 @@ export async function runCompactionPass(
     const effective = effectiveConfig(character, deps.config);
     if (!effective.app.memory.compaction.write_memory) {
       return await rotateWithoutMemoryWrite(character, thread, deps, effective, loaded, options);
+    }
+
+    const planned = await planCompactionCoverage(character, thread, effective, loaded, options);
+    if (planned.redundant) {
+      shoreLog.info(
+        `shore: the whole archival range for ${character}/${thread} was already written to ` +
+          `memory from another branch; rotating it into the archive without a second pass`,
+      );
+      return await rotateWithoutMemoryWrite(
+        character,
+        thread,
+        deps,
+        effective,
+        loaded,
+        options,
+        "archive-only rotation; this range was already covered by another branch's compaction",
+      );
     }
 
     const resolved = await resolveDeps(character, deps, effective);
@@ -196,6 +217,7 @@ export async function runCompactionPass(
         dataDir,
         resumable: true,
         tools: resolved.tools,
+        ...(planned.coverage === undefined ? {} : { coverage: planned.coverage }),
         ...(resolved.maxToolIterations === undefined
           ? {}
           : { maxToolIterations: resolved.maxToolIterations }),
@@ -206,6 +228,10 @@ export async function runCompactionPass(
         maxContextTokens: resolved.effective.app.memory.compaction.max_context_tokens,
       },
     );
+
+    if (planned.coverage !== undefined && outcome.kind !== "compacted") {
+      releaseCompactionCoverage(dataDir, character, planned.coverage.claim);
+    }
 
     await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
       await gitPushWorkspaceBestEffort(resolved.tools.workspaceDir);
@@ -226,6 +252,64 @@ interface ResolvedDeps {
   markdownStore: MarkdownMemoryStore | undefined;
   tools: CompactionTools;
   maxToolIterations: number | undefined;
+}
+
+interface PlannedCoverage {
+  redundant: boolean;
+  coverage?: CompactionCoverage;
+}
+
+export async function planCompactionCoverage(
+  character: string,
+  thread: string,
+  effective: LoadedConfig,
+  loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
+  options: CompactionRunOptions,
+): Promise<PlannedCoverage> {
+  const dataDir = effective.dirs.data;
+  const compaction = effective.app.memory.compaction;
+  const keepTurns =
+    options.keepTurnsOverride ??
+    retentionForBudget(loaded.messages, compaction.keep_recent_turns, compaction.max_context_tokens);
+  const splitAt = archiveSplitIndex(
+    loaded.messages,
+    keepTurns,
+    options.retainTrailingAutonomous ?? false,
+  );
+  if (splitAt === 0 || options.dryRun === true) return { redundant: false };
+
+  const archival = [...loaded.store.messages()].slice(0, splitAt);
+  if (archival.length === 0) return { redundant: false };
+
+  const resuming =
+    (await loadCompactionCheckpoint(dataDir, character, thread).catch(() => undefined)) !== undefined;
+
+  const dbPath = join(dataDir, HISTORY_DB_FILE);
+  const planned = withCoverageStore(dbPath, (store) =>
+    claimUncovered(store, character, "compaction", archival),
+  );
+
+  if (coverageIsRedundant(planned) && !resuming) return { redundant: true };
+  return {
+    redundant: false,
+    coverage: {
+      claim: planned.claim,
+      unit: planned.unit,
+      claimed: planned.claimed.length,
+      background: planned.covered.length,
+      unversioned: planned.unversioned,
+    },
+  };
+}
+
+export function releaseCompactionCoverage(
+  dataDir: string,
+  character: string,
+  claim: string,
+): void {
+  withCoverageStore(join(dataDir, HISTORY_DB_FILE), (store) => {
+    store.releaseMemoryCoverage(character, "compaction", claim);
+  });
 }
 
 export function effectiveConfig(character: string, config: LoadedConfig): LoadedConfig {

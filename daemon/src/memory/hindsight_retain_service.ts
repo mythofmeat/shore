@@ -3,8 +3,11 @@ import { shoreLog } from "../log.ts";
 import type { Message } from "../engine/types.ts";
 import {
   HistoryStore,
+  characterOfArchiveKey,
   type MemoryRetainJob,
 } from "../engine/history_store.ts";
+import { processingUnitId, versionOf } from "../engine/versions.ts";
+import { claimUncovered, versionsIn } from "./coverage.ts";
 import type { MemoryBackend } from "./backend.ts";
 
 const RETAIN_TOOL = "retain";
@@ -60,6 +63,63 @@ export function hindsightDocumentId(archiveKey: string, segment: number): string
   return `shore:${archiveKey}:seg${String(segment)}`;
 }
 
+export function hindsightUnitDocumentId(character: string, versions: readonly string[]): string {
+  return `shore:${character}:${processingUnitId(versions)}`;
+}
+
+function unitOf(character: string, documentId: string): string | undefined {
+  const prefix = `shore:${character}:`;
+  return documentId.startsWith(prefix) ? documentId.slice(prefix.length) : undefined;
+}
+
+export interface HindsightUnit {
+  kind: "unit";
+  documentId: string;
+  claim: string;
+  messages: Message[];
+  background: number;
+}
+
+export type HindsightUnitPlan =
+  | HindsightUnit
+  | { kind: "covered" }
+  | { kind: "claimed_elsewhere" };
+
+export function hindsightUnitFor(
+  store: HistoryStore,
+  archiveKey: string,
+  segment: number,
+  nowMs: number,
+): HindsightUnitPlan {
+  const character = characterOfArchiveKey(archiveKey);
+  const messages = store.readSegment(archiveKey, segment);
+  if (messages.length === 0) return { kind: "covered" };
+
+  const present = versionsIn(messages);
+  const covered = store.coveredMemoryVersions(character, "hindsight", present);
+  const unversioned = messages.some((message) => versionOf(message) === undefined);
+  if (!unversioned && covered.size === present.length) return { kind: "covered" };
+
+  const planned = claimUncovered(store, character, "hindsight", messages, { nowMs });
+  const claimable = new Set(planned.claimed);
+  const fresh = messages.filter((message) => {
+    const version = versionOf(message);
+    return version === undefined || claimable.has(version);
+  });
+  if (fresh.length === 0) return { kind: "claimed_elsewhere" };
+  const versions = versionsIn(fresh);
+  return {
+    kind: "unit",
+    documentId:
+      versions.length === 0
+        ? hindsightDocumentId(archiveKey, segment)
+        : hindsightUnitDocumentId(character, versions),
+    claim: planned.claim,
+    messages: fresh,
+    background: messages.length - fresh.length,
+  };
+}
+
 export function hindsightDocument(
   character: string,
   segment: number,
@@ -98,6 +158,11 @@ export function hindsightDocument(
       .replace("{last}", () => last.slice(0, 10)),
     documentId: hindsightDocumentId(archiveKey, segment),
   };
+}
+
+interface InFlightRetain {
+  documentId: string;
+  claim: string | undefined;
 }
 
 export class HindsightRetainService {
@@ -236,7 +301,8 @@ export class HindsightRetainService {
     registration: HindsightRetainRegistration,
     job: MemoryRetainJob,
   ): Promise<void> {
-    const documentId = hindsightDocumentId(job.archiveKey, job.segment);
+    const documentId = job.documentId ?? hindsightDocumentId(job.archiveKey, job.segment);
+    const inFlight: InFlightRetain = { documentId, claim: job.claim };
     let attempts = job.attempts;
     try {
       if (job.action === "delete") {
@@ -249,10 +315,10 @@ export class HindsightRetainService {
         return;
       }
       attempts += 1;
-      await this.#processRetain(store, registration, job, documentId);
+      await this.#processRetain(store, registration, job, documentId, inFlight);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      this.#recordFailure(store, job, documentId, detail, attempts);
+      this.#recordFailure(store, job, inFlight, detail, attempts);
     }
   }
 
@@ -260,25 +326,48 @@ export class HindsightRetainService {
     store: HistoryStore,
     registration: HindsightRetainRegistration,
     job: MemoryRetainJob,
-    documentId: string,
+    fallbackDocumentId: string,
+    inFlight: InFlightRetain,
   ): Promise<void> {
     const now = this.#now();
+    const plan = hindsightUnitFor(store, job.archiveKey, job.segment, now);
+    if (plan.kind === "covered") {
+      this.#adoptCoveredUnit(store, registration.character, job, fallbackDocumentId);
+      return;
+    }
+    if (plan.kind === "claimed_elsewhere") {
+      store.deferMemoryDocument(
+        job.archiveKey,
+        job.segment,
+        now + this.#confirmIntervalMs,
+        "another branch is retaining this material; waiting for it to finish",
+      );
+      return;
+    }
+    const unit = plan;
+    const documentId = unit.documentId;
+    inFlight.documentId = documentId;
+    inFlight.claim = unit.claim;
+    store.setMemoryDocumentIdentity(job.archiveKey, job.segment, documentId, unit.claim);
     store.beginMemorySubmission(
       job.archiveKey,
       job.segment,
       now + this.#confirmIntervalMs,
       now + this.#confirmWindowMs,
     );
-    if (job.attempts > 0 && await this.#adopt(store, registration, job, documentId)) return;
+    if (job.attempts > 0 && await this.#adopt(store, registration, { ...job, claim: unit.claim }, documentId)) {
+      return;
+    }
     const document = hindsightDocument(
       registration.character,
       job.segment,
-      store.readSegment(job.archiveKey, job.segment),
+      unit.messages,
       registration.userName,
       registration.possessivePronoun,
       job.archiveKey,
     );
     if (document === undefined) {
+      store.releaseMemoryCoverage(registration.character, "hindsight", unit.claim);
       store.markMemoryDocument(job.archiveKey, job.segment, null);
       shoreLog.debug(`shore: skipped empty hindsight archive document ${documentId}`);
       return;
@@ -286,7 +375,7 @@ export class HindsightRetainService {
     const payload = await this.#call(registration, RETAIN_TOOL, {
       content: document.content,
       context: document.context,
-      document_id: document.documentId,
+      document_id: documentId,
     });
     const operation = acceptedOperation(payload);
     if (operation === undefined) {
@@ -313,9 +402,10 @@ export class HindsightRetainService {
   ): Promise<void> {
     if (job.operation === undefined) {
       if (!await this.#adopt(store, registration, job, documentId)) {
-        store.requeueMemoryDocument(
-          job.archiveKey,
-          job.segment,
+        this.#requeue(
+          store,
+          registration.character,
+          job,
           `hindsight has no record of ${documentId}; resubmitting`,
           job.attempts >= this.#maxAttempts,
         );
@@ -325,13 +415,14 @@ export class HindsightRetainService {
     const status = await this.#operationStatus(registration, job.operation);
     if (status.status === "completed" || status.status === "not_found") {
       if (await this.#documentExists(registration, documentId)) {
-        store.markMemoryDocument(job.archiveKey, job.segment, "stored");
+        this.#confirmStored(store, registration.character, job, documentId);
         shoreLog.info(`shore: hindsight stored ${documentId}`);
         return;
       }
-      store.requeueMemoryDocument(
-        job.archiveKey,
-        job.segment,
+      this.#requeue(
+        store,
+        registration.character,
+        job,
         status.status === "completed"
           ? `hindsight finished operation ${job.operation} without storing ${documentId}`
           : `hindsight lost operation ${job.operation} and has no ${documentId}`,
@@ -340,9 +431,10 @@ export class HindsightRetainService {
       return;
     }
     if (status.status === "failed" || status.status === "cancelled") {
-      store.requeueMemoryDocument(
-        job.archiveKey,
-        job.segment,
+      this.#requeue(
+        store,
+        registration.character,
+        job,
         `hindsight retain operation ${status.status}${
           status.error === undefined ? "" : `: ${status.error}`
         }`,
@@ -352,9 +444,10 @@ export class HindsightRetainService {
     }
     const now = this.#now();
     if (now >= job.expires) {
-      store.requeueMemoryDocument(
-        job.archiveKey,
-        job.segment,
+      this.#requeue(
+        store,
+        registration.character,
+        job,
         `hindsight operation ${job.operation} was still ${status.status} at the end of the ` +
           "confirmation window; resubmitting",
         job.attempts >= this.#maxAttempts,
@@ -388,9 +481,89 @@ export class HindsightRetainService {
         return;
       }
     }
+    const supporting = store.eligibleDocumentOccurrences(
+      registration.character,
+      "hindsight",
+      documentId,
+    );
+    if (supporting.length > 0) {
+      store.markMemoryDocument(job.archiveKey, job.segment, null);
+      store.setMemoryDocumentIdentity(job.archiveKey, job.segment, null, null);
+      shoreLog.info(
+        `shore: kept hindsight document ${documentId}; ` +
+          `${String(supporting.length)} other included occurrence(s) still support it`,
+      );
+      return;
+    }
     await this.#delete(registration, documentId);
     store.markMemoryDocument(job.archiveKey, job.segment, null);
+    store.setMemoryDocumentIdentity(job.archiveKey, job.segment, null, null);
+    store.releaseHindsightUnitCoverage(registration.character, documentId);
     shoreLog.info(`shore: removed excluded archive document ${documentId} from hindsight`);
+  }
+
+  #requeue(
+    store: HistoryStore,
+    character: string,
+    job: MemoryRetainJob,
+    error: string,
+    exhausted: boolean,
+    due = 0,
+  ): void {
+    if (job.claim !== undefined) {
+      store.releaseMemoryCoverage(character, "hindsight", job.claim);
+    }
+    store.setMemoryDocumentIdentity(job.archiveKey, job.segment, null, null);
+    store.requeueMemoryDocument(job.archiveKey, job.segment, error, exhausted, due);
+  }
+
+  #confirmStored(
+    store: HistoryStore,
+    character: string,
+    job: MemoryRetainJob,
+    documentId: string,
+  ): void {
+    const claim = job.claim;
+    if (claim !== undefined) {
+      store.commitMemoryCoverage(character, "hindsight", claim, unitOf(character, documentId));
+    }
+    store.markMemoryDocumentOccurrence(
+      character,
+      "hindsight",
+      documentId,
+      job.archiveKey,
+      job.segment,
+    );
+    store.markMemoryDocument(job.archiveKey, job.segment, "stored");
+    store.setMemoryDocumentIdentity(job.archiveKey, job.segment, documentId, null);
+  }
+
+  #adoptCoveredUnit(
+    store: HistoryStore,
+    character: string,
+    job: MemoryRetainJob,
+    fallbackDocumentId: string,
+  ): void {
+    const versions = versionsIn(store.readSegment(job.archiveKey, job.segment));
+    const units = store.memoryUnitsFor(character, "hindsight", versions);
+    for (const unit of units) {
+      store.markMemoryDocumentOccurrence(
+        character,
+        "hindsight",
+        `shore:${character}:${unit}`,
+        job.archiveKey,
+        job.segment,
+      );
+    }
+    const documentId = units.length === 1 ? `shore:${character}:${units[0] ?? ""}` : null;
+    store.setMemoryDocumentIdentity(job.archiveKey, job.segment, documentId, null);
+    store.markMemoryDocument(job.archiveKey, job.segment, versions.length === 0 ? null : "stored");
+    shoreLog.info(
+      versions.length === 0
+        ? `shore: nothing to retain for ${fallbackDocumentId}`
+        : `shore: ${fallbackDocumentId} was already retained from another branch; ` +
+          `recorded it as an occurrence of ${String(units.length)} shared document(s)`,
+    );
   }
 
   async #adopt(
@@ -400,7 +573,7 @@ export class HindsightRetainService {
     documentId: string,
   ): Promise<boolean> {
     if (await this.#documentExists(registration, documentId)) {
-      store.markMemoryDocument(job.archiveKey, job.segment, "stored");
+      this.#confirmStored(store, registration.character, job, documentId);
       shoreLog.info(`shore: adopted the hindsight document already stored for ${documentId}`);
       return true;
     }
@@ -421,10 +594,11 @@ export class HindsightRetainService {
   #recordFailure(
     store: HistoryStore,
     job: MemoryRetainJob,
-    documentId: string,
+    inFlight: InFlightRetain,
     detail: string,
     attempts: number,
   ): void {
+    const documentId = inFlight.documentId;
     if (job.action === "confirm") {
       store.deferMemoryDocument(
         job.archiveKey,
@@ -442,7 +616,14 @@ export class HindsightRetainService {
     if (job.action === "delete") {
       store.markMemoryDeleteFailure(job.archiveKey, job.segment, detail, exhausted, due);
     } else {
-      store.requeueMemoryDocument(job.archiveKey, job.segment, detail, exhausted, due);
+      this.#requeue(
+        store,
+        characterOfArchiveKey(job.archiveKey),
+        { ...job, claim: inFlight.claim ?? job.claim },
+        detail,
+        exhausted,
+        due,
+      );
     }
     const counted = `(attempt ${String(attempts)}/${String(this.#maxAttempts)})`;
     if (exhausted) {

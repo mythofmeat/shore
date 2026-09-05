@@ -12,4 +12,8 @@ Every timestamp in the response — each result, the neighbours, `archive_bounda
 
 Results contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit identifies its source `thread` and includes the immediately preceding and following visible messages from that same thread, including across segment boundaries. Three matching messages are returned by default.
 
+A message copied into another thread by a fork is one conversation event living in two places, not two things that were said. Such a message is returned once, and `locations` lists every place it can be opened — thread, segment and ordinal — with the hit's own `thread` naming the one the neighbours came from. Two people saying the same words on separate occasions stay two results: identity comes from the event, never from matching text. Deduplication happens before the result limit, so inherited copies never crowd out distinct matches, and if one occurrence is excluded from history the message stays findable through any other included occurrence.
+
+`searched_messages` counts distinct conversation events; `searched_message_occurrences` counts their copies across threads. The two differ only when forks are in play.
+
 Each result's `model` field is the model that generated that message. It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means "not attributable", not "never said". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.

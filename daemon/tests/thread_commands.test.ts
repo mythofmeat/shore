@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { CommandError } from "../src/commands/errors.ts";
 import {
   archiveThread,
+  forkThread,
   listThreads,
   newThread,
   switchThread,
@@ -14,6 +15,7 @@ import {
 } from "../src/commands/threads.ts";
 import { MAIN_THREAD } from "../src/config/dirs.ts";
 import { ThreadError, type ThreadRecord, type ThreadsIndex } from "../src/engine/threads.ts";
+import { ForkBusy, type ForkResult, type ForkThreadOptions } from "../src/engine/fork.ts";
 
 const NOW = "2026-09-03T12:00:00.000Z";
 
@@ -24,6 +26,9 @@ function record(id: string, extra: Partial<ThreadRecord> = {}): ThreadRecord {
 class FakeRegistry implements ThreadRegistry {
   index: ThreadsIndex;
   readonly calls: string[] = [];
+  busy = false;
+  forkMessages = 4;
+  forkTurns = 2;
 
   constructor(threads: ThreadRecord[], home = MAIN_THREAD) {
     this.index = { version: 1, home, threads };
@@ -75,6 +80,45 @@ class FakeRegistry implements ThreadRegistry {
       }),
     };
     return Promise.resolve(this.index);
+  }
+
+  forkThread(
+    _c: string,
+    source: string,
+    child: string,
+    options: ForkThreadOptions = {},
+  ): Promise<ForkResult> {
+    this.calls.push(`fork:${source}->${child}:${JSON.stringify(options)}`);
+    if (this.busy) return Promise.reject(new ForkBusy("qifei", source, "a compaction is running"));
+    if (!this.index.threads.some((t) => t.id === source)) {
+      return Promise.reject(new ThreadError("not_found", `no thread "${source}"`));
+    }
+    if (this.index.threads.some((t) => t.id === child)) {
+      return Promise.reject(new ThreadError("exists", `thread "${child}" already exists`));
+    }
+    const forked = {
+      fork_id: "fk_test",
+      source,
+      created_at: NOW,
+      messages: this.forkMessages,
+      turns: options.turns ?? this.forkTurns,
+    };
+    const childRecord = record(child, { forked_from: forked });
+    this.index = { ...this.index, threads: [...this.index.threads, childRecord] };
+    return Promise.resolve({
+      index: this.index,
+      child: childRecord,
+      fork: {
+        version: 1,
+        fork_id: forked.fork_id,
+        character: "qifei",
+        child,
+        source,
+        created_at: NOW,
+        message_count: forked.messages,
+        turn_count: forked.turns,
+      },
+    });
   }
 
   setThreadModel(_c: string, id: string, model: string | undefined): Promise<ThreadsIndex> {
@@ -369,5 +413,96 @@ describe("pinning a thread to a model", () => {
     } catch (e) {
       expect((e as CommandError).code).toBe("invalid_request");
     }
+  });
+});
+
+describe("branching a thread into its own context", () => {
+  test("the source defaults to the thread the caller is speaking in", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    const out = await forkThread(ctx(registry, "eval"), { name: "eval-b" });
+
+    expect(registry.calls).toEqual(["fork:eval->eval-b:{}"]);
+    expect(out.fork).toMatchObject({ source: "eval", thread: "eval-b", scope: "full" });
+    expect(out.threads.find((t) => t.id === "eval-b")?.forked_from?.source).toBe("eval");
+  });
+
+  test("--from overrides the caller's thread without switching it", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    const out = await forkThread(ctx(registry, "eval"), { name: "spin", from: "main" });
+
+    expect(registry.calls).toEqual(["fork:main->spin:{}"]);
+    expect(out.current).toBe("eval");
+    expect(out.home).toBe(MAIN_THREAD);
+  });
+
+  test("a turn count is passed through and reported as a partial snapshot", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD)]);
+    const out = await forkThread(ctx(registry), { name: "tail", turns: 3 });
+
+    expect(registry.calls).toEqual(['fork:main->tail:{"turns":3}']);
+    expect(out.fork).toMatchObject({ scope: "last_turns", requested_turns: 3, turns: 3 });
+  });
+
+  test("a zero, negative or fractional turn count is an invalid request", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD)]);
+    for (const turns of [0, -1, 2.5, "3"]) {
+      try {
+        await forkThread(ctx(registry), { name: "tail", turns });
+        throw new Error(`expected a rejection for ${String(turns)}`);
+      } catch (e) {
+        expect((e as CommandError).code).toBe("invalid_request");
+      }
+    }
+    expect(registry.calls).toEqual([]);
+  });
+
+  test("an existing destination is refused rather than overwritten", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD), record("eval")]);
+    try {
+      await forkThread(ctx(registry), { name: "eval" });
+      throw new Error("expected a rejection");
+    } catch (e) {
+      expect((e as CommandError).code).toBe("invalid_request");
+    }
+  });
+
+  test("an unknown source is not found", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD)]);
+    try {
+      await forkThread(ctx(registry), { name: "spin", from: "ghost" });
+      throw new Error("expected a rejection");
+    } catch (e) {
+      expect((e as CommandError).code).toBe("not_found");
+    }
+  });
+
+  test("a source busy with another mutation answers busy, not a half-copied thread", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD)]);
+    registry.busy = true;
+    try {
+      await forkThread(ctx(registry), { name: "spin" });
+      throw new Error("expected a rejection");
+    } catch (e) {
+      expect((e as CommandError).code).toBe("busy");
+    }
+    expect(registry.index.threads.map((t) => t.id)).toEqual([MAIN_THREAD]);
+  });
+
+  test("the snapshot runs under the exclusive gate when one is wired", async () => {
+    const registry = new FakeRegistry([record(MAIN_THREAD)]);
+    const order: string[] = [];
+    const context: ThreadContext = {
+      ...ctx(registry),
+      withSnapshot: async (run) => {
+        order.push("enter");
+        try {
+          return await run();
+        } finally {
+          order.push("leave");
+        }
+      },
+    };
+    await forkThread(context, { name: "spin" });
+    expect(order).toEqual(["enter", "leave"]);
   });
 });

@@ -12,6 +12,14 @@ import {
 import { ConfigError, loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
 import { ConversationEngine, type HistoryListener } from "./engine/conversation.ts";
 import {
+  ForkBusy,
+  forkThread,
+  recoverForks,
+  type ForkResult,
+  type ForkThreadOptions,
+} from "./engine/fork.ts";
+import { tryBeginCompaction } from "./memory/compaction/manager.ts";
+import {
   archiveThread,
   createThread,
   ensureThreads,
@@ -139,6 +147,7 @@ export class CharacterRegistry {
     const found = discoverCharacters(this.#configDir, this.#workspaceRoot());
     for (const name of found) {
       try {
+        await recoverForks(this.#dataDir, name);
         const index = await ensureThreads(this.#dataDir, name, new Date().toISOString());
         this.#threads.set(name, index);
         await ensureCharacterWorkspace(
@@ -235,6 +244,25 @@ export class CharacterRegistry {
     });
     this.#engines.delete(engineKey(name, id));
     return this.#remember(name, index);
+  }
+
+  async forkThread(
+    name: string,
+    source: string,
+    child: string,
+    options: ForkThreadOptions = {},
+  ): Promise<ForkResult> {
+    const guard = tryBeginCompaction(this.#dataDir, name);
+    if (guard === undefined) {
+      throw new ForkBusy(name, source, "a compaction pass holds this character");
+    }
+    try {
+      const result = await forkThread(this.#dataDir, name, source, child, options);
+      this.#remember(name, result.index);
+      return result;
+    } finally {
+      guard.release();
+    }
   }
 
   async setHomeThread(name: string, id: string): Promise<ThreadsIndex> {

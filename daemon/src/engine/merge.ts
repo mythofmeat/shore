@@ -135,6 +135,7 @@ function mergeGroup(group: Message[]): Message {
     ...(lastAssistant.provider_key !== undefined ? { provider_key: lastAssistant.provider_key } : {}),
     ...(lastAssistant.model !== undefined ? { model: lastAssistant.model } : {}),
     ...(lastAssistant.origin !== undefined ? { origin: lastAssistant.origin } : {}),
+    ...(lastAssistant.version !== undefined ? { version: lastAssistant.version } : {}),
   };
 }
 

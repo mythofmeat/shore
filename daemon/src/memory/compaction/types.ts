@@ -25,6 +25,15 @@ export interface ConversationMessage {
   timestamp: string;
   isToolResultOnly: boolean;
   isAutonomous: boolean;
+  version?: string;
+}
+
+export interface CompactionCoverage {
+  claim: string;
+  unit: string;
+  claimed: number;
+  background: number;
+  unversioned: number;
 }
 
 export interface MemoryFileOp {
@@ -168,6 +177,7 @@ export interface ConversationManager {
       memoryAfter?: string;
       excluded?: boolean;
       note?: string;
+      coverageClaim?: string;
     },
   ): Promise<string>;
 }

@@ -220,6 +220,8 @@ export interface HandlerAssembly
   log?: MessageHandlerDeps["log"];
 }
 
+const EXCLUSIVE_COMMANDS = new Set(["export_character", "import_character", "fork_thread"]);
+
 function beginIndexForeground(a: HandlerAssembly): () => void {
   const endHistory = a.runtime.historyIndex.beginForeground();
   const endWorkspace = a.runtime.workspaceIndex.beginForeground();
@@ -257,7 +259,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
           endForeground();
         }
       };
-      return command.name === "export_character" || command.name === "import_character"
+      return EXCLUSIVE_COMMANDS.has(command.name)
         ? await run()
         : await a.runtime.snapshotGate.withActivity(run);
     },

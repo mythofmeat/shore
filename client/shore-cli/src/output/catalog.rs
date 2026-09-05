@@ -463,7 +463,32 @@ fn thread_facts(row: &Value) -> String {
     if !model.is_empty() {
         parts.push(model.to_owned());
     }
+    let source = row
+        .get("forked_from")
+        .and_then(|origin| origin.get("source"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !source.is_empty() {
+        parts.push(format!("forked from {source}"));
+    }
     parts.join(" \u{b7} ")
+}
+
+fn fork_note(data: &Value) -> Option<String> {
+    let fork = data.get("fork")?;
+    let thread = fork.get("thread").and_then(Value::as_str)?;
+    let source = fork.get("source").and_then(Value::as_str)?;
+    let messages = fork.get("messages").and_then(Value::as_u64).unwrap_or(0);
+    let turns = fork.get("turns").and_then(Value::as_u64).unwrap_or(0);
+    let scope = if fork.get("scope").and_then(Value::as_str) == Some("last_turns") {
+        format!("the last {}", thread_turns(turns))
+    } else {
+        "the whole active context".to_owned()
+    };
+    Some(format!(
+        "{thread} is a snapshot of {source}: {scope}, {messages} message(s), \
+         {turns} of your turn(s). Each side is edited and compacted on its own from here"
+    ))
 }
 
 pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
@@ -496,6 +521,9 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
     }
     rows.write(out);
     blank(out);
+    if let Some(forked) = fork_note(data) {
+        note(out, &forked);
+    }
     note(
         out,
         "home is where unprompted messages arrive; other threads speak only when spoken to",

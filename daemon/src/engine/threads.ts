@@ -57,6 +57,14 @@ const MIGRATED_ENTRIES = [
   "compaction-checkpoint.json",
 ] as const;
 
+export interface ThreadForkOrigin {
+  fork_id: string;
+  source: string;
+  created_at: string;
+  messages: number;
+  turns: number;
+}
+
 export interface ThreadRecord {
   id: string;
   label?: string;
@@ -64,6 +72,7 @@ export interface ThreadRecord {
   last_active?: string;
   chat_model?: string;
   compaction: boolean;
+  forked_from?: ThreadForkOrigin;
 }
 
 export interface ThreadsIndex {

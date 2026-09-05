@@ -14,6 +14,7 @@ import {
 import { backupBeforeWrite, quarantineLines } from "./backup.ts";
 import { mergeToolLoopMessages } from "./merge";
 import type { ContentBlock, ImageRef, Message, MessageAlternative } from "./types";
+import { alternativeVersionOf, newMessageVersion, versionOf } from "./versions.ts";
 
 export class MessageNotFound extends Error {
   constructor(msgId: string) {
@@ -72,6 +73,10 @@ const messageStoreIo: MessageStoreIo = {
   },
   tempPath: (dir) => join(dir, `.${crypto.randomUUID()}.tmp`),
 };
+
+function versioned(msg: Message): Message {
+  return versionOf(msg) === undefined ? { ...msg, version: newMessageVersion() } : msg;
+}
 
 interface Mutation<T> {
   changed: boolean;
@@ -187,10 +192,12 @@ function serializeForStorage(msg: Message): string {
         };
         if (a.provider_key !== undefined) out["provider_key"] = a.provider_key;
         if (a.model !== undefined) out["model"] = a.model;
+        if (a.version !== undefined) out["version"] = a.version;
         return out;
       }),
     ]);
   }
+  if (msg.version !== undefined) ordered.push(["version", msg.version]);
   ordered.push(["timestamp", msg.timestamp]);
   if (msg.provider_key !== undefined) ordered.push(["provider_key", msg.provider_key]);
   if (msg.model !== undefined) ordered.push(["model", msg.model]);
@@ -203,6 +210,12 @@ function serializeForStorage(msg: Message): string {
   const obj: Record<string, unknown> = {};
   for (const [k, v] of ordered) obj[k] = v;
   return JSON.stringify(obj);
+}
+
+export function serializeMessages(messages: readonly Message[]): string {
+  let out = "";
+  for (const message of messages) out += `${serializeForStorage(message)}\n`;
+  return out;
 }
 
 export function isToolResultOnly(m: Message): boolean {
@@ -237,7 +250,12 @@ export function withoutOrphanToolResults(messages: readonly Message[]): Message[
       kept.push(msg);
       continue;
     }
-    kept.push({ ...msg, content_blocks: blocks, content: deriveContentFromBlocks(blocks, true) });
+    kept.push({
+      ...msg,
+      content_blocks: blocks,
+      content: deriveContentFromBlocks(blocks, true),
+      version: newMessageVersion(),
+    });
   }
   return kept;
 }
@@ -290,7 +308,14 @@ function alternativeFromMessage(msg: Message): MessageAlternative {
     timestamp: msg.timestamp,
     ...(msg.provider_key !== undefined ? { provider_key: msg.provider_key } : {}),
     ...(msg.model !== undefined ? { model: msg.model } : {}),
+    ...(versionOf(msg) === undefined ? {} : { version: msg.version }),
   };
+}
+
+function stampAlternativeVersion(message: Message, index: number): void {
+  const alternative = message.alternatives?.[index];
+  if (alternative === undefined) return;
+  if (alternativeVersionOf(alternative) === undefined) alternative.version = newMessageVersion();
 }
 
 function messageFromAlternative(template: Message, index: number): Message | undefined {
@@ -298,7 +323,9 @@ function messageFromAlternative(template: Message, index: number): Message | und
   if (alt === undefined) return undefined;
   const provider = alt.provider_key ?? template.provider_key;
   const model = alt.model ?? template.model;
+  const version = alternativeVersionOf(alt);
   return normalizeMessage({
+    ...(version === undefined ? {} : { version }),
     msg_id: template.msg_id,
     role: "assistant",
     content: alt.content,
@@ -426,7 +453,7 @@ export class MessageStore {
   }
 
   async append(msg: Message): Promise<void> {
-    const candidate = structuredClone(msg);
+    const candidate = versioned(structuredClone(msg));
     await this.#mutate((messages) => {
       messages.push(candidate);
       return changed(undefined);
@@ -451,13 +478,14 @@ export class MessageStore {
         images: [],
         content_blocks: blocks,
         timestamp,
+        version: newMessageVersion(),
       });
       return changed(missing.length);
     });
   }
 
   async insertByTimestamp(msg: Message): Promise<void> {
-    const candidate = structuredClone(msg);
+    const candidate = versioned(structuredClone(msg));
     await this.#mutate((messages) => {
       const at = Date.parse(candidate.timestamp);
       let pos: number;
@@ -478,6 +506,19 @@ export class MessageStore {
     });
   }
 
+  async stampVersions(versions: ReadonlyMap<string, string>): Promise<number> {
+    return await this.#mutate((messages) => {
+      let stamped = 0;
+      for (const message of messages) {
+        const version = versions.get(message.msg_id);
+        if (version === undefined || versionOf(message) !== undefined) continue;
+        message.version = version;
+        stamped += 1;
+      }
+      return stamped === 0 ? unchanged(0) : changed(stamped);
+    });
+  }
+
   async edit(msgId: string, newContent: string): Promise<void> {
     await this.#mutate((messages) => {
       const msg = messages.find((m) => m.msg_id === msgId);
@@ -487,6 +528,7 @@ export class MessageStore {
         msg.role === "assistant"
           ? editAssistantText(msg.content_blocks, newContent)
           : [{ type: "text", text: newContent }];
+      msg.version = newMessageVersion();
       return changed(undefined);
     });
   }
@@ -502,7 +544,7 @@ export class MessageStore {
   }
 
   async replaceAfterLastUserTurn(newMessages: Message[]): Promise<number> {
-    const replacements = structuredClone(newMessages);
+    const replacements = structuredClone(newMessages).map(versioned);
     return await this.#mutate((messages) => {
       const keep = this.#keepIndex(messages);
       const removed = messages.length - keep;
@@ -604,6 +646,8 @@ export class MessageStore {
           `alternate index ${index + 1} out of range (message has ${altCount} alternate response(s))`,
         );
       if (index >= altCount) throw outOfRange();
+
+      stampAlternativeVersion(target, index);
 
       if ((target.alt_index ?? 0) === index) {
         return unchanged({

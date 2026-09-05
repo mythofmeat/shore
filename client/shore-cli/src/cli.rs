@@ -1378,6 +1378,27 @@ pub(crate) enum ThreadCommand {
         /// Thread id
         name: String,
     },
+
+    /// Branch a thread: the new one starts with a snapshot of the source's context
+    ///
+    /// The copy is independent from the moment it is made: later edits,
+    /// regeneration, compaction or retirement on either side leave the other
+    /// alone. Both threads keep the whole transcript, and a message copied by a
+    /// fork is one conversation event in two places, so recall shows it once and
+    /// memory processing runs over it once.
+    Fork {
+        /// Thread id for the new thread: letters, digits, dot, dash or underscore
+        name: String,
+
+        /// Thread to copy from; defaults to the one you are talking in
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Copy only the last N of your turns, with their whole tool exchanges.
+        /// Omit to copy the complete active context
+        #[arg(long)]
+        turns: Option<u32>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -2306,6 +2327,10 @@ pub(crate) fn to_swp_command(
             }
             ThreadCommand::Home { name } => Some(("thread_home", json!({ "name": name }))),
             ThreadCommand::Archive { name } => Some(("archive_thread", json!({ "name": name }))),
+            ThreadCommand::Fork { name, from, turns } => Some((
+                "fork_thread",
+                json!({ "name": name, "from": from, "turns": turns }),
+            )),
         },
 
         CliCommand::Export {
@@ -3546,7 +3571,7 @@ mod tests {
 
     #[test]
     fn thread_commands_reach_the_wire_under_their_own_names() {
-        let cases: [(&[&str], &str); 7] = [
+        let cases: [(&[&str], &str); 8] = [
             (&["thread"], "list_threads"),
             (&["thread", "use", "scratch"], "switch_thread"),
             (&["thread", "new", "scratch"], "create_thread"),
@@ -3554,6 +3579,7 @@ mod tests {
             (&["thread", "model", "scratch"], "thread_model"),
             (&["thread", "home", "scratch"], "thread_home"),
             (&["thread", "archive", "scratch"], "archive_thread"),
+            (&["thread", "fork", "scratch"], "fork_thread"),
         ];
         for (args, expected) in cases {
             let cli = parse(args);

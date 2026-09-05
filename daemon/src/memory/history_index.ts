@@ -7,13 +7,14 @@ import { chmodSync, mkdirSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
+import { versionOf } from "../engine/versions.ts";
 import { compactionManifestIn, segmentsDirIn } from "../config/dirs.ts";
 import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/character_history.ts";
 import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
 
 export const HISTORY_SEARCH_DB_FILE = "history_search.db";
-export const HISTORY_SEARCH_SCHEMA_VERSION = 5;
+export const HISTORY_SEARCH_SCHEMA_VERSION = 6;
 export const HISTORY_CHUNK_CHARS = 1_200;
 export const HISTORY_CHUNK_OVERLAP = 120;
 export const HISTORY_EMBED_BATCH_ITEMS = 32;
@@ -42,10 +43,12 @@ CREATE TABLE messages (
   timestamp TEXT NOT NULL,
   model TEXT,
   content_hash TEXT NOT NULL,
-  chunk_count INTEGER NOT NULL
+  chunk_count INTEGER NOT NULL,
+  version TEXT
 );
 CREATE INDEX messages_chronology
   ON messages(archive_key, segment, ordinal);
+CREATE INDEX messages_version ON messages(version);
 CREATE TABLE chunks (
   id INTEGER PRIMARY KEY,
   message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -90,6 +93,7 @@ export interface IndexedMessage {
   timestamp: string;
   model: string | null;
   content_hash: string;
+  version: string | null;
 }
 
 interface CanonicalMessage {
@@ -101,12 +105,14 @@ interface CanonicalMessage {
   role: Message["role"];
   timestamp: string;
   model: string | undefined;
+  version: string | undefined;
   text: string;
 }
 
 interface CanonicalCorpus {
   messages: CanonicalMessage[];
   selectedCount: number;
+  distinctCount: number;
 }
 
 export interface HistoryIndexOpenOptions {
@@ -220,8 +226,9 @@ export class HistorySearchIndex {
       }
       const putMessage = this.#db.query(
         `INSERT INTO messages
-           (locator, segment, ordinal, msg_id, role, timestamp, model, content_hash, chunk_count, archive_key)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+           (locator, segment, ordinal, msg_id, role, timestamp, model, content_hash, chunk_count,
+            archive_key, version)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
       );
       const putChunk = this.#db.query(
         "INSERT INTO chunks(message_id, ordinal, content_hash) VALUES (?1, ?2, ?3)",
@@ -234,9 +241,16 @@ export class HistorySearchIndex {
         const existingId = unchanged.get(`${item.locator}\0${hash}`);
         if (existingId !== undefined) {
           this.#db.query(
-            `UPDATE messages SET msg_id = ?1, role = ?2, timestamp = ?3, model = ?4
-             WHERE id = ?5`,
-          ).run(item.msgId, item.role, item.timestamp, item.model ?? null, existingId);
+            `UPDATE messages SET msg_id = ?1, role = ?2, timestamp = ?3, model = ?4, version = ?5
+             WHERE id = ?6`,
+          ).run(
+            item.msgId,
+            item.role,
+            item.timestamp,
+            item.model ?? null,
+            item.version ?? null,
+            existingId,
+          );
           continue;
         }
         putMessage.run(
@@ -250,6 +264,7 @@ export class HistorySearchIndex {
           hash,
           chunks.length,
           item.archive_key,
+          item.version ?? null,
         );
         const messageId = (
           this.#db.query("SELECT last_insert_rowid() AS id").get() as { id: number }
@@ -264,6 +279,7 @@ export class HistorySearchIndex {
       }
       this.#setMetadata("source_fingerprint", after);
       this.#setMetadata("selected_message_count", String(corpus.selectedCount));
+      this.#setMetadata("distinct_message_count", String(corpus.distinctCount));
     })();
   }
 
@@ -271,12 +287,16 @@ export class HistorySearchIndex {
     return Number(this.#metadata("selected_message_count") ?? 0);
   }
 
+  distinctMessageCount(): number {
+    return Number(this.#metadata("distinct_message_count") ?? this.selectedMessageCount());
+  }
+
   lexicalRows(query: string): { row: IndexedMessage; rank: number }[] {
     const expression = ftsExpression(query);
     if (expression === undefined) return [];
     const rows = this.#db.query(
       `SELECT m.id, m.archive_key, m.segment, m.ordinal, m.msg_id, m.role,
-              m.timestamp, m.model, m.content_hash,
+              m.timestamp, m.model, m.content_hash, m.version,
               bm25(chunks_fts) AS score
        FROM chunks_fts
        JOIN chunks c ON c.id = chunks_fts.rowid
@@ -297,7 +317,8 @@ export class HistorySearchIndex {
 
   allRows(): IndexedMessage[] {
     return this.#db.query(
-      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash
+      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash,
+              version
        FROM messages ORDER BY segment, ordinal`,
     ).all() as IndexedMessage[];
   }
@@ -320,7 +341,8 @@ export class HistorySearchIndex {
     if (ids.length === 0) return [];
     const marks = ids.map(() => "?").join(",");
     return this.#db.query(
-      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash
+      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash,
+              version
        FROM messages WHERE id IN (${marks})`,
     ).all(...ids) as IndexedMessage[];
   }
@@ -329,7 +351,8 @@ export class HistorySearchIndex {
     const op = direction < 0 ? "<" : ">";
     const order = direction < 0 ? "DESC" : "ASC";
     const neighbor = this.#db.query(
-      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash
+      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash,
+              version
        FROM messages
        WHERE archive_key = ?3 AND (segment ${op} ?1 OR (segment = ?1 AND ordinal ${op} ?2))
        ORDER BY segment ${order}, ordinal ${order} LIMIT 1`,
@@ -380,7 +403,7 @@ export class HistorySearchIndex {
          LIMIT ?
        )
        SELECT m.id, m.archive_key, m.segment, m.ordinal, m.msg_id, m.role,
-              m.timestamp, m.model, m.content_hash, e.vector
+              m.timestamp, m.model, m.content_hash, m.version, e.vector
        FROM candidates candidate
        JOIN chunks c ON c.id = candidate.chunk_id
        JOIN messages m ON m.id = c.message_id
@@ -412,7 +435,7 @@ export class HistorySearchIndex {
     const batchCandidates = this.#db.query(
       `SELECT c.id AS chunk_id, c.ordinal AS chunk_ordinal, c.content_hash,
               m.id, m.archive_key, m.segment, m.ordinal, m.msg_id, m.role,
-              m.timestamp, m.model
+              m.timestamp, m.model, m.version
        FROM chunks c JOIN messages m ON m.id = c.message_id
        WHERE c.id > ?3 AND NOT EXISTS (
          SELECT 1 FROM embeddings e
@@ -547,6 +570,7 @@ export async function loadCanonicalTexts(
 
 async function readCanonicalCorpus(ref: CharacterHistoryRef): Promise<CanonicalCorpus> {
   const messages: CanonicalMessage[] = [];
+  const distinct = new Set<string>();
   let selectedCount = 0;
   const reader = await CharacterHistoryReader.load(ref);
   try {
@@ -554,12 +578,17 @@ async function readCanonicalCorpus(ref: CharacterHistoryRef): Promise<CanonicalC
       if (entry.excluded === true) continue;
       const archived = await reader.readSegment(entry.archiveKey, entry.idx);
       appendCanonical(messages, archived, entry.archiveKey, entry.idx);
+      archived.forEach((message, ordinal) => {
+        distinct.add(
+          versionOf(message) ?? `occurrence:${entry.archiveKey}:${String(entry.idx)}:${String(ordinal)}`,
+        );
+      });
       selectedCount += archived.length;
     }
   } finally {
     reader.close();
   }
-  return { messages, selectedCount };
+  return { messages, selectedCount, distinctCount: distinct.size };
 }
 
 async function readStableCanonicalCorpus(
@@ -583,7 +612,7 @@ function appendCanonical(out: CanonicalMessage[], messages: readonly Message[], 
     out.push({
       locator: JSON.stringify([archiveKey, segment, ordinal]), archive_key: archiveKey, segment, ordinal,
       msgId: message.msg_id, role: message.role, timestamp: message.timestamp,
-      model: message.model, text: selected,
+      model: message.model, version: versionOf(message), text: selected,
     });
   });
 }

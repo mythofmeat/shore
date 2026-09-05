@@ -1,5 +1,7 @@
 import { join } from "node:path";
 
+import { required } from "../util/required.ts";
+
 import type { Embedder } from "../llm/embed.ts";
 import {
   HistorySearchIndex,
@@ -313,6 +315,7 @@ export interface SearchHistoryResult {
   model_filter: string | null;
   results: Record<string, unknown>[];
   count: number;
+  searched_message_occurrences: number;
   searched_messages: number;
   skipped_invalid_timestamps: number;
 }
@@ -391,20 +394,22 @@ async function handleSearchHistoryUnlocked(
     const ranked = mode === "hybrid"
       ? fuseCandidates(lexical, vector)
       : mode === "vector" ? vector : lexical;
-    const chosen = deduplicateMessages(ranked).slice(0, maxResultsFrom(input));
+    const chosen = groupMessages(ranked).slice(0, maxResultsFrom(input));
     const neighborRows: IndexedMessage[] = [];
     for (const hit of chosen) {
-      const before = index.neighbor(hit.row, -1);
-      const after = index.neighbor(hit.row, 1);
+      const before = index.neighbor(hit.candidate.row, -1);
+      const after = index.neighbor(hit.candidate.row, 1);
       if (before !== undefined) neighborRows.push(before);
       if (after !== undefined) neighborRows.push(after);
     }
     const neighborTexts = await loadCanonicalTexts(index.ref, neighborRows);
     const results = chosen.map((hit) => {
-      const before = index.neighbor(hit.row, -1);
-      const after = index.neighbor(hit.row, 1);
+      const row = hit.candidate.row;
+      const before = index.neighbor(row, -1);
+      const after = index.neighbor(row, 1);
       return {
-        ...presentMessage(hit.row, hit.text, timeZone),
+        ...presentMessage(row, hit.candidate.text, timeZone),
+        locations: hit.locations,
         before: before === undefined
           ? []
           : [presentMessage(before, neighborTexts.get(before.id) ?? "", timeZone)],
@@ -434,7 +439,8 @@ async function handleSearchHistoryUnlocked(
       model_filter: modelFilter ?? null,
       results,
       count: results.length,
-      searched_messages: index.selectedMessageCount(),
+      searched_message_occurrences: index.selectedMessageCount(),
+      searched_messages: index.distinctMessageCount(),
       skipped_invalid_timestamps: stats.skipped,
     };
   } finally {
@@ -577,14 +583,66 @@ function fuseCandidates(
   );
 }
 
-function deduplicateMessages(candidates: readonly RankedHistoryCandidate[]): RankedHistoryCandidate[] {
+export interface HistoryLocation {
+  thread: string;
+  segment: number;
+  ordinal: number;
+}
+
+interface GroupedHistoryCandidate {
+  candidate: RankedHistoryCandidate;
+  locations: HistoryLocation[];
+}
+
+function locatorKey(row: IndexedMessage): string {
+  return JSON.stringify([row.archive_key, row.segment, row.ordinal]);
+}
+
+function identityKey(row: IndexedMessage): string {
+  return row.version === null ? `at:${locatorKey(row)}` : `version:${row.version}`;
+}
+
+export function locationOf(row: IndexedMessage): HistoryLocation {
+  return { thread: threadOf(row.archive_key), segment: row.segment, ordinal: row.ordinal };
+}
+
+function betterRepresentative(a: IndexedMessage, b: IndexedMessage): IndexedMessage {
+  return compareIndexed(a, b) <= 0 ? a : b;
+}
+
+function groupMessages(
+  candidates: readonly RankedHistoryCandidate[],
+): GroupedHistoryCandidate[] {
   const seen = new Set<string>();
-  return candidates.filter((candidate) => {
-    const key = JSON.stringify([candidate.row.archive_key, candidate.row.segment, candidate.row.ordinal]);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const groups = new Map<string, GroupedHistoryCandidate>();
+  const order: string[] = [];
+  for (const candidate of candidates) {
+    const locator = locatorKey(candidate.row);
+    if (seen.has(locator)) continue;
+    seen.add(locator);
+    const key = identityKey(candidate.row);
+    const existing = groups.get(key);
+    if (existing === undefined) {
+      groups.set(key, { candidate, locations: [locationOf(candidate.row)] });
+      order.push(key);
+      continue;
+    }
+    existing.locations.push(locationOf(candidate.row));
+    const representative = betterRepresentative(existing.candidate.row, candidate.row);
+    if (representative !== existing.candidate.row) {
+      existing.candidate = { ...candidate, row: representative };
+    }
+  }
+  for (const group of groups.values()) {
+    group.locations.sort(
+      (a, b) => a.thread.localeCompare(b.thread) || a.segment - b.segment || a.ordinal - b.ordinal,
+    );
+  }
+  return order.map((key) => required(groups.get(key)));
+}
+
+function threadOf(archiveKey: string): string {
+  return archiveKey.includes("/") ? archiveKey.slice(archiveKey.indexOf("/") + 1) : "main";
 }
 
 function presentMessage(
@@ -593,7 +651,7 @@ function presentMessage(
   timeZone: string,
 ): Record<string, unknown> {
   return {
-    thread: row.archive_key.includes("/") ? row.archive_key.slice(row.archive_key.indexOf("/") + 1) : "main",
+    thread: threadOf(row.archive_key),
     msg_id: row.msg_id,
     role: row.role,
     timestamp: normalizeToZone(row.timestamp, timeZone),

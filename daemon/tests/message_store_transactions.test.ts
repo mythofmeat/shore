@@ -66,7 +66,10 @@ const initialMessages = (): Message[] => [
   answer("a2", 5),
 ];
 
-const wire = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
+const wire = (value: unknown): unknown =>
+  JSON.parse(JSON.stringify(value), (key: string, entry: unknown) =>
+    key === "version" ? undefined : entry,
+  );
 
 function faultInjectingIo(): {
   io: MessageStoreIo;

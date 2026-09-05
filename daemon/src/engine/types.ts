@@ -34,6 +34,7 @@ export interface MessageAlternative {
   timestamp: string;
   provider_key?: string;
   model?: string;
+  version?: string;
 }
 
 export interface Message {
@@ -49,4 +50,5 @@ export interface Message {
   provider_key?: string;
   model?: string;
   origin?: MessageOrigin;
+  version?: string;
 }

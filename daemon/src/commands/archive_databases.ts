@@ -6,6 +6,17 @@ import { Ledger } from "../ledger/store.ts";
 
 type Row = Record<string, SQLQueryBindings>;
 
+const CHARACTER_SCOPED_TABLES = [
+  "history_messages",
+  "history_segments",
+  "history_pending",
+  "history_character_stats",
+  "history_archive_revision",
+  "history_thread_forks",
+  "memory_coverage",
+  "memory_documents",
+] as const;
+
 export function exportHistoryDatabase(path: string, character: string, output: string): void {
   const opened = HistoryStore.open(path);
   opened.close();
@@ -18,13 +29,7 @@ export function exportHistoryDatabase(path: string, character: string, output: s
     `DELETE FROM history_alternatives
        WHERE message_id IN (SELECT id FROM history_messages WHERE NOT ${CHARACTER_ARCHIVES_SQL})`,
   ).run(character);
-  for (const table of [
-    "history_messages",
-    "history_segments",
-    "history_pending",
-    "history_character_stats",
-    "history_archive_revision",
-  ]) {
+  for (const table of CHARACTER_SCOPED_TABLES) {
     copy.query(`DELETE FROM ${table} WHERE NOT ${CHARACTER_ARCHIVES_SQL}`).run(character);
   }
   copy.run(
@@ -59,7 +64,8 @@ export function importHistoryDatabase(
   const destination = new Database(destinationPath, { create: true, readwrite: true });
   const source = new Database(sourcePath, { readonly: true });
   try {
-    for (const table of ["history_messages", "history_segments", "history_pending", "history_character_stats", "history_archive_revision"]) {
+    for (const table of CHARACTER_SCOPED_TABLES) {
+      if (!hasTable(source, table)) continue;
       const other = source.query(`SELECT 1 FROM ${table} WHERE NOT ${CHARACTER_ARCHIVES_SQL} LIMIT 1`).get(character);
       if (other !== null) throw new Error("archive database contains another character");
     }
@@ -76,6 +82,10 @@ export function importHistoryDatabase(
       copyRows(source, destination, "history_segments", CHARACTER_ARCHIVES_SQL, "", character);
       copyRows(source, destination, "history_pending", CHARACTER_ARCHIVES_SQL, "", character);
       copyRows(source, destination, "history_character_stats", CHARACTER_ARCHIVES_SQL, "", character);
+      for (const table of ["history_thread_forks", "memory_coverage", "memory_documents"]) {
+        if (!hasTable(source, table)) continue;
+        copyRows(source, destination, table, CHARACTER_ARCHIVES_SQL, "OR IGNORE", character);
+      }
 
       const ids = new Map<number, number>();
       const messages = source
@@ -114,9 +124,19 @@ export function importHistoryDatabase(
         `UPDATE history_segments
             SET memory_doc = 'pending', memory_doc_attempts = 0,
                 memory_doc_error = NULL, memory_doc_op = NULL,
-                memory_doc_due = 0, memory_doc_expires = 0
+                memory_doc_due = 0, memory_doc_expires = 0,
+                memory_doc_id = NULL, memory_doc_claim = NULL
           WHERE ${CHARACTER_ARCHIVES_SQL} AND committed = 1 AND excluded = 0
             AND memory_doc IN ('submitted', 'stored')`,
+      ).run(character);
+      destination.query(
+        "DELETE FROM memory_coverage WHERE character = ?1 AND path = 'hindsight'",
+      ).run(character);
+      destination.query(
+        "DELETE FROM memory_documents WHERE character = ?1 AND path = 'hindsight'",
+      ).run(character);
+      destination.query(
+        "DELETE FROM memory_coverage WHERE character = ?1 AND state = 'claimed'",
       ).run(character);
     })();
   } finally {
@@ -180,13 +200,7 @@ export function removeImportedDatabaseRows(
         `DELETE FROM history_alternatives
            WHERE message_id IN (SELECT id FROM history_messages WHERE ${CHARACTER_ARCHIVES_SQL})`,
       ).run(character);
-      for (const table of [
-        "history_messages",
-        "history_segments",
-        "history_pending",
-        "history_character_stats",
-        "history_archive_revision",
-      ]) {
+      for (const table of CHARACTER_SCOPED_TABLES) {
         history.query(`DELETE FROM ${table} WHERE ${CHARACTER_ARCHIVES_SQL}`).run(character);
       }
       history.run(
@@ -206,6 +220,12 @@ export function removeImportedDatabaseRows(
     })();
     ledger.close();
   }
+}
+
+function hasTable(db: Database, table: string): boolean {
+  return db
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1")
+    .get(table) !== null;
 }
 
 function requireOnlyCharacter(db: Database, table: string, character: string): void {

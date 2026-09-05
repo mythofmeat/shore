@@ -18,6 +18,7 @@ export interface DurableHistoryLocation {
   dbPath: string;
   archiveKey: string;
   retain?: boolean;
+  coverageClaim?: string;
 }
 
 export function conversationManager(
@@ -35,7 +36,14 @@ export function conversationManager(
         now,
         newId,
         params.operationId,
-        history,
+        history === undefined
+          ? history
+          : {
+              ...history,
+              ...(params.coverageClaim === undefined
+                ? {}
+                : { coverageClaim: params.coverageClaim }),
+            },
         {
           ...(params.memoryBefore === undefined ? {} : { memory_before: params.memoryBefore }),
           ...(params.memoryAfter === undefined ? {} : { memory_after: params.memoryAfter }),
@@ -132,6 +140,7 @@ async function archiveToDatabase(
         messages,
         activeContent,
         retainedContent,
+        history.coverageClaim,
       );
     }
     try {

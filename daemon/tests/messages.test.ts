@@ -13,7 +13,14 @@ import type { Message, MessageAlternative } from "../src/engine/types";
 
 import fixture from "./engine_captures/messages.json";
 
-const wire = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
+const MINTED_VERSION_RE = /mv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+const wire = (v: unknown): unknown =>
+  JSON.parse(JSON.stringify(v), (key: string, entry: unknown) =>
+    key === "version" && typeof entry === "string" ? "<minted_version>" : entry,
+  );
+
+const settledVersions = (text: string): string => text.replaceAll(MINTED_VERSION_RE, "<minted_version>");
 
 const hydrate = (m: Message): Message => ({
   ...m,
@@ -455,9 +462,10 @@ describe("operation traces", () => {
           if (step.file === undefined) {
             await expectPersistedAsHeld(path, store, where);
           } else {
-            expect(await Bun.file(path).text(), `file after ${JSON.stringify(step.op)}`).toBe(
-              step.file,
-            );
+            expect(
+              settledVersions(await Bun.file(path).text()),
+              `file after ${JSON.stringify(step.op)}`,
+            ).toBe(step.file);
           }
         }
       });

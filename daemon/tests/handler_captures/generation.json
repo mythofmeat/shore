@@ -1,68 +1,4 @@
 {
-  "$shared": {
-    "s0": [
-      {
-        "label": "system",
-        "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
-      },
-      {
-        "label": "tools_guidance",
-        "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
-      },
-      {
-        "label": "character",
-        "text": "<ada>\nada system prompt\n</ada>"
-      }
-    ],
-    "s1": [
-      {
-        "character": "ada",
-        "content": "hello",
-        "content_blocks": [
-          {
-            "text": "hello",
-            "type": "text"
-          }
-        ],
-        "images": [],
-        "msg_id": "<minted_id>",
-        "origin": "user_input",
-        "revision": 1,
-        "role": "user",
-        "timestamp": "<minted_timestamp>",
-        "type": "new_message"
-      }
-    ],
-    "s2": {
-      "autonomy_manager_present": true,
-      "character_data_dir": "<root>/data/ada",
-      "character_name": "ada",
-      "config_dir": "<root>/config",
-      "embedder": false,
-      "image_dir": "<root>/data/ada/images",
-      "image_gen_config": null,
-      "markdown_store": true,
-      "mcp_registry": true,
-      "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
-      "memory_retrieval_config": {
-        "binary": "skip",
-        "max_embed_chars_per_file": 4000,
-        "max_file_bytes": 2097152,
-        "max_indexed_files": 50000,
-        "max_total_indexed_bytes": 1073741824,
-        "mode": "auto"
-      },
-      "search_config": {
-        "api_key_env": "TAVILY_API_KEY",
-        "include_answer": true,
-        "result_limit": 5,
-        "search_depth": "basic"
-      },
-      "subagent_conversation_len": null,
-      "subagent_runtime": false,
-      "workspace_dir": "<root>/config/characters/ada/workspace"
-    }
-  },
   "timezone": "America/New_York",
   "generated_at": "2026-08-05T22:21:54.870820499-04:00",
   "handle_generation": [
@@ -196,19 +132,20 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
+            "timestamp": "<minted_timestamp>",
             "content": "hello"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "model": "claude-fixture",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
@@ -217,6 +154,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
+            "model": "claude-fixture",
             "content": "hi there"
           }
         ],
@@ -237,9 +175,20 @@
                 ]
               }
             ],
-            "system": {
-              "$ref": "s0"
-            },
+            "system": [
+              {
+                "label": "system",
+                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+              },
+              {
+                "label": "tools_guidance",
+                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+              },
+              {
+                "label": "character",
+                "text": "<ada>\nada system prompt\n</ada>"
+              }
+            ],
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -436,7 +385,7 @@
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "model": "claude-fixture",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
@@ -471,6 +420,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
+            "model": "claude-fixture",
             "content": "second answer"
           }
         ],
@@ -491,9 +441,20 @@
                 ]
               }
             ],
-            "system": {
-              "$ref": "s0"
-            },
+            "system": [
+              {
+                "label": "system",
+                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+              },
+              {
+                "label": "tools_guidance",
+                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+              },
+              {
+                "label": "character",
+                "text": "<ada>\nada system prompt\n</ada>"
+              }
+            ],
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -556,20 +517,37 @@
             "content_type": "text"
           }
         ],
-        "broadcast_events": {
-          "$ref": "s1"
-        },
+        "broadcast_events": [
+          {
+            "character": "ada",
+            "content": "hello",
+            "content_blocks": [
+              {
+                "text": "hello",
+                "type": "text"
+              }
+            ],
+            "images": [],
+            "msg_id": "<minted_id>",
+            "origin": "user_input",
+            "revision": 1,
+            "role": "user",
+            "timestamp": "<minted_timestamp>",
+            "type": "new_message"
+          }
+        ],
         "conversation": [
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
+            "timestamp": "<minted_timestamp>",
             "content": "hello"
           }
         ],
@@ -590,9 +568,20 @@
                 ]
               }
             ],
-            "system": {
-              "$ref": "s0"
-            },
+            "system": [
+              {
+                "label": "system",
+                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+              },
+              {
+                "label": "tools_guidance",
+                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+              },
+              {
+                "label": "character",
+                "text": "<ada>\nada system prompt\n</ada>"
+              }
+            ],
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -611,7 +600,7 @@
     },
     {
       "name": "a provider error mid-stream fails the turn and persists nothing",
-      "note": "the chunks already relayed stay relayed \u2014 the client saw them \u2014 but the turn is not written and no stream_end goes out, so a client that stopped at the last chunk is left waiting on a turn that failed",
+      "note": "the chunks already relayed stay relayed — the client saw them — but the turn is not written and no stream_end goes out, so a client that stopped at the last chunk is left waiting on a turn that failed",
       "input": {
         "history": [],
         "body": {
@@ -669,20 +658,37 @@
             "content_type": "text"
           }
         ],
-        "broadcast_events": {
-          "$ref": "s1"
-        },
+        "broadcast_events": [
+          {
+            "character": "ada",
+            "content": "hello",
+            "content_blocks": [
+              {
+                "text": "hello",
+                "type": "text"
+              }
+            ],
+            "images": [],
+            "msg_id": "<minted_id>",
+            "origin": "user_input",
+            "revision": 1,
+            "role": "user",
+            "timestamp": "<minted_timestamp>",
+            "type": "new_message"
+          }
+        ],
         "conversation": [
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
+            "timestamp": "<minted_timestamp>",
             "content": "hello"
           }
         ],
@@ -703,9 +709,20 @@
                 ]
               }
             ],
-            "system": {
-              "$ref": "s0"
-            },
+            "system": [
+              {
+                "label": "system",
+                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+              },
+              {
+                "label": "tools_guidance",
+                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+              },
+              {
+                "label": "character",
+                "text": "<ada>\nada system prompt\n</ada>"
+              }
+            ],
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -858,7 +875,7 @@
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "model": "claude-fixture",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
@@ -867,6 +884,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
+            "model": "claude-fixture",
             "content": "answer"
           }
         ],
@@ -887,9 +905,20 @@
                 ]
               }
             ],
-            "system": {
-              "$ref": "s0"
-            },
+            "system": [
+              {
+                "label": "system",
+                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+              },
+              {
+                "label": "tools_guidance",
+                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+              },
+              {
+                "label": "character",
+                "text": "<ada>\nada system prompt\n</ada>"
+              }
+            ],
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -1091,19 +1120,20 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "what time is it"
               }
             ],
+            "timestamp": "<minted_timestamp>",
             "content": "what time is it"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "model": "claude-fixture",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "tool_use",
@@ -1114,12 +1144,13 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
+            "model": "claude-fixture",
             "content": ""
           },
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "tool_result",
@@ -1128,12 +1159,13 @@
                 "is_error": false
               }
             ],
+            "timestamp": "<minted_timestamp>",
             "content": "<recorded>"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "model": "claude-fixture",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
@@ -1142,6 +1174,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
+            "model": "claude-fixture",
             "content": "it is late"
           }
         ],
@@ -1162,9 +1195,20 @@
                 ]
               }
             ],
-            "system": {
-              "$ref": "s0"
-            },
+            "system": [
+              {
+                "label": "system",
+                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+              },
+              {
+                "label": "tools_guidance",
+                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+              },
+              {
+                "label": "character",
+                "text": "<ada>\nada system prompt\n</ada>"
+              }
+            ],
             "tools": [
               "generate_image",
               "web_search",
@@ -1215,7 +1259,7 @@
     },
     {
       "name": "tools disabled keeps the loop out of the sidecar",
-      "note": "`can_delegate_tool_loop` is false, so a turn that stops on tool_use runs the daemon's own tool phase instead \u2014 which with no tools enabled produces no tool turns at all",
+      "note": "`can_delegate_tool_loop` is false, so a turn that stops on tool_use runs the daemon's own tool phase instead — which with no tools enabled produces no tool turns at all",
       "input": {
         "history": [],
         "body": {
@@ -1343,19 +1387,20 @@
           {
             "msg_id": "<minted_id>",
             "role": "user",
-            "timestamp": "<minted_timestamp>",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
                 "text": "hello"
               }
             ],
+            "timestamp": "<minted_timestamp>",
             "content": "hello"
           },
           {
             "msg_id": "<minted_id>",
             "role": "assistant",
-            "model": "claude-fixture",
+            "version": "<minted_version>",
             "content_blocks": [
               {
                 "type": "text",
@@ -1364,6 +1409,7 @@
             ],
             "timestamp": "<minted_timestamp>",
             "provider_key": "anthropic",
+            "model": "claude-fixture",
             "content": "no tools here"
           }
         ],
@@ -1384,9 +1430,20 @@
                 ]
               }
             ],
-            "system": {
-              "$ref": "s0"
-            },
+            "system": [
+              {
+                "label": "system",
+                "text": "You are ada, in conversation with eshen.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory."
+              },
+              {
+                "label": "tools_guidance",
+                "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n"
+              },
+              {
+                "label": "character",
+                "text": "<ada>\nada system prompt\n</ada>"
+              }
+            ],
             "max_tokens": 4096,
             "provider_key": "anthropic",
             "replay_prior_thinking": "all",
@@ -1418,7 +1475,33 @@
         "conversation_len": 0
       },
       "output": {
-        "$ref": "s2"
+        "autonomy_manager_present": true,
+        "character_data_dir": "<root>/data/ada",
+        "character_name": "ada",
+        "config_dir": "<root>/config",
+        "embedder": false,
+        "image_dir": "<root>/data/ada/images",
+        "image_gen_config": null,
+        "markdown_store": true,
+        "mcp_registry": true,
+        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
+        "memory_retrieval_config": {
+          "binary": "skip",
+          "max_embed_chars_per_file": 4000,
+          "max_file_bytes": 2097152,
+          "max_indexed_files": 50000,
+          "max_total_indexed_bytes": 1073741824,
+          "mode": "auto"
+        },
+        "search_config": {
+          "api_key_env": "TAVILY_API_KEY",
+          "include_answer": true,
+          "result_limit": 5,
+          "search_depth": "basic"
+        },
+        "subagent_conversation_len": null,
+        "subagent_runtime": false,
+        "workspace_dir": "<root>/config/characters/ada/workspace"
       }
     },
     {
@@ -1434,7 +1517,33 @@
         "conversation_len": 1
       },
       "output": {
-        "$ref": "s2"
+        "autonomy_manager_present": true,
+        "character_data_dir": "<root>/data/ada",
+        "character_name": "ada",
+        "config_dir": "<root>/config",
+        "embedder": false,
+        "image_dir": "<root>/data/ada/images",
+        "image_gen_config": null,
+        "markdown_store": true,
+        "mcp_registry": true,
+        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
+        "memory_retrieval_config": {
+          "binary": "skip",
+          "max_embed_chars_per_file": 4000,
+          "max_file_bytes": 2097152,
+          "max_indexed_files": 50000,
+          "max_total_indexed_bytes": 1073741824,
+          "mode": "auto"
+        },
+        "search_config": {
+          "api_key_env": "TAVILY_API_KEY",
+          "include_answer": true,
+          "result_limit": 5,
+          "search_depth": "basic"
+        },
+        "subagent_conversation_len": null,
+        "subagent_runtime": false,
+        "workspace_dir": "<root>/config/characters/ada/workspace"
       }
     },
     {
@@ -1492,7 +1601,33 @@
         "conversation_len": 0
       },
       "output": {
-        "$ref": "s2"
+        "autonomy_manager_present": true,
+        "character_data_dir": "<root>/data/ada",
+        "character_name": "ada",
+        "config_dir": "<root>/config",
+        "embedder": false,
+        "image_dir": "<root>/data/ada/images",
+        "image_gen_config": null,
+        "markdown_store": true,
+        "mcp_registry": true,
+        "memory_index_path": "<root>/cache/characters/ada/workspace_index.json",
+        "memory_retrieval_config": {
+          "binary": "skip",
+          "max_embed_chars_per_file": 4000,
+          "max_file_bytes": 2097152,
+          "max_indexed_files": 50000,
+          "max_total_indexed_bytes": 1073741824,
+          "mode": "auto"
+        },
+        "search_config": {
+          "api_key_env": "TAVILY_API_KEY",
+          "include_answer": true,
+          "result_limit": 5,
+          "search_depth": "basic"
+        },
+        "subagent_conversation_len": null,
+        "subagent_runtime": false,
+        "workspace_dir": "<root>/config/characters/ada/workspace"
       }
     },
     {

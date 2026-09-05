@@ -105,6 +105,7 @@ describe("history search index", () => {
       timestamp: "2026-08-13T00:01:00+00:00",
       model: null,
       text: "First paragraph.\n\nNeedle stays formatted.\nThird line.",
+      locations: [{ thread: "main", segment: 0, ordinal: 1 }],
       before: [{
         thread: "main", msg_id: "u1", role: "user", timestamp: "2026-08-13T00:00:00+00:00",
         model: null, text: "Before paragraph.",

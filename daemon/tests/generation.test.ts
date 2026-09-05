@@ -47,6 +47,7 @@ afterAll(restoreTestEnv);
 
 const MINTED_TS = "2026-01-01T00:00:00-05:00";
 const MINTED_ID_RE = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MINTED_VERSION_RE = /^mv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 let seededTimestamps = new Set<string>();
 
@@ -63,6 +64,8 @@ function normalise(v: unknown): unknown {
         !seededTimestamps.has(val)
       ) {
         out[k] = "<minted_timestamp>";
+      } else if (k === "version" && typeof val === "string" && MINTED_VERSION_RE.test(val)) {
+        out[k] = "<minted_version>";
       } else if (k === "api_key") {
         out[k] = "<redacted>";
       } else if (k === "total_ms" || k === "ttft_ms") {

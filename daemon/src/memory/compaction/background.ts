@@ -22,6 +22,7 @@ function toConversationMessage(msg: Message): ConversationMessage {
     timestamp: msg.timestamp,
     isToolResultOnly: isToolResultOnly(msg),
     isAutonomous: msg.origin === "autonomous",
+    ...(msg.version === undefined ? {} : { version: msg.version }),
   };
 }
 

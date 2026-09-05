@@ -7,6 +7,7 @@ import {
   deriveContentFromBlocks,
   normalizeMessage,
 } from "./message_store.ts";
+import { alternativeVersionOf, versionOf } from "./versions.ts";
 import type {
   ContentBlock,
   ImageRef,
@@ -64,6 +65,8 @@ CREATE TABLE IF NOT EXISTS history_segments (
     memory_doc_op TEXT,
     memory_doc_due INTEGER NOT NULL DEFAULT 0,
     memory_doc_expires INTEGER NOT NULL DEFAULT 0,
+    memory_doc_id TEXT,
+    memory_doc_claim TEXT,
     label         TEXT,
     note          TEXT,
     PRIMARY KEY (character, idx)
@@ -73,7 +76,8 @@ CREATE TABLE IF NOT EXISTS history_pending (
     character  TEXT PRIMARY KEY,
     segment    INTEGER NOT NULL,
     before_hash TEXT NOT NULL,
-    after_hash  TEXT NOT NULL
+    after_hash  TEXT NOT NULL,
+    coverage_claim TEXT
 );
 
 CREATE TABLE IF NOT EXISTS history_messages (
@@ -93,7 +97,8 @@ CREATE TABLE IF NOT EXISTS history_messages (
     blocks_hash  TEXT    NOT NULL,
     display_kind INTEGER NOT NULL,
     display_seq  INTEGER,
-    is_user_turn INTEGER NOT NULL
+    is_user_turn INTEGER NOT NULL,
+    version      TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_history_messages_slot
@@ -107,7 +112,46 @@ CREATE TABLE IF NOT EXISTS history_alternatives (
     model        TEXT,
     images       TEXT,
     blocks_hash  TEXT    NOT NULL,
+    version      TEXT,
     PRIMARY KEY (message_id, ordinal)
+);
+
+CREATE TABLE IF NOT EXISTS history_thread_forks (
+    character     TEXT    NOT NULL,
+    fork_id       TEXT    NOT NULL,
+    child         TEXT    NOT NULL,
+    source        TEXT    NOT NULL,
+    created_at    TEXT    NOT NULL,
+    message_count INTEGER NOT NULL,
+    turn_count    INTEGER NOT NULL,
+    PRIMARY KEY (character, fork_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_thread_forks_child
+    ON history_thread_forks (character, child);
+
+CREATE TABLE IF NOT EXISTS memory_coverage (
+    character  TEXT    NOT NULL,
+    path       TEXT    NOT NULL,
+    version    TEXT    NOT NULL,
+    state      TEXT    NOT NULL,
+    unit       TEXT,
+    claim      TEXT,
+    claimed_at INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT    NOT NULL,
+    PRIMARY KEY (character, path, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_coverage_claim
+    ON memory_coverage (character, path, state, claimed_at);
+
+CREATE TABLE IF NOT EXISTS memory_documents (
+    character   TEXT    NOT NULL,
+    path        TEXT    NOT NULL,
+    document_id TEXT    NOT NULL,
+    archive_key TEXT    NOT NULL,
+    segment     INTEGER NOT NULL,
+    PRIMARY KEY (character, path, document_id, archive_key, segment)
 );
 
 CREATE TABLE IF NOT EXISTS history_metadata (
@@ -158,6 +202,17 @@ export type MemoryDocumentState =
   | "failed"
   | "delete_failed";
 
+export type MemoryPath = "compaction" | "hindsight";
+
+export interface ThreadForkRecord {
+  fork_id: string;
+  child: string;
+  source: string;
+  created_at: string;
+  message_count: number;
+  turn_count: number;
+}
+
 export interface MemoryRetainJob {
   archiveKey: string;
   segment: number;
@@ -166,9 +221,14 @@ export interface MemoryRetainJob {
   attempts: number;
   operation: string | undefined;
   expires: number;
+  documentId: string | undefined;
+  claim: string | undefined;
 }
 
 export const CHARACTER_ARCHIVES_SQL = "(character = ?1 OR substr(character, 1, length(?1) + 1) = ?1 || '/')";
+
+const MESSAGE_ARCHIVES_SQL =
+  "(m.character = ?1 OR substr(m.character, 1, length(?1) + 1) = ?1 || '/')";
 
 const ACTIONABLE = `((s.excluded = 0 AND s.memory_doc IN ('pending', 'submitted'))
         OR (s.excluded = 1 AND s.memory_doc IN ('submitted', 'stored')))`;
@@ -184,6 +244,7 @@ interface BodyRow {
   timestamp: string;
   provider_key: string | null;
   model: string | null;
+  version: string | null;
 }
 
 interface MessageRow extends BodyRow {
@@ -254,6 +315,7 @@ export class HistoryStore {
     messages: Message[],
     activeBefore: string,
     activeAfter: string,
+    coverageClaim?: string,
   ): number {
     return this.#db.transaction(() => {
       const pending = this.#db
@@ -267,10 +329,10 @@ export class HistoryStore {
       this.#replaceSegment(character, idx, entry, messages, false);
       this.#db
         .query(
-          `INSERT INTO history_pending (character, segment, before_hash, after_hash)
-           VALUES (?1, ?2, ?3, ?4)`,
+          `INSERT INTO history_pending (character, segment, before_hash, after_hash, coverage_claim)
+           VALUES (?1, ?2, ?3, ?4, ?5)`,
         )
-        .run(character, idx, textHash(activeBefore), textHash(activeAfter));
+        .run(character, idx, textHash(activeBefore), textHash(activeAfter), coverageClaim ?? null);
       return idx;
     })();
   }
@@ -283,12 +345,24 @@ export class HistoryStore {
            WHERE character = ?1 AND idx = ?2`,
         )
         .get(character, idx) as { committed: number } | null;
+      const pending = this.#db
+        .query(
+          "SELECT coverage_claim FROM history_pending WHERE character = ?1 AND segment = ?2",
+        )
+        .get(character, idx) as { coverage_claim: string | null } | null;
       this.#db
         .query("UPDATE history_segments SET committed = 1 WHERE character = ?1 AND idx = ?2")
         .run(character, idx);
       this.#db
         .query("DELETE FROM history_pending WHERE character = ?1 AND segment = ?2")
         .run(character, idx);
+      if (pending?.coverage_claim !== null && pending?.coverage_claim !== undefined) {
+        this.commitMemoryCoverage(
+          characterOfArchiveKey(character),
+          "compaction",
+          pending.coverage_claim,
+        );
+      }
       if (row?.committed === 0) {
         this.#updateCharacterStats(character, this.#segmentTurnCount(character, idx));
       }
@@ -297,10 +371,22 @@ export class HistoryStore {
 
   abortCompaction(character: string, idx: number): void {
     this.#db.transaction(() => {
+      const pending = this.#db
+        .query(
+          "SELECT coverage_claim FROM history_pending WHERE character = ?1 AND segment = ?2",
+        )
+        .get(character, idx) as { coverage_claim: string | null } | null;
       this.#deleteSegment(character, idx);
       this.#db
         .query("DELETE FROM history_pending WHERE character = ?1 AND segment = ?2")
         .run(character, idx);
+      if (pending?.coverage_claim !== null && pending?.coverage_claim !== undefined) {
+        this.releaseMemoryCoverage(
+          characterOfArchiveKey(character),
+          "compaction",
+          pending.coverage_claim,
+        );
+      }
       this.#collectGarbage();
     })();
   }
@@ -325,6 +411,13 @@ export class HistoryStore {
       return;
     }
     throw new PendingCompactionConflict(character);
+  }
+
+  pendingCompactionSegment(character: string): number | undefined {
+    const row = this.#db
+      .query("SELECT segment FROM history_pending WHERE character = ?1")
+      .get(character) as { segment: number } | null;
+    return row?.segment ?? undefined;
   }
 
   hasSegment(character: string, idx: number): boolean {
@@ -494,6 +587,240 @@ export class HistoryStore {
     })();
   }
 
+  recordThreadFork(character: string, record: ThreadForkRecord): void {
+    this.#db
+      .query(
+        `INSERT INTO history_thread_forks
+             (character, fork_id, child, source, created_at, message_count, turn_count)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT (character, fork_id) DO UPDATE SET
+           child = excluded.child,
+           source = excluded.source,
+           created_at = excluded.created_at,
+           message_count = excluded.message_count,
+           turn_count = excluded.turn_count`,
+      )
+      .run(
+        character,
+        record.fork_id,
+        record.child,
+        record.source,
+        record.created_at,
+        record.message_count,
+        record.turn_count,
+      );
+  }
+
+  threadForks(character: string): ThreadForkRecord[] {
+    return this.#db
+      .query(
+        `SELECT fork_id, child, source, created_at, message_count, turn_count
+         FROM history_thread_forks WHERE character = ?1
+         ORDER BY created_at, fork_id`,
+      )
+      .all(character) as ThreadForkRecord[];
+  }
+
+  forkOf(character: string, forkId: string): ThreadForkRecord | undefined {
+    const row = this.#db
+      .query(
+        `SELECT fork_id, child, source, created_at, message_count, turn_count
+         FROM history_thread_forks WHERE character = ?1 AND fork_id = ?2`,
+      )
+      .get(character, forkId) as ThreadForkRecord | null;
+    return row ?? undefined;
+  }
+
+  forkAncestry(character: string, thread: string): ThreadForkRecord[] {
+    const byChild = new Map<string, ThreadForkRecord>();
+    for (const fork of this.threadForks(character)) byChild.set(fork.child, fork);
+    const chain: ThreadForkRecord[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined = thread;
+    while (cursor !== undefined && !seen.has(cursor)) {
+      seen.add(cursor);
+      const fork: ThreadForkRecord | undefined = byChild.get(cursor);
+      if (fork === undefined) break;
+      chain.push(fork);
+      cursor = fork.source;
+    }
+    return chain;
+  }
+
+  forgetThreadFork(character: string, forkId: string): void {
+    this.#db
+      .query("DELETE FROM history_thread_forks WHERE character = ?1 AND fork_id = ?2")
+      .run(character, forkId);
+  }
+
+  claimMemoryCoverage(
+    character: string,
+    path: MemoryPath,
+    versions: readonly string[],
+    claim: string,
+    unit: string,
+    nowMs: number,
+    leaseMs: number,
+    stamp = new Date(nowMs).toISOString(),
+  ): string[] {
+    if (versions.length === 0) return [];
+    return this.#db.transaction(() => {
+      this.expireMemoryClaims(character, path, nowMs - leaseMs);
+      const insert = this.#db.query(
+        `INSERT OR IGNORE INTO memory_coverage
+             (character, path, version, state, unit, claim, claimed_at, updated_at)
+         VALUES (?1, ?2, ?3, 'claimed', ?4, ?5, ?6, ?7)`,
+      );
+      const won: string[] = [];
+      for (const version of new Set(versions)) {
+        if (insert.run(character, path, version, unit, claim, nowMs, stamp).changes > 0) {
+          won.push(version);
+        }
+      }
+      return won;
+    })();
+  }
+
+  coveredMemoryVersions(
+    character: string,
+    path: MemoryPath,
+    versions: readonly string[],
+  ): Set<string> {
+    const wanted = [...new Set(versions)];
+    if (wanted.length === 0) return new Set();
+    const marks = wanted.map((_, index) => `?${String(index + 3)}`).join(", ");
+    const rows = this.#db
+      .query(
+        `SELECT version FROM memory_coverage
+         WHERE character = ?1 AND path = ?2 AND state = 'covered' AND version IN (${marks})`,
+      )
+      .all(character, path, ...wanted) as { version: string }[];
+    return new Set(rows.map((row) => row.version));
+  }
+
+  commitMemoryCoverage(
+    character: string,
+    path: MemoryPath,
+    claim: string,
+    unit?: string,
+    stamp?: string,
+  ): number {
+    return this.#db
+      .query(
+        `UPDATE memory_coverage
+         SET state = 'covered', claim = NULL, claimed_at = 0, updated_at = ?4,
+             unit = CASE WHEN ?5 IS NULL THEN unit ELSE ?5 END
+         WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'`,
+      )
+      .run(character, path, claim, stamp ?? new Date().toISOString(), unit ?? null).changes;
+  }
+
+  releaseMemoryCoverage(character: string, path: MemoryPath, claim: string): number {
+    return this.#db
+      .query(
+        `DELETE FROM memory_coverage
+         WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'`,
+      )
+      .run(character, path, claim).changes;
+  }
+
+  expireMemoryClaims(character: string, path: MemoryPath, olderThanMs: number): number {
+    return this.#db
+      .query(
+        `DELETE FROM memory_coverage
+         WHERE character = ?1 AND path = ?2 AND state = 'claimed' AND claimed_at < ?3`,
+      )
+      .run(character, path, olderThanMs).changes;
+  }
+
+  memoryCoverageState(
+    character: string,
+    path: MemoryPath,
+    version: string,
+  ): { state: string; unit: string | null; claim: string | null } | undefined {
+    const row = this.#db
+      .query(
+        `SELECT state, unit, claim FROM memory_coverage
+         WHERE character = ?1 AND path = ?2 AND version = ?3`,
+      )
+      .get(character, path, version) as
+      | { state: string; unit: string | null; claim: string | null }
+      | null;
+    return row ?? undefined;
+  }
+
+  markMemoryDocumentOccurrence(
+    character: string,
+    path: MemoryPath,
+    documentId: string,
+    archiveKey: string,
+    segment: number,
+  ): void {
+    this.#db
+      .query(
+        `INSERT OR IGNORE INTO memory_documents
+             (character, path, document_id, archive_key, segment)
+         VALUES (?1, ?2, ?3, ?4, ?5)`,
+      )
+      .run(character, path, documentId, archiveKey, segment);
+  }
+
+  eligibleDocumentOccurrences(
+    character: string,
+    path: MemoryPath,
+    documentId: string,
+  ): { archive_key: string; segment: number }[] {
+    return this.#db
+      .query(
+        `SELECT d.archive_key, d.segment FROM memory_documents d
+         JOIN history_segments s ON s.character = d.archive_key AND s.idx = d.segment
+         WHERE d.character = ?1 AND d.path = ?2 AND d.document_id = ?3
+           AND s.committed = 1 AND s.excluded = 0
+         ORDER BY d.archive_key, d.segment`,
+      )
+      .all(character, path, documentId) as { archive_key: string; segment: number }[];
+  }
+
+  releaseHindsightUnitCoverage(character: string, documentId: string): number {
+    const prefix = `shore:${character}:`;
+    if (!documentId.startsWith(prefix)) return 0;
+    const unit = documentId.slice(prefix.length);
+    return this.#db
+      .query(
+        `DELETE FROM memory_coverage
+         WHERE character = ?1 AND path = 'hindsight' AND unit = ?2`,
+      )
+      .run(character, unit).changes;
+  }
+
+  characterDistinctTurnCount(character: string): number {
+    const row = this.#db
+      .query(
+        `SELECT COUNT(*) AS n FROM (
+           SELECT DISTINCT COALESCE(m.version, 'occurrence:' || m.id) AS identity
+           FROM history_messages m
+           JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+           WHERE ${MESSAGE_ARCHIVES_SQL}
+             AND s.committed = 1 AND m.is_user_turn = 1
+         )`,
+      )
+      .get(character) as { n: number };
+    return row.n;
+  }
+
+  characterOccurrenceTurnCount(character: string): number {
+    const row = this.#db
+      .query(
+        `SELECT COUNT(*) AS n
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE ${MESSAGE_ARCHIVES_SQL}
+           AND s.committed = 1 AND m.is_user_turn = 1`,
+      )
+      .get(character) as { n: number };
+    return row.n;
+  }
+
   archiveKeys(character: string): string[] {
     return (this.#db.query(
       `SELECT DISTINCT s.character FROM history_segments s
@@ -515,7 +842,7 @@ export class HistoryStore {
     const row = this.#db
       .query(
         `SELECT s.character, s.idx, s.excluded, s.memory_doc, s.memory_doc_attempts, s.memory_doc_op,
-                s.memory_doc_expires
+                s.memory_doc_expires, s.memory_doc_id, s.memory_doc_claim
          FROM history_segments s
          WHERE ${CHARACTER_ARCHIVES_SQL} AND s.committed = 1 AND s.memory_doc_due <= ?2
            AND ${ACTIONABLE}
@@ -530,6 +857,8 @@ export class HistoryStore {
         memory_doc_attempts: number;
         memory_doc_op: string | null;
         memory_doc_expires: number;
+        memory_doc_id: string | null;
+        memory_doc_claim: string | null;
       } | null;
     if (row === null) return undefined;
     const action: MemoryRetainAction = row.excluded === 1
@@ -545,6 +874,8 @@ export class HistoryStore {
       attempts: row.memory_doc_attempts,
       operation: row.memory_doc_op ?? undefined,
       expires: row.memory_doc_expires,
+      documentId: row.memory_doc_id ?? undefined,
+      claim: row.memory_doc_claim ?? undefined,
     };
   }
 
@@ -567,6 +898,38 @@ export class HistoryStore {
          WHERE character = ?1 AND idx = ?2 AND committed = 1`,
       )
       .run(character, idx, state).changes > 0;
+  }
+
+  setMemoryDocumentIdentity(
+    character: string,
+    idx: number,
+    documentId: string | null,
+    claim: string | null,
+  ): boolean {
+    return this.#db
+      .query(
+        `UPDATE history_segments SET memory_doc_id = ?3, memory_doc_claim = ?4
+         WHERE character = ?1 AND idx = ?2 AND committed = 1`,
+      )
+      .run(character, idx, documentId, claim).changes > 0;
+  }
+
+  memoryUnitsFor(
+    character: string,
+    path: MemoryPath,
+    versions: readonly string[],
+  ): string[] {
+    const wanted = [...new Set(versions)];
+    if (wanted.length === 0) return [];
+    const marks = wanted.map((_, index) => `?${String(index + 3)}`).join(", ");
+    const rows = this.#db
+      .query(
+        `SELECT DISTINCT unit FROM memory_coverage
+         WHERE character = ?1 AND path = ?2 AND state = 'covered'
+           AND unit IS NOT NULL AND version IN (${marks})`,
+      )
+      .all(character, path, ...wanted) as { unit: string }[];
+    return rows.map((row) => row.unit);
   }
 
   beginMemorySubmission(character: string, idx: number, due: number, expires: number): boolean {
@@ -687,7 +1050,7 @@ export class HistoryStore {
     const rows = this.#db
       .query(
         `SELECT id, msg_id, role, timestamp, provider_key, model, origin, segment,
-                alt_index, alt_count, images, blocks_hash
+                alt_index, alt_count, images, blocks_hash, version
          FROM history_messages
          WHERE character = ?1 AND segment = ?2
            AND EXISTS (
@@ -712,7 +1075,7 @@ export class HistoryStore {
     const rows = this.#db
       .query(
         `SELECT m.id, m.msg_id, m.role, m.timestamp, m.provider_key, m.model, m.origin,
-                m.segment, m.alt_index, m.alt_count, m.images, m.blocks_hash
+                m.segment, m.alt_index, m.alt_count, m.images, m.blocks_hash, m.version
          FROM history_messages m
          JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
          WHERE m.character = ?1 AND s.committed = 1
@@ -728,7 +1091,7 @@ export class HistoryStore {
 
   #messagesFromRows(rows: MessageRow[], metrics?: HistoryReadMetrics): Message[] {
     const altQuery = this.#db.query(
-      `SELECT timestamp, provider_key, model, images, blocks_hash
+      `SELECT timestamp, provider_key, model, images, blocks_hash, version
        FROM history_alternatives WHERE message_id = ?1 ORDER BY ordinal`,
     );
 
@@ -747,6 +1110,7 @@ export class HistoryStore {
       if (row.provider_key !== null) message.provider_key = row.provider_key;
       if (row.model !== null) message.model = row.model;
       if (row.origin !== null) message.origin = row.origin;
+      if (row.version !== null) message.version = row.version;
 
       const altRows = altQuery.all(row.id) as BodyRow[];
       if (altRows.length > 0) {
@@ -764,8 +1128,8 @@ export class HistoryStore {
         `INSERT INTO history_messages
              (character, segment, ordinal, msg_id, role, timestamp,
               provider_key, model, origin, alt_index, alt_count, images, blocks_hash,
-              display_kind, display_seq, is_user_turn)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15)`,
+              display_kind, display_seq, is_user_turn, version)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15, ?16)`,
       )
       .run(
         character,
@@ -783,6 +1147,7 @@ export class HistoryStore {
         blocksHash,
         kind,
         message.role === "user" && kind !== DISPLAY_TOOL_RESULT ? 1 : 0,
+        versionOf(message) ?? null,
       );
 
     if (message.alternatives === undefined || message.alternatives.length === 0) return;
@@ -790,8 +1155,8 @@ export class HistoryStore {
       .id;
     const insertAlt = this.#db.query(
       `INSERT INTO history_alternatives
-           (message_id, ordinal, timestamp, provider_key, model, images, blocks_hash)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+           (message_id, ordinal, timestamp, provider_key, model, images, blocks_hash, version)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
     );
     message.alternatives.forEach((alternative, altOrdinal) => {
       insertAlt.run(
@@ -802,6 +1167,7 @@ export class HistoryStore {
         alternative.model ?? null,
         imagesColumn(alternative.images),
         this.#storeBlob(utf8.encode(JSON.stringify(alternative.content_blocks))),
+        alternativeVersionOf(alternative) ?? null,
       );
     });
   }
@@ -954,6 +1320,7 @@ export class HistoryStore {
       timestamp: row.timestamp,
       ...(row.provider_key === null ? {} : { provider_key: row.provider_key }),
       ...(row.model === null ? {} : { model: row.model }),
+      ...(row.version === null ? {} : { version: row.version }),
     };
   }
 
@@ -1003,6 +1370,11 @@ export class HistoryStore {
                      UNION SELECT blocks_hash FROM history_alternatives
                    )`);
   }
+}
+
+export function characterOfArchiveKey(archiveKey: string): string {
+  const slash = archiveKey.indexOf("/");
+  return slash === -1 ? archiveKey : archiveKey.slice(0, slash);
 }
 
 function imagesColumn(images: ImageRef[] | undefined): string | null {
@@ -1068,11 +1440,23 @@ function migrate(db: Database): void {
   if (columns.some((column) => column.name === "memory_retain")) {
     db.run("DROP TABLE IF EXISTS history_memory_retain");
   }
+  if (!columns.some((column) => column.name === "memory_doc_id")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN memory_doc_id TEXT");
+  }
+  if (!columns.some((column) => column.name === "memory_doc_claim")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN memory_doc_claim TEXT");
+  }
   if (!columns.some((column) => column.name === "label")) {
     db.run("ALTER TABLE history_segments ADD COLUMN label TEXT");
   }
   if (!columns.some((column) => column.name === "note")) {
     db.run("ALTER TABLE history_segments ADD COLUMN note TEXT");
+  }
+  const pendingColumns = db.query("PRAGMA table_info(history_pending)").all() as {
+    name: string;
+  }[];
+  if (!pendingColumns.some((column) => column.name === "coverage_claim")) {
+    db.run("ALTER TABLE history_pending ADD COLUMN coverage_claim TEXT");
   }
   const messageColumns = db.query("PRAGMA table_info(history_messages)").all() as {
     name: string;
@@ -1086,6 +1470,17 @@ function migrate(db: Database): void {
   if (!messageColumns.some((column) => column.name === "is_user_turn")) {
     db.run("ALTER TABLE history_messages ADD COLUMN is_user_turn INTEGER");
   }
+  if (!messageColumns.some((column) => column.name === "version")) {
+    db.run("ALTER TABLE history_messages ADD COLUMN version TEXT");
+  }
+  const alternativeColumns = db.query("PRAGMA table_info(history_alternatives)").all() as {
+    name: string;
+  }[];
+  if (!alternativeColumns.some((column) => column.name === "version")) {
+    db.run("ALTER TABLE history_alternatives ADD COLUMN version TEXT");
+  }
+  db.run(`CREATE INDEX IF NOT EXISTS idx_history_messages_version
+           ON history_messages (character, version)`);
   db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_history_segments_operation
            ON history_segments (character, compaction_id)
            WHERE compaction_id IS NOT NULL`);

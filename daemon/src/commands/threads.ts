@@ -1,5 +1,5 @@
 import type { Args } from "./navigation.ts";
-import { invalidRequest, notFound } from "./errors.ts";
+import { busy, invalidRequest, notFound } from "./errors.ts";
 import {
   ThreadError,
   type ArchiveThreadOptions,
@@ -7,6 +7,7 @@ import {
   type ThreadRecord,
   type ThreadsIndex,
 } from "../engine/threads.ts";
+import { ForkBusy, type ForkResult, type ForkThreadOptions } from "../engine/fork.ts";
 
 const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
 
@@ -29,6 +30,12 @@ export interface ThreadRegistry {
   setHomeThread(character: string, id: string): Promise<ThreadsIndex>;
   setThreadLabel(character: string, id: string, label: string | undefined): Promise<ThreadsIndex>;
   setThreadModel(character: string, id: string, model: string | undefined): Promise<ThreadsIndex>;
+  forkThread(
+    character: string,
+    source: string,
+    child: string,
+    options?: ForkThreadOptions,
+  ): Promise<ForkResult>;
 }
 
 export interface ThreadContext {
@@ -37,6 +44,7 @@ export interface ThreadContext {
   current: string;
   turns?: ReadonlyMap<string, number>;
   warm?: string;
+  withSnapshot?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
 export interface ThreadView {
@@ -50,6 +58,7 @@ export interface ThreadView {
   current: boolean;
   turns?: number;
   warm?: boolean;
+  forked_from?: ThreadRecord["forked_from"];
 }
 
 export interface ThreadListing {
@@ -60,6 +69,7 @@ export interface ThreadListing {
 }
 
 export function threadCommandError(e: unknown): unknown {
+  if (e instanceof ForkBusy) return busy(e.message);
   if (!(e instanceof ThreadError)) return e;
   return e.kind === "not_found" ? notFound(e.message) : invalidRequest(e.message);
 }
@@ -160,6 +170,53 @@ export async function threadModel(ctx: ThreadContext, args: Args): Promise<Threa
   const model = optionalText(args["model"], "model");
   try {
     return listing(ctx, await ctx.registry.setThreadModel(ctx.character, id, model));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export interface ThreadForkResult extends ThreadListing {
+  fork: {
+    fork_id: string;
+    thread: string;
+    source: string;
+    created_at: string;
+    messages: number;
+    turns: number;
+    scope: "full" | "last_turns";
+    requested_turns?: number;
+  };
+}
+
+function requestedTurns(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw invalidRequest("turns must be a positive whole number of turns");
+  }
+  return value;
+}
+
+export async function forkThread(ctx: ThreadContext, args: Args): Promise<ThreadForkResult> {
+  const id = requiredId(args);
+  const from = optionalText(args["from"], "from") ?? ctx.current;
+  const turns = requestedTurns(args["turns"]);
+  const run = async (): Promise<ForkResult> =>
+    await ctx.registry.forkThread(ctx.character, from, id, turns === undefined ? {} : { turns });
+  try {
+    const result = ctx.withSnapshot === undefined ? await run() : await ctx.withSnapshot(run);
+    return {
+      ...listing(ctx, result.index),
+      fork: {
+        fork_id: result.fork.fork_id,
+        thread: result.fork.child,
+        source: result.fork.source,
+        created_at: result.fork.created_at,
+        messages: result.fork.message_count,
+        turns: result.fork.turn_count,
+        scope: turns === undefined ? "full" : "last_turns",
+        ...(turns === undefined ? {} : { requested_turns: turns }),
+      },
+    };
   } catch (e) {
     throw threadCommandError(e);
   }

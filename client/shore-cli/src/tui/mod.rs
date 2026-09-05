@@ -2478,6 +2478,24 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 | "thread_model" => {
                     absorb_thread_listing(app, &co.data);
                 }
+                "fork_thread" => {
+                    absorb_thread_listing(app, &co.data);
+                    if let Some(fork) = co.data.get("fork") {
+                        let thread = fork
+                            .get("thread")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("");
+                        let source = fork
+                            .get("source")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("");
+                        let turns = fork
+                            .get("turns")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0);
+                        app.set_status(format!("forked {source} -> {thread} ({turns} turns)"));
+                    }
+                }
                 "switch_thread" => {
                     let Some(name) = co
                         .data

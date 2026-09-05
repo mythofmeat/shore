@@ -72,6 +72,7 @@ import {
   listThreads,
   newThread,
   switchThread,
+  forkThread,
   threadHome,
   threadLabel,
   threadModel,
@@ -169,6 +170,11 @@ export async function runCommand(
       const result = await archiveThread(await threadListingContext(deps, engine, session), args);
       deps.historyIndex?.noteMutation?.(character);
       deps.historyIndex?.noteMemoryWork?.(character);
+      return result;
+    }
+    case "fork_thread": {
+      const result = await forkThread(await threadListingContext(deps, engine, session), args);
+      deps.historyIndex?.noteMutation?.(character);
       return result;
     }
     case "thread_home":
@@ -379,8 +385,12 @@ async function threadListingContext(
 ): Promise<ThreadContext> {
   const base = threadContext(deps, engine);
   const warm = deps.keepalive?.keepalive.warmThread(base.character);
+  const archive = deps.archive;
   return {
     ...base,
+    ...(archive === undefined
+      ? {}
+      : { withSnapshot: async <T>(run: () => Promise<T>) => await archive.withSnapshot(run) }),
     turns: await threadTurnCounts(
       session.dataDir,
       base.character,
