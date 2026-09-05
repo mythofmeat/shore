@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../src/llm/types.ts";
 import { MarkdownMemoryStore } from "../src/memory/markdown_store.ts";
+import { planMessage, planOf } from "./support/archival_plan.ts";
 import { compact } from "../src/memory/compaction/manager.ts";
 import {
   COMPACTION_SUBAGENT,
@@ -13,25 +14,14 @@ import {
   type CompactionLlm,
   type CompactionTools,
   type ConversationManager,
-  type ConversationMessage,
   type ToolOutput,
 } from "../src/memory/compaction/types.ts";
 
-function turn(role: string, content: string): ConversationMessage {
-  return {
-    role,
-    content,
-    timestamp: "2026-08-22T00:00:00.000Z",
-    isToolResultOnly: false,
-    isAutonomous: false,
-  };
-}
-
-const MESSAGES: ConversationMessage[] = [
-  turn("user", "one"),
-  turn("assistant", "two"),
-  turn("user", "three"),
-  turn("assistant", "four"),
+const MESSAGES = [
+  planMessage("user", "one"),
+  planMessage("assistant", "two"),
+  planMessage("user", "three"),
+  planMessage("assistant", "four"),
 ];
 
 function chatRequest(): SidecarRequest {
@@ -41,7 +31,7 @@ function chatRequest(): SidecarRequest {
     api_key: "",
     provider_key: "anthropic",
     messages: MESSAGES.map(
-      (m) => ({ role: m.role, content: [{ type: "text", text: m.content }] }) as WireMessage,
+      (m): WireMessage => ({ role: m.role, content: [{ type: "text", text: m.content }] }),
     ),
     max_tokens: 1024,
     replay_prior_thinking: "off",
@@ -114,8 +104,7 @@ async function collectFrames(): Promise<ServerMessage[]> {
     await compact(
       {
         conversationId: "conv-1",
-        messages: MESSAGES,
-        activeContent: "one\ntwo\nthree\nfour\n",
+        plan: planOf(MESSAGES, { keepRecentTurns: 0 }),
         systemTemplate: "System for {{char}}.",
         promptTemplate: "Compact now, {{char}}.",
         charName: "Aria",
@@ -124,7 +113,6 @@ async function collectFrames(): Promise<ServerMessage[]> {
         conversationMgr: MGR,
         markdownStore,
         dryRun: false,
-        retainTrailingAutonomous: false,
         chatRequest: chatRequest(),
         tools: new QuietTools(workspace),
         emit: tagCompactionFrames((message) => frames.push(message)),
@@ -188,8 +176,7 @@ describe("a compaction pass reports what it is doing", () => {
       const outcome = await compact(
         {
           conversationId: "conv-1",
-          messages: MESSAGES,
-          activeContent: "one\ntwo\nthree\nfour\n",
+          plan: planOf(MESSAGES, { keepRecentTurns: 0 }),
           systemTemplate: "System for {{char}}.",
           promptTemplate: "Compact now, {{char}}.",
           charName: "Aria",
@@ -198,8 +185,7 @@ describe("a compaction pass reports what it is doing", () => {
           conversationMgr: MGR,
           markdownStore: await MarkdownMemoryStore.open(memory),
           dryRun: false,
-          retainTrailingAutonomous: false,
-          chatRequest: chatRequest(),
+            chatRequest: chatRequest(),
           tools: new QuietTools(workspace),
         },
         { keepRecentTurns: 0 },

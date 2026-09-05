@@ -442,8 +442,8 @@
       "args": {},
       "output": {
         "kind": "error",
-        "code": "internal_error",
-        "message": "API key environment variable SHORE_FIXTURE_API_KEY is not set"
+        "code": "invalid_request",
+        "message": "insufficient messages"
       }
     },
     {

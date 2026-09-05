@@ -12,7 +12,6 @@ import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/ty
 import { runToolLoop, type ToolLoopDriver, type ToolUseEvent } from "../../engine/tool_loop";
 import { hitTokenCeiling } from "../../llm/finish_reason.ts";
 import { budgetStopIn } from "../../llm/errors.ts";
-import { retainedTurns as retentionForBudget } from "./retention.ts";
 import type { ContentBlock } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
 import { rustLines, rustTrim } from "../lines";
@@ -34,7 +33,6 @@ import {
   type CompactionOutcome,
   type CompactionTools,
   type ConversationManager,
-  type ConversationMessage,
   type MemoryFileOp,
 } from "./types";
 import {
@@ -47,6 +45,9 @@ import {
   type CompactionCheckpoint,
   type CompactionPauseReason,
 } from "./checkpoint.ts";
+import { countTurns, planSourceIsCurrent, type ArchivalPlan } from "./plan.ts";
+
+export { archiveSplitIndex, countTurns, findTurnSplit, trailingAutonomousLen } from "./plan.ts";
 
 const inFlight = new Set<string>();
 const waiting = new Map<string, (() => void)[]>();
@@ -125,46 +126,6 @@ export function buildFinalMessage(
     out = out.slice(0, ifStart) + out.slice(endIf + END_IF.length);
   }
   return out.replaceAll("{{recap}}", "");
-}
-
-const isRealUserTurn = (msg: ConversationMessage): boolean =>
-  msg.role === "user" && !msg.isToolResultOnly;
-
-export function findTurnSplit(messages: ConversationMessage[], keepTurns: number): number {
-  if (keepTurns === 0) return messages.length;
-  let turnsSeen = 0;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (isRealUserTurn(required(messages[i]))) {
-      turnsSeen += 1;
-      if (turnsSeen >= keepTurns) return i;
-    }
-  }
-  return 0;
-}
-
-export function countTurns(messages: ConversationMessage[]): number {
-  return messages.filter(isRealUserTurn).length;
-}
-
-export function trailingAutonomousLen(messages: ConversationMessage[]): number {
-  let n = 0;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const msg = required(messages[i]);
-    if (msg.role !== "assistant" || !msg.isAutonomous) break;
-    n += 1;
-  }
-  return n;
-}
-
-export function archiveSplitIndex(
-  messages: ConversationMessage[],
-  keepTurns: number,
-  retainTrailingAutonomous: boolean,
-): number {
-  const splitAt = findTurnSplit(messages, keepTurns);
-  if (!retainTrailingAutonomous) return splitAt;
-  const tail = trailingAutonomousLen(messages);
-  return Math.min(splitAt, Math.max(messages.length - tail, 0));
 }
 
 export function writeAllowedPath(path: string): boolean {
@@ -499,8 +460,7 @@ export function compactThread(opts: Pick<CompactOptions, "thread">): string {
 
 export interface CompactOptions {
   conversationId: string;
-  messages: ConversationMessage[];
-  activeContent: string;
+  plan: ArchivalPlan;
   systemTemplate: string;
   promptTemplate: string;
   charName: string;
@@ -512,7 +472,6 @@ export interface CompactOptions {
   dryRun: boolean;
   keepTurnsOverride?: number;
   restart?: boolean;
-  retainTrailingAutonomous: boolean;
   chatRequest: SidecarRequest;
   dataDir?: string;
   tools: CompactionTools;
@@ -567,12 +526,10 @@ async function tryRealpath(p: string): Promise<string | undefined> {
 }
 
 export async function compact(opts: CompactOptions, settings: CompactionSettings): Promise<CompactionOutcome> {
-  const { messages, tools } = opts;
-
-  const keepTurns =
-    opts.keepTurnsOverride ??
-    retentionForBudget(messages, settings.keepRecentTurns, settings.maxContextTokens ?? 0);
-  const splitAt = archiveSplitIndex(messages, keepTurns, opts.retainTrailingAutonomous);
+  const { plan, tools } = opts;
+  void settings;
+  const messages = [...plan.conversation];
+  const splitAt = plan.splitAt;
   if (splitAt === 0) throw CompactionError.insufficientMessages();
 
   if (!opts.dryRun && opts.markdownStore === undefined) {
@@ -591,45 +548,17 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const compactedTurns = countTurns(messages.slice(0, splitAt));
   const originalRetained = messages.length - splitAt;
   const originalRetainedTurns = countTurns(messages.slice(splitAt));
-  let checkpoint = await resolveCheckpoint(
-    opts,
-    splitAt,
-    compactedTurns,
-    initialRequest,
-    workspaceHead,
-  );
+  const recovered = await recoverArchivedPass(opts, plan);
+  if (recovered !== undefined) return recovered;
+
+  let checkpoint = await resolveCheckpoint(opts, compactedTurns, initialRequest, workspaceHead);
   checkpoint.request.api_key = initialRequest.api_key;
   if (opts.coverage === undefined) delete checkpoint.coverageClaim;
   else checkpoint.coverageClaim = opts.coverage.claim;
-  const alreadyArchived = opts.resumable === true && opts.dataDir !== undefined
-    ? await hasCompactionOperation(
-        conversationRef(opts.dataDir, opts.charName, compactThread(opts), false),
-        checkpoint.id,
-      )
-    : false;
-  if (alreadyArchived && !checkpointSourceIsCompatible(checkpoint, await currentActiveContent(opts))) {
-    const liveContent = await currentActiveContent(opts);
-    const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
-    const markdownPaths = checkpoint.loop.writesApplied.map((write) => write.displayPath);
-    await clearCheckpoint(opts);
-    return {
-      kind: "compacted",
-      memoryFilesWritten: markdownPaths,
-      conversationId: opts.conversationId,
-      newConversationId: checkpoint.id,
-      messageCount: checkpoint.splitAt,
-      compactedTurns: checkpoint.compactedTurns,
-      retainedCount: liveLines.length,
-      retainedTurns: countRetainedTurns(liveLines),
-      markdownPaths,
-      toolRounds: checkpoint.loop.toolRounds,
-      toolsCalled: checkpoint.loop.toolsCalled,
-    };
-  }
   if (checkpoint.state === "paused" && checkpoint.resumeAt !== undefined) {
     if (Date.parse(checkpoint.resumeAt) > Date.now()) return pausedOutcome(opts, checkpoint);
   }
-  const conflict = await checkpointConflict(checkpoint, opts.activeContent);
+  const conflict = await checkpointConflict(checkpoint, plan.sourceContent);
   if (conflict !== undefined) {
     if (conflict.reason !== "source_conflict") {
       checkpoint.state = "paused";
@@ -647,7 +576,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     await clearCheckpoint(opts);
     checkpoint = newCompactionCheckpoint(
       opts.charName,
-      opts.activeContent,
+      plan.sourceContent,
       splitAt,
       compactedTurns,
       initialRequest,
@@ -737,20 +666,16 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   }
 
   const liveContent = await currentActiveContent(opts);
-  if (!checkpointSourceIsCompatible(checkpoint, liveContent)) {
+  if (!planSourceIsCurrent(plan, liveContent)) {
     checkpoint.state = "paused";
     checkpoint.pauseReason = "source_conflict";
     await persistCheckpoint(opts, checkpoint);
     return pausedOutcome(opts, checkpoint);
   }
   const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
-  const retained = opts.resumable === true
-    ? Math.max(liveLines.length - checkpoint.splitAt, 0)
-    : originalRetained;
-  const retainedTurns = opts.resumable === true
-    ? countRetainedTurns(liveLines.slice(checkpoint.splitAt))
-    : originalRetainedTurns;
-  const archivedCount = opts.resumable === true ? checkpoint.splitAt : splitAt;
+  const retained = Math.max(liveLines.length - plan.splitAt, 0);
+  const retainedTurns = countRetainedTurns(liveLines.slice(plan.splitAt));
+  const archivedCount = plan.splitAt;
   const archivedTurns = opts.resumable === true ? checkpoint.compactedTurns : compactedTurns;
   const memoryAfter = await tools.gitHead?.(workspaceDir);
 
@@ -854,57 +779,71 @@ async function archiveCompactPrefix(
   }
 }
 
+async function recoverArchivedPass(
+  opts: CompactOptions,
+  plan: ArchivalPlan,
+): Promise<CompactionOutcome | undefined> {
+  const prior = plan.checkpoint;
+  if (opts.resumable !== true || opts.dataDir === undefined || prior === undefined) return undefined;
+  const archived = await hasCompactionOperation(
+    conversationRef(opts.dataDir, opts.charName, compactThread(opts), false),
+    prior.id,
+  );
+  if (!archived) return undefined;
+  const liveContent = await currentActiveContent(opts);
+  if (checkpointSourceIsCompatible(prior, liveContent)) return undefined;
+
+  const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
+  const markdownPaths = prior.loop.writesApplied.map((write) => write.displayPath);
+  await clearCheckpoint(opts);
+  return {
+    kind: "compacted",
+    memoryFilesWritten: markdownPaths,
+    conversationId: opts.conversationId,
+    newConversationId: prior.id,
+    messageCount: prior.splitAt,
+    compactedTurns: prior.compactedTurns,
+    retainedCount: liveLines.length,
+    retainedTurns: countRetainedTurns(liveLines),
+    markdownPaths,
+    toolRounds: prior.loop.toolRounds,
+    toolsCalled: prior.loop.toolsCalled,
+  };
+}
+
 async function resolveCheckpoint(
   opts: CompactOptions,
-  splitAt: number,
   compactedTurns: number,
   request: SidecarRequest,
   workspaceHead: string | undefined,
 ): Promise<CompactionCheckpoint> {
+  const { plan } = opts;
   if (opts.resumable === true && opts.dataDir !== undefined) {
-    if (opts.restart === true) {
-      const abandonedBefore = await discardCheckpoint(opts);
-      return newCompactionCheckpoint(
-        opts.charName,
-        opts.activeContent,
-        splitAt,
-        compactedTurns,
-        request,
-        opts.dryRun,
-        abandonedBefore ?? workspaceHead,
+    if (plan.resumed && plan.checkpoint !== undefined) return plan.checkpoint;
+    const abandoned = plan.checkpoint;
+    if (abandoned !== undefined) {
+      shoreLog.warn(
+        `shore: starting a fresh compaction for ${opts.charName} rather than resuming ` +
+          `checkpoint ${abandoned.id}, which splits at ${String(abandoned.splitAt)} against a ` +
+          `conversation this pass splits at ${String(plan.splitAt)}. The memory it already wrote ` +
+          `(${JSON.stringify(abandoned.loop.writesApplied.map((w) => w.displayPath))}) stays on disk`,
       );
-    } else {
-      const existing = await loadCompactionCheckpoint(
-        opts.dataDir,
-        opts.charName,
-        compactThread(opts),
-      );
-      if (existing !== undefined) {
-        if (opts.keepTurnsOverride === undefined || existing.splitAt === splitAt) return existing;
-        shoreLog.warn(
-          `shore: compaction checkpoint ${existing.id} for ${opts.charName} splits at ` +
-            `${String(existing.splitAt)}, but this pass was asked to keep ` +
-            `${String(opts.keepTurnsOverride)} turn(s), which splits at ${String(splitAt)}; ` +
-            `starting a fresh pass at the requested split. The memory it already wrote ` +
-            `(${JSON.stringify(existing.loop.writesApplied.map((w) => w.displayPath))}) stays on disk`,
-        );
-        await removeCompactionCheckpoint(opts.dataDir, opts.charName, compactThread(opts));
-        return newCompactionCheckpoint(
-          opts.charName,
-          opts.activeContent,
-          splitAt,
-          compactedTurns,
-          request,
-          opts.dryRun,
-          existing.memoryBefore ?? workspaceHead,
-        );
-      }
     }
+    const abandonedBefore = abandoned === undefined ? undefined : await discardCheckpoint(opts);
+    return newCompactionCheckpoint(
+      opts.charName,
+      plan.sourceContent,
+      plan.splitAt,
+      compactedTurns,
+      request,
+      opts.dryRun,
+      abandonedBefore ?? abandoned?.memoryBefore ?? workspaceHead,
+    );
   }
   return newCompactionCheckpoint(
     opts.charName,
-    opts.activeContent,
-    splitAt,
+    plan.sourceContent,
+    plan.splitAt,
     compactedTurns,
     request,
     opts.dryRun,
@@ -982,7 +921,7 @@ function pausedOutcome(
     kind: "paused",
     conversationId: opts.conversationId,
     checkpointId: checkpoint.id,
-    messageCount: checkpoint.splitAt,
+    messageCount: opts.plan.splitAt,
     compactedTurns: checkpoint.compactedTurns,
     toolRounds: checkpoint.loop.toolRounds,
     toolsCalled: checkpoint.loop.toolsCalled,
@@ -1001,14 +940,14 @@ function budgetResetAt(e: unknown): string | undefined {
 }
 
 async function currentActiveContent(opts: CompactOptions): Promise<string> {
-  if (opts.resumable !== true || opts.dataDir === undefined) return opts.activeContent;
+  if (opts.resumable !== true || opts.dataDir === undefined) return opts.plan.sourceContent;
   try {
     return await readFile(
       characterActiveJsonl(opts.dataDir, opts.charName, compactThread(opts)),
       "utf8",
     );
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return opts.activeContent;
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return opts.plan.sourceContent;
     throw e;
   }
 }

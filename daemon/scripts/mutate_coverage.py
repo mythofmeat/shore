@@ -26,7 +26,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 COVERAGE = ROOT / "src/memory/coverage.ts"
 STORE = ROOT / "src/engine/history_store.ts"
 HINDSIGHT = ROOT / "src/memory/hindsight_retain_service.ts"
+MANAGER = ROOT / "src/memory/compaction/manager.ts"
 RUN = ROOT / "src/memory/compaction/run.ts"
+PLAN = ROOT / "src/memory/compaction/plan.ts"
 VERSIONS = ROOT / "src/engine/versions.ts"
 
 # (label, [path,] find, replace)
@@ -235,43 +237,6 @@ MUTANTS = [
      "    for (const candidate of recorded.length === 0 ? [documentId] : recorded) {"),
 
     # --- a paused pass another branch finished is retired, not wedged --------
-    ("wedge: a range someone else finished stays an outstanding claim forever",
-     RUN,
-     "  if (coverageIsRedundant(planned)) {",
-     "  if (coverageIsRedundant(planned) && checkpoint === undefined) {"),
-    ("wedge: the checkpoint is rotated over without being retired",
-     RUN,
-     "      ...(checkpoint === undefined\n"
-     "        ? {}\n"
-     "        : {\n"
-     "            abandoned: {\n"
-     "              checkpointId: checkpoint.id,\n"
-     "              ...(resumed === undefined ? {} : { splitAt: checkpoint.splitAt }),\n"
-     "            },\n"
-     "          }),\n",
-     ""),
-    ("retire: the rotation recomputes its range from the live conversation",
-     RUN,
-     "        planned.abandoned?.splitAt,\n",
-     ""),
-    ("retire: a checkpoint the conversation outgrew still dictates the range",
-     RUN,
-     "              ...(resumed === undefined ? {} : { splitAt: checkpoint.splitAt }),",
-     "              splitAt: checkpoint.splitAt,"),
-    ("retire: the frozen split is not clamped to what the conversation still holds "
-     "(EQUIVALENT: a compatible checkpoint's source is a prefix of the live conversation, so "
-     "its split cannot exceed the message count unless the file was hand-corrupted, and even "
-     "then archiveAndRetain slices the same lines - the clamp only keeps the reported "
-     "retained counts from going negative)",
-     RUN,
-     "  const splitAt = Math.min(\n"
-     "    splitAtOverride ??\n"
-     "      archiveSplitIndex(loaded.messages, keepTurns, options.retainTrailingAutonomous ?? false),\n"
-     "    loaded.messages.length,\n"
-     "  );",
-     "  const splitAt =\n"
-     "    splitAtOverride ??\n"
-     "    archiveSplitIndex(loaded.messages, keepTurns, options.retainTrailingAutonomous ?? false);"),
     ("wedge: retiring a pass leaves its checkpoint on disk",
      RUN,
      "  await removeCompactionCheckpoint(dataDir, character, thread);\n"
@@ -287,14 +252,6 @@ MUTANTS = [
      "  void checkpointId;"),
 
     # --- a claim the pass does not hold is not a licence to archive ----------
-    ("blocking: a pass that claimed nothing archives the material anyway",
-     RUN,
-     "  if (coverageIsPartial(planned) || (planned.pending === 0 && planned.unversioned === 0)) {",
-     "  if (false as boolean) {"),
-    ("blocking: half a range is enough to archive the whole of it",
-     RUN,
-     "  if (coverageIsPartial(planned) || (planned.pending === 0 && planned.unversioned === 0)) {",
-     "  if (planned.claimed.length === 0 && planned.unversioned === 0) {"),
     ("blocking: a partial claim counts as owning the range",
      COVERAGE,
      "  return claim.claimed.length !== claim.pending;",
@@ -305,18 +262,6 @@ MUTANTS = [
      "  const pending = versionsIn(fresh).filter((version) => !background.has(version));"),
 
     # --- a resumed pass claims the range its checkpoint froze ----------------
-    ("resume: the claim follows the live conversation, not the checkpoint's range",
-     RUN,
-     "  const archival = resumed ?? [...loaded.store.messages()].slice(0, splitAt);",
-     "  const archival = [...loaded.store.messages()].slice(0, splitAt);"),
-    ("resume: the frozen range is read past the split the checkpoint recorded",
-     RUN,
-     "  return messagesFromJsonl(checkpoint.sourceContent).slice(0, checkpoint.splitAt);",
-     "  return messagesFromJsonl(checkpoint.sourceContent);"),
-    ("resume: a checkpoint the conversation outgrew is still resumed",
-     RUN,
-     "  if (!checkpointSourceIsCompatible(checkpoint, activeContent)) return undefined;",
-     "  void activeContent;"),
 
     # --- a mixed segment stands behind what it inherited ---------------------
     ("support: a mixed segment records only its own document, not the inherited one",
@@ -327,20 +272,12 @@ MUTANTS = [
      HINDSIGHT,
      "    backgroundVersions: versionsIn(inherited),",
      "    backgroundVersions: [],"),
-    ("blocking: a resumed pass mints a new claim instead of reusing its checkpoint's",
-     RUN,
-     "      ...(resumeClaim === undefined ? {} : { claim: resumeClaim }),",
-     "      ...{},"),
     ("blocking: a claim is not reclaimable by the pass that already holds it",
      STORE,
      "           WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'\n"
      "             AND version IN (${marks})`,",
      "           WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'\n"
      "             AND claimed_at < 0 AND version IN (${marks})`,"),
-    ("blocking: a paused pass drops the claim its checkpoint will resume with",
-     RUN,
-     '      outcome.kind !== "paused"\n',
-     ""),
 
     # --- inherited context reaches the retainer, marked ----------------------
     ("context: the inherited half of a unit is dropped from the document",
@@ -357,6 +294,114 @@ MUTANTS = [
      HINDSIGHT,
      "  if (fresh === 0 || first === undefined || last === undefined) return undefined;",
      "  if (lines.length === 0 || first === undefined || last === undefined) return undefined;"),
+
+    # --- one plan, resolved once, carried to the archive ---------------------
+    ("plan: the frozen source is abandoned for whatever is live now",
+     PLAN,
+     "  const sourceContent = resumed ? checkpoint.sourceContent : input.rawContent;",
+     "  const sourceContent = input.rawContent;"),
+    ("plan: the split is recomputed from the live conversation, not the frozen one",
+     PLAN,
+     "  const splitAt = Math.min(resumed ? checkpoint.splitAt : liveSplitAt, messages.length);",
+     "  const splitAt = Math.min(liveSplitAt, messages.length);"),
+    ("plan: the range is read past the split the checkpoint recorded",
+     PLAN,
+     "  const archival = messages.slice(0, splitAt);",
+     "  const archival = [...messages];"),
+    ("plan: a checkpoint the conversation outgrew is resumed anyway",
+     PLAN,
+     "  if (!sourceIsCurrent(checkpoint.sourceContent, checkpoint.sourceHash, liveContent)) return false;",
+     "  void liveContent;"),
+    ("plan: an explicit keep-turns count cannot move a frozen split",
+     PLAN,
+     "  if (settings.keepTurnsOverride !== undefined && checkpoint.splitAt !== splitAt) return false;",
+     "  void splitAt;"),
+    ("plan: a restart resumes the checkpoint it was told to throw away",
+     PLAN,
+     "  if (checkpoint === undefined || settings.restart === true) return false;",
+     "  if (checkpoint === undefined) return false;"),
+    ("plan: the versions carried are the whole conversation, not the range",
+     PLAN,
+     "    versions: versionsIn(archival),",
+     "    versions: versionsIn(messages),"),
+    ("commit: the source is never verified before the archive is written",
+     PLAN,
+     "  if (!planSourceIsCurrent(plan, liveContent)) return undefined;",
+     "  void liveContent;"),
+    ("commit: the retained tail is measured against the live split, not the plan's",
+     PLAN,
+     "  return { liveContent, retained: Math.max(liveLines.length - plan.splitAt, 0) };",
+     "  return { liveContent, retained: 0 };"),
+    ("commit: a rotation writes the snapshot it planned from rather than what is live",
+     RUN,
+     "      keepLastN: commit.retained,\n"
+     "      activeContent: commit.liveContent,",
+     "      keepLastN: commit.retained,\n"
+     "      activeContent: plan.sourceContent,"),
+    ("commit: a rotation commits even when the conversation moved under it",
+     RUN,
+     "  if (commit === undefined) {",
+     "  if (false as boolean) {"),
+    ("plan: coverage is claimed over something other than the resolved range",
+     RUN,
+     '    claimUncovered(store, character, "compaction", plan.archival, {',
+     '    claimUncovered(store, character, "compaction", plan.messages, {'),
+    ("plan: a resumed pass mints a new claim instead of reusing its checkpoint's",
+     RUN,
+     "  const resumeClaim = plan.resumed ? plan.checkpoint?.coverageClaim : undefined;",
+     "  const resumeClaim = undefined;"),
+    ("blocking: a pass that owns none of the range archives it anyway",
+     RUN,
+     "  if (coverageIsPartial(claimed) || (claimed.pending === 0 && claimed.unversioned === 0)) {",
+     "  if (false as boolean) {"),
+    ("blocking: half a range is enough to archive the whole of it",
+     RUN,
+     "  if (coverageIsPartial(claimed) || (claimed.pending === 0 && claimed.unversioned === 0)) {",
+     "  if (claimed.claimed.length === 0 && claimed.unversioned === 0) {"),
+    ("wedge: a range someone else finished stays an outstanding claim forever",
+     RUN,
+     "  if (coverageIsRedundant(claimed)) return { redundant: true };",
+     "  if (coverageIsRedundant(claimed) && plan.checkpoint === undefined) {\n"
+     "    return { redundant: true };\n"
+     "  }"),
+    ("wedge: the checkpoint is rotated over without being retired",
+     RUN,
+     "      if (plan.checkpoint !== undefined) {\n"
+     "        const settled = await reconcileAbandonedPass(dataDir, character, thread, plan.checkpoint.id);\n"
+     "        if (settled) return undefined;\n"
+     "      }\n",
+     ""),
+    ("recovery: an already-archived pass is re-run instead of recognised",
+     MANAGER,
+     "  const recovered = await recoverArchivedPass(opts, plan);\n"
+     "  if (recovered !== undefined) return recovered;\n",
+     ""),
+    ("recovery: a pass whose turns are still live is mistaken for one already archived",
+     MANAGER,
+     "  if (checkpointSourceIsCompatible(prior, liveContent)) return undefined;",
+     "  void liveContent;"),
+    ("manager: the archive commits at a split the plan never resolved",
+     MANAGER,
+     "  const retained = Math.max(liveLines.length - plan.splitAt, 0);",
+     "  const retained = Math.max(liveLines.length - splitAt - 1, 0);"),
+    ("manager: the checkpoint is written from live content rather than the plan's source",
+     MANAGER,
+     "      plan.sourceContent,\n"
+     "      plan.splitAt,\n"
+     "      compactedTurns,\n"
+     "      request,\n"
+     "      opts.dryRun,\n"
+     "      abandonedBefore ?? abandoned?.memoryBefore ?? workspaceHead,",
+     "      liveSourceOf(opts),\n"
+     "      plan.splitAt,\n"
+     "      compactedTurns,\n"
+     "      request,\n"
+     "      opts.dryRun,\n"
+     "      abandonedBefore ?? abandoned?.memoryBefore ?? workspaceHead,"),
+    ("manager: a resumed plan still re-resolves its own checkpoint",
+     MANAGER,
+     "    if (plan.resumed && plan.checkpoint !== undefined) return plan.checkpoint;",
+     "    if (false as boolean) return required(plan.checkpoint);"),
 
     # --- the archive commit is where compaction coverage lands ---------------
     ("archive: coverage is committed even when the archive is abandoned",
@@ -401,6 +446,8 @@ def main() -> int:
             "tests/compaction_coverage.test.ts",
             "tests/hindsight_branches.test.ts",
             "tests/registry_threads.test.ts",
+            "tests/compaction_resume.test.ts",
+            "tests/compaction_truncated.test.ts",
         ],
     )
 

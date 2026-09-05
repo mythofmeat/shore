@@ -11,11 +11,14 @@ import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { newMessageVersion } from "../src/engine/versions.ts";
 import { loadMessagesForCompaction } from "../src/memory/compaction/background.ts";
+import { openArchivalCommit, resolveArchivalPlan } from "../src/memory/compaction/plan.ts";
+import type { CompactionRunOptions } from "../src/memory/compaction/run.ts";
 import { hashCompactionSource } from "../src/memory/compaction/checkpoint.ts";
 import { backgroundCoverageNotice } from "../src/memory/compaction/manager.ts";
 import {
   planCompactionCoverage,
   releaseCompactionCoverage,
+  rotateWithoutMemoryWrite,
   runCompactionPass,
 } from "../src/memory/compaction/run.ts";
 import { COVERAGE_LEASE_MS, claimUncovered } from "../src/memory/coverage.ts";
@@ -113,22 +116,47 @@ async function writeCheckpoint(
   );
 }
 
-async function planAuto(w: Awaited<ReturnType<typeof world>>, keepRecentTurns: number) {
-  w.config.app.memory.compaction.keep_recent_turns = keepRecentTurns;
-  w.config.app.memory.compaction.max_context_tokens = 0;
-  const loaded = await loadMessagesForCompaction(w.dataDir, "ada", "main");
-  return await planCompactionCoverage("ada", "main", w.config, loaded, {});
+interface Planned {
+  redundant: boolean;
+  blocked?: boolean;
+  coverage?: { claim: string; claimed: number; background: number; fresh: number };
+  checkpointId?: string;
 }
 
-async function plan(w: Awaited<ReturnType<typeof world>>, keepTurns: number) {
+async function planAuto(
+  w: Awaited<ReturnType<typeof world>>,
+  keepRecentTurns: number,
+): Promise<Planned> {
+  w.config.app.memory.compaction.keep_recent_turns = keepRecentTurns;
+  w.config.app.memory.compaction.max_context_tokens = 0;
+  return await planWith(w, {});
+}
+
+async function plan(
+  w: Awaited<ReturnType<typeof world>>,
+  keepTurns: number,
+): Promise<Planned> {
+  return await planWith(w, { keepTurnsOverride: keepTurns });
+}
+
+async function planWith(
+  w: Awaited<ReturnType<typeof world>>,
+  options: CompactionRunOptions,
+): Promise<Planned> {
   const loaded = await loadMessagesForCompaction(w.dataDir, "ada", "main");
-  return await planCompactionCoverage(
-    "ada",
-    "main",
-    w.config,
-    loaded,
-    { keepTurnsOverride: keepTurns },
-  );
+  const compaction = w.config.app.memory.compaction;
+  const archival = await resolveArchivalPlan(w.dataDir, "ada", "main", loaded, {
+    keepRecentTurns: compaction.keep_recent_turns,
+    maxContextTokens: compaction.max_context_tokens,
+    ...(options.keepTurnsOverride === undefined
+      ? {}
+      : { keepTurnsOverride: options.keepTurnsOverride }),
+  });
+  if (archival === undefined) return { redundant: false };
+  return {
+    ...planCompactionCoverage("ada", w.config, archival, options),
+    ...(archival.checkpoint === undefined ? {} : { checkpointId: archival.checkpoint.id }),
+  };
 }
 
 function cover(dataDir: string, messages: readonly Message[]): void {
@@ -246,7 +274,7 @@ describe("deciding whether a compaction has anything new to write", () => {
     const planned = await planAuto(w, 1);
     expect(planned.blocked).toBeUndefined();
     expect(planned.redundant).toBe(true);
-    expect(planned.abandoned).toMatchObject({ checkpointId: "cp", splitAt: 4 });
+    expect(planned.checkpointId).toBe("cp");
   });
 
   test("a redundant range with no checkpoint has nothing to retire", async () => {
@@ -255,7 +283,7 @@ describe("deciding whether a compaction has anything new to write", () => {
 
     const planned = await planAuto(w, 1);
     expect(planned.redundant).toBe(true);
-    expect(planned.abandoned).toBeUndefined();
+    expect(planned.checkpointId).toBeUndefined();
   });
 
   test("blocking leaves the first pass's claim alone so it can still finish", async () => {
@@ -525,11 +553,150 @@ describe("retiring a pass another branch finished for it", () => {
     await writeCheckpoint(w.dataDir, "cl_paused", jsonl(w.messages));
     cover(w.dataDir, w.messages.slice(0, 4));
 
-    expect((await planAuto(w, 1)).abandoned).toMatchObject({ checkpointId: "cp" });
+    expect((await planAuto(w, 1)).checkpointId).toBe("cp");
     await runPass(w);
 
     const settled = await planAuto(w, 1);
     expect(settled.blocked).toBeUndefined();
-    expect(settled.abandoned).toBeUndefined();
+    expect(settled.checkpointId).toBeUndefined();
+  });
+});
+
+describe("one plan carried from resolution to archival", () => {
+  async function resolve(
+    w: Awaited<ReturnType<typeof world>>,
+    options: { keepRecentTurns: number; restart?: boolean; keepTurnsOverride?: number },
+  ) {
+    const loaded = await loadMessagesForCompaction(w.dataDir, "ada", "main");
+    return await resolveArchivalPlan(w.dataDir, "ada", "main", loaded, {
+      maxContextTokens: 0,
+      ...options,
+    });
+  }
+
+  test("a resumed plan freezes the source, the split and the versions together", async () => {
+    const w = await world();
+    const frozen = jsonl(w.messages);
+    await writeCheckpoint(w.dataDir, "cl_paused", frozen);
+
+    const arrived = [
+      message("m_7", "user", "one more thing", newMessageVersion()),
+      message("m_8", "assistant", "of course", newMessageVersion()),
+    ];
+    await writeFile(
+      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
+      frozen + jsonl(arrived),
+    );
+
+    const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
+    expect(resolved.resumed).toBe(true);
+    expect(resolved.sourceContent).toBe(frozen);
+    expect(resolved.splitAt).toBe(4);
+    expect(resolved.archival.map((m) => m.msg_id)).toEqual(["m_1", "m_2", "m_3", "m_4"]);
+    expect(resolved.versions).toEqual(w.messages.slice(0, 4).map((m) => required(m.version)));
+    expect(resolved.checkpoint?.id).toBe("cp");
+  });
+
+  test("the commit it opens keeps every turn the frozen range does not cover", async () => {
+    const w = await world();
+    const frozen = jsonl(w.messages);
+    await writeCheckpoint(w.dataDir, "cl_paused", frozen);
+    const arrived = [message("m_7", "user", "one more thing", newMessageVersion())];
+    await writeFile(
+      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
+      frozen + jsonl(arrived),
+    );
+
+    const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
+    const commit = required(await openArchivalCommit(w.dataDir, "ada", "main", resolved));
+    expect(commit.retained).toBe(3);
+    expect(commit.liveContent).toBe(frozen + jsonl(arrived));
+  });
+
+  test("a conversation rewritten under the plan refuses to commit", async () => {
+    const w = await world();
+    const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
+    await writeFile(
+      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
+      jsonl([message("m_9", "user", "a different conversation", newMessageVersion())]),
+    );
+
+    expect(await openArchivalCommit(w.dataDir, "ada", "main", resolved)).toBeUndefined();
+  });
+
+  test("a rotation archives exactly the range the plan resolved", async () => {
+    const w = await world();
+    w.config.app.memory.compaction.write_memory = false;
+    w.config.app.memory.compaction.keep_recent_turns = 1;
+    w.config.app.memory.compaction.max_context_tokens = 0;
+
+    const outcome = await runCompactionPass("ada", {
+      config: w.config,
+      generate: () => {
+        throw new Error("no memory pass here");
+      },
+    });
+    expect(outcome?.kind).toBe("rotated");
+
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      expect(store.readSegment("ada", 0).map((m) => m.msg_id)).toEqual([
+        "m_1",
+        "m_2",
+        "m_3",
+        "m_4",
+      ]);
+    } finally {
+      store.close();
+    }
+    const kept = await loadMessagesForCompaction(w.dataDir, "ada", "main");
+    expect([...kept.store.messages()].map((m) => m.msg_id)).toEqual(["m_5", "m_6"]);
+  });
+
+  test("a rotation refuses to commit a plan the conversation moved out from under", async () => {
+    const w = await world();
+    w.config.app.memory.compaction.keep_recent_turns = 1;
+    w.config.app.memory.compaction.max_context_tokens = 0;
+    const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
+
+    await writeFile(
+      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
+      jsonl([message("m_9", "user", "a different conversation", newMessageVersion())]),
+    );
+
+    const outcome = await rotateWithoutMemoryWrite(
+      "ada",
+      "main",
+      { config: w.config, generate: () => { throw new Error("unused"); } },
+      w.config,
+      resolved,
+      join(w.dataDir, "ada", "threads", "main"),
+      {},
+    );
+
+    expect(outcome).toBeUndefined();
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      expect(store.segmentCount("ada")).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("restart is part of resolving the plan, not something applied after it", async () => {
+    const w = await world();
+    await writeCheckpoint(w.dataDir, "cl_paused", jsonl(w.messages));
+
+    expect(required(await resolve(w, { keepRecentTurns: 1 })).resumed).toBe(true);
+    expect(required(await resolve(w, { keepRecentTurns: 1, restart: true })).resumed).toBe(false);
+  });
+
+  test("an explicit keep-turns count that moves the split refuses the frozen one", async () => {
+    const w = await world();
+    await writeCheckpoint(w.dataDir, "cl_paused", jsonl(w.messages));
+
+    const resolved = required(await resolve(w, { keepRecentTurns: 1, keepTurnsOverride: 0 }));
+    expect(resolved.resumed).toBe(false);
+    expect(resolved.splitAt).toBe(6);
   });
 });

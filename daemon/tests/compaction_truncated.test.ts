@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { MarkdownMemoryStore } from "../src/memory/markdown_store.ts";
+import type { ArchivalPlan } from "../src/memory/compaction/plan.ts";
+import { planFor } from "./support/archival_plan.ts";
 import { conversationManager } from "../src/memory/compaction/archive.ts";
 import { compact } from "../src/memory/compaction/manager.ts";
 import type {
@@ -34,7 +36,7 @@ test("a compaction cut off at the token ceiling does not archive behind a half-w
   const deferred: string[] = [];
 
   const outcome = await compact(
-    options(dataDir, workspace, memoryStore, messages, activeContent, tools(workspace, deferred), scripted([
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools(workspace, deferred), scripted([
       response("tool_use", [
         {
           type: "tool_use",
@@ -72,7 +74,7 @@ test("a pass that ends cleanly still archives", async () => {
   await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
 
   const outcome = await compact(
-    options(dataDir, workspace, memoryStore, messages, activeContent, tools(workspace), scripted([
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools(workspace), scripted([
       response("tool_use", [
         {
           type: "tool_use",
@@ -111,15 +113,13 @@ function options(
   dataDir: string,
   workspace: string,
   memoryStore: MarkdownMemoryStore,
-  messages: ConversationMessage[],
-  activeContent: string,
+  plan: ArchivalPlan,
   toolCtx: CompactionTools,
   llm: CompactionLlm,
 ) {
   return {
     conversationId: "ada",
-    messages,
-    activeContent,
+    plan,
     systemTemplate: "system",
     promptTemplate: "compact",
     charName: "ada",
@@ -128,7 +128,6 @@ function options(
     conversationMgr: conversationManager(join(dataDir, "ada", "threads", "main")),
     markdownStore: memoryStore,
     dryRun: false,
-    retainTrailingAutonomous: false,
     chatRequest: request(),
     dataDir,
     resumable: true,

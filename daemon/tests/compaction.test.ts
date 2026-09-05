@@ -50,6 +50,9 @@ import {
 } from "../src/tools/workspace_path";
 import { rustTrim } from "../src/memory/lines";
 import { queueDeferredEdit } from "../src/memory/deferred_edits";
+import type { Message } from "../src/engine/types.ts";
+import { jsonlOf, maybePlanOf } from "./support/archival_plan.ts";
+import { CompactionError } from "../src/memory/compaction/types";
 
 type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
@@ -503,6 +506,22 @@ function toConversationMessage(m: Json): ConversationMessage {
   };
 }
 
+function toPlanMessage(m: Json, index: number): Message {
+  const content = m.content as string;
+  const toolResultOnly = m.is_tool_result_only === true;
+  return {
+    msg_id: `m_${String(index)}`,
+    role: m.role as Message["role"],
+    content,
+    images: [],
+    content_blocks: toolResultOnly
+      ? [{ type: "tool_result", tool_use_id: `t_${String(index)}`, content }]
+      : [{ type: "text", text: content }],
+    timestamp: m.timestamp as string,
+    ...(m.is_autonomous === true ? { origin: "autonomous" as const } : {}),
+  };
+}
+
 function twoMessages(): ConversationMessage[] {
   return [0, 1].map((i) => ({
     role: i % 2 === 0 ? "user" : "assistant",
@@ -933,6 +952,14 @@ async function runPass(pass: Json): Promise<void> {
     const set = messageSets[pass.messages_ref as string];
     if (set === undefined) throw new Error(`no message set named ${String(pass.messages_ref)}`);
     const messages = set.map(toConversationMessage);
+    const planMessages = set.map(toPlanMessage);
+    const plan = maybePlanOf(planMessages, {
+      keepRecentTurns: pass.keep_recent_turns as number,
+      ...(pass.keep_turns_override === null
+        ? {}
+        : { keepTurnsOverride: pass.keep_turns_override as number }),
+      retainTrailingAutonomous: pass.retain_trailing_autonomous as boolean,
+    });
 
     const seeded = Object.fromEntries(
       (pass.seed as Json[]).map((f) => [f.path as string, f.content as string]),
@@ -952,11 +979,11 @@ async function runPass(pass: Json): Promise<void> {
     let outcome: unknown = null;
     let error: string | null = null;
     try {
+      if (plan === undefined) throw CompactionError.insufficientMessages();
       outcome = await compact(
         {
           conversationId: "conv-1",
-          messages,
-          activeContent: "line1\nline2\nline3\n",
+          plan,
           systemTemplate: "System for {{char}} and {{user}}.",
           promptTemplate: "Compact now, {{char}}.",
           charName: "Aria",
@@ -968,7 +995,6 @@ async function runPass(pass: Json): Promise<void> {
           ...(pass.keep_turns_override === null
             ? {}
             : { keepTurnsOverride: pass.keep_turns_override as number }),
-          retainTrailingAutonomous: pass.retain_trailing_autonomous as boolean,
           chatRequest: chatRequest(messages),
           ...(pass.with_data_dir === true ? { dataDir } : {}),
           tools,
@@ -1018,7 +1044,7 @@ async function runPass(pass: Json): Promise<void> {
     for (const call of mgr.calls) {
       expect(call.conversation_id, `${where}: the archive names the conversation`).toBe("conv-1");
       expect(call.active_content, `${where}: and carries the text still live`).toBe(
-        "line1\nline2\nline3\n",
+        jsonlOf(planMessages),
       );
       expect(call.keep_last_n, `${where}: and keeps everything after the split`).toBe(
         messages.length - split,

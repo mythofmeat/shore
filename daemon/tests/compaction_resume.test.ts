@@ -7,6 +7,8 @@ import { dirname, join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { MarkdownMemoryStore } from "../src/memory/markdown_store.ts";
+import type { ArchivalPlan } from "../src/memory/compaction/plan.ts";
+import { planFor } from "./support/archival_plan.ts";
 import { conversationManager } from "../src/memory/compaction/archive.ts";
 import { compact } from "../src/memory/compaction/manager.ts";
 import type {
@@ -58,8 +60,7 @@ test("a failed compaction resumes after its completed tool round without replayi
       dataDir,
       workspace,
       memoryStore,
-      messages,
-      activeContent,
+      await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
       tools,
       scripted([
         response("tool_use", [
@@ -89,7 +90,7 @@ test("a failed compaction resumes after its completed tool round without replayi
 
   const secondLlm = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
   const second = await compact(
-    options(dataDir, workspace, memoryStore, messages, activeContent, tools, secondLlm, true),
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, secondLlm, true),
     { keepRecentTurns: 1 },
   );
 
@@ -140,8 +141,8 @@ test("the tool-round ceiling pauses work in resumable slices instead of making t
     name: "edit",
     input: { path, content: `${id}\n` },
   }]);
-  const run = (llm: CompactionLlm) => compact({
-    ...options(dataDir, workspace, memoryStore, messages, activeContent, tools, llm),
+  const run = async (llm: CompactionLlm) => await compact({
+    ...options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, llm),
     maxToolIterations: 1,
   }, { keepRecentTurns: 1 });
 
@@ -185,7 +186,7 @@ test("an explicit keep-turns count wins over the split a stale checkpoint planne
 
   const paused = await compact(
     {
-      ...options(dataDir, workspace, memoryStore, messages, activeContent, tools, scripted([
+      ...options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, scripted([
         response("tool_use", [
           {
             type: "tool_use",
@@ -207,9 +208,14 @@ test("an explicit keep-turns count wins over the split a stale checkpoint planne
 
   const compacted = await compact(
     {
-      ...options(dataDir, workspace, memoryStore, messages, activeContent, tools, scripted([
-        response("end_turn", [{ type: "text", text: "done" }]),
-      ])),
+      ...options(
+        dataDir,
+        workspace,
+        memoryStore,
+        await planFor(dataDir, "ada", "main", { keepRecentTurns: 1, keepTurnsOverride: 0 }),
+        tools,
+        scripted([response("end_turn", [{ type: "text", text: "done" }])]),
+      ),
       keepTurnsOverride: 0,
     },
     { keepRecentTurns: 1 },
@@ -253,14 +259,13 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
     ensureWorkspaceGitRepo: async () => {},
     gitCommitAll: async () => false,
   };
-  const run = (msgs: ConversationMessage[], content: string, llm: CompactionLlm) =>
-    compact(options(dataDir, workspace, memoryStore, msgs, content, tools, llm, true), {
+  const run = async (plan: ArchivalPlan, llm: CompactionLlm) =>
+    await compact(options(dataDir, workspace, memoryStore, plan, tools, llm, true), {
       keepRecentTurns: 1,
     });
 
   const paused = await run(
-    messages,
-    activeContent,
+    await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
     scripted([
       response("tool_use", [
         {
@@ -279,8 +284,7 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
   delete crashed.pauseReason;
 
   const archived = await run(
-    messages,
-    activeContent,
+    await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
     scripted([response("end_turn", [{ type: "text", text: "done" }])]),
   );
   expect(archived.kind).toBe("compacted");
@@ -292,7 +296,7 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
   await writeFile(join(characterDir, "threads", "main", "active.jsonl"), grownContent, "utf8");
 
   const afterCrash = scripted([]);
-  const resumed = await run([...messages.slice(2), ...grown], grownContent, afterCrash);
+  const resumed = await run(await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), afterCrash);
 
   expect(resumed.kind).toBe("compacted");
   expect(afterCrash.calls).toBe(0);
@@ -333,10 +337,17 @@ test("a checkpoint the workspace has moved past stays wedged until a restart thr
       input: { path: "memory/fact.md", content: "remembered\n" },
     },
   ]);
-  const run = (llm: CompactionLlm, restart = false) =>
-    compact(
+  const run = async (llm: CompactionLlm, restart = false) =>
+    await compact(
       {
-        ...options(dataDir, workspace, memoryStore, messages, activeContent, tools, llm),
+        ...options(
+          dataDir,
+          workspace,
+          memoryStore,
+          await planFor(dataDir, "ada", "main", { keepRecentTurns: 1, restart }),
+          tools,
+          llm,
+        ),
         restart,
       },
       { keepRecentTurns: 1 },
@@ -363,8 +374,16 @@ test("a checkpoint the workspace has moved past stays wedged until a restart thr
   const restarted = await run(restartedLlm, true);
 
   expect(restarted.kind).toBe("compacted");
+  expect(restarted).toMatchObject({ messageCount: 2, retainedCount: 2, retainedTurns: 1 });
   expect(restartedLlm.calls).toBe(2);
-  expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).not.toBe(activeContent);
+  const kept = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
+  expect(kept).not.toBe(activeContent);
+  expect(
+    kept
+      .trim()
+      .split("\n")
+      .map((line) => (JSON.parse(line) as { content: string }).content),
+  ).toEqual(messages.slice(2).map((m) => m.content));
   expect(readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
@@ -396,9 +415,9 @@ test("a checkpoint whose source was edited out from under it is discarded instea
     ensureWorkspaceGitRepo: async () => {},
     gitCommitAll: async () => false,
   };
-  const run = (msgs: ConversationMessage[], content: string, llm: CompactionLlm) =>
-    compact(
-      options(dataDir, workspace, memoryStore, msgs, content, tools, llm),
+  const run = async (plan: ArchivalPlan, llm: CompactionLlm) =>
+    await compact(
+      options(dataDir, workspace, memoryStore, plan, tools, llm),
       { keepRecentTurns: 1 },
     );
 
@@ -411,8 +430,7 @@ test("a checkpoint whose source was edited out from under it is discarded instea
     },
   ]);
   const paused = await run(
-    messages,
-    activeContent,
+    await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
     scripted([editTurn, new Error("provider unavailable")]),
   );
   expect(paused.kind).toBe("paused");
@@ -425,7 +443,10 @@ test("a checkpoint whose source was edited out from under it is discarded instea
   await writeFile(join(characterDir, "threads", "main", "active.jsonl"), editedLines, "utf8");
 
   const freshLlm = scripted([editTurn, response("end_turn", [{ type: "text", text: "done" }])]);
-  const second = await run(edited, editedLines, freshLlm);
+  const second = await run(
+    await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
+    freshLlm,
+  );
 
   expect(second.kind).toBe("compacted");
   expect(freshLlm.calls).toBe(2);
@@ -438,16 +459,14 @@ function options(
   dataDir: string,
   workspace: string,
   memoryStore: MarkdownMemoryStore,
-  messages: ConversationMessage[],
-  activeContent: string,
+  plan: ArchivalPlan,
   tools: CompactionTools,
   llm: CompactionLlm,
   durable = false,
 ) {
   return {
     conversationId: "ada",
-    messages,
-    activeContent,
+    plan,
     systemTemplate: "system",
     promptTemplate: "compact",
     charName: "ada",
@@ -461,7 +480,6 @@ function options(
     ),
     markdownStore: memoryStore,
     dryRun: false,
-    retainTrailingAutonomous: false,
     chatRequest: compactionRequest(),
     dataDir,
     resumable: true,
@@ -543,3 +561,78 @@ function scripted(
     },
   };
 }
+
+test("an archived operation whose turns are still live is not mistaken for a finished pass", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-live-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  const messages = conversation();
+  const activeContent = messages.map(activeLine).join("\n") + "\n";
+  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent, "utf8");
+
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    dispatch: async () => ({ output: "ok", isError: false }),
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+
+  const paused = await compact(
+    options(
+      dataDir,
+      workspace,
+      memoryStore,
+      await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
+      tools,
+      scripted([new Error("provider unavailable")]),
+      true,
+    ),
+    { keepRecentTurns: 1 },
+  );
+  expect(paused.kind).toBe("paused");
+
+  const checkpoint = JSON.parse(
+    await readFile(join(characterDir, "threads", "main", "compaction-checkpoint.json"), "utf8"),
+  ) as { id: string };
+
+  const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+  try {
+    const idx = store.beginCompaction(
+      "ada",
+      {
+        file: HISTORY_DB_FILE,
+        message_count: 2,
+        compacted_at: "2026-08-12T00:00:00Z",
+        compaction_id: checkpoint.id,
+      },
+      [],
+      "before",
+      "after",
+    );
+    store.finishCompaction("ada", idx);
+  } finally {
+    store.close();
+  }
+
+  const secondLlm = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
+  const second = await compact(
+    options(
+      dataDir,
+      workspace,
+      memoryStore,
+      await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }),
+      tools,
+      secondLlm,
+      true,
+    ),
+    { keepRecentTurns: 1 },
+  );
+
+  expect(second.kind).toBe("compacted");
+  expect(secondLlm.calls).toBe(1);
+});

@@ -37,13 +37,7 @@ import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, hasCompactionOperation, segmentCount } from "./archive.ts";
 import { handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
-import {
-  archiveSplitIndex,
-  compact,
-  countTurns,
-  tryBeginCompaction,
-} from "./manager.ts";
-import { retainedTurns as retentionForBudget } from "./retention.ts";
+import { compact, countTurns, tryBeginCompaction } from "./manager.ts";
 import { DEFAULT_COMPACT_PROMPT, DEFAULT_COMPACT_SYSTEM } from "./prompts.ts";
 import { renderToolValue } from "../../tools/media.ts";
 import {
@@ -60,15 +54,13 @@ import {
   coverageIsRedundant,
   withCoverageStore,
 } from "../coverage.ts";
+import { removeCompactionCheckpoint } from "./checkpoint.ts";
 import {
-  checkpointSourceIsCompatible,
-  loadCompactionCheckpoint,
-  removeCompactionCheckpoint,
-  type CompactionCheckpoint,
-} from "./checkpoint.ts";
-import { normalizeMessage } from "../../engine/message_store.ts";
-import type { Message } from "../../engine/types.ts";
-import { rustLines, rustTrim } from "../lines.ts";
+  messagesFromJsonl,
+  openArchivalCommit,
+  resolveArchivalPlan,
+  type ArchivalPlan,
+} from "./plan.ts";
 
 export interface CompactionRunDeps {
   config: LoadedConfig;
@@ -105,43 +97,42 @@ export async function runCompaction(
   return handleCompactionOutcome(character, deps.notify ?? (() => {}), outcome);
 }
 
-async function rotateWithoutMemoryWrite(
+export async function rotateWithoutMemoryWrite(
   character: string,
   thread: string,
   deps: CompactionRunDeps,
   effective: LoadedConfig,
-  loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
+  plan: ArchivalPlan,
+  conversationDir: string,
   options: CompactionRunOptions,
   note = "archive-only rotation; automatic memory writes disabled",
-  splitAtOverride?: number,
-): Promise<CompactionOutcome> {
-  const compaction = effective.app.memory.compaction;
-  const keepTurns =
-    options.keepTurnsOverride ??
-    retentionForBudget(loaded.messages, compaction.keep_recent_turns, compaction.max_context_tokens);
-  const splitAt = Math.min(
-    splitAtOverride ??
-      archiveSplitIndex(loaded.messages, keepTurns, options.retainTrailingAutonomous ?? false),
-    loaded.messages.length,
-  );
-  if (splitAt === 0) throw CompactionError.insufficientMessages();
-
-  const retained = loaded.messages.length - splitAt;
+): Promise<CompactionOutcome | undefined> {
   const dryRun = options.dryRun ?? false;
+  const dataDir = effective.dirs.data;
+  const commit = dryRun
+    ? { liveContent: plan.sourceContent, retained: plan.messages.length - plan.splitAt }
+    : await openArchivalCommit(dataDir, character, thread, plan);
+  if (commit === undefined) {
+    shoreLog.warn(
+      `shore: not rotating ${character}/${thread}: the conversation was rewritten under the ` +
+        `plan that resolved this range, so archiving it would commit a range nobody resolved`,
+    );
+    return undefined;
+  }
 
   if (!dryRun) {
     await conversationManager(
-      loaded.conversationDir,
+      conversationDir,
       deps.now ?? (() => new Date().toISOString()),
       deps.newId ?? (() => crypto.randomUUID()),
       {
-        dbPath: join(deps.config.dirs.data, HISTORY_DB_FILE),
+        dbPath: join(dataDir, HISTORY_DB_FILE),
         archiveKey: archiveKey(character, thread),
         retain: effective.app.memory.retain.enabled,
       },
     ).archiveAndRetain("archive-only", {
-      keepLastN: retained,
-      activeContent: loaded.rawContent,
+      keepLastN: commit.retained,
+      activeContent: commit.liveContent,
       note,
     });
   }
@@ -150,12 +141,29 @@ async function rotateWithoutMemoryWrite(
     kind: "rotated",
     conversationId: character,
     dryRun,
-    messageCount: loaded.messages.length,
-    archivedMessages: splitAt,
-    compactedTurns: countTurns(loaded.messages.slice(0, splitAt)),
-    retainedCount: retained,
-    retainedTurns: countTurns(loaded.messages.slice(splitAt)),
+    messageCount: plan.splitAt + commit.retained,
+    archivedMessages: plan.splitAt,
+    compactedTurns: countTurns([...plan.conversation].slice(0, plan.splitAt)),
+    retainedCount: commit.retained,
+    retainedTurns: countRetainedLines(commit.liveContent, plan.splitAt),
   };
+}
+
+function countRetainedLines(liveContent: string, splitAt: number): number {
+  return countTurns(
+    messagesFromJsonl(liveContent)
+      .slice(splitAt)
+      .map((message) => ({
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        isToolResultOnly:
+          message.role === "user" &&
+          message.content_blocks.length > 0 &&
+          message.content_blocks.every((block) => block.type === "tool_result"),
+        isAutonomous: message.origin === "autonomous",
+      })),
+  );
 }
 
 export async function runCompactionPass(
@@ -175,11 +183,31 @@ export async function runCompactionPass(
     if (loaded.messages.length === 0) return undefined;
 
     const effective = effectiveConfig(character, deps.config);
-    if (!effective.app.memory.compaction.write_memory) {
-      return await rotateWithoutMemoryWrite(character, thread, deps, effective, loaded, options);
+    const compaction = effective.app.memory.compaction;
+    const plan = await resolveArchivalPlan(dataDir, character, thread, loaded, {
+      keepRecentTurns: compaction.keep_recent_turns,
+      maxContextTokens: compaction.max_context_tokens,
+      ...(options.keepTurnsOverride === undefined
+        ? {}
+        : { keepTurnsOverride: options.keepTurnsOverride }),
+      retainTrailingAutonomous: options.retainTrailingAutonomous ?? false,
+      restart: options.restart ?? false,
+    });
+    if (plan === undefined) throw CompactionError.insufficientMessages();
+
+    if (!compaction.write_memory) {
+      return await rotateWithoutMemoryWrite(
+        character,
+        thread,
+        deps,
+        effective,
+        plan,
+        loaded.conversationDir,
+        options,
+      );
     }
 
-    const planned = await planCompactionCoverage(character, thread, effective, loaded, options);
+    const planned = planCompactionCoverage(character, effective, plan, options);
     if (planned.blocked === true) {
       shoreLog.warn(
         `shore: skipping compaction for ${character}/${thread}: another pass holds the memory ` +
@@ -189,13 +217,8 @@ export async function runCompactionPass(
       return undefined;
     }
     if (planned.redundant) {
-      if (planned.abandoned !== undefined) {
-        const settled = await reconcileAbandonedPass(
-          dataDir,
-          character,
-          thread,
-          planned.abandoned.checkpointId,
-        );
+      if (plan.checkpoint !== undefined) {
+        const settled = await reconcileAbandonedPass(dataDir, character, thread, plan.checkpoint.id);
         if (settled) return undefined;
       }
       shoreLog.info(
@@ -207,10 +230,10 @@ export async function runCompactionPass(
         thread,
         deps,
         effective,
-        loaded,
+        plan,
+        loaded.conversationDir,
         options,
         "archive-only rotation; this range was already covered by another branch's compaction",
-        planned.abandoned?.splitAt,
       );
     }
 
@@ -220,8 +243,7 @@ export async function runCompactionPass(
     const outcome = await compact(
       {
         conversationId: character,
-        messages: loaded.messages,
-        activeContent: loaded.rawContent,
+        plan,
         systemTemplate: resolved.systemTemplate,
         promptTemplate: resolved.promptTemplate,
         charName: character,
@@ -244,7 +266,6 @@ export async function runCompactionPass(
         ...(options.keepTurnsOverride === undefined
           ? {}
           : { keepTurnsOverride: options.keepTurnsOverride }),
-        retainTrailingAutonomous: options.retainTrailingAutonomous ?? false,
         chatRequest,
         dataDir,
         resumable: true,
@@ -290,81 +311,44 @@ interface ResolvedDeps {
   maxToolIterations: number | undefined;
 }
 
-interface AbandonedPass {
-  checkpointId: string;
-  splitAt?: number;
-}
-
 interface PlannedCoverage {
   redundant: boolean;
   blocked?: boolean;
-  abandoned?: AbandonedPass;
   coverage?: CompactionCoverage;
 }
 
-export async function planCompactionCoverage(
+export function planCompactionCoverage(
   character: string,
-  thread: string,
   effective: LoadedConfig,
-  loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
+  plan: ArchivalPlan,
   options: CompactionRunOptions,
-): Promise<PlannedCoverage> {
-  const dataDir = effective.dirs.data;
-  const compaction = effective.app.memory.compaction;
-  const keepTurns =
-    options.keepTurnsOverride ??
-    retentionForBudget(loaded.messages, compaction.keep_recent_turns, compaction.max_context_tokens);
-  const splitAt = archiveSplitIndex(
-    loaded.messages,
-    keepTurns,
-    options.retainTrailingAutonomous ?? false,
-  );
-  if (splitAt === 0 || options.dryRun === true) return { redundant: false };
+): PlannedCoverage {
+  if (options.dryRun === true || plan.archival.length === 0) return { redundant: false };
 
-  const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(
-    () => undefined,
-  );
-  const resumed = resumedRange(checkpoint, loaded.rawContent, splitAt, options);
-  const resumeClaim = resumed === undefined ? undefined : checkpoint?.coverageClaim;
-
-  const archival = resumed ?? [...loaded.store.messages()].slice(0, splitAt);
-  if (archival.length === 0) return { redundant: false };
-
-  const dbPath = join(dataDir, HISTORY_DB_FILE);
-  const planned = withCoverageStore(dbPath, (store) =>
-    claimUncovered(store, character, "compaction", archival, {
+  const dbPath = join(effective.dirs.data, HISTORY_DB_FILE);
+  const resumeClaim = plan.resumed ? plan.checkpoint?.coverageClaim : undefined;
+  const claimed = withCoverageStore(dbPath, (store) =>
+    claimUncovered(store, character, "compaction", plan.archival, {
       contiguous: true,
       ...(resumeClaim === undefined ? {} : { claim: resumeClaim }),
     }),
   );
 
-  if (coverageIsRedundant(planned)) {
-    return {
-      redundant: true,
-      ...(checkpoint === undefined
-        ? {}
-        : {
-            abandoned: {
-              checkpointId: checkpoint.id,
-              ...(resumed === undefined ? {} : { splitAt: checkpoint.splitAt }),
-            },
-          }),
-    };
-  }
-  if (coverageIsPartial(planned) || (planned.pending === 0 && planned.unversioned === 0)) {
+  if (coverageIsRedundant(claimed)) return { redundant: true };
+  if (coverageIsPartial(claimed) || (claimed.pending === 0 && claimed.unversioned === 0)) {
     withCoverageStore(dbPath, (store) => {
-      store.releaseMemoryCoverage(character, "compaction", planned.claim);
+      store.releaseMemoryCoverage(character, "compaction", claimed.claim);
     });
     return { redundant: false, blocked: true };
   }
   return {
     redundant: false,
     coverage: {
-      claim: planned.claim,
-      unit: planned.unit,
-      claimed: planned.claimed.length,
-      background: planned.backgroundMessages,
-      fresh: archival.length - planned.backgroundMessages,
+      claim: claimed.claim,
+      unit: claimed.unit,
+      claimed: claimed.claimed.length,
+      background: claimed.backgroundMessages,
+      fresh: plan.archival.length - claimed.backgroundMessages,
     },
   };
 }
@@ -389,31 +373,6 @@ async function reconcileAbandonedPass(
       ". The memory it already wrote stays on disk",
   );
   return archived;
-}
-
-function resumedRange(
-  checkpoint: CompactionCheckpoint | undefined,
-  activeContent: string,
-  splitAt: number,
-  options: CompactionRunOptions,
-): Message[] | undefined {
-  if (checkpoint === undefined || options.restart === true) return undefined;
-  if (!checkpointSourceIsCompatible(checkpoint, activeContent)) return undefined;
-  if (options.keepTurnsOverride !== undefined && checkpoint.splitAt !== splitAt) return undefined;
-  return messagesFromJsonl(checkpoint.sourceContent).slice(0, checkpoint.splitAt);
-}
-
-function messagesFromJsonl(content: string): Message[] {
-  const messages: Message[] = [];
-  for (const line of rustLines(content)) {
-    if (rustTrim(line) === "") continue;
-    try {
-      messages.push(normalizeMessage(JSON.parse(line) as Message));
-    } catch {
-      continue;
-    }
-  }
-  return messages;
 }
 
 export function releaseCompactionCoverage(
