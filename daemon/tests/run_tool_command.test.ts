@@ -436,3 +436,72 @@ describe("nestedCalls", () => {
     expect(nestedCalls(failed, "debug_root", false)[0]?.ok).toBe(false);
   });
 });
+
+describe("a run_tool command that is cancelled", () => {
+  test("the abort reaches the running sub-agent", async () => {
+    const controller = new AbortController();
+    let seen: AbortSignal | undefined;
+    let running = (): void => undefined;
+    const started = new Promise<void>((resolve) => {
+      running = resolve;
+    });
+
+    const { ctx } = await world({
+      enabledSubagents: ["librarian"],
+      subagent: () => Promise.resolve("unused; the capture below replaces it"),
+    });
+
+    const withCapture: RunToolContext = {
+      ...ctx,
+      signal: controller.signal,
+      tools: (_charName, _turn) => ({
+        runSubagent: (_parent) => async (_name, _query, signal) => {
+          seen = signal;
+          running();
+          await new Promise<void>((resolve) => {
+            signal?.addEventListener("abort", () => resolve(), { once: true });
+          });
+          return "cancelled";
+        },
+      }),
+    };
+
+    const call = runTool("ada", withCapture, {
+      tool: "ask_librarian",
+      input: { query: "anything" },
+    });
+
+    await started;
+    expect(seen).toBeDefined();
+    expect(seen?.aborted).toBe(false);
+
+    controller.abort();
+    await call;
+    expect(seen?.aborted).toBe(true);
+  });
+
+  test("a command already aborted never starts the tool", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let reached = false;
+
+    const { ctx } = await world({ enabledSubagents: ["librarian"], subagent: () => Promise.resolve("x") });
+    const withCapture: RunToolContext = {
+      ...ctx,
+      signal: controller.signal,
+      tools: (_charName, _turn) => ({
+        runSubagent: (_parent) => async () => {
+          reached = true;
+          return "x";
+        },
+      }),
+    };
+
+    const call = runTool("ada", withCapture, {
+      tool: "ask_librarian",
+      input: { query: "anything" },
+    });
+    expect(await call.then(() => false, () => true)).toBe(true);
+    expect(reached).toBe(false);
+  });
+});

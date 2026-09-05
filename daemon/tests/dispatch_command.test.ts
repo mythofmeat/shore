@@ -19,6 +19,8 @@ import {
   type CommandSession,
 } from "../src/commands/dispatch.ts";
 import { testTmp } from "./support/tmp.ts";
+import { SnapshotGate } from "../src/snapshot_gate.ts";
+import { CharacterRegistry } from "../src/characters.ts";
 
 const UNWIRED: Record<string, string> = {
   keepalive_ping_now: "keepalive_ping_now is not available in this build",
@@ -317,5 +319,86 @@ describe("runCharacterlessCommand", () => {
     for (const c of fixture.dispatch_characterless) {
       if (!accepted.includes(c.name)) expect(isCharacterless(c.name)).toBe(false);
     }
+  });
+});
+
+const rejected = (work: Promise<unknown>): Promise<boolean> =>
+  work.then(
+    () => false,
+    () => true,
+  );
+
+describe("an exclusive command whose client disconnects while it waits for the snapshot", () => {
+  async function wired(signal: AbortSignal): Promise<{
+    engine: ConversationEngine;
+    session: CommandSession;
+    deps: CommandDeps;
+    gate: SnapshotGate;
+    registry: CharacterRegistry;
+  }> {
+    const { engine, session, deps, config } = await harness();
+    const gate = new SnapshotGate();
+    const registry = await CharacterRegistry.create(
+      config.dirs.config,
+      config.dirs.data,
+      config,
+    );
+    session.signal = signal;
+    return {
+      engine,
+      session,
+      gate,
+      registry,
+      deps: {
+        ...deps,
+        threads: registry,
+        archive: {
+          dirs: config.dirs,
+          hasCharacter: (name: string) => registry.hasCharacter(name),
+          withSnapshot: async <T>(work: () => Promise<T>) => await gate.withSnapshot(work),
+          refreshAfterImport: async () => undefined,
+        },
+      },
+    };
+  }
+
+  test("a fork abandoned behind the gate does not create the thread", async () => {
+    const controller = new AbortController();
+    const { engine, session, deps, gate, registry } = await wired(controller.signal);
+
+    let releaseReader = (): void => undefined;
+    const readerHeld = new Promise<void>((resolve) => {
+      releaseReader = resolve;
+    });
+    const reader = gate.withActivity(async () => {
+      await readerHeld;
+    });
+
+    const forking = rejected(
+      runCommand(engine, session, deps, {
+        rid: null,
+        name: "fork_thread",
+        args: { name: "spin" },
+      }),
+    );
+
+    controller.abort();
+    releaseReader();
+    await reader;
+    expect(await forking).toBe(true);
+
+    expect(registry.listThreads("ada").map((t) => t.id)).not.toContain("spin");
+  });
+
+  test("the same fork succeeds when the client stays", async () => {
+    const { engine, session, deps, registry } = await wired(new AbortController().signal);
+
+    await runCommand(engine, session, deps, {
+      rid: null,
+      name: "fork_thread",
+      args: { name: "spin" },
+    });
+
+    expect(registry.listThreads("ada").map((t) => t.id)).toContain("spin");
   });
 });

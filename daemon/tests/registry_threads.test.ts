@@ -365,3 +365,52 @@ describe("concurrent thread-index mutations", () => {
     expect(registry.threads("aria")).toEqual(onDisk as never);
   });
 });
+
+const rejected = (work: Promise<unknown>): Promise<boolean> =>
+  work.then(
+    () => false,
+    () => true,
+  );
+
+describe("a thread mutation whose client disconnects while it waits for the lock", () => {
+  test("the queued create never touches the index", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    const controller = new AbortController();
+
+    const holding = registry.createThread("aria", "slow", {});
+    const queued = rejected(registry.createThread("aria", "abandoned", {}, controller.signal));
+    controller.abort();
+
+    await holding;
+    expect(await queued).toBe(true);
+
+    const onDisk = JSON.parse(
+      readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
+    ) as { threads: Array<{ id: string }> };
+
+    expect(onDisk.threads.map((t) => t.id).sort()).toEqual([MAIN_THREAD, "slow"].sort());
+    expect(registry.listThreads("aria").map((t) => t.id).sort()).toEqual(
+      [MAIN_THREAD, "slow"].sort(),
+    );
+  });
+
+  test("an abandoned label edit leaves the earlier one intact", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    await registry.createThread("aria", "alpha");
+    const controller = new AbortController();
+
+    const holding = registry.setThreadLabel("aria", "alpha", "kept");
+    const queued = rejected(
+      registry.setThreadLabel("aria", "alpha", "abandoned", controller.signal),
+    );
+    controller.abort();
+
+    await holding;
+    expect(await queued).toBe(true);
+
+    const onDisk = JSON.parse(
+      readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
+    ) as { threads: Array<{ id: string; label?: string }> };
+    expect(onDisk.threads.find((t) => t.id === "alpha")?.label).toBe("kept");
+  });
+});

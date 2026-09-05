@@ -21,20 +21,37 @@ function optionalText(value: unknown, field: string): string | undefined {
 export interface ThreadRegistry {
   listThreads(character: string): readonly ThreadRecord[];
   homeThread(character: string): string;
-  createThread(character: string, id: string, options?: NewThread): Promise<ThreadsIndex>;
+  createThread(
+    character: string,
+    id: string,
+    options?: NewThread,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex>;
   archiveThread(
     character: string,
     id: string,
     options?: ArchiveThreadOptions,
+    signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
-  setHomeThread(character: string, id: string): Promise<ThreadsIndex>;
-  setThreadLabel(character: string, id: string, label: string | undefined): Promise<ThreadsIndex>;
-  setThreadModel(character: string, id: string, model: string | undefined): Promise<ThreadsIndex>;
+  setHomeThread(character: string, id: string, signal?: AbortSignal): Promise<ThreadsIndex>;
+  setThreadLabel(
+    character: string,
+    id: string,
+    label: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex>;
+  setThreadModel(
+    character: string,
+    id: string,
+    model: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex>;
   forkThread(
     character: string,
     source: string,
     child: string,
     options?: ForkThreadOptions,
+    signal?: AbortSignal,
   ): Promise<ForkResult>;
 }
 
@@ -44,6 +61,7 @@ export interface ThreadContext {
   current: string;
   turns?: ReadonlyMap<string, number>;
   warm?: string;
+  signal?: AbortSignal;
   withSnapshot?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
@@ -131,7 +149,7 @@ export async function newThread(ctx: ThreadContext, args: Args): Promise<ThreadL
     ...(args["compaction"] === true ? { compaction: true } : {}),
   };
   try {
-    return listing(ctx, await ctx.registry.createThread(ctx.character, id, options));
+    return listing(ctx, await ctx.registry.createThread(ctx.character, id, options, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }
@@ -140,7 +158,7 @@ export async function newThread(ctx: ThreadContext, args: Args): Promise<ThreadL
 export async function archiveThread(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
   const id = requiredId(args);
   try {
-    return listing(ctx, await ctx.registry.archiveThread(ctx.character, id));
+    return listing(ctx, await ctx.registry.archiveThread(ctx.character, id, undefined, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }
@@ -149,7 +167,7 @@ export async function archiveThread(ctx: ThreadContext, args: Args): Promise<Thr
 export async function threadHome(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
   const id = requiredId(args);
   try {
-    return listing(ctx, await ctx.registry.setHomeThread(ctx.character, id));
+    return listing(ctx, await ctx.registry.setHomeThread(ctx.character, id, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }
@@ -159,7 +177,7 @@ export async function threadLabel(ctx: ThreadContext, args: Args): Promise<Threa
   const id = requiredId(args);
   const label = optionalText(args["label"], "label");
   try {
-    return listing(ctx, await ctx.registry.setThreadLabel(ctx.character, id, label));
+    return listing(ctx, await ctx.registry.setThreadLabel(ctx.character, id, label, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }
@@ -169,7 +187,7 @@ export async function threadModel(ctx: ThreadContext, args: Args): Promise<Threa
   const id = requiredId(args);
   const model = optionalText(args["model"], "model");
   try {
-    return listing(ctx, await ctx.registry.setThreadModel(ctx.character, id, model));
+    return listing(ctx, await ctx.registry.setThreadModel(ctx.character, id, model, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }
@@ -201,7 +219,13 @@ export async function forkThread(ctx: ThreadContext, args: Args): Promise<Thread
   const from = optionalText(args["from"], "from") ?? ctx.current;
   const turns = requestedTurns(args["turns"]);
   const run = async (): Promise<ForkResult> =>
-    await ctx.registry.forkThread(ctx.character, from, id, turns === undefined ? {} : { turns });
+    await ctx.registry.forkThread(
+      ctx.character,
+      from,
+      id,
+      turns === undefined ? {} : { turns },
+      ctx.signal,
+    );
   try {
     const result = ctx.withSnapshot === undefined ? await run() : await ctx.withSnapshot(run);
     return {

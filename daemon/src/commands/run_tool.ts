@@ -263,9 +263,11 @@ export async function runTool(
     ctx.tools(character, turn),
   );
 
+  signal.throwIfAborted();
+
   const exec: ToolExecution = {
     sendDirect: send,
-    ctx: toolContext,
+    ctx: { ...toolContext, signal },
     limits: toolLimitsFrom(ctx.config.app.tools, ctx.config.app.subagents),
     now,
     newMessageId,

@@ -164,7 +164,7 @@ export async function runCommand(
     case "list_threads":
       return listThreads(await threadListingContext(deps, engine, session));
     case "switch_thread":
-      return switchThread(threadContext(deps, engine), args);
+      return switchThread(threadContext(deps, engine, session.signal), args);
     case "create_thread":
       return await newThread(await threadListingContext(deps, engine, session), args);
     case "archive_thread": {
@@ -361,23 +361,48 @@ export function runCharacterlessCommand(
       return listProviders(providersContext(session, deps));
     case "list_provider_models":
       return listProviderModels(providersContext(session, deps), args);
-    case "export_character":
+    case "export_character": {
       if (deps.archive === undefined) throw unwired("export_character");
-      return exportCharacter(deps.archive, args);
-    case "import_character":
+      return exportCharacter(archiveWithSignal(deps.archive, session.signal), args);
+    }
+    case "import_character": {
       if (deps.archive === undefined) throw unwired("import_character");
-      return importCharacter(deps.archive, args);
+      return importCharacter(archiveWithSignal(deps.archive, session.signal), args);
+    }
     default:
       throw invalidRequest(`Command '${cmd.name}' requires a character`);
   }
 }
 
-function threadContext(deps: CommandDeps, engine: ConversationEngine): ThreadContext {
+type SnapshotRunner = <T>(run: () => Promise<T>) => Promise<T>;
+
+function guardedSnapshot(
+  withSnapshot: SnapshotRunner,
+  signal: AbortSignal | undefined,
+): SnapshotRunner {
+  if (signal === undefined) return withSnapshot;
+  return async <T>(run: () => Promise<T>): Promise<T> =>
+    await withSnapshot(async () => {
+      signal.throwIfAborted();
+      return await run();
+    });
+}
+
+function threadContext(
+  deps: CommandDeps,
+  engine: ConversationEngine,
+  signal?: AbortSignal,
+): ThreadContext {
   const registry = deps.threads;
   if (registry === undefined) {
     throw internalError("thread commands need a character registry, and this one has none");
   }
-  return { registry, character: engine.characterName, current: engine.thread };
+  return {
+    registry,
+    character: engine.characterName,
+    current: engine.thread,
+    ...(signal === undefined ? {} : { signal }),
+  };
 }
 
 async function threadListingContext(
@@ -385,20 +410,39 @@ async function threadListingContext(
   engine: ConversationEngine,
   session: CommandSession,
 ): Promise<ThreadContext> {
-  const base = threadContext(deps, engine);
+  const base = threadContext(deps, engine, session.signal);
   const warm = deps.keepalive?.keepalive.warmThread(base.character);
   const archive = deps.archive;
   return {
     ...base,
     ...(archive === undefined
       ? {}
-      : { withSnapshot: async <T>(run: () => Promise<T>) => await archive.withSnapshot(run) }),
+      : {
+          withSnapshot: guardedSnapshot(
+            async <T>(run: () => Promise<T>) => await archive.withSnapshot(run),
+            session.signal,
+          ),
+        }),
     turns: await threadTurnCounts(
       session.dataDir,
       base.character,
       base.registry.listThreads(base.character).map((t) => t.id),
     ),
     ...(warm === undefined ? {} : { warm }),
+  };
+}
+
+function archiveWithSignal(
+  archive: ArchiveContext,
+  signal: AbortSignal | undefined,
+): ArchiveContext {
+  if (signal === undefined) return archive;
+  return {
+    ...archive,
+    withSnapshot: guardedSnapshot(
+      async <T>(run: () => Promise<T>) => await archive.withSnapshot(run),
+      signal,
+    ),
   };
 }
 

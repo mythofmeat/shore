@@ -230,12 +230,20 @@ export class CharacterRegistry {
     return engine;
   }
 
-  async createThread(name: string, id: string, options: NewThread = {}): Promise<ThreadsIndex> {
-    return await this.#withThreadIndex(name, async () =>
-      this.#remember(
-        name,
-        await createThread(this.#dataDir, name, id, new Date().toISOString(), options),
-      ),
+  async createThread(
+    name: string,
+    id: string,
+    options: NewThread = {},
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await createThread(this.#dataDir, name, id, new Date().toISOString(), options),
+        ),
+      signal,
     );
   }
 
@@ -243,6 +251,7 @@ export class CharacterRegistry {
     name: string,
     id: string,
     options: ArchiveThreadOptions = {},
+    signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
     return await this.#withThreadIndex(name, async () => {
       const index = await archiveThread(this.#dataDir, name, id, {
@@ -251,7 +260,7 @@ export class CharacterRegistry {
       });
       this.#engines.delete(engineKey(name, id));
       return this.#remember(name, index);
-    });
+    }, signal);
   }
 
   async forkThread(
@@ -259,6 +268,7 @@ export class CharacterRegistry {
     source: string,
     child: string,
     options: ForkThreadOptions = {},
+    signal?: AbortSignal,
   ): Promise<ForkResult> {
     const guard = tryBeginCompaction(this.#dataDir, name);
     if (guard === undefined) {
@@ -266,40 +276,66 @@ export class CharacterRegistry {
     }
     try {
       const live = await this.getOrCreate(name, source);
-      return await this.#withThreadIndex(name, async () => {
-        const result = await forkThread(this.#dataDir, name, source, child, {
-          ...options,
-          source: options.source ?? live,
-        });
-        this.#remember(name, result.index);
-        return result;
-      });
+      return await this.#withThreadIndex(
+        name,
+        async () => {
+          const result = await forkThread(this.#dataDir, name, source, child, {
+            ...options,
+            source: options.source ?? live,
+          });
+          this.#remember(name, result.index);
+          return result;
+        },
+        signal,
+      );
     } finally {
       guard.release();
     }
   }
 
-  async setHomeThread(name: string, id: string): Promise<ThreadsIndex> {
-    return await this.#withThreadIndex(name, async () =>
-      this.#remember(name, await setHomeThread(this.#dataDir, name, id, new Date().toISOString())),
+  async setHomeThread(name: string, id: string, signal?: AbortSignal): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),
+        ),
+      signal,
     );
   }
 
-  async setThreadLabel(name: string, id: string, label: string | undefined): Promise<ThreadsIndex> {
-    return await this.#withThreadIndex(name, async () =>
-      this.#remember(
-        name,
-        await setThreadLabel(this.#dataDir, name, id, label, new Date().toISOString()),
-      ),
+  async setThreadLabel(
+    name: string,
+    id: string,
+    label: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadLabel(this.#dataDir, name, id, label, new Date().toISOString()),
+        ),
+      signal,
     );
   }
 
-  async setThreadModel(name: string, id: string, model: string | undefined): Promise<ThreadsIndex> {
-    return await this.#withThreadIndex(name, async () =>
-      this.#remember(
-        name,
-        await setThreadModel(this.#dataDir, name, id, model, new Date().toISOString()),
-      ),
+  async setThreadModel(
+    name: string,
+    id: string,
+    model: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadModel(this.#dataDir, name, id, model, new Date().toISOString()),
+        ),
+      signal,
     );
   }
 
@@ -310,8 +346,15 @@ export class CharacterRegistry {
     });
   }
 
-  async #withThreadIndex<T>(name: string, run: () => Promise<T>): Promise<T> {
-    return await threadIndexMutex.withKey(`${this.#dataDir}\u0000${name}`, run);
+  async #withThreadIndex<T>(
+    name: string,
+    run: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return await threadIndexMutex.withKey(`${this.#dataDir}\u0000${name}`, async () => {
+      signal?.throwIfAborted();
+      return await run();
+    });
   }
 
   #remember(name: string, index: ThreadsIndex): ThreadsIndex {

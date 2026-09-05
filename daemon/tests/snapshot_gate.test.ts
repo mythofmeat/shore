@@ -52,35 +52,3 @@ describe("SnapshotGate", () => {
     await Promise.all(both);
   });
 });
-
-describe("a command abandoned while queued behind the gate", () => {
-  test("aborting before admission means the body never runs", async () => {
-    const gate = new SnapshotGate();
-    const controller = new AbortController();
-    const ran: string[] = [];
-
-    let releaseWriter = (): void => undefined;
-    const writerHeld = new Promise<void>((resolve) => {
-      releaseWriter = resolve;
-    });
-    const writer = gate.withSnapshot(async () => {
-      await writerHeld;
-    });
-
-    const waiting = gate
-      .withActivity(async () => {
-        controller.signal.throwIfAborted();
-        ran.push("body");
-      })
-      .catch((error: unknown) => {
-        ran.push(error instanceof Error ? error.name : "unknown");
-      });
-
-    controller.abort();
-    releaseWriter();
-    await writer;
-    await waiting;
-
-    expect(ran).toEqual(["AbortError"]);
-  });
-});

@@ -245,13 +245,12 @@ MUTANTS = [
      "      this.#engines.delete(engineKey(name, id));\n"
      "      return index;"),
     ("threads: moving home does not refresh the cached index",
-     "    return await this.#withThreadIndex(name, async () =>\n"
-     "      this.#remember(name, await setHomeThread(this.#dataDir, name, id, new Date().toISOString())),\n"
-     "    );",
-     "    return await this.#withThreadIndex(\n"
-     "      name,\n"
-     "      async () => await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),\n"
-     "    );"),
+     "      async () =>\n"
+     "        this.#remember(\n"
+     "          name,\n"
+     "          await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),\n"
+     "        ),",
+     "      async () => await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),"),
     ("threads: a vanished character keeps its cached index",
      "    for (const name of Array.from(this.#threads.keys())) {\n"
      "      if (!afterSet.has(name)) this.#threads.delete(name);\n"
