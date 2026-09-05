@@ -132,7 +132,7 @@ function cachedChatRequest(): SidecarRequest {
 }
 
 describe("running a heartbeat", () => {
-  test("a tick on the cached chat request calls the provider with a key", async () => {
+  test("a tick uses the home model and provider key despite a cached side model", async () => {
     const config = await world();
     config.providers = ProviderRegistry.fromSection({
       anthropic: { api_key_env: KEY_ENV },
@@ -153,7 +153,7 @@ describe("running a heartbeat", () => {
     await executor.runHeartbeatTick("ada", NO_HOOKS);
 
     expect(seen.length).toBe(1);
-    expect(seen[0]?.model).toBe("discovered-opus");
+    expect(seen[0]?.model).toBe("claude-fixture");
     expect(seen[0]?.api_key).toBe("secret");
   });
 
@@ -516,7 +516,7 @@ describe("running a heartbeat", () => {
     expect(appended[0]?.images[0]?.path).toContain("generated");
   });
 
-  test("the cached body's ledger path survives into every round", async () => {
+  test("the configured ledger replaces the cached ledger for a heartbeat", async () => {
     const config = await world();
     const cache = new LastRequestCache();
     const seen: SidecarRequest[] = [];
@@ -548,7 +548,7 @@ describe("running a heartbeat", () => {
 
     await executor.runHeartbeatTick("ada", NO_HOOKS);
 
-    expect(seen[0]?.context?.ledger).toBe(ledgerPath);
+    expect(seen[0]?.context?.ledger).toBe(join(config.dirs.data, "ledger.db"));
     expect(seen[0]?.context?.call_type).toBe("heartbeat");
   });
 

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -536,6 +536,18 @@ describe("running a tick", () => {
       } as never,
       undefined,
     );
+
+    await copyFile(f.path, join(config.dirs.data, "ledger.db"));
+    config.app.usage.timezone = "utc";
+    config.app.usage.budgets = [{
+      name: "monthly",
+      period: "month",
+      cost_usd: 10,
+      warn_at: [0.8],
+      warn_action: "pause_heartbeat",
+      limit: "warn",
+      usage_kind: [],
+    } as never];
 
     let generated = 0;
     const result = await runHeartbeatTick(

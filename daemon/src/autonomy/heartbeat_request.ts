@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { usageConfigView } from "../ledger/budget.ts";
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -12,7 +14,7 @@ import { resolveDisplayName } from "../config/app.ts";
 import { resolvePromptTemplate } from "../config/dirs.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { formatWallClock } from "../engine/prompt.ts";
-import { threadChatModel } from "../engine/threads.ts";
+import { homeThreadOf, threadChatModel } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
@@ -122,21 +124,21 @@ export async function prepareHeartbeatRequest(
   config: LoadedConfig,
   deps: PrepareHeartbeatDeps,
 ): Promise<PreparedHeartbeat | undefined> {
-  let source = deps.cache.get(character);
-  if (source === undefined) {
-    const rebuilt = await rebuildRequestFromDisk(
-      character,
-      config.dirs.data,
-      config,
-      deps.rebuild ?? {},
+  const thread = await homeThreadOf(config.dirs.data, character);
+  const rebuilt = await rebuildRequestFromDisk(
+    character,
+    config.dirs.data,
+    config,
+    { ...deps.rebuild, thread },
+  );
+  if (rebuilt === undefined) {
+    shoreLog.info(
+      `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,
     );
-    if (rebuilt === undefined) {
-      shoreLog.info(
-        `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,
-      );
-      return undefined;
-    }
-    source = rebuilt.request;
+    return undefined;
+  }
+  const source = rebuilt.request;
+  if (deps.cache.get(character) === undefined) {
     deps.cache.set(character, source, {
       intervalMs: rebuilt.keepalive_interval_ms,
       maxSecs: rebuilt.keepalive_max_secs,
@@ -150,6 +152,16 @@ export async function prepareHeartbeatRequest(
     deps.env === undefined ? {} : { env: deps.env },
   );
 
+  request.context = {
+    ...request.context,
+    ledger: join(config.dirs.data, "ledger.db"),
+    usage: usageConfigView(config.app.usage),
+    character,
+    thread,
+    call_type: "heartbeat",
+    thinking_enabled: request.context?.thinking_enabled ?? false,
+  };
+
   const maxToolIterations =
     override !== undefined
       ? override.maxToolIterations
@@ -157,7 +169,7 @@ export async function prepareHeartbeatRequest(
           configView(config),
           character,
           (v, c, n, h) => findEffectiveModel(v, c, n, h),
-          await threadChatModel(config.dirs.data, character),
+          await threadChatModel(config.dirs.data, character, thread),
         )?.maxToolIterations;
 
   const nowMs = deps.now?.() ?? Date.now();
