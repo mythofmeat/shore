@@ -15,6 +15,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider } from "../src/llm/types.ts";
+import { buildToolContext } from "../src/handler/tool_context.ts";
 import { HistoryIndexService } from "../src/memory/history_index_service.ts";
 import type { McpClient } from "../src/mcp/client.ts";
 import type { RecoveryWait } from "../src/tools/mcp_registry.ts";
@@ -199,6 +200,31 @@ describe("what assembly wires together", () => {
       await runtime.shutdown();
     } finally {
       proto.register = original;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("history registrations and tool contexts stay anchored to main when heartbeat home moves", async () => {
+    const { root, config } = await dirsUnder("shore-runtime-history-home-");
+    try {
+      const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+      await mkdir(workspace, { recursive: true });
+      await writeFile(join(workspace, "SOUL.md"), "# ada");
+      const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
+      try {
+        await runtime.registry.createThread("ada", "side");
+        await runtime.registry.setHomeThread("ada", "side");
+        await runtime.refreshHistoryIndexes();
+        const main = join(config.dirs.data, "ada", "threads", "main");
+        expect(runtime.historyIndex.registeredCharacters()).toEqual(["ada"]);
+        expect(runtime.historyIndex.progress("ada")?.conversationDir).toBe(main);
+        const ctx = await buildToolContext(config, config.dirs.data, "ada");
+        expect(ctx.conversationDir).toBe(main);
+        expect(ctx.characterName).toBe("ada");
+      } finally {
+        await runtime.shutdown();
+      }
+    } finally {
       await rm(root, { recursive: true, force: true });
     }
   });

@@ -16,7 +16,7 @@ import type { ConversationManager } from "./types.ts";
 
 export interface DurableHistoryLocation {
   dbPath: string;
-  character: string;
+  archiveKey: string;
   retain?: boolean;
 }
 
@@ -110,17 +110,17 @@ async function archiveToDatabase(
   const reader = await SegmentReader.load({
     dir: characterDir,
     dbPath: history.dbPath,
-    character: history.character,
+    archiveKey: history.archiveKey,
     createHistoryDb: true,
   });
   reader.close();
   const store = HistoryStore.open(history.dbPath);
   let idx: number | undefined;
   try {
-    store.recoverPending(history.character, activeContent);
-    if (operationId === undefined || !store.hasCompactionOperation(history.character, operationId)) {
+    store.recoverPending(history.archiveKey, activeContent);
+    if (operationId === undefined || !store.hasCompactionOperation(history.archiveKey, operationId)) {
       idx = store.beginCompaction(
-        history.character,
+        history.archiveKey,
         {
           file: HISTORY_DB_FILE,
           message_count: messages.length,
@@ -137,10 +137,10 @@ async function archiveToDatabase(
     try {
       await atomicWrite(activeJsonlIn(characterDir), retainedContent);
     } catch (e) {
-      if (idx !== undefined) store.abortCompaction(history.character, idx);
+      if (idx !== undefined) store.abortCompaction(history.archiveKey, idx);
       throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
     }
-    if (idx !== undefined) store.finishCompaction(history.character, idx);
+    if (idx !== undefined) store.finishCompaction(history.archiveKey, idx);
   } finally {
     store.close();
   }
@@ -246,7 +246,7 @@ function withHistoryStore<T>(
   let store: HistoryStore | undefined;
   try {
     store = HistoryStore.open(ref.dbPath);
-    return read(store, ref.character);
+    return read(store, ref.archiveKey);
   } catch {
     return undefined;
   } finally {

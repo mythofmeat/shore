@@ -159,7 +159,7 @@ export async function clear(
       `clear-${crypto.randomUUID()}`,
       {
         dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
-        character: archiveKey(character, engine.thread),
+        archiveKey: archiveKey(character, engine.thread),
         retain: ctx.retainArchived === true,
       },
       {

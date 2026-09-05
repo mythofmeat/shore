@@ -229,7 +229,10 @@ export class CharacterRegistry {
     id: string,
     options: ArchiveThreadOptions = {},
   ): Promise<ThreadsIndex> {
-    const index = await archiveThread(this.#dataDir, name, id, options);
+    const index = await archiveThread(this.#dataDir, name, id, {
+      ...options,
+      retain: options.retain ?? this.effectiveConfig(name).app.memory.retain.enabled,
+    });
     this.#engines.delete(engineKey(name, id));
     return this.#remember(name, index);
   }

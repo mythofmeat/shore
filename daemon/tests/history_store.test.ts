@@ -118,10 +118,10 @@ test("archive retain work becomes visible only with the durable segment commit",
     "after\n",
   );
 
-  expect(store.nextMemoryRetainJob("ada")).toBeUndefined();
+  expect(store.nextCharacterMemoryRetainJob("ada")).toBeUndefined();
   store.recoverPending("ada", "after\n");
-  expect(store.nextMemoryRetainJob("ada")).toMatchObject({
-    character: "ada",
+  expect(store.nextCharacterMemoryRetainJob("ada")).toMatchObject({
+    archiveKey: "ada",
     segment,
     action: "retain",
   });
@@ -143,7 +143,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
     () => "2026-08-13T10:01:00+10:00",
     () => "conversation-2",
     "compact-2",
-    { dbPath, character: "ada" },
+    { dbPath, archiveKey: "ada" },
   );
 
   expect(access(join(characterDir, "threads", "main", "segments"))).rejects.toThrow();
@@ -151,7 +151,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   const reader = await SegmentReader.load({
     dir: join(characterDir, "threads", "main"),
     dbPath,
-    character: "ada",
+    archiveKey: "ada",
     createHistoryDb: true,
   });
   expect(reader.segmentCount()).toBe(1);
@@ -165,6 +165,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   });
   expect(search.results).toEqual([
     {
+      thread: "main",
       msg_id: "u1",
       role: "user",
       timestamp: "2026-08-13T10:00:00+10:00",
@@ -173,6 +174,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
       before: [],
       after: [
         {
+          thread: "main",
           msg_id: "a1",
           role: "assistant",
           timestamp: "2026-08-13T10:00:00+10:00",
@@ -209,7 +211,7 @@ test("legacy segments import lazily and survive removal of the source files", as
   const importing = await SegmentReader.load({
     dir: join(characterDir, "threads", "main"),
     dbPath,
-    character: "ada",
+    archiveKey: "ada",
     createHistoryDb: true,
   });
   expect(await importing.readSegment(0)).toEqual(messages);
@@ -220,7 +222,7 @@ test("legacy segments import lazily and survive removal of the source files", as
   const durable = await SegmentReader.load({
     dir: join(characterDir, "threads", "main"),
     dbPath,
-    character: "ada",
+    archiveKey: "ada",
     createHistoryDb: true,
   });
   expect(await durable.readSegment(0)).toEqual(messages);
@@ -388,15 +390,15 @@ describe("the durable state of an archive document", () => {
 
     store = HistoryStore.open(path);
     expect(status(store)).toBe("submitted");
-    expect(store.nextMemoryRetainJob("ada", 60_000)).toMatchObject({
+    expect(store.nextCharacterMemoryRetainJob("ada", 60_000)).toMatchObject({
       action: "confirm",
       status: "submitted",
       operation: "op-1",
       attempts: 1,
       expires: 1_800_000,
     });
-    expect(store.nextMemoryRetainJob("ada", 59_999)).toBeUndefined();
-    expect(store.nextMemoryRetainDeadline("ada")).toBe(60_000);
+    expect(store.nextCharacterMemoryRetainJob("ada", 59_999)).toBeUndefined();
+    expect(store.nextCharacterMemoryRetainDeadline("ada")).toBe(60_000);
     store.close();
   });
 
@@ -415,7 +417,7 @@ describe("the durable state of an archive document", () => {
     store.beginMemorySubmission("ada", 0, 1, 2);
     store.recordMemoryOperation("ada", 0, "op-1", 1);
     expect(store.requeueMemoryDocument("ada", 0, "operation failed", false)).toBe(true);
-    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+    expect(store.nextCharacterMemoryRetainJob("ada", 0)).toMatchObject({
       action: "retain",
       operation: undefined,
       attempts: 1,
@@ -429,10 +431,10 @@ describe("the durable state of an archive document", () => {
     store.beginMemorySubmission("ada", 0, 1, 2);
     expect(store.requeueMemoryDocument("ada", 0, "document rejected", true)).toBe(true);
     expect(status(store)).toBe("failed");
-    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    expect(store.nextCharacterMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
     expect(store.entries("ada")[0]?.memory_error).toBe("document rejected");
     expect(store.retryMemoryDocument("ada", 0)).toBe(true);
-    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({ action: "retain", attempts: 0 });
+    expect(store.nextCharacterMemoryRetainJob("ada", 0)).toMatchObject({ action: "retain", attempts: 0 });
     store.close();
   });
 
@@ -441,7 +443,7 @@ describe("the durable state of an archive document", () => {
     segment(store);
     expect(store.setExcluded("ada", 0, true, true)).toBe(true);
     expect(status(store)).toBeUndefined();
-    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    expect(store.nextCharacterMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
     store.close();
   });
 
@@ -451,7 +453,7 @@ describe("the durable state of an archive document", () => {
     store.beginMemorySubmission("ada", 0, 1, 2);
     store.requeueMemoryDocument("ada", 0, "retain timed out", false);
     expect(store.setExcluded("ada", 0, true, true)).toBe(true);
-    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({ action: "delete" });
+    expect(store.nextCharacterMemoryRetainJob("ada", 0)).toMatchObject({ action: "delete" });
     store.close();
   });
 
@@ -461,7 +463,7 @@ describe("the durable state of an archive document", () => {
     store.beginMemorySubmission("ada", 0, 1, 2);
     store.recordMemoryOperation("ada", 0, "op-1", 1);
     expect(store.setExcluded("ada", 0, true, true)).toBe(true);
-    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+    expect(store.nextCharacterMemoryRetainJob("ada", 0)).toMatchObject({
       action: "delete",
       status: "submitted",
       operation: "op-1",
@@ -476,7 +478,7 @@ describe("the durable state of an archive document", () => {
     store.setExcluded("ada", 0, true, true);
     store.markMemoryDocument("ada", 0, null);
     expect(store.setExcluded("ada", 0, false, true)).toBe(true);
-    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({ action: "retain", attempts: 0 });
+    expect(store.nextCharacterMemoryRetainJob("ada", 0)).toMatchObject({ action: "retain", attempts: 0 });
 
     segment(store, 1);
     store.markMemoryDocument("ada", 1, "stored");
@@ -493,20 +495,20 @@ describe("the durable state of an archive document", () => {
     store.setExcluded("ada", 0, true, true);
     expect(store.markMemoryDeleteFailure("ada", 0, "server unavailable", true, 0)).toBe(true);
     expect(status(store)).toBe("delete_failed");
-    expect(store.nextMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
+    expect(store.nextCharacterMemoryRetainJob("ada", Number.MAX_SAFE_INTEGER)).toBeUndefined();
     expect(store.retryMemoryDocument("ada", 0)).toBe(true);
-    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({ action: "delete" });
+    expect(store.nextCharacterMemoryRetainJob("ada", 0)).toMatchObject({ action: "delete" });
     store.close();
   });
 
   test("an idle character reports no deadline at all", () => {
     const store = HistoryStore.openInMemory();
     segment(store, 0, false);
-    expect(store.nextMemoryRetainDeadline("ada")).toBeUndefined();
+    expect(store.nextCharacterMemoryRetainDeadline("ada")).toBeUndefined();
     segment(store, 1);
-    expect(store.nextMemoryRetainDeadline("ada")).toBe(0);
+    expect(store.nextCharacterMemoryRetainDeadline("ada")).toBe(0);
     store.markMemoryDocument("ada", 1, "stored");
-    expect(store.nextMemoryRetainDeadline("ada")).toBeUndefined();
+    expect(store.nextCharacterMemoryRetainDeadline("ada")).toBeUndefined();
     store.close();
   });
 
@@ -516,7 +518,7 @@ describe("the durable state of an archive document", () => {
     store.beginMemorySubmission("ada", 0, 60_000, 1_800_000);
     store.recordMemoryOperation("ada", 0, "op-1", 60_000);
     segment(store);
-    expect(store.nextMemoryRetainJob("ada", 0)).toMatchObject({
+    expect(store.nextCharacterMemoryRetainJob("ada", 0)).toMatchObject({
       action: "retain",
       operation: undefined,
       attempts: 0,

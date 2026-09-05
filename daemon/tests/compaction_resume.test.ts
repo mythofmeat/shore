@@ -457,7 +457,7 @@ function options(
       join(dataDir, "ada", "threads", "main"),
       () => new Date().toISOString(),
       () => crypto.randomUUID(),
-      durable ? { dbPath: join(dataDir, HISTORY_DB_FILE), character: "ada" } : undefined,
+      durable ? { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: "ada" } : undefined,
     ),
     markdownStore: memoryStore,
     dryRun: false,

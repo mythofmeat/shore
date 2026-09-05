@@ -8,13 +8,12 @@ import { dirname, join } from "node:path";
 
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { compactionManifestIn, segmentsDirIn } from "../config/dirs.ts";
-import type { ConversationRef } from "../engine/segments.ts";
-import { SegmentReader } from "../engine/segments.ts";
+import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/character_history.ts";
 import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
 
 export const HISTORY_SEARCH_DB_FILE = "history_search.db";
-export const HISTORY_SEARCH_SCHEMA_VERSION = 4;
+export const HISTORY_SEARCH_SCHEMA_VERSION = 5;
 export const HISTORY_CHUNK_CHARS = 1_200;
 export const HISTORY_CHUNK_OVERLAP = 120;
 export const HISTORY_EMBED_BATCH_ITEMS = 32;
@@ -35,6 +34,7 @@ CREATE TABLE metadata (
 CREATE TABLE messages (
   id INTEGER PRIMARY KEY,
   locator TEXT NOT NULL UNIQUE,
+  archive_key TEXT NOT NULL,
   segment INTEGER NOT NULL,
   ordinal INTEGER NOT NULL,
   msg_id TEXT NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE messages (
   chunk_count INTEGER NOT NULL
 );
 CREATE INDEX messages_chronology
-  ON messages(segment, ordinal);
+  ON messages(archive_key, segment, ordinal);
 CREATE TABLE chunks (
   id INTEGER PRIMARY KEY,
   message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -82,6 +82,7 @@ export interface HistoryIndexDiagnostics {
 
 export interface IndexedMessage {
   id: number;
+  archive_key: string;
   segment: number;
   ordinal: number;
   msg_id: string;
@@ -93,6 +94,7 @@ export interface IndexedMessage {
 
 interface CanonicalMessage {
   locator: string;
+  archive_key: string;
   segment: number;
   ordinal: number;
   msgId: string;
@@ -138,17 +140,16 @@ export async function withHistoryIndexLock<T>(path: string, run: () => Promise<T
 export class HistorySearchIndex {
   readonly path: string;
   readonly conversationDir: string;
-  readonly ref: ConversationRef;
+  readonly ref: CharacterHistoryRef;
   #db: Database;
 
   private constructor(options: HistoryIndexOpenOptions, db: Database) {
     this.path = options.path ?? join(options.conversationDir, HISTORY_SEARCH_DB_FILE);
     this.conversationDir = options.conversationDir;
     this.ref = {
-      dir: options.conversationDir,
+      mainConversationDir: options.conversationDir,
       dbPath: options.dbPath,
       character: options.character,
-      createHistoryDb: false,
     };
     this.#db = db;
   }
@@ -219,8 +220,8 @@ export class HistorySearchIndex {
       }
       const putMessage = this.#db.query(
         `INSERT INTO messages
-           (locator, segment, ordinal, msg_id, role, timestamp, model, content_hash, chunk_count)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+           (locator, segment, ordinal, msg_id, role, timestamp, model, content_hash, chunk_count, archive_key)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
       );
       const putChunk = this.#db.query(
         "INSERT INTO chunks(message_id, ordinal, content_hash) VALUES (?1, ?2, ?3)",
@@ -248,6 +249,7 @@ export class HistorySearchIndex {
           item.model ?? null,
           hash,
           chunks.length,
+          item.archive_key,
         );
         const messageId = (
           this.#db.query("SELECT last_insert_rowid() AS id").get() as { id: number }
@@ -273,7 +275,7 @@ export class HistorySearchIndex {
     const expression = ftsExpression(query);
     if (expression === undefined) return [];
     const rows = this.#db.query(
-      `SELECT m.id, m.segment, m.ordinal, m.msg_id, m.role,
+      `SELECT m.id, m.archive_key, m.segment, m.ordinal, m.msg_id, m.role,
               m.timestamp, m.model, m.content_hash,
               bm25(chunks_fts) AS score
        FROM chunks_fts
@@ -295,7 +297,7 @@ export class HistorySearchIndex {
 
   allRows(): IndexedMessage[] {
     return this.#db.query(
-      `SELECT id, segment, ordinal, msg_id, role, timestamp, model, content_hash
+      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash
        FROM messages ORDER BY segment, ordinal`,
     ).all() as IndexedMessage[];
   }
@@ -318,7 +320,7 @@ export class HistorySearchIndex {
     if (ids.length === 0) return [];
     const marks = ids.map(() => "?").join(",");
     return this.#db.query(
-      `SELECT id, segment, ordinal, msg_id, role, timestamp, model, content_hash
+      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash
        FROM messages WHERE id IN (${marks})`,
     ).all(...ids) as IndexedMessage[];
   }
@@ -327,11 +329,11 @@ export class HistorySearchIndex {
     const op = direction < 0 ? "<" : ">";
     const order = direction < 0 ? "DESC" : "ASC";
     const neighbor = this.#db.query(
-      `SELECT id, segment, ordinal, msg_id, role, timestamp, model, content_hash
+      `SELECT id, archive_key, segment, ordinal, msg_id, role, timestamp, model, content_hash
        FROM messages
-       WHERE segment ${op} ?1 OR (segment = ?1 AND ordinal ${op} ?2)
+       WHERE archive_key = ?3 AND (segment ${op} ?1 OR (segment = ?1 AND ordinal ${op} ?2))
        ORDER BY segment ${order}, ordinal ${order} LIMIT 1`,
-    ).get(row.segment, row.ordinal) as IndexedMessage | null;
+    ).get(row.segment, row.ordinal, row.archive_key) as IndexedMessage | null;
     if (neighbor === null || Math.abs(neighbor.segment - row.segment) > 1) return undefined;
     return neighbor;
   }
@@ -377,7 +379,7 @@ export class HistorySearchIndex {
          ORDER BY lsh_score DESC, c.id
          LIMIT ?
        )
-       SELECT m.id, m.segment, m.ordinal, m.msg_id, m.role,
+       SELECT m.id, m.archive_key, m.segment, m.ordinal, m.msg_id, m.role,
               m.timestamp, m.model, m.content_hash, e.vector
        FROM candidates candidate
        JOIN chunks c ON c.id = candidate.chunk_id
@@ -409,7 +411,7 @@ export class HistorySearchIndex {
     const cursor = Number(this.#metadata(EMBED_CURSOR) ?? 0);
     const batchCandidates = this.#db.query(
       `SELECT c.id AS chunk_id, c.ordinal AS chunk_ordinal, c.content_hash,
-              m.id, m.segment, m.ordinal, m.msg_id, m.role,
+              m.id, m.archive_key, m.segment, m.ordinal, m.msg_id, m.role,
               m.timestamp, m.model
        FROM chunks c JOIN messages m ON m.id = c.message_id
        WHERE c.id > ?3 AND NOT EXISTS (
@@ -501,20 +503,22 @@ export function chunkVisibleText(text: string): string[] {
 }
 
 export async function loadMessageTexts(
-  ref: ConversationRef,
+  ref: CharacterHistoryRef,
   rows: readonly IndexedMessage[],
 ): Promise<Map<number, string>> {
   const out = new Map<number, string>();
-  const bySegment = new Map<number, IndexedMessage[]>();
+  const groups = new Map<string, IndexedMessage[]>();
   for (const row of rows) {
-    const group = bySegment.get(row.segment) ?? [];
+    const key = JSON.stringify([row.archive_key, row.segment]);
+    const group = groups.get(key) ?? [];
     group.push(row);
-    bySegment.set(row.segment, group);
+    groups.set(key, group);
   }
-  const reader = await SegmentReader.load(ref);
+  const reader = await CharacterHistoryReader.load(ref);
   try {
-    for (const [segment, group] of bySegment) {
-      const messages = await reader.readSegment(segment);
+    for (const group of groups.values()) {
+      const first = required(group[0]);
+      const messages = await reader.readSegment(first.archive_key, first.segment);
       for (const row of group) {
         const message = messages[row.ordinal];
         if (message === undefined) continue;
@@ -529,7 +533,7 @@ export async function loadMessageTexts(
 }
 
 export async function loadCanonicalTexts(
-  ref: ConversationRef,
+  ref: CharacterHistoryRef,
   rows: readonly IndexedMessage[],
 ): Promise<Map<number, string>> {
   const loaded = await loadMessageTexts(ref, rows);
@@ -541,18 +545,15 @@ export async function loadCanonicalTexts(
   return out;
 }
 
-async function readCanonicalCorpus(ref: ConversationRef): Promise<CanonicalCorpus> {
+async function readCanonicalCorpus(ref: CharacterHistoryRef): Promise<CanonicalCorpus> {
   const messages: CanonicalMessage[] = [];
   let selectedCount = 0;
-  const reader = await SegmentReader.load(ref);
+  const reader = await CharacterHistoryReader.load(ref);
   try {
-    const excluded = new Set(
-      reader.entries().filter((entry) => entry.excluded === true).map((entry) => entry.idx),
-    );
-    for (let segment = 0; segment < reader.segmentCount(); segment += 1) {
-      if (excluded.has(segment)) continue;
-      const archived = await reader.readSegment(segment);
-      appendCanonical(messages, archived, segment);
+    for (const entry of reader.entries()) {
+      if (entry.excluded === true) continue;
+      const archived = await reader.readSegment(entry.archiveKey, entry.idx);
+      appendCanonical(messages, archived, entry.archiveKey, entry.idx);
       selectedCount += archived.length;
     }
   } finally {
@@ -562,7 +563,7 @@ async function readCanonicalCorpus(ref: ConversationRef): Promise<CanonicalCorpu
 }
 
 async function readStableCanonicalCorpus(
-  ref: ConversationRef,
+  ref: CharacterHistoryRef,
   initialFingerprint: string,
 ): Promise<{ corpus: CanonicalCorpus; fingerprint: string }> {
   let before = initialFingerprint;
@@ -575,12 +576,12 @@ async function readStableCanonicalCorpus(
   throw new Error("history archive changed repeatedly while the search index was reconciling");
 }
 
-function appendCanonical(out: CanonicalMessage[], messages: readonly Message[], segment: number): void {
+function appendCanonical(out: CanonicalMessage[], messages: readonly Message[], archiveKey: string, segment: number): void {
   messages.forEach((message, ordinal) => {
     const selected = visibleText(message);
     if (selected === undefined) return;
     out.push({
-      locator: `${segment}:${ordinal}`, segment, ordinal,
+      locator: JSON.stringify([archiveKey, segment, ordinal]), archive_key: archiveKey, segment, ordinal,
       msgId: message.msg_id, role: message.role, timestamp: message.timestamp,
       model: message.model, text: selected,
     });
@@ -604,8 +605,8 @@ function contentHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-async function sourceFingerprint(ref: ConversationRef): Promise<string> {
-  const reader = await SegmentReader.load(ref);
+async function sourceFingerprint(ref: CharacterHistoryRef): Promise<string> {
+  const reader = await CharacterHistoryReader.load(ref);
   let digest: string;
   try {
     digest = reader.archiveDigest();
@@ -613,8 +614,8 @@ async function sourceFingerprint(ref: ConversationRef): Promise<string> {
     reader.close();
   }
   const legacy = [
-    compactionManifestIn(ref.dir),
-    segmentsDirIn(ref.dir),
+    compactionManifestIn(ref.mainConversationDir),
+    segmentsDirIn(ref.mainConversationDir),
   ].map((path) => {
     try {
       const s = statSync(path, { bigint: true });
@@ -706,7 +707,7 @@ function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): number {
 }
 
 function compareLocator(a: IndexedMessage, b: IndexedMessage): number {
-  return a.segment - b.segment || a.ordinal - b.ordinal;
+  return a.archive_key.localeCompare(b.archive_key) || a.segment - b.segment || a.ordinal - b.ordinal;
 }
 
 function removeCacheFiles(path: string): void {

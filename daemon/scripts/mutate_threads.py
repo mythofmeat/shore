@@ -180,8 +180,8 @@ MUTANTS = [
      "  requireThread(index, character, id);\n  if (index.home === id) {",
      "  if (index.home === id) {"),
     ("archive: the messages land under the bare character key",
-     "        character: archiveKey(character, id),",
-     "        character,"),
+     "        archiveKey: archiveKey(character, id),",
+     "        archiveKey: character,"),
     ("archive: an empty conversation still writes a segment (EQUIVALENT — "
      "archiveAndRetain over empty content archives nothing: it writes no segment "
      "and no database row, and the empty active file it rewrites is inside the "

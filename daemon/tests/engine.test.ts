@@ -135,7 +135,7 @@ describe("reading a conversation back off disk", () => {
       const reader = await SegmentReader.load({
         dir: join(dir, "threads", "main"),
         dbPath: join(dir, "history.db"),
-        character: "ada",
+        archiveKey: "ada",
         createHistoryDb: false,
       });
 

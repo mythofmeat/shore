@@ -580,7 +580,7 @@ function fuseCandidates(
 function deduplicateMessages(candidates: readonly RankedHistoryCandidate[]): RankedHistoryCandidate[] {
   const seen = new Set<string>();
   return candidates.filter((candidate) => {
-    const key = `${candidate.row.segment}:${candidate.row.ordinal}`;
+    const key = JSON.stringify([candidate.row.archive_key, candidate.row.segment, candidate.row.ordinal]);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -593,6 +593,7 @@ function presentMessage(
   timeZone: string,
 ): Record<string, unknown> {
   return {
+    thread: row.archive_key.includes("/") ? row.archive_key.slice(row.archive_key.indexOf("/") + 1) : "main",
     msg_id: row.msg_id,
     role: row.role,
     timestamp: normalizeToZone(row.timestamp, timeZone),
@@ -602,7 +603,7 @@ function presentMessage(
 }
 
 function compareIndexed(a: IndexedMessage, b: IndexedMessage): number {
-  return a.segment - b.segment || a.ordinal - b.ordinal;
+  return a.archive_key.localeCompare(b.archive_key) || a.segment - b.segment || a.ordinal - b.ordinal;
 }
 
 function describeFailure(error: unknown): string {

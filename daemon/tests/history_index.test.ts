@@ -99,17 +99,18 @@ describe("history search index", () => {
     });
     expect(result.mode).toBe("lexical");
     expect(result.results).toEqual([{
+      thread: "main",
       msg_id: "a1",
       role: "assistant",
       timestamp: "2026-08-13T00:01:00+00:00",
       model: null,
       text: "First paragraph.\n\nNeedle stays formatted.\nThird line.",
       before: [{
-        msg_id: "u1", role: "user", timestamp: "2026-08-13T00:00:00+00:00",
+        thread: "main", msg_id: "u1", role: "user", timestamp: "2026-08-13T00:00:00+00:00",
         model: null, text: "Before paragraph.",
       }],
       after: [{
-        msg_id: "u2", role: "user", timestamp: "2026-08-13T00:03:00+00:00",
+        thread: "main", msg_id: "u2", role: "user", timestamp: "2026-08-13T00:03:00+00:00",
         model: null, text: "After paragraph.",
       }],
     }]);

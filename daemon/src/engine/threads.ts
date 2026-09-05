@@ -394,7 +394,7 @@ export async function archiveThread(
       `thread-archive-${crypto.randomUUID()}`,
       {
         dbPath: join(data, HISTORY_DB_FILE),
-        character: archiveKey(character, id),
+        archiveKey: archiveKey(character, id),
         ...(options.retain === undefined ? {} : { retain: options.retain }),
       },
     );

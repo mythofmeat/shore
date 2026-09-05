@@ -124,7 +124,7 @@ async function pureArchive(
       deps.newId ?? (() => crypto.randomUUID()),
       {
         dbPath: join(dataDir, HISTORY_DB_FILE),
-        character: archiveKey(character, thread),
+        archiveKey: archiveKey(character, thread),
         retain: deps.config.app.memory.retain.enabled,
       },
     ).archiveAndRetain("deep-idle", { keepLastN: tail, activeContent });

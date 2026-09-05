@@ -21,6 +21,14 @@ describe("character archives", () => {
     const source = await root("source");
     await seedCharacter(source, "ada", "hello from ada");
     await seedCharacter(source, "bea", "hello from bea");
+    const sourceHistory = HistoryStore.open(join(source.data, "history.db"));
+    for (const key of ["ada/side", "ada/retired", "adam/side", "bea/side"]) {
+      sourceHistory.putSegment(key, 0, {
+        file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z", retain: true,
+      }, [userMessage(key, `archived ${key}`)]);
+      sourceHistory.markMemoryDocument(key, 0, "stored");
+    }
+    sourceHistory.close();
     const output = join(source.runtime, "ada.shore.tar.gz");
     const exported = await exportCharacter(context(source, new Set(["ada", "bea"])), {
       character: "ada",
@@ -44,9 +52,11 @@ describe("character archives", () => {
     expect(await readFile(join(target.data, "ada", "threads", "main", "active.jsonl"), "utf8"))
       .toContain("hello from ada");
     const history = new Database(join(target.data, "history.db"), { readonly: true });
-    expect(history.query("SELECT DISTINCT character FROM history_messages").values()).toEqual([
-      ["ada"],
+    expect(history.query("SELECT DISTINCT character FROM history_messages ORDER BY character").values()).toEqual([
+      ["ada"], ["ada/retired"], ["ada/side"],
     ]);
+    expect(history.query("SELECT character, memory_doc FROM history_segments WHERE character != 'ada' ORDER BY character").values())
+      .toEqual([["ada/retired", "pending"], ["ada/side", "pending"]]);
     history.close();
   });
 
@@ -63,7 +73,7 @@ describe("character archives", () => {
     expect(await readFile(join(target.data, "ada", "threads", "main", "active.jsonl"), "utf8")).toContain("keep me");
   });
 
-  test("a hidden history conflict is preserved when import rolls back", async () => {
+  test.each(["ada", "ada/retired"])("a hidden history conflict at %s is preserved when import rolls back", async (key) => {
     const source = await root("hidden-source");
     await seedCharacter(source, "ada", "archive value");
     const output = join(source.runtime, "ada.shore.tar.gz");
@@ -72,7 +82,7 @@ describe("character archives", () => {
     const target = await root("hidden-target");
     const history = HistoryStore.open(join(target.data, "history.db"));
     history.putSegment(
-      "ada",
+      key,
       0,
       { file: "hidden.jsonl", message_count: 1, compacted_at: "2026-09-01T00:00:00Z" },
       [userMessage("ada", "hidden history")],
@@ -83,11 +93,31 @@ describe("character archives", () => {
       .rejects.toThrow("history already exists");
     const preserved = new Database(join(target.data, "history.db"), { readonly: true });
     const count = preserved
-      .query("SELECT COUNT(*) AS count FROM history_messages WHERE character = 'ada'")
-      .get() as { count: number };
+      .query("SELECT COUNT(*) AS count FROM history_messages WHERE character = ?1")
+      .get(key) as { count: number };
     expect(count.count).toBe(1);
     preserved.close();
   });
+  test("a later import failure removes all imported thread rows and preserves other characters", async () => {
+    const source = await root("rollback-source");
+    await seedCharacter(source, "ada", "main");
+    const store = HistoryStore.open(join(source.data, "history.db"));
+    store.putSegment("ada/retired", 0, {
+      file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z",
+    }, [userMessage("ada", "retired")]);
+    store.close();
+    const output = join(source.runtime, "ada.shore.tar.gz");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+    const target = await root("rollback-target");
+    await seedCharacter(target, "adam", "preserved");
+    expect(importCharacter(context(target, new Set(["adam"]), () => { throw new Error("refresh failed"); }), { archive: output }))
+      .rejects.toThrow("refresh failed");
+    const restored = HistoryStore.open(join(target.data, "history.db"));
+    expect(restored.archiveKeys("ada")).toEqual([]);
+    expect(restored.readSegment("adam", 0)[0]?.content).toBe("preserved");
+    restored.close();
+  });
+
 });
 
 async function root(name: string): Promise<ShoreDirs> {

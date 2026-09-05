@@ -186,7 +186,7 @@ describe("runIdleCompaction: the pass", () => {
     expect(await activeIds(characterDir)).toEqual(["m_3", "m_4", "m_5", "m_6"]);
     expect(historySegmentCount(dataDir)).toBe(1);
     const history = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
-    expect(history.nextMemoryRetainJob("ada")).toMatchObject({
+    expect(history.nextCharacterMemoryRetainJob("ada")).toMatchObject({
       segment: 0,
       action: "retain",
     });

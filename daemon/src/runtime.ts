@@ -13,6 +13,7 @@ import {
   pluginsDir,
   rustJoin,
   threadDataDir,
+  MAIN_THREAD,
 } from "./config/dirs.ts";
 import { HISTORY_DB_FILE } from "./engine/history_store.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
@@ -170,7 +171,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         conversationDir: threadDataDir(
           effective.dirs.data,
           character,
-          registry.homeThread(character),
+          MAIN_THREAD,
         ),
         dbPath: rustJoin(effective.dirs.data, HISTORY_DB_FILE),
         indexPath: historyIndexPath(effective.dirs.cache, character),

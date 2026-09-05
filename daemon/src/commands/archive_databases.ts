@@ -1,7 +1,7 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { writeFileSync } from "node:fs";
 
-import { HistoryStore } from "../engine/history_store.ts";
+import { CHARACTER_ARCHIVES_SQL, HistoryStore } from "../engine/history_store.ts";
 import { Ledger } from "../ledger/store.ts";
 
 type Row = Record<string, SQLQueryBindings>;
@@ -16,7 +16,7 @@ export function exportHistoryDatabase(path: string, character: string, output: s
   copy.run("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = OFF");
   copy.query(
     `DELETE FROM history_alternatives
-       WHERE message_id IN (SELECT id FROM history_messages WHERE character != ?1)`,
+       WHERE message_id IN (SELECT id FROM history_messages WHERE NOT ${CHARACTER_ARCHIVES_SQL})`,
   ).run(character);
   for (const table of [
     "history_messages",
@@ -25,7 +25,7 @@ export function exportHistoryDatabase(path: string, character: string, output: s
     "history_character_stats",
     "history_archive_revision",
   ]) {
-    copy.query(`DELETE FROM ${table} WHERE character != ?1`).run(character);
+    copy.query(`DELETE FROM ${table} WHERE NOT ${CHARACTER_ARCHIVES_SQL}`).run(character);
   }
   copy.run(
     `DELETE FROM history_blobs
@@ -59,24 +59,27 @@ export function importHistoryDatabase(
   const destination = new Database(destinationPath, { create: true, readwrite: true });
   const source = new Database(sourcePath, { readonly: true });
   try {
-    requireOnlyCharacter(source, "history_messages", character);
+    for (const table of ["history_messages", "history_segments", "history_pending", "history_character_stats", "history_archive_revision"]) {
+      const other = source.query(`SELECT 1 FROM ${table} WHERE NOT ${CHARACTER_ARCHIVES_SQL} LIMIT 1`).get(character);
+      if (other !== null) throw new Error("archive database contains another character");
+    }
     const exists = destination
       .query(
-        `SELECT 1 FROM history_segments WHERE character = ?1
-         UNION ALL SELECT 1 FROM history_messages WHERE character = ?1 LIMIT 1`,
+        `SELECT 1 FROM history_segments WHERE ${CHARACTER_ARCHIVES_SQL}
+         UNION ALL SELECT 1 FROM history_messages WHERE ${CHARACTER_ARCHIVES_SQL} LIMIT 1`,
       )
       .get(character);
     if (exists !== null) throw new Error(`history already exists for ${character}`);
 
     destination.transaction(() => {
       copyRows(source, destination, "history_blobs", undefined, "OR IGNORE");
-      copyRows(source, destination, "history_segments", "character = ?1", "", character);
-      copyRows(source, destination, "history_pending", "character = ?1", "", character);
-      copyRows(source, destination, "history_character_stats", "character = ?1", "", character);
+      copyRows(source, destination, "history_segments", CHARACTER_ARCHIVES_SQL, "", character);
+      copyRows(source, destination, "history_pending", CHARACTER_ARCHIVES_SQL, "", character);
+      copyRows(source, destination, "history_character_stats", CHARACTER_ARCHIVES_SQL, "", character);
 
       const ids = new Map<number, number>();
       const messages = source
-        .query("SELECT * FROM history_messages WHERE character = ?1 ORDER BY id")
+        .query(`SELECT * FROM history_messages WHERE ${CHARACTER_ARCHIVES_SQL} ORDER BY id`)
         .all(character) as Row[];
       const messageColumns = columnsOf(source, "history_messages").filter((column) => column !== "id");
       const insertMessage = inserter(destination, "history_messages", messageColumns);
@@ -98,14 +101,13 @@ export function importHistoryDatabase(
         );
       }
 
-      const revision = source
-        .query("SELECT revision FROM history_archive_revision WHERE character = ?1")
-        .get(character) as Row | null;
-      if (revision !== null) {
+      for (const revision of source.query(
+        `SELECT character, revision FROM history_archive_revision WHERE ${CHARACTER_ARCHIVES_SQL}`,
+      ).all(character) as Row[]) {
         destination.query(
           `INSERT INTO history_archive_revision(character, revision) VALUES (?1, ?2)
              ON CONFLICT(character) DO UPDATE SET revision = excluded.revision`,
-        ).run(character, binding(revision, "revision"));
+        ).run(binding(revision, "character"), binding(revision, "revision"));
       }
 
       destination.query(
@@ -113,7 +115,7 @@ export function importHistoryDatabase(
             SET memory_doc = 'pending', memory_doc_attempts = 0,
                 memory_doc_error = NULL, memory_doc_op = NULL,
                 memory_doc_due = 0, memory_doc_expires = 0
-          WHERE character = ?1 AND committed = 1 AND excluded = 0
+          WHERE ${CHARACTER_ARCHIVES_SQL} AND committed = 1 AND excluded = 0
             AND memory_doc IN ('submitted', 'stored')`,
       ).run(character);
     })();
@@ -176,7 +178,7 @@ export function removeImportedDatabaseRows(
     history.transaction(() => {
       history.query(
         `DELETE FROM history_alternatives
-           WHERE message_id IN (SELECT id FROM history_messages WHERE character = ?1)`,
+           WHERE message_id IN (SELECT id FROM history_messages WHERE ${CHARACTER_ARCHIVES_SQL})`,
       ).run(character);
       for (const table of [
         "history_messages",
@@ -185,7 +187,7 @@ export function removeImportedDatabaseRows(
         "history_character_stats",
         "history_archive_revision",
       ]) {
-        history.query(`DELETE FROM ${table} WHERE character = ?1`).run(character);
+        history.query(`DELETE FROM ${table} WHERE ${CHARACTER_ARCHIVES_SQL}`).run(character);
       }
       history.run(
         `DELETE FROM history_blobs

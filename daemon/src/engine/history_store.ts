@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS history_segments (
     memory_after  TEXT,
     excluded      INTEGER NOT NULL DEFAULT 0,
     memory_doc    TEXT,
+    retain_requested INTEGER,
     memory_doc_attempts INTEGER NOT NULL DEFAULT 0,
     memory_doc_error TEXT,
     memory_doc_op TEXT,
@@ -158,7 +159,7 @@ export type MemoryDocumentState =
   | "delete_failed";
 
 export interface MemoryRetainJob {
-  character: string;
+  archiveKey: string;
   segment: number;
   action: MemoryRetainAction;
   status: MemoryDocumentState;
@@ -166,6 +167,8 @@ export interface MemoryRetainJob {
   operation: string | undefined;
   expires: number;
 }
+
+export const CHARACTER_ARCHIVES_SQL = "(character = ?1 OR substr(character, 1, length(?1) + 1) = ?1 || '/')";
 
 const ACTIONABLE = `((s.excluded = 0 AND s.memory_doc IN ('pending', 'submitted'))
         OR (s.excluded = 1 AND s.memory_doc IN ('submitted', 'stored')))`;
@@ -491,18 +494,36 @@ export class HistoryStore {
     })();
   }
 
-  nextMemoryRetainJob(character: string, now = 0): MemoryRetainJob | undefined {
+  archiveKeys(character: string): string[] {
+    return (this.#db.query(
+      `SELECT DISTINCT s.character FROM history_segments s
+       WHERE ${CHARACTER_ARCHIVES_SQL} AND s.committed = 1 ORDER BY s.character`,
+    ).all(character) as { character: string }[]).map((row) => row.character);
+  }
+
+  backfillThreadArchiveRetention(character: string): number {
+    return this.#db.query(
+      `UPDATE history_segments AS s SET memory_doc = 'pending', retain_requested = 1
+       WHERE ${CHARACTER_ARCHIVES_SQL} AND s.committed = 1 AND s.excluded = 0
+         AND s.retain_requested IS NULL AND s.memory_doc IS NULL
+         AND s.memory_doc_attempts = 0 AND s.memory_doc_op IS NULL
+         AND s.compaction_id GLOB 'thread-archive-*'`,
+    ).run(character).changes;
+  }
+
+  nextCharacterMemoryRetainJob(character: string, now = 0): MemoryRetainJob | undefined {
     const row = this.#db
       .query(
-        `SELECT s.idx, s.excluded, s.memory_doc, s.memory_doc_attempts, s.memory_doc_op,
+        `SELECT s.character, s.idx, s.excluded, s.memory_doc, s.memory_doc_attempts, s.memory_doc_op,
                 s.memory_doc_expires
          FROM history_segments s
-         WHERE s.character = ?1 AND s.committed = 1 AND s.memory_doc_due <= ?2
+         WHERE ${CHARACTER_ARCHIVES_SQL} AND s.committed = 1 AND s.memory_doc_due <= ?2
            AND ${ACTIONABLE}
-         ORDER BY s.idx
+         ORDER BY s.memory_doc_due, s.compacted_at, s.character, s.idx
          LIMIT 1`,
       )
       .get(character, now) as {
+        character: string;
         idx: number;
         excluded: number;
         memory_doc: MemoryDocumentState;
@@ -517,7 +538,7 @@ export class HistoryStore {
       ? "retain"
       : "confirm";
     return {
-      character,
+      archiveKey: row.character,
       segment: row.idx,
       action,
       status: row.memory_doc,
@@ -527,11 +548,11 @@ export class HistoryStore {
     };
   }
 
-  nextMemoryRetainDeadline(character: string): number | undefined {
+  nextCharacterMemoryRetainDeadline(character: string): number | undefined {
     const row = this.#db
       .query(
         `SELECT MIN(s.memory_doc_due) AS due FROM history_segments s
-         WHERE s.character = ?1 AND s.committed = 1 AND ${ACTIONABLE}`,
+         WHERE ${CHARACTER_ARCHIVES_SQL} AND s.committed = 1 AND ${ACTIONABLE}`,
       )
       .get(character) as { due: number | null } | null;
     return row?.due ?? undefined;
@@ -800,8 +821,8 @@ export class HistoryStore {
         `INSERT INTO history_segments
              (character, idx, file, message_count, compacted_at, compaction_id, committed,
               memory_before, memory_after, excluded, memory_doc, memory_doc_attempts,
-              memory_doc_error, label, note)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+              memory_doc_error, label, note, retain_requested)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
          ON CONFLICT (character, idx) DO UPDATE SET
            file = excluded.file,
            message_count = excluded.message_count,
@@ -812,6 +833,7 @@ export class HistoryStore {
            memory_after = excluded.memory_after,
            excluded = excluded.excluded,
            memory_doc = excluded.memory_doc,
+           retain_requested = excluded.retain_requested,
            memory_doc_attempts = excluded.memory_doc_attempts,
            memory_doc_error = excluded.memory_doc_error,
            memory_doc_op = NULL,
@@ -836,6 +858,7 @@ export class HistoryStore {
         null,
         entry.label ?? null,
         entry.note ?? null,
+        entry.retain === true ? 1 : 0,
       );
     normalizedMessages.forEach((message, ordinal) => {
       this.#insertMessage(character, idx, ordinal, message);
@@ -1016,6 +1039,9 @@ function migrate(db: Database): void {
   }
   if (!columns.some((column) => column.name === "excluded")) {
     db.run("ALTER TABLE history_segments ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.some((column) => column.name === "retain_requested")) {
+    db.run("ALTER TABLE history_segments ADD COLUMN retain_requested INTEGER");
   }
   if (!columns.some((column) => column.name === "memory_doc")) {
     db.run("ALTER TABLE history_segments ADD COLUMN memory_doc TEXT");

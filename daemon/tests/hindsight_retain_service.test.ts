@@ -190,7 +190,7 @@ function state(path: string, idx = 0): {
 
 function pending(path: string, now = Number.MAX_SAFE_INTEGER): boolean {
   const store = HistoryStore.open(path);
-  const job = store.nextMemoryRetainJob("ada", now);
+  const job = store.nextCharacterMemoryRetainJob("ada", now);
   store.close();
   return job !== undefined;
 }

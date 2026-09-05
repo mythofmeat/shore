@@ -28,7 +28,7 @@ export type { SegmentEntry, SegmentRecord } from "./history_store.ts";
 export interface ConversationRef {
   dir: string;
   dbPath: string;
-  character: string;
+  archiveKey: string;
   createHistoryDb: boolean;
 }
 
@@ -41,7 +41,7 @@ export function conversationRef(
   return {
     dir: threadDataDir(dataDir, character, thread),
     dbPath: join(dataDir, HISTORY_DB_FILE),
-    character: archiveKey(character, thread),
+    archiveKey: archiveKey(character, thread),
     createHistoryDb,
   };
 }
@@ -80,7 +80,7 @@ export class SegmentReader {
   static async load(ref: ConversationRef): Promise<SegmentReader> {
     const manifestPath = compactionManifestIn(ref.dir);
     const segmentsDir = segmentsDirIn(ref.dir);
-    const character = ref.character;
+    const character = ref.archiveKey;
 
     let raw: string;
     try {

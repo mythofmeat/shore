@@ -235,10 +235,8 @@ MUTANTS = [
     ("threads: archiving leaves the cached engine behind",
      "    this.#engines.delete(engineKey(name, id));\n", ""),
     ("threads: archiving does not refresh the cached index",
-     "    const index = await archiveThread(this.#dataDir, name, id, options);\n"
      "    this.#engines.delete(engineKey(name, id));\n"
      "    return this.#remember(name, index);",
-     "    const index = await archiveThread(this.#dataDir, name, id, options);\n"
      "    this.#engines.delete(engineKey(name, id));\n"
      "    return index;"),
     ("threads: moving home does not refresh the cached index",

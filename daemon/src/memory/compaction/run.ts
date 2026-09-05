@@ -118,7 +118,7 @@ async function rotateWithoutMemoryWrite(
       deps.newId ?? (() => crypto.randomUUID()),
       {
         dbPath: join(deps.config.dirs.data, HISTORY_DB_FILE),
-        character: archiveKey(character, thread),
+        archiveKey: archiveKey(character, thread),
         retain: effective.app.memory.retain.enabled,
       },
     ).archiveAndRetain("archive-only", {
@@ -181,7 +181,7 @@ export async function runCompactionPass(
           deps.newId ?? (() => crypto.randomUUID()),
           {
             dbPath: join(dataDir, HISTORY_DB_FILE),
-            character: archiveKey(character, thread),
+            archiveKey: archiveKey(character, thread),
             retain: resolved.effective.app.memory.retain.enabled,
           },
         ),

@@ -165,8 +165,12 @@ export async function runCommand(
       return switchThread(threadContext(deps, engine), args);
     case "create_thread":
       return await newThread(await threadListingContext(deps, engine, session), args);
-    case "archive_thread":
-      return await archiveThread(await threadListingContext(deps, engine, session), args);
+    case "archive_thread": {
+      const result = await archiveThread(await threadListingContext(deps, engine, session), args);
+      deps.historyIndex?.noteMutation?.(character);
+      deps.historyIndex?.noteMemoryWork?.(character);
+      return result;
+    }
     case "thread_home":
       return await threadHome(await threadListingContext(deps, engine, session), args);
     case "thread_label":

@@ -157,7 +157,7 @@ describe("segment management", () => {
 
     await segments(root, "ada", MAIN_THREAD, { action: "exclude", index: 0 }, undefined, true);
     const store = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    expect(store.nextMemoryRetainJob("ada")).toMatchObject({
+    expect(store.nextCharacterMemoryRetainJob("ada")).toMatchObject({
       segment: 0,
       action: "delete",
     });
@@ -196,7 +196,7 @@ describe("segment management", () => {
     expect(wakes).toBe(1);
 
     const retried = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    expect(retried.nextMemoryRetainJob("ada")).toMatchObject({
+    expect(retried.nextCharacterMemoryRetainJob("ada")).toMatchObject({
       segment: 0,
       action: "retain",
       attempts: 0,
@@ -291,7 +291,7 @@ describe("segment management", () => {
     });
 
     const retried = HistoryStore.open(join(root, HISTORY_DB_FILE));
-    expect(retried.nextMemoryRetainJob("ada/eval")).toMatchObject({ segment: 0 });
+    expect(retried.nextCharacterMemoryRetainJob("ada/eval")).toMatchObject({ segment: 0 });
     retried.close();
   });
 

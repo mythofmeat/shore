@@ -98,7 +98,7 @@ export class ConversationEngine {
     const segments = await SegmentReader.load({
       dir: conversationDir,
       dbPath: historyDbPath,
-      character: archiveKey(characterName, thread),
+      archiveKey: archiveKey(characterName, thread),
       createHistoryDb: true,
     });
     return new ConversationEngine(
@@ -345,7 +345,7 @@ export class ConversationEngine {
     this.#segments = await SegmentReader.load({
       dir: this.#conversationDir,
       dbPath: this.#historyDbPath,
-      character: archiveKey(this.#characterName, this.#thread),
+      archiveKey: archiveKey(this.#characterName, this.#thread),
       createHistoryDb: true,
     });
     this.#advanceRewrite();
