@@ -373,7 +373,17 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
   const broadcast: ServerMessage[] = [];
   const requests: SidecarRequest[] = [];
   const steps = turnInput.tool_steps;
-  const events = turnInput.events;
+  const events = turnInput.events.map((event) => {
+    if (!("timing" in event)) return event;
+    const timing = event.timing as typeof event.timing & { ttft_ms?: number };
+    return {
+      ...event,
+      timing: {
+        total_ms: timing.total_ms,
+        time_to_first_token_ms: timing.time_to_first_token_ms ?? timing.ttft_ms ?? 0,
+      },
+    };
+  });
 
   const provider: SidecarProvider = {
     // eslint-disable-next-line require-yield
@@ -585,8 +595,15 @@ describe("runGeneration", () => {
       );
       expect(shaped(run.broadcast)).toEqual(shaped(expectedBroadcast));
 
-      const expectedRequests = (out["sidecar_requests"] as Record<string, unknown>[]).map(
-        ({ tool_rpc: _hop, ...rest }) => rest,
+      const expectedRequests = (out["sidecar_requests"] as Record<string, unknown>[]).map<Record<string, unknown>>(
+        ({ tool_rpc: _hop, ...rest }) => ({
+          ...rest,
+          context: {
+            ...(rest["context"] as Record<string, unknown>),
+            ledger: join(run.dataDir, "ledger.db"),
+            usage: { allow_compaction_over_budget: false, budgets: [], timezone: "local" },
+          },
+        }),
       );
       const offered = run.requests.map((r) => (r as { tools?: ToolDefinition[] }).tools);
       expect(
@@ -617,6 +634,19 @@ describe("runGeneration", () => {
       expect(run.turnCount).toBe(out["turn_count"] as number);
 
       expectCachedIsTheSentRequestPlusTheReply(run, out);
+
+      if (run.lastRequest !== undefined) {
+        const toolTurns = input(c).tool_steps.flatMap((step) =>
+          step.kind === "messages"
+            ? step.messages ?? []
+            : [],
+        );
+        const sentCount = run.requests.at(-1)?.messages.length ?? 0;
+        const cached = run.lastRequest as SidecarRequest;
+        expect(cached.messages.length).toBe(sentCount + toolTurns.length + 1);
+        expect(cached.messages.slice(sentCount, -1).map(({ role, content }) => ({ role, content })))
+          .toEqual(toolTurns.map((turn) => ({ role: turn.role, content: turn.content_blocks })));
+      }
 
       const expectedCalls = ["ensureState"];
       const body = input(c).body;

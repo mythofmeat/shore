@@ -9,9 +9,11 @@ import {
   BudgetBlocked,
   generate,
   generateWithCredentialFallback,
+  runGeneration,
   resolveModelForRequest,
   type GenerateDeps,
 } from "../src/llm/generate.ts";
+import { compactionGenerate } from "../src/autonomy/in_process.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -109,8 +111,12 @@ function recordingProvider(
       if (result.kind !== undefined) throw result;
       return result;
     },
-    stream: () => {
-      throw new Error("not used");
+    stream: async function* (req) {
+      keys.push(req.api_key);
+      const result = behaviour(attempt++) as GenerateResponse & { kind?: string };
+      if (result.kind !== undefined) throw result;
+      yield { type: "start", model: result.model };
+      yield { ...result, type: "done" };
     },
   };
 }
@@ -128,6 +134,60 @@ function deps(provider: SidecarProvider, over: Partial<GenerateDeps> = {}): Gene
 function unauthorized(): LlmError {
   return { kind: "http_status", status: 401, body: "unauthorized" };
 }
+
+describe("shared generation contract", () => {
+  for (const workflow of ["chat", "heartbeat", "compaction"] as const) {
+    test(`${workflow} uses subscription authentication without an API key`, async () => {
+      const keys: string[] = [];
+      const provider = recordingProvider(keys);
+      const req = request({ sdk: "claude_agent", provider_key: "claude-code", api_key: "" });
+      const dependencies = deps(provider, { providers: { claude_agent: provider }, env: {} });
+      if (workflow === "chat") {
+        await runGeneration(req, { providerKey: "claude-code" }, dependencies);
+      } else if (workflow === "heartbeat") {
+        await generate(req, dependencies);
+      } else {
+        await compactionGenerate(dependencies)(req, { provider_key: "claude-code" }, "ada");
+      }
+      expect(keys).toEqual([""]);
+    });
+  }
+
+  for (const effect of ["text", "tool", "image"] as const) {
+    test(`does not replay or rotate credentials after a ${effect} effect`, async () => {
+      let attempts = 0;
+      const provider = recordingProvider([]);
+      expect(runGeneration(request(), { providerKey: "anthropic" }, deps(provider), {
+        events: async function* (_provider, _request, sink) {
+          attempts += 1;
+          if (effect === "text") yield { type: "text", text: "visible" };
+          else if (effect === "tool") yield { type: "tool_use", id: "tool-1", name: "write", input: {} };
+          else sink({ type: "send_image" } as never);
+          throw unauthorized();
+        },
+      })).rejects.toEqual(unauthorized());
+      expect(attempts).toBe(1);
+    });
+  }
+
+  test("an already cancelled call never reaches the provider", async () => {
+    const keys: string[] = [];
+    const controller = new AbortController();
+    controller.abort();
+    expect(generate(request(), deps(recordingProvider(keys)), controller.signal)).rejects.toThrow();
+    expect(keys).toEqual([]);
+  });
+
+  test("a provider error event rejects the generation", async () => {
+    const provider = recordingProvider([]);
+    expect(runGeneration(request(), { providerKey: "anthropic" }, deps(provider), {
+      events: async function* () {
+        yield { type: "text", text: "partial" };
+        yield { type: "error", message: "provider failed", usage: ok().usage, timing: ok().timing };
+      },
+    })).rejects.toMatchObject({ kind: "stream_errored" });
+  });
+});
 
 function badRequest(): LlmError {
   return { kind: "http_status", status: 400, body: "bad request" };
@@ -208,8 +268,10 @@ describe("rotating through a provider's keys", () => {
         seen.push(r.context?.api_key_name);
         return ok();
       },
-      stream: () => {
-        throw new Error("not used");
+      stream: async function* (r: SidecarRequest) {
+        seen.push(r.context?.api_key_name);
+        yield { type: "start", model: ok().model };
+        yield { ...ok(), type: "done" };
       },
     } as SidecarProvider;
 

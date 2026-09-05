@@ -136,14 +136,12 @@ MUTANTS = [
      '    call_type: "message",',
      '    call_type: "keepalive",'),
     ("inputs: the key the attempt used is not stamped on the labels",
-     GEN,
-     "        : { context: { ...request.context, api_key_name: candidate.name } }),",
-     "        : { context: { ...request.context } }),"),
+     GENERATE,
+     "      context: { ...required(request.context), api_key_name: name },",
+     "      context: { ...required(request.context), api_key_name: undefined },"),
     ("inputs: the loop's dispatch cap is never set",
      GEN,
-     "      ...(toolCtx === undefined || resolved.maxToolIterations === undefined\n"
-     "        ? {}\n"
-     "        : { max_tool_iterations: resolved.maxToolIterations }),",
+     "        call.max_tool_iterations = resolved.maxToolIterations;",
      ""),
 
     # --- whether the loop runs ------------------------------------------------
@@ -153,8 +151,8 @@ MUTANTS = [
      "  const toolsOn = false;"),
     ("loop: the tool phase is given a list nothing reads back",
      GEN,
-     "    intermediate = messages;",
-     "    intermediate = [];"),
+     "      }, intermediate);",
+     "      }, []);"),
     ("loop: the turns the loop produced are not persisted",
      GEN,
      "    toolIntermediateMessages: intermediate,",
@@ -227,12 +225,12 @@ MUTANTS = [
     # happen again quietly, so each has to be a failing test rather than a
     # reading of the source.
     ("gate: a chat turn is not budget-checked at all",
-     GEN,
+     GENERATE,
      "    const blocked = budgetBlockFor(call);\n"
      "    if (blocked) throw BudgetBlocked.from(blocked);",
      "    void budgetBlockFor;"),
     ("gate: the check is hoisted above the rotation, before the key is known",
-     GEN,
+     GENERATE,
      "    const blocked = budgetBlockFor(call);",
      "    const blocked = budgetBlockFor(request);"),
     ("gate: a refusal carries no kind, so rotation burns every key",

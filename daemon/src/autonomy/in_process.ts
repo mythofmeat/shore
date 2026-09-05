@@ -13,7 +13,6 @@ import type { LoadedConfig } from "../config/loader.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import type { Message } from "../engine/types.ts";
 import { generate, generateViaStream } from "../llm/generate.ts";
-import { DEFAULT_BACKOFF_BASE_MS, DEFAULT_MAX_RETRIES } from "../llm/fallback.ts";
 import type { FrameSink } from "../llm/stream.ts";
 import type { GenerateDeps } from "../llm/generate.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../llm/types.ts";
@@ -189,11 +188,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     return {
       providers: this.#deps.providers,
       config,
-      retry: {
-        maxRetries: config.app.advanced.max_retries ?? DEFAULT_MAX_RETRIES,
-        backoffBaseMs:
-          config.app.advanced.retry_backoff?.asMillis() ?? DEFAULT_BACKOFF_BASE_MS,
-      },
       ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
     };
   }

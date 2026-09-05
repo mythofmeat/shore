@@ -12,6 +12,7 @@ import { toolSurfaceFingerprint } from "./tool_surface.ts";
 import { estimateTokens } from "../engine/tokens.ts";
 import { describeDiscoveryError } from "../llm/discovery.ts";
 import { describeError, toLlmError } from "../llm/errors.ts";
+import { isAbortError } from "../llm/abort.ts";
 import {
   fetchNanoGptSubscription,
   nanoGptSubscriptionFresh,
@@ -390,6 +391,20 @@ export async function* recordingStream(
       }
       yield event;
     }
+  } catch (error) {
+    if (recorded === 0 || attempt !== undefined) {
+      await attempt?.pricingReady;
+      const partial = partialUsage();
+      tryRecord(ctx, req, {
+        usage: partial.usage,
+        timing: { total_ms: 0, time_to_first_token_ms: 0 },
+        finish_reason: isAbortError(error) ? "cancelled" : "error",
+        error: describeError(toLlmError(error)),
+        ...(partial.estimated ? { output_tokens_estimated: true } : {}),
+      }, attempt);
+      recorded += 1;
+    }
+    throw error;
   } finally {
     if (recorded === 0) {
       await attempt?.pricingReady;

@@ -1,17 +1,16 @@
-import { shoreLog } from "../log.ts";
-
+import { required } from "../util/required.ts";
+import { AbortError } from "./abort.ts";
+import type { ModelCallRetryOptions } from "./providers/generic_loop.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import {
   beginCallAttempt,
   prepareCallAccounting,
-  recordGenerate,
-  recordGenerateError,
   recordingStream,
 } from "../ledger/record.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
-import { readCandidateEnv, resolveKeyCandidates, type KeyCandidate } from "./credentials.ts";
+import { isKeylessSdk, KEYLESS_CANDIDATE, readCandidateEnv, resolveKeyCandidates } from "./credentials.ts";
 import { MissingApiKey } from "./request.ts";
 import {
   streamWithCredentialFallback,
@@ -22,7 +21,7 @@ import {
   type Sleep,
 } from "./fallback.ts";
 import { consumeStream, type FrameSink, type StreamResult } from "./stream.ts";
-import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
+import type { GenerateResponse, SidecarProvider, SidecarRequest, StreamEvent } from "./types.ts";
 import { rustJoin } from "../config/dirs.ts";
 import { usageConfigView, type BudgetBlock } from "../ledger/budget.ts";
 import { shouldRetryError } from "./retry.ts";
@@ -70,6 +69,7 @@ export function withResolvedCredential(
   config: LoadedConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): SidecarRequest {
+  if (isKeylessSdk(request.sdk)) return { ...request, api_key: "" };
   const providerKey = request.provider_key ?? request.sdk;
   const entry = config.providers.get(providerKey);
   const candidates = resolveKeyCandidates(
@@ -115,31 +115,143 @@ function providerFor(request: SidecarRequest, deps: GenerateDeps): SidecarProvid
   return provider;
 }
 
-async function callProvider(
+export interface StreamedGenerateOptions {
+  sink?: FrameSink;
+  signal?: AbortSignal;
+}
+
+export interface GenerationOptions extends StreamedGenerateOptions {
+  regen?: boolean;
+  rid?: string;
+  events?: (
+    provider: SidecarProvider,
+    request: SidecarRequest,
+    sink: FrameSink,
+    retry: ModelCallRetryOptions,
+  ) => AsyncIterable<StreamEvent>;
+  retriesWithinEvents?: boolean;
+  onFallback?: (event: FallbackEvent) => void;
+  onRetry?: import("./fallback.ts").RetryContext["onRetry"];
+  useRequestKey?: boolean;
+}
+
+export async function runGeneration(
   request: SidecarRequest,
+  resolved: KeySource,
   deps: GenerateDeps,
-  signal?: AbortSignal,
-): Promise<GenerateResponse> {
+  options: GenerationOptions = {},
+): Promise<{ result: StreamResult; fallbacks: FallbackEvent[] }> {
   const provider = providerFor(request, deps);
+  if (options.signal?.aborted) throw new AbortError();
   ensureCallContext(request, deps);
+  const retry = deps.retry ?? {
+    ...DEFAULT_RETRY,
+    maxRetries: deps.config.app.advanced.max_retries ?? DEFAULT_RETRY.maxRetries,
+    backoffBaseMs: deps.config.app.advanced.retry_backoff?.asMillis() ?? DEFAULT_RETRY.backoffBaseMs,
+  };
+  const callRetry: ModelCallRetryOptions = {
+    settings: retry,
+    sleep: deps.sleep ?? ((ms) => new Promise((resolve) => { setTimeout(resolve, ms); })),
+    ...(options.onRetry === undefined ? {} : { onRetry: options.onRetry }),
+  };
+  const entry = deps.config.providers.get(resolved.providerKey);
+  const candidates = isKeylessSdk(request.sdk)
+    ? [KEYLESS_CANDIDATE]
+    : options.useRequestKey
+      ? [{ name: "request", env: "", warn_on_fallback: false }]
+      : resolveKeyCandidates(
+          resolved.providerKey,
+          entry === undefined ? undefined : credentialEntry(entry),
+          resolved.apiKeyEnv,
+        );
 
-  await prepareCallAccounting(request);
-  const blocked = budgetBlockFor(request);
-  if (blocked) throw BudgetBlocked.from(blocked);
-  const attempt = beginCallAttempt(request.context, request);
+  let replaySafe = true;
+  const sink: FrameSink = (message) => {
+    if (message.type === "stream_chunk" || message.type === "tool_call" ||
+        message.type === "tool_result" || message.type === "send_image") replaySafe = false;
+    options.sink?.(message);
+  };
+  const fallbacks: FallbackEvent[] = [];
+  const attempt = async (apiKey: string, name: string): Promise<StreamResult> => {
+    if (options.signal?.aborted) throw new AbortError();
+    request.api_key = apiKey;
+    const call = {
+      ...request,
+      messages: [...request.messages],
+      context: { ...required(request.context), api_key_name: name },
+    };
+    await prepareCallAccounting(call);
+    const blocked = budgetBlockFor(call);
+    if (blocked) throw BudgetBlocked.from(blocked);
+    const started = beginCallAttempt(call.context, call);
+    const events = (async function* () {
+      const source = options.events?.(provider, call, sink, callRetry) ?? provider.stream(call, options.signal);
+      for await (const event of source) {
+        if (event.type === "tool_use") replaySafe = false;
+        yield event;
+      }
+    })();
+    const outcome = await consumeStream(
+      recordingStream(call.context, call, events, started, (nextRequest, callType) => {
+        const continued = {
+          ...nextRequest,
+          context: { ...required(nextRequest.context), call_type: callType },
+        };
+        const block = budgetBlockFor(continued);
+        if (block) throw BudgetBlocked.from(block);
+        return beginCallAttempt(continued.context, continued);
+      }),
+      { regen: options.regen ?? false, sink, ...(options.rid === undefined ? {} : { rid: options.rid }) },
+    );
+    if ("err" in outcome) throw outcome.err;
+    return outcome.ok;
+  };
+  const result = await streamWithCredentialFallback(
+    resolved.providerKey,
+    candidates,
+    (candidate) => candidate.env === ""
+      ? (isKeylessSdk(request.sdk) ? "" : request.api_key)
+      : readCandidateEnv(candidate, deps.env ?? process.env),
+    (apiKey, candidate) => {
+      if (options.retriesWithinEvents) return attempt(apiKey, candidate.name);
+      return streamWithRetry(
+        () => attempt(apiKey, candidate.name),
+        retry,
+        (error, attemptIndex, maxRetries) => replaySafe &&
+          shouldRetryError(error, attemptIndex, { max_retries: maxRetries }).decision === "retry",
+        deps.sleep,
+        {
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+          ...(options.onRetry === undefined ? {} : { onRetry: options.onRetry }),
+        },
+      );
+    },
+    {
+      record: (event) => { fallbacks.push(event); options.onFallback?.(event); },
+      canFallback: () => replaySafe,
+    },
+  );
+  return { result, fallbacks };
+}
 
-  const clock = deps.now ?? Date.now;
-  const startedAt = clock();
-  try {
-    const response = await provider.generate(request, signal);
-    await attempt.pricingReady;
-    recordGenerate(request.context, request, response, attempt);
-    return response;
-  } catch (e) {
-    await attempt.pricingReady;
-    recordGenerateError(request.context, request, startedAt, clock, attempt, e);
-    throw e;
-  }
+export async function generateViaStream(
+  request: SidecarRequest,
+  resolved: KeySource,
+  deps: GenerateDeps,
+  options: GenerationOptions = {},
+): Promise<GenerateOutcome> {
+  const { result, fallbacks } = await runGeneration(request, resolved, deps, options);
+  return {
+    response: {
+      content: result.content,
+      content_blocks: result.content_blocks,
+      finish_reason: result.finish_reason,
+      usage: result.usage,
+      timing: result.timing,
+      model: result.model === "" ? request.model : result.model,
+    },
+    fallbacks,
+  };
 }
 
 export async function generateWithCredentialFallback(
@@ -148,34 +260,7 @@ export async function generateWithCredentialFallback(
   deps: GenerateDeps,
   signal?: AbortSignal,
 ): Promise<GenerateOutcome> {
-  const entry = deps.config.providers.get(resolved.providerKey);
-  const candidates = resolveKeyCandidates(
-    resolved.providerKey,
-    entry === undefined ? undefined : credentialEntry(entry),
-    resolved.apiKeyEnv,
-  );
-
-  const fallbacks: FallbackEvent[] = [];
-  const response = await streamWithCredentialFallback(
-    resolved.providerKey,
-    candidates,
-    (candidate) => readCandidateEnv(candidate, deps.env ?? process.env),
-    (apiKey, candidate) =>
-      streamWithRetry(
-        () => {
-          request.api_key = apiKey;
-          if (request.context !== undefined) request.context.api_key_name = candidate.name;
-          return callProvider(request, deps, signal);
-        },
-        deps.retry ?? DEFAULT_RETRY,
-        undefined,
-        deps.sleep,
-        signal === undefined ? {} : { signal },
-      ),
-    { record: (event) => fallbacks.push(event) },
-  );
-
-  return { response, fallbacks };
+  return generateViaStream(request, resolved, deps, signal === undefined ? {} : { signal });
 }
 
 export async function generate(
@@ -184,105 +269,13 @@ export async function generate(
   signal?: AbortSignal,
 ): Promise<GenerateOutcome> {
   const resolved = resolveModelForRequest(deps.config, request);
-  if (resolved !== undefined) {
-    return await generateWithCredentialFallback(request, resolved, deps, signal);
-  }
-  if (request.api_key === "") {
-    return await generateWithCredentialFallback(
-      request,
-      { providerKey: request.provider_key ?? request.sdk },
-      deps,
-      signal,
-    );
-  }
-  shoreLog.debug(
-    `shore: ${request.provider_key ?? request.sdk}/${request.model} is not in the static catalog; ` +
-      `calling with the request's own key`,
-  );
-  return { response: await callProvider(request, deps, signal), fallbacks: [] };
-}
-
-export interface StreamedGenerateOptions {
-  sink?: FrameSink;
-  signal?: AbortSignal;
-}
-
-function responseFromStream(result: StreamResult, fallbackModel: string): GenerateResponse {
-  return {
-    content: result.content,
-    content_blocks: result.content_blocks,
-    finish_reason: result.finish_reason,
-    usage: result.usage,
-    timing: result.timing,
-    model: result.model === "" ? fallbackModel : result.model,
-  };
-}
-
-export async function generateViaStream(
-  request: SidecarRequest,
-  resolved: KeySource,
-  deps: GenerateDeps,
-  options: StreamedGenerateOptions = {},
-): Promise<GenerateOutcome> {
-  const provider = providerFor(request, deps);
-  ensureCallContext(request, deps);
-
-  const entry = deps.config.providers.get(resolved.providerKey);
-  const candidates = resolveKeyCandidates(
-    resolved.providerKey,
-    entry === undefined ? undefined : credentialEntry(entry),
-    resolved.apiKeyEnv,
-  );
-
-  let retrySafe = true;
-  const downstream: FrameSink = options.sink ?? (() => {});
-  const sink: FrameSink = (message) => {
-    if (message.type === "stream_chunk" || message.type === "tool_call") retrySafe = false;
-    downstream(message);
-  };
-  const fallbacks: FallbackEvent[] = [];
-
-  const attempt = async (apiKey: string, candidate: KeyCandidate): Promise<GenerateResponse> => {
-    request.api_key = apiKey;
-    if (request.context !== undefined) request.context.api_key_name = candidate.name;
-
-    await prepareCallAccounting(request);
-    const blocked = budgetBlockFor(request);
-    if (blocked) throw BudgetBlocked.from(blocked);
-    const started = beginCallAttempt(request.context, request);
-
-    const outcome = await consumeStream(
-      recordingStream(
-        request.context,
-        request,
-        provider.stream(request, options.signal),
-        started,
-      ),
-      { regen: false, sink },
-    );
-    if ("err" in outcome) throw outcome.err;
-    return responseFromStream(outcome.ok, request.model);
-  };
-
-  const response = await streamWithCredentialFallback(
-    resolved.providerKey,
-    candidates,
-    (candidate) => readCandidateEnv(candidate, deps.env ?? process.env),
-    (apiKey, candidate) =>
-      streamWithRetry(
-        () => attempt(apiKey, candidate),
-        deps.retry ?? DEFAULT_RETRY,
-        (error, attemptIndex, maxRetries) =>
-          retrySafe &&
-          shouldRetryError(error, attemptIndex, { max_retries: maxRetries }).decision === "retry",
-        deps.sleep,
-        options.signal === undefined ? {} : { signal: options.signal },
-      ),
+  return generateViaStream(
+    request,
+    resolved ?? { providerKey: request.provider_key ?? request.sdk },
+    deps,
     {
-      record: (event) => fallbacks.push(event),
-      canFallback: () => retrySafe,
+      ...(signal === undefined ? {} : { signal }),
+      useRequestKey: resolved === undefined && request.api_key !== "",
     },
   );
-
-  return { response, fallbacks };
 }

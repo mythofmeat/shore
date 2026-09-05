@@ -335,7 +335,7 @@ describe("what a stream records", () => {
     });
   });
 
-  test("a source that throws records a cancelled row and still throws", async () => {
+  test("a source that throws records an error row and still throws", async () => {
     await withLedger(async (path) => {
       async function* boom(): AsyncIterable<StreamEvent> {
         yield { type: "start", model: "claude-opus-4-6" };
@@ -344,7 +344,7 @@ describe("what a stream records", () => {
       expect(drain(recordingStream(ctx(path), REQ, boom()))).rejects.toThrow(
         "provider exploded",
       );
-      expect(rowsIn(path).map((r) => r["finish_reason"])).toEqual(["cancelled"]);
+      expect(rowsIn(path).map((r) => r["finish_reason"])).toEqual(["error"]);
     });
   });
 

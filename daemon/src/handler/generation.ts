@@ -1,5 +1,3 @@
-import { required } from "../util/required.ts";
-
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -16,20 +14,7 @@ import {
 } from "../llm/image_support.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { Message } from "../engine/types.ts";
-import {
-  DEFAULT_BACKOFF_BASE_MS,
-  DEFAULT_MAX_RETRIES,
-  streamWithCredentialFallback,
-  streamWithRetry,
-  type FallbackEvent,
-} from "../llm/fallback.ts";
-import {
-  isKeylessSdk,
-  KEYLESS_CANDIDATE,
-  readCandidateEnv,
-  resolveKeyCandidates,
-  type KeyCandidate,
-} from "../llm/credentials.ts";
+import type { FallbackEvent } from "../llm/fallback.ts";
 import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
 import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
 import { claudeAgentToolLoopEvents } from "../llm/providers/claude_agent.ts";
@@ -37,12 +22,9 @@ import {
   genericToolLoopEvents,
   type ModelCallRetryOptions,
 } from "../llm/providers/generic_loop.ts";
-import { shouldRetryError } from "../llm/retry.ts";
 import { describeError } from "../llm/errors.ts";
-import { BudgetBlocked } from "../llm/generate.ts";
-import { consumeStream, type StreamResult } from "../llm/stream.ts";
-import { budgetBlockFor } from "../ledger/gate.ts";
-import { beginCallAttempt, prepareCallAccounting, recordingStream } from "../ledger/record.ts";
+import { runGeneration as runModelGeneration } from "../llm/generate.ts";
+import type { StreamResult } from "../llm/stream.ts";
 import type {
   CallContext,
   ProviderOptions,
@@ -55,7 +37,7 @@ import { usageConfigView } from "../ledger/budget.ts";
 import { anyEnabled } from "../tools/registry.ts";
 import { toolPhase, type ToolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
-import { buildToolContext, credentialEntry, type ToolContextDeps } from "./tool_context.ts";
+import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
 import {
   buildGenerationRequest,
   ImagesUnsupportedError,
@@ -168,10 +150,6 @@ export interface GenerationDeps {
 
 const defaultNow = (): string => new Date().toISOString();
 const defaultMessageId = (): string => `m_${crypto.randomUUID()}`;
-const realSleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 
 export function makeRunGeneration(deps: GenerationDeps): RunGeneration {
   return (params: GenerationParams) => runGeneration(deps, params);
@@ -488,25 +466,8 @@ async function streamTurn(
   params: StreamTurnParams,
 ): Promise<{ result: StreamResult; intermediate: Message[] }> {
   const { config, charName, resolved, request } = params;
-  const provider = deps.providers[request.sdk];
-  if (provider === undefined) {
-    throw new Error(`unsupported sdk: ${request.sdk}`);
-  }
-
   const toolsOn = anyEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;
-  let replaySafe = true;
-  const send = (message: ServerMessage): void => {
-    if (
-      message.type === "stream_chunk" ||
-      message.type === "tool_call" ||
-      message.type === "tool_result" ||
-      message.type === "send_image"
-    ) {
-      replaySafe = false;
-    }
-    params.send(message);
-  };
-
+  let send: (message: ServerMessage) => void = params.send;
   const toolCtx = toolsOn
     ? await buildToolContext(
         config,
@@ -514,7 +475,7 @@ async function streamTurn(
         charName,
         deps.tools?.(charName, {
           conversation: params.conversation,
-          send,
+          send: (message) => send(message),
           ...(params.rid === undefined ? {} : { rid: params.rid }),
           now: params.now,
           newMessageId: params.newMessageId,
@@ -523,136 +484,47 @@ async function streamTurn(
       )
     : undefined;
 
-  const retry = {
-    maxRetries: config.app.advanced.max_retries ?? DEFAULT_MAX_RETRIES,
-    backoffBaseMs: config.app.advanced.retry_backoff?.asMillis() ?? DEFAULT_BACKOFF_BASE_MS,
-  };
-  const callRetry: ModelCallRetryOptions = {
-    settings: retry,
-    sleep: deps.sleep ?? realSleep,
+  let intermediate: Message[] = [];
+
+  const { result } = await runModelGeneration(request, resolved, {
+    providers: deps.providers,
+    config,
+    ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
+    ...(deps.env === undefined ? {} : { env: deps.env }),
+  }, {
+    signal: params.signal,
+    regen: params.regen,
+    ...(params.rid === undefined ? {} : { rid: params.rid }),
+    sink: params.send,
+    retriesWithinEvents: toolsOn,
+    onFallback: (event) => recordKeyFallback(deps, params, event),
     onRetry: (error, attemptIndex, delayMs) => {
-      deps.log?.warn?.("retrying provider model call", {
+      deps.log?.warn?.("retrying provider stream", {
         attempt: attemptIndex + 1,
         delay_ms: delayMs,
         error: describeError(error),
       });
     },
-  };
-
-  let intermediate: Message[] = [];
-
-  const attempt = async (apiKey: string, candidate: KeyCandidate): Promise<StreamResult> => {
-    const messages: Message[] = [];
-    const call: SidecarRequest = {
-      ...request,
-      api_key: apiKey,
-      messages: [...request.messages],
-      ...(toolCtx === undefined || resolved.maxToolIterations === undefined
-        ? {}
-        : { max_tool_iterations: resolved.maxToolIterations }),
-      ...(request.context === undefined
-        ? {}
-        : { context: { ...request.context, api_key_name: candidate.name } }),
-    };
-
-    await prepareCallAccounting(call);
-    const blocked = budgetBlockFor(call);
-    if (blocked) throw BudgetBlocked.from(blocked);
-    const initialAttempt = call.context?.ledger === undefined
-      ? undefined
-      : beginCallAttempt(call.context, call);
-
-    const phase: ToolPhase | undefined =
-      toolCtx === undefined
-        ? undefined
-        : toolPhase(
-            {
-              sendDirect: send,
-              ctx: toolCtx,
-              limits: toolLimits(config),
-              ...(params.rid === undefined ? {} : { rid: params.rid }),
-              now: params.now,
-              newMessageId: params.newMessageId,
-              schemas: schemasFrom(call.tools),
-              onRecordTurn: params.persistIntermediate,
-            },
-            messages,
-          );
-
-    const events = turnEvents(
-      deps,
-      provider,
-      call,
-      phase,
-      params.signal,
-      phase === undefined ? undefined : callRetry,
-    );
-
-    const outcome = await consumeStream(recordingStream(
-      call.context,
-      call,
-      events,
-      initialAttempt,
-      (nextRequest, callType) => {
-        const continued = {
-          ...nextRequest,
-          context: { ...required(nextRequest.context), call_type: callType },
-        };
-        const nextBlock = budgetBlockFor(continued);
-        if (nextBlock) {
-          throw BudgetBlocked.from(nextBlock);
-        }
-        return beginCallAttempt(continued.context, continued);
-      },
-    ), {
-      regen: params.regen,
-      sink: send,
-      ...(params.rid === undefined ? {} : { rid: params.rid }),
-    });
-    if ("err" in outcome) throw outcome.err;
-    intermediate = messages;
-    return outcome.ok;
-  };
-
-  const entry = config.providers.get(resolved.providerKey);
-  const candidates = isKeylessSdk(resolved.sdk)
-    ? [KEYLESS_CANDIDATE]
-    : resolveKeyCandidates(
-      resolved.providerKey,
-      entry === undefined ? undefined : credentialEntry(entry),
-      resolved.apiKeyEnv,
-    );
-
-  const result = await streamWithCredentialFallback(
-    resolved.providerKey,
-    candidates,
-    (candidate) => (candidate.env === "" ? "" : readCandidateEnv(candidate, deps.env ?? process.env)),
-    (apiKey, candidate) => {
-      if (toolsOn) return attempt(apiKey, candidate);
-      return streamWithRetry(
-        () => attempt(apiKey, candidate),
-        retry,
-        (error, attemptIndex, maxRetries) =>
-          replaySafe &&
-          shouldRetryError(error, attemptIndex, { max_retries: maxRetries }).decision === "retry",
-        deps.sleep ?? realSleep,
-        {
-          signal: params.signal,
-          onRetry: (error, attemptIndex, delayMs) => {
-            deps.log?.warn?.("retrying provider stream", {
-              attempt: attemptIndex + 1,
-              delay_ms: delayMs,
-              error: describeError(error),
-            });
-          },
-        },
-      );
+    events: (provider, call, sink, callRetry) => {
+      send = sink;
+      intermediate = [];
+      if (toolCtx !== undefined && resolved.maxToolIterations !== undefined) {
+        call.max_tool_iterations = resolved.maxToolIterations;
+      }
+      const phase = toolCtx === undefined ? undefined : toolPhase({
+        sendDirect: sink,
+        ctx: toolCtx,
+        limits: toolLimits(config),
+        ...(params.rid === undefined ? {} : { rid: params.rid }),
+        now: params.now,
+        newMessageId: params.newMessageId,
+        schemas: schemasFrom(call.tools),
+        onRecordTurn: params.persistIntermediate,
+      }, intermediate);
+      return turnEvents(deps, provider, call, phase, params.signal,
+        phase === undefined ? undefined : callRetry);
     },
-    {
-      record: (event) => recordKeyFallback(deps, params, event),
-      canFallback: () => replaySafe,
-    },
-  );
+  });
 
   return { result, intermediate };
 }
