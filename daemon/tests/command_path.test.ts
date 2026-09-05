@@ -21,7 +21,9 @@ import {
 } from "../src/handler/commands.ts";
 import { characterPreferencesPath, loadPreferences } from "../src/config/preferences.ts";
 import type { RequestMeta } from "../src/swp/session.ts";
+import { existsSync } from "node:fs";
 import { testTmp } from "./support/tmp.ts";
+import { SnapshotGate } from "../src/snapshot_gate.ts";
 
 const RID_DROPPED = new Set(["list_characters", "list_models", "list_providers"]);
 
@@ -42,6 +44,8 @@ interface Harness {
   deps: CommandPathDeps;
   savedModel(character: string): string | undefined;
   configDir: string;
+  dirs: { config: string; data: string; cache: string; runtime: string };
+  wireArchive(gate: SnapshotGate): void;
 }
 
 async function harness(characters: readonly string[]): Promise<Harness> {
@@ -135,6 +139,15 @@ async function harness(characters: readonly string[]): Promise<Harness> {
     deps,
     savedModel: (character) => savedSelection(dirs.data, character),
     configDir: dirs.config,
+    dirs,
+    wireArchive: (gate: SnapshotGate) => {
+      deps.commands.archive = {
+        dirs,
+        hasCharacter: (name: string) => characters.includes(name),
+        withSnapshot: async <T>(work: () => Promise<T>) => await gate.withSnapshot(work),
+        refreshAfterImport: async () => undefined,
+      };
+    },
   };
 }
 
@@ -445,4 +458,53 @@ test("a session with no rid still gets its progress frames", () => {
   emit({ type: "phase", rid: null, phase: "compacting round 2", model: null });
   expect(sent).toHaveLength(1);
   expect(sent[0]).toMatchObject({ phase: "compacting round 2", rid: null });
+});
+
+describe("an export abandoned while it waits for the snapshot", () => {
+  test("dispatchCommand does not stage the character after its client leaves", async () => {
+    const h = await harness(["ada"]);
+    const gate = new SnapshotGate();
+    h.wireArchive(gate);
+
+    const controller = new AbortController();
+    const output = join(h.dirs.cache, "ada.shore");
+
+    let releaseReader = (): void => undefined;
+    const readerHeld = new Promise<void>((resolve) => {
+      releaseReader = resolve;
+    });
+    const reader = gate.withActivity(async () => {
+      await readerHeld;
+    });
+
+    const frame = dispatchCommand(
+      h.deps,
+      { rid: null, name: "export_character", args: { character: "ada", output } },
+      meta(null, null),
+      controller.signal,
+    );
+
+    controller.abort();
+    releaseReader();
+    await reader;
+
+    expect(envelope(await frame)["kind"]).toBe("error");
+    expect(existsSync(output)).toBe(false);
+  });
+
+  test("the same export succeeds when the client stays", async () => {
+    const h = await harness(["ada"]);
+    h.wireArchive(new SnapshotGate());
+    const output = join(h.dirs.cache, "ada.shore");
+
+    const frame = await dispatchCommand(
+      h.deps,
+      { rid: null, name: "export_character", args: { character: "ada", output } },
+      meta(null, null),
+      new AbortController().signal,
+    );
+
+    expect(envelope(frame)["kind"]).toBe("command_output");
+    expect(existsSync(output)).toBe(true);
+  });
 });

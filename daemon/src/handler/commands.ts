@@ -60,10 +60,10 @@ export async function dispatchCommand(
   const rid = meta.rid ?? undefined;
 
   if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {
-    return characterlessCommand(deps, cmd, sessionId, selected, rid);
+    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
   }
   if (cmd.name === "refresh_provider_models") {
-    return characterlessCommand(deps, cmd, sessionId, selected, rid);
+    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
   }
   if (cmd.name === "switch_character") {
     return await switchCharacterCommand(deps, cmd, sessionId, rid, selected);
@@ -158,6 +158,7 @@ async function characterlessCommand(
   sessionId: number,
   selected: string | undefined,
   rid: string | undefined,
+  signal: AbortSignal,
 ): Promise<ServerMessage> {
   const session: CommandSession = {
     config: deps.globalConfig(),
@@ -166,6 +167,7 @@ async function characterlessCommand(
     characterName: undefined,
     activeModel: undefined,
     runtime: deps.runtime,
+    signal,
     ...(deps.env === undefined ? {} : { env: deps.env }),
   };
 

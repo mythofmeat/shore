@@ -65,14 +65,14 @@ MUTANTS = [
      '  if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {',
      "  if (false) {"),
     ("route: refresh_provider_models takes the character path",
-     '  if (cmd.name === "refresh_provider_models") {\n    return characterlessCommand(deps, cmd, sessionId, selected, rid);\n  }',
+     '  if (cmd.name === "refresh_provider_models") {\n    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);\n  }',
      ""),
     ("route: switch_character takes the character path",
      '  if (cmd.name === "switch_character") {\n    return await switchCharacterCommand(deps, cmd, sessionId, rid, selected);\n  }',
      ""),
     ("route: every command is characterless",
      "  let character: string;",
-     "  return characterlessCommand(deps, cmd, sessionId, selected, rid);\n  let character: string;"),
+     "  return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);\n  let character: string;"),
 
     # --- character resolution -------------------------------------------------
     ("resolve: an unresolvable character is an internal error",
