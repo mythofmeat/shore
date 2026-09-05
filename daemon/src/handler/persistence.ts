@@ -100,7 +100,7 @@ export async function persistAndNotify(
   ctx.autonomy.notifyAssistantMessage(charName, engine.turnCount());
 
   ctx.notifier.notifyMessageComplete(
-    `Shore — ${charName}`,
+    `Shore - ${charName}`,
     notifyContent,
     params.wallClockMs,
   );

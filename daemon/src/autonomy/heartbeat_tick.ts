@@ -128,7 +128,7 @@ export async function persistHeartbeatMessage(
     }
   }
 
-  deps.notify?.(`Shore — ${character}`, msg.content);
+  deps.notify?.(`Shore - ${character}`, msg.content);
 
   note("message_sent", `Autonomous message sent: ${shortPreview(msg.content)}`);
 }

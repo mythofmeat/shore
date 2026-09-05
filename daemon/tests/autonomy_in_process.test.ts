@@ -665,7 +665,7 @@ describe("the other two actions", () => {
       notifyCompactionComplete: (title) => compacted.push(title),
     }).runDeepArchive("ada", 1);
 
-    expect(compacted).toEqual(["Shore — ada"]);
+    expect(compacted).toEqual(["Shore - ada"]);
     expect(spoke).toEqual([]);
   });
 });

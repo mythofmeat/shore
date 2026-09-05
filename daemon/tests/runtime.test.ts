@@ -160,7 +160,7 @@ describe("what assembly wires together", () => {
       notify: (event: string) => events.push(event),
     });
 
-    notify("Shore — ada", "thinking about the tide");
+    notify("Shore - ada", "thinking about the tide");
     expect(events).toEqual(["autonomous_message"]);
   });
 
@@ -170,7 +170,7 @@ describe("what assembly wires together", () => {
       notify: (event: string) => events.push(event),
     });
 
-    notify("Shore — ada", "Idle conversation archived (12 messages, no LLM pass needed)");
+    notify("Shore - ada", "Idle conversation archived (12 messages, no LLM pass needed)");
     expect(events).toEqual(["compaction_complete"]);
   });
 

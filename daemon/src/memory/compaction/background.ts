@@ -55,7 +55,7 @@ export function handleCompactionOutcome(
         `retained_turns=${outcome.retainedTurns}, tool_rounds=${outcome.toolRounds})`,
     );
     notify(
-      `Shore — ${character}`,
+      `Shore - ${character}`,
       `Compaction complete: ${outcome.memoryFilesWritten.length} entries from ` +
         `${outcome.compactedTurns} turns`,
     );
@@ -69,7 +69,7 @@ export function handleCompactionOutcome(
         `retained_turns=${String(outcome.retainedTurns)})`,
     );
     notify(
-      `Shore — ${character}`,
+      `Shore - ${character}`,
       `Conversation rotated into history (${String(outcome.archivedMessages)} messages, ` +
         `no memory write)`,
     );
@@ -83,7 +83,7 @@ export function handleCompactionOutcome(
         `partial_writes=${JSON.stringify(outcome.partialWrites)}) — conversation NOT archived`,
     );
     notify(
-      `Shore — ${character}`,
+      `Shore - ${character}`,
       `Compaction was cut off at the token ceiling and wrote only part of its summary. ` +
         `Conversation kept; will retry on next trigger.`,
     );

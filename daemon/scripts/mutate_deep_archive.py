@@ -191,7 +191,7 @@ MUTANTS = [
      "    body: `Idle conversation archived (messages, no LLM pass needed)`,"),
     ("notification: the title loses the character",
      D,
-     "    title: `Shore — ${character}`,",
+     "    title: `Shore - ${character}`,",
      "    title: `Shore`,"),
 
     # --- the runner's half ----------------------------------------------------

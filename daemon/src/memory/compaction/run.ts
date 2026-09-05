@@ -89,7 +89,7 @@ export async function runCompaction(
   if (outcome === undefined) return 0;
   if (outcome.kind === "paused") {
     deps.notify?.(
-      `Shore — ${character}`,
+      `Shore - ${character}`,
       `Compaction paused after ${outcome.toolRounds} rounds (${outcome.reason}); conversation kept`,
     );
     throw new CompactionPaused(outcome.checkpointId, outcome.reason, outcome.resumeAt);

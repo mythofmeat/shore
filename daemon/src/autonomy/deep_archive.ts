@@ -46,7 +46,7 @@ export function deepArchiveNotification(
   archivable: number,
 ): { title: string; body: string } {
   return {
-    title: `Shore — ${character}`,
+    title: `Shore - ${character}`,
     body: `Idle conversation archived (${archivable} messages, no LLM pass needed)`,
   };
 }

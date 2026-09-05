@@ -443,7 +443,7 @@
       },
       "new_conversation_id_is_fresh": true,
       "notification": {
-        "title": "Shore — ada",
+        "title": "Shore - ada",
         "body": "Idle conversation archived (4 messages, no LLM pass needed)"
       }
     },
@@ -503,7 +503,7 @@
       },
       "new_conversation_id_is_fresh": true,
       "notification": {
-        "title": "Shore — ada",
+        "title": "Shore - ada",
         "body": "Idle conversation archived (2 messages, no LLM pass needed)"
       }
     },
@@ -555,7 +555,7 @@
       },
       "new_conversation_id_is_fresh": true,
       "notification": {
-        "title": "Shore — ada",
+        "title": "Shore - ada",
         "body": "Idle conversation archived (2 messages, no LLM pass needed)"
       }
     }
@@ -564,28 +564,28 @@
     {
       "archivable": 0,
       "notification": {
-        "title": "Shore — ada",
+        "title": "Shore - ada",
         "body": "Idle conversation archived (0 messages, no LLM pass needed)"
       }
     },
     {
       "archivable": 1,
       "notification": {
-        "title": "Shore — ada",
+        "title": "Shore - ada",
         "body": "Idle conversation archived (1 messages, no LLM pass needed)"
       }
     },
     {
       "archivable": 2,
       "notification": {
-        "title": "Shore — ada",
+        "title": "Shore - ada",
         "body": "Idle conversation archived (2 messages, no LLM pass needed)"
       }
     },
     {
       "archivable": 47,
       "notification": {
-        "title": "Shore — ada",
+        "title": "Shore - ada",
         "body": "Idle conversation archived (47 messages, no LLM pass needed)"
       }
     }

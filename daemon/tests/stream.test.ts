@@ -1120,7 +1120,7 @@ describe("persist_and_notify", () => {
     expect(engine.messages[0]?.model).toBe("claude-test");
     expect(events).toHaveLength(1);
     expect((events[0] as unknown as Row)["origin"]).toBe("assistant_reply");
-    expect(notified).toEqual(["notify_send:Shore — Alice:hi"]);
+    expect(notified).toEqual(["notify_send:Shore - Alice:hi"]);
     expect(lastRequests[0]?.messages).toHaveLength(1);
   });
 
@@ -1138,7 +1138,7 @@ describe("persist_and_notify", () => {
     });
     expect(engine.messages).toEqual([]);
     expect(events).toEqual([]);
-    expect(notified).toEqual(["notify_send:Shore — Alice:"]);
+    expect(notified).toEqual(["notify_send:Shore - Alice:"]);
   });
 
   test("tool-loop turns are appended before the response and raise no events", async () => {

@@ -159,7 +159,7 @@ describe("delivering what a tick asked to say", () => {
     });
     expect(pushed).toEqual([{ revision: 7, msg: appended[0] as Message }]);
     expect(notified).toEqual([
-      { title: "Shore — ada", body: "I read that paper you left open" },
+      { title: "Shore - ada", body: "I read that paper you left open" },
     ]);
     expect(notes).toEqual([
       { kind: "message_sent", detail: "Autonomous message sent: I read that paper you left open" },
