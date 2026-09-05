@@ -1325,7 +1325,11 @@ function runProcess(
   options: { cwd?: string | undefined; env?: NodeJS.ProcessEnv | undefined },
 ): Promise<ProcessOutput> {
   return new Promise((resolve, reject) => {
-    const child = spawn(program, args, { cwd: options.cwd, env: options.env });
+    const child = spawn(program, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));

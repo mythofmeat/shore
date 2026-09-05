@@ -16,6 +16,7 @@ import {
   GIT_SAFETY_FLAGS,
   handleDelete,
   handleEdit,
+  handleGit,
   handleRead,
   handleSearch,
   isPathLikeArg,
@@ -722,6 +723,21 @@ describe("best line excerpt", () => {
       expect(bestLineExcerpt(c.content, c.query_lower)).toEqual([c.line, c.excerpt]);
     });
   }
+});
+
+describe("git execution", () => {
+  test("shortlog without a revision reaches EOF instead of waiting for stdin", async () => {
+    const workspace = mkdtempSync(testTmp("shortlog-"));
+    await handleGit({ subcommand: "commit", args: ["--allow-empty", "-m", "initial"] }, workspace, "Ada");
+    expect(await handleGit({ subcommand: "shortlog", args: ["-sn", "--since=2 days ago"] }, workspace, "Ada")).toMatchObject({
+      exit_code: 0,
+      stdout: "",
+      stderr: "",
+    });
+    const history = await handleGit({ subcommand: "shortlog", args: ["-sn", "--since=2 days ago", "HEAD"] }, workspace, "Ada");
+    expect(history).toMatchObject({ exit_code: 0 });
+    expect((history as { stdout: string }).stdout).toContain("Ada");
+  }, 5_000);
 });
 
 describe("git validation", () => {
