@@ -246,7 +246,7 @@ describe("deciding whether a compaction has anything new to write", () => {
     const planned = await planAuto(w, 1);
     expect(planned.blocked).toBeUndefined();
     expect(planned.redundant).toBe(true);
-    expect(planned.abandoned).toBe("cp");
+    expect(planned.abandoned).toMatchObject({ checkpointId: "cp", splitAt: 4 });
   });
 
   test("a redundant range with no checkpoint has nothing to retire", async () => {
@@ -424,6 +424,64 @@ describe("retiring a pass another branch finished for it", () => {
     }
   });
 
+  test("retiring a pass archives the range it froze, not the turns that arrived after", async () => {
+    const w = await world();
+    const frozen = jsonl(w.messages);
+    await writeCheckpoint(w.dataDir, "cl_paused", frozen);
+    cover(w.dataDir, w.messages.slice(0, 4));
+
+    const arrived = [
+      message("m_7", "user", "one more thing", newMessageVersion()),
+      message("m_8", "assistant", "of course", newMessageVersion()),
+    ];
+    await writeFile(
+      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
+      frozen + jsonl(arrived),
+    );
+
+    const outcome = await runPass(w);
+    expect(outcome?.kind).toBe("rotated");
+
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      const archived = store.readSegment("ada", 0);
+      expect(archived.map((m) => m.msg_id)).toEqual(["m_1", "m_2", "m_3", "m_4"]);
+      const late = arrived.map((m) => required(m.version));
+      expect(store.coveredMemoryVersions("ada", "compaction", late).size).toBe(0);
+    } finally {
+      store.close();
+    }
+
+    const kept = await loadMessagesForCompaction(w.dataDir, "ada", "main");
+    expect([...kept.store.messages()].map((m) => m.msg_id)).toEqual([
+      "m_5",
+      "m_6",
+      "m_7",
+      "m_8",
+    ]);
+  });
+
+  test("a checkpoint the conversation outgrew does not dictate the range it rotates", async () => {
+    const w = await world();
+    await writeCheckpoint(w.dataDir, "cl_paused", "not this conversation\n", 2);
+    cover(w.dataDir, w.messages.slice(0, 4));
+
+    const outcome = await runPass(w);
+    expect(outcome?.kind).toBe("rotated");
+
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      expect(store.readSegment("ada", 0).map((m) => m.msg_id)).toEqual([
+        "m_1",
+        "m_2",
+        "m_3",
+        "m_4",
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
   test("a pass that already archived its turns is retired without archiving them twice", async () => {
     const w = await world();
     await writeCheckpoint(w.dataDir, "cl_paused", jsonl(w.messages));
@@ -467,7 +525,7 @@ describe("retiring a pass another branch finished for it", () => {
     await writeCheckpoint(w.dataDir, "cl_paused", jsonl(w.messages));
     cover(w.dataDir, w.messages.slice(0, 4));
 
-    expect((await planAuto(w, 1)).abandoned).toBe("cp");
+    expect((await planAuto(w, 1)).abandoned).toMatchObject({ checkpointId: "cp" });
     await runPass(w);
 
     const settled = await planAuto(w, 1);

@@ -237,17 +237,41 @@ MUTANTS = [
     # --- a paused pass another branch finished is retired, not wedged --------
     ("wedge: a range someone else finished stays an outstanding claim forever",
      RUN,
-     "  if (coverageIsRedundant(planned)) {\n"
-     "    return {\n"
-     "      redundant: true,\n"
-     "      ...(resuming && checkpoint !== undefined ? { abandoned: checkpoint.id } : {}),\n"
-     "    };\n"
-     "  }",
-     "  if (coverageIsRedundant(planned) && !resuming) return { redundant: true };"),
+     "  if (coverageIsRedundant(planned)) {",
+     "  if (coverageIsRedundant(planned) && checkpoint === undefined) {"),
     ("wedge: the checkpoint is rotated over without being retired",
      RUN,
-     "      ...(resuming && checkpoint !== undefined ? { abandoned: checkpoint.id } : {}),\n",
+     "      ...(checkpoint === undefined\n"
+     "        ? {}\n"
+     "        : {\n"
+     "            abandoned: {\n"
+     "              checkpointId: checkpoint.id,\n"
+     "              ...(resumed === undefined ? {} : { splitAt: checkpoint.splitAt }),\n"
+     "            },\n"
+     "          }),\n",
      ""),
+    ("retire: the rotation recomputes its range from the live conversation",
+     RUN,
+     "        planned.abandoned?.splitAt,\n",
+     ""),
+    ("retire: a checkpoint the conversation outgrew still dictates the range",
+     RUN,
+     "              ...(resumed === undefined ? {} : { splitAt: checkpoint.splitAt }),",
+     "              splitAt: checkpoint.splitAt,"),
+    ("retire: the frozen split is not clamped to what the conversation still holds "
+     "(EQUIVALENT: a compatible checkpoint's source is a prefix of the live conversation, so "
+     "its split cannot exceed the message count unless the file was hand-corrupted, and even "
+     "then archiveAndRetain slices the same lines - the clamp only keeps the reported "
+     "retained counts from going negative)",
+     RUN,
+     "  const splitAt = Math.min(\n"
+     "    splitAtOverride ??\n"
+     "      archiveSplitIndex(loaded.messages, keepTurns, options.retainTrailingAutonomous ?? false),\n"
+     "    loaded.messages.length,\n"
+     "  );",
+     "  const splitAt =\n"
+     "    splitAtOverride ??\n"
+     "    archiveSplitIndex(loaded.messages, keepTurns, options.retainTrailingAutonomous ?? false);"),
     ("wedge: retiring a pass leaves its checkpoint on disk",
      RUN,
      "  await removeCompactionCheckpoint(dataDir, character, thread);\n"

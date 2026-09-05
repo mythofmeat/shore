@@ -113,15 +113,16 @@ async function rotateWithoutMemoryWrite(
   loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
   options: CompactionRunOptions,
   note = "archive-only rotation; automatic memory writes disabled",
+  splitAtOverride?: number,
 ): Promise<CompactionOutcome> {
   const compaction = effective.app.memory.compaction;
   const keepTurns =
     options.keepTurnsOverride ??
     retentionForBudget(loaded.messages, compaction.keep_recent_turns, compaction.max_context_tokens);
-  const splitAt = archiveSplitIndex(
-    loaded.messages,
-    keepTurns,
-    options.retainTrailingAutonomous ?? false,
+  const splitAt = Math.min(
+    splitAtOverride ??
+      archiveSplitIndex(loaded.messages, keepTurns, options.retainTrailingAutonomous ?? false),
+    loaded.messages.length,
   );
   if (splitAt === 0) throw CompactionError.insufficientMessages();
 
@@ -193,7 +194,7 @@ export async function runCompactionPass(
           dataDir,
           character,
           thread,
-          planned.abandoned,
+          planned.abandoned.checkpointId,
         );
         if (settled) return undefined;
       }
@@ -209,6 +210,7 @@ export async function runCompactionPass(
         loaded,
         options,
         "archive-only rotation; this range was already covered by another branch's compaction",
+        planned.abandoned?.splitAt,
       );
     }
 
@@ -288,10 +290,15 @@ interface ResolvedDeps {
   maxToolIterations: number | undefined;
 }
 
+interface AbandonedPass {
+  checkpointId: string;
+  splitAt?: number;
+}
+
 interface PlannedCoverage {
   redundant: boolean;
   blocked?: boolean;
-  abandoned?: string;
+  abandoned?: AbandonedPass;
   coverage?: CompactionCoverage;
 }
 
@@ -318,7 +325,6 @@ export async function planCompactionCoverage(
     () => undefined,
   );
   const resumed = resumedRange(checkpoint, loaded.rawContent, splitAt, options);
-  const resuming = checkpoint !== undefined;
   const resumeClaim = resumed === undefined ? undefined : checkpoint?.coverageClaim;
 
   const archival = resumed ?? [...loaded.store.messages()].slice(0, splitAt);
@@ -335,7 +341,14 @@ export async function planCompactionCoverage(
   if (coverageIsRedundant(planned)) {
     return {
       redundant: true,
-      ...(resuming && checkpoint !== undefined ? { abandoned: checkpoint.id } : {}),
+      ...(checkpoint === undefined
+        ? {}
+        : {
+            abandoned: {
+              checkpointId: checkpoint.id,
+              ...(resumed === undefined ? {} : { splitAt: checkpoint.splitAt }),
+            },
+          }),
     };
   }
   if (coverageIsPartial(planned) || (planned.pending === 0 && planned.unversioned === 0)) {
