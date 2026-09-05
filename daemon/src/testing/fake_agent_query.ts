@@ -168,6 +168,19 @@ function usageBlock(usage: FakeUsage): unknown {
   };
 }
 
+function deltaUsageBlock(usage: FakeUsage): unknown {
+  const out: Record<string, number> = {};
+  if (usage.input_tokens !== undefined) out.input_tokens = usage.input_tokens;
+  if (usage.output_tokens !== undefined) out.output_tokens = usage.output_tokens;
+  if (usage.cache_read_input_tokens !== undefined) {
+    out.cache_read_input_tokens = usage.cache_read_input_tokens;
+  }
+  if (usage.cache_creation_input_tokens !== undefined) {
+    out.cache_creation_input_tokens = usage.cache_creation_input_tokens;
+  }
+  return out;
+}
+
 function requestedBlocks(round: FakeRound, index: number): FakeBlock[] {
   const asked = (round.toolCalls ?? []).map<FakeBlock>((call, n) => ({
     kind: "tool_use",
@@ -224,7 +237,7 @@ function* roundFrames(
     {
       type: "message_delta",
       delta: { stop_reason: stopReasonOf(round), stop_sequence: null },
-      usage: usageBlock(round.deltaUsage ?? {}),
+      usage: deltaUsageBlock(round.deltaUsage ?? {}),
     },
     `${messageId}_md`,
   );

@@ -328,3 +328,49 @@ describe("what the CLI is told about result size", () => {
     expect(Number(env.MAX_MCP_OUTPUT_TOKENS)).toBeGreaterThan(25_000);
   });
 });
+
+describe("what compaction is told the context weighs", () => {
+  test("five tool rounds report one round's context, not five summed", async () => {
+    const tools = phase();
+    const { events } = await drive(
+      {
+        rounds: [
+          {
+            blocks: [{ kind: "text", text: "let me look." }],
+            toolCalls: [{ name: "read" }],
+            startUsage: { input_tokens: 3, cache_read_input_tokens: 53_915 },
+          },
+          {
+            blocks: [],
+            toolCalls: [{ name: "read" }],
+            startUsage: { input_tokens: 3, cache_read_input_tokens: 55_800 },
+          },
+          {
+            blocks: [],
+            toolCalls: [{ name: "read" }],
+            startUsage: { input_tokens: 3, cache_read_input_tokens: 57_200 },
+          },
+          {
+            blocks: [],
+            toolCalls: [{ name: "read" }],
+            startUsage: { input_tokens: 3, cache_read_input_tokens: 58_900 },
+          },
+          {
+            blocks: [{ kind: "text", text: "it says Brian." }],
+            startUsage: { input_tokens: 3, cache_read_input_tokens: 60_400 },
+          },
+        ],
+        resultUsage: {
+          input_tokens: 15,
+          output_tokens: 2_387,
+          cache_read_input_tokens: 286_215,
+          cache_creation_input_tokens: 8_790,
+        },
+      },
+      tools,
+    );
+    const finished = done(events);
+    expect(finished.usage.cache_read_tokens).toBe(286_215);
+    expect(finished.context_usage?.cache_read_tokens).toBe(60_400);
+  });
+});

@@ -383,6 +383,12 @@ function emptyUsage(): Usage {
   return { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
 }
 
+function lastRoundUsage(acc: TurnAccumulator): Usage | undefined {
+  const u = acc.usage;
+  const context = u.input_tokens + u.cache_read_tokens + u.cache_creation_tokens;
+  return context === 0 ? undefined : u;
+}
+
 interface SdkTurnFacts {
   subtype: string;
   sessionId?: string;
@@ -601,11 +607,13 @@ export class ClaudeAgentProvider implements SidecarProvider {
       }
 
       const total = Date.now() - startedAt;
+      const context = lastRoundUsage(acc);
       yield {
         type: "done",
         content: acc.text,
         finish_reason: finishReasonOf(seen, acc.stopReason),
         usage: seen.usage ?? acc.usage,
+        ...(context === undefined ? {} : { context_usage: context }),
         timing: {
           total_ms: total,
           time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
@@ -802,12 +810,14 @@ export async function* claudeAgentToolLoopEvents(
     }
 
     const total = Date.now() - startedAt;
+    const context = lastRoundUsage(acc);
     yield {
       type: "done",
       content: acc.text,
       finish_reason: finishReasonOf(seen, acc.stopReason),
       content_blocks: round.finalBlocks(),
       usage: seen.usage ?? acc.usage,
+      ...(context === undefined ? {} : { context_usage: context }),
       timing: {
         total_ms: total,
         time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,

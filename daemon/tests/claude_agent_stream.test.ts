@@ -168,6 +168,66 @@ describe("what gets billed", () => {
       cache_creation_tokens: 44,
     });
   });
+
+  test("context_usage is the last round alone, not every round of the tool loop summed", async () => {
+    const { events } = await collect({
+      rounds: [
+        {
+          blocks: [{ kind: "text", text: "looking" }],
+          startUsage: { input_tokens: 5, cache_read_input_tokens: 50_000 },
+          deltaUsage: { output_tokens: 100 },
+        },
+        {
+          blocks: [{ kind: "text", text: "still looking" }],
+          startUsage: { input_tokens: 5, cache_read_input_tokens: 56_000 },
+          deltaUsage: { output_tokens: 200 },
+        },
+        {
+          blocks: [{ kind: "text", text: "done" }],
+          startUsage: { input_tokens: 5, cache_read_input_tokens: 60_000, cache_creation_input_tokens: 900 },
+          deltaUsage: { output_tokens: 300 },
+        },
+      ],
+      resultUsage: {
+        input_tokens: 15,
+        output_tokens: 600,
+        cache_read_input_tokens: 166_000,
+        cache_creation_input_tokens: 900,
+      },
+    });
+    expect(done(events).usage.cache_read_tokens).toBe(166_000);
+    expect(done(events).context_usage).toEqual({
+      input_tokens: 5,
+      output_tokens: 300,
+      cache_read_tokens: 60_000,
+      cache_creation_tokens: 900,
+    });
+  });
+
+  test("a nested agent's rounds do not become the reported context", async () => {
+    const { events } = await collect({
+      rounds: [
+        {
+          blocks: [{ kind: "text", text: "mine" }],
+          startUsage: { input_tokens: 7, cache_read_input_tokens: 40_000 },
+        },
+        {
+          blocks: [{ kind: "text", text: "nested" }],
+          startUsage: { input_tokens: 1, cache_read_input_tokens: 999_000 },
+          nested: true,
+        },
+      ],
+    });
+    expect(done(events).context_usage?.cache_read_tokens).toBe(40_000);
+  });
+
+  test("a run that streamed no context leaves context_usage off so billing usage stands in", async () => {
+    const { events } = await collect({
+      rounds: [],
+      resultUsage: { input_tokens: 11, cache_read_input_tokens: 33 },
+    });
+    expect(done(events).context_usage).toBeUndefined();
+  });
 });
 
 describe("frames that are not this turn", () => {
