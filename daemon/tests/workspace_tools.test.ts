@@ -193,33 +193,21 @@ describe("read", () => {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree, c.workspace_missing === true);
       const ws = c.workspace_unset === true ? "" : workspace;
-      const got = blankDirectorySizes(await outcome(() => handleRead(c.input, ws)));
+      const got = await outcome(() => handleRead(c.input, ws));
       recordedValue(CAPTURE, ["read", index, "result"], got);
       if (recording) return;
-      expect(got).toEqual(blankDirectorySizes(c.result));
+      expect(got).toEqual(c.result);
     });
   }
 
-  test("directory size is the filesystem's", async () => {
+  test("directory trees show nested files without filesystem sizes", async () => {
     const { workspace } = await makeCase([
       { path: "sub", kind: "dir" },
       { path: "sub/deep.md", kind: "file", content: "deep file" },
     ]);
-    const listing = (await handleRead({}, workspace)) as { entries: { name: string; size: number }[] };
-    const sub = listing.entries.find((e) => e.name === "sub");
-    expect(sub?.size).toBe((await lstat(join(workspace, "sub"))).size);
+    expect(await handleRead({}, workspace)).toBe("workspace/\n└── sub/\n    └── deep.md");
   });
 });
-
-function blankDirectorySizes(o: Outcome): Outcome {
-  if (!("ok" in o)) return o;
-  const ok = o.ok as Record<string, unknown> | null;
-  if (ok === null || typeof ok !== "object" || !Array.isArray(ok.entries)) return o;
-  const entries = (ok.entries as Record<string, unknown>[]).map((e) =>
-    e.type === "directory" ? { ...e, size: null } : e,
-  );
-  return { ok: { ...ok, entries } };
-}
 
 function changedPaths(
   before: { path: string; content?: string }[],

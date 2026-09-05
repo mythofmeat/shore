@@ -126,15 +126,21 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
           description:
             "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root.",
         },
+        depth: {
+          type: "integer",
+          minimum: 1,
+          maximum: 8,
+          description: "Directory tree depth (default 2, maximum 8). Use 1 for immediate children. Ignored for files.",
+        },
         offset: {
           type: "number",
           description:
-            "Line number to start reading from (1-based). Files only; ignored for directories. Optional.",
+            "Starting file line or directory tree entry (1-based). Optional.",
         },
         limit: {
           type: "number",
           description:
-            "Maximum number of lines to read. Files only; ignored for directories. Optional.",
+            "Maximum file lines or tree entries. Directories default to 200 entries, capped at 1000.",
         },
       },
       required: [],

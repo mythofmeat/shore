@@ -26,7 +26,7 @@
         "path": "empty.md"
       },
       {
-        "content": "\ud83c\udf0a tea\n\u8336 is tea\nTEA time\n",
+        "content": "🌊 tea\n茶 is tea\nTEA time\n",
         "kind": "file",
         "mtime_secs": 1700000400,
         "path": "unicode.md"
@@ -116,7 +116,7 @@
       {
         "content": "omega\n",
         "kind": "file",
-        "path": "\u03a9.md"
+        "path": "Ω.md"
       },
       {
         "kind": "dir",
@@ -181,7 +181,7 @@
         "path": "tie-a.md"
       },
       {
-        "content": "\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a tea after emoji\n\u8336 tea\n",
+        "content": "🌊🌊🌊 tea after emoji\n茶 tea\n",
         "kind": "file",
         "mtime_secs": 1700004000,
         "path": "unicode.md"
@@ -263,7 +263,7 @@
       },
       "input": {},
       "result": {
-        "$ref": "s1"
+        "ok": "workspace/\n├── memory/\n│   └── people/ …\n├── sub/\n│   └── deep.md\n├── SOUL.md\n├── empty.md\n├── no-trailing.md\n├── notes.md\n└── unicode.md"
       }
     },
     {
@@ -271,9 +271,7 @@
       "tree": [],
       "input": {},
       "result": {
-        "ok": {
-          "entries": []
-        }
+        "ok": "workspace/\n(empty directory)"
       }
     },
     {
@@ -360,7 +358,7 @@
           "total_lines": 5,
           "offset": 2,
           "returned_lines": 2,
-          "note": "Showing lines 2\u20133 of 5. Use offset=4 to continue."
+          "note": "Showing lines 2–3 of 5. Use offset=4 to continue."
         }
       }
     },
@@ -380,7 +378,7 @@
           "total_lines": 5,
           "offset": 1,
           "returned_lines": 2,
-          "note": "Showing lines 1\u20132 of 5. Use offset=3 to continue."
+          "note": "Showing lines 1–2 of 5. Use offset=3 to continue."
         }
       }
     },
@@ -400,7 +398,7 @@
           "total_lines": 5,
           "offset": 1,
           "returned_lines": 0,
-          "note": "Showing lines 1\u20130 of 5. Use offset=1 to continue."
+          "note": "Showing lines 1–0 of 5. Use offset=1 to continue."
         }
       }
     },
@@ -556,7 +554,7 @@
       "result": {
         "ok": {
           "path": "unicode.md",
-          "content": "\ud83c\udf0a tea\n\u8336 is tea\nTEA time\n",
+          "content": "🌊 tea\n茶 is tea\nTEA time\n",
           "total_lines": 4
         }
       }
@@ -570,15 +568,7 @@
         "path": "sub"
       },
       "result": {
-        "ok": {
-          "entries": [
-            {
-              "name": "deep.md",
-              "type": "file",
-              "size": 9
-            }
-          ]
-        }
+        "ok": "sub/\n└── deep.md"
       }
     },
     {
@@ -590,15 +580,7 @@
         "path": "memory"
       },
       "result": {
-        "ok": {
-          "entries": [
-            {
-              "name": "people",
-              "type": "directory",
-              "size": null
-            }
-          ]
-        }
+        "ok": "memory/\n└── people/\n    └── ren.md"
       }
     },
     {
@@ -642,7 +624,7 @@
         "path": "workspace"
       },
       "result": {
-        "$ref": "s1"
+        "ok": "workspace/\n├── memory/\n│   └── people/ …\n├── sub/\n│   └── deep.md\n├── SOUL.md\n├── empty.md\n├── no-trailing.md\n├── notes.md\n└── unicode.md"
       }
     },
     {
@@ -714,7 +696,7 @@
         "path": 5
       },
       "result": {
-        "$ref": "s1"
+        "ok": "workspace/\n├── memory/\n│   └── people/ …\n├── sub/\n│   └── deep.md\n├── SOUL.md\n├── empty.md\n├── no-trailing.md\n├── notes.md\n└── unicode.md"
       }
     },
     {
@@ -724,55 +706,7 @@
       },
       "input": {},
       "result": {
-        "ok": {
-          "entries": [
-            {
-              "name": ".git",
-              "type": "directory",
-              "size": null
-            },
-            {
-              "name": ".gitignore",
-              "type": "file",
-              "size": 6
-            },
-            {
-              "name": "A.md",
-              "type": "file",
-              "size": 3
-            },
-            {
-              "name": "a.md",
-              "type": "file",
-              "size": 2
-            },
-            {
-              "name": "b.md",
-              "type": "file",
-              "size": 4
-            },
-            {
-              "name": "dir",
-              "type": "directory",
-              "size": null
-            },
-            {
-              "name": "dirlink",
-              "type": "file",
-              "size": 3
-            },
-            {
-              "name": "link.md",
-              "type": "file",
-              "size": 4
-            },
-            {
-              "name": "\u03a9.md",
-              "type": "file",
-              "size": 6
-            }
-          ]
-        }
+        "ok": "workspace/\n├── .git/\n│   └── config\n├── dir/\n│   └── inner.md\n├── .gitignore\n├── A.md\n├── a.md\n├── b.md\n├── dirlink@\n├── link.md@\n└── Ω.md"
       }
     },
     {
@@ -784,15 +718,7 @@
         "path": "dirlink"
       },
       "result": {
-        "ok": {
-          "entries": [
-            {
-              "name": "inner.md",
-              "type": "file",
-              "size": 3
-            }
-          ]
-        }
+        "ok": "dirlink/\n└── inner.md"
       }
     },
     {
@@ -820,7 +746,7 @@
         "path": "."
       },
       "result": {
-        "$ref": "s1"
+        "ok": "./\n├── memory/\n│   └── people/ …\n├── sub/\n│   └── deep.md\n├── SOUL.md\n├── empty.md\n├── no-trailing.md\n├── notes.md\n└── unicode.md"
       }
     },
     {
@@ -829,10 +755,7 @@
       "workspace_missing": true,
       "input": {},
       "result": {
-        "ok": {
-          "entries": [],
-          "note": "directory does not exist yet"
-        }
+        "ok": "workspace/ (directory does not exist yet)"
       }
     },
     {
@@ -879,7 +802,7 @@
       "tree": [],
       "input": {
         "path": "u.md",
-        "content": "\ud83c\udf0a\u8336"
+        "content": "🌊茶"
       }
     },
     {
@@ -1218,7 +1141,7 @@
         {
           "path": "u.md",
           "kind": "file",
-          "content": "\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a"
+          "content": "🌊🌊🌊"
         }
       ],
       "input": {
@@ -1237,7 +1160,7 @@
         {
           "path": "wide.md",
           "kind": "file",
-          "content": "\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a\ud83c\udf0a"
+          "content": "🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊"
         }
       ],
       "input": {
@@ -1674,7 +1597,7 @@
         "max_results": 0
       },
       "max_file_bytes": null,
-      "searched_files": 1,
+      "searched_files": 2,
       "skipped_binary_or_large": 0
     },
     {
@@ -1700,7 +1623,7 @@
         "max_results": 1
       },
       "max_file_bytes": null,
-      "searched_files": 1,
+      "searched_files": 2,
       "skipped_binary_or_large": 0
     },
     {
@@ -1713,7 +1636,7 @@
         "max_results": 2
       },
       "max_file_bytes": null,
-      "searched_files": 2,
+      "searched_files": 3,
       "skipped_binary_or_large": 0
     },
     {
@@ -1785,7 +1708,7 @@
         "$ref": "s4"
       },
       "input": {
-        "query": "\u8336"
+        "query": "茶"
       },
       "max_file_bytes": null,
       "searched_files": 7,
@@ -2140,10 +2063,10 @@
     },
     {
       "name": "cjk terms",
-      "content": "\u8336\u306e\u8a71\n\u304a\u8336\n",
-      "query_lower": "\u8336",
+      "content": "茶の話\nお茶\n",
+      "query_lower": "茶",
       "line": 1,
-      "excerpt": "\u8336\u306e\u8a71"
+      "excerpt": "茶の話"
     },
     {
       "name": "first non-heading fallback",
@@ -2161,10 +2084,10 @@
     },
     {
       "name": "cjk term, direct miss",
-      "content": "# heading\nfirst line\n\u304a\u8336\u306e\u8a71\n",
-      "query_lower": "\u8336 zzz",
+      "content": "# heading\nfirst line\nお茶の話\n",
+      "query_lower": "茶 zzz",
       "line": 3,
-      "excerpt": "\u304a\u8336\u306e\u8a71"
+      "excerpt": "お茶の話"
     },
     {
       "name": "underscore term, direct miss",
@@ -3380,9 +3303,9 @@
       "email": "qi-fei@shore.local"
     },
     {
-      "character": "\u8336",
-      "name": "\u8336",
-      "email": "\u8336@shore.local"
+      "character": "茶",
+      "name": "茶",
+      "email": "茶@shore.local"
     },
     {
       "character": "Ren Zhao",
@@ -3410,9 +3333,9 @@
       "email": "mixed-case@shore.local"
     },
     {
-      "character": "\u0130stanbul",
-      "name": "\u0130stanbul",
-      "email": "i\u0307stanbul@shore.local"
+      "character": "İstanbul",
+      "name": "İstanbul",
+      "email": "i̇stanbul@shore.local"
     }
   ]
 }

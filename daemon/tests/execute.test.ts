@@ -436,3 +436,20 @@ describe("the cap a tool result is held to", () => {
     expect(frame?.output).not.toBe(LONG);
   });
 });
+
+test("compact file reads reach both the model and terminal, retaining the internal value", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "shore-output-execution-"));
+  try {
+    await writeFile(join(workspace, "note.md"), "hello\nworld");
+    const ctx = { ...scriptedContext("read", { ok: null }), workspaceDir: workspace };
+    const { exec, frames } = harness(null, { max_result_chars: 1000, timeout_ms: 1000 }, ctx);
+    const result = await runToolUse({ id: "read-text", name: "read", input: { path: "note.md" } }, exec, []);
+    const expected = "note.md: lines 1–2 of 2\n1: hello\n2: world";
+    expect(result.raw).toBe(expected);
+    expect(result.block).toMatchObject({ content: expected });
+    expect(frames.find((frame) => frame.type === "tool_result")).toMatchObject({ output: expected });
+    expect(result.value).toEqual({ path: "note.md", content: "hello\nworld", total_lines: 2 });
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+});

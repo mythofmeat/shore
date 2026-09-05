@@ -1,3 +1,4 @@
+import { formatToolOutput } from "./output.ts";
 import { shoreLog } from "../log.ts";
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -19,7 +20,6 @@ import {
 } from "./dispatch.ts";
 import {
   base64Bytes,
-  payloadText,
   toolMediaOf,
   type ToolMediaItem,
   type ToolResultPayload,
@@ -100,7 +100,7 @@ export async function runToolUse(
     );
     payload = toolMediaOf(value);
     okValue = payload === undefined ? value : payload.value;
-    rawOutput = joinLines([payloadText(okValue), ...(payload?.extra ?? [])]);
+    rawOutput = joinLines([formatToolOutput(toolUse.name, okValue), ...(payload?.extra ?? [])]);
     isError = false;
   } catch (e) {
     rawOutput = e instanceof Error ? e.message : String(e);

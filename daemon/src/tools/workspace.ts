@@ -198,14 +198,14 @@ function truncateExcerptLine(line: string): string {
 
 export async function handleRead(input: ToolInput, workspaceDir: string): Promise<unknown> {
   const pathStr = asStr(input, "path");
-  if (pathStr === undefined) return await listDirectory(workspaceDir, undefined);
+  if (pathStr === undefined) return await listDirectory(workspaceDir, undefined, input);
 
   const [, stripped] = resolveRoots(workspaceDir, pathStr);
-  if (stripped === "") return await listDirectory(workspaceDir, pathStr);
+  if (stripped === "") return await listDirectory(workspaceDir, pathStr, input);
 
   const path = resolvePath(workspaceDir, pathStr);
 
-  if (await isDir(path)) return await listDirectory(workspaceDir, pathStr);
+  if (await isDir(path)) return await listDirectory(workspaceDir, pathStr, input);
 
   if (!(await exists(path))) throw new ToolIoError(`file not found: ${pathStr}`);
   if (!(await isFile(path))) {
@@ -248,40 +248,50 @@ export async function handleRead(input: ToolInput, workspaceDir: string): Promis
 async function listDirectory(
   workspaceDir: string,
   pathStr: string | undefined,
-): Promise<unknown> {
+  input: ToolInput,
+): Promise<string> {
   const dir = resolveListPath(workspaceDir, pathStr);
-
-  if (!(await exists(dir))) {
-    return { entries: [], note: "directory does not exist yet" };
+  const depth = asU64(input, "depth") ?? 2;
+  if (depth < 1 || depth > 8 || (input.depth !== undefined && asU64(input, "depth") === undefined)) {
+    throw new InvalidArgs("depth must be an integer between 1 and 8");
   }
-  if (!(await isDir(dir))) {
-    throw new InvalidArgs(`${pathStr ?? "."} is not a directory`);
-  }
+  const offset = Math.max(asU64(input, "offset") ?? 1, 1);
+  const limit = Math.max(1, Math.min(asU64(input, "limit") ?? 200, 1000));
+  const label = pathStr ?? "workspace";
+  const lines = [`${label.replace(/\/$/, "")}/`];
+  if (!(await exists(dir))) return `${lines[0]} (directory does not exist yet)`;
+  if (!(await isDir(dir))) throw new InvalidArgs(`${label} is not a directory`);
 
-  let names: string[];
+  let seen = 0;
+  let more = false;
+  async function walk(current: string, prefix: string, level: number): Promise<void> {
+    const entries = await readdir(current, { withFileTypes: true });
+    entries.sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || compareRustStrings(a.name, b.name));
+    for (const [index, entry] of entries.entries()) {
+      seen += 1;
+      if (seen >= offset + limit) {
+        more = true;
+        return;
+      }
+      const last = index === entries.length - 1;
+      const name = Array.from(entry.name).some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127) ? JSON.stringify(entry.name) : entry.name;
+      const suffix = entry.isDirectory() ? (level === depth ? "/ …" : "/") : entry.isSymbolicLink() ? "@" : "";
+      if (seen >= offset) lines.push(`${prefix}${last ? "└── " : "├── "}${name}${suffix}`);
+      if (entry.isDirectory() && level < depth) {
+        await walk(join(current, entry.name), `${prefix}${last ? "    " : "│   "}`, level + 1);
+        if (more) return;
+      }
+    }
+  }
   try {
-    names = await readdir(dir);
+    await walk(dir, "", 1);
   } catch (e) {
     throw new ToolIoError(ioMessage(e));
   }
-
-  const entries: { name: string; type: string; size: number }[] = [];
-  for (const name of names) {
-    let meta;
-    try {
-      meta = await lstat(join(dir, name));
-    } catch (e) {
-      throw new ToolIoError(ioMessage(e));
-    }
-    entries.push({
-      name,
-      type: meta.isDirectory() ? "directory" : "file",
-      size: meta.size,
-    });
-  }
-
-  entries.sort((a, b) => compareRustStrings(a.name, b.name));
-  return { entries };
+  if (seen === 0) lines.push("(empty directory)");
+  else if (lines.length === 1 && !more) lines.push("(no entries at this offset)");
+  if (more) lines.push(`More entries: use offset=${offset + limit} with the same path and depth, or read a subdirectory.`);
+  return lines.join("\n");
 }
 
 export async function handleEdit(
@@ -618,14 +628,24 @@ async function handleSearchLexical(
     candidates,
     workspaceDir,
     queryLower,
-    maxResults,
+    maxResults + 1,
     oversizeSkipped,
   );
 
+  const hasMore = scan.results.length > maxResults;
+  if (hasMore) {
+    scan.results.pop();
+    const last = scan.filesSummary.at(-1) as { hits: number } | undefined;
+    if (last !== undefined) {
+      last.hits -= 1;
+      if (last.hits === 0) scan.filesSummary.pop();
+    }
+  }
   const count = scan.results.length;
   const response: Record<string, unknown> = {
     query,
     results: scan.results,
+    ...(hasMore ? { has_more: true } : {}),
     count,
     searched_files: scan.searchedFiles,
     skipped_binary_or_large: scan.skippedBinaryOrLarge,
@@ -813,6 +833,7 @@ async function handleSearchHybrid(
     mode,
     results,
     count: results.length,
+    ...(result.files.length > maxResults ? { has_more: true } : {}),
     searched_files: result.searchedFiles,
     embedded_files: result.embeddedFiles,
     ...(result.pendingFiles === 0 ? {} : { pending_files: result.pendingFiles }),

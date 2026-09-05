@@ -80,18 +80,18 @@ EXECUTE = "src/tools/execute.ts"
 MUTANTS = [
     # ── the result string ───────────────────────────────────────────────
     ("a string result is serialized like everything else",
-     'rawOutput = joinLines([payloadText(okValue), ...(payload?.extra ?? [])]);',
+     'rawOutput = joinLines([formatToolOutput(toolUse.name, okValue), ...(payload?.extra ?? [])]);',
      'rawOutput = joinLines([JSON.stringify(okValue) ?? "", ...(payload?.extra ?? [])]);'),
     ("a non-string result is stringified rather than serialized",
-     'rawOutput = joinLines([payloadText(okValue), ...(payload?.extra ?? [])]);',
+     'rawOutput = joinLines([formatToolOutput(toolUse.name, okValue), ...(payload?.extra ?? [])]);',
      'rawOutput = joinLines([typeof okValue === "string" ? okValue : String(okValue),\n'
      '      ...(payload?.extra ?? [])]);'),
     ("a media payload is read as its own wrapper rather than unwrapped",
      "    okValue = payload === undefined ? value : payload.value;",
      "    okValue = value;"),
     ("the media payload's extra lines never reach the model",
-     'rawOutput = joinLines([payloadText(okValue), ...(payload?.extra ?? [])]);',
-     'rawOutput = payloadText(okValue);'),
+     'rawOutput = joinLines([formatToolOutput(toolUse.name, okValue), ...(payload?.extra ?? [])]);',
+     'rawOutput = formatToolOutput(toolUse.name, okValue);'),
     ("a failure reports String(e), keeping the `Error: ` prefix",
      "rawOutput = e instanceof Error ? e.message : String(e);",
      "rawOutput = String(e);"),
