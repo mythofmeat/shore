@@ -329,7 +329,11 @@ describe("handleConnection", () => {
       "hello",
       "history",
     ]);
-    expect(c.routed.map((r) => r.kind)).toEqual(["engine", "all_clients_disconnected"]);
+    expect(c.routed.map((r) => r.kind)).toEqual([
+      "engine",
+      "session_disconnected",
+      "all_clients_disconnected",
+    ]);
     expect(c.router.sessions()).toEqual([]);
   });
 

@@ -229,8 +229,9 @@ describe("what a connection produces", () => {
       expect(controls[0]).toMatchObject({ kind: "engine", msg: { type: "cancel" } });
 
       await peer.detach();
-      expect(controls).toHaveLength(2);
-      expect(controls[1]).toEqual({ kind: "all_clients_disconnected" });
+      expect(controls).toHaveLength(3);
+      expect(controls[1]).toMatchObject({ kind: "session_disconnected" });
+      expect(controls[2]).toEqual({ kind: "all_clients_disconnected" });
     } finally {
       releaseCommand();
       await stop();

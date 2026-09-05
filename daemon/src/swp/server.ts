@@ -258,6 +258,7 @@ export class Server {
         subscription.unsubscribe();
         const { allGone } = this.#router.unregisterSession(clientId);
         this.#config.log?.info?.("Local client detached", { client_id: clientId });
+        await this.#route({ kind: "session_disconnected", sessionId: clientId });
         if (allGone) await this.#route({ kind: "all_clients_disconnected" });
         await relay;
       },

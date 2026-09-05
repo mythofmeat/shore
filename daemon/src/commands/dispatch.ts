@@ -102,6 +102,7 @@ export interface CommandSession {
   thread?: string;
   threadModel?: string;
   runtime: ConfigRuntime;
+  signal?: AbortSignal;
   env?: NodeJS.ProcessEnv;
   emit?: FrameSink;
 }
@@ -305,6 +306,7 @@ export async function runCommand(
           config: session.config,
           dataDir: session.dataDir,
           conversation: engine.messages(),
+          ...(session.signal === undefined ? {} : { signal: session.signal }),
         },
         args,
       );

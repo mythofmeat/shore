@@ -815,7 +815,7 @@ describe("the handler, whole", () => {
 
       const deps = buildMessageHandlerDeps(handlerAssembly(runtime));
       await deps
-        .dispatchCommand({ name: "status" } as never, {} as never)
+        .dispatchCommand({ name: "status" } as never, {} as never, new AbortController().signal)
         .catch(() => undefined);
 
       expect(held).toEqual(["history", "workspace"]);

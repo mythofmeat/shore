@@ -250,11 +250,12 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     leases: new StreamLeases(a.log),
     registry: handlerRegistry(a.runtime.registry),
     notifier: handlerNotifier(a.runtime.notifier),
-    dispatchCommand: async (command, meta) => {
+    dispatchCommand: async (command, meta, signal) => {
       const run = async () => {
+        signal.throwIfAborted();
         const endForeground = beginIndexForeground(a);
         try {
-          return await dispatchCommand(command, meta);
+          return await dispatchCommand(command, meta, signal);
         } finally {
           endForeground();
         }

@@ -34,6 +34,7 @@ export interface RunToolContext {
   now?: () => string;
   newMessageId?: () => string;
   toolUseId?: () => string;
+  signal?: AbortSignal;
 }
 
 export interface RunToolRequest {
@@ -244,12 +245,15 @@ export async function runTool(
   const newMessageId = ctx.newMessageId ?? (() => `m_${crypto.randomUUID()}`);
   const toolUseId = (ctx.toolUseId ?? (() => `debug_${crypto.randomUUID()}`))();
 
+  const signal = ctx.signal ?? new AbortController().signal;
+  signal.throwIfAborted();
+
   const turn: SubagentTurn = {
     conversation: ctx.conversation,
     send,
     now,
     newMessageId,
-    signal: new AbortController().signal,
+    signal,
   };
 
   const toolContext = await buildToolContext(

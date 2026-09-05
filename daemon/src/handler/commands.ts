@@ -45,14 +45,15 @@ export interface CommandPathDeps {
 
 export function makeDispatchCommand(
   deps: CommandPathDeps,
-): (cmd: Command, meta: RequestMeta) => Promise<ServerMessage> {
-  return (cmd, meta) => dispatchCommand(deps, cmd, meta);
+): (cmd: Command, meta: RequestMeta, signal: AbortSignal) => Promise<ServerMessage> {
+  return (cmd, meta, signal) => dispatchCommand(deps, cmd, meta, signal);
 }
 
 export async function dispatchCommand(
   deps: CommandPathDeps,
   cmd: Command,
   meta: RequestMeta,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<ServerMessage> {
   const sessionId = meta.session.sessionId;
   const selected = meta.session.selectedCharacter ?? undefined;
@@ -86,7 +87,7 @@ export async function dispatchCommand(
     return frameWithRid(commandFrame(cmd.name, { err: internalError(message) }), rid);
   }
 
-  const session = characterSession(deps, character, config, sessionId, rid, engine.thread);
+  const session = characterSession(deps, character, config, sessionId, rid, signal, engine.thread);
 
   let frame: ServerMessage;
   try {
@@ -203,6 +204,7 @@ function characterSession(
   config: LoadedConfig,
   sessionId: number,
   rid: string | undefined,
+  signal: AbortSignal,
   thread?: string,
 ): CommandSession {
   const saved = savedModelForCharacter(
@@ -226,6 +228,7 @@ function characterSession(
     ...(thread === undefined ? {} : { thread }),
     ...(threadModel === undefined ? {} : { threadModel }),
     runtime: deps.runtime,
+    signal,
     ...(deps.env === undefined ? {} : { env: deps.env }),
     emit: sessionEmitter(deps.router, sessionId, rid),
   };

@@ -12,6 +12,8 @@ import {
 import { StreamLeases } from "../src/handler/lease.ts";
 import { SessionRouter, type RequestMeta } from "../src/swp/session.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
+import type { Command } from "../src/protocol/Command.ts";
+import { required } from "../src/util/required.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { NoModelError } from "../src/handler/setup.ts";
 import { NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
@@ -40,6 +42,11 @@ function harness(
   characters: readonly string[],
   sessions: number,
   runGeneration?: (params: GenerationParams) => Promise<void>,
+  dispatchCommand?: (
+    cmd: Command,
+    meta: RequestMeta,
+    signal: AbortSignal,
+  ) => Promise<ServerMessage>,
 ) {
   const router = new SessionRouter();
   const frames = new Map<number, ServerMessage[]>();
@@ -57,8 +64,10 @@ function harness(
     leases,
     registry: registryOf(characters),
     notifier: { notify: (_e, title, body) => notifications.push({ title, body }) },
-    dispatchCommand: () =>
-      Promise.resolve({ type: "command_output", name: "status", success: true, data: null }),
+    dispatchCommand:
+      dispatchCommand ??
+      (() =>
+        Promise.resolve({ type: "command_output", name: "status", success: true, data: null })),
     runGeneration: (params) => {
       started.push(params);
       if (runGeneration !== undefined) return runGeneration(params);
@@ -674,5 +683,235 @@ describe("a generation that throws", () => {
       code: "timeout",
       message: "stream errored after partial usage: The operation timed out.",
     });
+  });
+});
+
+interface Deferred {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+  readonly reject: (error: unknown) => void;
+}
+
+function deferred(): Deferred {
+  let settle: () => void = () => undefined;
+  let fail: (error: unknown) => void = () => undefined;
+  const promise = new Promise<void>((resolve, reject) => {
+    settle = resolve;
+    fail = reject;
+  });
+  return { promise, resolve: settle, reject: fail };
+}
+
+const command = (name: string, rid: string | null = null): Command =>
+  ({ type: "command", name, args: {}, rid }) as unknown as Command;
+
+const commandOutput = (name: string): ServerMessage => ({
+  type: "command_output",
+  name,
+  data: null,
+});
+
+function gatedDispatch() {
+  const gates = new Map<string, Deferred>();
+  const signals = new Map<string, AbortSignal>();
+  const started: string[] = [];
+
+  const gate = (name: string): Deferred => {
+    const existing = gates.get(name);
+    if (existing !== undefined) return existing;
+    const fresh = deferred();
+    gates.set(name, fresh);
+    return fresh;
+  };
+
+  const dispatch = async (
+    cmd: Command,
+    _meta: RequestMeta,
+    signal: AbortSignal,
+  ): Promise<ServerMessage> => {
+    started.push(cmd.name);
+    signals.set(cmd.name, signal);
+    await gate(cmd.name).promise;
+    return commandOutput(cmd.name);
+  };
+
+  return { dispatch, gate, signals, started };
+}
+
+const settle = async (): Promise<void> => {
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+};
+
+const names = (frames: ServerMessage[]): string[] =>
+  frames.map((f) => (f.type === "command_output" ? f.name : f.type));
+
+describe("per-session routing queues", () => {
+  test("a slow command on one session does not delay another session", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const { handler, frames } = harness(["ada"], 2, undefined, dispatch);
+
+    handler.enqueueRouted({ kind: "command", cmd: command("slow"), meta: meta("ada", 1, null, "command") });
+    handler.enqueueRouted({ kind: "command", cmd: command("fast"), meta: meta("ada", 2, null, "command") });
+    gate("fast").resolve();
+    await settle();
+
+    expect(started).toEqual(["slow", "fast"]);
+    expect(names(required(frames.get(2)))).toEqual(["fast"]);
+    expect(names(required(frames.get(1)))).toEqual([]);
+
+    gate("slow").resolve();
+    await handler.drain();
+    expect(names(required(frames.get(1)))).toEqual(["slow"]);
+  });
+
+  test("commands on one session reply in the order they were issued", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const { handler, frames } = harness(["ada"], 1, undefined, dispatch);
+
+    for (const name of ["first", "second", "third"]) {
+      handler.enqueueRouted({
+        kind: "command",
+        cmd: command(name),
+        meta: meta("ada", 1, null, "command"),
+      });
+    }
+    gate("third").resolve();
+    gate("second").resolve();
+    await settle();
+
+    expect(started).toEqual(["first"]);
+
+    gate("first").resolve();
+    await handler.drain();
+    expect(names(required(frames.get(1)))).toEqual(["first", "second", "third"]);
+  });
+
+  test("a message on another session launches while a command is pending", async () => {
+    const { dispatch, gate } = gatedDispatch();
+    const { handler, started } = harness(["ada"], 2, async () => undefined, dispatch);
+
+    handler.enqueueRouted({ kind: "command", cmd: command("slow"), meta: meta("ada", 1, null, "command") });
+    handler.enqueueRouted({
+      kind: "engine",
+      msg: message(null, "hi", true),
+      meta: meta("ada", 2, null, "message"),
+    });
+    await settle();
+
+    expect(started).toHaveLength(1);
+    expect(started[0]?.meta.session.sessionId).toBe(2);
+
+    gate("slow").resolve();
+    await handler.drain();
+  });
+
+  test("a message queued behind a command on the same session waits for it", async () => {
+    const { dispatch, gate } = gatedDispatch();
+    const { handler, started } = harness(["ada"], 1, async () => undefined, dispatch);
+
+    handler.enqueueRouted({ kind: "command", cmd: command("slow"), meta: meta("ada", 1, null, "command") });
+    handler.enqueueRouted({
+      kind: "engine",
+      msg: message(null, "hi", true),
+      meta: meta("ada", 1, null, "message"),
+    });
+    await settle();
+    expect(started).toHaveLength(0);
+
+    gate("slow").resolve();
+    await settle();
+    expect(started).toHaveLength(1);
+    await handler.drain();
+  });
+
+  test("a running generation does not block the next command on its session", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const generating = deferred();
+    const { handler, frames } = harness(["ada"], 1, async () => await generating.promise, dispatch);
+
+    handler.enqueueRouted({
+      kind: "engine",
+      msg: message(null, "hi", true),
+      meta: meta("ada", 1, null, "message"),
+    });
+    handler.enqueueRouted({ kind: "command", cmd: command("after"), meta: meta("ada", 1, null, "command") });
+    gate("after").resolve();
+    await settle();
+
+    expect(started).toEqual(["after"]);
+    expect(names(required(frames.get(1)))).toEqual(["after"]);
+
+    generating.resolve();
+    await handler.drain();
+  });
+
+  test("a failing dispatch is logged and does not wedge the session queue", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const { handler, frames, errors } = harness(["ada"], 1, undefined, dispatch);
+
+    handler.enqueueRouted({ kind: "command", cmd: command("boom"), meta: meta("ada", 1, null, "command") });
+    handler.enqueueRouted({ kind: "command", cmd: command("after"), meta: meta("ada", 1, null, "command") });
+    gate("boom").reject(new Error("dispatch exploded"));
+    gate("after").resolve();
+    await handler.drain();
+
+    expect(started).toEqual(["boom", "after"]);
+    expect(errors.map((e) => e.fields?.["error"])).toContain("dispatch exploded");
+    expect(names(required(frames.get(1)))).toEqual(["after"]);
+  });
+
+  test("drain waits for queued work that has not started yet", async () => {
+    const { dispatch, gate } = gatedDispatch();
+    const { handler, frames } = harness(["ada"], 1, undefined, dispatch);
+
+    handler.enqueueRouted({ kind: "command", cmd: command("first"), meta: meta("ada", 1, null, "command") });
+    handler.enqueueRouted({ kind: "command", cmd: command("second"), meta: meta("ada", 1, null, "command") });
+
+    let drained = false;
+    const draining = handler.drain().then(() => {
+      drained = true;
+    });
+    gate("first").resolve();
+    await settle();
+    expect(drained).toBe(false);
+
+    gate("second").resolve();
+    await draining;
+    expect(names(required(frames.get(1)))).toEqual(["first", "second"]);
+  });
+});
+
+describe("a session that disconnects mid-command", () => {
+  test("aborts the in-flight command and suppresses its reply", async () => {
+    const { dispatch, gate, signals } = gatedDispatch();
+    const { handler, router, frames } = harness(["ada"], 1, undefined, dispatch);
+
+    handler.enqueueRouted({ kind: "command", cmd: command("slow"), meta: meta("ada", 1, null, "command") });
+    await settle();
+    expect(required(signals.get("slow")).aborted).toBe(false);
+
+    router.unregisterSession(1);
+    await handler.handleControl({ kind: "session_disconnected", sessionId: 1 });
+    expect(required(signals.get("slow")).aborted).toBe(true);
+
+    gate("slow").resolve();
+    await handler.drain();
+    expect(names(required(frames.get(1)))).toEqual([]);
+  });
+
+  test("drops a command still queued for the departed session", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const { handler, router } = harness(["ada"], 1, undefined, dispatch);
+
+    handler.enqueueRouted({ kind: "command", cmd: command("slow"), meta: meta("ada", 1, null, "command") });
+    handler.enqueueRouted({ kind: "command", cmd: command("never"), meta: meta("ada", 1, null, "command") });
+    await settle();
+
+    router.unregisterSession(1);
+    await handler.handleControl({ kind: "session_disconnected", sessionId: 1 });
+    gate("slow").resolve();
+    await handler.drain();
+
+    expect(started).toEqual(["slow"]);
   });
 });

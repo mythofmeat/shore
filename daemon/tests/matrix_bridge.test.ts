@@ -166,7 +166,7 @@ async function harness(
 
   const routing = (async () => {
     for await (const routed of server.routes()) {
-      if (routed.kind === "all_clients_disconnected") continue;
+      if (routed.kind !== "command" && routed.kind !== "engine") continue;
       const msg = routed.kind === "command" ? ({ type: "command", ...routed.cmd } as ClientMessage) : routed.msg;
       received.push(msg);
       delivered.push({ character: routed.meta.session.selectedCharacter, msg });

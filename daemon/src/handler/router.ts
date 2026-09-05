@@ -7,12 +7,13 @@ import type { Command } from "../protocol/Command.ts";
 import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { ImagesUnsupportedError, NoModelError } from "./setup.ts";
-import type {
-  DirectSender,
-  ControlRoutedMessage,
-  RequestMeta,
-  RoutedMessage,
-  SessionRouter,
+import {
+  isControlRoutedMessage,
+  type DirectSender,
+  type ControlRoutedMessage,
+  type RequestMeta,
+  type RoutedMessage,
+  type SessionRouter,
 } from "../swp/session.ts";
 import type { LeaseRouter, StreamLeases } from "./lease.ts";
 
@@ -110,7 +111,11 @@ export interface MessageHandlerDeps {
   readonly leases: StreamLeases;
   readonly registry: HandlerRegistry;
   readonly notifier: HandlerNotifier;
-  readonly dispatchCommand: (cmd: Command, meta: RequestMeta) => Promise<ServerMessage>;
+  readonly dispatchCommand: (
+    cmd: Command,
+    meta: RequestMeta,
+    signal: AbortSignal,
+  ) => Promise<ServerMessage>;
   readonly runGeneration: RunGeneration;
   readonly log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -130,6 +135,8 @@ export function sanitiseRid(rid: string | null | undefined): string | null {
 export class MessageHandler {
   readonly #deps: MessageHandlerDeps;
   readonly #sessions = new Map<number, () => void>();
+  readonly #queues = new Map<number, Promise<void>>();
+  readonly #commandAborts = new Map<number, Set<AbortController>>();
 
   constructor(deps: MessageHandlerDeps) {
     this.#deps = deps;
@@ -139,27 +146,74 @@ export class MessageHandler {
     return this.#sessions.size;
   }
 
+  get queuedSessionCount(): number {
+    return this.#queues.size;
+  }
+
   async run(routes: AsyncIterable<RoutedMessage>): Promise<void> {
     this.#deps.log?.info?.("message handler started");
     for await (const routed of routes) {
-      await this.handleRouted(routed);
+      this.enqueueRouted(routed);
     }
     await this.drain();
     this.#deps.log?.info?.("message handler shutting down (route stream closed)");
   }
 
+  enqueueRouted(routed: RoutedMessage): void {
+    if (isControlRoutedMessage(routed)) {
+      this.#track(this.#guard(this.handleControl(routed)));
+      return;
+    }
+
+    const sessionId = routed.meta.session.sessionId;
+    const tail = this.#queues.get(sessionId) ?? Promise.resolve();
+    const settled = this.#guard(
+      tail.then(async () => {
+        if (!this.#deps.router.has(sessionId)) return;
+        await this.handleRouted(routed);
+      }),
+    );
+
+    this.#queues.set(sessionId, settled);
+    this.#track(settled);
+    void settled.then(() => {
+      if (this.#queues.get(sessionId) === settled) this.#queues.delete(sessionId);
+    });
+  }
+
   async handleRouted(routed: RoutedMessage): Promise<void> {
     switch (routed.kind) {
-      case "command": {
-        const result = await this.#deps.dispatchCommand(routed.cmd, routed.meta);
-        await this.#deps.router.sendToSession(routed.meta.session.sessionId, result);
+      case "command":
+        await this.#runCommand(routed.cmd, routed.meta);
         return;
-      }
       case "engine":
         await this.handleEngine(routed.msg, routed.meta);
         return;
+      case "session_disconnected":
       case "all_clients_disconnected": {
         await this.handleControl(routed);
+      }
+    }
+  }
+
+  async #runCommand(cmd: Command, meta: RequestMeta): Promise<void> {
+    const sessionId = meta.session.sessionId;
+    const controller = new AbortController();
+    const registered = this.#commandAborts.get(sessionId) ?? new Set<AbortController>();
+    registered.add(controller);
+    this.#commandAborts.set(sessionId, registered);
+
+    try {
+      const result = await this.#deps.dispatchCommand(cmd, meta, controller.signal);
+      if (controller.signal.aborted) return;
+      await this.#deps.router.sendToSession(sessionId, result);
+    } catch (error) {
+      if (!controller.signal.aborted) throw error;
+    } finally {
+      const live = this.#commandAborts.get(sessionId);
+      if (live !== undefined) {
+        live.delete(controller);
+        if (live.size === 0) this.#commandAborts.delete(sessionId);
       }
     }
   }
@@ -173,10 +227,39 @@ export class MessageHandler {
       );
       return;
     }
+    if (routed.kind === "session_disconnected") {
+      this.#abortSessionCommands(routed.sessionId);
+      this.#queues.delete(routed.sessionId);
+      return;
+    }
     for (const sessionId of this.#sessions.keys()) {
       await this.cancelGeneration(sessionId, null, "all clients disconnected");
     }
     this.#deps.leases.clear();
+  }
+
+  #abortSessionCommands(sessionId: number): void {
+    const registered = this.#commandAborts.get(sessionId);
+    if (registered === undefined) return;
+    this.#deps.log?.info?.("cancelling commands for departed session", {
+      session_id: sessionId,
+      commands: registered.size,
+    });
+    for (const controller of registered) controller.abort();
+    this.#commandAborts.delete(sessionId);
+  }
+
+  #guard(work: Promise<void>): Promise<void> {
+    return work.catch((error: unknown) => {
+      this.#deps.log?.error?.("error handling routed message", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  #track(work: Promise<void>): void {
+    this.#inFlight.add(work);
+    void work.then(() => this.#inFlight.delete(work));
   }
 
   async handleEngine(msg: ClientMessage, meta: RequestMeta): Promise<void> {
@@ -263,7 +346,7 @@ export class MessageHandler {
       signal: controller.signal,
     };
 
-    const running = this.#deps
+    const running: Promise<void> = this.#deps
       .runGeneration(params)
       .catch(async (error: unknown) => {
         if (controller.signal.aborted) return;
@@ -290,8 +373,7 @@ export class MessageHandler {
         }
       });
 
-    this.#inFlight.add(running);
-    void running.finally(() => this.#inFlight.delete(running));
+    this.#track(this.#guard(running));
   }
 
   async cancelGeneration(

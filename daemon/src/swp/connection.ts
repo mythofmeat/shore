@@ -220,6 +220,7 @@ export async function handleConnection(duplex: Duplex, ctx: ConnectionContext): 
     if (session !== null) {
       const { allGone } = ctx.router.unregisterSession(session.sessionId);
       ctx.log?.info?.("Client disconnected", { client_id: ctx.clientId });
+      await ctx.route({ kind: "session_disconnected", sessionId: session.sessionId });
       if (allGone) {
         await ctx.route({ kind: "all_clients_disconnected" });
       }
