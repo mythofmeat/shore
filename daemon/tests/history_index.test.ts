@@ -1,3 +1,4 @@
+import { formatToolOutput } from "../src/tools/output.ts";
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
@@ -99,7 +100,7 @@ describe("history search index", () => {
     });
     expect(result.mode).toBe("lexical");
     expect(result.results).toEqual([{
-      thread: "main",
+      thread: "main", segment: 0, ordinal: 1,
       msg_id: "a1",
       role: "assistant",
       timestamp: "2026-08-13T00:01:00+00:00",
@@ -107,11 +108,11 @@ describe("history search index", () => {
       text: "First paragraph.\n\nNeedle stays formatted.\nThird line.",
       locations: [{ thread: "main", segment: 0, ordinal: 1 }],
       before: [{
-        thread: "main", msg_id: "u1", role: "user", timestamp: "2026-08-13T00:00:00+00:00",
+        thread: "main", segment: 0, ordinal: 0, msg_id: "u1", role: "user", timestamp: "2026-08-13T00:00:00+00:00",
         model: null, text: "Before paragraph.",
       }],
       after: [{
-        thread: "main", msg_id: "u2", role: "user", timestamp: "2026-08-13T00:03:00+00:00",
+        thread: "main", segment: 0, ordinal: 3, msg_id: "u2", role: "user", timestamp: "2026-08-13T00:03:00+00:00",
         model: null, text: "After paragraph.",
       }],
     }]);
@@ -699,4 +700,19 @@ describe("timestamps a subagent can line up", () => {
     expect(result.archive_boundary.oldest).toBe("2026-08-12T13:00:00+00:00");
     expect(result.archive_boundary.newest).toBe("2026-08-12T20:00:00+00:00");
   });
+});
+
+test("actual history results merge adjacent context and report additional distinct matches", async () => {
+  const dir = await character([
+    message("a", "user", "needle one", "2026-08-13T00:00:00Z"),
+    message("b", "assistant", "needle two", "2026-08-13T00:01:00Z"),
+    message("c", "user", "needle three", "2026-08-13T00:02:00Z"),
+  ]);
+  const partial = await handleSearchHistory({ query: "needle", mode: "lexical", max_results: 2 }, dir, identity(dir));
+  expect(partial.has_more).toBe(true);
+  const all = await handleSearchHistory({ query: "needle", mode: "lexical", max_results: 3 }, dir, identity(dir));
+  expect(all.has_more).toBeUndefined();
+  const output = formatToolOutput("search_chat_logs", all);
+  for (const text of ["needle one", "needle two", "needle three"]) expect(output.match(new RegExp(text, "g"))).toHaveLength(1);
+  expect(output.match(/— match/g)).toHaveLength(3);
 });

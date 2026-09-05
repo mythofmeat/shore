@@ -80,6 +80,8 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       type: "object",
       properties: {
         url: { type: "string", description: "The URL to fetch." },
+        offset: { type: "integer", minimum: 1, description: "Starting character (1-based). Use the continuation offset from the previous result." },
+        limit: { type: "integer", minimum: 1, maximum: 50000, description: "Maximum characters to return (default 12000)." },
       },
       required: ["url"],
     },

@@ -165,7 +165,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   });
   expect(search.results).toEqual([
     {
-      thread: "main",
+      thread: "main", segment: 0, ordinal: 0,
       msg_id: "u1",
       role: "user",
       timestamp: "2026-08-13T10:00:00+10:00",
@@ -175,7 +175,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
       before: [],
       after: [
         {
-          thread: "main",
+          thread: "main", segment: 0, ordinal: 1,
           msg_id: "a1",
           role: "assistant",
           timestamp: "2026-08-13T10:00:00+10:00",

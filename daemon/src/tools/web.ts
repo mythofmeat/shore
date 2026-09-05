@@ -1,3 +1,4 @@
+import { htmlToText } from "./html_text.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 
 export class ToolHttpError extends Error {
@@ -38,65 +39,7 @@ export function truncateToBytes(
   return { content: decoder.decode(bytes.subarray(0, end)), truncated: true };
 }
 
-const SKIPPED_BLOCKS = ["script", "style", "head"] as const;
-
-const ENTITIES: readonly (readonly [string, string])[] = [
-  ["&amp;", "&"],
-  ["&lt;", "<"],
-  ["&gt;", ">"],
-  ["&quot;", '"'],
-  ["&#39;", "'"],
-  ["&apos;", "'"],
-  ["&nbsp;", " "],
-  ["&#x27;", "'"],
-  ["&#x2F;", "/"],
-];
-
-function asciiLowercase(s: string): string {
-  return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
-}
-
-export function stripHtml(html: string): string {
-  let cleaned = "";
-  let i = 0;
-
-  while (i < html.length) {
-    if (html[i] === "<") {
-      const remainingLower = asciiLowercase(html.slice(i));
-      const tag = SKIPPED_BLOCKS.find((t) => remainingLower.startsWith(`<${t}`));
-      if (tag !== undefined) {
-        const close = `</${tag}`;
-        const endPos = remainingLower.indexOf(close);
-        if (endPos !== -1) {
-          const afterClose = i + endPos + close.length;
-          const gt = html.indexOf(">", afterClose);
-          if (gt !== -1) {
-            i = gt + 1;
-            continue;
-          }
-        }
-        break;
-      }
-
-      const gt = html.indexOf(">", i);
-      if (gt !== -1) {
-        cleaned += " ";
-        i = gt + 1;
-        continue;
-      }
-    }
-
-    cleaned += html[i] as string;
-    i += 1;
-  }
-
-  let decoded = cleaned;
-  for (const [from, to] of ENTITIES) {
-    decoded = decoded.split(from).join(to);
-  }
-
-  return decoded.replace(/\p{White_Space}+/gu, " ").replace(/^ | $/g, "");
-}
+export { htmlToText as stripHtml } from "./html_text.ts";
 
 export interface SearchConfigView {
   api_key_env: string;
@@ -275,6 +218,11 @@ export interface FetchUrlResult {
   content_type: string;
   content: string;
   truncated: boolean;
+  offset: number;
+  returned_chars: number;
+  total_chars: number;
+  next_offset?: number;
+  body_truncated?: boolean;
 }
 
 export async function handleFetchUrl(
@@ -288,6 +236,8 @@ export async function handleFetchUrl(
     throw new InvalidArgs("missing 'url' field");
   }
 
+  const offset = pageArgument(input, "offset", 1);
+  const limit = Math.min(pageArgument(input, "limit", 12_000), MAX_CONTENT_BYTES);
   const lookup = policy.lookup ?? resolveHost;
   let target = parseTarget(url);
   let resp: Response;
@@ -320,10 +270,26 @@ export async function handleFetchUrl(
 
   const contentType = resp.headers.get("content-type") ?? "unknown";
   const { text, capped } = await readCapped(resp);
-  const extracted = contentType.includes("html") ? stripHtml(text) : text;
-  const { content, truncated } = truncateToBytes(extracted, MAX_CONTENT_BYTES);
+  const extracted = contentType.toLowerCase().includes("html") ? htmlToText(text, target.href) : text;
+  const chars = Array.from(extracted);
+  const start = Math.min(offset - 1, chars.length);
+  const end = Math.min(start + limit, chars.length);
+  const more = end < chars.length;
+  return {
+    url: target.href, content_type: contentType, content: chars.slice(start, end).join(""),
+    truncated: more || capped, offset, returned_chars: end - start, total_chars: chars.length,
+    ...(more ? { next_offset: end + 1 } : {}),
+    ...(capped ? { body_truncated: true } : {}),
+  };
+}
 
-  return { url, content_type: contentType, content, truncated: truncated || capped };
+function pageArgument(input: Record<string, unknown>, field: string, fallback: number): number {
+  const value = input[field];
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw new InvalidArgs(`${field} must be a positive integer`);
+  }
+  return value;
 }
 
 function redirectTarget(resp: Response): string | undefined {
@@ -345,7 +311,7 @@ async function readCapped(resp: Response): Promise<{ text: string; capped: boole
       if (done) break;
       if (value === undefined) continue;
       const room = MAX_BODY_BYTES - total;
-      if (value.byteLength >= room) {
+      if (value.byteLength > room) {
         chunks.push(value.subarray(0, room));
         total += room;
         capped = true;

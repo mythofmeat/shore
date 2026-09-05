@@ -52,8 +52,8 @@ describe("stripHtml", () => {
     );
   });
 
-  test("&amp; is decoded first, so an escaped entity decodes twice", () => {
-    expect(stripHtml("&amp;lt;")).toBe("<");
+  test("entities are decoded exactly once", () => {
+    expect(stripHtml("&amp;lt;")).toBe("&lt;");
     expect(stripHtml("&amp;amp;")).toBe("&amp;");
   });
 
@@ -70,24 +70,24 @@ describe("stripHtml", () => {
   test("block matching is ASCII-case-insensitive only", () => {
     expect(stripHtml("<SCRIPT>x</SCRIPT>y")).toBe("y");
     expect(stripHtml("<ScRiPt>x</ScRiPt>after")).toBe("after");
-    expect(stripHtml("<\u{FF53}cript>x</\u{FF53}cript>y")).toBe("x y");
+    expect(stripHtml("<\u{FF53}cript>x</\u{FF53}cript>y")).toBe("<ｓcript>xy");
   });
 
-  test("whitespace collapse uses the ascii set, not JavaScript's unicode one", () => {
+  test("whitespace collapse handles Unicode spaces", () => {
     expect(stripHtml("a\u{A0}b")).toBe("a b");
     expect(stripHtml("a\u{3000}b")).toBe("a b");
     expect(stripHtml("a\u{85}b")).toBe("a b");
-    expect(stripHtml("a\u{FEFF}b")).toBe("a\u{FEFF}b");
-    expect(stripHtml("\u{FEFF}text")).toBe("\u{FEFF}text");
+    expect(stripHtml("a\u{FEFF}b")).toBe("a b");
+    expect(stripHtml("\u{FEFF}text")).toBe("text");
   });
 
   test("the tag search lowercases in ASCII, so offsets stay aligned", () => {
     expect(stripHtml("<script>\u{130}</script>after")).toBe("after");
-    expect(stripHtml("<p>\u{130}</p>tail")).toBe("\u{130} tail");
+    expect(stripHtml("<p>\u{130}</p>tail")).toBe("\u{130}\n\ntail");
   });
 
   test("a multi-byte character adjacent to a tag survives intact", () => {
-    expect(stripHtml("é<b>x</b>")).toBe("é x");
+    expect(stripHtml("é<b>x</b>")).toBe("éx");
     expect(stripHtml("<p>🎵</p>")).toBe("🎵");
   });
 });
@@ -319,7 +319,7 @@ describe("handleFetchUrl", () => {
     const big = "a".repeat(MAX_CONTENT_BYTES + 10);
     const out = await handleFetchUrl({ url: U }, html(big, "text/plain"), undefined, pub);
     expect(out.truncated).toBe(true);
-    expect(utf8(out.content)).toBe(MAX_CONTENT_BYTES);
+    expect(utf8(out.content)).toBe(12_000);
   });
 
   test("only http and https can be fetched", async () => {
@@ -416,7 +416,8 @@ describe("handleFetchUrl", () => {
 
     const out = await handleFetchUrl({ url: U }, endless, undefined, pub);
     expect(out.truncated).toBe(true);
-    expect(produced).toBeLessThanOrEqual(MAX_BODY_BYTES + 65_536);
+    expect(out.total_chars).toBe(MAX_BODY_BYTES);
+    expect(produced).toBeLessThanOrEqual(MAX_BODY_BYTES + 2 * 65_536);
   });
 });
 

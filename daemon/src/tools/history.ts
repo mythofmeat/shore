@@ -299,6 +299,20 @@ interface RankedHistoryCandidate {
   timestampMs: number | undefined;
 }
 
+export interface HistoryMessage extends HistoryLocation {
+  msg_id: string;
+  role: string;
+  timestamp: string;
+  model: string | null;
+  text: string;
+}
+
+export interface HistoryHit extends HistoryMessage {
+  locations: HistoryLocation[];
+  before: HistoryMessage[];
+  after: HistoryMessage[];
+}
+
 export interface SearchHistoryResult {
   mode: Exclude<HistorySearchMode, "auto">;
   semantic_index: {
@@ -314,6 +328,7 @@ export interface SearchHistoryResult {
   time_range: { start_time: string | null; end_time: string | null; inclusive: true };
   model_filter: string | null;
   results: Record<string, unknown>[];
+  has_more?: boolean;
   count: number;
   searched_message_occurrences: number;
   searched_messages: number;
@@ -394,7 +409,8 @@ async function handleSearchHistoryUnlocked(
     const ranked = mode === "hybrid"
       ? fuseCandidates(lexical, vector)
       : mode === "vector" ? vector : lexical;
-    const chosen = groupMessages(ranked).slice(0, maxResultsFrom(input));
+    const grouped = groupMessages(ranked);
+    const chosen = grouped.slice(0, maxResultsFrom(input));
     const neighborRows: IndexedMessage[] = [];
     for (const hit of chosen) {
       const before = index.neighbor(hit.candidate.row, -1);
@@ -438,6 +454,7 @@ async function handleSearchHistoryUnlocked(
       },
       model_filter: modelFilter ?? null,
       results,
+      ...(grouped.length > chosen.length ? { has_more: true } : {}),
       count: results.length,
       searched_message_occurrences: index.selectedMessageCount(),
       searched_messages: index.distinctMessageCount(),
@@ -649,9 +666,9 @@ function presentMessage(
   row: IndexedMessage,
   text: string,
   timeZone: string,
-): Record<string, unknown> {
+): HistoryMessage {
   return {
-    thread: threadOf(row.archive_key),
+    ...locationOf(row),
     msg_id: row.msg_id,
     role: row.role,
     timestamp: normalizeToZone(row.timestamp, timeZone),

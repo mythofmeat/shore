@@ -13,22 +13,22 @@
     {
       "label": "simple_tags",
       "input": "<p>hello</p><p>world</p>",
-      "output": "hello world"
+      "output": "hello\n\nworld"
     },
     {
-      "label": "tag_becomes_a_space",
+      "label": "inline_tags_preserve_adjacency",
       "input": "a<b>c",
-      "output": "a c"
+      "output": "ac"
     },
     {
-      "label": "attributes_are_dropped",
+      "label": "link_destination_is_preserved",
       "input": "<a href=\"http://x\">link</a>",
-      "output": "link"
+      "output": "link (http://x/)"
     },
     {
       "label": "script_removed",
       "input": "<p>a</p><script>var x = 1;</script><p>b</p>",
-      "output": "a b"
+      "output": "a\n\nb"
     },
     {
       "label": "style_removed",
@@ -43,7 +43,7 @@
     {
       "label": "uppercase_script",
       "input": "<P>a</P><SCRIPT>evil()</SCRIPT><P>b</P>",
-      "output": "a b"
+      "output": "a\n\nb"
     },
     {
       "label": "mixed_case_script",
@@ -88,7 +88,7 @@
     {
       "label": "empty_tag",
       "input": "a<>b",
-      "output": "a b"
+      "output": "a<>b"
     },
     {
       "label": "entity_amp",
@@ -121,17 +121,17 @@
       "output": "a/b"
     },
     {
-      "label": "unknown_entity_is_left",
+      "label": "copyright_entity",
       "input": "a&copy;b",
-      "output": "a&copy;b"
+      "output": "a©b"
     },
     {
-      "label": "double_decode_amp_lt",
+      "label": "entities_decode_once",
       "input": "&amp;lt;",
-      "output": "<"
+      "output": "&lt;"
     },
     {
-      "label": "double_decode_amp_amp",
+      "label": "escaped_amp_entity",
       "input": "&amp;amp;",
       "output": "&amp;"
     },
@@ -156,9 +156,9 @@
       "output": "a b"
     },
     {
-      "label": "tag_spacing_collapses",
+      "label": "paragraph_spacing",
       "input": "<p>a</p>   <p>b</p>",
-      "output": "a b"
+      "output": "a\n\nb"
     },
     {
       "label": "only_whitespace",
@@ -178,7 +178,7 @@
     {
       "label": "unicode_in_tags",
       "input": "<p>祈飛</p><p>レン</p>",
-      "output": "祈飛 レン"
+      "output": "祈飛\n\nレン"
     },
     {
       "label": "unicode_nbsp_char",
@@ -198,7 +198,7 @@
     {
       "label": "multibyte_before_tag",
       "input": "é<b>x</b>",
-      "output": "é x"
+      "output": "éx"
     },
     {
       "label": "multibyte_inside_removed_block",
@@ -208,7 +208,7 @@
     {
       "label": "fullwidth_s_is_not_script",
       "input": "<ｓcript>x</ｓcript>y",
-      "output": "x y"
+      "output": "<ｓcript>xy"
     },
     {
       "label": "script_with_dotted_capital_i",
@@ -218,7 +218,7 @@
     {
       "label": "text_with_dotted_capital_i",
       "input": "<p>İ</p>tail",
-      "output": "İ tail"
+      "output": "İ\n\ntail"
     },
     {
       "label": "nel_is_whitespace",
@@ -226,14 +226,14 @@
       "output": "a b"
     },
     {
-      "label": "bom_is_not_whitespace",
+      "label": "bom_is_whitespace",
       "input": "a﻿b",
-      "output": "a﻿b"
+      "output": "a b"
     },
     {
-      "label": "bom_at_start_is_not_trimmed",
+      "label": "bom_at_start_is_trimmed",
       "input": "﻿text",
-      "output": "﻿text"
+      "output": "text"
     }
   ],
   "truncate_to_bytes": [
