@@ -54,8 +54,20 @@ import {
   type CompactionOutcome,
   type CompactionTools,
 } from "./types.ts";
-import { claimUncovered, coverageIsRedundant, withCoverageStore } from "../coverage.ts";
-import { loadCompactionCheckpoint } from "./checkpoint.ts";
+import {
+  claimUncovered,
+  coverageIsPartial,
+  coverageIsRedundant,
+  withCoverageStore,
+} from "../coverage.ts";
+import {
+  checkpointSourceIsCompatible,
+  loadCompactionCheckpoint,
+  type CompactionCheckpoint,
+} from "./checkpoint.ts";
+import { normalizeMessage } from "../../engine/message_store.ts";
+import type { Message } from "../../engine/types.ts";
+import { rustLines, rustTrim } from "../lines.ts";
 
 export interface CompactionRunDeps {
   config: LoadedConfig;
@@ -291,14 +303,15 @@ export async function planCompactionCoverage(
   );
   if (splitAt === 0 || options.dryRun === true) return { redundant: false };
 
-  const archival = [...loaded.store.messages()].slice(0, splitAt);
-  if (archival.length === 0) return { redundant: false };
-
   const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(
     () => undefined,
   );
+  const resumed = resumedRange(checkpoint, loaded.rawContent, splitAt, options);
   const resuming = checkpoint !== undefined;
-  const resumeClaim = checkpoint?.coverageClaim;
+  const resumeClaim = resumed === undefined ? undefined : checkpoint?.coverageClaim;
+
+  const archival = resumed ?? [...loaded.store.messages()].slice(0, splitAt);
+  if (archival.length === 0) return { redundant: false };
 
   const dbPath = join(dataDir, HISTORY_DB_FILE);
   const planned = withCoverageStore(dbPath, (store) =>
@@ -309,7 +322,7 @@ export async function planCompactionCoverage(
   );
 
   if (coverageIsRedundant(planned) && !resuming) return { redundant: true };
-  if (planned.claimed.length === 0 && planned.unversioned === 0) {
+  if (coverageIsPartial(planned) || (planned.pending === 0 && planned.unversioned === 0)) {
     withCoverageStore(dbPath, (store) => {
       store.releaseMemoryCoverage(character, "compaction", planned.claim);
     });
@@ -325,6 +338,31 @@ export async function planCompactionCoverage(
       fresh: archival.length - planned.backgroundMessages,
     },
   };
+}
+
+function resumedRange(
+  checkpoint: CompactionCheckpoint | undefined,
+  activeContent: string,
+  splitAt: number,
+  options: CompactionRunOptions,
+): Message[] | undefined {
+  if (checkpoint === undefined || options.restart === true) return undefined;
+  if (!checkpointSourceIsCompatible(checkpoint, activeContent)) return undefined;
+  if (options.keepTurnsOverride !== undefined && checkpoint.splitAt !== splitAt) return undefined;
+  return messagesFromJsonl(checkpoint.sourceContent).slice(0, checkpoint.splitAt);
+}
+
+function messagesFromJsonl(content: string): Message[] {
+  const messages: Message[] = [];
+  for (const line of rustLines(content)) {
+    if (rustTrim(line) === "") continue;
+    try {
+      messages.push(normalizeMessage(JSON.parse(line) as Message));
+    } catch {
+      continue;
+    }
+  }
+  return messages;
 }
 
 export function releaseCompactionCoverage(

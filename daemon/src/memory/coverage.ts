@@ -13,6 +13,7 @@ export interface CoverageClaim {
   unit: string;
   claimed: string[];
   covered: string[];
+  pending: number;
   versions: number;
   unversioned: number;
   backgroundMessages: number;
@@ -100,7 +101,7 @@ export function claimUncovered(
     ? new Set(versionsIn(messages.slice(0, backgroundMessages)))
     : covered;
   const fresh = messages.slice(options.contiguous === true ? backgroundMessages : 0);
-  const pending = versionsIn(fresh).filter((version) => !background.has(version));
+  const pending = versionsIn(fresh).filter((version) => !covered.has(version));
   const claim = options.claim ?? newCoverageClaim();
   const unit = processingUnitId(pending);
   const claimed = store.claimMemoryCoverage(
@@ -117,10 +118,15 @@ export function claimUncovered(
     unit,
     claimed,
     covered: versions.filter((version) => background.has(version)),
+    pending: pending.length,
     versions: versions.length,
     unversioned: unversionedCount(fresh),
     backgroundMessages,
   };
+}
+
+export function coverageIsPartial(claim: CoverageClaim): boolean {
+  return claim.claimed.length !== claim.pending;
 }
 
 export function coverageIsRedundant(claim: CoverageClaim): boolean {

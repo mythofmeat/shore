@@ -478,7 +478,7 @@ describe("what a coverage record remembers", () => {
     store.close();
   });
 
-  test("the unit filed is the document's own, even when another pass held part of the range", async () => {
+  test("a range another pass half-owns is left alone until it can be taken whole", async () => {
     const path = join(root("coverage-partial-claim"), HISTORY_DB_FILE);
     const held = message("u1", "user", "held elsewhere", newMessageVersion());
     const mine = message("u2", "user", "mine to write", newMessageVersion());
@@ -498,15 +498,54 @@ describe("what a coverage record remembers", () => {
 
     const stored = new Set<string>();
     const mcp = backend(stored);
-    await drain(service(mcp.backend, path));
+    const built = service(mcp.backend, path);
+    await drain(built);
 
-    const documentId = required(retainedIds(mcp.calls)[0]);
-    expect(documentId).toBe(`shore:ada:${processingUnitId([required(mine.version)])}`);
-    const store = HistoryStore.open(path);
-    expect(store.memoryUnitsFor("ada", "hindsight", [required(mine.version)])).toEqual([
-      processingUnitId([required(mine.version)]),
+    expect(retainedIds(mcp.calls)).toEqual([]);
+    expect(statusOf(path, "ada")).toBe("pending");
+    const held_ = HistoryStore.open(path);
+    expect(
+      held_.memoryCoverageState("ada", "hindsight", required(mine.version)),
+    ).toBeUndefined();
+    held_.close();
+  });
+
+  test("once the other pass lets go, the whole range is retained in one document", async () => {
+    const path = join(root("coverage-partial-released"), HISTORY_DB_FILE);
+    const held = message("u1", "user", "held elsewhere", newMessageVersion());
+    const mine = message("u2", "user", "mine to write", newMessageVersion());
+    archive(path, "ada", [held, mine]);
+
+    const before = HistoryStore.open(path);
+    before.claimMemoryCoverage(
+      "ada",
+      "hindsight",
+      [required(held.version)],
+      "someone-else",
+      "their-unit",
+      0,
+      60_000,
+    );
+    before.close();
+
+    const stored = new Set<string>();
+    let clock = 0;
+    const mcp = backend(stored);
+    const built = service(mcp.backend, path, () => clock);
+    await drain(built);
+    expect(retainedIds(mcp.calls)).toEqual([]);
+
+    const releasing = HistoryStore.open(path);
+    releasing.releaseMemoryCoverage("ada", "hindsight", "someone-else");
+    releasing.close();
+    clock = 10 ** 7;
+    built.noteWork("ada");
+    await drain(built);
+
+    expect(retainedIds(mcp.calls)).toEqual([
+      `shore:ada:${processingUnitId([required(held.version), required(mine.version)])}`,
     ]);
-    store.close();
+    expect(statusOf(path, "ada")).toBe("stored");
   });
 
   test("a resubmission after a lost operation reclaims its own material", async () => {
@@ -647,5 +686,60 @@ describe("segments this feature never touched", () => {
       store.memoryCoverageState("ada", "hindsight", required(wordless.version)),
     ).toBeUndefined();
     store.close();
+  });
+});
+
+describe("a mixed segment as an occurrence of what it inherited", () => {
+  test("excluding the parent keeps the inherited document the child still holds", async () => {
+    const path = join(root("hindsight-mixed-support"), HISTORY_DB_FILE);
+    const inherited = message("u1", "user", "the first thing", newMessageVersion());
+    const fresh = message("u2", "user", "the second thing", newMessageVersion());
+    archive(path, "ada", [inherited], "2026-08-20T00:00:00+10:00");
+    archive(path, "ada/spin", [inherited, fresh], "2026-08-21T12:00:00+10:00");
+
+    const stored = new Set<string>();
+    const mcp = backend(stored);
+    const built = service(mcp.backend, path);
+    await drain(built);
+
+    const documents = retainedIds(mcp.calls);
+    expect(documents).toHaveLength(2);
+    const parentDocument = `shore:ada:${processingUnitId([required(inherited.version)])}`;
+    expect(documents).toContain(parentDocument);
+
+    const store = HistoryStore.open(path);
+    expect(
+      store.documentsForOccurrence("ada", "hindsight", "ada/spin", 0).sort(),
+    ).toEqual([...documents].sort());
+    store.setExcluded("ada", 0, true, true);
+    store.close();
+    built.noteWork("ada");
+    await drain(built);
+
+    expect(stored.has(parentDocument)).toBe(true);
+    expect(mcp.calls.some((call) => call.name === "delete_document")).toBe(false);
+  });
+
+  test("excluding both leaves neither document behind", async () => {
+    const path = join(root("hindsight-mixed-support-all"), HISTORY_DB_FILE);
+    const inherited = message("u1", "user", "the first thing", newMessageVersion());
+    const fresh = message("u2", "user", "the second thing", newMessageVersion());
+    archive(path, "ada", [inherited], "2026-08-20T00:00:00+10:00");
+    archive(path, "ada/spin", [inherited, fresh], "2026-08-21T12:00:00+10:00");
+
+    const stored = new Set<string>();
+    const mcp = backend(stored);
+    const built = service(mcp.backend, path);
+    await drain(built);
+    expect(stored.size).toBe(2);
+
+    const store = HistoryStore.open(path);
+    store.setExcluded("ada", 0, true, true);
+    store.setExcluded("ada/spin", 0, true, true);
+    store.close();
+    built.noteWork("ada");
+    await drain(built);
+
+    expect([...stored]).toEqual([]);
   });
 });

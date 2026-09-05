@@ -10,16 +10,21 @@ import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { newMessageVersion } from "../src/engine/versions.ts";
 import { loadMessagesForCompaction } from "../src/memory/compaction/background.ts";
+import { hashCompactionSource } from "../src/memory/compaction/checkpoint.ts";
 import { backgroundCoverageNotice } from "../src/memory/compaction/manager.ts";
 import {
   planCompactionCoverage,
   releaseCompactionCoverage,
 } from "../src/memory/compaction/run.ts";
-import { claimUncovered } from "../src/memory/coverage.ts";
+import { COVERAGE_LEASE_MS, claimUncovered } from "../src/memory/coverage.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const STAMP = "2026-09-05T00:00:00Z";
+
+function jsonl(messages: readonly Message[]): string {
+  return messages.map((m) => JSON.stringify(m)).join("\n") + "\n";
+}
 
 function message(id: string, role: Message["role"], text: string, version: string): Message {
   return {
@@ -71,7 +76,12 @@ async function world(messages: Message[] = conversation()): Promise<{
   };
 }
 
-async function writeCheckpoint(dataDir: string, coverageClaim: string): Promise<void> {
+async function writeCheckpoint(
+  dataDir: string,
+  coverageClaim: string,
+  sourceContent: string,
+  splitAt = 4,
+): Promise<void> {
   await writeFile(
     join(dataDir, "ada", "threads", "main", "compaction-checkpoint.json"),
     JSON.stringify({
@@ -81,9 +91,9 @@ async function writeCheckpoint(dataDir: string, coverageClaim: string): Promise<
       createdAt: STAMP,
       updatedAt: STAMP,
       state: "running",
-      sourceContent: "",
-      sourceHash: "",
-      splitAt: 4,
+      sourceContent,
+      sourceHash: hashCompactionSource(sourceContent),
+      splitAt,
       compactedTurns: 2,
       coverageClaim,
       request: { api_key: "" },
@@ -99,6 +109,13 @@ async function writeCheckpoint(dataDir: string, coverageClaim: string): Promise<
       },
     }),
   );
+}
+
+async function planAuto(w: Awaited<ReturnType<typeof world>>, keepRecentTurns: number) {
+  w.config.app.memory.compaction.keep_recent_turns = keepRecentTurns;
+  w.config.app.memory.compaction.max_context_tokens = 0;
+  const loaded = await loadMessagesForCompaction(w.dataDir, "ada", "main");
+  return await planCompactionCoverage("ada", "main", w.config, loaded, {});
 }
 
 async function plan(w: Awaited<ReturnType<typeof world>>, keepTurns: number) {
@@ -161,6 +178,63 @@ describe("deciding whether a compaction has anything new to write", () => {
     expect(second.coverage).toBeUndefined();
   });
 
+  test("a range another pass half-owns blocks rather than archiving the rest of it", async () => {
+    const w = await world();
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      store.claimMemoryCoverage(
+        "ada",
+        "compaction",
+        [required(required(w.messages[2]).version)],
+        "someone-else",
+        "their-unit",
+        Date.now(),
+        COVERAGE_LEASE_MS,
+      );
+    } finally {
+      store.close();
+    }
+
+    const planned = await plan(w, 1);
+    expect(planned.blocked).toBe(true);
+    expect(planned.coverage).toBeUndefined();
+  });
+
+  test("the blocked pass leaves nothing claimed behind for the other one to trip on", async () => {
+    const w = await world();
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      store.claimMemoryCoverage(
+        "ada",
+        "compaction",
+        [required(required(w.messages[2]).version)],
+        "someone-else",
+        "their-unit",
+        Date.now(),
+        COVERAGE_LEASE_MS,
+      );
+    } finally {
+      store.close();
+    }
+    await plan(w, 1);
+
+    const after = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      for (const untouched of [w.messages[0], w.messages[1], w.messages[3]]) {
+        expect(
+          after.memoryCoverageState("ada", "compaction", required(required(untouched).version)),
+        ).toBeUndefined();
+      }
+      after.releaseMemoryCoverage("ada", "compaction", "someone-else");
+    } finally {
+      after.close();
+    }
+
+    const retried = await plan(w, 1);
+    expect(retried.blocked).toBeUndefined();
+    expect(required(retried.coverage).claimed).toBe(4);
+  });
+
   test("blocking leaves the first pass's claim alone so it can still finish", async () => {
     const w = await world();
     const first = await plan(w, 1);
@@ -180,12 +254,52 @@ describe("deciding whether a compaction has anything new to write", () => {
     const w = await world();
     const first = await plan(w, 1);
     const claim = required(first.coverage).claim;
-    await writeCheckpoint(w.dataDir, claim);
+    await writeCheckpoint(w.dataDir, claim, jsonl(w.messages));
 
     const resumed = await plan(w, 1);
     expect(resumed.blocked).toBeUndefined();
     expect(required(resumed.coverage).claim).toBe(claim);
     expect(required(resumed.coverage).claimed).toBe(4);
+  });
+
+  test("a resumed pass claims the range its checkpoint froze, not what has arrived since", async () => {
+    const w = await world();
+    const frozen = jsonl(w.messages);
+    const first = await planAuto(w, 1);
+    const claim = required(first.coverage).claim;
+    await writeCheckpoint(w.dataDir, claim, frozen);
+
+    const arrived = [
+      message("m_7", "user", "one more thing", newMessageVersion()),
+      message("m_8", "assistant", "of course", newMessageVersion()),
+    ];
+    await writeFile(
+      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
+      frozen + jsonl(arrived),
+    );
+
+    const resumed = await planAuto(w, 1);
+    expect(required(resumed.coverage).claim).toBe(claim);
+    expect(required(resumed.coverage).claimed).toBe(4);
+    expect(required(resumed.coverage).background + required(resumed.coverage).fresh).toBe(4);
+
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      store.commitMemoryCoverage("ada", "compaction", claim);
+      const late = arrived.map((m) => required(m.version));
+      expect(store.coveredMemoryVersions("ada", "compaction", late).size).toBe(0);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("a checkpoint the source outgrew is not resumed, so the current range is planned", async () => {
+    const w = await world();
+    const first = await plan(w, 1);
+    await writeCheckpoint(w.dataDir, required(first.coverage).claim, "not this conversation\n");
+
+    const replanned = await plan(w, 1);
+    expect(replanned.blocked).toBe(true);
   });
 
   test("an edit inside the inherited range keeps that message out of the background", async () => {

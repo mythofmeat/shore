@@ -7,7 +7,7 @@ import {
   type MemoryRetainJob,
 } from "../engine/history_store.ts";
 import { processingUnitId, versionOf } from "../engine/versions.ts";
-import { claimUncovered, versionsIn } from "./coverage.ts";
+import { claimUncovered, coverageIsPartial, versionsIn } from "./coverage.ts";
 import type { MemoryBackend } from "./backend.ts";
 
 const RETAIN_TOOL = "retain";
@@ -78,6 +78,7 @@ export interface HindsightUnit {
   claim: string;
   messages: Message[];
   background: ReadonlySet<string>;
+  backgroundVersions: string[];
 }
 
 export type HindsightUnitPlan =
@@ -101,14 +102,22 @@ export function hindsightUnitFor(
   if (!unversioned && covered.size === present.length) return { kind: "covered" };
 
   const planned = claimUncovered(store, character, "hindsight", messages, { nowMs });
+  if (coverageIsPartial(planned)) {
+    store.releaseMemoryCoverage(character, "hindsight", planned.claim);
+    return { kind: "claimed_elsewhere" };
+  }
   const claimable = new Set(planned.claimed);
   const fresh = messages.filter((message) => {
     const version = versionOf(message);
     return version === undefined || claimable.has(version);
   });
-  if (fresh.length === 0) return { kind: "claimed_elsewhere" };
+  if (fresh.length === 0) {
+    store.releaseMemoryCoverage(character, "hindsight", planned.claim);
+    return { kind: "claimed_elsewhere" };
+  }
   const versions = versionsIn(fresh);
   const freshIds = new Set(fresh.map((message) => message.msg_id));
+  const inherited = messages.filter((message) => !freshIds.has(message.msg_id));
   return {
     kind: "unit",
     documentId:
@@ -117,9 +126,8 @@ export function hindsightUnitFor(
         : hindsightUnitDocumentId(character, versions),
     claim: planned.claim,
     messages,
-    background: new Set(
-      messages.filter((message) => !freshIds.has(message.msg_id)).map((m) => m.msg_id),
-    ),
+    background: new Set(inherited.map((message) => message.msg_id)),
+    backgroundVersions: versionsIn(inherited),
   };
 }
 
@@ -364,6 +372,7 @@ export class HindsightRetainService {
     const documentId = unit.documentId;
     inFlight.documentId = documentId;
     inFlight.claim = unit.claim;
+    this.#recordInheritedSupport(store, registration.character, job, unit.backgroundVersions);
     store.setMemoryDocumentIdentity(job.archiveKey, job.segment, documentId, unit.claim);
     store.beginMemorySubmission(
       job.archiveKey,
@@ -565,15 +574,13 @@ export class HindsightRetainService {
     store.setMemoryDocumentIdentity(job.archiveKey, job.segment, documentId, null);
   }
 
-  #adoptCoveredUnit(
+  #recordInheritedSupport(
     store: HistoryStore,
     character: string,
     job: MemoryRetainJob,
-    fallbackDocumentId: string,
+    versions: readonly string[],
   ): void {
-    const versions = versionsIn(store.readSegment(job.archiveKey, job.segment));
-    const units = store.memoryUnitsFor(character, "hindsight", versions);
-    for (const unit of units) {
+    for (const unit of store.memoryUnitsFor(character, "hindsight", versions)) {
       store.markMemoryDocumentOccurrence(
         character,
         "hindsight",
@@ -582,6 +589,17 @@ export class HindsightRetainService {
         job.segment,
       );
     }
+  }
+
+  #adoptCoveredUnit(
+    store: HistoryStore,
+    character: string,
+    job: MemoryRetainJob,
+    fallbackDocumentId: string,
+  ): void {
+    const versions = versionsIn(store.readSegment(job.archiveKey, job.segment));
+    const units = store.memoryUnitsFor(character, "hindsight", versions);
+    this.#recordInheritedSupport(store, character, job, versions);
     const documentId = units.length === 1 ? `shore:${character}:${units[0] ?? ""}` : null;
     store.setMemoryDocumentIdentity(job.archiveKey, job.segment, documentId, null);
     store.markMemoryDocument(job.archiveKey, job.segment, versions.length === 0 ? null : "stored");

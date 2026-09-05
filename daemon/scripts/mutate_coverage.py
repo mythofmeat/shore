@@ -131,10 +131,28 @@ MUTANTS = [
      HINDSIGHT,
      '  if (!unversioned && covered.size === present.length) return { kind: "covered" };',
      "  void unversioned;"),
-    ("hindsight: material another branch is retaining is marked stored here",
+    ("hindsight: material another branch is retaining is marked stored here "
+     "(EQUIVALENT: a unit is only built when it owns every pending version, and a range "
+     "with nothing pending and nothing unversioned has already returned covered above, so "
+     "this branch is unreachable defence)",
      HINDSIGHT,
-     '  if (fresh.length === 0) return { kind: "claimed_elsewhere" };',
+     "  if (fresh.length === 0) {\n"
+     '    store.releaseMemoryCoverage(character, "hindsight", planned.claim);\n'
+     '    return { kind: "claimed_elsewhere" };\n'
+     "  }",
      '  if (fresh.length === 0) return { kind: "covered" };'),
+    ("hindsight: a half-owned range is submitted as the part it could claim",
+     HINDSIGHT,
+     "  if (coverageIsPartial(planned)) {\n"
+     '    store.releaseMemoryCoverage(character, "hindsight", planned.claim);\n'
+     '    return { kind: "claimed_elsewhere" };\n'
+     "  }\n",
+     ""),
+    ("hindsight: deferring a half-owned range keeps the claim it could not use",
+     HINDSIGHT,
+     "  if (coverageIsPartial(planned)) {\n"
+     '    store.releaseMemoryCoverage(character, "hindsight", planned.claim);\n',
+     "  if (coverageIsPartial(planned)) {\n"),
     ("hindsight: the document id is per segment, so two branches never share one",
      HINDSIGHT,
      "    documentId:\n"
@@ -153,7 +171,9 @@ MUTANTS = [
      '      store.commitMemoryCoverage(character, "hindsight", claim, unitOf(character, documentId));\n'
      "    }",
      "    void claim;"),
-    ("hindsight: the coverage record forgets which document covered it",
+    ("hindsight: the coverage record forgets which document covered it "
+     "(EQUIVALENT: a unit is only submitted when it owns every pending version, so the "
+     "tentative unit taken at claim time and the document's own unit are the same set)",
      HINDSIGHT,
      '      store.commitMemoryCoverage(character, "hindsight", claim, unitOf(character, documentId));',
      '      store.commitMemoryCoverage(character, "hindsight", claim);'),
@@ -213,8 +233,44 @@ MUTANTS = [
     # --- a claim the pass does not hold is not a licence to archive ----------
     ("blocking: a pass that claimed nothing archives the material anyway",
      RUN,
-     "  if (planned.claimed.length === 0 && planned.unversioned === 0) {",
+     "  if (coverageIsPartial(planned) || (planned.pending === 0 && planned.unversioned === 0)) {",
      "  if (false as boolean) {"),
+    ("blocking: half a range is enough to archive the whole of it",
+     RUN,
+     "  if (coverageIsPartial(planned) || (planned.pending === 0 && planned.unversioned === 0)) {",
+     "  if (planned.claimed.length === 0 && planned.unversioned === 0) {"),
+    ("blocking: a partial claim counts as owning the range",
+     COVERAGE,
+     "  return claim.claimed.length !== claim.pending;",
+     "  return claim.claimed.length === 0 && claim.pending > 0;"),
+    ("blocking: material covered outside the background counts as contested",
+     COVERAGE,
+     "  const pending = versionsIn(fresh).filter((version) => !covered.has(version));",
+     "  const pending = versionsIn(fresh).filter((version) => !background.has(version));"),
+
+    # --- a resumed pass claims the range its checkpoint froze ----------------
+    ("resume: the claim follows the live conversation, not the checkpoint's range",
+     RUN,
+     "  const archival = resumed ?? [...loaded.store.messages()].slice(0, splitAt);",
+     "  const archival = [...loaded.store.messages()].slice(0, splitAt);"),
+    ("resume: the frozen range is read past the split the checkpoint recorded",
+     RUN,
+     "  return messagesFromJsonl(checkpoint.sourceContent).slice(0, checkpoint.splitAt);",
+     "  return messagesFromJsonl(checkpoint.sourceContent);"),
+    ("resume: a checkpoint the conversation outgrew is still resumed",
+     RUN,
+     "  if (!checkpointSourceIsCompatible(checkpoint, activeContent)) return undefined;",
+     "  void activeContent;"),
+
+    # --- a mixed segment stands behind what it inherited ---------------------
+    ("support: a mixed segment records only its own document, not the inherited one",
+     HINDSIGHT,
+     "    this.#recordInheritedSupport(store, registration.character, job, unit.backgroundVersions);\n",
+     ""),
+    ("support: the inherited half is looked up as if it had no versions",
+     HINDSIGHT,
+     "    backgroundVersions: versionsIn(inherited),",
+     "    backgroundVersions: [],"),
     ("blocking: a resumed pass mints a new claim instead of reusing its checkpoint's",
      RUN,
      "      ...(resumeClaim === undefined ? {} : { claim: resumeClaim }),",
