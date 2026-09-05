@@ -56,7 +56,7 @@ CAP = (
     "          configView(config),\n"
     "          character,\n"
     "          (v, c, n, h) => findEffectiveModel(v, c, n, h),\n"
-    "          await threadChatModel(config.dirs.data, character),\n"
+    "          await threadChatModel(config.dirs.data, character, thread),\n"
     "        )?.maxToolIterations;"
 )
 
@@ -146,26 +146,24 @@ MUTANTS = [
      "  deps.cache.set(character, request, undefined);"),
     ("prepare: a mid-turn conversation ticks anyway on an empty body",
      H,
-     "    if (rebuilt === undefined) {\n"
-     "      shoreLog.info(\n"
-     "        `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,\n"
-     "      );\n"
-     "      return undefined;\n"
-     "    }",
-     "    if (rebuilt === undefined) {\n"
-     "      source = { messages: [] } as never;\n"
-     "    } else {"),
+     "  if (rebuilt === undefined) {\n"
+     "    shoreLog.info(\n"
+     "      `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,\n"
+     "    );\n"
+     "    return undefined;\n"
+     "  }",
+     "  if (rebuilt === undefined) return { request: { messages: [] } as never, maxToolIterations: undefined, override: undefined };"),
     ("prepare: the round cap always comes from the chat model, not the one running",
      H, CAP,
      "    resolveChatModelForCharacter(\n"
      "      configView(config),\n"
      "      character,\n"
      "      (v, c, n, h) => findEffectiveModel(v, c, n, h),\n"
-     "      await threadChatModel(config.dirs.data, character),\n"
+     "      await threadChatModel(config.dirs.data, character, thread),\n"
      "    )?.maxToolIterations;"),
     ("prepare: the round cap ignores the home thread's pinned model",
      H,
-     "          await threadChatModel(config.dirs.data, character),\n",
+     "          await threadChatModel(config.dirs.data, character, thread),\n",
      ""),
     ("prepare: the round cap is unlimited whenever no override applies",
      H, CAP, "    override?.maxToolIterations;"),

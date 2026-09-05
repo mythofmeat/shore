@@ -246,7 +246,7 @@ describe("preparing a heartbeat body", () => {
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(prepared).toBeDefined();
-    expect(prepared?.request.messages.length).toBe(beforeLength + 1);
+    expect(prepared?.request.messages.at(-1)?.role).toBe("system");
     expect(cached.messages.length).toBe(beforeLength);
     expect(cache.get("alice")).toBe(cached);
   });
@@ -387,8 +387,10 @@ describe("preparing a heartbeat body", () => {
       JSON.stringify(message("user", "m_1", "you there?")) + "\n",
     );
 
+    const cache = new LastRequestCache();
+    cache.set("alice", minimalRequest("claude-opus-slowthink"));
     const prepared = await prepareHeartbeatRequest("alice", config, {
-      cache: new LastRequestCache(),
+      cache,
       env: ENV,
       ...PINNED,
     });
@@ -458,6 +460,7 @@ describe("preparing a heartbeat body", () => {
 
     expect(prepared?.override).toBeUndefined();
     expect(prepared?.maxToolIterations).toBe(9);
+    expect(prepared?.request.model).toBe("claude-opus-slowthink");
   });
 
   test("a side thread's pin does not reach the heartbeat, which lives at home", async () => {
@@ -480,10 +483,18 @@ describe("preparing a heartbeat body", () => {
       }),
     );
     const cache = new LastRequestCache();
-    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
+    const sideRequest = minimalRequest("claude-opus-slowthink");
+    sideRequest.messages = [{ role: "user", content: [{ type: "text", text: "side thread secret" }] }];
+    sideRequest.context = { character: "alice", thread: "eval", call_type: "message", thinking_enabled: false };
+    cache.set("alice", sideRequest);
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(prepared?.maxToolIterations).toBe(4);
+    expect(prepared?.request.model).toBe("claude-sonnet-chat");
+    expect(prepared?.request.context?.thread).toBe("main");
+    expect(JSON.stringify(prepared?.request.messages)).not.toContain("side thread secret");
+    expect(JSON.stringify(prepared?.request.messages)).toContain("hello");
+    expect(cache.get("alice")).toBe(sideRequest);
   });
 });
