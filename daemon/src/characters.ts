@@ -19,6 +19,7 @@ import {
   type ForkThreadOptions,
 } from "./engine/fork.ts";
 import { tryBeginCompaction } from "./memory/compaction/manager.ts";
+import { KeyedMutex } from "./util/keyed_mutex.ts";
 import {
   archiveThread,
   createThread,
@@ -109,6 +110,8 @@ export class CharacterConfigError extends Error {
   }
 }
 
+const threadIndexMutex = new KeyedMutex();
+
 export class CharacterRegistry {
   readonly #configDir: string;
   readonly #dataDir: string;
@@ -148,8 +151,9 @@ export class CharacterRegistry {
     for (const name of found) {
       try {
         await recoverForks(this.#dataDir, name);
-        const index = await ensureThreads(this.#dataDir, name, new Date().toISOString());
-        this.#threads.set(name, index);
+        const index = await this.#withThreadIndex(name, async () =>
+          this.#remember(name, await ensureThreads(this.#dataDir, name, new Date().toISOString())),
+        );
         await ensureCharacterWorkspace(
           characterDataDir(this.#dataDir, name),
           this.#configDir,
@@ -227,9 +231,11 @@ export class CharacterRegistry {
   }
 
   async createThread(name: string, id: string, options: NewThread = {}): Promise<ThreadsIndex> {
-    return this.#remember(
-      name,
-      await createThread(this.#dataDir, name, id, new Date().toISOString(), options),
+    return await this.#withThreadIndex(name, async () =>
+      this.#remember(
+        name,
+        await createThread(this.#dataDir, name, id, new Date().toISOString(), options),
+      ),
     );
   }
 
@@ -238,12 +244,14 @@ export class CharacterRegistry {
     id: string,
     options: ArchiveThreadOptions = {},
   ): Promise<ThreadsIndex> {
-    const index = await archiveThread(this.#dataDir, name, id, {
-      ...options,
-      retain: options.retain ?? this.effectiveConfig(name).app.memory.retain.enabled,
+    return await this.#withThreadIndex(name, async () => {
+      const index = await archiveThread(this.#dataDir, name, id, {
+        ...options,
+        retain: options.retain ?? this.effectiveConfig(name).app.memory.retain.enabled,
+      });
+      this.#engines.delete(engineKey(name, id));
+      return this.#remember(name, index);
     });
-    this.#engines.delete(engineKey(name, id));
-    return this.#remember(name, index);
   }
 
   async forkThread(
@@ -258,41 +266,52 @@ export class CharacterRegistry {
     }
     try {
       const live = await this.getOrCreate(name, source);
-      const result = await forkThread(this.#dataDir, name, source, child, {
-        ...options,
-        source: options.source ?? live,
+      return await this.#withThreadIndex(name, async () => {
+        const result = await forkThread(this.#dataDir, name, source, child, {
+          ...options,
+          source: options.source ?? live,
+        });
+        this.#remember(name, result.index);
+        return result;
       });
-      this.#remember(name, result.index);
-      return result;
     } finally {
       guard.release();
     }
   }
 
   async setHomeThread(name: string, id: string): Promise<ThreadsIndex> {
-    return this.#remember(
-      name,
-      await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),
+    return await this.#withThreadIndex(name, async () =>
+      this.#remember(name, await setHomeThread(this.#dataDir, name, id, new Date().toISOString())),
     );
   }
 
   async setThreadLabel(name: string, id: string, label: string | undefined): Promise<ThreadsIndex> {
-    return this.#remember(
-      name,
-      await setThreadLabel(this.#dataDir, name, id, label, new Date().toISOString()),
+    return await this.#withThreadIndex(name, async () =>
+      this.#remember(
+        name,
+        await setThreadLabel(this.#dataDir, name, id, label, new Date().toISOString()),
+      ),
     );
   }
 
   async setThreadModel(name: string, id: string, model: string | undefined): Promise<ThreadsIndex> {
-    return this.#remember(
-      name,
-      await setThreadModel(this.#dataDir, name, id, model, new Date().toISOString()),
+    return await this.#withThreadIndex(name, async () =>
+      this.#remember(
+        name,
+        await setThreadModel(this.#dataDir, name, id, model, new Date().toISOString()),
+      ),
     );
   }
 
   async touchThread(name: string, id: string): Promise<void> {
-    const index = await touchThread(this.#dataDir, name, id, new Date().toISOString());
-    if (index !== undefined) this.#threads.set(name, index);
+    await this.#withThreadIndex(name, async () => {
+      const index = await touchThread(this.#dataDir, name, id, new Date().toISOString());
+      if (index !== undefined) this.#threads.set(name, index);
+    });
+  }
+
+  async #withThreadIndex<T>(name: string, run: () => Promise<T>): Promise<T> {
+    return await threadIndexMutex.withKey(`${this.#dataDir}\u0000${name}`, run);
   }
 
   #remember(name: string, index: ThreadsIndex): ThreadsIndex {

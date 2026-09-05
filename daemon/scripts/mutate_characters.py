@@ -212,7 +212,12 @@ MUTANTS = [
      "    return loadCharacterDefinition(this.#dataDir, name, this.#workspaceRoot());"),
     # --- threads ----------------------------------------------------------
     ("threads: the index is not cached at scan time",
-     "        this.#threads.set(name, index);\n", ""),
+     "        const index = await this.#withThreadIndex(name, async () =>\n"
+     "          this.#remember(name, await ensureThreads(this.#dataDir, name, new Date().toISOString())),\n"
+     "        );",
+     "        const index = await this.#withThreadIndex(name, async () =>\n"
+     "          await ensureThreads(this.#dataDir, name, new Date().toISOString()),\n"
+     "        );"),
     ("threads: an unqualified call opens main rather than home",
      "    const id = thread ?? this.homeThread(name);",
      "    const id = thread ?? MAIN_THREAD;"),
@@ -235,16 +240,18 @@ MUTANTS = [
     ("threads: archiving leaves the cached engine behind",
      "    this.#engines.delete(engineKey(name, id));\n", ""),
     ("threads: archiving does not refresh the cached index",
-     "    this.#engines.delete(engineKey(name, id));\n"
-     "    return this.#remember(name, index);",
-     "    this.#engines.delete(engineKey(name, id));\n"
-     "    return index;"),
+     "      this.#engines.delete(engineKey(name, id));\n"
+     "      return this.#remember(name, index);",
+     "      this.#engines.delete(engineKey(name, id));\n"
+     "      return index;"),
     ("threads: moving home does not refresh the cached index",
-     "    return this.#remember(\n"
-     "      name,\n"
-     "      await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),\n"
+     "    return await this.#withThreadIndex(name, async () =>\n"
+     "      this.#remember(name, await setHomeThread(this.#dataDir, name, id, new Date().toISOString())),\n"
      "    );",
-     "    return await setHomeThread(this.#dataDir, name, id, new Date().toISOString());"),
+     "    return await this.#withThreadIndex(\n"
+     "      name,\n"
+     "      async () => await setHomeThread(this.#dataDir, name, id, new Date().toISOString()),\n"
+     "    );"),
     ("threads: a vanished character keeps its cached index",
      "    for (const name of Array.from(this.#threads.keys())) {\n"
      "      if (!afterSet.has(name)) this.#threads.delete(name);\n"

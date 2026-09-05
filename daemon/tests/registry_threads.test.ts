@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { CharacterRegistry } from "../src/characters.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
-import { MAIN_THREAD } from "../src/config/dirs.ts";
+import { MAIN_THREAD, characterThreadsIndex } from "../src/config/dirs.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -281,5 +281,87 @@ describe("the registry as the thread authority", () => {
     expect(registry.threads("nova")).toBeUndefined();
     expect(registry.listThreads("nova")).toEqual([]);
     expect(registry.threads("aria")?.threads.length).toBe(1);
+  });
+});
+
+describe("concurrent thread-index mutations", () => {
+  test("two threads created at once both survive on disk and in the registry", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+
+    await Promise.all([
+      registry.createThread("aria", "alpha"),
+      registry.createThread("aria", "beta"),
+    ]);
+
+    const onDisk = JSON.parse(
+      readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
+    ) as { threads: Array<{ id: string }> };
+
+    expect(onDisk.threads.map((t) => t.id).sort()).toEqual([MAIN_THREAD, "alpha", "beta"].sort());
+    expect(registry.listThreads("aria").map((t) => t.id).sort()).toEqual(
+      [MAIN_THREAD, "alpha", "beta"].sort(),
+    );
+  });
+
+  test("concurrent label and model edits on different threads both stick", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    await registry.createThread("aria", "alpha");
+    await registry.createThread("aria", "beta");
+
+    await Promise.all([
+      registry.setThreadLabel("aria", "alpha", "first"),
+      registry.setThreadModel("aria", "beta", "openai:gpt-4"),
+      registry.setHomeThread("aria", "alpha"),
+    ]);
+
+    const onDisk = JSON.parse(
+      readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
+    ) as { home: string; threads: Array<{ id: string; label?: string; chat_model?: string }> };
+
+    expect(onDisk.home).toBe("alpha");
+    expect(onDisk.threads.find((t) => t.id === "alpha")?.label).toBe("first");
+    expect(onDisk.threads.find((t) => t.id === "beta")?.chat_model).toBe("openai:gpt-4");
+
+    const cached = registry.listThreads("aria");
+    expect(cached.find((t) => t.id === "alpha")?.label).toBe("first");
+    expect(cached.find((t) => t.id === "beta")?.chat_model).toBe("openai:gpt-4");
+  });
+
+  test("a create racing an archive leaves the index consistent", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    await registry.createThread("aria", "doomed");
+
+    await Promise.all([
+      registry.createThread("aria", "fresh"),
+      registry.archiveThread("aria", "doomed"),
+    ]);
+
+    const onDisk = JSON.parse(
+      readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
+    ) as { threads: Array<{ id: string }> };
+
+    expect(onDisk.threads.map((t) => t.id).sort()).toEqual([MAIN_THREAD, "fresh"].sort());
+    expect(registry.listThreads("aria").map((t) => t.id).sort()).toEqual(
+      [MAIN_THREAD, "fresh"].sort(),
+    );
+  });
+
+  test("the in-memory index matches disk after concurrent touches", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    await registry.createThread("aria", "alpha");
+
+    await Promise.all([
+      registry.touchThread("aria", "alpha"),
+      registry.touchThread("aria", MAIN_THREAD),
+      registry.setThreadLabel("aria", "alpha", "labelled"),
+    ]);
+
+    const onDisk = JSON.parse(
+      readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
+    ) as { threads: Array<{ id: string; label?: string; last_active?: string }> };
+
+    expect(onDisk.threads.find((t) => t.id === "alpha")?.label).toBe("labelled");
+    expect(onDisk.threads.every((t) => t.last_active !== undefined)).toBe(true);
+    expect(registry.threads("aria")).toEqual(onDisk as never);
   });
 });
