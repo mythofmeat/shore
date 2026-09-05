@@ -743,3 +743,76 @@ describe("a mixed segment as an occurrence of what it inherited", () => {
     expect([...stored]).toEqual([]);
   });
 });
+
+describe("excluding a segment while its own document is still in flight", () => {
+  test("the submitted document is deleted alongside the ones it inherited", async () => {
+    const path = join(root("hindsight-exclude-inflight"), HISTORY_DB_FILE);
+    const inherited = message("u1", "user", "the first thing", newMessageVersion());
+    const fresh = message("u2", "user", "the second thing", newMessageVersion());
+    archive(path, "ada", [inherited], "2026-08-20T00:00:00+10:00");
+    archive(path, "ada/spin", [inherited, fresh], "2026-08-21T12:00:00+10:00");
+
+    const parentDocument = `shore:ada:${processingUnitId([required(inherited.version)])}`;
+    const childDocument = `shore:ada:${processingUnitId([required(fresh.version)])}`;
+    const stored = new Set<string>();
+    const inFlight = new Set([`op:${childDocument}`]);
+    const calls: Recorded[] = [];
+    let clock = 0;
+    const memory: MemoryBackend = {
+      call: (name: string, args: Record<string, unknown>) => {
+        calls.push({ name, args });
+        const raw = args["document_id"];
+        const id = typeof raw === "string" ? raw : "";
+        if (name === "retain") {
+          stored.add(id);
+          return Promise.resolve({ status: "accepted", operation_id: `op:${id}` });
+        }
+        if (name === "get_document") {
+          return stored.has(id) && !inFlight.has(`op:${id}`)
+            ? Promise.resolve({ id })
+            : Promise.resolve({ error: `Document '${id}' not found` });
+        }
+        if (name === "delete_document") {
+          stored.delete(id);
+          return Promise.resolve({ status: "deleted", document_id: id, document_deleted: 1 });
+        }
+        if (name === "get_operation") {
+          const operation = args["operation_id"];
+          const key = typeof operation === "string" ? operation : "";
+          return Promise.resolve({
+            status: inFlight.has(key) ? "processing" : "completed",
+            operation_id: key,
+          });
+        }
+        if (name === "list_operations") return Promise.resolve({ total: 0, operations: [] });
+        return Promise.resolve({});
+      },
+    };
+
+    const built = service(() => memory, path, () => clock);
+    await drain(built);
+
+    expect(statusOf(path, "ada")).toBe("stored");
+    expect(statusOf(path, "ada/spin")).toBe("submitted");
+    expect([...stored].sort()).toEqual([childDocument, parentDocument].sort());
+
+    const excluding = HistoryStore.open(path);
+    expect(excluding.documentsForOccurrence("ada", "hindsight", "ada/spin", 0)).toEqual([
+      parentDocument,
+    ]);
+    excluding.setExcluded("ada", 0, true, true);
+    excluding.setExcluded("ada/spin", 0, true, true);
+    excluding.close();
+    clock = 10 ** 7;
+    built.noteWork("ada");
+    await drain(built);
+
+    expect([...stored]).toEqual([]);
+    const deleted = new Set(
+      calls
+        .filter((call) => call.name === "delete_document")
+        .map((call) => String(call.args["document_id"])),
+    );
+    expect([...deleted].sort()).toEqual([childDocument, parentDocument].sort());
+  });
+});

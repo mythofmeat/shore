@@ -223,12 +223,44 @@ MUTANTS = [
      "      void candidate;"),
     ("deletion: only the segment's named document is considered, not the ones it backs",
      HINDSIGHT,
-     "    for (const candidate of recorded.length === 0 ? [documentId] : recorded) {",
+     "    for (const candidate of new Set([...recorded, documentId])) {",
      "    for (const candidate of [documentId]) {"),
     ("deletion: a segment with no recorded documents deletes nothing at all",
      HINDSIGHT,
-     "    for (const candidate of recorded.length === 0 ? [documentId] : recorded) {",
+     "    for (const candidate of new Set([...recorded, documentId])) {",
      "    for (const candidate of recorded) {"),
+    ("deletion: a document still in flight is overlooked once anything else is recorded",
+     HINDSIGHT,
+     "    for (const candidate of new Set([...recorded, documentId])) {",
+     "    for (const candidate of recorded.length === 0 ? [documentId] : recorded) {"),
+
+    # --- a paused pass another branch finished is retired, not wedged --------
+    ("wedge: a range someone else finished stays an outstanding claim forever",
+     RUN,
+     "  if (coverageIsRedundant(planned)) {\n"
+     "    return {\n"
+     "      redundant: true,\n"
+     "      ...(resuming && checkpoint !== undefined ? { abandoned: checkpoint.id } : {}),\n"
+     "    };\n"
+     "  }",
+     "  if (coverageIsRedundant(planned) && !resuming) return { redundant: true };"),
+    ("wedge: the checkpoint is rotated over without being retired",
+     RUN,
+     "      ...(resuming && checkpoint !== undefined ? { abandoned: checkpoint.id } : {}),\n",
+     ""),
+    ("wedge: retiring a pass leaves its checkpoint on disk",
+     RUN,
+     "  await removeCompactionCheckpoint(dataDir, character, thread);\n"
+     "  shoreLog.warn(",
+     "  shoreLog.warn("),
+    ("wedge: a pass that already archived its turns archives them a second time",
+     RUN,
+     "  const archived = await hasCompactionOperation(\n"
+     "    conversationRef(dataDir, character, thread, false),\n"
+     "    checkpointId,\n"
+     "  );",
+     "  const archived = false as boolean;\n"
+     "  void checkpointId;"),
 
     # --- a claim the pass does not hold is not a licence to archive ----------
     ("blocking: a pass that claimed nothing archives the material anyway",

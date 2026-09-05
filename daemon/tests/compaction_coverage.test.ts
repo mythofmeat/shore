@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -15,6 +16,7 @@ import { backgroundCoverageNotice } from "../src/memory/compaction/manager.ts";
 import {
   planCompactionCoverage,
   releaseCompactionCoverage,
+  runCompactionPass,
 } from "../src/memory/compaction/run.ts";
 import { COVERAGE_LEASE_MS, claimUncovered } from "../src/memory/coverage.ts";
 import { required } from "../src/util/required.ts";
@@ -235,6 +237,27 @@ describe("deciding whether a compaction has anything new to write", () => {
     expect(required(retried.coverage).claimed).toBe(4);
   });
 
+  test("a checkpoint whose range another branch finished is retired, not blocked forever", async () => {
+    const w = await world();
+    const frozen = jsonl(w.messages);
+    await writeCheckpoint(w.dataDir, "cl_paused", frozen);
+    cover(w.dataDir, w.messages.slice(0, 4));
+
+    const planned = await planAuto(w, 1);
+    expect(planned.blocked).toBeUndefined();
+    expect(planned.redundant).toBe(true);
+    expect(planned.abandoned).toBe("cp");
+  });
+
+  test("a redundant range with no checkpoint has nothing to retire", async () => {
+    const w = await world();
+    cover(w.dataDir, w.messages.slice(0, 4));
+
+    const planned = await planAuto(w, 1);
+    expect(planned.redundant).toBe(true);
+    expect(planned.abandoned).toBeUndefined();
+  });
+
   test("blocking leaves the first pass's claim alone so it can still finish", async () => {
     const w = await world();
     const first = await plan(w, 1);
@@ -367,5 +390,88 @@ describe("telling the compaction pass what it is looking at", () => {
     expect(notice).toContain("oldest 5 message(s)");
     expect(notice).toContain("do not write them up again");
     expect(notice).toContain("3 message(s) that follow");
+  });
+});
+
+describe("retiring a pass another branch finished for it", () => {
+  async function runPass(w: Awaited<ReturnType<typeof world>>) {
+    w.config.app.memory.compaction.keep_recent_turns = 1;
+    w.config.app.memory.compaction.max_context_tokens = 0;
+    return await runCompactionPass("ada", {
+      config: w.config,
+      generate: () => {
+        throw new Error("the memory pass must not run");
+      },
+    });
+  }
+
+  test("the checkpoint is cleared and its turns rotate into the archive", async () => {
+    const w = await world();
+    await writeCheckpoint(w.dataDir, "cl_paused", jsonl(w.messages));
+    cover(w.dataDir, w.messages.slice(0, 4));
+
+    const outcome = await runPass(w);
+
+    expect(outcome?.kind).toBe("rotated");
+    expect(
+      existsSync(join(w.dataDir, "ada", "threads", "main", "compaction-checkpoint.json")),
+    ).toBe(false);
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      expect(store.segmentCount("ada")).toBe(1);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("a pass that already archived its turns is retired without archiving them twice", async () => {
+    const w = await world();
+    await writeCheckpoint(w.dataDir, "cl_paused", jsonl(w.messages));
+    cover(w.dataDir, w.messages.slice(0, 4));
+
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      const idx = store.beginCompaction(
+        "ada",
+        {
+          file: HISTORY_DB_FILE,
+          message_count: 4,
+          compacted_at: STAMP,
+          compaction_id: "cp",
+        },
+        w.messages.slice(0, 4),
+        "before",
+        "after",
+      );
+      store.finishCompaction("ada", idx);
+    } finally {
+      store.close();
+    }
+
+    const outcome = await runPass(w);
+
+    expect(outcome).toBeUndefined();
+    expect(
+      existsSync(join(w.dataDir, "ada", "threads", "main", "compaction-checkpoint.json")),
+    ).toBe(false);
+    const after = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      expect(after.segmentCount("ada")).toBe(1);
+    } finally {
+      after.close();
+    }
+  });
+
+  test("the wedge is gone: the next plan neither blocks nor re-retires", async () => {
+    const w = await world();
+    await writeCheckpoint(w.dataDir, "cl_paused", jsonl(w.messages));
+    cover(w.dataDir, w.messages.slice(0, 4));
+
+    expect((await planAuto(w, 1)).abandoned).toBe("cp");
+    await runPass(w);
+
+    const settled = await planAuto(w, 1);
+    expect(settled.blocked).toBeUndefined();
+    expect(settled.abandoned).toBeUndefined();
   });
 });

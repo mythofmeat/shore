@@ -514,7 +514,7 @@ export class HindsightRetainService {
       job.segment,
     );
     const kept: string[] = [];
-    for (const candidate of recorded.length === 0 ? [documentId] : recorded) {
+    for (const candidate of new Set([...recorded, documentId])) {
       const supporting = store.eligibleDocumentOccurrences(
         registration.character,
         "hindsight",

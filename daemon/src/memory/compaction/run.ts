@@ -34,7 +34,7 @@ import {
 import { MarkdownMemoryStore } from "../markdown_store.ts";
 import { applyDeferredEdits, queueDeferredEdit } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
-import { conversationManager, segmentCount } from "./archive.ts";
+import { conversationManager, hasCompactionOperation, segmentCount } from "./archive.ts";
 import { handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
 import {
@@ -63,6 +63,7 @@ import {
 import {
   checkpointSourceIsCompatible,
   loadCompactionCheckpoint,
+  removeCompactionCheckpoint,
   type CompactionCheckpoint,
 } from "./checkpoint.ts";
 import { normalizeMessage } from "../../engine/message_store.ts";
@@ -187,6 +188,15 @@ export async function runCompactionPass(
       return undefined;
     }
     if (planned.redundant) {
+      if (planned.abandoned !== undefined) {
+        const settled = await reconcileAbandonedPass(
+          dataDir,
+          character,
+          thread,
+          planned.abandoned,
+        );
+        if (settled) return undefined;
+      }
       shoreLog.info(
         `shore: the whole archival range for ${character}/${thread} was already written to ` +
           `memory from another branch; rotating it into the archive without a second pass`,
@@ -281,6 +291,7 @@ interface ResolvedDeps {
 interface PlannedCoverage {
   redundant: boolean;
   blocked?: boolean;
+  abandoned?: string;
   coverage?: CompactionCoverage;
 }
 
@@ -321,7 +332,12 @@ export async function planCompactionCoverage(
     }),
   );
 
-  if (coverageIsRedundant(planned) && !resuming) return { redundant: true };
+  if (coverageIsRedundant(planned)) {
+    return {
+      redundant: true,
+      ...(resuming && checkpoint !== undefined ? { abandoned: checkpoint.id } : {}),
+    };
+  }
   if (coverageIsPartial(planned) || (planned.pending === 0 && planned.unversioned === 0)) {
     withCoverageStore(dbPath, (store) => {
       store.releaseMemoryCoverage(character, "compaction", planned.claim);
@@ -338,6 +354,28 @@ export async function planCompactionCoverage(
       fresh: archival.length - planned.backgroundMessages,
     },
   };
+}
+
+async function reconcileAbandonedPass(
+  dataDir: string,
+  character: string,
+  thread: string,
+  checkpointId: string,
+): Promise<boolean> {
+  const archived = await hasCompactionOperation(
+    conversationRef(dataDir, character, thread, false),
+    checkpointId,
+  );
+  await removeCompactionCheckpoint(dataDir, character, thread);
+  shoreLog.warn(
+    `shore: discarding compaction checkpoint ${checkpointId} for ${character}/${thread}: ` +
+      `another branch wrote up everything it was going to summarise. ` +
+      (archived
+        ? "Its turns were already archived, so there is nothing left to do"
+        : "Its turns are rotated into the archive without a second memory pass") +
+      ". The memory it already wrote stays on disk",
+  );
+  return archived;
 }
 
 function resumedRange(
