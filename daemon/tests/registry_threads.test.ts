@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -179,6 +186,49 @@ describe("the registry as the thread authority", () => {
     expect(child).not.toBe(home);
     expect(child.conversationDir).toBe(join(dataDir, "aria", "threads", "spin"));
     expect(child.messages().map((m) => m.content)).toEqual(["first"]);
+  });
+
+  test("a version stamped onto legacy context survives the cached engine's next write", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    const activePath = join(dataDir, "aria", "threads", MAIN_THREAD, "active.jsonl");
+    mkdirSync(join(dataDir, "aria", "threads", MAIN_THREAD), { recursive: true });
+    writeFileSync(
+      activePath,
+      `${JSON.stringify({
+        msg_id: "u1",
+        role: "user",
+        content: "legacy",
+        images: [],
+        content_blocks: [{ type: "text", text: "legacy" }],
+        timestamp: "2026-09-05T00:00:00.000Z",
+      })}\n`,
+    );
+
+    const cached = await registry.getOrCreate("aria", MAIN_THREAD);
+    expect(cached.messages().map((m) => m.version)).toEqual([undefined]);
+
+    await registry.forkThread("aria", MAIN_THREAD, "spin");
+    await cached.appendMessage({
+      msg_id: "u2",
+      role: "user",
+      content: "later",
+      images: [],
+      content_blocks: [{ type: "text", text: "later" }],
+      timestamp: "2026-09-05T00:01:00.000Z",
+    });
+
+    const parent = readFileSync(activePath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { msg_id: string; version?: string });
+    const stamped = parent.find((m) => m.msg_id === "u1")?.version;
+    expect(stamped).toBeDefined();
+
+    const child = readFileSync(
+      join(dataDir, "aria", "threads", "spin", "active.jsonl"),
+      "utf8",
+    ).trim();
+    expect((JSON.parse(child) as { version?: string }).version).toBe(stamped);
   });
 
   test("a fork while that character is compacting answers busy rather than half-copying", async () => {

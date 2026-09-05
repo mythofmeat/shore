@@ -51,11 +51,17 @@ export interface ForkMarker {
   turn_count: number;
 }
 
+export interface ForkSource {
+  messages(): readonly Message[];
+  stampMessageVersions(versions: ReadonlyMap<string, string>): Promise<number>;
+}
+
 export interface ForkThreadOptions {
   turns?: number;
   now?: () => string;
   newForkId?: () => string;
   failAfter?: ForkStage;
+  source?: ForkSource;
 }
 
 export type ForkStage = "context" | "provenance" | "publish";
@@ -176,12 +182,10 @@ async function forkThreadLocked(
     throw new ForkBusy(character, source, "a compaction is mid-flight in this character");
   }
 
-  const sourceDir = threadDataDir(data, character, source);
-  const sourcePath = activeJsonlIn(sourceDir);
-  const store = await MessageStore.load(sourcePath);
-  const selected = selectForkContext(store.messages(), turns);
+  const live = options.source ?? (await loadForkSource(data, character, source));
+  const selected = selectForkContext(live.messages(), turns);
 
-  const minted = await mintSourceVersions(store, selected);
+  const minted = await mintSourceVersions(live, selected);
   const copied = selected.map((message) => {
     const version = versionOf(message) ?? minted.get(message.msg_id);
     return version === undefined ? message : { ...message, version };
@@ -243,8 +247,22 @@ function forkRecordOf(marker: ForkMarker): ThreadForkRecord {
   };
 }
 
+async function loadForkSource(
+  data: string,
+  character: string,
+  thread: string,
+): Promise<ForkSource> {
+  const store = await MessageStore.load(
+    activeJsonlIn(threadDataDir(data, character, thread)),
+  );
+  return {
+    messages: () => store.messages(),
+    stampMessageVersions: async (versions) => await store.stampVersions(versions),
+  };
+}
+
 async function mintSourceVersions(
-  store: MessageStore,
+  source: ForkSource,
   selected: readonly Message[],
 ): Promise<Map<string, string>> {
   const minted = new Map<string, string>();
@@ -252,7 +270,7 @@ async function mintSourceVersions(
     if (versionOf(message) === undefined) minted.set(message.msg_id, newMessageVersion());
   }
   if (minted.size === 0) return minted;
-  await store.stampVersions(minted);
+  await source.stampMessageVersions(minted);
   return minted;
 }
 

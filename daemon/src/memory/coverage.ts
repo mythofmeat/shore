@@ -15,6 +15,7 @@ export interface CoverageClaim {
   covered: string[];
   versions: number;
   unversioned: number;
+  backgroundMessages: number;
 }
 
 export function newCoverageClaim(): string {
@@ -62,16 +63,44 @@ export interface CoverageStore {
   releaseMemoryCoverage(character: string, path: MemoryPath, claim: string): number;
 }
 
+export function coveredPrefixLength(
+  messages: readonly Message[],
+  covered: ReadonlySet<string>,
+): number {
+  let length = 0;
+  for (const message of messages) {
+    const version = versionOf(message);
+    if (version === undefined || !covered.has(version)) break;
+    length += 1;
+  }
+  return length;
+}
+
 export function claimUncovered(
   store: CoverageStore,
   character: string,
   path: MemoryPath,
   messages: readonly Message[],
-  options: { claim?: string; nowMs?: number; leaseMs?: number } = {},
+  options: {
+    claim?: string;
+    nowMs?: number;
+    leaseMs?: number;
+    contiguous?: boolean;
+  } = {},
 ): CoverageClaim {
   const versions = versionsIn(messages);
   const covered = store.coveredMemoryVersions(character, path, versions);
-  const pending = versions.filter((version) => !covered.has(version));
+  const backgroundMessages = options.contiguous === true
+    ? coveredPrefixLength(messages, covered)
+    : messages.length - messages.filter((message) => {
+        const version = versionOf(message);
+        return version === undefined || !covered.has(version);
+      }).length;
+  const background = options.contiguous === true
+    ? new Set(versionsIn(messages.slice(0, backgroundMessages)))
+    : covered;
+  const fresh = messages.slice(options.contiguous === true ? backgroundMessages : 0);
+  const pending = versionsIn(fresh).filter((version) => !background.has(version));
   const claim = options.claim ?? newCoverageClaim();
   const unit = processingUnitId(pending);
   const claimed = store.claimMemoryCoverage(
@@ -87,9 +116,10 @@ export function claimUncovered(
     claim,
     unit,
     claimed,
-    covered: versions.filter((version) => covered.has(version)),
+    covered: versions.filter((version) => background.has(version)),
     versions: versions.length,
-    unversioned: unversionedCount(messages),
+    unversioned: unversionedCount(fresh),
+    backgroundMessages,
   };
 }
 

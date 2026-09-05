@@ -40,14 +40,19 @@ function root(prefix: string): string {
   return dir;
 }
 
-function archive(path: string, key: string, messages: Message[]): void {
+function archive(
+  path: string,
+  key: string,
+  messages: Message[],
+  compactedAt = "2026-08-21T12:00:00+10:00",
+): void {
   const store = HistoryStore.open(path);
   const idx = store.beginCompaction(
     key,
     {
       file: HISTORY_DB_FILE,
       message_count: messages.length,
-      compacted_at: "2026-08-21T12:00:00+10:00",
+      compacted_at: compactedAt,
       retain: true,
     },
     messages,
@@ -181,7 +186,7 @@ describe("retaining a conversation that two threads share", () => {
     expect(statusOf(path, "ada/spin")).toBe("stored");
   });
 
-  test("a branch that added turns retains only what it added", async () => {
+  test("a branch that added turns keeps the inherited context, marked as already recorded", async () => {
     const path = join(root("hindsight-mixed"), HISTORY_DB_FILE);
     const inherited = message("u1", "user", "hello", newMessageVersion());
     const fresh = message("u2", "user", "and another thing", newMessageVersion());
@@ -198,8 +203,52 @@ describe("retaining a conversation that two threads share", () => {
       const body = call.args["content"];
       return typeof body === "string" ? body : "";
     });
-    expect(bodies.some((body) => body.includes("hello") && !body.includes("another"))).toBe(true);
-    expect(bodies.some((body) => body.includes("another") && !body.includes("hello"))).toBe(true);
+    const first = required(bodies.find((body) => !body.includes("another")));
+    const second = required(bodies.find((body) => body.includes("another")));
+
+    expect(first).toContain("hello");
+    expect(first).not.toContain("[already recorded]");
+
+    expect(second).toContain("and another thing");
+    expect(second).toContain("[already recorded] Ren");
+    expect(second).toContain("hello");
+    expect(second.indexOf("hello")).toBeLessThan(second.indexOf("and another thing"));
+  });
+
+  test("the document identity follows the new material, not the context carried with it", async () => {
+    const path = join(root("hindsight-mixed-id"), HISTORY_DB_FILE);
+    const inherited = message("u1", "user", "hello", newMessageVersion());
+    const fresh = message("u2", "user", "and another thing", newMessageVersion());
+    archive(path, "ada", [inherited]);
+    archive(path, "ada/spin", [inherited, fresh]);
+
+    const stored = new Set<string>();
+    const mcp = backend(stored);
+    await drain(service(mcp.backend, path));
+
+    expect(retainedIds(mcp.calls)).toContain(
+      `shore:ada:${processingUnitId([required(fresh.version)])}`,
+    );
+  });
+
+  test("the context tells the retainer what the marked lines are for", async () => {
+    const path = join(root("hindsight-mixed-context"), HISTORY_DB_FILE);
+    const inherited = message("u1", "user", "hello", newMessageVersion());
+    const fresh = message("u2", "user", "make that Thursday", newMessageVersion());
+    archive(path, "ada", [inherited]);
+    archive(path, "ada/spin", [inherited, fresh]);
+
+    const stored = new Set<string>();
+    const mcp = backend(stored);
+    await drain(service(mcp.backend, path));
+
+    const contexts = mcp.calls
+      .filter((call) => call.name === "retain")
+      .map((call) => {
+        const value = call.args["context"];
+        return typeof value === "string" ? value : "";
+      });
+    expect(contexts.some((value) => value.includes("take nothing new from them"))).toBe(true);
   });
 
   test("excluding one occurrence keeps the shared document that the other still needs", async () => {
@@ -482,6 +531,121 @@ describe("what a coverage record remembers", () => {
     expect(
       store.coveredMemoryVersions("ada", "hindsight", [required(required(shared[0]).version)]).size,
     ).toBe(1);
+    store.close();
+  });
+});
+
+describe("excluding a segment that several documents were built from", () => {
+  test("every document it was the last occurrence of is deleted, not just a named one", async () => {
+    const path = join(root("hindsight-multi-doc"), HISTORY_DB_FILE);
+    const one = message("u1", "user", "the first thing", newMessageVersion());
+    const two = message("u2", "user", "the second thing", newMessageVersion());
+    archive(path, "ada/a", [one], "2026-08-20T00:00:00+10:00");
+    archive(path, "ada/b", [two], "2026-08-20T01:00:00+10:00");
+    archive(path, "ada", [one, two], "2026-08-21T12:00:00+10:00");
+
+    const stored = new Set<string>();
+    const mcp = backend(stored);
+    const built = service(mcp.backend, path);
+    await drain(built);
+
+    const documents = retainedIds(mcp.calls);
+    expect(documents).toHaveLength(2);
+    const store = HistoryStore.open(path);
+    expect(store.documentsForOccurrence("ada", "hindsight", "ada", 0).sort()).toEqual(
+      [...documents].sort(),
+    );
+    store.setExcluded("ada/a", 0, true, true);
+    store.setExcluded("ada/b", 0, true, true);
+    store.close();
+    built.noteWork("ada");
+    await drain(built);
+
+    expect([...stored].sort()).toEqual([...documents].sort());
+
+    const before = HistoryStore.open(path);
+    before.setExcluded("ada", 0, true, true);
+    before.close();
+    built.noteWork("ada");
+    await drain(built);
+
+    expect([...stored]).toEqual([]);
+  });
+
+  test("a segment excluded while another still includes the material keeps it retained", async () => {
+    const path = join(root("hindsight-multi-doc-kept"), HISTORY_DB_FILE);
+    const one = message("u1", "user", "the first thing", newMessageVersion());
+    const two = message("u2", "user", "the second thing", newMessageVersion());
+    archive(path, "ada/a", [one], "2026-08-20T00:00:00+10:00");
+    archive(path, "ada/b", [two], "2026-08-20T01:00:00+10:00");
+    archive(path, "ada", [one, two], "2026-08-21T12:00:00+10:00");
+
+    const stored = new Set<string>();
+    const mcp = backend(stored);
+    const built = service(mcp.backend, path);
+    await drain(built);
+    const documents = retainedIds(mcp.calls);
+
+    const store = HistoryStore.open(path);
+    store.setExcluded("ada", 0, true, true);
+    store.close();
+    built.noteWork("ada");
+    await drain(built);
+
+    expect([...stored].sort()).toEqual([...documents].sort());
+  });
+});
+
+describe("segments this feature never touched", () => {
+  test("a legacy stored segment is deleted by its own per-segment id", async () => {
+    const path = join(root("hindsight-legacy-delete"), HISTORY_DB_FILE);
+    archive(path, "ada", [message("u1", "user", "hello", newMessageVersion())]);
+
+    const seeded = HistoryStore.open(path);
+    seeded.markMemoryDocument("ada", 0, "stored");
+    expect(seeded.documentsForOccurrence("ada", "hindsight", "ada", 0)).toEqual([]);
+    seeded.setExcluded("ada", 0, true, true);
+    seeded.close();
+
+    const stored = new Set(["shore:ada:seg0"]);
+    const mcp = backend(stored);
+    await drain(service(mcp.backend, path));
+
+    expect(
+      mcp.calls.filter((call) => call.name === "delete_document").map((call) => call.args),
+    ).toEqual([{ document_id: "shore:ada:seg0" }]);
+    expect([...stored]).toEqual([]);
+  });
+
+  test("a unit whose new material carries no words is not submitted as inherited lines", async () => {
+    const path = join(root("hindsight-wordless"), HISTORY_DB_FILE);
+    const inherited = message("u1", "user", "hello", newMessageVersion());
+    const wordless: Message = {
+      msg_id: "a1",
+      role: "assistant",
+      content: "",
+      images: [],
+      content_blocks: [{ type: "tool_use", id: "t1", name: "read", input: {} }],
+      timestamp: "2026-08-20T10:00:00+10:00",
+      version: newMessageVersion(),
+    };
+    archive(path, "ada", [inherited], "2026-08-20T00:00:00+10:00");
+    archive(path, "ada/spin", [inherited, wordless], "2026-08-21T12:00:00+10:00");
+
+    const stored = new Set<string>();
+    const mcp = backend(stored);
+    await drain(service(mcp.backend, path));
+
+    expect(retainedIds(mcp.calls)).toHaveLength(1);
+    const sent = required(
+      mcp.calls.find((call) => call.name === "retain"),
+    );
+    expect(String(sent.args["content"])).not.toContain("[already recorded]");
+    expect(statusOf(path, "ada/spin")).toBeUndefined();
+    const store = HistoryStore.open(path);
+    expect(
+      store.memoryCoverageState("ada", "hindsight", required(wordless.version)),
+    ).toBeUndefined();
     store.close();
   });
 });

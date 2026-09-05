@@ -599,6 +599,8 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     workspaceHead,
   );
   checkpoint.request.api_key = initialRequest.api_key;
+  if (opts.coverage === undefined) delete checkpoint.coverageClaim;
+  else checkpoint.coverageClaim = opts.coverage.claim;
   const alreadyArchived = opts.resumable === true && opts.dataDir !== undefined
     ? await hasCompactionOperation(
         conversationRef(opts.dataDir, opts.charName, compactThread(opts), false),
@@ -653,6 +655,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
       workspaceHead,
     );
     checkpoint.request.api_key = initialRequest.api_key;
+    if (opts.coverage !== undefined) checkpoint.coverageClaim = opts.coverage.claim;
   }
   checkpoint.state = "running";
   delete checkpoint.pauseReason;
@@ -785,13 +788,12 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
 }
 
 export function backgroundCoverageNotice(coverage: CompactionCoverage): string | undefined {
-  if (coverage.background === 0) return undefined;
-  const fresh = coverage.claimed + coverage.unversioned;
+  if (coverage.background === 0 || coverage.fresh === 0) return undefined;
   return (
-    `\n\nBackground: the oldest ${String(coverage.background)} message(s) of this range were ` +
-    `already written to memory from another branch of this conversation. They are here so the ` +
-    `newer material reads in context — do not write them up again. Write memory for the ` +
-    `${String(fresh)} message(s) that follow them.`
+    `\n\nBackground: the oldest ${String(coverage.background)} message(s) of the range being ` +
+    `archived were already written to memory from another branch of this conversation. They are ` +
+    `here so the newer material reads in context — do not write them up again. Write memory for ` +
+    `the ${String(coverage.fresh)} message(s) that follow them, which nothing has recorded yet.`
   );
 }
 

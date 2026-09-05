@@ -275,7 +275,7 @@ describe("hindsight processing units across branches", () => {
 
     const unit = unitFor(history, "ada", 0, 1_000);
     expect(unit.messages).toHaveLength(2);
-    expect(unit.background).toBe(0);
+    expect(unit.background.size).toBe(0);
     expect(unit.documentId).toBe(
       `shore:ada:${processingUnitId(messages.map((m) => required(m.version)))}`,
     );
@@ -320,8 +320,8 @@ describe("hindsight processing units across branches", () => {
     history.commitMemoryCoverage("ada", "hindsight", parent.claim);
 
     const child = unitFor(history, "ada/spin", 0, 2_000);
-    expect(child.messages.map((m) => m.content)).toEqual(["fresh"]);
-    expect(child.background).toBe(1);
+    expect(child.messages.map((m) => m.content)).toEqual(["inherited", "fresh"]);
+    expect([...child.background]).toEqual([inherited.msg_id]);
     expect(child.documentId).not.toBe(parent.documentId);
     history.close();
   });

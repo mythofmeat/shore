@@ -257,7 +257,11 @@ export class CharacterRegistry {
       throw new ForkBusy(name, source, "a compaction pass holds this character");
     }
     try {
-      const result = await forkThread(this.#dataDir, name, source, child, options);
+      const live = await this.getOrCreate(name, source);
+      const result = await forkThread(this.#dataDir, name, source, child, {
+        ...options,
+        source: options.source ?? live,
+      });
       this.#remember(name, result.index);
       return result;
     } finally {

@@ -166,6 +166,14 @@ export async function runCompactionPass(
     }
 
     const planned = await planCompactionCoverage(character, thread, effective, loaded, options);
+    if (planned.blocked === true) {
+      shoreLog.warn(
+        `shore: skipping compaction for ${character}/${thread}: another pass holds the memory ` +
+          `claim on everything it would archive. The conversation is kept as it is; this retries ` +
+          `once that claim finishes or its lease runs out`,
+      );
+      return undefined;
+    }
     if (planned.redundant) {
       shoreLog.info(
         `shore: the whole archival range for ${character}/${thread} was already written to ` +
@@ -229,7 +237,11 @@ export async function runCompactionPass(
       },
     );
 
-    if (planned.coverage !== undefined && outcome.kind !== "compacted") {
+    if (
+      planned.coverage !== undefined &&
+      outcome.kind !== "compacted" &&
+      outcome.kind !== "paused"
+    ) {
       releaseCompactionCoverage(dataDir, character, planned.coverage.claim);
     }
 
@@ -256,6 +268,7 @@ interface ResolvedDeps {
 
 interface PlannedCoverage {
   redundant: boolean;
+  blocked?: boolean;
   coverage?: CompactionCoverage;
 }
 
@@ -281,23 +294,35 @@ export async function planCompactionCoverage(
   const archival = [...loaded.store.messages()].slice(0, splitAt);
   if (archival.length === 0) return { redundant: false };
 
-  const resuming =
-    (await loadCompactionCheckpoint(dataDir, character, thread).catch(() => undefined)) !== undefined;
+  const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(
+    () => undefined,
+  );
+  const resuming = checkpoint !== undefined;
+  const resumeClaim = checkpoint?.coverageClaim;
 
   const dbPath = join(dataDir, HISTORY_DB_FILE);
   const planned = withCoverageStore(dbPath, (store) =>
-    claimUncovered(store, character, "compaction", archival),
+    claimUncovered(store, character, "compaction", archival, {
+      contiguous: true,
+      ...(resumeClaim === undefined ? {} : { claim: resumeClaim }),
+    }),
   );
 
   if (coverageIsRedundant(planned) && !resuming) return { redundant: true };
+  if (planned.claimed.length === 0 && planned.unversioned === 0) {
+    withCoverageStore(dbPath, (store) => {
+      store.releaseMemoryCoverage(character, "compaction", planned.claim);
+    });
+    return { redundant: false, blocked: true };
+  }
   return {
     redundant: false,
     coverage: {
       claim: planned.claim,
       unit: planned.unit,
       claimed: planned.claimed.length,
-      background: planned.covered.length,
-      unversioned: planned.unversioned,
+      background: planned.backgroundMessages,
+      fresh: archival.length - planned.backgroundMessages,
     },
   };
 }

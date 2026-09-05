@@ -44,6 +44,7 @@ export interface CompactionCheckpoint {
   splitAt: number;
   compactedTurns: number;
   memoryBefore?: string;
+  coverageClaim?: string;
   request: SidecarRequest;
   loop: CheckpointLoopState;
 }

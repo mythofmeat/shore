@@ -671,13 +671,20 @@ export class HistoryStore {
              (character, path, version, state, unit, claim, claimed_at, updated_at)
          VALUES (?1, ?2, ?3, 'claimed', ?4, ?5, ?6, ?7)`,
       );
-      const won: string[] = [];
-      for (const version of new Set(versions)) {
-        if (insert.run(character, path, version, unit, claim, nowMs, stamp).changes > 0) {
-          won.push(version);
-        }
+      const wanted = [...new Set(versions)];
+      for (const version of wanted) {
+        insert.run(character, path, version, unit, claim, nowMs, stamp);
       }
-      return won;
+      const marks = wanted.map((_, index) => `?${String(index + 4)}`).join(", ");
+      const rows = this.#db
+        .query(
+          `SELECT version FROM memory_coverage
+           WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'
+             AND version IN (${marks})`,
+        )
+        .all(character, path, claim, ...wanted) as { version: string }[];
+      const held = new Set(rows.map((row) => row.version));
+      return wanted.filter((version) => held.has(version));
     })();
   }
 
@@ -763,6 +770,23 @@ export class HistoryStore {
          VALUES (?1, ?2, ?3, ?4, ?5)`,
       )
       .run(character, path, documentId, archiveKey, segment);
+  }
+
+  documentsForOccurrence(
+    character: string,
+    path: MemoryPath,
+    archiveKey: string,
+    segment: number,
+  ): string[] {
+    return (
+      this.#db
+        .query(
+          `SELECT document_id FROM memory_documents
+           WHERE character = ?1 AND path = ?2 AND archive_key = ?3 AND segment = ?4
+           ORDER BY document_id`,
+        )
+        .all(character, path, archiveKey, segment) as { document_id: string }[]
+    ).map((row) => row.document_id);
   }
 
   eligibleDocumentOccurrences(

@@ -26,6 +26,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 COVERAGE = ROOT / "src/memory/coverage.ts"
 STORE = ROOT / "src/engine/history_store.ts"
 HINDSIGHT = ROOT / "src/memory/hindsight_retain_service.ts"
+RUN = ROOT / "src/memory/compaction/run.ts"
 VERSIONS = ROOT / "src/engine/versions.ts"
 
 # (label, [path,] find, replace)
@@ -89,13 +90,20 @@ MUTANTS = [
      COVERAGE,
      "  return claim.unversioned === 0 && claim.covered.length === claim.versions;",
      "  return claim.unversioned === 0 && claim.claimed.length === 0;"),
-    ("inheritance: nothing is ever taken as processed, so both branches redo it "
-     "(EQUIVALENT: the insert ignores a version that already has a row, so a covered "
-     "one cannot be reclaimed, and the tentative unit this widens is overwritten with "
-     "the document's own unit when the claim commits)",
+    ("inheritance: the background is any covered message, not the run at the front",
      COVERAGE,
-     "  const pending = versions.filter((version) => !covered.has(version));",
-     "  const pending = [...versions];"),
+     "  const backgroundMessages = options.contiguous === true\n"
+     "    ? coveredPrefixLength(messages, covered)",
+     "  const backgroundMessages = options.contiguous === true\n"
+     "    ? covered.size"),
+    ("inheritance: a covered message stops the prefix instead of extending it",
+     COVERAGE,
+     "    if (version === undefined || !covered.has(version)) break;",
+     "    if (version === undefined || covered.has(version)) break;"),
+    ("inheritance: an unversioned message is folded into the background prefix",
+     COVERAGE,
+     "    if (version === undefined || !covered.has(version)) break;",
+     "    if (version !== undefined && !covered.has(version)) break;"),
     ("inheritance: covered material is claimed again alongside the new",
      COVERAGE,
      "  const covered = store.coveredMemoryVersions(character, path, versions);",
@@ -191,8 +199,52 @@ MUTANTS = [
      "         ORDER BY d.archive_key, d.segment`,"),
     ("deletion: deleting the last copy leaves its material marked processed",
      HINDSIGHT,
-     "    store.releaseHindsightUnitCoverage(registration.character, documentId);",
-     "    void documentId;"),
+     "      store.releaseHindsightUnitCoverage(registration.character, candidate);",
+     "      void candidate;"),
+    ("deletion: only the segment's named document is considered, not the ones it backs",
+     HINDSIGHT,
+     "    for (const candidate of recorded.length === 0 ? [documentId] : recorded) {",
+     "    for (const candidate of [documentId]) {"),
+    ("deletion: a segment with no recorded documents deletes nothing at all",
+     HINDSIGHT,
+     "    for (const candidate of recorded.length === 0 ? [documentId] : recorded) {",
+     "    for (const candidate of recorded) {"),
+
+    # --- a claim the pass does not hold is not a licence to archive ----------
+    ("blocking: a pass that claimed nothing archives the material anyway",
+     RUN,
+     "  if (planned.claimed.length === 0 && planned.unversioned === 0) {",
+     "  if (false as boolean) {"),
+    ("blocking: a resumed pass mints a new claim instead of reusing its checkpoint's",
+     RUN,
+     "      ...(resumeClaim === undefined ? {} : { claim: resumeClaim }),",
+     "      ...{},"),
+    ("blocking: a claim is not reclaimable by the pass that already holds it",
+     STORE,
+     "           WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'\n"
+     "             AND version IN (${marks})`,",
+     "           WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'\n"
+     "             AND claimed_at < 0 AND version IN (${marks})`,"),
+    ("blocking: a paused pass drops the claim its checkpoint will resume with",
+     RUN,
+     '      outcome.kind !== "paused"\n',
+     ""),
+
+    # --- inherited context reaches the retainer, marked ----------------------
+    ("context: the inherited half of a unit is dropped from the document",
+     HINDSIGHT,
+     "    messages,\n"
+     "    background: new Set(",
+     "    messages: fresh,\n"
+     "    background: new Set("),
+    ("context: inherited lines are not marked, so they read as new material",
+     HINDSIGHT,
+     '      `${inherited ? "[already recorded] " : ""}${names[message.role]} ` +',
+     "      `${names[message.role]} ` +"),
+    ("context: a document of nothing but inherited lines is still submitted",
+     HINDSIGHT,
+     "  if (fresh === 0 || first === undefined || last === undefined) return undefined;",
+     "  if (lines.length === 0 || first === undefined || last === undefined) return undefined;"),
 
     # --- the archive commit is where compaction coverage lands ---------------
     ("archive: coverage is committed even when the archive is abandoned",
@@ -236,6 +288,7 @@ def main() -> int:
             "tests/memory_coverage.test.ts",
             "tests/compaction_coverage.test.ts",
             "tests/hindsight_branches.test.ts",
+            "tests/registry_threads.test.ts",
         ],
     )
 

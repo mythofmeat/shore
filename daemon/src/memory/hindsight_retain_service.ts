@@ -77,7 +77,7 @@ export interface HindsightUnit {
   documentId: string;
   claim: string;
   messages: Message[];
-  background: number;
+  background: ReadonlySet<string>;
 }
 
 export type HindsightUnitPlan =
@@ -108,6 +108,7 @@ export function hindsightUnitFor(
   });
   if (fresh.length === 0) return { kind: "claimed_elsewhere" };
   const versions = versionsIn(fresh);
+  const freshIds = new Set(fresh.map((message) => message.msg_id));
   return {
     kind: "unit",
     documentId:
@@ -115,10 +116,16 @@ export function hindsightUnitFor(
         ? hindsightDocumentId(archiveKey, segment)
         : hindsightUnitDocumentId(character, versions),
     claim: planned.claim,
-    messages: fresh,
-    background: messages.length - fresh.length,
+    messages,
+    background: new Set(
+      messages.filter((message) => !freshIds.has(message.msg_id)).map((m) => m.msg_id),
+    ),
   };
 }
+
+const BACKGROUND_NOTE =
+  " Lines marked [already recorded] were retained from another branch of this same " +
+  "conversation and are here only so the rest reads in context; take nothing new from them.";
 
 export function hindsightDocument(
   character: string,
@@ -127,6 +134,7 @@ export function hindsightDocument(
   userName: string,
   possessivePronoun: string,
   archiveKey = character,
+  background: ReadonlySet<string> = new Set(),
 ): HindsightDocument | undefined {
   const names: Record<Message["role"], string> = {
     user: userName,
@@ -135,6 +143,8 @@ export function hindsightDocument(
   };
   const lines: string[] = [];
   const stamps: string[] = [];
+  let fresh = 0;
+  let marked = false;
   for (const message of messages) {
     if (message.role === "system") continue;
     const text = message.content_blocks
@@ -142,12 +152,18 @@ export function hindsightDocument(
       .join(" ")
       .trim();
     if (text === "") continue;
+    const inherited = background.has(message.msg_id);
+    if (inherited) marked = true;
+    else fresh += 1;
     stamps.push(message.timestamp);
-    lines.push(`${names[message.role]} (${message.timestamp}): ${text}`);
+    lines.push(
+      `${inherited ? "[already recorded] " : ""}${names[message.role]} ` +
+        `(${message.timestamp}): ${text}`,
+    );
   }
   const first = stamps[0];
   const last = stamps.at(-1);
-  if (lines.length === 0 || first === undefined || last === undefined) return undefined;
+  if (fresh === 0 || first === undefined || last === undefined) return undefined;
   return {
     content: lines.join("\n\n"),
     context: CONTEXT
@@ -155,7 +171,7 @@ export function hindsightDocument(
       .replace("{character}", () => character)
       .replace("{pronoun}", () => possessivePronoun)
       .replace("{first}", () => first.slice(0, 10))
-      .replace("{last}", () => last.slice(0, 10)),
+      .replace("{last}", () => last.slice(0, 10)) + (marked ? BACKGROUND_NOTE : ""),
     documentId: hindsightDocumentId(archiveKey, segment),
   };
 }
@@ -365,6 +381,7 @@ export class HindsightRetainService {
       registration.userName,
       registration.possessivePronoun,
       job.archiveKey,
+      unit.background,
     );
     if (document === undefined) {
       store.releaseMemoryCoverage(registration.character, "hindsight", unit.claim);
@@ -481,25 +498,35 @@ export class HindsightRetainService {
         return;
       }
     }
-    const supporting = store.eligibleDocumentOccurrences(
+    const recorded = store.documentsForOccurrence(
       registration.character,
       "hindsight",
-      documentId,
+      job.archiveKey,
+      job.segment,
     );
-    if (supporting.length > 0) {
-      store.markMemoryDocument(job.archiveKey, job.segment, null);
-      store.setMemoryDocumentIdentity(job.archiveKey, job.segment, null, null);
-      shoreLog.info(
-        `shore: kept hindsight document ${documentId}; ` +
-          `${String(supporting.length)} other included occurrence(s) still support it`,
+    const kept: string[] = [];
+    for (const candidate of recorded.length === 0 ? [documentId] : recorded) {
+      const supporting = store.eligibleDocumentOccurrences(
+        registration.character,
+        "hindsight",
+        candidate,
       );
-      return;
+      if (supporting.length > 0) {
+        kept.push(candidate);
+        continue;
+      }
+      await this.#delete(registration, candidate);
+      store.releaseHindsightUnitCoverage(registration.character, candidate);
+      shoreLog.info(`shore: removed excluded archive document ${candidate} from hindsight`);
     }
-    await this.#delete(registration, documentId);
     store.markMemoryDocument(job.archiveKey, job.segment, null);
     store.setMemoryDocumentIdentity(job.archiveKey, job.segment, null, null);
-    store.releaseHindsightUnitCoverage(registration.character, documentId);
-    shoreLog.info(`shore: removed excluded archive document ${documentId} from hindsight`);
+    if (kept.length > 0) {
+      shoreLog.info(
+        `shore: kept ${String(kept.length)} hindsight document(s) other included ` +
+          `occurrences still support: ${kept.join(", ")}`,
+      );
+    }
   }
 
   #requeue(

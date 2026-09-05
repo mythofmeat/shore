@@ -257,6 +257,10 @@ export class ConversationEngine {
     return this.#segments.displayStartForTurns(Math.min(end, globalActiveStart), remaining);
   }
 
+  async stampMessageVersions(versions: ReadonlyMap<string, string>): Promise<number> {
+    return await this.#messages.stampVersions(versions);
+  }
+
   async appendMessage(msg: Message): Promise<void> {
     await this.#messages.append(msg);
     this.#advanceRevision();

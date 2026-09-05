@@ -57,8 +57,11 @@ MUTANTS = [
      "    return { ...message, version: newMessageVersion() };"),
     ("identity: the source keeps no version, so the two sides never share one",
      "  if (minted.size === 0) return minted;\n"
-     "  await store.stampVersions(minted);",
+     "  await source.stampMessageVersions(minted);",
      "  if (minted.size === 0) return minted;"),
+    ("identity: the source is re-read from disk, so a cached parent overwrites the stamp",
+     "  const live = options.source ?? (await loadForkSource(data, character, source));",
+     "  const live = await loadForkSource(data, character, source);"),
     ("identity: an existing version is overwritten rather than carried across "
      "(EQUIVALENT: stampVersions skips a message that already has one, and the copy "
      "prefers the message's own version over the minted map, so overwriting the map "
@@ -162,7 +165,11 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/thread_fork.test.ts"], src=FORK)
+    return _run_mutants(
+        MUTANTS,
+        ["tests/thread_fork.test.ts", "tests/registry_threads.test.ts"],
+        src=FORK,
+    )
 
 
 if __name__ == "__main__":

@@ -33,7 +33,7 @@ export interface CompactionCoverage {
   unit: string;
   claimed: number;
   background: number;
-  unversioned: number;
+  fresh: number;
 }
 
 export interface MemoryFileOp {

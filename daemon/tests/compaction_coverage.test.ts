@@ -71,6 +71,36 @@ async function world(messages: Message[] = conversation()): Promise<{
   };
 }
 
+async function writeCheckpoint(dataDir: string, coverageClaim: string): Promise<void> {
+  await writeFile(
+    join(dataDir, "ada", "threads", "main", "compaction-checkpoint.json"),
+    JSON.stringify({
+      version: 1,
+      id: "cp",
+      character: "ada",
+      createdAt: STAMP,
+      updatedAt: STAMP,
+      state: "running",
+      sourceContent: "",
+      sourceHash: "",
+      splitAt: 4,
+      compactedTurns: 2,
+      coverageClaim,
+      request: { api_key: "" },
+      loop: {
+        writesApplied: [],
+        toolsCalled: [],
+        dryRunPreviews: [],
+        toolRounds: 0,
+        maxRoundsHit: false,
+        dryRun: false,
+        pendingResults: [],
+        pendingUseCount: 0,
+      },
+    }),
+  );
+}
+
 async function plan(w: Awaited<ReturnType<typeof world>>, keepTurns: number) {
   const loaded = await loadMessagesForCompaction(w.dataDir, "ada", "main");
   return await planCompactionCoverage(
@@ -120,13 +150,59 @@ describe("deciding whether a compaction has anything new to write", () => {
     expect(required(planned.coverage).claimed).toBe(2);
   });
 
-  test("a claim another pass holds is not handed out twice, and is not mistaken for done", async () => {
+  test("a pass that could claim nothing blocks rather than archiving unprocessed material", async () => {
     const w = await world();
     const first = await plan(w, 1);
-    const second = await plan(w, 1);
     expect(required(first.coverage).claimed).toBe(4);
-    expect(required(second.coverage).claimed).toBe(0);
+
+    const second = await plan(w, 1);
+    expect(second.blocked).toBe(true);
     expect(second.redundant).toBe(false);
+    expect(second.coverage).toBeUndefined();
+  });
+
+  test("blocking leaves the first pass's claim alone so it can still finish", async () => {
+    const w = await world();
+    const first = await plan(w, 1);
+    await plan(w, 1);
+
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      expect(
+        store.commitMemoryCoverage("ada", "compaction", required(first.coverage).claim),
+      ).toBe(4);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("a resumed pass reclaims the material its own checkpoint is holding", async () => {
+    const w = await world();
+    const first = await plan(w, 1);
+    const claim = required(first.coverage).claim;
+    await writeCheckpoint(w.dataDir, claim);
+
+    const resumed = await plan(w, 1);
+    expect(resumed.blocked).toBeUndefined();
+    expect(required(resumed.coverage).claim).toBe(claim);
+    expect(required(resumed.coverage).claimed).toBe(4);
+  });
+
+  test("an edit inside the inherited range keeps that message out of the background", async () => {
+    const w = await world();
+    cover(w.dataDir, w.messages.slice(0, 4));
+    const edited = { ...required(w.messages[1]), version: newMessageVersion() };
+    await writeFile(
+      join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
+      [w.messages[0], edited, ...w.messages.slice(2)]
+        .map((m) => JSON.stringify(m))
+        .join("\n") + "\n",
+    );
+
+    const planned = await plan(w, 1);
+    expect(planned.redundant).toBe(false);
+    expect(required(planned.coverage).background).toBe(1);
+    expect(required(planned.coverage).fresh).toBe(3);
   });
 
   test("releasing an abandoned pass's claim gives the material back", async () => {
@@ -147,7 +223,8 @@ describe("deciding whether a compaction has anything new to write", () => {
     );
     const planned = await plan(w, 1);
     expect(planned.redundant).toBe(false);
-    expect(required(planned.coverage).unversioned).toBe(4);
+    expect(required(planned.coverage).background).toBe(0);
+    expect(required(planned.coverage).fresh).toBe(4);
   });
 
   test("nothing to archive means nothing to claim", async () => {
@@ -161,7 +238,7 @@ describe("deciding whether a compaction has anything new to write", () => {
 describe("telling the compaction pass what it is looking at", () => {
   test("a wholly new range gets no background notice", () => {
     expect(
-      backgroundCoverageNotice({ claim: "c", unit: "u", claimed: 3, background: 0, unversioned: 0 }),
+      backgroundCoverageNotice({ claim: "c", unit: "u", claimed: 3, background: 0, fresh: 3 }),
     ).toBeUndefined();
   });
 
@@ -169,9 +246,9 @@ describe("telling the compaction pass what it is looking at", () => {
     const notice = backgroundCoverageNotice({
       claim: "c",
       unit: "u",
-      claimed: 2,
+      claimed: 3,
       background: 5,
-      unversioned: 1,
+      fresh: 3,
     });
     expect(notice).toContain("oldest 5 message(s)");
     expect(notice).toContain("do not write them up again");
