@@ -216,6 +216,13 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
           type: "number",
           description: "Maximum matches to return. Defaults to 20, maximum 100.",
         },
+        context: {
+          type: "integer",
+          minimum: 0,
+          maximum: 10000,
+          default: 500,
+          description: "Characters of context on each side of the match. Automatically shrinks to target a 12000-character response while retaining every result and the full match.",
+        },
       },
       required: ["query"],
     },

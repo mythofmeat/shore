@@ -650,7 +650,7 @@ describe("excerpting the line a match was found on", () => {
   test("what comes back stays within the window, plus its ellipses", () => {
     for (const pad of [0, 50, CHARS, CHARS * 5]) {
       const line = `${"a".repeat(pad)} tea ${"b".repeat(pad)}`;
-      expect(chars(excerptOf(line, "tea")), `pad ${pad}`).toBeLessThanOrEqual(CHARS + 6);
+      expect(chars(excerptOf(line, "tea")), `pad ${pad}`).toBeLessThanOrEqual(CHARS * 2 + 3 + 6);
     }
   });
 
@@ -664,14 +664,14 @@ describe("excerpting the line a match was found on", () => {
     expect(both.startsWith("...") && both.endsWith("...")).toBe(true);
   });
 
-  test("context unavailable on one side is spent on the other", () => {
+  test("context stays within the requested distance on each side", () => {
     const long = "x".repeat(CHARS * 2);
     const trailingOnly = excerptOf(`tea ${long}`, "tea");
     const bothSides = excerptOf(`${long} tea ${long}`, "tea");
-    expect(chars(trailingOnly)).toBeGreaterThan(chars(bothSides) - 6);
+    expect(chars(trailingOnly)).toBeLessThan(chars(bothSides));
   });
 
-  test("a match longer than the window still comes back whole", () => {
+  test("a match longer than the window is preserved in full", () => {
     const huge = "t".repeat(CHARS * 2);
     expect(excerptOf(`before ${huge} after`, huge)).toContain(huge);
   });
@@ -682,7 +682,7 @@ describe("excerpting the line a match was found on", () => {
       const got = excerptOf(line, "tea");
       expect(got, filler).toContain("tea");
       expect(got, filler).not.toContain("\uFFFD");
-      expect(chars(got), filler).toBeLessThanOrEqual(CHARS + 6);
+      expect(chars(got), filler).toBeLessThanOrEqual(CHARS * 2 + 3 + 6);
     }
   });
 

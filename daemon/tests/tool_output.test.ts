@@ -82,3 +82,38 @@ test("real searches distinguish an exact limit from omitted matches, and reads p
     await rm(workspace, { recursive: true, force: true });
   }
 });
+
+test("search shares its response budget across every match and honors context", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "shore-search-budget-"));
+  try {
+    const paragraph = `${"😀".repeat(900)}NEEDLE${"界".repeat(900)}`;
+    await writeFile(join(workspace, "paragraphs.md"), Array.from({ length: 51 }, () => paragraph).join("\n"));
+    const search = async (max_results: number, context?: number) => await handleSearch(
+      { query: "needle", mode: "lexical", max_results, ...(context === undefined ? {} : { context }) },
+      workspace, undefined, undefined,
+    ) as { results: { excerpt: string }[]; has_more?: boolean };
+    const wide = await search(1);
+    expect(wide.results[0]?.excerpt).toBe(`...${"😀".repeat(500)}NEEDLE${"界".repeat(500)}...`);
+    const many = await search(50);
+    expect(many.results).toHaveLength(50);
+    for (const hit of many.results) {
+      expect(hit.excerpt).toContain("NEEDLE");
+      expect(hit.excerpt.startsWith("...")).toBe(true);
+      expect(hit.excerpt.endsWith("...")).toBe(true);
+      expect(Array.from(hit.excerpt).length).toBeLessThan(250);
+    }
+    expect(Array.from(formatToolOutput("search", many)).length).toBeLessThanOrEqual(12000);
+    expect(formatToolOutput("search", many)).toContain("More matches available");
+    expect((await search(1, 4)).results[0]?.excerpt).toBe("...😀😀😀😀NEEDLE界界界界...");
+    expect((await search(1, 0)).results[0]?.excerpt).toBe("...NEEDLE...");
+    for (const context of [-1, 1.5, "500", 10001]) {
+      expect(handleSearch({ query: "needle", context }, workspace, undefined, undefined)).rejects.toThrow("context must be an integer");
+    }
+    const huge = "Q".repeat(13000);
+    await writeFile(join(workspace, "huge.md"), `before ${huge} after`);
+    const result = await handleSearch({ query: huge, mode: "lexical", context: 0 }, workspace, undefined, undefined) as { results: { excerpt: string }[] };
+    expect(result.results[0]?.excerpt).toBe(`...${huge}...`);
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+});

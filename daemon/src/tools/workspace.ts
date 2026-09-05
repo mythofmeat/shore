@@ -1,3 +1,4 @@
+import { formatToolOutput } from "./output.ts";
 import { required } from "../util/required.ts";
 
 import { spawn } from "node:child_process";
@@ -36,7 +37,9 @@ import {
 
 const SEARCH_DEFAULT_MAX_RESULTS = 20;
 const SEARCH_MAX_RESULTS = 100;
-export const SEARCH_EXCERPT_CHARS = 1_200;
+export const SEARCH_EXCERPT_CHARS = 500;
+export const SEARCH_RESPONSE_CHARS = 12_000;
+const searchExcerptRenderers = new WeakMap<object, (context: number) => string>();
 
 const EDIT_SNIPPET_CHARS = 800;
 
@@ -150,50 +153,43 @@ function indexOfCodePoints(haystack: string[], needle: string[]): number | undef
   return undefined;
 }
 
-export function excerptLine(line: string, rawMatchStart: number, rawMatchEnd: number): string {
+export function excerptLine(line: string, rawMatchStart: number, rawMatchEnd: number, context = SEARCH_EXCERPT_CHARS): string {
   const trimmedStart = rustTrimStart(line);
   const leadingTrimmed = Array.from(line).length - Array.from(trimmedStart).length;
   const trimmed = Array.from(rustTrimEnd(trimmedStart));
-
   const matchStart = Math.min(Math.max(rawMatchStart - leadingTrimmed, 0), trimmed.length);
-  const matchEnd = Math.max(
-    Math.min(Math.max(rawMatchEnd - leadingTrimmed, 0), trimmed.length),
-    matchStart,
-  );
-
-  const matchChars = matchEnd - matchStart;
-  const availableBefore = matchStart;
-  const availableAfter = trimmed.length - matchEnd;
-  const contextChars = Math.max(SEARCH_EXCERPT_CHARS - matchChars, 0);
-  const halfContextChars = Math.floor(contextChars / 2);
-
-  let beforeChars = Math.min(halfContextChars, availableBefore);
-  let afterChars = Math.min(Math.max(contextChars - beforeChars, 0), availableAfter);
-
-  const unusedAfter = Math.max(contextChars - (beforeChars + afterChars), 0);
-  if (unusedAfter > 0) {
-    beforeChars += Math.min(Math.max(availableBefore - beforeChars, 0), unusedAfter);
-  }
-
-  const unusedBefore = Math.max(contextChars - (beforeChars + afterChars), 0);
-  if (unusedBefore > 0) {
-    afterChars += Math.min(Math.max(availableAfter - afterChars, 0), unusedBefore);
-  }
-
-  const excerptStart = Math.max(matchStart - beforeChars, 0);
-  const excerptEnd = Math.min(matchEnd + afterChars, trimmed.length);
-
-  let excerpt = "";
-  if (excerptStart > 0) excerpt += "...";
-  excerpt += trimmed.slice(excerptStart, excerptEnd).join("");
-  if (excerptEnd < trimmed.length) excerpt += "...";
-  return excerpt;
+  const matchEnd = Math.max(Math.min(rawMatchEnd - leadingTrimmed, trimmed.length), matchStart);
+  const start = Math.max(0, matchStart - context);
+  const end = Math.min(trimmed.length, matchEnd + context);
+  return `${start > 0 ? "..." : ""}${trimmed.slice(start, end).join("")}${end < trimmed.length ? "..." : ""}`;
 }
 
-function truncateExcerptLine(line: string): string {
+function truncateExcerptLine(line: string, context: number): string {
   const count = Array.from(line).length;
-  if (count <= SEARCH_EXCERPT_CHARS) return line;
-  return `${truncateChars(line, SEARCH_EXCERPT_CHARS)}...`;
+  if (count <= context * 2) return line;
+  return `${truncateChars(line, context * 2)}...`;
+}
+
+function budgetSearchResponse(response: Record<string, unknown>, context: number): Record<string, unknown> {
+  const results = response.results as { excerpt: string }[];
+  const render = (width: number) => {
+    for (const hit of results) {
+      const renderer = searchExcerptRenderers.get(hit);
+      if (renderer) hit.excerpt = renderer(width);
+    }
+  };
+  render(context);
+  if (Array.from(formatToolOutput("search", response)).length <= SEARCH_RESPONSE_CHARS) return response;
+  let low = 0;
+  let high = context;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    render(mid);
+    if (Array.from(formatToolOutput("search", response)).length <= SEARCH_RESPONSE_CHARS) low = mid;
+    else high = mid - 1;
+  }
+  render(low);
+  return response;
 }
 
 export async function handleRead(input: ToolInput, workspaceDir: string): Promise<unknown> {
@@ -265,7 +261,7 @@ async function listDirectory(
   let seen = 0;
   let more = false;
   async function walk(current: string, prefix: string, level: number): Promise<void> {
-    const entries = await readdir(current, { withFileTypes: true });
+    const entries = (await readdir(current, { withFileTypes: true })).filter((entry) => !entry.name.startsWith("."));
     entries.sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || compareRustStrings(a.name, b.name));
     for (const [index, entry] of entries.entries()) {
       seen += 1;
@@ -576,6 +572,10 @@ export async function handleSearch(
   retrievalConfigOpt: RetrievalConfig | undefined,
   semantics: SearchSemantics | undefined,
 ): Promise<unknown> {
+  const context = input.context ?? SEARCH_EXCERPT_CHARS;
+  if (typeof context !== "number" || !Number.isSafeInteger(context) || context < 0 || context > 10_000) {
+    throw new InvalidArgs("context must be an integer between 0 and 10000");
+  }
   const retrievalConfig = retrievalConfigOpt ?? DEFAULT_RETRIEVAL_CONFIG;
   const requestedMode = parseSearchMode(input.mode);
   const requestedHybrid = requestedMode !== "lexical";
@@ -587,20 +587,20 @@ export async function handleSearch(
       pathStr !== undefined && pathStr !== "" && pathStr !== "."
         ? scopePrefixFor(workspaceDir, pathStr)
         : undefined;
-    return await handleSearchHybrid(
+    return budgetSearchResponse(await handleSearchHybrid(
       input,
       workspaceDir,
       retrievalConfig,
       mode,
       semantics,
       scope,
-    );
+    ), context);
   }
 
   const response = await handleSearchLexical(input, workspaceDir, retrievalConfig);
   response.mode = "lexical";
   if (requestedHybrid) response.semantic_unavailable = "embedder not configured";
-  return response;
+  return budgetSearchResponse(response, context);
 }
 
 function scopePrefixFor(workspaceDir: string, raw: string): string {
@@ -769,11 +769,9 @@ async function scanLexicalMatches(
       const line = required(lines[i]);
       const match = findCaseInsensitiveMatch(line, queryLower);
       if (match === undefined) continue;
-      results.push({
-        path: display,
-        line: i + 1,
-        excerpt: excerptLine(line, match[0], match[1]),
-      });
+      const hit = { path: display, line: i + 1, excerpt: "" };
+      searchExcerptRenderers.set(hit, (context) => excerptLine(line, match[0], match[1], context));
+      results.push(hit);
       fileHits += 1;
       if (results.length >= maxResults) break;
     }
@@ -792,7 +790,7 @@ async function handleSearchHybrid(
   mode: HybridMode,
   semantics: SearchSemantics,
   pathFilter: string | undefined,
-): Promise<unknown> {
+): Promise<Record<string, unknown>> {
   const query = normalizeSearchQuery(input);
   const maxResults = searchResultLimit(input);
 
@@ -818,7 +816,7 @@ async function handleSearchHybrid(
   const qLower = query.toLowerCase();
   const results = result.files.slice(0, maxResults).map((f) => {
     const [lineNo, excerpt] = bestLineExcerpt(f.content ?? "", qLower);
-    return {
+    const hit = {
       path: f.displayPath,
       line: lineNo,
       excerpt,
@@ -826,6 +824,8 @@ async function handleSearchHybrid(
       semantic_score: f.semanticScore ?? null,
       combined_score: f.combinedScore,
     };
+    searchExcerptRenderers.set(hit, (context) => bestLineExcerpt(f.content ?? "", qLower, context)[1]);
+    return hit;
   });
 
   const response: Record<string, unknown> = {
@@ -850,12 +850,12 @@ async function handleSearchHybrid(
   return response;
 }
 
-export function bestLineExcerpt(content: string, qLower: string): [number, string] {
+export function bestLineExcerpt(content: string, qLower: string, context = SEARCH_EXCERPT_CHARS): [number, string] {
   const lines = rustLines(content);
 
   for (let i = 0; i < lines.length; i += 1) {
     const match = findCaseInsensitiveMatch(required(lines[i]), qLower);
-    if (match !== undefined) return [i + 1, excerptLine(required(lines[i]), match[0], match[1])];
+    if (match !== undefined) return [i + 1, excerptLine(required(lines[i]), match[0], match[1], context)];
   }
 
   const terms = searchExcerptTerms(qLower);
@@ -867,18 +867,18 @@ export function bestLineExcerpt(content: string, qLower: string): [number, strin
     if (best !== undefined) {
       const [lineNo, line, term] = best;
       const match = findCaseInsensitiveMatch(line, term);
-      if (match !== undefined) return [lineNo, excerptLine(line, match[0], match[1])];
-      return [lineNo, truncateExcerptLine(rustTrim(line))];
+      if (match !== undefined) return [lineNo, excerptLine(line, match[0], match[1], context)];
+      return [lineNo, truncateExcerptLine(rustTrim(line), context)];
     }
   }
 
   for (let i = 0; i < lines.length; i += 1) {
     const trimmed = rustTrim(required(lines[i]));
-    if (trimmed !== "" && !trimmed.startsWith("#")) return [i + 1, truncateExcerptLine(trimmed)];
+    if (trimmed !== "" && !trimmed.startsWith("#")) return [i + 1, truncateExcerptLine(trimmed, context)];
   }
   for (let i = 0; i < lines.length; i += 1) {
     const trimmed = rustTrim(required(lines[i]));
-    if (trimmed !== "") return [i + 1, truncateExcerptLine(trimmed)];
+    if (trimmed !== "") return [i + 1, truncateExcerptLine(trimmed, context)];
   }
   return [1, ""];
 }

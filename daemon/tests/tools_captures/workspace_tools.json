@@ -706,7 +706,7 @@
       },
       "input": {},
       "result": {
-        "ok": "workspace/\n├── .git/\n│   └── config\n├── dir/\n│   └── inner.md\n├── .gitignore\n├── A.md\n├── a.md\n├── b.md\n├── dirlink@\n├── link.md@\n└── Ω.md"
+        "ok": "workspace/\n├── dir/\n│   └── inner.md\n├── A.md\n├── a.md\n├── b.md\n├── dirlink@\n├── link.md@\n└── Ω.md"
       }
     },
     {
