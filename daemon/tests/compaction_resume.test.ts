@@ -636,3 +636,103 @@ test("an archived operation whose turns are still live is not mistaken for a fin
   expect(second.kind).toBe("compacted");
   expect(secondLlm.calls).toBe(1);
 });
+
+test("a conversation rewritten after the plan was resolved pauses instead of archiving", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-rewritten-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+
+  const messages = conversation();
+  const activePath = join(characterDir, "threads", "main", "active.jsonl");
+  await writeFile(activePath, messages.map(activeLine).join("\n") + "\n", "utf8");
+
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    dispatch: async () => ({ output: "ok", isError: false }),
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const plan = await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
+
+  await writeFile(
+    activePath,
+    conversation().slice(0, 2).map(activeLine).join("\n") + "\n",
+    "utf8",
+  );
+
+  const outcome = await compact(
+    options(
+      dataDir,
+      workspace,
+      memoryStore,
+      plan,
+      tools,
+      scripted([response("end_turn", [{ type: "text", text: "done" }])]),
+      true,
+    ),
+    { keepRecentTurns: 1 },
+  );
+
+  expect(outcome).toMatchObject({ kind: "paused", reason: "source_conflict" });
+  const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+  try {
+    expect(store.segmentCount("ada")).toBe(0);
+  } finally {
+    store.close();
+  }
+});
+
+test("turns that arrive while a pass runs are kept, not archived with the planned range", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-grown-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+
+  const messages = conversation();
+  const activePath = join(characterDir, "threads", "main", "active.jsonl");
+  const planned = messages.map(activeLine).join("\n") + "\n";
+  await writeFile(activePath, planned, "utf8");
+
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    dispatch: async () => ({ output: "ok", isError: false }),
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const plan = await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
+
+  const arrived = conversationMessage("user", "one more thing while you were busy");
+  await writeFile(activePath, planned + activeLine(arrived) + "\n", "utf8");
+
+  const outcome = await compact(
+    options(
+      dataDir,
+      workspace,
+      memoryStore,
+      plan,
+      tools,
+      scripted([response("end_turn", [{ type: "text", text: "done" }])]),
+      true,
+    ),
+    { keepRecentTurns: 1 },
+  );
+
+  expect(outcome).toMatchObject({ kind: "compacted", messageCount: 2, retainedCount: 3 });
+  const kept = (await readFile(activePath, "utf8"))
+    .trim()
+    .split("\n")
+    .map((line) => (JSON.parse(line) as { content: string }).content);
+  expect(kept).toEqual([
+    ...messages.slice(2).map((m) => m.content),
+    "one more thing while you were busy",
+  ]);
+});

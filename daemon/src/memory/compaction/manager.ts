@@ -45,7 +45,12 @@ import {
   type CompactionCheckpoint,
   type CompactionPauseReason,
 } from "./checkpoint.ts";
-import { countTurns, planSourceIsCurrent, type ArchivalPlan } from "./plan.ts";
+import {
+  countTurns,
+  openArchivalCommit,
+  retainedTurnCount,
+  type ArchivalPlan,
+} from "./plan.ts";
 
 export { archiveSplitIndex, countTurns, findTurnSplit, trailingAutonomousLen } from "./plan.ts";
 
@@ -665,16 +670,14 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     };
   }
 
-  const liveContent = await currentActiveContent(opts);
-  if (!planSourceIsCurrent(plan, liveContent)) {
+  const commit = openArchivalCommit(plan, await currentActiveContent(opts));
+  if (commit === undefined) {
     checkpoint.state = "paused";
     checkpoint.pauseReason = "source_conflict";
     await persistCheckpoint(opts, checkpoint);
     return pausedOutcome(opts, checkpoint);
   }
-  const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
-  const retained = Math.max(liveLines.length - plan.splitAt, 0);
-  const retainedTurns = countRetainedTurns(liveLines.slice(plan.splitAt));
+  const { retained, retainedTurns } = commit;
   const archivedCount = plan.splitAt;
   const archivedTurns = opts.resumable === true ? checkpoint.compactedTurns : compactedTurns;
   const memoryAfter = await tools.gitHead?.(workspaceDir);
@@ -683,7 +686,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     opts.conversationMgr,
     opts.conversationId,
     retained,
-    liveContent,
+    commit.liveContent,
     state.writesApplied,
     workspaceDir,
     opts.charName,
@@ -804,7 +807,7 @@ async function recoverArchivedPass(
     messageCount: prior.splitAt,
     compactedTurns: prior.compactedTurns,
     retainedCount: liveLines.length,
-    retainedTurns: countRetainedTurns(liveLines),
+    retainedTurns: retainedTurnCount(liveContent, 0),
     markdownPaths,
     toolRounds: prior.loop.toolRounds,
     toolsCalled: prior.loop.toolsCalled,
@@ -952,20 +955,4 @@ async function currentActiveContent(opts: CompactOptions): Promise<string> {
   }
 }
 
-function countRetainedTurns(lines: readonly string[]): number {
-  let count = 0;
-  for (const line of lines) {
-    try {
-      const message = JSON.parse(line) as { role?: unknown; content_blocks?: unknown };
-      if (message.role !== "user") continue;
-      const blocks = Array.isArray(message.content_blocks) ? message.content_blocks : [];
-      if (blocks.length > 0 && blocks.every((block) => {
-        return typeof block === "object" && block !== null &&
-          (block as { type?: unknown }).type === "tool_result";
-      })) continue;
-      count += 1;
-    } catch {}
-  }
-  return count;
-}
 

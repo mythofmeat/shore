@@ -56,8 +56,8 @@ import {
 } from "../coverage.ts";
 import { removeCompactionCheckpoint } from "./checkpoint.ts";
 import {
-  messagesFromJsonl,
   openArchivalCommit,
+  readLiveSource,
   resolveArchivalPlan,
   type ArchivalPlan,
 } from "./plan.ts";
@@ -109,9 +109,12 @@ export async function rotateWithoutMemoryWrite(
 ): Promise<CompactionOutcome | undefined> {
   const dryRun = options.dryRun ?? false;
   const dataDir = effective.dirs.data;
-  const commit = dryRun
-    ? { liveContent: plan.sourceContent, retained: plan.messages.length - plan.splitAt }
-    : await openArchivalCommit(dataDir, character, thread, plan);
+  const commit = openArchivalCommit(
+    plan,
+    dryRun
+      ? plan.sourceContent
+      : await readLiveSource(dataDir, character, thread, plan.sourceContent),
+  );
   if (commit === undefined) {
     shoreLog.warn(
       `shore: not rotating ${character}/${thread}: the conversation was rewritten under the ` +
@@ -145,26 +148,10 @@ export async function rotateWithoutMemoryWrite(
     archivedMessages: plan.splitAt,
     compactedTurns: countTurns([...plan.conversation].slice(0, plan.splitAt)),
     retainedCount: commit.retained,
-    retainedTurns: countRetainedLines(commit.liveContent, plan.splitAt),
+    retainedTurns: commit.retainedTurns,
   };
 }
 
-function countRetainedLines(liveContent: string, splitAt: number): number {
-  return countTurns(
-    messagesFromJsonl(liveContent)
-      .slice(splitAt)
-      .map((message) => ({
-        role: message.role,
-        content: message.content,
-        timestamp: message.timestamp,
-        isToolResultOnly:
-          message.role === "user" &&
-          message.content_blocks.length > 0 &&
-          message.content_blocks.every((block) => block.type === "tool_result"),
-        isAutonomous: message.origin === "autonomous",
-      })),
-  );
-}
 
 export async function runCompactionPass(
   character: string,

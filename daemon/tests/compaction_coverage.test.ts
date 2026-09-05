@@ -11,7 +11,11 @@ import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { newMessageVersion } from "../src/engine/versions.ts";
 import { loadMessagesForCompaction } from "../src/memory/compaction/background.ts";
-import { openArchivalCommit, resolveArchivalPlan } from "../src/memory/compaction/plan.ts";
+import {
+  openArchivalCommit,
+  readLiveSource,
+  resolveArchivalPlan,
+} from "../src/memory/compaction/plan.ts";
 import type { CompactionRunOptions } from "../src/memory/compaction/run.ts";
 import { hashCompactionSource } from "../src/memory/compaction/checkpoint.ts";
 import { backgroundCoverageNotice } from "../src/memory/compaction/manager.ts";
@@ -608,8 +612,14 @@ describe("one plan carried from resolution to archival", () => {
     );
 
     const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
-    const commit = required(await openArchivalCommit(w.dataDir, "ada", "main", resolved));
+    const commit = required(
+      openArchivalCommit(
+        resolved,
+        await readLiveSource(w.dataDir, "ada", "main", resolved.sourceContent),
+      ),
+    );
     expect(commit.retained).toBe(3);
+    expect(commit.retainedTurns).toBe(2);
     expect(commit.liveContent).toBe(frozen + jsonl(arrived));
   });
 
@@ -621,7 +631,12 @@ describe("one plan carried from resolution to archival", () => {
       jsonl([message("m_9", "user", "a different conversation", newMessageVersion())]),
     );
 
-    expect(await openArchivalCommit(w.dataDir, "ada", "main", resolved)).toBeUndefined();
+    expect(
+      openArchivalCommit(
+        resolved,
+        await readLiveSource(w.dataDir, "ada", "main", resolved.sourceContent),
+      ),
+    ).toBeUndefined();
   });
 
   test("a rotation archives exactly the range the plan resolved", async () => {

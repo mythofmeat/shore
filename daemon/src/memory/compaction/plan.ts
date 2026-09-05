@@ -69,7 +69,10 @@ export interface ArchivalPlanSettings {
   restart?: boolean;
 }
 
+declare const resolvedByPlanner: unique symbol;
+
 export interface ArchivalPlan {
+  readonly [resolvedByPlanner]: true;
   sourceContent: string;
   sourceHash: string;
   messages: readonly Message[];
@@ -177,7 +180,7 @@ export function buildArchivalPlan(
   if (splitAt === 0) return undefined;
 
   const archival = messages.slice(0, splitAt);
-  return {
+  const plan: Omit<ArchivalPlan, typeof resolvedByPlanner> = {
     sourceContent,
     sourceHash: hashCompactionSource(sourceContent),
     messages,
@@ -189,27 +192,42 @@ export function buildArchivalPlan(
     ...(checkpoint === undefined ? {} : { checkpoint }),
     resumed,
   };
+  return plan as ArchivalPlan;
 }
 
 export interface ArchivalCommit {
   liveContent: string;
   retained: number;
+  retainedTurns: number;
 }
 
-export async function openArchivalCommit(
+export function retainedTurnCount(liveContent: string, from: number): number {
+  return countTurns(conversationView(messagesFromJsonl(liveContent)).slice(from));
+}
+
+export function openArchivalCommit(
+  plan: ArchivalPlan,
+  liveContent: string,
+): ArchivalCommit | undefined {
+  if (!planSourceIsCurrent(plan, liveContent)) return undefined;
+  const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
+  return {
+    liveContent,
+    retained: Math.max(liveLines.length - plan.splitAt, 0),
+    retainedTurns: retainedTurnCount(liveContent, plan.splitAt),
+  };
+}
+
+export async function readLiveSource(
   dataDir: string,
   character: string,
   thread: string,
-  plan: ArchivalPlan,
-): Promise<ArchivalCommit | undefined> {
-  let liveContent: string;
+  fallback: string,
+): Promise<string> {
   try {
-    liveContent = await readFile(characterActiveJsonl(dataDir, character, thread), "utf8");
+    return await readFile(characterActiveJsonl(dataDir, character, thread), "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    liveContent = plan.sourceContent;
+    return fallback;
   }
-  if (!planSourceIsCurrent(plan, liveContent)) return undefined;
-  const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
-  return { liveContent, retained: Math.max(liveLines.length - plan.splitAt, 0) };
 }

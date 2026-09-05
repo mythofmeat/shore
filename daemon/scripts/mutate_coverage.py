@@ -330,8 +330,12 @@ MUTANTS = [
      "  void liveContent;"),
     ("commit: the retained tail is measured against the live split, not the plan's",
      PLAN,
-     "  return { liveContent, retained: Math.max(liveLines.length - plan.splitAt, 0) };",
-     "  return { liveContent, retained: 0 };"),
+     "    retained: Math.max(liveLines.length - plan.splitAt, 0),",
+     "    retained: 0,"),
+    ("commit: the retained turns are counted over the whole conversation",
+     PLAN,
+     "    retainedTurns: retainedTurnCount(liveContent, plan.splitAt),",
+     "    retainedTurns: retainedTurnCount(liveContent, 0),"),
     ("commit: a rotation writes the snapshot it planned from rather than what is live",
      RUN,
      "      keepLastN: commit.retained,\n"
@@ -380,10 +384,18 @@ MUTANTS = [
      MANAGER,
      "  if (checkpointSourceIsCompatible(prior, liveContent)) return undefined;",
      "  void liveContent;"),
-    ("manager: the archive commits at a split the plan never resolved",
+    ("manager: the archive commits without checking the plan's source is still current",
      MANAGER,
-     "  const retained = Math.max(liveLines.length - plan.splitAt, 0);",
-     "  const retained = Math.max(liveLines.length - splitAt - 1, 0);"),
+     "  const commit = openArchivalCommit(plan, await currentActiveContent(opts));\n"
+     "  if (commit === undefined) {",
+     "  const commit = required(openArchivalCommit(plan, plan.sourceContent));\n"
+     "  if (false as boolean) {"),
+    ("manager: the archive is written from the plan's snapshot, not what is live",
+     MANAGER,
+     "    commit.liveContent,\n"
+     "    state.writesApplied,",
+     "    plan.sourceContent,\n"
+     "    state.writesApplied,"),
     ("manager: the checkpoint is written from live content rather than the plan's source",
      MANAGER,
      "      plan.sourceContent,\n"
