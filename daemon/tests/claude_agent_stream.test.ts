@@ -444,12 +444,13 @@ describe("sending a picture", () => {
     for await (const turn of prompt as AsyncIterable<{ message: { content: unknown } }>) {
       sent.push(turn.message.content);
     }
-    expect(sent).toEqual([
-      [
-        { type: "text", text: expect.stringContaining("what is this?") as unknown as string },
-        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
-      ],
-    ]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toEqual(expect.arrayContaining([
+      { type: "text", text: "<current_user_turn>\n" },
+      { type: "text", text: "what is this?" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+      { type: "text", text: "\n</current_user_turn>" },
+    ]));
   });
 
   test("the text still says where the picture was", async () => {
@@ -461,7 +462,7 @@ describe("sending a picture", () => {
       message: { content: { type: string; text?: string }[] };
     }>;
     const sent = [];
-    for await (const turn of prompt) sent.push(turn.message.content[0]?.text ?? "");
+    for await (const turn of prompt) sent.push(turn.message.content.map((b) => b.text ?? "").join("\n"));
     expect(sent[0]).toContain("[image attached: image/png]");
   });
 });

@@ -716,3 +716,20 @@ test("actual history results merge adjacent context and report additional distin
   for (const text of ["needle one", "needle two", "needle three"]) expect(output.match(new RegExp(text, "g"))).toHaveLength(1);
   expect(output.match(/— match/g)).toHaveLength(3);
 });
+
+test("phrase music lookup excludes partial terms and returns compact evidence", async () => {
+  const dir = await character([
+    message("noise", "user", "The cure for being knocked up", "2026-08-01T00:00:00Z"),
+    message("band", "user", "x".repeat(900) + " No Cure was mentioned here. " + "y".repeat(900), "2026-08-02T00:00:00Z"),
+    message("substring", "user", "There is no curette here", "2026-08-03T00:00:00Z"),
+  ]);
+  const result = await handleSearchHistory({ query: "No Cure", match: "phrase", compact: true }, dir, identity(dir));
+  expect(result.mode).toBe("lexical");
+  expect(result.count).toBe(1);
+  const hit = result.results[0];
+  expect(hit?.msg_id).toBe("band");
+  expect(String(hit?.text)).toContain("No Cure");
+  expect(String(hit?.text).length).toBeLessThan(610);
+  expect(hit?.before).toEqual([]);
+  expect(hit?.after).toEqual([]);
+});

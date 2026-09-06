@@ -1,7 +1,10 @@
+import { required } from "../src/util/required.ts";
+
 import { describe, expect, test } from "bun:test";
 
 import {
   agentEffort,
+  agentPrompt,
   conversationKey,
   nextEntries,
   planTurn,
@@ -503,5 +506,78 @@ describe("anchoring several rounds in one turn", () => {
       undefined,
       undefined,
     ]);
+  });
+});
+
+
+describe("image placement when a regeneration rebuilds history", () => {
+  const oldImage: WireMessage = {
+    role: "user",
+    content: [
+      { type: "text", text: "An earlier photo" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "OLD" } },
+    ],
+  };
+  const latest = msg("user", "A later message with no attachment");
+
+  async function deliveredBlocks(plan: ReturnType<typeof planTurn>) {
+    const prompt = agentPrompt(plan);
+    if (typeof prompt === "string") throw new Error("expected a multimodal replay");
+    const turns = [];
+    for await (const turn of prompt) turns.push(turn);
+    expect(turns).toHaveLength(1);
+    return required(turns[0]).message.content;
+  }
+
+  test("old image remains inside its historical turn before the current message", async () => {
+    const plan = planTurn(undefined, [oldImage, asst1, latest]);
+    const content = await deliveredBlocks(plan);
+    expect(Array.isArray(content)).toBe(true);
+    const blocks = content as { type: string; text?: string }[];
+    const imageIndex = blocks.findIndex((b) => b.type === "image");
+    const closePrior = blocks.findIndex((b) => b.text === "\n</prior_user_turn>");
+    const current = blocks.findIndex((b) => b.text === "<current_user_turn>\n");
+    expect(imageIndex).toBeGreaterThan(0);
+    expect(imageIndex).toBeLessThan(closePrior);
+    expect(closePrior).toBeLessThan(current);
+    expect(blocks.slice(current).some((b) => b.type === "image")).toBe(false);
+  });
+
+  test("a fork before the image turn preserves its historical placement", async () => {
+    const history = [user1, asst1, oldImage, msg("assistant", "Earlier reply"), latest];
+    const record = seed(history);
+    record.entries = nextEntries(planTurn(undefined, history), ["early-anchor"]);
+    const plan = planTurn(record, history);
+    expect(plan.fork).toBe(true);
+    const content = await deliveredBlocks(plan);
+    const blocks = content as { type: string; text?: string }[];
+    const imageIndex = blocks.findIndex((b) => b.type === "image");
+    const current = blocks.findIndex((b) => b.text === "<current_user_turn>\n");
+    expect(imageIndex).toBeGreaterThan(0);
+    expect(imageIndex).toBeLessThan(current);
+    expect(blocks.slice(current).some((b) => b.type === "image")).toBe(false);
+  });
+
+  test("regenerating the image-bearing turn still delivers its image as current", async () => {
+    const content = await deliveredBlocks(planTurn(undefined, [oldImage]));
+    const blocks = content as { type: string; text?: string }[];
+    const current = blocks.findIndex((b) => b.text === "<current_user_turn>\n");
+    expect(blocks.findIndex((b) => b.type === "image")).toBeGreaterThan(current);
+  });
+
+  test("a session using the old flattened-image replay is rebuilt", () => {
+    const old = { ...seed([oldImage, asst1, latest]), version: 4 };
+    const plan = planTurn(old, [oldImage, asst1, latest]);
+    expect(plan.resume).toBeUndefined();
+    expect(plan.replayContent).toBeDefined();
+  });
+
+  test("a valid earlier anchor does not reattach an image already in the session", () => {
+    const record = seed([oldImage, asst1, latest]);
+    record.entries = nextEntries(planTurn(undefined, [oldImage, asst1, latest]), ["anchor"]);
+    const plan = planTurn(record, [oldImage, asst1, latest]);
+    expect(plan.fork).toBe(true);
+    expect(plan.images).toEqual([]);
+    expect(agentPrompt(plan)).toBe("A later message with no attachment");
   });
 });

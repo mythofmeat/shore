@@ -165,13 +165,14 @@ export class QueryMatcher {
   readonly rawLower: string;
   readonly terms: string[];
 
-  constructor(query: string) {
+  constructor(query: string, readonly exactPhrase = false) {
     this.rawLower = query.toLowerCase();
     this.terms = tokenize(this.rawLower);
   }
 
   score(content: string): number | undefined {
     const contentLower = content.toLowerCase();
+    if (this.exactPhrase) return this.phraseIndex(contentLower) === undefined ? undefined : PHRASE_BONUS;
 
     if (this.terms.length === 0) {
       return contentLower.includes(this.rawLower) ? PHRASE_BONUS : undefined;
@@ -192,7 +193,21 @@ export class QueryMatcher {
     return new Set(this.terms.filter((term) => contentLower.includes(term))).size;
   }
 
+  phraseIndex(contentLower: string): number | undefined {
+    let start = 0;
+    while (start <= contentLower.length) {
+      const index = contentLower.indexOf(this.rawLower, start);
+      if (index < 0) return undefined;
+      const before = Array.from(contentLower.slice(0, index)).at(-1);
+      const after = Array.from(contentLower.slice(index + this.rawLower.length))[0];
+      if ((before === undefined || !/[\p{Alphabetic}\p{Number}\p{Mark}_]/u.test(before)) && (after === undefined || !/[\p{Alphabetic}\p{Number}\p{Mark}_]/u.test(after))) return index;
+      start = index + 1;
+    }
+    return undefined;
+  }
+
   earliestIndex(contentLower: string): number | undefined {
+    if (this.exactPhrase) return this.phraseIndex(contentLower);
     let best = indexOrUndefined(contentLower, this.rawLower);
     for (const term of this.terms) {
       const idx = contentLower.indexOf(term);
@@ -315,6 +330,8 @@ export interface HistoryHit extends HistoryMessage {
 
 export interface SearchHistoryResult {
   mode: Exclude<HistorySearchMode, "auto">;
+  match?: "phrase";
+  compact?: boolean;
   semantic_index: {
     indexed_chunks: number;
     total_chunks: number;
@@ -358,7 +375,11 @@ async function handleSearchHistoryUnlocked(
   if (query === undefined && rangeIsEmpty(range) && modelFilter === undefined) {
     throw new InvalidArgs("provide query, start_time, end_time, model, or a combination");
   }
-  const requested = searchModeFrom(input, options.defaultMode ?? "auto");
+  const match = input.match ?? "ranked";
+  if (match !== "ranked" && match !== "phrase") throw new InvalidArgs("match must be ranked or phrase");
+  if (match === "phrase" && query === undefined) throw new InvalidArgs("phrase matching requires query");
+  const compact = input.compact === true;
+  const requested = match === "phrase" ? "lexical" : searchModeFrom(input, options.defaultMode ?? "auto");
   let mode: Exclude<HistorySearchMode, "auto"> = requested === "auto"
     ? options.embedder === undefined ? "lexical" : "hybrid"
     : requested;
@@ -373,7 +394,7 @@ async function handleSearchHistoryUnlocked(
   try {
     const diagnostics = index.diagnostics(options.embedder);
     const stats = { skipped: 0 };
-    const matcher = query === undefined ? undefined : new QueryMatcher(query);
+    const matcher = query === undefined ? undefined : new QueryMatcher(query, match === "phrase");
     let lexical: RankedHistoryCandidate[] = [];
     if (mode !== "vector") {
       lexical = await lexicalCandidates(index, conversationDir, matcher, range, modelFilter, stats);
@@ -413,18 +434,18 @@ async function handleSearchHistoryUnlocked(
     const chosen = grouped.slice(0, maxResultsFrom(input));
     const neighborRows: IndexedMessage[] = [];
     for (const hit of chosen) {
-      const before = index.neighbor(hit.candidate.row, -1);
-      const after = index.neighbor(hit.candidate.row, 1);
+      const before = compact ? undefined : index.neighbor(hit.candidate.row, -1);
+      const after = compact ? undefined : index.neighbor(hit.candidate.row, 1);
       if (before !== undefined) neighborRows.push(before);
       if (after !== undefined) neighborRows.push(after);
     }
     const neighborTexts = await loadCanonicalTexts(index.ref, neighborRows);
     const results = chosen.map((hit) => {
       const row = hit.candidate.row;
-      const before = index.neighbor(row, -1);
-      const after = index.neighbor(row, 1);
+      const before = compact ? undefined : index.neighbor(row, -1);
+      const after = compact ? undefined : index.neighbor(row, 1);
       return {
-        ...presentMessage(row, hit.candidate.text, timeZone),
+        ...presentMessage(row, compact ? excerptFor(hit.candidate.text, matcher, 600) : hit.candidate.text, timeZone),
         locations: hit.locations,
         before: before === undefined
           ? []
@@ -438,6 +459,8 @@ async function handleSearchHistoryUnlocked(
 
     return {
       mode,
+      ...(match === "phrase" ? { match: "phrase" as const } : {}),
+      ...(compact ? { compact: true } : {}),
       semantic_index: diagnostics,
       ...(semanticUnavailable === undefined ? {} : { semantic_unavailable: semanticUnavailable }),
       query: query ?? null,
