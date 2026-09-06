@@ -157,6 +157,7 @@ function replayText(msg: WireMessage, attached: ContentBlock[]): string {
 export interface Replay {
   text: string;
   images: ContentBlock[];
+  content: ContentBlock[];
 }
 
 function renderReplay(msgs: readonly WireMessage[]): Replay {
@@ -172,11 +173,36 @@ function renderReplay(msgs: readonly WireMessage[]): Replay {
     })
     .filter((t) => t !== "")
     .join("\n\n");
-  return { text, images };
+  return { text, images, content: replayContent(msgs) };
+}
+
+function replayContent(msgs: readonly WireMessage[]): ContentBlock[] {
+  const latestUser = msgs.findLastIndex((m) => m.role === "user" &&
+    hashableBlocks(m).some((block) => block.type === "text" || block.type === "image"));
+  const content: ContentBlock[] = [{
+    type: "text",
+    text: "Conversation replay follows. Images inside prior_user_turn belong to that earlier turn; they are not new uploads. Respond to current_user_turn.",
+  }];
+  for (const [index, message] of msgs.entries()) {
+    const tag = message.role === "assistant" ? "prior_assistant_turn"
+      : index === latestUser ? "current_user_turn" : "prior_user_turn";
+    content.push({ type: "text", text: `<${tag}>\n` });
+    for (const block of hashableBlocks(message)) {
+      if (block.type === "image") {
+        content.push({ type: "text", text: `[image attached: ${block.source.media_type}]` }, block);
+      } else {
+        const text = replayBlock(block, []);
+        if (text.trim() !== "") content.push({ type: "text", text });
+      }
+    }
+    content.push({ type: "text", text: `\n</${tag}>` });
+  }
+  return content;
 }
 
 export interface TurnPlan {
   prompt: string;
+  replayContent?: ContentBlock[];
   images: ContentBlock[];
   resume?: string;
   resumeSessionAt?: string;
@@ -190,6 +216,7 @@ function coldStart(msgs: readonly WireMessage[]): TurnPlan {
   return {
     prompt: replay.text,
     images: replay.images,
+    replayContent: replay.content,
     fork: false,
     keptEntries: [],
     delivered: [...msgs],
@@ -210,6 +237,7 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
     return {
       prompt: replay.text,
       images: replay.images,
+      replayContent: replay.content,
       resume: record.sessionId,
       fork: false,
       keptEntries: record.entries.slice(0, k),
@@ -226,6 +254,7 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
   return {
     prompt: replay.text,
     images: replay.images,
+    replayContent: replay.content,
     resume: record.sessionId,
     resumeSessionAt: at,
     fork: true,
@@ -551,7 +580,7 @@ async function* oneUserTurn(content: ContentBlock[]): AsyncIterable<SDKUserMessa
 
 export function agentPrompt(plan: TurnPlan): AgentPrompt {
   if (plan.images.length === 0) return plan.prompt;
-  return oneUserTurn([{ type: "text", text: plan.prompt }, ...plan.images]);
+  return oneUserTurn(plan.replayContent ?? [{ type: "text", text: plan.prompt }, ...plan.images]);
 }
 
 export interface ClaudeAgentDeps {

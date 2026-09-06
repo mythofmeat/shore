@@ -138,8 +138,8 @@ MUTANTS = [
      "  if (record === undefined || record.version === undefined) return coldStart(msgs);"),
     ("version: the book is stamped with the version it is not",
      SESSIONS,
-     "export const SESSION_BOOK_VERSION = 4;",
-     "export const SESSION_BOOK_VERSION = 3;"),
+     "export const SESSION_BOOK_VERSION = 5;",
+     "export const SESSION_BOOK_VERSION = 4;"),
 
     # --- reading a stream the provider does not own ---------------------------
     ("stream: the model's own events are ignored, so nothing streams at all",
@@ -427,11 +427,11 @@ MUTANTS = [
      ""),
     ("images: the text is dropped when a picture rides along",
      AGENT,
-     "  return oneUserTurn([{ type: \"text\", text: plan.prompt }, ...plan.images]);",
+     "  return oneUserTurn(plan.replayContent ?? [{ type: \"text\", text: plan.prompt }, ...plan.images]);",
      "  return oneUserTurn(plan.images);"),
     ("images: the pictures are dropped when the text rides along",
      AGENT,
-     "  return oneUserTurn([{ type: \"text\", text: plan.prompt }, ...plan.images]);",
+     "  return oneUserTurn(plan.replayContent ?? [{ type: \"text\", text: plan.prompt }, ...plan.images]);",
      "  return oneUserTurn([{ type: \"text\", text: plan.prompt }]);"),
 ]
 
