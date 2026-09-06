@@ -74,6 +74,10 @@ export class StreamAccumulator {
         return { kind: "continue" };
       }
 
+      case "provider_warning":
+        sink({ type: "provider_warning", rid: rid ?? null, message: event.message });
+        return { kind: "continue" };
+
       case "text": {
         this.flushThinking();
         this.#textBuf += event.text;

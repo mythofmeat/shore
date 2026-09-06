@@ -85,6 +85,7 @@ impl SyncState {
             | ServerMessage::ToolResult(_)
             | ServerMessage::SendImage(_)
             | ServerMessage::CacheWarning(_)
+            | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)

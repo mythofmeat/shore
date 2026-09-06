@@ -276,6 +276,12 @@ pub(crate) fn print_config_warning(w: &ConfigWarning) {
 
 pub(crate) fn print_warning_frame(msg: &ServerMessage) {
     match msg {
+        ServerMessage::ProviderWarning(w) => {
+            let stderr = io::stderr();
+            let mut out = stderr.lock();
+            paint_on_stderr(&mut out, Tone::Warn, "warning");
+            _ = writeln!(out, ": {}", w.message);
+        }
         ServerMessage::ProviderFallbackWarning(w) => print_provider_fallback_warning(w),
         ServerMessage::UsageWarning(w) => print_usage_warning(w),
         ServerMessage::ConfigWarning(w) => print_config_warning(w),

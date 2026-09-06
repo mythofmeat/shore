@@ -137,6 +137,7 @@ export interface Timing {
 
 export type StreamEvent =
   | { type: "start"; model: string }
+  | { type: "provider_warning"; message: string }
   | { type: "text"; text: string }
   | { type: "thinking"; text: string }
   | { type: "thinking_signature"; signature: string }

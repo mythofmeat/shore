@@ -29,6 +29,7 @@ const RID_BEARING: ReadonlySet<string> = new Set([
   "tool_result",
   "send_image",
   "provider_fallback_warning",
+  "provider_warning",
   "usage_warning",
 ]);
 

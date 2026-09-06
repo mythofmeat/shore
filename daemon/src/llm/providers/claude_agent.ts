@@ -263,6 +263,19 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
   };
 }
 
+function* replayWarnings(plan: TurnPlan): Iterable<StreamEvent> {
+  const replayed = plan.resume !== undefined && !plan.fork
+    ? plan.delivered.filter((message) => message.role !== "assistant")
+    : plan.delivered;
+  if (replayed.length <= 1 && !replayed.some((message) => message.role === "assistant")) return;
+  const message =
+    `Claude Agent SDK: Shore is collapsing ${replayed.length} conversation messages into a single user turn. ` +
+    "This loses native turn structure and can significantly degrade model quality. " +
+    "The replay remains in this SDK session's history. Start a new conversation or switch to the Anthropic API provider to preserve native turns.";
+  shoreLog.warn(message);
+  yield { type: "provider_warning", message };
+}
+
 export function nextEntries(
   plan: TurnPlan,
   pendingAssistantUuids: readonly string[] | undefined,
@@ -615,6 +628,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
 
     try {
       yield { type: "start", model: req.model };
+      yield* replayWarnings(plan);
 
       const run = this.#runQuery({ prompt: agentPrompt(plan), options: buildOptions(req, plan, abort) });
 
@@ -804,6 +818,7 @@ export async function* claudeAgentToolLoopEvents(
 
   try {
     yield { type: "start", model: req.model };
+    yield* replayWarnings(plan);
 
     const run = (deps.runQuery ?? query)({
       prompt: agentPrompt(plan),

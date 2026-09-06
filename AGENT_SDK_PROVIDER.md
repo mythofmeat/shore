@@ -13,12 +13,19 @@ This is here to be tried and judged, not to be depended on. It is built to be de
 Measured against qifei's real card (SOUL + USER + AGENTS, ~37k chars) on 2026-09-02, with the
 wire captured through a logging proxy on `ANTHROPIC_BASE_URL`:
 
-- **Characterization is not degraded.** Once the harness is stripped, it contributes ~200 tokens:
+- **Harness overhead was small in this measurement.** Once the harness is stripped, it contributes ~200 tokens:
   a billing-header line, one sentence reading `You are a Claude agent, built on Anthropic's
   Claude Agent SDK.`, and a `<system-reminder>` carrying the account email and today's date.
 - Left at its defaults it is much worse — ~25 built-in tool schemas (~12.8k tokens) ride along,
   it loads `~/.claude/settings.json` and project `CLAUDE.md`, and every turn costs a second API
   request to generate a session title. The provider turns all of that off.
+
+**History replay can significantly degrade model quality.** When Shore cannot reuse the native
+SDK history (for example after switching providers or changing earlier messages), it collapses
+the replayed messages into one user turn. Role labels in text do not preserve native turn
+structure, and the replay stays in the SDK session on subsequent turns. Shore displays a
+warning before generating whenever it collapses multiple messages or replays an assistant
+message. Start a new conversation or use the Anthropic API provider to preserve native turns.
 
 ## Enabling it
 

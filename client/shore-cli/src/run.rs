@@ -692,6 +692,7 @@ async fn follow_log_stream(
             | ServerMessage::ToolResult(_)
             | ServerMessage::SendImage(_)
             | ServerMessage::CacheWarning(_)
+            | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
@@ -1766,7 +1767,8 @@ async fn recv_streaming_response(
                     output::print_phase(phase);
                 }
             }
-            ServerMessage::ProviderFallbackWarning(_)
+            ServerMessage::ProviderWarning(_)
+            | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_) => {
                 spinner.clear().await;
@@ -1828,6 +1830,7 @@ async fn recv_command_data(
             | ServerMessage::ToolCall(_)
             | ServerMessage::ToolResult(_)
             | ServerMessage::CacheWarning(_)
+            | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::Unknown => {}

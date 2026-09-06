@@ -209,6 +209,14 @@ pub struct CacheWarning {
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct ProviderWarning {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rid: Option<String>,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ProviderFallbackWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -271,6 +279,7 @@ pub enum ServerMessage {
     ToolResult(ToolResult),
     SendImage(SendImage),
     CacheWarning(CacheWarning),
+    ProviderWarning(ProviderWarning),
     ProviderFallbackWarning(ProviderFallbackWarning),
     UsageWarning(UsageWarning),
     ConfigWarning(ConfigWarning),
@@ -298,6 +307,7 @@ impl ServerMessage {
             | ServerMessage::Phase(_)
             | ServerMessage::NewMessage(_)
             | ServerMessage::CacheWarning(_)
+            | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
@@ -323,6 +333,7 @@ impl ServerMessage {
             | ServerMessage::Phase(_)
             | ServerMessage::NewMessage(_)
             | ServerMessage::CacheWarning(_)
+            | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)
@@ -348,6 +359,7 @@ impl ServerMessage {
             | ServerMessage::Phase(_)
             | ServerMessage::NewMessage(_)
             | ServerMessage::CacheWarning(_)
+            | ServerMessage::ProviderWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
             | ServerMessage::ConfigWarning(_)

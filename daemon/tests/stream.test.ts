@@ -1465,3 +1465,19 @@ describe("applyGeneratedMessagesToEngine", () => {
     expect(events).toEqual([]);
   });
 });
+
+test("provider warnings reach the client without becoming assistant content", () => {
+  const accumulator = new StreamAccumulator();
+  const frames: ServerMessage[] = [];
+  expect(accumulator.handle(
+    { type: "provider_warning", message: "History collapsed" },
+    false,
+    (frame) => frames.push(frame),
+    "replay-request",
+  )).toEqual({ kind: "continue" });
+  expect(frames).toEqual([{
+    type: "provider_warning",
+    rid: "replay-request",
+    message: "History collapsed",
+  }]);
+});

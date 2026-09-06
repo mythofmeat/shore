@@ -466,3 +466,42 @@ describe("sending a picture", () => {
     expect(sent[0]).toContain("[image attached: image/png]");
   });
 });
+
+describe("conversation replay warnings", () => {
+  test("warns before model output when history is collapsed", async () => {
+    const { events } = await collect(
+      { rounds: [{ blocks: [{ kind: "text", text: "reply" }] }] },
+      request({ messages: [
+        { role: "user", content: [{ type: "text", text: "hello" }] },
+        { role: "assistant", content: [{ type: "text", text: "hi" }] },
+        { role: "user", content: [{ type: "text", text: "continue" }] },
+      ] }),
+    );
+    expect(events[1]?.type).toBe("provider_warning");
+    const warning = events.find((event) => event.type === "provider_warning");
+    expect(warning?.message).toContain("collapsing 3 conversation messages into a single user turn");
+    expect(events.filter((event) => event.type === "provider_warning")).toHaveLength(1);
+    expect(done(events).content).toBe("reply");
+  });
+
+  test("does not warn for a fresh conversation", async () => {
+    const { events } = await collect({ rounds: [] });
+    expect(kinds(events)).not.toContain("provider_warning");
+  });
+});
+
+test("a native session continuation does not warn about replay", async () => {
+  const path = join(await bookDir(), "sessions.json");
+  const agent = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] });
+  const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
+  const first = request();
+  for await (const event of provider.stream(first)) expect(event.type).not.toBe("error");
+  const events: StreamEvent[] = [];
+  for await (const event of provider.stream(request({ messages: [
+    ...first.messages,
+    { role: "assistant", content: [{ type: "text", text: "hi" }] },
+    { role: "user", content: [{ type: "text", text: "continue" }] },
+  ] }))) events.push(event);
+  expect(agent.calls[1]?.options.resume).toBeDefined();
+  expect(kinds(events)).not.toContain("provider_warning");
+});

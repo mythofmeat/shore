@@ -374,3 +374,16 @@ describe("what compaction is told the context weighs", () => {
     expect(finished.context_usage?.cache_read_tokens).toBe(60_400);
   });
 });
+
+test("the SDK tool loop warns when replaying prior conversation turns", async () => {
+  const { events } = await drive(ONE_CALL, phase(), request({ messages: [
+    { role: "user", content: [{ type: "text", text: "hello" }] },
+    { role: "assistant", content: [{ type: "text", text: "hi" }] },
+    { role: "user", content: [{ type: "text", text: "read SOUL.md" }] },
+  ] }));
+  expect(events[1]?.type).toBe("provider_warning");
+  const warning = events.find((event) => event.type === "provider_warning");
+  expect(warning?.message).toContain("can significantly degrade model quality");
+  expect(events.filter((event) => event.type === "provider_warning")).toHaveLength(1);
+  expect(done(events).content).toBe("it says Brian.");
+});

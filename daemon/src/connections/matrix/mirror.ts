@@ -68,6 +68,9 @@ export function routeMirror(msg: ServerMessage): MirrorAction {
           `$${msg.cost_limit.toFixed(2)} (${Math.round(msg.percent_used * 100)}%) this ${msg.period}`,
       };
 
+    case "provider_warning":
+      return { kind: "notice", text: `⚠️ ${msg.message}` };
+
     case "cache_warning":
       return { kind: "notice", text: `⚠️ cache: ${msg.message}` };
 

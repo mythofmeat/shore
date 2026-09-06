@@ -1884,6 +1884,7 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::NewMessage(_)
         | ServerMessage::SendImage(_)
         | ServerMessage::CacheWarning(_)
+        | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
         | ServerMessage::ConfigWarning(_)
@@ -2034,6 +2035,7 @@ fn is_compaction_frame(msg: &ServerMessage) -> bool {
         | ServerMessage::ToolResult(_)
         | ServerMessage::SendImage(_)
         | ServerMessage::CacheWarning(_)
+        | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
         | ServerMessage::ConfigWarning(_)
@@ -2086,6 +2088,7 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         | ServerMessage::NewMessage(_)
         | ServerMessage::SendImage(_)
         | ServerMessage::CacheWarning(_)
+        | ServerMessage::ProviderWarning(_)
         | ServerMessage::ProviderFallbackWarning(_)
         | ServerMessage::UsageWarning(_)
         | ServerMessage::ConfigWarning(_)
@@ -2927,6 +2930,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         ServerMessage::ConfigWarning(cw) => {
             let what = cw.character.as_deref().unwrap_or("config");
             app.set_warning(format!("{what}: {} not applied — {}", cw.path, cw.message));
+            RedrawEffect::Immediate
+        }
+
+        ServerMessage::ProviderWarning(w) => {
+            app.set_warning(w.message.clone());
             RedrawEffect::Immediate
         }
 

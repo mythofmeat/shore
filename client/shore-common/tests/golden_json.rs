@@ -1043,6 +1043,7 @@ fn request_scoped_server_messages_missing_rid_default_to_none() {
             ServerMessage::ToolCall(msg) => assert_eq!(msg.rid, None),
             ServerMessage::ToolResult(msg) => assert_eq!(msg.rid, None),
             ServerMessage::SendImage(msg) => assert_eq!(msg.rid, None),
+            ServerMessage::ProviderWarning(msg) => assert_eq!(msg.rid, None),
             ServerMessage::Hello(_)
             | ServerMessage::History(_)
             | ServerMessage::Shutdown(_)
