@@ -281,6 +281,15 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
           description:
             "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only.",
         },
+        match: {
+          type: "string",
+          enum: ["ranked", "phrase"],
+          description: "Use phrase for named artists/titles: requires the whole case-insensitive phrase with word boundaries and disables semantic expansion. Default ranked allows partial-term matches.",
+        },
+        compact: {
+          type: "boolean",
+          description: "Return matching excerpts of up to 600 characters without neighboring messages. Use for focused fact lookup; default false returns full messages and neighbors.",
+        },
         start_time: {
           type: "string",
           description:

@@ -418,3 +418,13 @@ describe("time range membership", () => {
     expect(boundary.every((c) => c.expect)).toBe(true);
   });
 });
+
+
+test("exact phrases respect Unicode word boundaries but allow hyphens", () => {
+  const matcher = new QueryMatcher("No Cure", true);
+  expect(matcher.score("No Cure-related discussion")).toBeDefined();
+  expect(matcher.score("No Curette")).toBeUndefined();
+  expect(matcher.score("No Cureé")).toBeUndefined();
+  expect(matcher.score("No Curette followed by No Cure.")).toBeDefined();
+  expect(matcher.score("The cure is unrelated")).toBeUndefined();
+});

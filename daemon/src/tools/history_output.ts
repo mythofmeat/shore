@@ -6,6 +6,8 @@ function key(message: HistoryLocation): string {
 
 export function historyText(value: SearchHistoryResult): string {
   const lines = [`Chat history: ${value.count} matches (${value.mode}; ${value.time_zone})`];
+  if (value.match === "phrase") lines.push("Matching: whole phrase with word boundaries; no semantic expansion.");
+  if (value.compact) lines.push("Showing matching excerpts without neighboring messages; request full context for relevant hits.");
   if (value.query !== null) lines.push(`Query: ${JSON.stringify(value.query)}`);
   if (value.model_filter !== null) lines.push(`Model filter: ${JSON.stringify(value.model_filter)}`);
   const range = value.time_range;
