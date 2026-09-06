@@ -1,3 +1,4 @@
+import type { ToolPhase } from "../tools/execute.ts";
 import { shoreLog } from "../log.ts";
 
 import {
@@ -37,6 +38,7 @@ export interface HeartbeatLoopDeps {
     iteration: number,
     callType: string,
   ) => Promise<GenerateResponse | undefined>;
+  generateWithTools?: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse>;
   dispatch: (
     name: string,
     input: unknown,
@@ -130,6 +132,8 @@ export async function runHeartbeatToolLoop(
   request: SidecarRequest,
   deps: HeartbeatLoopDeps,
 ): Promise<HeartbeatLoopResult> {
+  if (request.sdk === "claude_agent") return runSdkHeartbeat(request, deps);
+
   const maxNormalIterations = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
   const totalIterations = maxNormalIterations + deps.wrapUpGrace;
 
@@ -214,4 +218,109 @@ export async function runHeartbeatToolLoop(
   }
 
   return { sendMessageText, images, thinking: messageThinking, failedRound, failure };
+}
+
+async function runSdkHeartbeat(
+  request: SidecarRequest,
+  deps: HeartbeatLoopDeps,
+): Promise<HeartbeatLoopResult> {
+  request = {
+    ...request,
+    tools: [
+      ...(request.tools ?? []).filter((tool) => tool.name !== "set_next_wake" && !isSendMessageTool(tool.name)),
+      {
+        name: "set_next_wake",
+        description: "Schedule the next heartbeat.",
+        input_schema: {
+          type: "object",
+          properties: { hours_from_now: { type: "number" }, reason: { type: "string" } },
+          required: ["hours_from_now", "reason"],
+        },
+      },
+      {
+        name: "send_message",
+        description: "Send a message to the user when this heartbeat finishes.",
+        input_schema: {
+          type: "object",
+          properties: { message: { type: "string" } },
+          required: ["message"],
+        },
+      },
+    ],
+  };
+  const result: HeartbeatLoopResult = { sendMessageText: undefined, images: [] };
+  if (deps.generateWithTools === undefined) {
+    return { ...result, failedRound: 0, failure: new Error("Claude Agent SDK heartbeat tool loop is unavailable") };
+  }
+  let iteration = 0;
+  let captured: CapturedTool[] = [];
+  let pendingBlocks: ContentBlock[] = [];
+  const observe = (blocks: ContentBlock[]): void => {
+    const text = blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("");
+    const sent = captured.filter((tool) => !tool.isError)
+      .map((tool): ToolUse => ["", tool.name, tool.input]);
+    const message = captureToolSendMessage(sent) ?? extractSendMessage(text);
+    if (message !== undefined) {
+      result.sendMessageText = message;
+      result.thinking = thinkingOf(blocks);
+    }
+  };
+  const record = (response: GenerateResponse): void => {
+    observe(response.content_blocks);
+    deps.recordTranscript?.({
+      callType: iteration === 0 ? "heartbeat" : "heartbeat_tool_loop",
+      iteration,
+      response,
+      captured,
+    });
+    captured = [];
+    iteration += 1;
+  };
+  const phase: ToolPhase = {
+    messages: [],
+    runTool: async (use) => {
+      const round = await dispatchHeartbeatTools([[use.id, use.name, use.input]], deps, request.tools);
+      captured.push(...round.captured);
+      result.images.push(...round.images);
+      const message = captureToolSendMessage([[use.id, use.name, use.input]]);
+      if (message !== undefined) result.sendMessageText = message;
+      const block = round.results[0];
+      if (block === undefined) throw new Error("Heartbeat tool returned no result");
+      return block;
+    },
+    recordTurn: (role, blocks) => {
+      if (role === "assistant") {
+        pendingBlocks = blocks;
+      } else {
+        record({
+          model: request.model,
+          content: pendingBlocks.flatMap((block) => block.type === "text" ? [block.text] : []).join(""),
+          content_blocks: pendingBlocks,
+          finish_reason: "tool_use",
+          usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
+          timing: { total_ms: 0, time_to_first_token_ms: 0 },
+        });
+        pendingBlocks = [];
+      }
+    },
+  };
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), deps.deadlineMs ?? HEARTBEAT_LOOP_DEADLINE_MS);
+  try {
+    const response = await deps.generateWithTools({
+      ...request,
+      ...(deps.maxToolIterations === undefined ? {} : { max_tool_iterations: deps.maxToolIterations }),
+    }, phase, abort.signal);
+    record(response);
+    if (response.finish_reason.startsWith("error")) {
+      result.failedRound = iteration - 1;
+      result.failure = new Error(`Claude Agent SDK heartbeat ended with ${response.finish_reason}`);
+    }
+  } catch (failure) {
+    result.failedRound = iteration;
+    result.failure = failure;
+  } finally {
+    clearTimeout(timer);
+  }
+  return result;
 }

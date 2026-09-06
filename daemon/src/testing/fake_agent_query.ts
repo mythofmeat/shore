@@ -51,6 +51,7 @@ export interface FakeToolOutcome {
   allowed: boolean;
   denial?: string;
   output?: unknown;
+  isError?: boolean;
 }
 
 export interface FakeAgent {
@@ -298,7 +299,7 @@ export function fakeAgent(script: FakeScript): FakeAgent {
           continue;
         }
         const output = await client.callTool({ name: call.name, arguments: input });
-        toolOutcomes.push({ name: wireName(call.name), allowed: true, output: output.content });
+        toolOutcomes.push({ name: wireName(call.name), allowed: true, output: output.content, isError: output.isError === true });
         results.push({
           type: "tool_result",
           tool_use_id: `toolu_${String(index)}_${String(n)}`,

@@ -267,6 +267,7 @@ export async function generate(
   request: SidecarRequest,
   deps: GenerateDeps,
   signal?: AbortSignal,
+  options: GenerationOptions = {},
 ): Promise<GenerateOutcome> {
   const resolved = resolveModelForRequest(deps.config, request);
   return generateViaStream(
@@ -274,6 +275,7 @@ export async function generate(
     resolved ?? { providerKey: request.provider_key ?? request.sdk },
     deps,
     {
+      ...options,
       ...(signal === undefined ? {} : { signal }),
       useRequestKey: resolved === undefined && request.api_key !== "",
     },

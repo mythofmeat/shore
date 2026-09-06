@@ -1,3 +1,4 @@
+import { ClaudeAgentProvider } from "../llm/providers/claude_agent.ts";
 import { shoreLog } from "../log.ts";
 
 import { runHeartbeatTick } from "./heartbeat_tick.ts";
@@ -71,6 +72,19 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
               `${event.to?.name ?? "(none)"}: ${event.reason}`,
           );
         }
+        return response;
+      },
+
+      generateWithTools: async (request, phase, signal) => {
+        labelAccountedCall(request, config, character, "heartbeat");
+        const { response } = await generate(request, this.#generateDeps(config), signal, {
+          events: (provider, call) => {
+            if (!(provider instanceof ClaudeAgentProvider)) {
+              throw new Error("Claude Agent SDK heartbeat requires a provider with native tool support");
+            }
+            return provider.streamWithTools(call, phase, signal);
+          },
+        });
         return response;
       },
 

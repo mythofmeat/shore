@@ -617,3 +617,27 @@ describe("the reasoning behind what a tick says", () => {
     expect(result.thinking).toEqual([]);
   });
 });
+
+test("SDK heartbeats fail visibly if native tool support is missing", async () => {
+  const w = world([]);
+  const result = await runHeartbeatToolLoop({ ...request(), sdk: "claude_agent" }, w.deps);
+  expect(result.failedRound).toBe(0);
+  expect(String(result.failure)).toContain("tool loop is unavailable");
+});
+
+test("SDK heartbeat deadline aborts the native run and preserves completed message tools", async () => {
+  const w = world([], {
+    deadlineMs: 5,
+    generateWithTools: async (_request, phase, signal) => {
+      await phase.runTool({ id: "send", name: "send_message", input: { message: "Already done." } });
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("deadline reached")), { once: true });
+      });
+      throw new Error("unreachable");
+    },
+  });
+  const result = await runHeartbeatToolLoop({ ...request(), sdk: "claude_agent" }, w.deps);
+  expect(result.sendMessageText).toBe("Already done.");
+  expect(result.failedRound).toBe(0);
+  expect(String(result.failure)).toContain("deadline reached");
+});

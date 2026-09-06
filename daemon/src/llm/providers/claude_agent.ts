@@ -669,6 +669,13 @@ export class ClaudeAgentProvider implements SidecarProvider {
     }
   }
 
+  streamWithTools(req: SidecarRequest, phase: ToolPhase, signal?: AbortSignal): AsyncIterable<StreamEvent> {
+    return claudeAgentToolLoopEvents(req, phase, signal, {
+      runQuery: this.#runQuery,
+      bookPath: this.#bookPath,
+    });
+  }
+
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const blocks = new BlockAssembler();
     let content = "";
@@ -868,6 +875,7 @@ export async function* claudeAgentToolLoopEvents(
       },
     };
   } catch (e) {
+    await round.close(acc);
     discardMissingAnchor(path, key, record, plan, e);
     yield streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now);
   } finally {

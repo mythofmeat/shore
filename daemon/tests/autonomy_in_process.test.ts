@@ -1,3 +1,6 @@
+import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
+import { fakeAgent } from "../src/testing/fake_agent_query.ts";
+import { readFile } from "node:fs/promises";
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -668,4 +671,124 @@ describe("the other two actions", () => {
     expect(compacted).toEqual(["Shore - ada"]);
     expect(spoke).toEqual([]);
   });
+});
+
+
+test("Claude SDK heartbeats execute workspace tools, schedule a wake, and deliver a message", async () => {
+  const config = await world();
+  const model = config.models.chat.get("chat.fixture");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.sdk = "claude_agent";
+  model.providerKey = "claude-agent";
+  config.app.tools.enabled_tools = ["read", "edit"];
+  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+  await writeFile(join(workspace, "HEARTBEAT.md"), "Before");
+  const agent = fakeAgent({
+    rounds: [
+      { blocks: [], toolCalls: [{ name: "read", input: { path: "HEARTBEAT.md" } }] },
+      { blocks: [], toolCalls: [{ name: "edit", input: { path: "HEARTBEAT.md", content: "After" } }] },
+      { blocks: [], toolCalls: [
+        { name: "set_next_wake", input: { hours_from_now: 2, reason: "follow up" } },
+        { name: "send_message", input: { message: "I updated my notes." } },
+      ] },
+      { blocks: [{ kind: "text", text: "HEARTBEAT_OK" }] },
+    ],
+  });
+  const appended: Message[] = [];
+  const wakes: [number, string][] = [];
+  const transcripts: unknown[] = [];
+  const executor = new InProcessAutonomyExecutor({
+    registry: registryFor(config, appended),
+    cache: new LastRequestCache(),
+    providers: {
+      claude_agent: new ClaudeAgentProvider({
+        runQuery: agent.query,
+        bookPath: () => join(config.dirs.data, "sdk-sessions.json"),
+      }),
+    },
+    callStore: { recordTranscript: (entry) => transcripts.push(entry) },
+  });
+  const result = await executor.runHeartbeatTick("ada", {
+    scheduleNextWake: (hours, reason) => { wakes.push([hours, reason]); return hours; },
+  });
+  expect(agent.calls).toHaveLength(1);
+  expect(agent.toolOutcomes.map((outcome) => outcome.allowed)).toEqual([true, true, true, true]);
+  expect(await readFile(join(workspace, "HEARTBEAT.md"), "utf8")).toBe("After");
+  expect(wakes).toEqual([[2, "follow up"]]);
+  expect(appended.map((entry) => entry.content)).toEqual(["I updated my notes."]);
+  expect(transcripts).toHaveLength(4);
+  expect(result.events.some((event) => event.kind === "message_sent")).toBe(true);
+});
+
+test.each([false, true])("SDK heartbeat preserves completed work on SDK failure (stream throws: %s)", async (streamThrows) => {
+  const config = await world();
+  const model = config.models.chat.get("chat.fixture");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.sdk = "claude_agent";
+  model.providerKey = "claude-agent";
+  config.app.tools.enabled_tools = ["read"];
+  const agent = fakeAgent({
+    rounds: [
+      {
+        blocks: [{ kind: "text", text: "<sendMessage>Still here.</sendMessage>" }],
+        toolCalls: [{ name: "read", input: { path: "missing-file.md" } }],
+      },
+      ...(streamThrows ? [] : [{ blocks: [{ kind: "text" as const, text: "HEARTBEAT_OK" }] }]),
+    ],
+    ...(streamThrows ? { throwOn: new Error("SDK disconnected") } : { subtype: "error_max_turns" }),
+  });
+  const appended: Message[] = [];
+  const executor = new InProcessAutonomyExecutor({
+    registry: registryFor(config, appended),
+    cache: new LastRequestCache(),
+    providers: {
+      claude_agent: new ClaudeAgentProvider({
+        runQuery: agent.query,
+        bookPath: () => join(config.dirs.data, "sdk-sessions.json"),
+      }),
+    },
+  });
+  const result = await executor.runHeartbeatTick("ada", NO_HOOKS);
+  expect(agent.toolOutcomes[0]?.allowed).toBe(true);
+  expect(agent.toolOutcomes[0]?.isError).toBe(true);
+  expect(appended.map((entry) => entry.content)).toEqual(["Still here."]);
+  expect(result.events.some((event) => event.kind === "call_failed")).toBe(true);
+  expect(result.events.some((event) => event.kind === "message_skipped")).toBe(false);
+});
+
+test("SDK heartbeat respects the configured tool round budget", async () => {
+  const config = await world();
+  const model = config.models.chat.get("chat.fixture");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.sdk = "claude_agent";
+  model.providerKey = "claude-agent";
+  model.maxToolIterations = 1;
+  const agent = fakeAgent({
+    rounds: [
+      { blocks: [], toolCalls: [{ name: "set_next_wake", input: { hours_from_now: 2, reason: "first" } }] },
+      { blocks: [], toolCalls: [
+        { name: "set_next_wake", input: { hours_from_now: 3, reason: "denied" } },
+        { name: "send_message", input: { message: "Must not be delivered." } },
+      ] },
+      { blocks: [{ kind: "text", text: "HEARTBEAT_OK" }] },
+    ],
+  });
+  const appended: Message[] = [];
+  const wakes: number[] = [];
+  const executor = new InProcessAutonomyExecutor({
+    registry: registryFor(config, appended),
+    cache: new LastRequestCache(),
+    providers: {
+      claude_agent: new ClaudeAgentProvider({
+        runQuery: agent.query,
+        bookPath: () => join(config.dirs.data, "sdk-sessions.json"),
+      }),
+    },
+  });
+  await executor.runHeartbeatTick("ada", {
+    scheduleNextWake: (hours) => { wakes.push(hours); return hours; },
+  });
+  expect(wakes).toEqual([2]);
+  expect(agent.toolOutcomes.map((outcome) => outcome.allowed)).toEqual([true, false, false]);
+  expect(appended).toHaveLength(0);
 });

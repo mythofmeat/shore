@@ -312,3 +312,13 @@ it is written down rather than taken.
 
 `engine/threads.ts` is the only module outside the provider that reaches into it, which is why the
 session book lives in its own file: pruning on archive does not drag the SDK into the thread path.
+
+## Heartbeats
+
+Claude Agent SDK heartbeats use the same native SDK tool loop as chat. Workspace and MCP
+tools execute through Shore's heartbeat dispatcher, with heartbeat-only `set_next_wake`
+and `send_message` tools added to the surface. Tagged `<sendMessage>` replies still work.
+Tool rounds are recorded in the heartbeat transcript; SDK usage is accounted once for the
+whole run. The configured tool-round limit is enforced through SDK tool permissions, and
+the heartbeat deadline aborts the SDK run. SDK failures are logged as failed ticks while
+messages and images from completed actions are retained.
