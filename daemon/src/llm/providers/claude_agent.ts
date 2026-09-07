@@ -1,3 +1,5 @@
+import { retryToolStream } from "../tool_loop.ts";
+import { ToolLoopStop } from "../tool_loop_control.ts";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 
@@ -46,6 +48,7 @@ import {
   type StreamEvent,
   type Usage,
   type WireMessage,
+  type ToolLoopOptions,
 } from "../types.ts";
 
 const NESTED_LOOP_TOOLS = ["Task", "Agent", "Skill"];
@@ -456,6 +459,7 @@ async function* rawEventsOf(
   run: AsyncIterable<SDKMessage>,
   seen: SdkTurnFacts,
   onRoundStart?: () => Promise<void>,
+  onRoundEnd?: () => Promise<void>,
 ): AsyncIterable<RawMessageStreamEvent> {
   for await (const msg of run) {
     const sid = (msg as { session_id?: string }).session_id;
@@ -479,6 +483,7 @@ async function* rawEventsOf(
       if (endsATurn(event)) seen.sawStopReason = true;
       if (event.type === "message_start" && onRoundStart !== undefined) await onRoundStart();
       yield event;
+      if (event.type === "message_stop") await onRoundEnd?.();
       continue;
     }
 
@@ -627,6 +632,9 @@ export class ClaudeAgentProvider implements SidecarProvider {
     signal?.addEventListener("abort", () => abort.abort(), { once: true });
 
     try {
+      if ((req.tools?.length ?? 0) > 0) {
+        throw new Error("Tool-capable generation requires a tool executor; use the shared tool loop");
+      }
       yield { type: "start", model: req.model };
       yield* replayWarnings(plan);
 
@@ -669,11 +677,14 @@ export class ClaudeAgentProvider implements SidecarProvider {
     }
   }
 
-  streamWithTools(req: SidecarRequest, phase: ToolPhase, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    return claudeAgentToolLoopEvents(req, phase, signal, {
-      runQuery: this.#runQuery,
-      bookPath: this.#bookPath,
-    });
+  streamWithTools(req: SidecarRequest, phase: ToolPhase, signal?: AbortSignal, options: ToolLoopOptions = {}): AsyncIterable<StreamEvent> {
+    return retryToolStream(
+      (tools, abortSignal) => claudeAgentToolLoopEvents(req, tools, abortSignal, {
+        runQuery: this.#runQuery,
+        bookPath: this.#bookPath,
+      }, options),
+      phase, signal, options.retry,
+    );
   }
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
@@ -723,33 +734,115 @@ function withBareName(event: StreamEvent, names: ToolNames): StreamEvent {
 
 class RoundLog {
   readonly #phase: ToolPhase;
-  readonly #pending = new Map<string, string[]>();
+  readonly #request: SidecarRequest;
   #assembler = new BlockAssembler();
   #results: ContentBlock[] = [];
-  #minted = 0;
+  #claimed = new Set<string>();
+  #turn: GenerateResponse | undefined;
+  #finished = false;
+  #ready: Promise<void>;
+  #resolveReady!: () => void;
+  #failure: unknown;
+  #serial: Promise<unknown> = Promise.resolve();
   iterations = 0;
+  stopped = false;
 
-  constructor(phase: ToolPhase) {
+  constructor(phase: ToolPhase, request: SidecarRequest) {
     this.#phase = phase;
+    this.#request = request;
+    this.#ready = new Promise((resolve) => { this.#resolveReady = resolve; });
   }
 
   absorb(event: StreamEvent): void {
     this.#assembler.absorb(event);
-    if (event.type !== "tool_use") return;
-    const queue = this.#pending.get(event.name) ?? [];
-    queue.push(event.id);
-    this.#pending.set(event.name, queue);
   }
 
-  claimId(bare: string): string {
-    const claimed = this.#pending.get(bare)?.shift();
-    if (claimed !== undefined) return claimed;
-    this.#minted += 1;
-    return `toolu_shore_${String(this.#minted)}`;
+  async modelFinished(acc: TurnAccumulator): Promise<void> {
+    if (this.#turn !== undefined) return;
+    this.#turn = {
+      model: this.#request.model,
+      content: acc.text,
+      content_blocks: this.#assembler.finish(),
+      finish_reason: acc.stopReason,
+      usage: { ...acc.usage },
+      timing: { total_ms: 0, time_to_first_token_ms: 0 },
+    };
+    try {
+      await this.#phase.onTurn?.(this.#turn);
+      if (this.#turn.content_blocks.some((block) => block.type === "tool_use")) {
+        await this.#phase.recordTurn("assistant", this.#turn.content_blocks);
+      }
+    } catch (error) {
+      this.#failure = error;
+      throw error;
+    } finally {
+      this.#resolveReady();
+    }
   }
 
-  addResult(block: ContentBlock): void {
-    this.#results.push(block);
+  async runTool(bare: string, input: unknown, signal: AbortSignal): Promise<ContentBlock> {
+    const run = async (): Promise<ContentBlock> => {
+      if (signal.aborted) throw new Error("SDK tool run aborted");
+      let onAbort: () => void = () => {};
+      const aborted = new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(new Error("SDK tool run aborted"));
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+      try {
+        await Promise.race([this.#ready, aborted]);
+      } finally {
+        signal.removeEventListener("abort", onAbort);
+      }
+      if (this.#failure !== undefined) throw this.#failure;
+      const turn = this.#turn;
+      const use = turn?.content_blocks.find((block) =>
+        block.type === "tool_use" && block.name === bare &&
+        canonicalJson(block.input) === canonicalJson(input) &&
+        !this.#claimed.has(block.id));
+      if (use?.type !== "tool_use") throw new Error(`SDK invoked ${bare} without a streamed tool call`);
+      this.#claimed.add(use.id);
+      const result = await this.#phase.runTool({ id: use.id, name: bare, input });
+      this.#results.push(result);
+      if (this.#results.length === turn?.content_blocks.filter((block) => block.type === "tool_use").length) {
+        await this.finishTools();
+      }
+      return result;
+    };
+    if (this.#phase.parallel !== false) return run();
+    const result = this.#serial.then(run);
+    this.#serial = result.catch(() => {});
+    return result;
+  }
+
+  async finishTools(): Promise<void> {
+    if (this.#finished || this.#turn === undefined) return;
+    this.#finished = true;
+    this.iterations += 1;
+    const results = this.#turn.content_blocks.flatMap((block) => {
+      if (block.type !== "tool_use") return [];
+      const found = this.#results.find((result) => result.type === "tool_result" && result.tool_use_id === block.id);
+      return found === undefined ? [] : [found];
+    });
+    await this.#phase.recordTurn("user", results);
+    await this.#phase.afterTurn?.(this.#turn);
+    const before = this.#request.messages.map((message) => message.content.length);
+    try {
+      await this.#phase.beforeTurn?.(this.#request);
+    } catch (error) {
+      if (!(error instanceof ToolLoopStop)) throw error;
+      this.stopped = true;
+      return;
+    }
+    const added = this.#request.messages
+      .flatMap((message, index) => message.content.slice(before[index] ?? 0)
+        .flatMap((block) => block.type === "text" ? [block.text] : []))
+      .join("\n");
+    const last = this.#results.at(-1);
+    if (added !== "" && last?.type === "tool_result") {
+      last.content = typeof last.content === "string"
+        ? `${last.content}\n\n${added}`
+        : [...last.content, { type: "text", text: added }];
+    }
   }
 
   finalBlocks(): ContentBlock[] {
@@ -757,15 +850,29 @@ class RoundLog {
   }
 
   async close(acc: TurnAccumulator): Promise<void> {
-    const blocks = this.#assembler.finish();
+    if (this.#turn === undefined) return;
+    if (!this.#finished) {
+      if (this.#results.length > 0) await this.finishTools();
+      else await this.#phase.afterTurn?.(this.#turn);
+    }
     this.#assembler = new BlockAssembler();
-    acc.text = "";
-    if (this.#results.length === 0) return;
-    const results = this.#results;
     this.#results = [];
-    this.iterations += 1;
-    await this.#phase.recordTurn("assistant", blocks);
-    await this.#phase.recordTurn("user", results);
+    this.#claimed.clear();
+    this.#turn = undefined;
+    this.#finished = false;
+    this.#failure = undefined;
+    this.#ready = new Promise((resolve) => { this.#resolveReady = resolve; });
+    acc.text = "";
+  }
+
+  async finish(): Promise<void> {
+    if (this.#turn !== undefined && !this.#finished) {
+      if (this.#results.length > 0) await this.finishTools();
+      else {
+        this.#finished = true;
+        await this.#phase.afterTurn?.(this.#turn);
+      }
+    }
   }
 }
 
@@ -774,6 +881,7 @@ export async function* claudeAgentToolLoopEvents(
   tools: ToolPhase,
   signal?: AbortSignal,
   deps: ClaudeAgentDeps = {},
+  options: ToolLoopOptions = {},
 ): AsyncIterable<StreamEvent> {
   const defs = req.tools ?? [];
   if (defs.length === 0) {
@@ -790,20 +898,25 @@ export async function* claudeAgentToolLoopEvents(
   const key = conversationKey(req);
   const book = readBook(path);
   const record = book[key];
-  const plan = planTurn(record, req.messages);
+  let plan = planTurn(record, req.messages);
 
   const abort = new AbortController();
   if (signal?.aborted) abort.abort();
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
 
   const names = new ToolNames(defs);
-  const round = new RoundLog(tools);
+  const round = new RoundLog(tools, req);
   const cap = req.max_tool_iterations;
 
+  let toolFailure: unknown;
   const instance = shoreToolServer(defs, names, async (bare, input) => {
-    const block = await tools.runTool({ id: round.claimId(bare), name: bare, input });
-    round.addResult(block);
-    return block;
+    try {
+      return await round.runTool(bare, input, abort.signal);
+    } catch (error) {
+      toolFailure = error;
+      abort.abort();
+      throw error;
+    }
   });
 
   const canUseTool: CanUseTool = (toolName) => {
@@ -827,18 +940,25 @@ export async function* claudeAgentToolLoopEvents(
     yield { type: "start", model: req.model };
     yield* replayWarnings(plan);
 
+    await tools.beforeTurn?.(req);
+    plan = planTurn(record, req.messages);
     const run = (deps.runQuery ?? query)({
       prompt: agentPrompt(plan),
       options: buildOptions(req, plan, abort, {
         instance,
         canUseTool,
-        maxTurns: cap === undefined ? TURN_BACKSTOP : cap + 2,
+        maxTurns: cap === undefined ? TURN_BACKSTOP : options.capBehavior === "stop_after_dispatch" ? Math.max(1, cap) : cap + 2,
         timeoutMs: MCP_TOOL_TIMEOUT_MS,
       }),
     });
 
     const events = anthropicContentEvents(
-      rawEventsOf(run, seen, () => round.close(acc)),
+      rawEventsOf(run, seen, async () => {
+        if (round.stopped || (options.capBehavior === "stop_after_dispatch" && cap !== undefined && round.iterations >= cap)) {
+          throw new ToolLoopStop();
+        }
+        await round.close(acc);
+      }, () => round.modelFinished(acc)),
       acc,
     );
     for await (const streamed of events) {
@@ -847,6 +967,10 @@ export async function* claudeAgentToolLoopEvents(
       round.absorb(event);
       yield event;
     }
+
+    if (toolFailure !== undefined) throw toolFailure;
+    if (round.stopped) throw new ToolLoopStop();
+    await round.finish();
 
     if (seen.sessionId !== undefined) {
       book[key] = {
@@ -865,7 +989,8 @@ export async function* claudeAgentToolLoopEvents(
     yield {
       type: "done",
       content: acc.text,
-      finish_reason: finishReasonOf(seen, acc.stopReason),
+      finish_reason: options.capBehavior === "stop_after_dispatch" && cap !== undefined && round.iterations >= cap
+        ? "tool_use" : finishReasonOf(seen, acc.stopReason),
       content_blocks: round.finalBlocks(),
       usage: seen.usage ?? acc.usage,
       ...(context === undefined ? {} : { context_usage: context }),
@@ -875,9 +1000,18 @@ export async function* claudeAgentToolLoopEvents(
       },
     };
   } catch (e) {
-    await round.close(acc);
+    if (e instanceof ToolLoopStop || toolFailure instanceof ToolLoopStop) {
+      yield {
+        type: "done", content: acc.text, content_blocks: round.finalBlocks(),
+        finish_reason: options.capBehavior === "stop_after_dispatch" ? "tool_use" : "end_turn",
+        usage: seen.usage ?? acc.usage,
+        timing: { total_ms: Date.now() - startedAt, time_to_first_token_ms: firstTokenAt === 0 ? Date.now() - startedAt : firstTokenAt - startedAt },
+      };
+      return;
+    }
+    await round.finish();
     discardMissingAnchor(path, key, record, plan, e);
-    yield streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now);
+    yield { ...streamErrorEvent(e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now), cause: toolFailure ?? e };
   } finally {
     abort.abort();
   }

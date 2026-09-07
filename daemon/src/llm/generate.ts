@@ -1,3 +1,7 @@
+import { withCallCapture, type CallRecorder } from "./capture.ts";
+import { toolLoopEvents } from "./tool_loop.ts";
+import type { ToolPhase } from "../tools/execute.ts";
+import type { ToolLoopOptions } from "./types.ts";
 import { required } from "../util/required.ts";
 import { AbortError } from "./abort.ts";
 import type { ModelCallRetryOptions } from "./providers/generic_loop.ts";
@@ -21,7 +25,7 @@ import {
   type Sleep,
 } from "./fallback.ts";
 import { consumeStream, type FrameSink, type StreamResult } from "./stream.ts";
-import type { GenerateResponse, SidecarProvider, SidecarRequest, StreamEvent } from "./types.ts";
+import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
 import { rustJoin } from "../config/dirs.ts";
 import { usageConfigView, type BudgetBlock } from "../ledger/budget.ts";
 import { shouldRetryError } from "./retry.ts";
@@ -48,6 +52,7 @@ export class BudgetBlocked extends Error {
 export interface GenerateDeps {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   config: LoadedConfig;
+  callStore?: CallRecorder;
   env?: NodeJS.ProcessEnv;
   sleep?: Sleep;
   retry?: RetrySettings;
@@ -112,7 +117,7 @@ function ensureCallContext(request: SidecarRequest, deps: GenerateDeps): void {
 function providerFor(request: SidecarRequest, deps: GenerateDeps): SidecarProvider {
   const provider = deps.providers[request.sdk];
   if (provider === undefined) throw new Error(`unsupported sdk: ${request.sdk}`);
-  return provider;
+  return withCallCapture(provider, deps.callStore);
 }
 
 export interface StreamedGenerateOptions {
@@ -121,15 +126,10 @@ export interface StreamedGenerateOptions {
 }
 
 export interface GenerationOptions extends StreamedGenerateOptions {
+  tools?: ToolPhase | ((request: SidecarRequest, sink: FrameSink) => ToolPhase | undefined);
+  toolLoop?: ToolLoopOptions;
   regen?: boolean;
   rid?: string;
-  events?: (
-    provider: SidecarProvider,
-    request: SidecarRequest,
-    sink: FrameSink,
-    retry: ModelCallRetryOptions,
-  ) => AsyncIterable<StreamEvent>;
-  retriesWithinEvents?: boolean;
   onFallback?: (event: FallbackEvent) => void;
   onRetry?: import("./fallback.ts").RetryContext["onRetry"];
   useRequestKey?: boolean;
@@ -141,6 +141,9 @@ export async function runGeneration(
   deps: GenerateDeps,
   options: GenerationOptions = {},
 ): Promise<{ result: StreamResult; fallbacks: FallbackEvent[] }> {
+  if ((request.tools?.length ?? 0) > 0 && options.tools === undefined) {
+    throw new Error("Tool-capable generation requires a tool executor");
+  }
   const provider = providerFor(request, deps);
   if (options.signal?.aborted) throw new AbortError();
   ensureCallContext(request, deps);
@@ -166,6 +169,7 @@ export async function runGeneration(
         );
 
   let replaySafe = true;
+  let toolLoopUsed = false;
   const sink: FrameSink = (message) => {
     if (message.type === "stream_chunk" || message.type === "tool_call" ||
         message.type === "tool_result" || message.type === "send_image") replaySafe = false;
@@ -185,7 +189,14 @@ export async function runGeneration(
     if (blocked) throw BudgetBlocked.from(blocked);
     const started = beginCallAttempt(call.context, call);
     const events = (async function* () {
-      const source = options.events?.(provider, call, sink, callRetry) ?? provider.stream(call, options.signal);
+      const tools = typeof options.tools === "function" ? options.tools(call, sink) : options.tools;
+      if ((call.tools?.length ?? 0) > 0 && tools === undefined) {
+        throw new Error("Tool-capable generation requires a tool executor");
+      }
+      toolLoopUsed = tools !== undefined;
+      const source = tools === undefined
+        ? provider.stream(call, options.signal)
+        : toolLoopEvents(provider, call, tools, options.signal, callRetry, options.toolLoop);
       for await (const event of source) {
         if (event.type === "tool_use") replaySafe = false;
         yield event;
@@ -203,7 +214,7 @@ export async function runGeneration(
       }),
       { regen: options.regen ?? false, sink, ...(options.rid === undefined ? {} : { rid: options.rid }) },
     );
-    if ("err" in outcome) throw outcome.err;
+    if ("err" in outcome) throw outcome.err.kind === "stream_errored" ? outcome.err.cause ?? outcome.err : outcome.err;
     return outcome.ok;
   };
   const result = await streamWithCredentialFallback(
@@ -213,11 +224,10 @@ export async function runGeneration(
       ? (isKeylessSdk(request.sdk) ? "" : request.api_key)
       : readCandidateEnv(candidate, deps.env ?? process.env),
     (apiKey, candidate) => {
-      if (options.retriesWithinEvents) return attempt(apiKey, candidate.name);
       return streamWithRetry(
         () => attempt(apiKey, candidate.name),
         retry,
-        (error, attemptIndex, maxRetries) => replaySafe &&
+        (error, attemptIndex, maxRetries) => !toolLoopUsed && replaySafe &&
           shouldRetryError(error, attemptIndex, { max_retries: maxRetries }).decision === "retry",
         deps.sleep,
         {

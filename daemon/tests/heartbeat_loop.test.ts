@@ -1,3 +1,4 @@
+import { toolGeneration } from "./support/tool_generation.ts";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -55,7 +56,7 @@ interface World {
 
 function world(
   rounds: GenerateResponse[],
-  over: Partial<HeartbeatLoopDeps> = {},
+  over: Partial<Omit<HeartbeatLoopDeps, "generate">> & { generate?: (request: SidecarRequest, iteration: number) => Promise<GenerateResponse | undefined> } = {},
   toolResult: (name: string, input: unknown) => HeartbeatToolResult = (name) => ({
     output: `${name} ok`,
     isError: false,
@@ -74,7 +75,6 @@ function world(
     transcript,
     deps: {
       character: "ada",
-      generate: async () => rounds[round++],
       dispatch: async (name, input) => {
         dispatched.push({ name, input });
         return toolResult(name, input);
@@ -88,6 +88,7 @@ function world(
       wrapUpGrace: 3,
       maxToolIterations: 4,
       ...over,
+      generate: toolGeneration(over.generate ?? (async () => rounds[round++])),
     },
   };
 }
@@ -176,14 +177,14 @@ describe("what a tick asks to say", () => {
     expect(result.sendMessageText).toBe("from the flat string");
   });
 
-  test("reads a sendMessage tool call from a response that does not finish on tool_use", async () => {
+  test("does not deliver a message tool that was never executed", async () => {
     const w = world([
       response([toolUse("t1", "sendMessage", { message: "I found something" })], "end_turn"),
     ]);
 
     const result = await runHeartbeatToolLoop(request(), w.deps);
 
-    expect(result.sendMessageText).toBe("I found something");
+    expect(result.sendMessageText).toBeUndefined();
     expect(w.dispatched).toEqual([]);
   });
 
@@ -618,26 +619,28 @@ describe("the reasoning behind what a tick says", () => {
   });
 });
 
-test("SDK heartbeats fail visibly if native tool support is missing", async () => {
-  const w = world([]);
-  const result = await runHeartbeatToolLoop({ ...request(), sdk: "claude_agent" }, w.deps);
-  expect(result.failedRound).toBe(0);
-  expect(String(result.failure)).toContain("tool loop is unavailable");
-});
-
 test("SDK heartbeat deadline aborts the native run and preserves completed message tools", async () => {
   const w = world([], {
     deadlineMs: 5,
-    generateWithTools: async (_request, phase, signal) => {
+    generate: async () => undefined,
+  });
+  w.deps.generate = async (_request, phase, signal) => {
       await phase.runTool({ id: "send", name: "send_message", input: { message: "Already done." } });
       await new Promise<void>((_resolve, reject) => {
         signal.addEventListener("abort", () => reject(new Error("deadline reached")), { once: true });
       });
       throw new Error("unreachable");
-    },
-  });
+    };
   const result = await runHeartbeatToolLoop({ ...request(), sdk: "claude_agent" }, w.deps);
   expect(result.sendMessageText).toBe("Already done.");
   expect(result.failedRound).toBe(0);
   expect(String(result.failure)).toContain("deadline reached");
+});
+
+test("an absent generation result is reported as a failed heartbeat", async () => {
+  const w = world([]);
+  w.deps.generate = async () => undefined;
+  const result = await runHeartbeatToolLoop(request(), w.deps);
+  expect(result.failedRound).toBe(0);
+  expect(result.sendMessageText).toBeUndefined();
 });

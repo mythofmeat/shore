@@ -15,13 +15,7 @@ import {
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { Message } from "../engine/types.ts";
 import type { FallbackEvent } from "../llm/fallback.ts";
-import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
-import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
-import { claudeAgentToolLoopEvents } from "../llm/providers/claude_agent.ts";
-import {
-  genericToolLoopEvents,
-  type ModelCallRetryOptions,
-} from "../llm/providers/generic_loop.ts";
+import type { CallRecorder } from "../llm/capture.ts";
 import { describeError } from "../llm/errors.ts";
 import { runGeneration as runModelGeneration } from "../llm/generate.ts";
 import type { StreamResult } from "../llm/stream.ts";
@@ -30,12 +24,11 @@ import type {
   ProviderOptions,
   SidecarProvider,
   SidecarRequest,
-  StreamEvent,
   WireMessage,
 } from "../llm/types.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { anyEnabled } from "../tools/registry.ts";
-import { toolPhase, type ToolPhase } from "../tools/execute.ts";
+import { toolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
 import {
@@ -134,12 +127,6 @@ export interface GenerationDeps {
   newMessageId?: () => string;
   monotonicMs?: () => number;
   sleep?: (ms: number) => Promise<void>;
-  loopEvents?: (
-    provider: SidecarProvider,
-    req: SidecarRequest,
-    phase: ToolPhase,
-    signal: AbortSignal,
-  ) => AsyncIterable<StreamEvent>;
   env?: NodeJS.ProcessEnv;
   log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -442,25 +429,6 @@ interface StreamTurnParams {
   persistIntermediate: (message: Message) => Promise<void>;
 }
 
-export function turnEvents(
-  deps: Pick<GenerationDeps, "callStore" | "loopEvents">,
-  provider: SidecarProvider,
-  call: SidecarRequest,
-  phase: ToolPhase | undefined,
-  signal: AbortSignal,
-  retry?: ModelCallRetryOptions,
-): AsyncIterable<StreamEvent> {
-  if (phase === undefined) return provider.stream(call, signal);
-  if (deps.loopEvents !== undefined) return deps.loopEvents(provider, call, phase, signal);
-  if (call.sdk === "anthropic") {
-    return capturedEvents(deps.callStore, call, () =>
-      anthropicToolLoopEvents(call, phase, signal, Date.now, retry),
-    );
-  }
-  if (call.sdk === "claude_agent") return claudeAgentToolLoopEvents(call, phase, signal);
-  return genericToolLoopEvents(provider, call, phase, signal, Date.now, retry);
-}
-
 async function streamTurn(
   deps: GenerationDeps,
   params: StreamTurnParams,
@@ -488,6 +456,7 @@ async function streamTurn(
 
   const { result } = await runModelGeneration(request, resolved, {
     providers: deps.providers,
+    ...(deps.callStore === undefined ? {} : { callStore: deps.callStore }),
     config,
     ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
     ...(deps.env === undefined ? {} : { env: deps.env }),
@@ -496,7 +465,6 @@ async function streamTurn(
     regen: params.regen,
     ...(params.rid === undefined ? {} : { rid: params.rid }),
     sink: params.send,
-    retriesWithinEvents: toolsOn,
     onFallback: (event) => recordKeyFallback(deps, params, event),
     onRetry: (error, attemptIndex, delayMs) => {
       deps.log?.warn?.("retrying provider stream", {
@@ -505,7 +473,7 @@ async function streamTurn(
         error: describeError(error),
       });
     },
-    events: (provider, call, sink, callRetry) => {
+    tools: (call, sink) => {
       send = sink;
       intermediate = [];
       if (toolCtx !== undefined && resolved.maxToolIterations !== undefined) {
@@ -521,8 +489,7 @@ async function streamTurn(
         schemas: schemasFrom(call.tools),
         onRecordTurn: params.persistIntermediate,
       }, intermediate);
-      return turnEvents(deps, provider, call, phase, params.signal,
-        phase === undefined ? undefined : callRetry);
+      return phase;
     },
   });
 

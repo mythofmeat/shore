@@ -447,7 +447,7 @@ function validateConfig(
   if (compaction !== undefined) throw validationError(compaction);
   const recall = validateMemoryRecall(app.memory.recall);
   if (recall !== undefined) throw validationError(recall);
-  const retain = validateMemoryRetain(app.memory.retain, app.memory.compaction);
+  const retain = validateMemoryRetain(app.memory.retain);
   if (retain !== undefined) throw validationError(retain);
 
   const backend = validateMemoryBackend(app.memory.backend, app.memory);

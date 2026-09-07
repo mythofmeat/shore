@@ -1,3 +1,4 @@
+import { toolGeneration } from "./support/tool_generation.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -111,11 +112,20 @@ function writingModel(seen: { messages: unknown[] }[] = []) {
 }
 
 function deps(config: LoadedConfig, over: Partial<IdleCompactionDeps> = {}): IdleCompactionDeps {
+  const raw = over.run?.generate ?? writingModel();
   return {
     config,
     cache: new LastRequestCache(),
-    run: { generate: writingModel() },
     ...over,
+    ...("run" in over && over.run === undefined ? {} : {
+      run: {
+        ...over.run,
+        generate: (request, model, character, sink, tools, options) =>
+          tools === undefined
+            ? raw(request, model, character, sink)
+            : toolGeneration(async (call) => raw(call, model, character, sink))(request, tools, undefined, options),
+      },
+    }),
   };
 }
 

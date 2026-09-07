@@ -1,3 +1,3 @@
-The conversation above is complete and will be archived after this pass.
+Maintain MEMORY.md for the next conversation. Reconcile the existing notes with what happened here, leaving enough context for future-you to continue naturally with minimal reorientation.
 
-Perform the memory-compaction process described in your instructions for this conversation. Preserve anything that should survive the archive, update existing memory where appropriate, commit the resulting changes, and finish with the required summary.
+Record important, durable information in appropriate memory files. Leave incidental material in the archive. Persist and commit any useful changes, then briefly summarize the update.

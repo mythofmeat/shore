@@ -1,3 +1,4 @@
+import { toolGeneration } from "./support/tool_generation.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -50,6 +51,7 @@ function response(blocks: unknown[], finish: string): GenerateResponse {
 }
 
 class TwoRoundLlm implements CompactionLlm {
+  run: CompactionLlm["run"] = (request, phase, options) => toolGeneration(async () => this.generate())(request, phase, undefined, options);
   #round = 0;
   buildInitialRequest(): SidecarRequest {
     return chatRequest();

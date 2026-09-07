@@ -1,3 +1,4 @@
+import { toolGeneration } from "./support/tool_generation.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -195,6 +196,9 @@ function response(
 function scripted(turns: GenerateResponse[]): CompactionLlm {
   let next = 0;
   return {
+    run(callRequest, phase, loopOptions) {
+      return toolGeneration(async (call) => this.generate(call))(callRequest, phase, undefined, loopOptions);
+    },
     buildInitialRequest(_system: string, compactNowUser: WireMessage, chat: SidecarRequest) {
       return { ...chat, messages: [compactNowUser] };
     },

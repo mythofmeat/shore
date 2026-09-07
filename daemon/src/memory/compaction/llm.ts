@@ -1,3 +1,5 @@
+import type { ToolPhase } from "../../tools/execute.ts";
+import type { ToolLoopOptions } from "../../llm/types.ts";
 import { shoreLog } from "../../log";
 
 import { buildRequestWithProviderKeys, pushInlineSystem, type ResolvedModel } from "../../llm/request";
@@ -31,6 +33,8 @@ export type LedgerGenerate = (
   model: ResolvedModel,
   character: string,
   sink?: FrameSink,
+  tools?: ToolPhase,
+  options?: ToolLoopOptions,
 ) => Promise<GenerateResponse>;
 
 export interface RealCompactionLlmOptions {
@@ -77,7 +81,19 @@ export class RealCompactionLlm implements CompactionLlm {
     return request;
   }
 
-  async generate(request: SidecarRequest): Promise<GenerateResponse> {
+  run(request: SidecarRequest, tools: ToolPhase, options?: ToolLoopOptions): Promise<GenerateResponse> {
+    return this.generate(request, tools, options);
+  }
+
+  async generate(request: SidecarRequest, tools?: ToolPhase, options?: ToolLoopOptions): Promise<GenerateResponse> {
+    let responseObserved = false;
+    const phase = tools === undefined ? undefined : {
+      ...tools,
+      onTurn: (turn: GenerateResponse) => {
+        responseObserved = true;
+        return tools.onTurn?.(turn);
+      },
+    };
     const model = this.#opts.model;
     const support = imageSupportFor(
       {
@@ -90,27 +106,29 @@ export class RealCompactionLlm implements CompactionLlm {
     if (support === false) this.#dropImages(request);
 
     try {
-      return await this.#send(request);
+      return await this.#send(request, phase, options);
     } catch (e) {
-      if (support === false || !isImageRejection(e) || countImageBlocks(request.messages) === 0) {
+      if (responseObserved || support === false || !isImageRejection(e) || countImageBlocks(request.messages) === 0) {
         throw CompactionError.llm(describeError(e), e);
       }
       recordImageRejection(this.#opts.cacheDir, model.provider_key, model.model_id);
       this.#dropImages(request);
       try {
-        return await this.#send(request);
+        return await this.#send(request, phase, options);
       } catch (retry) {
         throw CompactionError.llm(describeError(retry), retry);
       }
     }
   }
 
-  async #send(request: SidecarRequest): Promise<GenerateResponse> {
+  async #send(request: SidecarRequest, tools?: ToolPhase, options?: ToolLoopOptions): Promise<GenerateResponse> {
     return await this.#opts.generate(
       request,
       this.#opts.model,
       this.#opts.character,
       this.#opts.emit,
+      tools,
+      options,
     );
   }
 

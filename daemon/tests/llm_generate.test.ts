@@ -157,14 +157,16 @@ describe("shared generation contract", () => {
     test(`does not replay or rotate credentials after a ${effect} effect`, async () => {
       let attempts = 0;
       const provider = recordingProvider([]);
+      let effectSink: (message: import("../src/protocol/ServerMessage.ts").ServerMessage) => void = () => {};
+      provider.stream = async function* () {
+        attempts += 1;
+        if (effect === "text") yield { type: "text", text: "visible" };
+        else if (effect === "tool") yield { type: "tool_use", id: "tool-1", name: "write", input: {} };
+        else effectSink({ type: "send_image" } as never);
+        throw unauthorized();
+      };
       expect(runGeneration(request(), { providerKey: "anthropic" }, deps(provider), {
-        events: async function* (_provider, _request, sink) {
-          attempts += 1;
-          if (effect === "text") yield { type: "text", text: "visible" };
-          else if (effect === "tool") yield { type: "tool_use", id: "tool-1", name: "write", input: {} };
-          else sink({ type: "send_image" } as never);
-          throw unauthorized();
-        },
+        tools: (_request, sink) => { effectSink = sink; return undefined; },
       })).rejects.toEqual(unauthorized());
       expect(attempts).toBe(1);
     });
@@ -180,12 +182,11 @@ describe("shared generation contract", () => {
 
   test("a provider error event rejects the generation", async () => {
     const provider = recordingProvider([]);
-    expect(runGeneration(request(), { providerKey: "anthropic" }, deps(provider), {
-      events: async function* () {
-        yield { type: "text", text: "partial" };
-        yield { type: "error", message: "provider failed", usage: ok().usage, timing: ok().timing };
-      },
-    })).rejects.toMatchObject({ kind: "stream_errored" });
+    provider.stream = async function* () {
+      yield { type: "text", text: "partial" };
+      yield { type: "error", message: "provider failed", usage: ok().usage, timing: ok().timing };
+    };
+    expect(runGeneration(request(), { providerKey: "anthropic" }, deps(provider))).rejects.toMatchObject({ kind: "stream_errored" });
   });
 });
 
@@ -487,4 +488,14 @@ describe("the budget gate", () => {
     expect(keys).toEqual([]);
     expect(rowsIn(path).length).toBe(1);
   });
+});
+
+
+test("tool-bearing generation refuses to run without a tool executor", async () => {
+  const keys: string[] = [];
+  const failure = await runGeneration(request({ tools: [{ name: "read", description: "read", input_schema: { type: "object" } }] }),
+    { providerKey: "anthropic" }, deps(recordingProvider(keys))).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(Error);
+  expect(String(failure)).toContain("Tool-capable generation requires a tool executor");
+  expect(keys).toEqual([]);
 });

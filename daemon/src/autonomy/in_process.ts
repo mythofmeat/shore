@@ -1,4 +1,3 @@
-import { ClaudeAgentProvider } from "../llm/providers/claude_agent.ts";
 import { shoreLog } from "../log.ts";
 
 import { runHeartbeatTick } from "./heartbeat_tick.ts";
@@ -16,13 +15,13 @@ import type { Message } from "../engine/types.ts";
 import { generate, generateViaStream } from "../llm/generate.ts";
 import type { FrameSink } from "../llm/stream.ts";
 import type { GenerateDeps } from "../llm/generate.ts";
-import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../llm/types.ts";
+import type { ToolLoopOptions, GenerateResponse, SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import type { ToolContextDeps } from "../handler/tool_context.ts";
 import { buildToolContext } from "../handler/tool_context.ts";
 import { toolLimitsFrom } from "../tools/dispatch.ts";
 import type { CallStore } from "../call_store.ts";
 import { recordTranscript } from "../transcript_capture.ts";
-import { runToolUse, type ToolExecution } from "../tools/execute.ts";
+import { runToolUse, type ToolExecution, type ToolPhase } from "../tools/execute.ts";
 import { schemasFrom } from "../tools/validate.ts";
 import type { RebuildDeps } from "../cache/rebuild.ts";
 
@@ -63,28 +62,24 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         ...(this.#deps.rebuild === undefined ? {} : { rebuild: this.#deps.rebuild }),
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
 
-      generate: async (request, _iteration, callType) => {
-        labelAccountedCall(request, config, character, callType);
-        const { response, fallbacks } = await generate(request, this.#generateDeps(config));
+      generate: async (request, phase, signal) => {
+        labelAccountedCall(request, config, character, "heartbeat");
+        let round = 0;
+        const { response, fallbacks } = await generate(request, this.#generateDeps(config), signal, {
+          tools: {
+            ...phase,
+            beforeTurn: async (call) => {
+              labelAccountedCall(call, config, character, round++ === 0 ? "heartbeat" : "heartbeat_tool_loop");
+              await phase.beforeTurn?.(call);
+            },
+          },
+        });
         for (const event of fallbacks) {
           shoreLog.warn(
             `shore: heartbeat for ${character} rotated ${event.from.name} → ` +
-              `${event.to?.name ?? "(none)"}: ${event.reason}`,
+            `${event.to?.name ?? "(none)"}: ${event.reason}`,
           );
         }
-        return response;
-      },
-
-      generateWithTools: async (request, phase, signal) => {
-        labelAccountedCall(request, config, character, "heartbeat");
-        const { response } = await generate(request, this.#generateDeps(config), signal, {
-          events: (provider, call) => {
-            if (!(provider instanceof ClaudeAgentProvider)) {
-              throw new Error("Claude Agent SDK heartbeat requires a provider with native tool support");
-            }
-            return provider.streamWithTools(call, phase, signal);
-          },
-        });
         return response;
       },
 
@@ -222,16 +217,18 @@ export type CompactionGenerate = (
   model: { provider_key: string; api_key_env?: string | undefined },
   character: string,
   sink?: FrameSink,
+  tools?: ToolPhase,
+  options?: ToolLoopOptions,
 ) => Promise<GenerateResponse>;
 
 export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
-  return async (request, model, character, sink) => {
+  return async (request, model, character, sink, tools, options) => {
     labelAccountedCall(request, deps.config, character, "compaction");
     const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
       deps,
-      sink === undefined ? {} : { sink },
+      { ...(sink === undefined ? {} : { sink }), ...(tools === undefined ? {} : { tools }), ...(options === undefined ? {} : { toolLoop: options }) },
     );
     for (const event of fallbacks) {
       shoreLog.warn(

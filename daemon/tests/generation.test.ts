@@ -433,6 +433,13 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
     await ConversationEngine.load("ada", config.dirs.data, undefined),
   );
 
+  if (steps.length > 0) {
+    provider.streamWithTools = (req, phase) => {
+      requests.push(req);
+      return scriptedLoop(steps, events, phase);
+    };
+  }
+
   const deps: GenerationDeps = {
     registry: {
       getOrCreate: async () => engine,
@@ -462,14 +469,7 @@ async function replayTurn(c: GenerationCase): Promise<Run> {
     newMessageId: () => `m_${crypto.randomUUID()}`,
     monotonicMs: () => 0,
     sleep: async () => {},
-    ...(steps.length === 0
-      ? {}
-      : {
-          loopEvents: (_p, req, phase) => {
-            requests.push(req);
-            return scriptedLoop(steps, events, phase);
-          },
-        }),
+
   };
 
   let error: string | undefined;

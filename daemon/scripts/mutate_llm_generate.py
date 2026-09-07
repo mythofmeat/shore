@@ -108,7 +108,7 @@ MUTANTS = [
     (
         "call: stream failure is swallowed",
         "src/llm/generate.ts",
-        "    if (\"err\" in outcome) throw outcome.err;",
+        "    if (\"err\" in outcome) throw outcome.err.kind === \"stream_errored\" ? outcome.err.cause ?? outcome.err : outcome.err;",
         "    if (\"err\" in outcome) return { content: \"\", content_blocks: [], model: call.model, finish_reason: \"end_turn\", tool_uses: [], usage: {}, timing: {} } as never;",
     ),
     (

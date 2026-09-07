@@ -1,3 +1,4 @@
+import { toolGeneration } from "./support/tool_generation.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterEach, expect, test } from "bun:test";
@@ -23,7 +24,7 @@ afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
 });
 
-test("a failed compaction resumes after its completed tool round without replaying the write", async () => {
+test.each([false, true])("compaction resumes without repeating writes and queues retention only after archive (retain: %s)", async (retain) => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-resume-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
@@ -74,6 +75,7 @@ test("a failed compaction resumes after its completed tool round without replayi
         new Error("provider unavailable"),
       ]),
       true,
+      retain,
     ),
     { keepRecentTurns: 1 },
   );
@@ -88,9 +90,13 @@ test("a failed compaction resumes after its completed tool round without replayi
   expect(checkpoint.loop.toolRounds).toBe(1);
   expect(checkpoint.memoryBefore).toBe("before-sha");
 
+  const pendingHistory = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+  expect(pendingHistory.nextCharacterMemoryRetainJob("ada")).toBeUndefined();
+  pendingHistory.close();
+
   const secondLlm = scripted([response("end_turn", [{ type: "text", text: "done" }])]);
   const second = await compact(
-    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, secondLlm, true),
+    options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, secondLlm, true, retain),
     { keepRecentTurns: 1 },
   );
 
@@ -105,10 +111,17 @@ test("a failed compaction resumes after its completed tool round without replayi
     memory_before: "before-sha",
     memory_after: "after-sha",
   });
+  const job = history.nextCharacterMemoryRetainJob("ada");
+  if (retain) {
+    expect(job?.action).toBe("retain");
+    expect(job?.status).toBe("pending");
+  } else {
+    expect(job).toBeUndefined();
+  }
   history.close();
 });
 
-test("the tool-round ceiling pauses work in resumable slices instead of making the job incomplete", async () => {
+test.each([false, true])("the tool-round ceiling preserves resumable slices, including a zero-cap pause (%s)", async (zeroCap) => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-slices-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
@@ -141,11 +154,18 @@ test("the tool-round ceiling pauses work in resumable slices instead of making t
     name: "edit",
     input: { path, content: `${id}\n` },
   }]);
-  const run = async (llm: CompactionLlm) => await compact({
+  const run = async (llm: CompactionLlm, maxToolIterations = 1) => await compact({
     ...options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools, llm),
-    maxToolIterations: 1,
+    maxToolIterations,
   }, { keepRecentTurns: 1 });
 
+  if (zeroCap) {
+    expect((await run(scripted([toolTurn("one", "memory/one.md")]), 0)).kind).toBe("paused");
+    const unused = scripted([]);
+    expect((await run(unused, 0)).kind).toBe("paused");
+    expect(unused.calls).toBe(0);
+    expect(edits).toBe(0);
+  }
   expect((await run(scripted([toolTurn("one", "memory/one.md")]))).kind).toBe("paused");
   expect((await run(scripted([toolTurn("two", "memory/two.md")]))).kind).toBe("paused");
   expect((await run(scripted([response("end_turn", [{ type: "text", text: "done" }])]))).kind)
@@ -463,6 +483,7 @@ function options(
   tools: CompactionTools,
   llm: CompactionLlm,
   durable = false,
+  retain = false,
 ) {
   return {
     conversationId: "ada",
@@ -476,7 +497,7 @@ function options(
       join(dataDir, "ada", "threads", "main"),
       () => new Date().toISOString(),
       () => crypto.randomUUID(),
-      durable ? { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: "ada" } : undefined,
+      durable ? { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: "ada", retain } : undefined,
     ),
     markdownStore: memoryStore,
     dryRun: false,
@@ -546,6 +567,9 @@ function scripted(
 ): CompactionLlm & { calls: number; apiKeys: string[] } {
   let next = 0;
   return {
+    run(callRequest, phase, loopOptions) {
+      return toolGeneration(async (call) => this.generate(call))(callRequest, phase, undefined, loopOptions);
+    },
     calls: 0,
     apiKeys: [],
     buildInitialRequest(_system: string, compactNowUser: WireMessage, chat: SidecarRequest) {

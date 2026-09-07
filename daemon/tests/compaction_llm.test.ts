@@ -415,3 +415,27 @@ describe("RealCompactionLlm.generate", () => {
     expect(readLearnedImageSupport(cacheDir, "zai-sub")["glm-5.3"]).toBeUndefined();
   });
 });
+
+test("image fallback cannot replay a compaction run after a checkpointed response", async () => {
+  let calls = 0;
+  let checkpoints = 0;
+  const llm = new RealCompactionLlm({
+    model: { provider_key: "zai-sub", model_id: "glm-5.3", sdk: "zai" } as ResolvedModel,
+    character: "Aria",
+    cacheDir: cacheScratch(),
+    generate: async (_req, _model, _character, _sink, phase) => {
+      calls += 1;
+      await phase?.onTurn?.(okResponse());
+      throw new Error("400 messages.content.type is invalid, allowed values: ['text']");
+    },
+  });
+  const failure = await llm.run(requestWithImage(), {
+    messages: [],
+    onTurn: () => { checkpoints += 1; },
+    recordTurn: () => {},
+    runTool: () => { throw new Error("unexpected tool"); },
+  }).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(CompactionError);
+  expect(calls).toBe(1);
+  expect(checkpoints).toBe(1);
+});

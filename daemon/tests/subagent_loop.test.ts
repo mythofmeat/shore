@@ -670,3 +670,31 @@ describe("settings shared across sub-agents reach the wire", () => {
     expect(seen[0]?.temperature).toBeUndefined();
   });
 });
+
+
+test("a captured SDK subagent executes workspace tools through shared generation", async () => {
+  const { ClaudeAgentProvider } = await import("../src/llm/providers/claude_agent.ts");
+  const { fakeAgent } = await import("../src/testing/fake_agent_query.ts");
+  const { config, root } = await configWith({ researcher: spec({ tools: ["read"] }) });
+  const model = config.models.chat.get("cheap");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.sdk = "claude_agent";
+  const ctx = contextIn(root);
+  await mkdir(config.dirs.data, { recursive: true });
+  await mkdir(ctx.workspaceDir, { recursive: true });
+  await writeFile(join(ctx.workspaceDir, "MEMORY.md"), "Continuity matters.");
+  const agent = fakeAgent({ rounds: [
+    { blocks: [], toolCalls: [{ name: "read", input: { path: "MEMORY.md" } }] },
+    { blocks: [{ kind: "text", text: "Continuity matters." }] },
+  ] });
+  const records: unknown[] = [];
+  const result = await runSubagent({
+    config, ctx, env: {},
+    providers: { claude_agent: new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => join(root, "sessions.json") }) },
+    callStore: { recordCall: (record) => { records.push(record); return records.length; } },
+  }, "researcher", "Read the memory.");
+  expect(result).toBe("Continuity matters.");
+  expect(agent.toolOutcomes).toHaveLength(1);
+  expect(JSON.stringify(agent.toolOutcomes[0]?.output)).toContain("Continuity matters.");
+  expect(records).toHaveLength(1);
+});

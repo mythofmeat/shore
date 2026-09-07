@@ -33,3 +33,14 @@ describe("the Anthropic client has one construction site", () => {
     expect(loop).not.toContain("anthropicClientFor");
   });
 });
+
+
+test("workflows cannot select provider-specific tool loops", () => {
+  const workflows = ["handler/generation.ts", "tools/subagent_loop.ts", "autonomy/in_process.ts", "autonomy/heartbeat_loop.ts", "memory/compaction/manager.ts", "memory/compaction/llm.ts"];
+  for (const workflow of workflows) {
+    const source = readFileSync(join(SRC, workflow), "utf8");
+    expect(source).not.toMatch(/(?:claudeAgent|anthropic|generic)ToolLoopEvents/);
+    expect(source).not.toMatch(/sdk\s*[!=]==?\s*["']claude_agent["']/);
+    expect(source).not.toMatch(/providers\/(?:claude_agent|anthropic|generic_loop)/);
+  }
+});

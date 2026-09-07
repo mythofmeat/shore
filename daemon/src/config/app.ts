@@ -700,12 +700,8 @@ const MEMORY_RETAIN: StructSpec<MemoryRetainConfig> = {
 
 export function validateMemoryRetain(
   retain: MemoryRetainConfig,
-  compaction: CompactionConfig,
 ): string | undefined {
   if (!retain.enabled) return undefined;
-  if (compaction.write_memory) {
-    return "memory.retain.enabled requires memory.compaction.write_memory = false";
-  }
   if (retain.possessive_pronoun.trim() === "") {
     return "memory.retain.possessive_pronoun must not be blank";
   }

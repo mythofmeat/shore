@@ -164,6 +164,11 @@ export interface CompactionLlm {
   ): SidecarRequest;
 
   generate(request: SidecarRequest): Promise<GenerateResponse>;
+  run(
+    request: SidecarRequest,
+    tools: import("../../tools/execute.ts").ToolPhase,
+    options?: import("../../llm/types.ts").ToolLoopOptions,
+  ): Promise<GenerateResponse>;
 }
 
 export interface ConversationManager {

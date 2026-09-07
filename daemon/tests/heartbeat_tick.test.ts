@@ -1,3 +1,4 @@
+import { toolGeneration } from "./support/tool_generation.ts";
 import { afterAll, afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { copyFile, mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -110,10 +111,9 @@ function recordingEngine(appended: Message[], revision = 7): HeartbeatEngine {
   };
 }
 
-function tickDeps(over: Partial<HeartbeatTickDeps> = {}): HeartbeatTickDeps {
+function tickDeps(over: Partial<Omit<HeartbeatTickDeps, "generate">> & { generate?: () => Promise<GenerateResponse | undefined> } = {}): HeartbeatTickDeps {
   return {
     cache: new LastRequestCache(),
-    generate: async () => response([{ type: "text", text: "HEARTBEAT_OK" }]),
     dispatch: async () => ({ output: "ok", isError: false }),
     scheduleNextWake: () => "scheduled",
     newId: () => "m_fixed",
@@ -121,6 +121,7 @@ function tickDeps(over: Partial<HeartbeatTickDeps> = {}): HeartbeatTickDeps {
     now: () => Date.parse("2026-07-30T13:00:00Z"),
     timeZone: "UTC",
     ...over,
+    generate: toolGeneration(over.generate ?? (async () => response([{ type: "text", text: "HEARTBEAT_OK" }]))),
   };
 }
 

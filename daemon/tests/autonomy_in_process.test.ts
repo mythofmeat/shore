@@ -80,7 +80,7 @@ async function world(): Promise<LoadedConfig> {
   app.defaults.model = "fixture";
   app.advanced.max_retries = 0;
   const models = emptyCatalog();
-  models.chat.set("chat.fixture", MODEL);
+  models.chat.set("chat.fixture", structuredClone(MODEL));
 
   return { app, models, providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
 }
@@ -763,6 +763,7 @@ test("SDK heartbeat respects the configured tool round budget", async () => {
   model.sdk = "claude_agent";
   model.providerKey = "claude-agent";
   model.maxToolIterations = 1;
+  config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds = 0;
   const agent = fakeAgent({
     rounds: [
       { blocks: [], toolCalls: [{ name: "set_next_wake", input: { hours_from_now: 2, reason: "first" } }] },
@@ -789,6 +790,64 @@ test("SDK heartbeat respects the configured tool round budget", async () => {
     scheduleNextWake: (hours) => { wakes.push(hours); return hours; },
   });
   expect(wakes).toEqual([2]);
-  expect(agent.toolOutcomes.map((outcome) => outcome.allowed)).toEqual([true, false, false]);
+  expect(agent.toolOutcomes.map((outcome) => outcome.allowed)).toEqual([true]);
   expect(appended).toHaveLength(0);
+});
+
+test.each([false, true])("SDK compaction with Hindsight preserves writes across a paused run (%s)", async (pause) => {
+  const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
+  const { HistoryStore, HISTORY_DB_FILE } = await import("../src/engine/history_store.ts");
+  const config = await world();
+  const model = config.models.chat.get("chat.fixture");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.sdk = "claude_agent";
+  model.providerKey = "claude-agent";
+  config.app.tools.enabled_tools = ["read", "edit", "git"];
+  config.app.memory.retain.enabled = true;
+  config.app.memory.compaction.write_memory = true;
+  config.app.memory.git_push = false;
+  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+  await writeFile(join(workspace, "MEMORY.md"), "Old context");
+  const agent = fakeAgent({
+    rounds: [
+      { blocks: [], toolCalls: [{ name: "read", input: { path: "MEMORY.md" } }] },
+      { blocks: [], toolCalls: [{ name: "edit", input: { path: "MEMORY.md", content: "Ready for the next conversation." } }] },
+      { blocks: [{ kind: "text", text: "Updated the active context." }] },
+    ],
+  });
+  if (pause) model.maxToolIterations = 2;
+  const { withCallCapture } = await import("../src/llm/capture.ts");
+  const records: unknown[] = [];
+  const provider = withCallCapture(new ClaudeAgentProvider({
+    runQuery: agent.query,
+    bookPath: () => join(config.dirs.data, "sdk-sessions.json"),
+  }), { recordCall: (record) => { records.push(record); return records.length; } });
+  let outcome = await runCompactionPass("ada", {
+    config,
+    generate: compactionGenerate({ config, providers: { claude_agent: provider } }),
+  }, { keepTurnsOverride: 0 });
+  if (pause) {
+    expect(outcome?.kind).toBe("paused");
+    expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe("Ready for the next conversation.");
+    const pending = HistoryStore.open(join(config.dirs.data, HISTORY_DB_FILE));
+    expect(pending.nextCharacterMemoryRetainJob("ada")).toBeUndefined();
+    pending.close();
+    const resumedAgent = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "Memory maintenance is complete." }] }] });
+    const resumedProvider = new ClaudeAgentProvider({ runQuery: resumedAgent.query, bookPath: () => join(config.dirs.data, "sdk-sessions.json") });
+    outcome = await runCompactionPass("ada", {
+      config, generate: compactionGenerate({ config, providers: { claude_agent: resumedProvider } }),
+    }, { keepTurnsOverride: 0 });
+    expect(resumedAgent.toolOutcomes).toEqual([]);
+  }
+  expect(records).toHaveLength(1);
+  expect(outcome?.kind).toBe("compacted");
+  expect(agent.calls).toHaveLength(1);
+  expect(agent.toolOutcomes.map((tool) => tool.allowed)).toEqual([true, true]);
+  expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe("Ready for the next conversation.");
+  const history = HistoryStore.open(join(config.dirs.data, HISTORY_DB_FILE));
+  try {
+    expect(history.nextCharacterMemoryRetainJob("ada")?.action).toBe("retain");
+  } finally {
+    history.close();
+  }
 });

@@ -164,6 +164,7 @@ export class StreamAccumulator {
               ? { kind: "aborted", message: event.message }
               : {
                   kind: "stream_errored",
+                  ...(event.cause === undefined ? {} : { cause: event.cause }),
                   message: event.message,
                   usage: event.usage,
                   timing: event.timing,

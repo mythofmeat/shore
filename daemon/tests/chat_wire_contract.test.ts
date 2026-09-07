@@ -12,12 +12,13 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
-import { turnEvents } from "../src/handler/generation.ts";
+import { toolLoopEvents } from "../src/llm/tool_loop.ts";
+import { withCallCapture } from "../src/llm/capture.ts";
 import { buildGenerationRequest, type SetupEngine } from "../src/handler/setup.ts";
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
 import { anthropicToolLoopEvents } from "../src/llm/providers/anthropic_loop.ts";
 import { consumeStream } from "../src/llm/stream.ts";
-import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
+import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { installWireCapture } from "../src/llm/wire_capture.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
@@ -426,7 +427,7 @@ describe("what gets recorded", () => {
     };
 
     await runToDone(
-      turnEvents({ callStore: store }, unusableProvider(), req, phase, new AbortController().signal),
+      toolLoopEvents(withCallCapture(new AnthropicProvider(), store), req, phase, new AbortController().signal),
     );
     await new Promise((resolve) => {
       setTimeout(resolve, 50);
@@ -472,16 +473,7 @@ describe("what gets recorded", () => {
   });
 });
 
-function unusableProvider(): SidecarProvider {
-  return {
-    stream(): AsyncIterable<StreamEvent> {
-      throw new Error("the Anthropic tool loop must not route through the provider table");
-    },
-    generate() {
-      return Promise.reject(new Error("unused"));
-    },
-  };
-}
+
 
 function collectingPhase(): ToolPhase {
   const messages: Message[] = [];

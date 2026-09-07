@@ -1,3 +1,4 @@
+import { toolGeneration } from "./support/tool_generation.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
@@ -614,6 +615,7 @@ async function snapshotTree(root: string): Promise<Record<string, string>> {
 }
 
 class ScriptedLlm implements CompactionLlm {
+  run: CompactionLlm["run"] = (request, phase, options) => toolGeneration(async () => this.generate())(request, phase, undefined, options);
   built: Json | undefined;
   request: SidecarRequest | undefined;
   readonly served: GenerateResponse[] = [];

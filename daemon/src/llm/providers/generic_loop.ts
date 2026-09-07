@@ -1,3 +1,4 @@
+import { ToolLoopStop } from "../tool_loop_control.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import {
   runToolLoop,
@@ -19,12 +20,15 @@ import type {
   SidecarRequest,
   StreamEvent,
   Timing,
+  GenerateResponse,
+  ToolLoopOptions,
   Usage,
 } from "../types.ts";
 import { marksFirstToken } from "./anthropic.ts";
 import { pushAssistantBlocks } from "../request.ts";
 
 interface ProviderTurn {
+  response: GenerateResponse;
   blocks: ContentBlock[];
   finishReason: string;
 }
@@ -52,7 +56,7 @@ function addUsage(total: Usage, one: Usage): Usage {
   };
 }
 
-class EventChannel {
+export class EventChannel {
   private pending: { event: StreamEvent; taken: () => void } | undefined;
   private waiting: (() => void) | undefined;
   private closed = false;
@@ -83,8 +87,11 @@ class EventChannel {
       const pending = this.pending;
       if (pending !== undefined) {
         this.pending = undefined;
-        yield pending.event;
-        pending.taken();
+        try {
+          yield pending.event;
+        } finally {
+          pending.taken();
+        }
         continue;
       }
       if (this.closed) return;
@@ -103,6 +110,7 @@ class TurnBuilder {
   private reasoningContent: string | undefined;
   private readonly redacted: ContentBlock[] = [];
   private readonly toolUses: ContentBlock[] = [];
+  private completedBlocks: ContentBlock[] | undefined;
   finishReason = "end_turn";
   usage: Usage = emptyUsage();
 
@@ -135,6 +143,10 @@ class TurnBuilder {
         });
         break;
       case "done":
+        if (event.content_blocks !== undefined && event.content_blocks.length > 0) {
+          this.completedBlocks = event.content_blocks as ContentBlock[];
+        }
+        if (this.text === "") this.text = event.content;
         this.finishReason = event.finish_reason;
         this.usage = event.usage;
         break;
@@ -144,6 +156,7 @@ class TurnBuilder {
   }
 
   blocks(): ContentBlock[] {
+    if (this.completedBlocks !== undefined) return this.completedBlocks;
     const out: ContentBlock[] = [];
     const hasReasoning =
       this.thinking.length > 0 ||
@@ -184,6 +197,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
   firstTokenAt = 0;
 
   private pendingResults: ContentBlock[] = [];
+  private pendingTurn: GenerateResponse | undefined;
   private callStartedAt: number;
 
   constructor(
@@ -210,6 +224,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
   }
 
   async callModel(): Promise<ProviderTurn> {
+    await this.tools.beforeTurn?.(this.req);
     let visibleOutput = false;
     let finalFailureUsage: Usage | undefined;
 
@@ -250,7 +265,15 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
 
       const blocks = builder.blocks();
       return {
-        turn: { blocks, finishReason: builder.finishReason },
+        turn: {
+          blocks,
+          finishReason: builder.finishReason,
+          response: {
+            content: builder.textSoFar(), content_blocks: blocks, finish_reason: builder.finishReason,
+            model: this.req.model, usage: builder.usage,
+            timing: { total_ms: this.now() - this.callStartedAt, time_to_first_token_ms: callFirstTokenAt === 0 ? this.now() - this.callStartedAt : callFirstTokenAt - this.callStartedAt },
+          },
+        },
         usage: builder.usage,
         text: builder.textSoFar(),
         firstAt: callFirstTokenAt,
@@ -302,6 +325,10 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
     this.completedCalls += 1;
     this.callStartedAt = callEnd;
 
+    await this.tools.onTurn?.(completed.turn.response);
+    if (completed.turn.finishReason !== "tool_use" || this.toolUses(completed.turn).length === 0) {
+      await this.tools.afterTurn?.(completed.turn.response);
+    }
     return completed.turn;
   }
 
@@ -309,7 +336,13 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
     pushAssistantBlocks(this.req, turn.blocks);
     await this.tools.recordTurn("assistant", turn.blocks);
 
-    this.pendingResults = await Promise.all(uses.map((use) => this.tools.runTool(use)));
+    this.pendingTurn = turn.response;
+    if (this.tools.parallel === false) {
+      this.pendingResults = [];
+      for (const use of uses) this.pendingResults.push(await this.tools.runTool(use));
+    } else {
+      this.pendingResults = await Promise.all(uses.map((use) => this.tools.runTool(use)));
+    }
   }
 
   async appendToolResults(): Promise<void> {
@@ -317,6 +350,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
     this.pendingResults = [];
     this.req.messages.push({ role: "user", content: blocks });
     await this.tools.recordTurn("user", blocks);
+    if (this.pendingTurn !== undefined) await this.tools.afterTurn?.(this.pendingTurn);
   }
 }
 
@@ -327,6 +361,7 @@ export async function* genericToolLoopEvents(
   signal?: AbortSignal,
   now: () => number = Date.now,
   retry?: ModelCallRetryOptions,
+  options: ToolLoopOptions = {},
 ): AsyncIterable<StreamEvent> {
   const startedAt = now();
 
@@ -340,19 +375,19 @@ export async function* genericToolLoopEvents(
   let failure: unknown;
   const running = (async () => {
     try {
-      await runToolLoop(driver, undefined, req.max_tool_iterations, "close_with_final_turn");
+      await runToolLoop(driver, undefined, req.max_tool_iterations, options.capBehavior ?? "close_with_final_turn");
     } catch (error) {
-      failure = error;
+      if (!(error instanceof ToolLoopStop)) failure = error;
     } finally {
       channel.close();
     }
   })();
 
-  yield { type: "start", model: req.model };
-
   try {
+    yield { type: "start", model: req.model };
     for await (const event of channel.drain()) yield event;
   } finally {
+    abort.abort();
     channel.close();
     await running;
   }
@@ -373,6 +408,7 @@ export async function* genericToolLoopEvents(
       (isLlmError(failure) && failure.kind === "stream_errored" && failure.timeout === true);
     yield {
       type: "error",
+      cause: failure,
       message:
         isLlmError(failure) && failure.kind === "stream_errored"
           ? failure.message

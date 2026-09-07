@@ -519,10 +519,8 @@ describe("a config shore refuses, and what it says", () => {
   test("off recall permits zero limits because it performs no work", () => {
     expect(accepted("\n[memory.recall]\nmode = \"off\"\nrecent_messages = 0\nmax_memories = 0\ntimeout = \"0s\"\n")).toBeDefined();
   });
-  test("archive retain has one memory owner and a configured backend", () => {
-    expect(refused("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.retain]\nenabled = true\n")).toContain(
-      "memory.retain.enabled requires memory.compaction.write_memory = false",
-    );
+  test("archive retain can coexist with memory writes and requires a configured backend", () => {
+    expect(accepted("\n[memory.backend]\nurl = \"http://localhost:8888/mcp/\"\n\n[memory.retain]\nenabled = true\n")).toBeDefined();
     expect(refused("\n[memory.compaction]\nwrite_memory = false\n\n[memory.retain]\nenabled = true\n")).toContain(
       "memory.backend.url must be set when memory.recall.mode is not \"off\"",
     );

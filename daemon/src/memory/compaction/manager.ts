@@ -9,7 +9,8 @@ import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 
 import { pushAssistantTurn } from "../../llm/request";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
-import { runToolLoop, type ToolLoopDriver, type ToolUseEvent } from "../../engine/tool_loop";
+import type { ToolUseEvent } from "../../engine/tool_loop";
+import type { ToolPhase } from "../../tools/execute.ts";
 import { hitTokenCeiling } from "../../llm/finish_reason.ts";
 import { budgetStopIn } from "../../llm/errors.ts";
 import type { ContentBlock } from "../../engine/types";
@@ -274,12 +275,10 @@ async function dispatchCompactionTool(
   return await tools.dispatch(name, input);
 }
 
-class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
+class CompactionDriver {
   readonly state: ToolLoopState;
-  #pending: ContentBlock[] = [];
 
   constructor(
-    private readonly llm: CompactionLlm,
     private readonly request: SidecarRequest,
     private readonly tools: CompactionTools,
     private readonly workspaceDir: string,
@@ -300,24 +299,20 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
     };
   }
 
-  finishReason(turn: GenerateResponse): string {
-    return turn.finish_reason;
-  }
-
   toolUses(turn: GenerateResponse): ToolUseEvent[] {
     return turn.content_blocks.flatMap((b) =>
       b.type === "tool_use" ? [{ id: b.id, name: b.name, input: b.input }] : [],
     );
   }
 
-  async callModel(): Promise<GenerateResponse> {
+  beforeTurn(): void {
     this.emit({
-      type: "phase",
-      rid: null,
-      phase: `compacting round ${String(this.state.toolRounds + 1)}`,
-      model: null,
+      type: "phase", rid: null,
+      phase: `compacting round ${String(this.state.toolRounds + 1)}`, model: null,
     });
-    const resp = await this.llm.generate(this.request);
+  }
+
+  async onTurn(resp: GenerateResponse): Promise<void> {
     if (hitTokenCeiling(resp.finish_reason)) {
       this.state.truncatedTurns = (this.state.truncatedTurns ?? 0) + 1;
     }
@@ -326,65 +321,51 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
     this.state.pendingResults = [];
     this.state.pendingUseCount = 0;
     await this.persist(this.state, this.request);
-    return resp;
   }
 
-  async dispatch(_turn: GenerateResponse, uses: ToolUseEvent[]): Promise<void> {
-    this.#pending = this.state.pendingResults.map((result, index) => ({
-      type: "tool_result" as const,
-      tool_use_id: required(uses[index]).id,
-      content: result.output,
-      is_error: result.isError,
-    }));
-    for (let i = this.state.pendingUseCount; i < uses.length; i += 1) {
-      const use = required(uses[i]);
-      this.state.toolsCalled.push(use.name);
-      this.emit({
-        type: "tool_call",
-        rid: null,
-        tool_id: use.id,
-        tool_name: use.name,
-        input: use.input,
-        subagent: COMPACTION_SUBAGENT,
-        task_id: null,
-      });
-      const result = await dispatchCompactionTool(
-        use.name,
-        use.input,
-        this.tools,
-        this.workspaceDir,
-        this.state,
-      );
-      const { output, isError } = result;
-      this.emit({
-        type: "tool_result",
-        rid: null,
-        tool_id: use.id,
-        tool_name: use.name,
-        output,
-        is_error: isError,
-        subagent: COMPACTION_SUBAGENT,
-        task_id: null,
-      });
-      this.state.pendingResults.push(result);
-      this.state.pendingUseCount = i + 1;
-      this.#pending.push({
-        type: "tool_result",
-        tool_use_id: use.id,
-        content: output,
-        is_error: isError,
-      });
-      await this.persist(this.state, this.request);
+  async runTool(use: ToolUseEvent): Promise<ContentBlock> {
+    const turn = required(this.state.pendingTurn);
+    const uses = this.toolUses(turn);
+    const index = uses.findIndex((candidate) => candidate.id === use.id);
+    if (index < 0) throw new Error("Compaction tool was not checkpointed before execution");
+    if (index > this.state.pendingUseCount) throw new Error("Compaction tools must execute in checkpoint order");
+    const previous = this.state.pendingResults[index];
+    if (previous !== undefined) {
+      return { type: "tool_result", tool_use_id: use.id, content: previous.output, is_error: previous.isError };
     }
-    this.request.messages.push({ role: "user", content: this.#pending });
+    this.state.toolsCalled.push(use.name);
+    this.emit({
+      type: "tool_call", rid: null, tool_id: use.id, tool_name: use.name,
+      input: use.input, subagent: COMPACTION_SUBAGENT, task_id: null,
+    });
+    const result = await dispatchCompactionTool(use.name, use.input, this.tools, this.workspaceDir, this.state);
+    this.emit({
+      type: "tool_result", rid: null, tool_id: use.id, tool_name: use.name,
+      output: result.output, is_error: result.isError, subagent: COMPACTION_SUBAGENT, task_id: null,
+    });
+    this.state.pendingResults.push(result);
+    this.state.pendingUseCount = index + 1;
+    await this.persist(this.state, this.request);
+    return { type: "tool_result", tool_use_id: use.id, content: result.output, is_error: result.isError };
+  }
+
+  async finishTools(): Promise<void> {
+    const turn = this.state.pendingTurn;
+    if (turn === undefined) return;
+    const uses = this.toolUses(turn);
+    if (this.state.pendingUseCount !== uses.length) return;
+    this.request.messages.push({
+      role: "user",
+      content: this.state.pendingResults.map((result, index) => ({
+        type: "tool_result", tool_use_id: required(uses[index]).id,
+        content: result.output, is_error: result.isError,
+      })),
+    });
     this.state.toolRounds += 1;
     delete this.state.pendingTurn;
     this.state.pendingResults = [];
     this.state.pendingUseCount = 0;
     await this.persist(this.state, this.request);
-  }
-
-  appendToolResults(): void {
   }
 }
 
@@ -399,23 +380,44 @@ async function runCompactionToolLoop(
   persist: (state: ToolLoopState, request: SidecarRequest) => Promise<void>,
   emit?: FrameSink,
 ): Promise<ToolLoopState> {
-  const driver = new CompactionDriver(
-    llm,
-    request,
-    tools,
-    workspaceDir,
-    dryRun,
-    restored,
-    persist,
-    emit,
-  );
-  const outcome = await runToolLoop(
-    driver,
-    driver.state.pendingTurn,
-    maxToolIterations,
-    "stop_after_dispatch",
-  );
-  driver.state.maxRoundsHit = outcome.stop === "cap_reached";
+  const driver = new CompactionDriver(request, tools, workspaceDir, dryRun, restored, persist, emit);
+  const startedRounds = driver.state.toolRounds;
+  const pending = driver.state.pendingTurn;
+  if (pending !== undefined) {
+    const uses = driver.toolUses(pending);
+    if (uses.length === 0 || pending.finish_reason !== "tool_use") return driver.state;
+    if (maxToolIterations === 0) {
+      driver.state.maxRoundsHit = true;
+      return driver.state;
+    }
+    for (const use of uses) await driver.runTool(use);
+    await driver.finishTools();
+  }
+  const spent = driver.state.toolRounds - startedRounds;
+  if (maxToolIterations !== undefined && spent > 0 && spent >= maxToolIterations) {
+    driver.state.maxRoundsHit = true;
+    return driver.state;
+  }
+  const phase: ToolPhase = {
+    messages: [],
+    parallel: false,
+    beforeTurn: () => driver.beforeTurn(),
+    onTurn: (turn) => driver.onTurn(turn),
+    runTool: (use) => driver.runTool(use),
+    recordTurn: async (role) => {
+      if (role === "user") await driver.finishTools();
+    },
+  };
+  const response = await llm.run({
+    ...request,
+    messages: [...request.messages],
+    ...(maxToolIterations === undefined ? {} : { max_tool_iterations: maxToolIterations - spent }),
+  }, phase, { capBehavior: "stop_after_dispatch" });
+  if (response.finish_reason.startsWith("error")) {
+    throw CompactionError.llm(`Model run ended with ${response.finish_reason}`);
+  }
+  driver.state.maxRoundsHit = response.finish_reason === "tool_use" &&
+    maxToolIterations !== undefined && driver.state.toolRounds - startedRounds >= maxToolIterations;
   return driver.state;
 }
 
@@ -954,5 +956,4 @@ async function currentActiveContent(opts: CompactOptions): Promise<string> {
     throw e;
   }
 }
-
 

@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { claudeAgentToolLoopEvents } from "../src/llm/providers/claude_agent.ts";
+import { ClaudeAgentProvider, claudeAgentToolLoopEvents } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent, type FakeScript } from "../src/testing/fake_agent_query.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
@@ -386,4 +386,72 @@ test("the SDK tool loop warns when replaying prior conversation turns", async ()
   expect(warning?.message).toContain("can significantly degrade model quality");
   expect(events.filter((event) => event.type === "provider_warning")).toHaveLength(1);
   expect(done(events).content).toBe("it says Brian.");
+});
+
+
+test("captured native tool streams finish when the consumer stops at done", async () => {
+  const { withCallCapture } = await import("../src/llm/capture.ts");
+  const { toolLoopEvents } = await import("../src/llm/tool_loop.ts");
+  const { consumeStream } = await import("../src/llm/stream.ts");
+  const agent = fakeAgent(ONE_CALL);
+  const dir = await mkdtemp(join(tmpdir(), "shore-native-capture-"));
+  const records: unknown[] = [];
+  const provider = withCallCapture(new ClaudeAgentProvider({
+    runQuery: agent.query, bookPath: () => join(dir, "sessions.json"),
+  }), { recordCall: (record) => { records.push(record); return records.length; } });
+  const tools = phase();
+  const order: string[] = [];
+  tools.onTurn = () => { order.push("checkpoint"); };
+  const dispatch = tools.runTool;
+  tools.runTool = (use) => { order.push("execute"); return dispatch(use); };
+  tools.afterTurn = () => { order.push("complete"); };
+  const result = await consumeStream(toolLoopEvents(provider, request(), tools), { regen: false, sink: () => {} });
+  expect("ok" in result).toBe(true);
+  expect(order).toEqual(["checkpoint", "execute", "complete", "checkpoint", "complete"]);
+  expect(tools.dispatched).toHaveLength(1);
+  expect(records).toHaveLength(1);
+});
+
+test("native round hooks pass appended wrap-up instructions into the SDK tool result", async () => {
+  const tools = phase();
+  let calls = 0;
+  tools.beforeTurn = (req) => {
+    calls += 1;
+    if (calls === 2) req.messages.at(-1)?.content.push({ type: "text", text: "Finish the heartbeat now." });
+  };
+  const { agent } = await drive(ONE_CALL, tools);
+  expect(JSON.stringify(agent.toolOutcomes[0]?.output)).toContain("Finish the heartbeat now.");
+});
+
+test("compaction cap stops native generation before a further model checkpoint", async () => {
+  const tools = phase();
+  const turns: string[] = [];
+  tools.onTurn = (turn) => { turns.push(turn.finish_reason); };
+  const agent = fakeAgent(ONE_CALL);
+  const dir = await mkdtemp(join(tmpdir(), "shore-native-cap-"));
+  const events: StreamEvent[] = [];
+  for await (const event of claudeAgentToolLoopEvents(request({ max_tool_iterations: 1 }), tools, undefined,
+    { runQuery: agent.query, bookPath: () => join(dir, "sessions.json") }, { capBehavior: "stop_after_dispatch" })) {
+    events.push(event);
+  }
+  expect(turns).toEqual(["tool_use"]);
+  expect(tools.dispatched).toHaveLength(1);
+  expect(done(events).finish_reason).toBe("tool_use");
+});
+
+test.each([false, true])("native retry only repeats a run before effects (%s)", async (checkpointed) => {
+  const { retryToolStream } = await import("../src/llm/tool_loop.ts");
+  const { consumeStream } = await import("../src/llm/stream.ts");
+  let attempts = 0;
+  const usage = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
+  const timing = { total_ms: 0, time_to_first_token_ms: 0 };
+  const outcome = await consumeStream(retryToolStream(async function* (tools) {
+    attempts += 1;
+    yield { type: "start", model: "test" };
+    if (checkpointed) await tools.onTurn?.({ model: "test", content: "", content_blocks: [], finish_reason: "end_turn", usage, timing });
+    if (attempts === 1) yield { type: "error", message: "temporarily unavailable", usage, timing };
+    else yield { type: "done", content: "recovered", finish_reason: "end_turn", usage, timing };
+  }, phase(), undefined, { settings: { maxRetries: 2, backoffBaseMs: 1 }, sleep: async () => {} }), { regen: false, sink: () => {} });
+  expect(attempts).toBe(checkpointed ? 1 : 2);
+  expect("ok" in outcome).toBe(!checkpointed);
 });

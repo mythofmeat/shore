@@ -316,6 +316,10 @@ export function recordReportedMessage(
 }
 
 export interface ToolPhase {
+  onTurn?: (turn: import("../llm/types.ts").GenerateResponse) => void | Promise<void>;
+  afterTurn?: (turn: import("../llm/types.ts").GenerateResponse) => void | Promise<void>;
+  beforeTurn?: (request: import("../llm/types.ts").SidecarRequest) => void | Promise<void>;
+  parallel?: boolean;
   readonly messages: Message[];
   runTool: (toolUse: ToolUseEvent) => Promise<ContentBlock>;
   recordTurn: (role: Role, blocks: ContentBlock[]) => void | Promise<void>;

@@ -1,3 +1,4 @@
+import { toolLoopEvents } from "./tool_loop.ts";
 import { ZERO_USAGE, type CallRecord, type CallStore, type Usage as StoreUsage } from "../call_store.ts";
 import { redactRequest } from "./redact.ts";
 import { newWireScope, withWireScope, wireScopedIteration } from "./wire_capture.ts";
@@ -116,12 +117,14 @@ async function* recordEvents(
   }
 }
 
+const capturedProviders = new WeakMap<SidecarProvider, CallRecorder>();
+
 export function withCallCapture(
   provider: SidecarProvider,
   store: CallRecorder | undefined,
   now: () => number = Date.now,
 ): SidecarProvider {
-  if (store === undefined) return provider;
+  if (store === undefined || capturedProviders.get(provider) === store) return provider;
 
   const write = (record: CallRecord): void => {
     try {
@@ -130,7 +133,11 @@ export function withCallCapture(
     }
   };
 
-  return {
+  const wrapped: SidecarProvider = {
+    streamWithTools(req, tools, signal, options) {
+      return capturedEvents(store, req, () => toolLoopEvents(provider, req, tools, signal, options?.retry, options), now);
+    },
+
     stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
       return capturedEvents(store, req, () => provider.stream(req, signal), now);
     },
@@ -168,6 +175,8 @@ export function withCallCapture(
       }
     },
   };
+  capturedProviders.set(wrapped, store);
+  return wrapped;
 }
 
 export function captureProviders<K extends string>(

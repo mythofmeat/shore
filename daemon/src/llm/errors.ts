@@ -10,6 +10,7 @@ export type LlmError =
   | { kind: "incomplete_stream" }
   | {
       kind: "stream_errored";
+      cause?: unknown;
       message: string;
       usage: Usage;
       timing: Timing;

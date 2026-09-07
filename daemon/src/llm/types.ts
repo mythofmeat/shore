@@ -164,6 +164,7 @@ export type StreamEvent =
   | { type: "ping" }
   | {
       type: "error";
+      cause?: unknown;
       message: string;
       usage: Usage;
       timing: Timing;
@@ -178,7 +179,7 @@ export function streamErrorEvent(
   startedAt: number,
   firstTokenAt: number,
   now: () => number,
-): StreamEvent {
+): Extract<StreamEvent, { type: "error" }> {
   const retryAfter = retryAfterMsFromError(err, now);
   return {
     type: "error",
@@ -203,7 +204,18 @@ export interface GenerateResponse {
   model: string;
 }
 
+export interface ToolLoopOptions {
+  retry?: import("./providers/generic_loop.ts").ModelCallRetryOptions;
+  capBehavior?: "stop_after_dispatch" | "close_with_final_turn";
+}
+
 export interface SidecarProvider {
+  streamWithTools?(
+    req: SidecarRequest,
+    tools: import("../tools/execute.ts").ToolPhase,
+    signal?: AbortSignal,
+    options?: ToolLoopOptions,
+  ): AsyncIterable<StreamEvent>;
   stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent>;
   generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse>;
 }

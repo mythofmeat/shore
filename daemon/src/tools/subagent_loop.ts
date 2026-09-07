@@ -1,5 +1,3 @@
-import { required } from "../util/required.ts";
-
 import { shoreLog } from "../log.ts";
 
 import { findEffectiveModel } from "../config/effective_catalog.ts";
@@ -14,28 +12,14 @@ import { resolvedReplayPriorThinking, toRequestModel } from "../config/models.ts
 import { renderTemplate } from "../engine/prompt.ts";
 import type { Message } from "../engine/types.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
-import {
-  genericToolLoopEvents,
-  type ModelCallRetryOptions,
-} from "../llm/providers/generic_loop.ts";
-import { claudeAgentToolLoopEvents } from "../llm/providers/claude_agent.ts";
-import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
-import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
-import {
-  DEFAULT_BACKOFF_BASE_MS,
-  DEFAULT_MAX_RETRIES,
-} from "../llm/fallback.ts";
-import { beginCallAttempt, prepareCallAccounting, recordingStream } from "../ledger/record.ts";
-import { budgetBlockFor } from "../ledger/gate.ts";
+import type { CallRecorder } from "../llm/capture.ts";
 import { usageConfigView } from "../ledger/budget.ts";
-import { BudgetBlocked } from "../llm/generate.ts";
+import { BudgetBlocked, runGeneration } from "../llm/generate.ts";
 import { describeError } from "../llm/errors.ts";
 import { buildRequestWithProviderKeys } from "../llm/request.ts";
-import { consumeStream } from "../llm/stream.ts";
 import type {
   SidecarProvider,
   SidecarRequest,
-  StreamEvent,
   ToolDefinition,
 } from "../llm/types.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
@@ -47,7 +31,7 @@ import {
   type ToolContext,
   type ToolLimitsView,
 } from "./dispatch.ts";
-import { toolPhase, type ToolPhase } from "./execute.ts";
+import { toolPhase } from "./execute.ts";
 import type { McpRegistry, McpToolDef } from "./mcp_registry.ts";
 import { ALL_TOOLS } from "./registry.ts";
 import {
@@ -119,7 +103,7 @@ export async function runSubagent(
   const resolved = resolveSubagentModelSettings(config.dirs.data, charName, name, catalogModel);
 
   const provider = deps.providers[resolved.sdk];
-  if (provider === undefined && resolved.sdk !== "anthropic") {
+  if (provider === undefined) {
     throw new InvalidArgs(`unsupported sdk: ${resolved.sdk}`);
   }
 
@@ -216,67 +200,29 @@ export async function runSubagent(
     }
   };
 
-  const retry = {
-    settings: {
-      maxRetries: config.app.advanced.max_retries ?? DEFAULT_MAX_RETRIES,
-      backoffBaseMs:
-        config.app.advanced.retry_backoff?.asMillis() ?? DEFAULT_BACKOFF_BASE_MS,
-    },
-    onRetry: (error: unknown, attemptIndex: number, delayMs: number) => {
-      shoreLog.warn(
-        `shore: retrying subagent '${name}' model call after attempt ${String(attemptIndex + 1)} ` +
-          `in ${String(delayMs)}ms: ${describeError(error)}`,
-      );
-    },
-  };
-  const events: AsyncIterable<StreamEvent> = subagentEvents(
-    deps,
-    request,
-    provider,
-    phase,
-    signal,
-    retry,
-  );
-
-  await prepareCallAccounting(request);
-  const blocked = budgetBlockFor(request);
-  if (blocked) {
-    await trace({ error: blocked.message });
-    throw BudgetBlocked.from(blocked);
-  }
-  const initialAttempt = beginCallAttempt(request.context, request);
-  let outcome;
   try {
-    outcome = await consumeStream(recordingStream(
-      request.context,
-      request,
-      events,
-      initialAttempt,
-      (continued, callType) => {
-        const next = { ...continued, context: { ...required(continued.context), call_type: callType } };
-        const nextBlock = budgetBlockFor(next);
-        if (nextBlock) {
-          throw BudgetBlocked.from(nextBlock);
-        }
-        return beginCallAttempt(next.context, next);
+    const { result } = await runGeneration(request, resolved, {
+      config, providers: deps.providers,
+      ...(deps.callStore === undefined ? {} : { callStore: deps.callStore }),
+      ...(deps.env === undefined ? {} : { env: deps.env }),
+    }, {
+      tools: phase, sink: send,
+      ...(signal === undefined ? {} : { signal }),
+      onRetry: (error, attemptIndex, delayMs) => {
+        shoreLog.warn(
+          `shore: retrying subagent '${name}' model call after attempt ${String(attemptIndex + 1)} ` +
+          `in ${String(delayMs)}ms: ${describeError(error)}`,
+        );
       },
-    ), {
-      regen: false,
-      sink: send,
     });
-  } catch (e) {
-    const failure = e instanceof Error ? e.message : String(e);
+    await trace({ result: result.content });
+    return result.content;
+  } catch (error) {
+    const failure = describeError(error);
     await trace({ error: failure });
-    throw e;
-  }
-
-  if ("err" in outcome) {
-    const failure = describe(outcome.err);
-    await trace({ error: failure });
+    if (error instanceof BudgetBlocked) throw error;
     throw new InvalidArgs(failure);
   }
-  await trace({ result: outcome.ok.content });
-  return outcome.ok.content;
 }
 
 export function nestedContext(ctx: ToolContext, signal?: AbortSignal): ToolContext {
@@ -303,27 +249,6 @@ export function taggedSink(
   };
 }
 
-function describe(err: { kind: string; message?: string }): string {
-  return err.message === undefined ? err.kind : `${err.kind}: ${err.message}`;
-}
-
 function toolLimits(config: LoadedConfig): ToolLimitsView {
   return toolLimitsFrom(config.app.tools, config.app.subagents);
-}
-
-function subagentEvents(
-  deps: Pick<SubagentDeps, "callStore">,
-  request: SidecarRequest,
-  provider: SidecarProvider | undefined,
-  phase: ToolPhase,
-  signal: AbortSignal | undefined,
-  retry?: ModelCallRetryOptions,
-): AsyncIterable<StreamEvent> {
-  if (request.sdk === "anthropic" || provider === undefined) {
-    return capturedEvents(deps.callStore, request, () =>
-      anthropicToolLoopEvents(request, phase, signal, Date.now, retry),
-    );
-  }
-  if (request.sdk === "claude_agent") return claudeAgentToolLoopEvents(request, phase, signal);
-  return genericToolLoopEvents(provider, request, phase, signal, Date.now, retry);
 }

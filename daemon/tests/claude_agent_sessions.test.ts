@@ -566,7 +566,11 @@ describe("image placement when a regeneration rebuilds history", () => {
   });
 
   test("a session using the old flattened-image replay is rebuilt", () => {
-    const old = { ...seed([oldImage, asst1, latest]), version: 4 };
+    const old = {
+      ...seed([oldImage, asst1, latest]),
+      version: 4,
+      entries: nextEntries(planTurn(undefined, [oldImage, asst1, latest]), ["anchor"]),
+    };
     const plan = planTurn(old, [oldImage, asst1, latest]);
     expect(plan.resume).toBeUndefined();
     expect(plan.replayContent).toBeDefined();

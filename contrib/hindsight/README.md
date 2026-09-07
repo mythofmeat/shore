@@ -84,7 +84,7 @@ timeout = "30s"
 # wrap_after = "\n</recalled_memories>"
 
 [memory.compaction]
-write_memory = false
+write_memory = false # set true to also maintain workspace memory during compaction
 
 [memory.retain]
 enabled = true

@@ -1,5 +1,5 @@
 import type { ToolPhase } from "../tools/execute.ts";
-import { shoreLog } from "../log.ts";
+import { ToolLoopStop } from "../llm/tool_loop_control.ts";
 
 import {
   captureToolSendMessage,
@@ -33,12 +33,7 @@ export interface TranscriptRound {
 
 export interface HeartbeatLoopDeps {
   character: string;
-  generate: (
-    request: SidecarRequest,
-    iteration: number,
-    callType: string,
-  ) => Promise<GenerateResponse | undefined>;
-  generateWithTools?: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse>;
+  generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse | undefined>;
   dispatch: (
     name: string,
     input: unknown,
@@ -64,17 +59,6 @@ export interface HeartbeatLoopResult {
 
 function thinkingOf(blocks: readonly ContentBlock[]): ContentBlock[] {
   return blocks.filter((b) => b.type === "thinking" || b.type === "redacted_thinking");
-}
-
-function toolUsesOf(blocks: readonly ContentBlock[]): ToolUse[] {
-  return blocks.flatMap((b) =>
-    b.type === "tool_use" ? [[b.id, b.name, b.input] as ToolUse] : [],
-  );
-}
-
-function responseText(resp: GenerateResponse): string {
-  if (resp.content_blocks.length === 0) return resp.content;
-  return resp.content_blocks.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
 }
 
 export async function dispatchHeartbeatTools(
@@ -132,98 +116,6 @@ export async function runHeartbeatToolLoop(
   request: SidecarRequest,
   deps: HeartbeatLoopDeps,
 ): Promise<HeartbeatLoopResult> {
-  if (request.sdk === "claude_agent") return runSdkHeartbeat(request, deps);
-
-  const maxNormalIterations = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
-  const totalIterations = maxNormalIterations + deps.wrapUpGrace;
-
-  shoreLog.info(
-    `shore: heartbeat tool loop for ${deps.character} ` +
-      `(max_iterations=${maxNormalIterations}, wrap_up_grace=${deps.wrapUpGrace})`,
-  );
-
-  let sendMessageText: string | undefined;
-  let messageThinking: ContentBlock[] = [];
-  let failedRound: number | undefined;
-  let failure: unknown;
-  const images: ImageRef[] = [];
-
-  const clock = deps.monotonicMs ?? Date.now;
-  const deadline = clock() + (deps.deadlineMs ?? HEARTBEAT_LOOP_DEADLINE_MS);
-  let wrapUpNudged = false;
-
-  for (let iteration = 0; iteration < totalIterations; iteration += 1) {
-    const action = budgetDecision(
-      clock() >= deadline,
-      iteration >= maxNormalIterations,
-      deps.wrapUpGrace,
-      wrapUpNudged,
-    );
-    if (action === "break") break;
-    if (action === "nudge") {
-      appendWrapUpNudge(request.messages);
-      wrapUpNudged = true;
-      deps.note("Wrap-up nudge: budget reached, model asked to summarize");
-    }
-
-    const callType = iteration === 0 ? "heartbeat" : "heartbeat_tool_loop";
-    let resp: GenerateResponse | undefined;
-    try {
-      resp = await deps.generate(request, iteration, callType);
-    } catch (e) {
-      failedRound = iteration;
-      failure = e;
-      break;
-    }
-    if (resp === undefined) {
-      failedRound = iteration;
-      break;
-    }
-
-    const thinking = thinkingOf(resp.content_blocks);
-    const tagged = extractSendMessage(responseText(resp));
-    if (tagged !== undefined) {
-      sendMessageText = tagged;
-      messageThinking = thinking;
-    }
-
-    request.messages.push({
-      role: "assistant",
-      content: resp.content_blocks,
-      ...(request.provider_key === undefined ? {} : { provider_key: request.provider_key }),
-      model: request.model,
-    });
-
-    const toolUses = toolUsesOf(resp.content_blocks);
-    const hasTools = toolUses.length > 0 && resp.finish_reason === "tool_use";
-
-    const fromTool = captureToolSendMessage(toolUses);
-    if (fromTool !== undefined) {
-      sendMessageText = fromTool;
-      messageThinking = thinking;
-    }
-
-    let captured: CapturedTool[] = [];
-    if (hasTools) {
-      const round = await dispatchHeartbeatTools(toolUses, deps, request.tools);
-      request.messages.push({ role: "user", content: round.results });
-      if (round.images.length > 0 && sendMessageText === undefined) messageThinking = thinking;
-      images.push(...round.images);
-      captured = round.captured;
-    }
-
-    deps.recordTranscript?.({ callType, iteration, response: resp, captured });
-
-    if (!hasTools) break;
-  }
-
-  return { sendMessageText, images, thinking: messageThinking, failedRound, failure };
-}
-
-async function runSdkHeartbeat(
-  request: SidecarRequest,
-  deps: HeartbeatLoopDeps,
-): Promise<HeartbeatLoopResult> {
   request = {
     ...request,
     tools: [
@@ -249,12 +141,12 @@ async function runSdkHeartbeat(
     ],
   };
   const result: HeartbeatLoopResult = { sendMessageText: undefined, images: [] };
-  if (deps.generateWithTools === undefined) {
-    return { ...result, failedRound: 0, failure: new Error("Claude Agent SDK heartbeat tool loop is unavailable") };
-  }
   let iteration = 0;
   let captured: CapturedTool[] = [];
-  let pendingBlocks: ContentBlock[] = [];
+  const clock = deps.monotonicMs ?? Date.now;
+  const deadline = clock() + (deps.deadlineMs ?? HEARTBEAT_LOOP_DEADLINE_MS);
+  const normalCap = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
+  let wrapUpNudged = false;
   const observe = (blocks: ContentBlock[]): void => {
     const text = blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("");
     const sent = captured.filter((tool) => !tool.isError)
@@ -267,6 +159,12 @@ async function runSdkHeartbeat(
   };
   const record = (response: GenerateResponse): void => {
     observe(response.content_blocks);
+    if (captured.some((tool) => tool.name === "generate_image" && !tool.isError) && result.sendMessageText === undefined) {
+      result.thinking = thinkingOf(response.content_blocks);
+    }
+    if (response.finish_reason !== "tool_use") {
+      request.messages.push({ role: "assistant", content: response.content_blocks });
+    }
     deps.recordTranscript?.({
       callType: iteration === 0 ? "heartbeat" : "heartbeat_tool_loop",
       iteration,
@@ -278,6 +176,18 @@ async function runSdkHeartbeat(
   };
   const phase: ToolPhase = {
     messages: [],
+    parallel: false,
+    beforeTurn: (call) => {
+      const action = budgetDecision(clock() >= deadline, iteration >= normalCap, deps.wrapUpGrace, wrapUpNudged);
+      if (action === "break" || iteration >= normalCap + deps.wrapUpGrace) throw new ToolLoopStop();
+      if (action === "nudge") {
+        appendWrapUpNudge(call.messages);
+        wrapUpNudged = true;
+        deps.note("Wrap-up nudge: budget reached, model asked to summarize");
+      }
+    },
+    onTurn: (turn) => { observe(turn.content_blocks); },
+    afterTurn: record,
     runTool: async (use) => {
       const round = await dispatchHeartbeatTools([[use.id, use.name, use.input]], deps, request.tools);
       captured.push(...round.captured);
@@ -288,33 +198,20 @@ async function runSdkHeartbeat(
       if (block === undefined) throw new Error("Heartbeat tool returned no result");
       return block;
     },
-    recordTurn: (role, blocks) => {
-      if (role === "assistant") {
-        pendingBlocks = blocks;
-      } else {
-        record({
-          model: request.model,
-          content: pendingBlocks.flatMap((block) => block.type === "text" ? [block.text] : []).join(""),
-          content_blocks: pendingBlocks,
-          finish_reason: "tool_use",
-          usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
-          timing: { total_ms: 0, time_to_first_token_ms: 0 },
-        });
-        pendingBlocks = [];
-      }
-    },
+    recordTurn: () => {},
   };
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), deps.deadlineMs ?? HEARTBEAT_LOOP_DEADLINE_MS);
   try {
-    const response = await deps.generateWithTools({
+    const response = await deps.generate({
       ...request,
-      ...(deps.maxToolIterations === undefined ? {} : { max_tool_iterations: deps.maxToolIterations }),
+      ...(deps.maxToolIterations === undefined ? {} : { max_tool_iterations: deps.maxToolIterations + deps.wrapUpGrace }),
     }, phase, abort.signal);
-    record(response);
-    if (response.finish_reason.startsWith("error")) {
+    if (response === undefined) {
+      result.failedRound = iteration;
+    } else if (response.finish_reason.startsWith("error")) {
       result.failedRound = iteration - 1;
-      result.failure = new Error(`Claude Agent SDK heartbeat ended with ${response.finish_reason}`);
+      result.failure = new Error(`Heartbeat generation ended with ${response.finish_reason}`);
     }
   } catch (failure) {
     result.failedRound = iteration;

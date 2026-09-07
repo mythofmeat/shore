@@ -145,12 +145,12 @@ servers are configured, and the `ask_*` subagents — running through shore's di
 shore's argument validation, per-tool timeouts, result windowing, media handling and
 `tool_call` / `tool_result` frames. There is no second implementation.
 
-The bridge is that shore's tool loop lives *outside* the provider while the Agent SDK runs its
-own. `turnEvents` (`daemon/src/handler/generation.ts`) already picks a loop per `sdk`, so
-`claude_agent` gets its own arm alongside the Anthropic one, and that arm is handed the
-`ToolPhase` the `SidecarProvider` contract deliberately withholds. `daemon/src/tools/subagent_loop.ts`
-has an independent switch of the same shape; both are wired, or a subagent on this provider
-would silently get no tools.
+Chat, subagents, heartbeats, and compaction all use `llm/tool_loop.ts` to select the
+provider's tool transport. The `SidecarProvider.streamWithTools` capability handles the SDK's
+native loop; other providers use the shared generic loop. Call-recording wrappers preserve
+that capability. Workflows supply the same `ToolPhase` lifecycle: checkpoint a model response
+before execution, dispatch tools, record results, and apply round budgets. They do not select
+SDK-specific loops. A tool-bearing generation without an executor fails explicitly.
 
 Shore's tools reach the SDK as one in-process MCP server built from `req.tools`. **The CLI applies
 the `mcp__<server>__` namespace itself**, to whatever the server advertises — so shore advertises
@@ -199,10 +199,10 @@ when that is set above ~48 KB.
   `tool_result`s, in that order, which is what `engine/merge.ts` needs to fold a tool-using turn
   back into one logical turn for regeneration and alt-switching. The final reply is not recorded
   as a round — it leaves in the finished turn.
-- `max_tool_iterations` is enforced in `canUseTool` rather than through the SDK's `maxTurns`.
-  Exceeding `maxTurns` ends a turn on a dangling `tool_use` with no prose; denying without
-  `interrupt` lets the model answer with what it has, which is what shore's own cap does.
-  `maxTurns` is left as an unreachable backstop.
+- `max_tool_iterations` is enforced in tool permissions. Interactive turns can finish with
+  prose after reaching the cap. Compaction stops after dispatching the last allowed round,
+  preserving its checkpoint for a later pass. Heartbeats use the shared lifecycle for their
+  normal budget, wrap-up grace, and deadline.
 - Budgets are checked in the same place, so a budget that trips mid-turn stops further tools
   instead of being noticed only at the end.
 - Usage is **one ledger row per turn**, taken from the run's own result — the SDK reports it
@@ -210,9 +210,8 @@ when that is set above ~48 KB.
   separately through their own rows, because they run shore's loop. There is no per-round
   accounting, so a report cannot break a turn down by round on this provider as it can on the
   others.
-- The wire is not captured. The SDK's HTTP happens in a subprocess, so `capturedEvents` is
-  deliberately not wrapped around this arm — `/calls` inspection is blind here. Use the
-  `ANTHROPIC_BASE_URL` proxy trick described above instead.
+- Call recording captures the SDK stream and aggregate usage. Raw HTTP still happens in the
+  CLI subprocess; use the `ANTHROPIC_BASE_URL` proxy described above to inspect that wire.
 
 Shore's prompts name tools bare (`read`, `search`), while the model sees them prefixed. In practice
 the model follows the prefixed names it is given without trouble, but watch for it reaching for the
@@ -300,9 +299,7 @@ it is written down rather than taken.
    `daemon/tests/claude_agent_stream.test.ts` and
    `daemon/scripts/mutate_claude_agent.py`.
 2. Revert the four one-line touches: the `Sdk` union and `SDK_VARIANTS` in `daemon/src/llm/types.ts`,
-   the import and table entry in `daemon/src/llm/providers/table.ts`, the `claude_agent` arm
-   in `turnEvents` (`daemon/src/handler/generation.ts`) and in `subagentEvents`
-   (`daemon/src/tools/subagent_loop.ts`), the effort case in
+   the import and table entry in `daemon/src/llm/providers/table.ts`, the effort case in
    `daemon/src/llm/settings.ts`, and the sdk-picker suggestion list in
    `client/shore-cli/src/tui/ui.rs`.
 3. Drop the `forgetThreadSessions` import and its call in `archiveThread`
@@ -322,3 +319,11 @@ Tool rounds are recorded in the heartbeat transcript; SDK usage is accounted onc
 whole run. The configured tool-round limit is enforced through SDK tool permissions, and
 the heartbeat deadline aborts the SDK run. SDK failures are logged as failed ticks while
 messages and images from completed actions are retained.
+
+## Compaction
+
+Compaction uses the same tool transport, with sequential execution and a durable checkpoint
+before each round and after each result. Resuming completes pending tools without repeating
+successful writes. Its existing write restrictions, dry-run behavior, and archive boundary
+apply to SDK providers too. Workspace memory maintenance and Hindsight retention can both be
+enabled; Hindsight retention is queued after the conversation is archived.
