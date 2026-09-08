@@ -1,5 +1,5 @@
 use std::io::{self, IsTerminal, Read as _};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use shore_common::protocol::server_msg::ServerMessage;
@@ -149,6 +149,13 @@ pub(crate) async fn execute(
             subcommand: Some(crate::cli::CharacterCommand::New { name }),
             ..
         } => handle_create_character(&mut conn, name).await?,
+        CliCommand::Character {
+            subcommand: Some(crate::cli::CharacterCommand::Delete { name, archive, yes }),
+            json,
+            ..
+        } => {
+            handle_delete_character(&mut conn, name, archive.as_deref(), *yes, *json).await?;
+        }
         CliCommand::Character {
             subcommand: Some(crate::cli::CharacterCommand::Use { name }),
             ..
@@ -1159,6 +1166,88 @@ async fn handle_create_character(
     Ok(())
 }
 
+async fn handle_delete_character(
+    conn: &mut SWPConnection,
+    name: &str,
+    archive: Option<&Path>,
+    yes: bool,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if !yes && !confirm_delete_character(name)? {
+        cli_err!("Left {name} alone.");
+        return Ok(());
+    }
+
+    info!(character = name, "Deleting character");
+    let args = match archive {
+        Some(path) => serde_json::json!({
+            "character": name,
+            "confirm": name,
+            "archive": crate::cli::absolute_path(path),
+        }),
+        None => serde_json::json!({ "character": name, "confirm": name }),
+    };
+    let _ignored = conn.send_command("delete_character", args).await?;
+    let data = recv_command_data(conn).await?;
+
+    if json {
+        cli_out!("{}", serde_json::to_string_pretty(&data)?);
+    } else {
+        if let Some(written) = data.get("archive").and_then(serde_json::Value::as_str) {
+            cli_out!("Backed up to {written}");
+        }
+        cli_out!("Deleted character: {name}");
+        for path in data
+            .get("removed")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+        {
+            cli_out!("  removed {path}");
+        }
+    }
+
+    forget_deleted_character(name);
+    Ok(())
+}
+
+fn confirm_delete_character(name: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    if !io::stdin().is_terminal() {
+        return Err(format!(
+            "deleting {name} cannot be undone; re-run with --yes \
+             (add --archive PATH to keep a backup first)"
+        )
+        .into());
+    }
+    cli_err!(
+        "Deleting {name} removes, on the daemon host: its workspace (SOUL.md, USER.md, memory),"
+    );
+    cli_err!("its config and avatar, its threads and data, its search indexes, and its rows in");
+    cli_err!("the history and usage databases. This cannot be undone.");
+    cli_err!("Type the character name to confirm:");
+    let mut answer = String::new();
+    let _ignored = io::stdin().read_line(&mut answer)?;
+    Ok(answer.trim() == name)
+}
+
+fn forget_deleted_character(name: &str) {
+    if let Err(e) = state::clear_active_thread(name) {
+        output::print_error(&format!("could not forget the thread saved for {name}: {e}"));
+    }
+    if state::read_active_character().as_deref() == Some(name) {
+        match state::clear_active_character() {
+            Ok(()) => {
+                cli_out!("{name} was your saved character; `shore character` lists what is left");
+            }
+            Err(e) => output::print_error(&format!("could not forget character {name}: {e}")),
+        }
+    }
+    if std::env::var("SHORE_CHARACTER").ok().as_deref() == Some(name) {
+        cli_err!("SHORE_CHARACTER still names {name} in this shell — unset it");
+    }
+}
+
 const SCAFFOLD_GUIDE: &[(&str, &str)] = &[
     ("SOUL.md", "who the character is"),
     ("USER.md", "who you are, to them"),
@@ -1615,7 +1704,7 @@ fn needs_a_shell(editor: &str) -> bool {
 
 pub(crate) fn editor_invocation(
     editor: &str,
-    path: &std::path::Path,
+    path: &Path,
 ) -> (String, Vec<std::ffi::OsString>) {
     if needs_a_shell(editor) {
         (
@@ -1641,7 +1730,7 @@ fn resolve_editor(visual: Option<String>, editor: Option<String>) -> String {
         .unwrap_or_else(|| "vi".into())
 }
 
-fn seed_editor_file(path: &std::path::Path, seed: &str) -> io::Result<()> {
+fn seed_editor_file(path: &Path, seed: &str) -> io::Result<()> {
     let trimmed = seed.trim_end();
     if trimmed.is_empty() {
         return Ok(());

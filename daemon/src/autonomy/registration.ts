@@ -107,6 +107,11 @@ export class TurnAutonomyBridge {
     });
   }
 
+  forget(character: string): void {
+    this.#registered.delete(character);
+    this.#activityBackfilled.delete(character);
+  }
+
   reloadConfig(effectiveConfig: (character: string) => LoadedConfig): void {
     for (const character of Array.from(this.#registered.keys())) {
       this.#after(character, () => {

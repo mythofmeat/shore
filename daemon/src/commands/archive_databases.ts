@@ -187,13 +187,13 @@ export function importLedgerDatabase(
   }
 }
 
-export function removeImportedDatabaseRows(
+export function removeCharacterDatabaseRows(
   historyPath: string,
   ledgerPath: string,
   character: string,
-  imported: { history: boolean; ledger: boolean },
+  remove: { history: boolean; ledger: boolean },
 ): void {
-  if (imported.history) {
+  if (remove.history) {
     const history = new Database(historyPath, { create: true, readwrite: true });
     history.transaction(() => {
       history.query(
@@ -212,7 +212,7 @@ export function removeImportedDatabaseRows(
     history.close();
   }
 
-  if (imported.ledger) {
+  if (remove.ledger) {
     const ledger = new Database(ledgerPath, { create: true, readwrite: true });
     ledger.transaction(() => {
       ledger.query("DELETE FROM call_attempts WHERE character = ?1").run(character);

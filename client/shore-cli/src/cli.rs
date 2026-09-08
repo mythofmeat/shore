@@ -1323,6 +1323,24 @@ pub(crate) enum CharacterCommand {
         /// Character name
         name: String,
     },
+
+    /// Delete a character for good: its workspace (SOUL.md and memory), its
+    /// config, its threads and data, its search indexes, and its rows in the
+    /// history and usage databases. Nothing is recoverable afterwards unless
+    /// you pass --archive.
+    #[command(verbatim_doc_comment)]
+    Delete {
+        /// Character name
+        name: String,
+
+        /// Back it up to this path on the daemon host before deleting
+        #[arg(long, value_name = "PATH")]
+        archive: Option<PathBuf>,
+
+        /// Delete without the confirmation prompt
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1832,10 +1850,13 @@ fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
                     with_palette_values(leaf, "model", &model_values)
                 })
         })
-        .mut_subcommand("character", |subcommand| {
-            subcommand.mut_subcommand("use", |leaf| {
-                with_palette_values(leaf, "name", &catalog.characters)
-            })
+        .mut_subcommand("character", |mut subcommand| {
+            for name in ["use", "delete"] {
+                subcommand = subcommand.mut_subcommand(name, |leaf| {
+                    with_palette_values(leaf, "name", &catalog.characters)
+                });
+            }
+            subcommand
         })
         .mut_subcommand("msg", |subcommand| {
             subcommand
@@ -2206,7 +2227,7 @@ complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_sub
 complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_subcommand_from fork\" -l from -r -f -a \"(shore complete threads 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_subcommand_from new\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use info\" -f -a \"(shore complete models 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_subcommand_from use\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_subcommand_from use delete\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -r -f -a \"(shore complete sections 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from tool\" -f -a \"(shore complete tools 2>/dev/null)\"\n\
@@ -2478,7 +2499,7 @@ pub(crate) fn to_swp_command(
     }
 }
 
-fn absolute_path(path: &Path) -> String {
+pub(crate) fn absolute_path(path: &Path) -> String {
     if path.is_absolute() {
         return path.display().to_string();
     }
@@ -3449,6 +3470,39 @@ mod tests {
                     Some(CharacterCommand::New { name }) if name == "alice"
                 ));
             }
+        );
+    }
+
+    #[test]
+    fn parse_character_delete() {
+        let cli = parse(&["character", "delete", "alice", "--archive", "/tmp/alice.tar.gz"]);
+        assert_variant!(
+            parsed_command(&cli),
+            CliCommand::Character { subcommand, .. } => {
+                assert!(matches!(
+                    subcommand,
+                    Some(CharacterCommand::Delete { name, archive, yes })
+                        if name == "alice"
+                            && archive.as_deref() == Some(Path::new("/tmp/alice.tar.gz"))
+                            && !yes
+                ));
+            }
+        );
+    }
+
+    #[test]
+    fn character_delete_requires_a_name() {
+        let err = Cli::try_parse_from(["shore", "character", "delete"])
+            .expect_err("a name is not optional");
+        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn character_delete_is_not_sent_by_the_generic_mapper() {
+        let cli = parse(&["character", "delete", "alice", "--yes"]);
+        assert!(
+            to_swp_command(parsed_command(&cli), None).is_none(),
+            "deletion goes through the confirming handler, never the bare mapper",
         );
     }
 

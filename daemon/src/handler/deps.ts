@@ -220,7 +220,12 @@ export interface HandlerAssembly
   log?: MessageHandlerDeps["log"];
 }
 
-const EXCLUSIVE_COMMANDS = new Set(["export_character", "import_character", "fork_thread"]);
+const EXCLUSIVE_COMMANDS = new Set([
+  "export_character",
+  "import_character",
+  "delete_character",
+  "fork_thread",
+]);
 
 function beginIndexForeground(a: HandlerAssembly): () => void {
   const endHistory = a.runtime.historyIndex.beginForeground();
@@ -545,6 +550,18 @@ async function pushHistorySnapshots(a: CommandAssembly): Promise<void> {
   }
 }
 
+async function releaseCharacter(a: CommandAssembly, character: string): Promise<void> {
+  const { runtime } = a;
+  runtime.keepalive.disarm(character);
+  a.autonomy.forget(character);
+  await runtime.autonomy.unregister(character);
+  runtime.cache.invalidate(character, "character_deleted");
+  runtime.callStore?.forgetCharacter(character);
+  for (const [sessionId, selected] of a.router.sessions()) {
+    if (selected === character) a.router.setSelectedCharacter(sessionId, null);
+  }
+}
+
 function commandDeps(a: CommandAssembly): CommandDeps {
   const { runtime } = a;
   const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");
@@ -558,9 +575,10 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       dirs: runtime.config.dirs,
       hasCharacter: (character) => runtime.registry.hasCharacter(character),
       withSnapshot: async (run) => await runtime.snapshotGate.withSnapshot(run),
-      refreshAfterImport: async () => {
+      refreshDiscovery: async () => {
         await applyReloadedConfig(a, runtime.registry.globalConfig());
       },
+      releaseCharacter: async (character) => await releaseCharacter(a, character),
     },
     compaction: {
       run: {

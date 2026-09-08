@@ -15,7 +15,8 @@ export type InvalidationReason =
   | "thread_change"
   | "prompt_reload"
   | "mcp_reload"
-  | "mcp_recovery";
+  | "mcp_recovery"
+  | "character_deleted";
 
 const UNARMED: KeepaliveArming = { intervalMs: undefined, maxSecs: undefined };
 

@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { versionOf } from "../engine/versions.ts";
-import { compactionManifestIn, segmentsDirIn } from "../config/dirs.ts";
+import { characterCacheDir, compactionManifestIn, segmentsDirIn } from "../config/dirs.ts";
 import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/character_history.ts";
 import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
@@ -123,7 +123,7 @@ export interface HistoryIndexOpenOptions {
 }
 
 export function historyIndexPath(cacheDir: string, character: string): string {
-  return join(cacheDir, "characters", character, HISTORY_SEARCH_DB_FILE);
+  return join(characterCacheDir(cacheDir, character), HISTORY_SEARCH_DB_FILE);
 }
 
 const indexLocks = new Map<string, Promise<void>>();

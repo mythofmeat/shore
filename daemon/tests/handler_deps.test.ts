@@ -826,6 +826,30 @@ describe("the handler, whole", () => {
     }
   });
 
+  test("a command that takes the snapshot itself is not first held as a reader", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-exclusive-", () => {}, ["ada"]);
+    try {
+      const deps = buildMessageHandlerDeps(handlerAssembly(runtime));
+
+      const frame = await deps.dispatchCommand(
+        {
+          rid: null,
+          name: "delete_character",
+          args: { character: "ada", confirm: "ada" },
+        },
+        { session: { sessionId: 1, selectedCharacter: null, selectedThread: null } } as never,
+        new AbortController().signal,
+      );
+
+      expect(frame.type).toBe("command_output");
+      expect(existsSync(join(root, "config", "characters", "ada"))).toBe(false);
+      expect(runtime.registry.hasCharacter("ada")).toBe(false);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("each handler gets its own leases", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-leases-");
     try {

@@ -1498,6 +1498,16 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             "create_character",
             serde_json::json!({ "name": name }),
         ),
+        CliCommand::Character {
+            subcommand: Some(CharacterCommand::Delete { name, .. }),
+            ..
+        } => {
+            app.set_error(format!(
+                "deleting a character cannot be undone, so it is shell-only: \
+                 run `shore character delete {name}`"
+            ));
+            Action::Redraw
+        }
         CliCommand::Config { path: true, .. } => {
             palette_swp_command(app, input, "status", serde_json::json!({}))
         }

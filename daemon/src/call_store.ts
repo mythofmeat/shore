@@ -682,6 +682,16 @@ export class CallStore {
     return count(row["n"]);
   }
 
+  forgetCharacter(character: string): number {
+    const removed =
+      this.#changes("DELETE FROM calls WHERE character = ?1", character) +
+      this.#changes("DELETE FROM transcripts WHERE character = ?1", character) +
+      this.#changes("DELETE FROM http_calls WHERE character = ?1", character);
+    this.#changes("DELETE FROM http_calls WHERE call_id NOT IN (SELECT call_id FROM calls)");
+    this.#collectGarbage();
+    return removed;
+  }
+
   rotate(cutoff: Date, maxTotalBytes: number): RotateStats {
     const cutoffUnix = unixSeconds(cutoff);
     const agedCalls = this.#changes("DELETE FROM calls WHERE ts_unix < ?1", cutoffUnix);

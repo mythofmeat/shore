@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { chmodSync, closeSync, mkdirSync, openSync, readSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { characterCacheDir } from "../config/dirs.ts";
+
 export const WORKSPACE_INDEX_DB_FILE = "workspace_index.db";
 export const WORKSPACE_INDEX_SCHEMA_VERSION = 2;
 
@@ -57,7 +59,7 @@ export interface WorkspaceIndexStats {
 }
 
 export function workspaceIndexDbPath(cacheDir: string, character: string): string {
-  return join(cacheDir, "characters", character, WORKSPACE_INDEX_DB_FILE);
+  return join(characterCacheDir(cacheDir, character), WORKSPACE_INDEX_DB_FILE);
 }
 
 export function documentHash(document: string): string {

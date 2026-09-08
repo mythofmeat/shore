@@ -1,6 +1,7 @@
 import { readFile, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
+import { characterCacheDir } from "../config/dirs.ts";
 import { toF32 } from "../llm/embed.ts";
 import { documentHash, type FileRow, type WorkspaceIndexStore } from "./workspace_store.ts";
 
@@ -22,7 +23,7 @@ export interface LegacyIndex {
 }
 
 export function legacyIndexPath(cacheDir: string, character: string): string {
-  return join(cacheDir, "characters", character, LEGACY_INDEX_FILE);
+  return join(characterCacheDir(cacheDir, character), LEGACY_INDEX_FILE);
 }
 
 export interface LegacyMigrationOutcome {

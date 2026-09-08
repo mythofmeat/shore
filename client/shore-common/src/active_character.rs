@@ -18,6 +18,12 @@ pub fn write_active_character(name: &str) -> std::io::Result<()> {
     write_to(&active_character_path(), name)
 }
 
+pub fn clear_active_character() -> std::io::Result<()> {
+    debug!("Clearing active character state file");
+    remove_at(&active_character_path())?;
+    remove_at(&legacy_active_character_path())
+}
+
 fn thread_state_path(character: &str) -> Option<PathBuf> {
     if character.is_empty()
         || character.contains('/')

@@ -89,6 +89,7 @@ import type { McpServerStatus } from "../tools/mcp_registry.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { clear, segments } from "./segments.ts";
 import {
+  deleteCharacter,
   exportCharacter,
   importCharacter,
   type ArchiveContext,
@@ -136,6 +137,7 @@ const CHARACTERLESS = new Set([
   "list_provider_models",
   "export_character",
   "import_character",
+  "delete_character",
 ]);
 
 export async function runCommand(
@@ -378,6 +380,10 @@ export function runCharacterlessCommand(
     case "import_character": {
       if (deps.archive === undefined) throw unwired("import_character");
       return importCharacter(archiveWithSignal(deps.archive, session.signal), args);
+    }
+    case "delete_character": {
+      if (deps.archive === undefined) throw unwired("delete_character");
+      return deleteCharacter(archiveWithSignal(deps.archive, session.signal), args);
     }
     default:
       throw invalidRequest(`Command '${cmd.name}' requires a character`);

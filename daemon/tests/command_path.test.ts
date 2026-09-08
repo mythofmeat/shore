@@ -146,7 +146,8 @@ async function harness(characters: readonly string[]): Promise<Harness> {
         dirs,
         hasCharacter: (name: string) => characters.includes(name),
         withSnapshot: async <T>(work: () => Promise<T>) => await gate.withSnapshot(work),
-        refreshAfterImport: async () => undefined,
+        refreshDiscovery: async () => undefined,
+        releaseCharacter: async () => undefined,
       };
     },
   };
@@ -459,6 +460,53 @@ test("a session with no rid still gets its progress frames", () => {
   emit({ type: "phase", rid: null, phase: "compacting round 2", model: null });
   expect(sent).toHaveLength(1);
   expect(sent[0]).toMatchObject({ phase: "compacting round 2", rid: null });
+});
+
+describe("deleting a character through the command path", () => {
+  test("it runs with no character selected and takes the workspace with it", async () => {
+    const h = await harness(["ada", "bea"]);
+    h.wireArchive(new SnapshotGate());
+
+    const frame = await dispatchCommand(
+      h.deps,
+      { rid: null, name: "delete_character", args: { character: "ada", confirm: "ada" } },
+      meta(null, null),
+      new AbortController().signal,
+    );
+
+    expect(envelope(frame)["kind"]).toBe("command_output");
+    expect(existsSync(join(h.dirs.config, "characters", "ada"))).toBe(false);
+    expect(existsSync(join(h.dirs.config, "characters", "bea"))).toBe(true);
+  });
+
+  test("one abandoned while it waits for the snapshot leaves the character alone", async () => {
+    const h = await harness(["ada"]);
+    const gate = new SnapshotGate();
+    h.wireArchive(gate);
+
+    const controller = new AbortController();
+    let releaseReader = (): void => undefined;
+    const readerHeld = new Promise<void>((resolve) => {
+      releaseReader = resolve;
+    });
+    const reader = gate.withActivity(async () => {
+      await readerHeld;
+    });
+
+    const frame = dispatchCommand(
+      h.deps,
+      { rid: null, name: "delete_character", args: { character: "ada", confirm: "ada" } },
+      meta(null, null),
+      controller.signal,
+    );
+
+    controller.abort();
+    releaseReader();
+    await reader;
+
+    expect(envelope(await frame)["kind"]).toBe("error");
+    expect(existsSync(join(h.dirs.config, "characters", "ada"))).toBe(true);
+  });
 });
 
 describe("an export abandoned while it waits for the snapshot", () => {

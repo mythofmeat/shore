@@ -165,6 +165,9 @@ export const characterMemoryDir = (
 
 export const characterDataDir = (data: string, name: string): string => rustJoin(data, name);
 
+export const characterCacheDir = (cache: string, name: string): string =>
+  rustJoin(cache, "characters", name);
+
 export const MAIN_THREAD = "main";
 
 export const characterThreadsDir = (data: string, name: string): string =>

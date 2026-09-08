@@ -175,8 +175,9 @@ function context(
     dirs,
     hasCharacter: (name) => characters.has(name),
     withSnapshot: async (run) => await run(),
-    refreshAfterImport: async () => {
+    refreshDiscovery: async () => {
       refresh();
     },
+    releaseCharacter: async () => undefined,
   };
 }

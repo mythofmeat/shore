@@ -356,7 +356,8 @@ describe("an exclusive command whose client disconnects while it waits for the s
           dirs: config.dirs,
           hasCharacter: (name: string) => registry.hasCharacter(name),
           withSnapshot: async <T>(work: () => Promise<T>) => await gate.withSnapshot(work),
-          refreshAfterImport: async () => undefined,
+          refreshDiscovery: async () => undefined,
+          releaseCharacter: async () => undefined,
         },
       },
     };

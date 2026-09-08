@@ -6,6 +6,7 @@ import { create, extract } from "tar";
 import type { ShoreDirs } from "../config/dirs.ts";
 import {
   SOUL_FILE,
+  characterCacheDir,
   characterConfigDir,
   characterDataDir,
   characterWorkspaceDir,
@@ -19,7 +20,7 @@ import {
   exportLedgerDatabase,
   importHistoryDatabase,
   importLedgerDatabase,
-  removeImportedDatabaseRows,
+  removeCharacterDatabaseRows,
 } from "./archive_databases.ts";
 
 const FORMAT = "shore-character";
@@ -31,7 +32,8 @@ export interface ArchiveContext {
   readonly dirs: ShoreDirs;
   hasCharacter(name: string): boolean;
   withSnapshot<T>(run: () => Promise<T>): Promise<T>;
-  refreshAfterImport(): Promise<void>;
+  refreshDiscovery(): Promise<void>;
+  releaseCharacter(name: string): Promise<void>;
 }
 
 interface Manifest {
@@ -121,6 +123,68 @@ export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<
   } finally {
     await rm(stage, { recursive: true, force: true });
   }
+}
+
+export async function deleteCharacter(ctx: ArchiveContext, args: Args): Promise<unknown> {
+  const character = requiredCharacter(args["character"]);
+  if (args["confirm"] !== character) {
+    throw invalidRequest(
+      `Deleting a character cannot be undone: repeat the name as confirm to delete ${character}`,
+    );
+  }
+
+  const targets = deletionTargets(ctx.dirs, character);
+  const present: string[] = [];
+  for (const path of targets) if (await exists(path)) present.push(path);
+  if (!ctx.hasCharacter(character) && present.length === 0) {
+    throw notFound(`Character not found: ${character}`);
+  }
+
+  const backup = args["archive"];
+  let archived: string | undefined;
+  if (backup !== undefined) {
+    const written = (await exportCharacter(ctx, { character, output: backup })) as {
+      archive: string;
+    };
+    archived = written.archive;
+  }
+
+  const historyPath = rustJoin(ctx.dirs.data, "history.db");
+  const ledgerPath = rustJoin(ctx.dirs.data, "ledger.db");
+  await ctx.withSnapshot(async () => {
+    await ctx.releaseCharacter(character);
+    for (const path of present) await rm(path, { recursive: true, force: true });
+    removeCharacterDatabaseRows(historyPath, ledgerPath, character, {
+      history: await exists(historyPath),
+      ledger: await exists(ledgerPath),
+    });
+    await ctx.refreshDiscovery();
+  });
+
+  return {
+    character,
+    deleted: true,
+    removed: present,
+    archive: archived ?? null,
+  };
+}
+
+function deletionTargets(dirs: ShoreDirs, character: string): string[] {
+  const paths = [
+    characterWorkspaceDir(dirs.config, character, dirs.workspace),
+    characterConfigDir(dirs.config, character),
+    characterDataDir(dirs.data, character),
+    characterCacheDir(dirs.cache, character),
+  ];
+  return paths.filter(
+    (path, index) =>
+      paths.indexOf(path) === index &&
+      !paths.some((other, otherIndex) => otherIndex !== index && contains(other, path)),
+  );
+}
+
+function contains(parent: string, child: string): boolean {
+  return child.startsWith(`${parent}/`);
 }
 
 async function stageCharacter(dirs: ShoreDirs, character: string, stage: string): Promise<void> {
@@ -265,11 +329,11 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
     imported.history = true;
     importLedgerDatabase(ledgerPath, join(stage, "ledger.db"), character);
     imported.ledger = true;
-    await ctx.refreshAfterImport();
+    await ctx.refreshDiscovery();
   } catch (error) {
     if (imported.history || imported.ledger) {
       try {
-        removeImportedDatabaseRows(historyPath, ledgerPath, character, imported);
+        removeCharacterDatabaseRows(historyPath, ledgerPath, character, imported);
       } catch {}
     }
     for (const path of [...created].reverse()) await rm(path, { recursive: true, force: true });
