@@ -65,6 +65,10 @@ export function writeBook(path: string, book: SessionBook): void {
   }
 }
 
+export function writeSession(path: string, key: string, record: SessionRecord): void {
+  writeBook(path, { ...readBook(path), [key]: record });
+}
+
 export function withoutThread(
   book: SessionBook,
   character: string,

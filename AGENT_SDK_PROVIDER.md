@@ -114,6 +114,19 @@ main conversation stays on another possible at all. Each turn:
 | Regenerating the most recent turn | Same fork, anchored one assistant turn further back; the user turn being answered is re-sent |
 | No common prefix, no session yet, or no assistant turn to anchor on | Fresh session; prior turns replayed as text, assistant ones wrapped in `<prior_assistant_turn>` |
 
+Completed native tool rounds are added to the delivered record before the run finishes: both
+the assistant's tool call and the user's tool result are already in the SDK session. Only the
+final assistant reply remains pending until Shore sends it back in the next request. Previously,
+the record omitted those tool rounds, so the next request replayed their results alongside the
+new user message even when resuming the same session. Continuation tests now inspect the actual
+SDK prompt across successive tool-using turns and provider restarts. Session writes merge with
+the latest book so overlapping conversations cannot erase each other's records.
+
+This bookkeeping fix keeps the existing book version and session IDs. It does not remove replays
+already stored in an SDK transcript. An older record can still replay its last untracked tool
+results once when first continued; subsequent completed rounds use the corrected bookkeeping.
+Cold starts and divergent histories still follow the replay rules above and retain their warnings.
+
 A replay is lossy but not silent: tool calls and their results come back as
 `<prior_tool_call name=…>` / `<prior_tool_result>` pairs rather than being dropped, so a cold
 start — which shore compacting a conversation forces — does not tell the model it said things it

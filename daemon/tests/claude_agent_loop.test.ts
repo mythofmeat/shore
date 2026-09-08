@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ClaudeAgentProvider, claudeAgentToolLoopEvents } from "../src/llm/providers/claude_agent.ts";
+import { ClaudeAgentProvider, claudeAgentToolLoopEvents, planTurn } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent, type FakeScript } from "../src/testing/fake_agent_query.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
@@ -272,10 +272,10 @@ describe("what a tool-using turn leaves in the session book", () => {
     const tools = phase();
     const { path } = await drive(ONE_CALL, tools);
     const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
-    expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual([
-      "msg_0_asst_1",
-      "msg_1_asst_0",
-    ]);
+    const record = Object.values(book)[0];
+    expect(record?.entries).toHaveLength(3);
+    expect(record?.entries[1]?.uuid).toBe("msg_0_asst_1");
+    expect(record?.pendingAssistantUuids).toEqual(["msg_1_asst_0"]);
   });
 
   test("a turn with no tools still records the one round it had", async () => {
@@ -287,6 +287,109 @@ describe("what a tool-using turn leaves in the session book", () => {
     );
     const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
     expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_0_asst_0"]);
+  });
+});
+
+describe("continuing after native tool rounds", () => {
+  test("successive turns send only the new user message, including after restarting the provider", async () => {
+    const path = join(await mkdtemp(join(tmpdir(), "shore-agent-continuation-")), "sessions.json");
+    const agent = fakeAgent({ rounds: [
+      { blocks: [{ kind: "thinking", text: "inspect", signature: "signed" }], toolCalls: [{ name: "read" }, { name: "ask_internet" }] },
+      { blocks: [], toolCalls: [{ name: "read", input: { path: "second" } }] },
+      { blocks: [{ kind: "text", text: "done" }] },
+    ] });
+    const history = request().messages;
+    for (let turn = 0; turn < 3; turn += 1) {
+      const tools = phase(() => `result from turn ${String(turn)}`);
+      const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
+      const events: StreamEvent[] = [];
+      for await (const event of provider.streamWithTools(request({ messages: [...history] }), tools)) events.push(event);
+      expect(events.filter((event) => event.type === "error" || event.type === "provider_warning")).toEqual([]);
+      expect(agent.calls[turn]?.prompt).toBe(turn === 0 ? "read SOUL.md" : `continue ${String(turn)}`);
+      if (turn > 0) expect(agent.calls[turn]?.options.resume).toBe("session-fake");
+      history.push(...tools.recorded.map(({ role, blocks }) => ({ role, content: blocks })));
+      history.push({ role: "assistant", content: (done(events).content_blocks ?? []) as ContentBlock[] });
+      history.push({ role: "user", content: [{ type: "text", text: `continue ${String(turn + 1)}` }] });
+    }
+  });
+
+  test("regenerating a final answer anchors after its tools and replays only their result", async () => {
+    const tools = phase();
+    const req = request();
+    const { path } = await drive(ONE_CALL, tools, req);
+    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    const plan = planTurn(Object.values(book)[0], [
+      ...req.messages,
+      ...tools.recorded.map(({ role, blocks }) => ({ role, content: blocks })),
+    ]);
+    expect(plan.resume).toBe("session-fake");
+    expect(plan.resumeSessionAt).toBe("msg_0_asst_1");
+    expect(plan.fork).toBe(true);
+    expect(plan.delivered).toHaveLength(1);
+    expect(plan.prompt).not.toContain("read SOUL.md");
+    expect(plan.prompt).not.toContain("prior_tool_call");
+  });
+
+  test("changed tool output forks instead of being mistaken for an unchanged native result", async () => {
+    const tools = phase();
+    const req = request();
+    const { path } = await drive(ONE_CALL, tools, req);
+    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    const history = [...req.messages, ...tools.recorded.map(({ role, blocks }) => ({ role, content: blocks }))];
+    const result = history.at(-1)?.content[0];
+    if (result?.type !== "tool_result") throw new Error("expected recorded result");
+    result.content = "edited result";
+    const plan = planTurn(Object.values(book)[0], history);
+    expect(plan.fork).toBe(true);
+    expect(plan.resumeSessionAt).toBe("msg_0_asst_1");
+    expect(plan.prompt).toContain("edited result");
+  });
+
+  test.each(["error", "image"])("a native %s result is not replayed on continuation", async (kind) => {
+    const tools = phase();
+    tools.runTool = async (use) => ({
+      type: "tool_result",
+      tool_use_id: use.id,
+      ...(kind === "error" ? { is_error: true } : {}),
+      content: kind === "error" ? "read failed" : [
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "aW1hZ2U=" } },
+      ],
+    });
+    const req = request();
+    const { path, events } = await drive(ONE_CALL, tools, req);
+    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    const plan = planTurn(Object.values(book)[0], [
+      ...req.messages,
+      ...tools.recorded.map(({ role, blocks }) => ({ role, content: blocks })),
+      { role: "assistant", content: (done(events).content_blocks ?? []) as ContentBlock[] },
+      { role: "user", content: [{ type: "text", text: "continue" }] },
+    ]);
+    expect(plan.resume).toBe("session-fake");
+    expect(plan.fork).toBe(false);
+    expect(plan.prompt).toBe("continue");
+    expect(plan.images).toEqual([]);
+  });
+
+  test("overlapping plain and tool-using chats retain both sessions", async () => {
+    const path = join(await mkdtemp(join(tmpdir(), "shore-agent-overlap-")), "sessions.json");
+    const agent = fakeAgent(ONE_CALL);
+    const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
+    const plain = provider.stream(request({ tools: [], context: { character: "plain", call_type: "message", thinking_enabled: false } }))[Symbol.asyncIterator]();
+    const native = provider.streamWithTools(request({ context: { character: "native", call_type: "message", thinking_enabled: false } }), phase())[Symbol.asyncIterator]();
+    for (const stream of [plain, native]) {
+      const started = await stream.next();
+      if (started.done) throw new Error("stream ended before start");
+      expect(started.value.type).toBe("start");
+    }
+    for (const stream of [plain, native]) {
+      for (;;) {
+        const next = await stream.next();
+        if (next.done) break;
+        expect(next.value.type).not.toBe("error");
+      }
+    }
+    const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+    expect(Object.keys(book)).toHaveLength(2);
   });
 });
 
@@ -386,6 +489,18 @@ test("the SDK tool loop warns when replaying prior conversation turns", async ()
   expect(warning?.message).toContain("can significantly degrade model quality");
   expect(events.filter((event) => event.type === "provider_warning")).toHaveLength(1);
   expect(done(events).content).toBe("it says Brian.");
+});
+
+test("the replay warning describes the prompt after the initial hook changes it", async () => {
+  const tools = phase();
+  tools.beforeTurn = (req) => {
+    if (req.messages.length === 1) {
+      req.messages.push({ role: "user", content: [{ type: "text", text: "another message" }] });
+    }
+  };
+  const { events } = await drive(ONE_CALL, tools);
+  const warning = events.find((event) => event.type === "provider_warning");
+  expect(warning?.message).toContain("collapsing 2 conversation messages");
 });
 
 

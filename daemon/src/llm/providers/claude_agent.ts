@@ -29,6 +29,7 @@ import {
   readBook,
   sessionKey,
   writeBook,
+  writeSession,
   type DeliveredEntry,
   type SessionRecord,
 } from "./agent_sessions.ts";
@@ -623,8 +624,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
 
     const path = this.#bookPath();
     const key = conversationKey(req);
-    const book = readBook(path);
-    const record = book[key];
+    const record = readBook(path)[key];
     const plan = planTurn(record, req.messages);
 
     const abort = new AbortController();
@@ -646,15 +646,14 @@ export class ClaudeAgentProvider implements SidecarProvider {
       }
 
       if (seen.sessionId !== undefined) {
-        book[key] = {
+        writeSession(path, key, {
           version: SESSION_BOOK_VERSION,
           sessionId: seen.sessionId,
           entries: nextEntries(plan, record?.pendingAssistantUuids),
           ...(seen.assistantUuids.length === 0
             ? {}
             : { pendingAssistantUuids: seen.assistantUuids }),
-        };
-        writeBook(path, book);
+        });
       }
 
       const total = Date.now() - startedAt;
@@ -744,6 +743,9 @@ class RoundLog {
   #resolveReady!: () => void;
   #failure: unknown;
   #serial: Promise<unknown> = Promise.resolve();
+  #nativeMessages: { message: WireMessage; assistantRound?: number }[] = [];
+  #assistantRounds = 0;
+  #recordedAssistantRounds = 0;
   iterations = 0;
   stopped = false;
 
@@ -759,6 +761,7 @@ class RoundLog {
 
   async modelFinished(acc: TurnAccumulator): Promise<void> {
     if (this.#turn !== undefined) return;
+    const assistantRound = this.#assistantRounds++;
     this.#turn = {
       model: this.#request.model,
       content: acc.text,
@@ -771,6 +774,11 @@ class RoundLog {
       await this.#phase.onTurn?.(this.#turn);
       if (this.#turn.content_blocks.some((block) => block.type === "tool_use")) {
         await this.#phase.recordTurn("assistant", this.#turn.content_blocks);
+        this.#nativeMessages.push({
+          message: { role: "assistant", content: this.#turn.content_blocks },
+          assistantRound,
+        });
+        this.#recordedAssistantRounds = this.#assistantRounds;
       }
     } catch (error) {
       this.#failure = error;
@@ -824,6 +832,7 @@ class RoundLog {
       return found === undefined ? [] : [found];
     });
     await this.#phase.recordTurn("user", results);
+    this.#nativeMessages.push({ message: { role: "user", content: results } });
     await this.#phase.afterTurn?.(this.#turn);
     const before = this.#request.messages.map((message) => message.content.length);
     try {
@@ -847,6 +856,17 @@ class RoundLog {
 
   finalBlocks(): ContentBlock[] {
     return this.#assembler.finish();
+  }
+
+  nativeEntries(assistantUuids: readonly string[]): DeliveredEntry[] {
+    return this.#nativeMessages.map(({ message, assistantRound }) => {
+      const uuid = assistantRound === undefined ? undefined : assistantUuids[assistantRound];
+      return { hash: messageHash(message), ...(uuid === undefined ? {} : { uuid }) };
+    });
+  }
+
+  pendingAssistantUuids(assistantUuids: readonly string[]): string[] {
+    return assistantUuids.slice(this.#recordedAssistantRounds);
   }
 
   async close(acc: TurnAccumulator): Promise<void> {
@@ -896,8 +916,7 @@ export async function* claudeAgentToolLoopEvents(
 
   const path = (deps.bookPath ?? bookPath)();
   const key = conversationKey(req);
-  const book = readBook(path);
-  const record = book[key];
+  const record = readBook(path)[key];
   let plan = planTurn(record, req.messages);
 
   const abort = new AbortController();
@@ -938,10 +957,9 @@ export async function* claudeAgentToolLoopEvents(
 
   try {
     yield { type: "start", model: req.model };
-    yield* replayWarnings(plan);
-
     await tools.beforeTurn?.(req);
     plan = planTurn(record, req.messages);
+    yield* replayWarnings(plan);
     const run = (deps.runQuery ?? query)({
       prompt: agentPrompt(plan),
       options: buildOptions(req, plan, abort, {
@@ -973,15 +991,18 @@ export async function* claudeAgentToolLoopEvents(
     await round.finish();
 
     if (seen.sessionId !== undefined) {
-      book[key] = {
+      const pendingAssistantUuids = round.pendingAssistantUuids(seen.assistantUuids);
+      writeSession(path, key, {
         version: SESSION_BOOK_VERSION,
         sessionId: seen.sessionId,
-        entries: nextEntries(plan, record?.pendingAssistantUuids),
-        ...(seen.assistantUuids.length === 0
+        entries: [
+          ...nextEntries(plan, record?.pendingAssistantUuids),
+          ...round.nativeEntries(seen.assistantUuids),
+        ],
+        ...(pendingAssistantUuids.length === 0
           ? {}
-          : { pendingAssistantUuids: seen.assistantUuids }),
-      };
-      writeBook(path, book);
+          : { pendingAssistantUuids }),
+      });
     }
 
     const total = Date.now() - startedAt;
