@@ -106,26 +106,17 @@ MUTANTS = [
 
     # ── the lease ───────────────────────────────────────────────────────
     ("every engine message takes the lease",
-     "    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind);",
-     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, "message");'),
+     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);',
+     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, "message", undefined, meta.session.selectedThread);'),
     ("no engine message takes the lease",
-     "    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind);",
-     "    void resolved;"),
+     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);',
+     '    void resolved;'),
     ("the lease is keyed by the session rather than the character",
-     "    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind);",
-     "    this.#deps.leases.observe(\n"
-     "      String(meta.session.sessionId),\n"
-     "      meta.session.sessionId,\n"
-     "      meta.kind,\n"
-     "    );"),
+     '    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);',
+     '    this.#deps.leases.observe(String(meta.session.sessionId), meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);'),
     ("the stream goes to the issuer alone, not the fanout",
-     "    const send = this.#deps.leases.fanout(\n"
-     "      charName,\n"
-     "      meta.session.sessionId,\n"
-     "      issuerSend,\n"
-     "      this.#deps.router,\n"
-     "    );",
-     "    const send = issuerSend;"),
+     '    const send = this.#deps.leases.fanout(\n      charName,\n      meta.session.sessionId,\n      async (msg) => { if (inSelectedThread()) await issuerSend(msg); },\n      this.#deps.router,\n      undefined,\n      thread,\n    );',
+     '    const send = issuerSend;'),
     ("the disconnect sweep leaves the leases in place",
      "    this.#deps.leases.clear();",
      "    void 0;"),
@@ -140,36 +131,23 @@ MUTANTS = [
 
     # ── the cancel frame ────────────────────────────────────────────────
     ("a cancel with nothing running still sends a frame",
-     "    const abort = this.#sessions.get(sessionId);\n"
-     "    if (abort === undefined) return;",
-     "    const abort = this.#sessions.get(sessionId);\n"
-     "    if (abort === undefined) {\n"
-     "      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));\n"
-     "      return;\n"
-     "    }"),
+     '    if (generations === undefined) return;',
+     '    if (generations === undefined) {\n      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));\n      return;\n    }'),
     ("a cancel sends no frame at all",
      "    await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));",
      "    void rid;"),
     ("a cancel does not abort what it announces",
-     "    abort();\n    this.#sessions.delete(sessionId);",
-     "    this.#sessions.delete(sessionId);"),
+     '      abort();\n      generations.delete(key);',
+     '      generations.delete(key);'),
     ("a finished generation clears a later launch's abort handle",
-     "        if (this.#sessions.get(meta.session.sessionId) === abort) {",
-     "        if (\n"
-     "          this.#sessions.get(meta.session.sessionId) ===\n"
-     "          this.#sessions.get(meta.session.sessionId)\n"
-     "        ) {"),
+     '        if (generations.get(scope) === abort) {',
+     '        if (true) {'),
     ("a completed generation retains its session state",
-     "        if (this.#sessions.get(meta.session.sessionId) === abort) {\n"
-     "          this.#sessions.delete(meta.session.sessionId);\n"
-     "        }",
-     "        void abort;"),
+     '        if (generations.get(scope) === abort) {\n          generations.delete(scope);\n          if (generations.size === 0) this.#sessions.delete(meta.session.sessionId);\n        }',
+     '        void abort;'),
     ("a cancelled generation retains its session state",
-     "    abort();\n"
-     "    this.#sessions.delete(sessionId);\n"
-     "    await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));",
-     "    abort();\n"
-     "    await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));"),
+     '    if (generations.size === 0) this.#sessions.delete(sessionId);',
+     '    void generations;'),
     ("the generation is never told it was cancelled",
      "      signal: controller.signal,",
      "      signal: new AbortController().signal,"),
@@ -191,14 +169,8 @@ MUTANTS = [
      "    }",
      "    void previousAbort;"),
     ("superseding also sends a cancelled stream_end",
-     "    const abort = () => controller.abort();\n"
-     "    this.#sessions.set(meta.session.sessionId, abort);",
-     "    const abort = () => controller.abort();\n"
-     "    this.#sessions.set(meta.session.sessionId, abort);\n"
-     "    void this.#deps.router.sendToSession(\n"
-     "      meta.session.sessionId,\n"
-     "      cancelledStreamEnd(rid),\n"
-     "    );"),
+     '    const abort = () => controller.abort();\n    generations.set(scope, abort);\n    this.#sessions.set(meta.session.sessionId, generations);',
+     '    const abort = () => controller.abort();\n    generations.set(scope, abort);\n    this.#sessions.set(meta.session.sessionId, generations);\n    void this.#deps.router.sendToSession(meta.session.sessionId, cancelledStreamEnd(rid));'),
 
     # ── the rid filter ──────────────────────────────────────────────────
     ("the rid filter accepts anything",

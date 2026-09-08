@@ -129,6 +129,7 @@ async function harness(characters: readonly string[]): Promise<Harness> {
     },
     router: {
       characterFor: () => null,
+      threadFor: () => null,
       setSelectedCharacter: () => {},
       sendToSession: async () => {},
     } as never,

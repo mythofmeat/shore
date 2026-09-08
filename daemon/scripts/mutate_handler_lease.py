@@ -68,14 +68,12 @@ MUTANTS = [
      "    return;"),
     ("take: the lease is global rather than per character",
      LEASE,
-     '    this.#leases.set(character, { sessionId, expiresAt: now + LEASE_TTL_MS });',
+     '    this.#leases.set(JSON.stringify([character, thread]), { sessionId, expiresAt: now + LEASE_TTL_MS });',
      '    this.#leases.set("", { sessionId, expiresAt: now + LEASE_TTL_MS });'),
     ("take: a later message does not displace an earlier holder",
      LEASE,
-     "    this.#leases.set(character, { sessionId, expiresAt: now + LEASE_TTL_MS });",
-     "    if (!this.#leases.has(character)) {\n"
-     "      this.#leases.set(character, { sessionId, expiresAt: now + LEASE_TTL_MS });\n"
-     "    }"),
+     '    this.#leases.set(JSON.stringify([character, thread]), { sessionId, expiresAt: now + LEASE_TTL_MS });',
+     '    if (!this.#leases.has(JSON.stringify([character, thread]))) {\n      this.#leases.set(JSON.stringify([character, thread]), { sessionId, expiresAt: now + LEASE_TTL_MS });\n    }'),
 
     # --- its lifetime ---------------------------------------------------------
     ("ttl: a day instead of an hour",
@@ -96,15 +94,12 @@ MUTANTS = [
      "    if (now > lease.expiresAt) {"),
     ("ttl: it never expires",
      LEASE,
-     "    if (now >= lease.expiresAt) {\n"
-     "      this.#leases.delete(character);\n"
-     "      return undefined;\n"
-     "    }\n",
-     ""),
+     '    if (now >= lease.expiresAt) {\n      this.#leases.delete(key);\n      return undefined;\n    }\n',
+     ''),
     ("ttl: an expired lease is declined but left in the map",
      LEASE,
-     "    if (now >= lease.expiresAt) {\n      this.#leases.delete(character);\n      return undefined;\n    }",
-     "    if (now >= lease.expiresAt) {\n      return undefined;\n    }"),
+     '    if (now >= lease.expiresAt) {\n      this.#leases.delete(key);\n      return undefined;\n    }',
+     '    if (now >= lease.expiresAt) {\n      return undefined;\n    }'),
 
     # --- resolving it ---------------------------------------------------------
     ("resolve: the issuer is fanned out to twice",
@@ -113,8 +108,8 @@ MUTANTS = [
      ""),
     ("resolve: a lease on a vanished session is kept and retried forever",
      LEASE,
-     "    if (send === undefined) this.#leases.delete(character);",
-     "    if (send === undefined) return undefined;"),
+     '    if (send === undefined) this.#leases.delete(key);',
+     '    if (send === undefined) return undefined;'),
     ("resolve: clearing forgets nothing",
      LEASE,
      "  clear(): void {\n    this.#leases.clear();",
@@ -133,10 +128,8 @@ MUTANTS = [
      ""),
     ("fanout: the recipients are re-resolved on every frame",
      LEASE,
-     "    const spectatorSend = this.spectator(character, issuerSession, router, now);\n"
-     "    return async (msg: ServerMessage) => {\n",
-     "    return async (msg: ServerMessage) => {\n"
-     "      const spectatorSend = this.spectator(character, issuerSession, router, now);\n"),
+     '    const spectatorSend = this.spectator(character, issuerSession, router, now, thread);\n    return async (msg: ServerMessage) => {\n',
+     '    return async (msg: ServerMessage) => {\n      const spectatorSend = this.spectator(character, issuerSession, router, now, thread);\n'),
     ("fanout: a dead lease holder aborts the generation",
      LEASE,
      "      if (spectatorSend !== undefined) {\n"
