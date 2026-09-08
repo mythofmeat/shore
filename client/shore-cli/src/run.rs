@@ -1194,8 +1194,13 @@ async fn handle_complete_query(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::cli::CompleteKind;
     let addr = resolve_addr(cli)?;
+    let character = cli.character.clone().or_else(state::read_active_character);
+    let thread = cli
+        .thread
+        .clone()
+        .or_else(|| character.as_deref().and_then(state::read_active_thread));
     let (mut conn, _hello, _history) =
-        SWPConnection::connect(&addr, "cli", "shore-cli", None).await?;
+        SWPConnection::connect_in_thread(&addr, "cli", "shore-cli", character, thread).await?;
 
     if matches!(
         kind,
@@ -1240,6 +1245,7 @@ async fn handle_complete_query(
     }
 
     let (cmd, array_keys) = match kind {
+        CompleteKind::Threads => ("list_threads", &["threads"][..]),
         CompleteKind::Characters => ("list_characters", &["characters"][..]),
         CompleteKind::Providers => ("list_providers", &["providers"][..]),
         CompleteKind::Sections => ("status", &["sections"][..]),
@@ -1265,6 +1271,7 @@ async fn handle_complete_query(
             let Some(name) = item
                 .as_str()
                 .or_else(|| item["name"].as_str())
+                .or_else(|| item["id"].as_str())
                 .or_else(|| item["tool"].as_str())
             else {
                 continue;

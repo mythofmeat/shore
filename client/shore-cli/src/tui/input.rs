@@ -199,6 +199,7 @@ fn palette_catalog_commands(app: &mut App) -> Vec<ConnCommand> {
     app.palette_catalog_loaded = true;
     [
         ("models", "list_models"),
+        ("threads", "list_threads"),
         ("providers", "list_providers"),
         ("status", "status"),
         ("tools", "tools"),

@@ -75,6 +75,7 @@ function toSnapshot(p: PersistedKeepalive): KeepaliveSnapshot {
 }
 
 export class AutonomyService {
+  readonly #foreground = new Map<string, number>();
   readonly #entries = new Map<string, Entry>();
   readonly #executor: AutonomyExecutor;
   readonly #now: () => number;
@@ -132,11 +133,26 @@ export class AutonomyService {
     await entry.runner.shutdown();
   }
 
+  beginForeground(character: string): () => void {
+    this.#foreground.set(character, (this.#foreground.get(character) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const remaining = (this.#foreground.get(character) ?? 1) - 1;
+      if (remaining > 0) this.#foreground.set(character, remaining);
+      else {
+        this.#foreground.delete(character);
+        this.#entries.get(character)?.runner.deferHeartbeat(this.#now());
+      }
+    };
+  }
+
   async tick(): Promise<void> {
     const due: [string, Entry][] = [];
     for (const pair of this.#entries) {
       pair[1].runner.setKeepaliveSchedule(toPersisted(this.#keepalive?.scheduleFor(pair[0])));
-      if (pair[1].inFlight) continue;
+      if (pair[1].inFlight || this.#foreground.has(pair[0])) continue;
       pair[1].inFlight = true;
       due.push(pair);
     }

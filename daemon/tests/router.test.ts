@@ -915,3 +915,28 @@ describe("a session that disconnects mid-command", () => {
     expect(started).toEqual(["slow"]);
   });
 });
+
+test("different threads can generate in one session without cancelling or mixing streams", async () => {
+  const h = harness(["Alice"], 1);
+  for (const thread of ["main", "scratch"]) {
+    h.router.setSelectedCharacter(1, "Alice");
+    h.router.setSelectedThread(1, thread);
+    const request = meta("Alice", 1, thread, "message");
+    await h.handler.handleRouted({
+      kind: "engine", msg: message(thread, "hello", true),
+      meta: { ...request, session: { ...request.session, selectedThread: thread } },
+    });
+  }
+  const main = required(h.started[0]);
+  const scratch = required(h.started[1]);
+  expect(main.signal.aborted).toBe(false);
+  await main.send({ type: "stream_chunk", text: "main", content_type: "text" });
+  await scratch.send({ type: "stream_chunk", text: "scratch", content_type: "text" });
+  expect(h.frames.get(1)).toEqual([{ type: "stream_chunk", text: "scratch", content_type: "text" }]);
+  await h.handler.cancelGeneration(1, null, "user cancelled");
+  expect(scratch.signal.aborted).toBe(true);
+  expect(main.signal.aborted).toBe(false);
+  await h.handler.handleControl({ kind: "all_clients_disconnected" });
+  await h.handler.drain();
+  expect(main.signal.aborted).toBe(true);
+});

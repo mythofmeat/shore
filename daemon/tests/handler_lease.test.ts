@@ -221,3 +221,17 @@ describe("the fanout", () => {
     ]);
   });
 });
+
+test("stream spectators follow a thread and stop receiving after leaving it", async () => {
+  const leases = new StreamLeases();
+  const sessions = new SessionRouter();
+  const received: ServerMessage[] = [];
+  sessions.registerSession({ ...client(1), thread: "scratch" }, async (msg) => { received.push(msg); });
+  leases.observe("Alice", 1, "message", T0, "scratch");
+  expect(leases.spectator("Alice", 2, sessions, T0, "main")).toBeUndefined();
+  const send = required(leases.spectator("Alice", 2, sessions, T0, "scratch"));
+  await send(probe("before"));
+  sessions.setSelectedThread(1, "main");
+  await send(probe("after"));
+  expect(received).toEqual([probe("before")]);
+});

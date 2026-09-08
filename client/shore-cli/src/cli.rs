@@ -929,6 +929,8 @@ pub(crate) enum CompleteKind {
     Models,
     /// Discovered character names
     Characters,
+    /// Threads belonging to the selected character
+    Threads,
     /// Configured provider keys
     Providers,
     /// Section names `shore status --section` accepts
@@ -1192,8 +1194,8 @@ pub(crate) enum ModelCommand {
     /// Spell out `use` when a model's name would otherwise read as one of
     /// these subcommands. An unknown name is an error, never a fallback.
     ///
-    /// Bare, this picks the chat model, saved against the attached character,
-    /// so characters can differ. Every other target writes the config file,
+    /// Bare, this pins the chat model for the current thread until changed or reset.
+    /// Every other target writes the config file,
     /// which is global: --background=<task> writes defaults.background.<task>,
     /// bare --background writes defaults.background.model (the value both
     /// tasks fall back to), --subagent=<name> writes subagents.<name>.model,
@@ -1294,7 +1296,7 @@ pub(crate) enum ModelCommand {
 
     /// Drop a saved selection and fall back to what it would inherit
     ///
-    /// Bare, this clears the character's chat model. Every other target clears
+    /// Bare, this clears the thread's pin to inherit the character default. Other targets clear
     /// the config keys `use` would have written, so the role falls back the
     /// way it did before anything was pinned. Bare --background clears all
     /// three background keys; bare --subagent clears defaults.subagent_model
@@ -1359,6 +1361,7 @@ pub(crate) enum ThreadCommand {
     },
 
     /// Pin a thread to its own chat model, or clear the pin to inherit the character's
+    #[command(hide = true)]
     Model {
         /// Thread id
         name: String,
@@ -1667,6 +1670,7 @@ impl PaletteValue {
 pub(crate) struct PaletteCatalog {
     pub models: Vec<PaletteValue>,
     pub characters: Vec<PaletteValue>,
+    pub threads: Vec<PaletteValue>,
     pub providers: Vec<PaletteValue>,
     pub status_sections: Vec<PaletteValue>,
     pub tools: Vec<PaletteValue>,
@@ -1809,6 +1813,23 @@ fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
                 })
                 .mut_subcommand("unfav", |leaf| {
                     with_palette_values(leaf, "name", &model_values)
+                })
+        })
+        .mut_subcommand("thread", |mut subcommand| {
+            for name in ["use", "label", "home", "archive", "model"] {
+                subcommand = subcommand.mut_subcommand(name, |leaf| {
+                    with_palette_values(leaf, "name", &catalog.threads)
+                });
+            }
+            subcommand
+                .mut_subcommand("fork", |leaf| {
+                    with_palette_values(leaf, "from", &catalog.threads)
+                })
+                .mut_subcommand("new", |leaf| {
+                    with_palette_values(leaf, "model", &model_values)
+                })
+                .mut_subcommand("model", |leaf| {
+                    with_palette_values(leaf, "model", &model_values)
                 })
         })
         .mut_subcommand("character", |subcommand| {
@@ -2180,6 +2201,10 @@ fn strip_noise_words(line: &str) -> String {
 pub(crate) fn fish_dynamic_completions_footer() -> &'static str {
     "\n\
 # ── Dynamic completions (populated by the daemon) ────────────────────\n\
+complete -c shore -l thread -r -f -a \"(shore complete threads 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_subcommand_from use label home archive\" -f -a \"(shore complete threads 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_subcommand_from fork\" -l from -r -f -a \"(shore complete threads 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_subcommand_from new\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use info\" -f -a \"(shore complete models 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_subcommand_from use\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n\
@@ -2909,6 +2934,30 @@ mod tests {
         let incomplete = palette_command_needs_more_input("model reset --subagent memory")
             .expect_err("a spaced target is an error, not an incomplete command");
         assert!(incomplete.contains("--subagent=memory"), "{incomplete}");
+    }
+
+    #[test]
+    fn palette_completes_existing_threads_but_leaves_new_names_free() {
+        let catalog = PaletteCatalog {
+            threads: vec![PaletteValue::plain("scratch")],
+            models: vec![PaletteValue::plain("anthropic:opus")],
+            ..PaletteCatalog::default()
+        };
+        for verb in ["use", "label", "home", "archive"] {
+            let input = format!("thread {verb} ");
+            assert!(palette_replacements(&input, &catalog).contains(&format!("{input}scratch")));
+        }
+        assert!(
+            palette_replacements("thread fork child --from ", &catalog)
+                .contains(&"thread fork child --from scratch".into())
+        );
+        assert!(
+            palette_replacements("thread new child --model ", &catalog)
+                .contains(&"thread new child --model anthropic:opus".into())
+        );
+        assert!(
+            !palette_replacements("thread new ", &catalog).contains(&"thread new scratch".into())
+        );
     }
 
     #[test]

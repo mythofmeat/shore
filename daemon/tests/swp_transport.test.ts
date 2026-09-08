@@ -337,6 +337,24 @@ describe("handleConnection", () => {
     expect(c.router.sessions()).toEqual([]);
   });
 
+  test("requests use the live thread after switching on an established socket", async () => {
+    const c = connect();
+    c.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
+    for (let i = 0; i < 2000 && c.router.sessions().length === 0; i += 1) await Promise.resolve();
+    c.router.setSelectedThread(1, "scratch");
+    c.send('{"type":"command","name":"list_threads","args":{}}\n');
+    c.send('{"type":"message","text":"hello","stream":true}\n');
+    c.close();
+    await c.done;
+    const requests = c.routed.filter((item) => item.kind === "command" || item.kind === "engine");
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      if (request.kind === "command" || request.kind === "engine") {
+        expect(request.meta.session.selectedThread).toBe("scratch");
+      }
+    }
+  });
+
   test("a direct send and a broadcast racing each other stay on separate lines", async () => {
     const c = connect({ slowSink: true });
     c.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');

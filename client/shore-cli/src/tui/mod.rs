@@ -815,6 +815,7 @@ fn thread_refresh_command(app: &mut App) -> ConnCommand {
 }
 
 fn absorb_thread_listing(app: &mut App, data: &serde_json::Value) {
+    app.palette_catalog.threads = named_palette_values(data, "threads");
     let Some(rows) = data.get("threads").and_then(|v| v.as_array()) else {
         return;
     };
@@ -1907,6 +1908,7 @@ fn named_palette_values(data: &serde_json::Value, array: &str) -> Vec<crate::cli
             let value = item
                 .as_str()
                 .or_else(|| item.get("name").and_then(serde_json::Value::as_str))
+                .or_else(|| item.get("id").and_then(serde_json::Value::as_str))
                 .or_else(|| item.get("tool").and_then(serde_json::Value::as_str))?;
             let help = item
                 .get("description")
@@ -1923,6 +1925,7 @@ fn named_palette_values(data: &serde_json::Value, array: &str) -> Vec<crate::cli
 
 fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
     match kind {
+        "threads" => absorb_thread_listing(app, data),
         "models" => {
             if data.get("models").is_some_and(serde_json::Value::is_object) {
                 let models = crate::output::models_by_provider(data);
@@ -3144,7 +3147,7 @@ mod redraw_tests {
     #[test]
     fn switching_threads_is_persisted_and_refetches_the_roster() {
         let tmp = tempfile::TempDir::new().unwrap();
-        set_env("SHORE_RUNTIME_DIR", &tmp.path().join("shore"));
+        set_env("SHORE_DATA_DIR", &tmp.path().join("shore"));
         let result = std::panic::catch_unwind(|| {
             let mut app = App {
                 character_name: "qifei".into(),
@@ -3173,7 +3176,7 @@ mod redraw_tests {
             );
             assert_eq!(effect.cmds.len(), 1, "the roster is refetched");
         });
-        unset_env("SHORE_RUNTIME_DIR");
+        unset_env("SHORE_DATA_DIR");
         result.unwrap();
     }
 

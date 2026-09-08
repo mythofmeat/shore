@@ -11,6 +11,7 @@ const fixture = expandShared<typeof rawFixture>(rawFixture);
 
 import { CommandError } from "../src/commands/errors.ts";
 import {
+  changeThreadModel,
   listModels,
   modelRoles,
   modelInfo,
@@ -919,4 +920,29 @@ describe("a discovered model's capabilities reach the settings table", () => {
     expect(schema.find((entry) => entry["key"] === "reasoning_effort")?.["suggestions"])
       .toEqual(["low", "high", "off"]);
   });
+});
+
+test("normal model selection pins only the thread, replaces its pin, and reset inherits", async () => {
+  const ctx = await buildContext(required(scenarios[0]).setup);
+  const pins: Array<string | undefined> = [];
+  const persist = async (model: string | undefined) => { pins.push(model); };
+  expect(await changeThreadModel(ctx, { name: "alpha" }, persist)).toMatchObject({
+    qualified_name: "chat.anthropic.alpha", changed: true,
+  });
+  ctx.threadModel = "chat.anthropic.alpha";
+  expect(await changeThreadModel(ctx, { name: "beta" }, persist)).toMatchObject({
+    qualified_name: "chat.anthropic.beta", changed: true,
+  });
+  expect(await changeThreadModel(ctx, {}, persist, true)).toMatchObject({
+    active: "chat.anthropic.beta", reset_to: "character default",
+  });
+  expect(pins).toEqual(["chat.anthropic.alpha", "chat.anthropic.beta", undefined]);
+  expect(existsSync(characterPreferencesPath(ctx.dataDir, "Tester"))).toBe(false);
+  try {
+    await changeThreadModel(ctx, { name: "missing-model" }, persist);
+    throw new Error("unknown model was accepted");
+  } catch (error) {
+    expect(error).toBeInstanceOf(CommandError);
+  }
+  expect(pins).toHaveLength(3);
 });

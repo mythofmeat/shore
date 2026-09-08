@@ -136,6 +136,12 @@ export class CharacterAutonomy {
     this.#state.dirty = true;
   }
 
+  deferHeartbeat(now: number): void {
+    this.#clock.deferWakeToMinimumLatency(now, true);
+    this.#state.lastActivityAt = now;
+    this.#state.dirty = true;
+  }
+
   onAssistantMessage(turnCount: number, now: number): void {
     this.#state.activeTurnCount = turnCount;
     this.#state.lastActivityAt = now;

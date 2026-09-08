@@ -91,7 +91,10 @@ async function afterChatModelChange(
     (args["background_task"] !== undefined || args["subagent"] !== undefined)
   ) return undefined;
 
-  await ctx.runtime.refreshCachedRequest(ctx.character);
+  await ctx.runtime.refreshCachedRequest(
+    ctx.character, "model_change",
+    ctx.router.threadFor(ctx.sessionId) ?? ctx.runtime.homeThread(ctx.character),
+  );
   return invalidated(data, { cached_request: true });
 }
 

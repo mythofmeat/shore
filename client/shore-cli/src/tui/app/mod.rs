@@ -823,6 +823,7 @@ impl App {
     pub(crate) fn invalidate_palette_catalog(&mut self) {
         self.palette_catalog_loaded = false;
         self.pending_palette_catalog.clear();
+        self.palette_catalog.threads.clear();
         self.palette_catalog.providers.clear();
         self.palette_catalog.status_sections.clear();
         self.palette_catalog.tools.clear();

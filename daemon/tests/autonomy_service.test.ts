@@ -553,3 +553,29 @@ describe("the keepalive's two halves", () => {
     });
   });
 });
+
+test("foreground turns defer only their character until all concurrent replies finish", async () => {
+  await inTempDir(async (root) => {
+    const { service, executor, now } = build();
+    for (const name of ["nova", "other"]) {
+      await service.register(registration(name, characterDir(root, name), { compactionEnabled: false }));
+      service.forceHeartbeatNow(name);
+    }
+    const first = service.beginForeground("nova");
+    const second = service.beginForeground("nova");
+    await service.tick();
+    expect(executor.calls).toEqual(["other:heartbeat"]);
+    first();
+    first();
+    await service.tick();
+    expect(executor.calls).toEqual(["other:heartbeat"]);
+    second();
+    await service.tick();
+    expect(executor.calls).toEqual(["other:heartbeat"]);
+    expect(service.status("nova")?.ticks_without_user).toBe(0);
+    now.value += HOUR;
+    await service.tick();
+    expect(executor.calls).toContain("nova:heartbeat");
+    await service.shutdown();
+  });
+});

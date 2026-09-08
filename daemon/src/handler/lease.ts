@@ -10,6 +10,8 @@ interface Lease {
 
 export interface LeaseRouter {
   senderFor(sessionId: number): DirectSender | undefined;
+  threadFor?(sessionId: number): string | null;
+  characterFor?(sessionId: number): string | null;
 }
 
 interface LeaseLogger {
@@ -21,9 +23,9 @@ export class StreamLeases {
 
   constructor(private readonly log?: LeaseLogger) {}
 
-  observe(character: string, sessionId: number, kind: RequestKind, now = Date.now()): void {
+  observe(character: string, sessionId: number, kind: RequestKind, now = Date.now(), thread: string | null = null): void {
     if (kind !== "message") return;
-    this.#leases.set(character, { sessionId, expiresAt: now + LEASE_TTL_MS });
+    this.#leases.set(JSON.stringify([character, thread]), { sessionId, expiresAt: now + LEASE_TTL_MS });
   }
 
   spectator(
@@ -31,17 +33,25 @@ export class StreamLeases {
     issuerSession: number,
     router: LeaseRouter,
     now = Date.now(),
+    thread: string | null = null,
   ): DirectSender | undefined {
-    const lease = this.#leases.get(character);
+    const key = JSON.stringify([character, thread]);
+    const lease = this.#leases.get(key);
     if (lease === undefined) return undefined;
     if (now >= lease.expiresAt) {
-      this.#leases.delete(character);
+      this.#leases.delete(key);
       return undefined;
     }
     if (lease.sessionId === issuerSession) return undefined;
     const send = router.senderFor(lease.sessionId);
-    if (send === undefined) this.#leases.delete(character);
-    return send;
+    if (send === undefined) this.#leases.delete(key);
+    if (send === undefined) return undefined;
+    return async (msg) => {
+      const selected = router.characterFor?.(lease.sessionId);
+      if (selected !== undefined && selected !== null && selected !== character) return;
+      if (router.threadFor !== undefined && router.threadFor(lease.sessionId) !== thread) return;
+      await send(msg);
+    };
   }
 
   fanout(
@@ -50,8 +60,9 @@ export class StreamLeases {
     issuerSend: DirectSender,
     router: LeaseRouter,
     now = Date.now(),
+    thread: string | null = null,
   ): DirectSender {
-    const spectatorSend = this.spectator(character, issuerSession, router, now);
+    const spectatorSend = this.spectator(character, issuerSession, router, now, thread);
     return async (msg: ServerMessage) => {
       if (spectatorSend !== undefined) {
         void sendObserved(spectatorSend, msg, this.log, "spectator");

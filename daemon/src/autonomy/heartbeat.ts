@@ -135,11 +135,11 @@ export class HeartbeatClock {
     this.#nextWakeAt = existing !== undefined && existing > floor ? existing : floor;
   }
 
-  deferWakeToMinimumLatency(now: number): void {
+  deferWakeToMinimumLatency(now: number, ensureScheduled = false): void {
     const existing = this.#nextWakeAt;
-    if (existing === undefined) return;
+    if (existing === undefined && !ensureScheduled) return;
     const floor = now + this.#config.minWakeIntervalMs;
-    if (existing >= floor) return;
+    if (existing !== undefined && existing >= floor) return;
     this.#nextWakeAt = floor;
     this.#lastAnchor = floor;
   }

@@ -223,6 +223,16 @@ describe("restartRequiredChanges", () => {
 });
 
 describe("a chat model change", () => {
+  test("model use and reset refresh the selected thread instead of home", async () => {
+    for (const command of ["switch_model", "reset_model"]) {
+      const f = fakes();
+      f.ctx.router.setSelectedThread(SESSION, "scratch");
+      await afterCommand(command, { name: "glm" }, {}, f.ctx);
+      expect(f.log.refreshArgs).toEqual([
+        { character: CHARACTER, reason: "model_change", thread: "scratch" },
+      ]);
+    }
+  });
   test("refreshes the autonomous request cache immediately", async () => {
     const f = fakes();
     const changed = { active: "glm", changed: true };

@@ -235,9 +235,11 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
   async function runGenerationInForeground(params: GenerationParams): Promise<void> {
     await a.runtime.snapshotGate.withActivity(async () => {
       const endForeground = beginIndexForeground(a);
+      const endAutonomyForeground = a.runtime.autonomy.beginForeground(params.charName);
       try {
         await runGeneration(params);
       } finally {
+        endAutonomyForeground();
         endForeground();
       }
     });

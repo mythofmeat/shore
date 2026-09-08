@@ -275,7 +275,7 @@ export async function messageLoop(
         }
         const outcome = routeClientMessage(
           admitted,
-          session,
+          { ...session, selectedThread: ctx.router.threadFor(session.sessionId) },
           ctx.router.characterFor(session.sessionId),
         );
         if (outcome.action === "reply") {

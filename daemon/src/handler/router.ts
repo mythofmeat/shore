@@ -135,7 +135,7 @@ export function sanitiseRid(rid: string | null | undefined): string | null {
 
 export class MessageHandler {
   readonly #deps: MessageHandlerDeps;
-  readonly #sessions = new Map<number, () => void>();
+  readonly #sessions = new Map<number, Map<string, () => void>>();
   readonly #queues = new Map<number, Promise<void>>();
   readonly #commandAborts = new Map<number, Set<AbortController>>();
 
@@ -305,7 +305,7 @@ export class MessageHandler {
             : {}),
         };
 
-    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind);
+    this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind, undefined, meta.session.selectedThread);
 
     await this.launchGeneration(meta, body, regen, resolved.name);
   }
@@ -320,14 +320,23 @@ export class MessageHandler {
     if (issuerSend === undefined) return;
 
     const rid = sanitiseRid(body.rid);
+    const thread = meta.session.selectedThread;
+    const scope = JSON.stringify([charName, thread]);
+    const selectedCharacter = this.#deps.router.characterFor(meta.session.sessionId);
+    const inSelectedThread = () =>
+      this.#deps.router.characterFor(meta.session.sessionId) === selectedCharacter &&
+      this.#deps.router.threadFor(meta.session.sessionId) === thread;
     const send = this.#deps.leases.fanout(
       charName,
       meta.session.sessionId,
-      issuerSend,
+      async (msg) => { if (inSelectedThread()) await issuerSend(msg); },
       this.#deps.router,
+      undefined,
+      thread,
     );
 
-    const previousAbort = this.#sessions.get(meta.session.sessionId);
+    const generations = this.#sessions.get(meta.session.sessionId) ?? new Map<string, () => void>();
+    const previousAbort = generations.get(scope);
     if (previousAbort !== undefined) {
       this.#deps.log?.info?.("aborting previous generation (superseded by new request)");
       previousAbort();
@@ -335,7 +344,8 @@ export class MessageHandler {
 
     const controller = new AbortController();
     const abort = () => controller.abort();
-    this.#sessions.set(meta.session.sessionId, abort);
+    generations.set(scope, abort);
+    this.#sessions.set(meta.session.sessionId, generations);
 
     const params: GenerationParams = {
       meta,
@@ -369,8 +379,9 @@ export class MessageHandler {
         this.#deps.notifier.notify("error", `Shore - ${charName}`, message);
       })
       .finally(() => {
-        if (this.#sessions.get(meta.session.sessionId) === abort) {
-          this.#sessions.delete(meta.session.sessionId);
+        if (generations.get(scope) === abort) {
+          generations.delete(scope);
+          if (generations.size === 0) this.#sessions.delete(meta.session.sessionId);
         }
       });
 
@@ -382,11 +393,22 @@ export class MessageHandler {
     rid: string | null,
     reason: string,
   ): Promise<void> {
-    const abort = this.#sessions.get(sessionId);
-    if (abort === undefined) return;
+    const generations = this.#sessions.get(sessionId);
+    if (generations === undefined) return;
+    const resolved = this.#deps.registry.resolveCharacter(this.#deps.router.characterFor(sessionId));
+    const scope = JSON.stringify([
+      "name" in resolved ? resolved.name : null, this.#deps.router.threadFor(sessionId),
+    ]);
+    const selected = reason === "all clients disconnected"
+      ? [...generations.entries()]
+      : [...generations.entries()].filter(([key]) => key === scope);
+    if (selected.length === 0) return;
     this.#deps.log?.info?.("cancelling active generation", { reason });
-    abort();
-    this.#sessions.delete(sessionId);
+    for (const [key, abort] of selected) {
+      abort();
+      generations.delete(key);
+    }
+    if (generations.size === 0) this.#sessions.delete(sessionId);
     await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(rid));
   }
 

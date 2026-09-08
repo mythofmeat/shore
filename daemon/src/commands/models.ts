@@ -667,6 +667,32 @@ function unpinSubagentModel(ctx: ModelsContext, selector: string): unknown {
   };
 }
 
+export async function changeThreadModel(
+  ctx: ModelsContext,
+  args: Args,
+  setModel: (model: string | undefined) => Promise<unknown>,
+  reset = false,
+): Promise<unknown> {
+  if (reset) {
+    await setModel(undefined);
+    return {
+      active: effectiveChatModel(ctx.config, ctx.characterName)?.qualifiedName ?? null,
+      reset_to: "character default",
+    };
+  }
+  const name = asStr(args["name"]);
+  if (name === undefined) return switchModel(ctx, args);
+  const resolved = resolve(ctx, name, asBool(args["include_hidden"]) ?? false);
+  await setModel(resolved.qualifiedName);
+  return {
+    active: resolved.qualifiedName,
+    qualified_name: resolved.qualifiedName,
+    provider: resolved.providerKey,
+    model_id: resolved.modelId,
+    changed: true,
+  };
+}
+
 export function switchModel(ctx: ModelsContext, args: Args): unknown {
   const subagent = asName(args["subagent"]);
   if (subagent !== undefined) return pinSubagentModel(ctx, subagent, args);

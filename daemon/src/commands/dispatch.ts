@@ -36,6 +36,7 @@ import { sessionActivateCommand, type SessionActivateContext } from "./activate.
 import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
 import { describeTool, runTool, type RunToolContext } from "./run_tool.ts";
 import {
+  changeThreadModel,
   effectiveChatModel,
   favoriteModel,
   listModels,
@@ -145,6 +146,7 @@ export async function runCommand(
 ): Promise<unknown> {
   const args = (cmd.args ?? {}) as Args;
   const character = engine.characterName;
+  const threads = deps.threads;
   const configDir = session.config.dirs.config;
   const workspaceRoot = session.config.dirs.workspace;
 
@@ -209,10 +211,18 @@ export async function runCommand(
     case "model_info":
       return modelInfo(session, args);
     case "switch_model":
+      if (threads !== undefined && args["background_task"] === undefined && args["subagent"] === undefined) {
+        return await changeThreadModel(session, args, (model) =>
+          threads.setThreadModel(character, engine.thread, model, session.signal));
+      }
       return switchModel(session, args);
     case "favorite_model":
       return favoriteModel(session, args);
     case "reset_model":
+      if (threads !== undefined && args["background_task"] === undefined && args["subagent"] === undefined) {
+        return await changeThreadModel(session, args, (model) =>
+          threads.setThreadModel(character, engine.thread, model, session.signal), true);
+      }
       return resetModel(session, args);
     case "set_model_setting":
       return setModelSetting(session, args);
