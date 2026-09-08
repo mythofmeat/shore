@@ -3475,7 +3475,13 @@ mod tests {
 
     #[test]
     fn parse_character_delete() {
-        let cli = parse(&["character", "delete", "alice", "--archive", "/tmp/alice.tar.gz"]);
+        let cli = parse(&[
+            "character",
+            "delete",
+            "alice",
+            "--archive",
+            "/tmp/alice.tar.gz",
+        ]);
         assert_variant!(
             parsed_command(&cli),
             CliCommand::Character { subcommand, .. } => {

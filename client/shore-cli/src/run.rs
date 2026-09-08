@@ -1233,7 +1233,9 @@ fn confirm_delete_character(name: &str) -> Result<bool, Box<dyn std::error::Erro
 
 fn forget_deleted_character(name: &str) {
     if let Err(e) = state::clear_active_thread(name) {
-        output::print_error(&format!("could not forget the thread saved for {name}: {e}"));
+        output::print_error(&format!(
+            "could not forget the thread saved for {name}: {e}"
+        ));
     }
     if state::read_active_character().as_deref() == Some(name) {
         match state::clear_active_character() {
@@ -1702,10 +1704,7 @@ fn needs_a_shell(editor: &str) -> bool {
     editor.chars().any(|c| SHELL_METACHARACTERS.contains(c))
 }
 
-pub(crate) fn editor_invocation(
-    editor: &str,
-    path: &Path,
-) -> (String, Vec<std::ffi::OsString>) {
+pub(crate) fn editor_invocation(editor: &str, path: &Path) -> (String, Vec<std::ffi::OsString>) {
     if needs_a_shell(editor) {
         (
             "sh".to_owned(),
