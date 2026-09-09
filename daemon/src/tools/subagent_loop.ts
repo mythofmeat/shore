@@ -161,7 +161,7 @@ export async function runSubagent(
     ...built.request,
     ...(maxIterations === undefined ? {} : { max_tool_iterations: maxIterations }),
     context: {
-      ledger: rustJoin(config.dirs.data, "ledger.db"),
+      ledger: rustJoin(config.dirs.data, "shore.db"),
       character: charName,
       call_type: "subagent",
       ...(built.api_key_name === undefined ? {} : { api_key_name: built.api_key_name }),

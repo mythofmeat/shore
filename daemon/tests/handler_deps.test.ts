@@ -1,10 +1,11 @@
+import { readdir } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
 
 import type { KeepaliveArming } from "../src/cache/last_request.ts";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -637,7 +638,7 @@ describe("what the assembly hands the driver", () => {
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
-      expect(deps.ledgerPath).toBe(join(root, "data", "ledger.db"));
+      expect(deps.ledgerPath).toBe(join(root, "data", "shore.db"));
       expect(deps.dataDir).toBe(join(root, "data"));
       expect(deps.notifier).toBe(runtime.notifier);
       expect(deps.recall).toBeDefined();
@@ -695,7 +696,7 @@ describe("what the assembly hands the driver", () => {
       });
 
       await mkdir(join(root, "data"), { recursive: true });
-      const ledger = Ledger.open(join(root, "data", "ledger.db"));
+      const ledger = Ledger.open(join(root, "data", "shore.db"));
       for (const character of ["ada", "nova"]) {
         ledger.database.query(
           `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
@@ -1172,7 +1173,7 @@ describe("the command path", () => {
       expect(deps.commands.keepalive?.lastRequest).toBe(runtime.cache);
       expect(deps.commands.keepalive?.keepalive).toBe(runtime.keepalive);
       expect(deps.commands.callStore).toBe(runtime.callStore);
-      expect(deps.commands.ledgerPath).toBe(join(root, "data", "ledger.db"));
+      expect(deps.commands.ledgerPath).toBe(join(root, "data", "shore.db"));
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

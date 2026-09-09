@@ -144,7 +144,7 @@ test("a generate with missing labels is attached to the daemon ledger before sen
   await generate(request, { providers: { openai: counting.provider }, config });
   expect(counting.calls).toBe(1);
   const labeled = request.context;
-  expect(labeled?.ledger).toBe(join(config.dirs.data, "ledger.db"));
+  expect(labeled?.ledger).toBe(join(config.dirs.data, "shore.db"));
   const ledger = Ledger.open(required(required(labeled).ledger));
   expect(ledger.database.query("SELECT COUNT(*) AS n FROM call_attempts").get()).toEqual({ n: 1 });
   ledger.close();

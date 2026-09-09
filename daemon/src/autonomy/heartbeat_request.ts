@@ -154,7 +154,7 @@ export async function prepareHeartbeatRequest(
 
   request.context = {
     ...request.context,
-    ledger: join(config.dirs.data, "ledger.db"),
+    ledger: join(config.dirs.data, "shore.db"),
     usage: usageConfigView(config.app.usage),
     character,
     thread,

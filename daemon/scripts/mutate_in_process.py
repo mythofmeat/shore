@@ -53,8 +53,8 @@ MUTANTS = [
      "    call_type: callType,"),
     ("ledger: the existing context is discarded, taking the ledger path with it",
      P,
-     "  request.context = {\n    ...request.context,\n    ledger: request.context?.ledger ?? rustJoin(config.dirs.data, \"ledger.db\"),",
-     '  request.context = {\n    ledger: rustJoin(config.dirs.data, "ledger.db"),'),
+     "  request.context = {\n    ...request.context,\n    ledger: request.context?.ledger ?? rustJoin(config.dirs.data, \"shore.db\"),",
+     '  request.context = {\n    ledger: rustJoin(config.dirs.data, "shore.db"),'),
 
     # --- which action runs ----------------------------------------------------
     ("action: a max_turns compaction runs here too, compacting the same turns twice",

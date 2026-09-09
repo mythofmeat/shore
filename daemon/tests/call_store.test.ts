@@ -159,9 +159,9 @@ function fillCanonical(store: CallStore): void {
 function storedRequestBytes(store: CallStore, callId: string): number {
   const row = store.database
     .query(
-      `SELECT COALESCE((SELECT stored FROM payloads WHERE id = request_payload_id),
+      `SELECT COALESCE((SELECT stored FROM capture_payloads WHERE id = request_payload_id),
                        LENGTH(request_zstd), 0) AS stored
-         FROM calls WHERE call_id = ?1`,
+         FROM capture_calls WHERE call_id = ?1`,
     )
     .get(callId) as { stored: number };
   return row.stored;
@@ -174,12 +174,12 @@ interface SchemaShape {
 
 function schemaShape(store: CallStore): SchemaShape {
   const db = store.database;
-  const columns = db.query("PRAGMA table_info(transcripts)").all() as { name: string }[];
+  const columns = db.query("PRAGMA table_info(capture_transcripts)").all() as { name: string }[];
   const indexes = db
     .query(
       `SELECT name, sql FROM sqlite_master
        WHERE type = 'index' AND name NOT LIKE 'sqlite_%'
-         AND tbl_name IN ('calls', 'transcripts')
+         AND tbl_name IN ('capture_calls', 'capture_transcripts')
        ORDER BY name`,
     )
     .all() as { name: string; sql: string | null }[];
@@ -399,11 +399,11 @@ describe("the schema a store opens with", () => {
     const path = join(mkdtempSync(join(tmpdir(), "call-store-migrate-")), "db.sqlite");
     const before = CallStore.open(path);
     for (const row of before.database
-      .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'transcripts'")
+      .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'capture_transcripts'")
       .all() as { name: string }[]) {
       if (!row.name.startsWith("sqlite_")) before.database.run(`DROP INDEX "${row.name}"`);
     }
-    before.database.run("ALTER TABLE transcripts DROP COLUMN character");
+    before.database.run("ALTER TABLE capture_transcripts DROP COLUMN character");
     expect(schemaShape(before).transcript_columns).not.toContain("character");
     before.close();
 

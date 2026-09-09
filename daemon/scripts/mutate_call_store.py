@@ -9,15 +9,15 @@ failure modes are all silent ones. What the fixture has to catch:
   `provider`, and every row still looks like a row.
 - **Ordering.** `ORDER BY ts_unix DESC, id DESC` is two keys, and dropping
   either one is invisible until two rows share a timestamp. `call_log` shows
-  the result as "recent calls", so a wrong order is a wrong answer.
+  the result as "recent capture_calls", so a wrong order is a wrong answer.
 - **Losing a filter.** A `character` filter that silently matches everything
-  leaks one character's calls into another's log.
+  leaks one character's capture_calls into another's log.
 - **`limit == 0` meaning "no limit".** Spelled `-1` to SQLite. Pass the 0
   through and every unlimited query returns nothing.
 - **Rotation deleting the wrong rows.** The size backstop is a window function
   with an exclusion for the newest row; get the exclusion wrong and rotation
   can empty the store. Get the comparison wrong and it never fires.
-- **The migration.** A DB predating `transcripts.character` must gain the
+- **The migration.** A DB predating `capture_transcripts.character` must gain the
   column. Skip it and every transcript write against an old store fails.
 
 A mutant is KILLED if `bun test tests/call_store.test.ts` fails with it
@@ -44,7 +44,7 @@ This is **60/60**, from 54/63 on the first pass. Of the nine that lived:
   express it, so it is gone rather than tested.
 
 One further mutant is **removed as equivalent**, not chased: dropping the
-`id DESC` tiebreak from the calls query. Two rows share a timestamp, a call
+`id DESC` tiebreak from the capture_calls query. Two rows share a timestamp, a call
 type and a character precisely so the tiebreak decides between them — but every
 plan SQLite picks for these queries already walks the index in descending rowid
 order, so the tiebreak and its absence are indistinguishable. It stays in the
@@ -55,7 +55,7 @@ The fixture is built to make the rest visible. It is not a JSON transcript of
 Rust's answers — it ships whole SQLite files that Rust *wrote*, and the replay
 queries those exact bytes. That is what makes byte counts and eviction
 boundaries assertable at all: Rust and Bun link different libzstd builds and
-disagree on the compressed size of some payloads, so asking TypeScript to
+disagree on the compressed size of some capture_payloads, so asking TypeScript to
 reproduce Rust's numbers would pin a library version rather than this module.
 One call has every optional column null; one has a response body and one has
 none, so `null` and `""` are told apart; one transcript entry is not valid
@@ -73,55 +73,55 @@ SRC = ROOT / "src/call_store.ts"
 # (label, find, replace)
 MUTANTS = [
     # --- ordering -------------------------------------------------------------
-    ("calls: ordered oldest-first",
+    ("capture_calls: ordered oldest-first",
      "         ORDER BY ts_unix DESC, id DESC\n         LIMIT ?3`,\n      )\n"
      "      .all(opt(filter.call_type), opt(filter.character), bound(filter.limit))",
      "         ORDER BY ts_unix ASC, id ASC\n         LIMIT ?3`,\n      )\n"
      "      .all(opt(filter.call_type), opt(filter.character), bound(filter.limit))"),
-    ("calls: the id tiebreak runs the other way",
+    ("capture_calls: the id tiebreak runs the other way",
      "         ORDER BY ts_unix DESC, id DESC\n         LIMIT ?3`,\n      )\n"
      "      .all(opt(filter.call_type), opt(filter.character), bound(filter.limit))",
      "         ORDER BY ts_unix DESC, id ASC\n         LIMIT ?3`,\n      )\n"
      "      .all(opt(filter.call_type), opt(filter.character), bound(filter.limit))"),
-    ("calls: ordered by id rather than by timestamp",
+    ("capture_calls: ordered by id rather than by timestamp",
      "         ORDER BY ts_unix DESC, id DESC\n         LIMIT ?3`,\n      )\n"
      "      .all(opt(filter.call_type), opt(filter.character), bound(filter.limit))",
      "         ORDER BY id DESC\n         LIMIT ?3`,\n      )\n"
      "      .all(opt(filter.call_type), opt(filter.character), bound(filter.limit))"),
-    ("transcripts: ordered oldest-first",
+    ("capture_transcripts: ordered oldest-first",
      "         ORDER BY ts_unix DESC, id DESC\n         LIMIT ?3`,\n      )\n"
      "      .all(source, opt(character), bound(limit))",
      "         ORDER BY ts_unix ASC, id ASC\n         LIMIT ?3`,\n      )\n"
      "      .all(source, opt(character), bound(limit))"),
-    ("transcripts: the id tiebreak is dropped",
+    ("capture_transcripts: the id tiebreak is dropped",
      "         ORDER BY ts_unix DESC, id DESC\n         LIMIT ?3`,\n      )\n"
      "      .all(source, opt(character), bound(limit))",
      "         ORDER BY ts_unix DESC\n         LIMIT ?3`,\n      )\n"
      "      .all(source, opt(character), bound(limit))"),
 
     # --- filters --------------------------------------------------------------
-    ("calls: the call_type filter matches everything",
+    ("capture_calls: the call_type filter matches everything",
      "         WHERE (?1 IS NULL OR call_type = ?1)\n           AND (?2 IS NULL OR character = ?2)",
      "         WHERE (?1 IS NULL OR ?1 = ?1)\n           AND (?2 IS NULL OR character = ?2)"),
-    ("calls: the character filter matches everything",
+    ("capture_calls: the character filter matches everything",
      "         WHERE (?1 IS NULL OR call_type = ?1)\n           AND (?2 IS NULL OR character = ?2)",
      "         WHERE (?1 IS NULL OR call_type = ?1)\n           AND (?2 IS NULL OR ?2 = ?2)"),
-    ("calls: the two filters are swapped",
+    ("capture_calls: the two filters are swapped",
      "         WHERE (?1 IS NULL OR call_type = ?1)\n           AND (?2 IS NULL OR character = ?2)",
      "         WHERE (?1 IS NULL OR character = ?1)\n           AND (?2 IS NULL OR call_type = ?2)"),
-    ("calls: the filters are OR'd rather than AND'd",
+    ("capture_calls: the filters are OR'd rather than AND'd",
      "         WHERE (?1 IS NULL OR call_type = ?1)\n           AND (?2 IS NULL OR character = ?2)",
      "         WHERE (?1 IS NULL OR call_type = ?1)\n            OR (?2 IS NULL OR character = ?2)"),
-    ("calls: an explicit null filter matches nothing rather than everything",
+    ("capture_calls: an explicit null filter matches nothing rather than everything",
      "         WHERE (?1 IS NULL OR call_type = ?1)\n           AND (?2 IS NULL OR character = ?2)",
      "         WHERE call_type IS ?1\n           AND (?2 IS NULL OR character = ?2)"),
-    ("transcripts: the source filter matches everything",
+    ("capture_transcripts: the source filter matches everything",
      "         WHERE source = ?1 AND (?2 IS NULL OR character = ?2)",
      "         WHERE ?1 = ?1 AND (?2 IS NULL OR character = ?2)"),
-    ("transcripts: the character filter matches everything",
+    ("capture_transcripts: the character filter matches everything",
      "         WHERE source = ?1 AND (?2 IS NULL OR character = ?2)",
      "         WHERE source = ?1 AND (?2 IS NULL OR ?2 = ?2)"),
-    ("transcripts: a null character matches only rows with no character",
+    ("capture_transcripts: a null character matches only rows with no character",
      "         WHERE source = ?1 AND (?2 IS NULL OR character = ?2)",
      "         WHERE source = ?1 AND character IS ?2"),
     ("filters: undefined is not treated as absent",
@@ -257,13 +257,13 @@ MUTANTS = [
 
     # --- rotate ---------------------------------------------------------------
     ("rotate: the cutoff is inclusive",
-     '    const agedCalls = this.#changes("DELETE FROM calls WHERE ts_unix < ?1", cutoffUnix);',
-     '    const agedCalls = this.#changes("DELETE FROM calls WHERE ts_unix <= ?1", cutoffUnix);'),
-    ("rotate: transcripts are not pruned by age",
+     '    const agedCalls = this.#changes("DELETE FROM capture_calls WHERE ts_unix < ?1", cutoffUnix);',
+     '    const agedCalls = this.#changes("DELETE FROM capture_calls WHERE ts_unix <= ?1", cutoffUnix);'),
+    ("rotate: capture_transcripts are not pruned by age",
      "    const agedTranscripts = this.#changes(\n"
-     '      "DELETE FROM transcripts WHERE ts_unix < ?1",\n      cutoffUnix,\n    );',
+     '      "DELETE FROM capture_transcripts WHERE ts_unix < ?1",\n      cutoffUnix,\n    );',
      "    const agedTranscripts = 0;"),
-    ("rotate: the age counter omits transcripts",
+    ("rotate: the age counter omits capture_transcripts",
      "      deleted_by_age: agedCalls + agedTranscripts + agedHttp,",
      "      deleted_by_age: agedCalls + agedHttp,"),
     ("rotate: the two counters are swapped",
@@ -279,41 +279,41 @@ MUTANTS = [
      "           WHERE running >= ?1"),
     ("rotate: the newest row is not exempt from the cap",
      "           WHERE running > ?1\n"
-     "             AND id != (SELECT id FROM calls ORDER BY ts_unix DESC, id DESC LIMIT 1)",
+     "             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix DESC, id DESC LIMIT 1)",
      "           WHERE running > ?1"),
     ("rotate: the exempt row is the oldest rather than the newest",
-     "             AND id != (SELECT id FROM calls ORDER BY ts_unix DESC, id DESC LIMIT 1)",
-     "             AND id != (SELECT id FROM calls ORDER BY ts_unix ASC, id ASC LIMIT 1)"),
+     "             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix DESC, id DESC LIMIT 1)",
+     "             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix ASC, id ASC LIMIT 1)"),
     ("rotate: the running total counts only the request blob",
      '                      SUM(COALESCE(request_stored, LENGTH(request_zstd), 0)\n'
      "                          + COALESCE(response_stored, LENGTH(response_zstd), 0)\n"
      "                          + COALESCE(wire.bytes, 0))",
      '                      SUM(COALESCE(request_stored, LENGTH(request_zstd), 0))'),
     ("rotate: the size backstop is skipped entirely",
-     "    const sized = this.#changes(\n      `DELETE FROM calls WHERE id IN (",
-     "    const sized = this.#changes(\n      `DELETE FROM calls WHERE 0 AND id IN ("),
+     "    const sized = this.#changes(\n      `DELETE FROM capture_calls WHERE id IN (",
+     "    const sized = this.#changes(\n      `DELETE FROM capture_calls WHERE 0 AND id IN ("),
 
     # --- schema and migration -------------------------------------------------
-    ("migrate: an old DB never gains transcripts.character",
-     '  if (!columnExists(db, "transcripts", "character")) {',
+    ("migrate: an old DB never gains capture_transcripts.character",
+     '  if (!columnExists(db, "capture_transcripts", "character")) {',
      "  if (false) {"),
     ("migrate: the migration runs on every open",
-     '  if (!columnExists(db, "transcripts", "character")) {',
+     '  if (!columnExists(db, "capture_transcripts", "character")) {',
      "  if (true) {"),
     ("migrate: the stale index is left in place, so adding the column fails",
-     "      `DROP INDEX IF EXISTS idx_transcripts_source;\n"
-     "       ALTER TABLE transcripts ADD COLUMN character TEXT;`,",
-     "      `ALTER TABLE transcripts ADD COLUMN character TEXT;`,"),
+     "      `DROP INDEX IF EXISTS idx_capture_transcripts_source;\n"
+     "       ALTER TABLE capture_transcripts ADD COLUMN character TEXT;`,",
+     "      `ALTER TABLE capture_transcripts ADD COLUMN character TEXT;`,"),
     ("migrate: the column check reads the wrong table",
-     '  if (!columnExists(db, "transcripts", "character")) {',
-     '  if (!columnExists(db, "calls", "character")) {'),
+     '  if (!columnExists(db, "capture_transcripts", "character")) {',
+     '  if (!columnExists(db, "capture_calls", "character")) {'),
     ("schema: the covering index is built before the migration that adds its column",
      "    db.run(SCHEMA);\n    migrate(db);\n    db.run(\n"
-     "      `CREATE INDEX IF NOT EXISTS idx_transcripts_source\n"
-     "           ON transcripts (source, character, ts_unix);`,\n    );",
+     "      `CREATE INDEX IF NOT EXISTS idx_capture_transcripts_source\n"
+     "           ON capture_transcripts (source, character, ts_unix);`,\n    );",
      "    db.run(SCHEMA);\n    db.run(\n"
-     "      `CREATE INDEX IF NOT EXISTS idx_transcripts_source\n"
-     "           ON transcripts (source, character, ts_unix);`,\n    );\n    migrate(db);"),
+     "      `CREATE INDEX IF NOT EXISTS idx_capture_transcripts_source\n"
+     "           ON capture_transcripts (source, character, ts_unix);`,\n    );\n    migrate(db);"),
     ("schema: a fresh DB has no character column",
      "    source            TEXT NOT NULL,\n    character         TEXT,\n    call_type         TEXT,",
      "    source            TEXT NOT NULL,\n    call_type         TEXT,"),

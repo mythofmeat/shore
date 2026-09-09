@@ -1480,7 +1480,7 @@
         "character_name": "ada",
         "config_dir": "<root>/config",
         "embedder": false,
-        "image_dir": "<root>/data/ada/images",
+        "image_dir": "<root>/data/media/ada",
         "image_gen_config": null,
         "markdown_store": true,
         "mcp_registry": true,
@@ -1522,7 +1522,7 @@
         "character_name": "ada",
         "config_dir": "<root>/config",
         "embedder": false,
-        "image_dir": "<root>/data/ada/images",
+        "image_dir": "<root>/data/media/ada",
         "image_gen_config": null,
         "markdown_store": true,
         "mcp_registry": true,
@@ -1559,7 +1559,7 @@
         "conversation_len": 2
       },
       "output": {
-        "image_dir": "<root>/data/ada/images",
+        "image_dir": "<root>/data/media/ada",
         "workspace_dir": "<root>/config/characters/ada/workspace",
         "character_data_dir": "<root>/data/ada",
         "config_dir": "<root>/config",
@@ -1606,7 +1606,7 @@
         "character_name": "ada",
         "config_dir": "<root>/config",
         "embedder": false,
-        "image_dir": "<root>/data/ada/images",
+        "image_dir": "<root>/data/media/ada",
         "image_gen_config": null,
         "markdown_store": true,
         "mcp_registry": true,
@@ -1643,7 +1643,7 @@
         "conversation_len": 0
       },
       "output": {
-        "image_dir": "<root>/data/ada/images",
+        "image_dir": "<root>/data/media/ada",
         "workspace_dir": "<root>/config/characters/ada/workspace",
         "character_data_dir": "<root>/data/ada",
         "config_dir": "<root>/config",
@@ -1685,7 +1685,7 @@
         "conversation_len": 0
       },
       "output": {
-        "image_dir": "<root>/data/ada/images",
+        "image_dir": "<root>/data/media/ada",
         "workspace_dir": "<root>/config/characters/ada/workspace",
         "character_data_dir": "<root>/data/ada",
         "config_dir": "<root>/config",
@@ -1736,7 +1736,7 @@
         "conversation_len": 0
       },
       "output": {
-        "image_dir": "<root>/data/ada/images",
+        "image_dir": "<root>/data/media/ada",
         "workspace_dir": "<root>/config/characters/ada/workspace",
         "character_data_dir": "<root>/data/ada",
         "config_dir": "<root>/config",

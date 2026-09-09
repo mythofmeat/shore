@@ -103,7 +103,7 @@ describe("payload store", () => {
 
     const raw = enc.encode(body(messages)).byteLength * 20;
     const stored = store.database
-      .query("SELECT SUM(LENGTH(data)) AS n FROM blobs")
+      .query("SELECT SUM(LENGTH(data)) AS n FROM capture_blobs")
       .get() as { n: number };
 
     expect(store.blobCount()).toBeLessThan(60);

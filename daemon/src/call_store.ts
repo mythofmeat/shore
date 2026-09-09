@@ -1,3 +1,4 @@
+import { renameLegacyCaptureTables } from "./storage/legacy_schema.ts";
 import { required } from "./util/required.ts";
 
 import { Database } from "bun:sqlite";
@@ -11,7 +12,7 @@ import { rateLimitSnapshot, type RateLimitSnapshot } from "./llm/retry_after.ts"
 const ZSTD_LEVEL = 3;
 
 const SCHEMA = `
-CREATE TABLE IF NOT EXISTS calls (
+CREATE TABLE IF NOT EXISTS capture_calls (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     call_id           TEXT NOT NULL,
     ts                TEXT NOT NULL,
@@ -32,10 +33,10 @@ CREATE TABLE IF NOT EXISTS calls (
     request_zstd      BLOB,
     response_zstd     BLOB
 );
-CREATE INDEX IF NOT EXISTS idx_calls_ts ON calls (ts_unix);
-CREATE INDEX IF NOT EXISTS idx_calls_type ON calls (call_type, ts_unix);
+CREATE INDEX IF NOT EXISTS idx_capture_calls_ts ON capture_calls (ts_unix);
+CREATE INDEX IF NOT EXISTS idx_capture_calls_type ON capture_calls (call_type, ts_unix);
 
-CREATE TABLE IF NOT EXISTS transcripts (
+CREATE TABLE IF NOT EXISTS capture_transcripts (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     ts                TEXT NOT NULL,
     ts_unix           INTEGER NOT NULL,
@@ -52,9 +53,9 @@ CREATE TABLE IF NOT EXISTS transcripts (
     cache_write_tokens INTEGER,
     entry_zstd         BLOB NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_transcripts_ts ON transcripts (ts_unix);
+CREATE INDEX IF NOT EXISTS idx_capture_transcripts_ts ON capture_transcripts (ts_unix);
 
-CREATE TABLE IF NOT EXISTS http_calls (
+CREATE TABLE IF NOT EXISTS capture_http_calls (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
     call_id               TEXT NOT NULL,
     seq                   INTEGER NOT NULL,
@@ -74,17 +75,17 @@ CREATE TABLE IF NOT EXISTS http_calls (
     response_headers_zstd BLOB,
     response_body_zstd    BLOB
 );
-CREATE INDEX IF NOT EXISTS idx_http_calls_call ON http_calls (call_id, seq);
-CREATE INDEX IF NOT EXISTS idx_http_calls_ts ON http_calls (ts_unix);
+CREATE INDEX IF NOT EXISTS idx_capture_http_calls_call ON capture_http_calls (call_id, seq);
+CREATE INDEX IF NOT EXISTS idx_capture_http_calls_ts ON capture_http_calls (ts_unix);
 
-CREATE TABLE IF NOT EXISTS blobs (
+CREATE TABLE IF NOT EXISTS capture_blobs (
     hash       TEXT PRIMARY KEY,
     size       INTEGER NOT NULL,
     compressed INTEGER NOT NULL,
     data       BLOB NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS payloads (
+CREATE TABLE IF NOT EXISTS capture_payloads (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     sha256   TEXT NOT NULL,
     size     INTEGER NOT NULL,
@@ -268,14 +269,15 @@ export class CallStore {
 
   private constructor(db: Database) {
     this.#db = db;
+    renameLegacyCaptureTables(db);
     db.run(`PRAGMA auto_vacuum = INCREMENTAL;
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
     db.run(SCHEMA);
     migrate(db);
     db.run(
-      `CREATE INDEX IF NOT EXISTS idx_transcripts_source
-           ON transcripts (source, character, ts_unix);`,
+      `CREATE INDEX IF NOT EXISTS idx_capture_transcripts_source
+           ON capture_transcripts (source, character, ts_unix);`,
     );
   }
 
@@ -304,7 +306,7 @@ export class CallStore {
     const manifest = new Uint8Array(chunks.length * HASH_BYTES);
 
     const insertBlob = this.#db.query(
-      "INSERT OR IGNORE INTO blobs (hash, size, compressed, data) VALUES (?1, ?2, ?3, ?4)",
+      "INSERT OR IGNORE INTO capture_blobs (hash, size, compressed, data) VALUES (?1, ?2, ?3, ?4)",
     );
     const counted = new Set<string>();
     let stored = 0;
@@ -322,7 +324,7 @@ export class CallStore {
     const manifestBlob = required(zstdCompressBytes(manifest));
     this.#db
       .query(
-        "INSERT INTO payloads (sha256, size, stored, chunks, manifest) VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO capture_payloads (sha256, size, stored, chunks, manifest) VALUES (?1, ?2, ?3, ?4, ?5)",
       )
       .run(
         sha256,
@@ -335,7 +337,7 @@ export class CallStore {
   }
 
   loadPayload(id: number): Uint8Array | null {
-    const row = this.#db.query("SELECT manifest, size FROM payloads WHERE id = ?1").get(id) as
+    const row = this.#db.query("SELECT manifest, size FROM capture_payloads WHERE id = ?1").get(id) as
       | Row
       | null;
     if (row === null) return null;
@@ -343,7 +345,7 @@ export class CallStore {
     if (!(manifest instanceof Uint8Array)) return null;
 
     const hashes = unpackManifest(zstdDecompressSync(manifest));
-    const select = this.#db.query("SELECT size, compressed, data FROM blobs WHERE hash = ?1");
+    const select = this.#db.query("SELECT size, compressed, data FROM capture_blobs WHERE hash = ?1");
     const out = new Uint8Array(count(row["size"]));
     let offset = 0;
     for (const hash of hashes) {
@@ -360,7 +362,7 @@ export class CallStore {
   payloadChunks(payloadId: number): PayloadChunk[] | null {
     const hashes = this.#manifestOf(payloadId);
     if (hashes === null) return null;
-    const select = this.#db.query("SELECT size, compressed, data FROM blobs WHERE hash = ?1");
+    const select = this.#db.query("SELECT size, compressed, data FROM capture_blobs WHERE hash = ?1");
     return hashes.map((hash) => {
       const blob = select.get(hash) as Row | null;
       const bytes = blob === null ? null : unpackBlob(blob);
@@ -390,9 +392,9 @@ export class CallStore {
   previousCallId(id: number): number | null {
     const row = this.#db
       .query(
-        `SELECT id FROM calls
-         WHERE (ts_unix, id) < (SELECT ts_unix, id FROM calls WHERE id = ?1)
-           AND character IS (SELECT character FROM calls WHERE id = ?1)
+        `SELECT id FROM capture_calls
+         WHERE (ts_unix, id) < (SELECT ts_unix, id FROM capture_calls WHERE id = ?1)
+           AND character IS (SELECT character FROM capture_calls WHERE id = ?1)
          ORDER BY ts_unix DESC, id DESC LIMIT 1`,
       )
       .get(id) as Row | null;
@@ -411,14 +413,14 @@ export class CallStore {
   }
 
   #requestPayloadOf(callId: number): { payload: number; source: "wire" | "internal" } | null {
-    const row = this.#db.query("SELECT call_id, request_payload_id FROM calls WHERE id = ?1").get(
+    const row = this.#db.query("SELECT call_id, request_payload_id FROM capture_calls WHERE id = ?1").get(
       callId,
     ) as Row | null;
     if (row === null) return null;
 
     const wire = this.#db
       .query(
-        `SELECT request_payload_id FROM http_calls
+        `SELECT request_payload_id FROM capture_http_calls
          WHERE call_id = ?1 AND request_payload_id IS NOT NULL
          ORDER BY seq LIMIT 1`,
       )
@@ -432,7 +434,7 @@ export class CallStore {
   }
 
   #manifestOf(payloadId: number): string[] | null {
-    const row = this.#db.query("SELECT manifest FROM payloads WHERE id = ?1").get(payloadId) as
+    const row = this.#db.query("SELECT manifest FROM capture_payloads WHERE id = ?1").get(payloadId) as
       | Row
       | null;
     if (row === null) return null;
@@ -449,7 +451,7 @@ export class CallStore {
         : this.storePayload(call.response_body);
     this.#db
       .query(
-        `INSERT INTO calls (
+        `INSERT INTO capture_calls (
             call_id, ts, ts_unix, call_type, character, model, provider, sdk,
             rid, finish_reason, input_tokens, output_tokens, cache_read_tokens,
             cache_write_tokens, duration_ms, error, request_payload_id, response_payload_id
@@ -481,7 +483,7 @@ export class CallStore {
   recordTranscript(entry: TranscriptRecord): number {
     this.#db
       .query(
-        `INSERT INTO transcripts (
+        `INSERT INTO capture_transcripts (
             ts, ts_unix, source, character, call_type, iteration, model, provider,
             finish_reason, input_tokens, output_tokens, cache_read_tokens,
             cache_write_tokens, entry_zstd
@@ -509,7 +511,7 @@ export class CallStore {
   recordHttpCall(exchange: HttpExchangeRecord): number {
     this.#db
       .query(
-        `INSERT INTO http_calls (
+        `INSERT INTO capture_http_calls (
             call_id, seq, ts, ts_unix, character, call_type, rid, method, url,
             status, status_text, duration_ms, error,
             request_headers_zstd, request_payload_id,
@@ -547,9 +549,9 @@ export class CallStore {
                 status, status_text, duration_ms, error,
                 request_headers_zstd, request_body_zstd, request_payload_id,
                 response_headers_zstd, response_body_zstd, response_payload_id,
-                (SELECT size FROM payloads WHERE id = request_payload_id) AS request_size,
-                (SELECT size FROM payloads WHERE id = response_payload_id) AS response_size
-         FROM http_calls WHERE call_id = ?1 ORDER BY seq`,
+                (SELECT size FROM capture_payloads WHERE id = request_payload_id) AS request_size,
+                (SELECT size FROM capture_payloads WHERE id = response_payload_id) AS response_size
+         FROM capture_http_calls WHERE call_id = ?1 ORDER BY seq`,
       )
       .all(call_id) as Row[];
     return rows.map((row) => ({
@@ -579,7 +581,7 @@ export class CallStore {
     const rows = this.#db
       .query(
         `SELECT url, ts, response_headers_zstd
-           FROM http_calls
+           FROM capture_http_calls
           WHERE status IS NOT NULL AND response_headers_zstd IS NOT NULL
           ORDER BY id DESC LIMIT ?1`,
       )
@@ -598,7 +600,7 @@ export class CallStore {
   }
 
   httpCallCount(): number {
-    const row = this.#db.query("SELECT COUNT(*) AS n FROM http_calls").get() as Row;
+    const row = this.#db.query("SELECT COUNT(*) AS n FROM capture_http_calls").get() as Row;
     return count(row["n"]);
   }
 
@@ -608,10 +610,10 @@ export class CallStore {
         `SELECT id, call_id, ts, call_type, character, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
                 cache_write_tokens, duration_ms, error,
-                (SELECT size FROM payloads WHERE id = request_payload_id) AS request_size,
-                (SELECT size FROM payloads WHERE id = response_payload_id) AS response_size,
+                (SELECT size FROM capture_payloads WHERE id = request_payload_id) AS request_size,
+                (SELECT size FROM capture_payloads WHERE id = response_payload_id) AS response_size,
                 request_zstd, response_zstd
-         FROM calls
+         FROM capture_calls
          WHERE (?1 IS NULL OR call_type = ?1)
            AND (?2 IS NULL OR character = ?2)
          ORDER BY ts_unix DESC, id DESC
@@ -627,11 +629,11 @@ export class CallStore {
         `SELECT id, call_id, ts, call_type, character, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
                 cache_write_tokens, duration_ms, error,
-                (SELECT size FROM payloads WHERE id = request_payload_id) AS request_size,
-                (SELECT size FROM payloads WHERE id = response_payload_id) AS response_size,
+                (SELECT size FROM capture_payloads WHERE id = request_payload_id) AS request_size,
+                (SELECT size FROM capture_payloads WHERE id = response_payload_id) AS response_size,
                 request_zstd, response_zstd,
                 request_payload_id, response_payload_id
-         FROM calls WHERE id = ?1`,
+         FROM capture_calls WHERE id = ?1`,
       )
       .get(id) as Row | null;
     if (row === null) return null;
@@ -656,7 +658,7 @@ export class CallStore {
         `SELECT id, ts, source, character, call_type, iteration, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
                 cache_write_tokens, entry_zstd
-         FROM transcripts
+         FROM capture_transcripts
          WHERE source = ?1 AND (?2 IS NULL OR character = ?2)
          ORDER BY ts_unix DESC, id DESC
          LIMIT ?3`,
@@ -678,32 +680,31 @@ export class CallStore {
   }
 
   callCount(): number {
-    const row = this.#db.query("SELECT COUNT(*) AS n FROM calls").get() as Row;
+    const row = this.#db.query("SELECT COUNT(*) AS n FROM capture_calls").get() as Row;
     return count(row["n"]);
   }
 
   forgetCharacter(character: string): number {
     const removed =
-      this.#changes("DELETE FROM calls WHERE character = ?1", character) +
-      this.#changes("DELETE FROM transcripts WHERE character = ?1", character) +
-      this.#changes("DELETE FROM http_calls WHERE character = ?1", character);
-    this.#changes("DELETE FROM http_calls WHERE call_id NOT IN (SELECT call_id FROM calls)");
+      this.#changes("DELETE FROM capture_calls WHERE character = ?1", character) +
+      this.#changes("DELETE FROM capture_transcripts WHERE character = ?1", character) +
+      this.#changes("DELETE FROM capture_http_calls WHERE character = ?1", character);
     this.#collectGarbage();
     return removed;
   }
 
   rotate(cutoff: Date, maxTotalBytes: number): RotateStats {
     const cutoffUnix = unixSeconds(cutoff);
-    const agedCalls = this.#changes("DELETE FROM calls WHERE ts_unix < ?1", cutoffUnix);
+    const agedCalls = this.#changes("DELETE FROM capture_calls WHERE ts_unix < ?1", cutoffUnix);
     const agedTranscripts = this.#changes(
-      "DELETE FROM transcripts WHERE ts_unix < ?1",
+      "DELETE FROM capture_transcripts WHERE ts_unix < ?1",
       cutoffUnix,
     );
 
-    const agedHttp = this.#changes("DELETE FROM http_calls WHERE ts_unix < ?1", cutoffUnix);
+    const agedHttp = this.#changes("DELETE FROM capture_http_calls WHERE ts_unix < ?1", cutoffUnix);
 
     const sized = this.#changes(
-      `DELETE FROM calls WHERE id IN (
+      `DELETE FROM capture_calls WHERE id IN (
            SELECT id FROM (
                SELECT id,
                       SUM(COALESCE(request_stored, LENGTH(request_zstd), 0)
@@ -712,34 +713,34 @@ export class CallStore {
                           OVER (ORDER BY ts_unix DESC, id DESC
                                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running
                FROM (
-                   SELECT calls.*,
-                          (SELECT stored FROM payloads WHERE id = request_payload_id)
+                   SELECT capture_calls.*,
+                          (SELECT stored FROM capture_payloads WHERE id = request_payload_id)
                               AS request_stored,
-                          (SELECT stored FROM payloads WHERE id = response_payload_id)
+                          (SELECT stored FROM capture_payloads WHERE id = response_payload_id)
                               AS response_stored
-                   FROM calls
-               ) AS calls
+                   FROM capture_calls
+               ) AS capture_calls
                LEFT JOIN (
                    SELECT call_id,
                           SUM(COALESCE(LENGTH(request_headers_zstd), 0)
                               + COALESCE(LENGTH(response_headers_zstd), 0)
                               + COALESCE(
-                                  (SELECT stored FROM payloads WHERE id = request_payload_id),
+                                  (SELECT stored FROM capture_payloads WHERE id = request_payload_id),
                                   LENGTH(request_body_zstd), 0)
                               + COALESCE(
-                                  (SELECT stored FROM payloads WHERE id = response_payload_id),
+                                  (SELECT stored FROM capture_payloads WHERE id = response_payload_id),
                                   LENGTH(response_body_zstd), 0)) AS bytes
-                   FROM http_calls GROUP BY call_id
-               ) AS wire ON wire.call_id = calls.call_id
+                   FROM capture_http_calls GROUP BY call_id
+               ) AS wire ON wire.call_id = capture_calls.call_id
            )
            WHERE running > ?1
-             AND id != (SELECT id FROM calls ORDER BY ts_unix DESC, id DESC LIMIT 1)
+             AND id != (SELECT id FROM capture_calls ORDER BY ts_unix DESC, id DESC LIMIT 1)
        )`,
       maxTotalBytes,
     );
 
     const orphaned = this.#changes(
-      "DELETE FROM http_calls WHERE call_id NOT IN (SELECT call_id FROM calls)",
+      "DELETE FROM capture_http_calls WHERE call_id NOT IN (SELECT call_id FROM capture_calls)",
     );
     this.#collectGarbage();
 
@@ -757,29 +758,33 @@ export class CallStore {
   }
 
   blobCount(): number {
-    const row = this.#db.query("SELECT COUNT(*) AS n FROM blobs").get() as Row;
+    const row = this.#db.query("SELECT COUNT(*) AS n FROM capture_blobs").get() as Row;
     return count(row["n"]);
+  }
+
+  collectUnusedPayloads(): void {
+    this.#collectGarbage();
   }
 
   #collectGarbage(): void {
     this.#changes(
-      `DELETE FROM payloads WHERE id NOT IN (
-           SELECT request_payload_id FROM calls WHERE request_payload_id IS NOT NULL
-           UNION SELECT response_payload_id FROM calls WHERE response_payload_id IS NOT NULL
-           UNION SELECT request_payload_id FROM http_calls WHERE request_payload_id IS NOT NULL
-           UNION SELECT response_payload_id FROM http_calls WHERE response_payload_id IS NOT NULL
+      `DELETE FROM capture_payloads WHERE id NOT IN (
+           SELECT request_payload_id FROM capture_calls WHERE request_payload_id IS NOT NULL
+           UNION SELECT response_payload_id FROM capture_calls WHERE response_payload_id IS NOT NULL
+           UNION SELECT request_payload_id FROM capture_http_calls WHERE request_payload_id IS NOT NULL
+           UNION SELECT response_payload_id FROM capture_http_calls WHERE response_payload_id IS NOT NULL
        )`,
     );
 
     this.#db.run("CREATE TEMP TABLE IF NOT EXISTS live_hashes (hash TEXT PRIMARY KEY)");
     this.#db.run("DELETE FROM live_hashes");
     const remember = this.#db.query("INSERT OR IGNORE INTO live_hashes (hash) VALUES (?1)");
-    for (const row of this.#db.query("SELECT manifest FROM payloads").iterate() as Iterable<Row>) {
+    for (const row of this.#db.query("SELECT manifest FROM capture_payloads").iterate() as Iterable<Row>) {
       const manifest = row["manifest"];
       if (!(manifest instanceof Uint8Array)) continue;
       for (const hash of unpackManifest(zstdDecompressSync(manifest))) remember.run(hash);
     }
-    this.#changes("DELETE FROM blobs WHERE hash NOT IN (SELECT hash FROM live_hashes)");
+    this.#changes("DELETE FROM capture_blobs WHERE hash NOT IN (SELECT hash FROM live_hashes)");
     this.#db.run("DELETE FROM live_hashes");
     this.#db.run("PRAGMA incremental_vacuum;");
   }
@@ -1032,22 +1037,22 @@ function optCount(v: unknown): number | null {
 
 function migrate(db: Database): void {
   addIntegerColumns(db, [
-    ["calls", "request_payload_id"],
-    ["calls", "response_payload_id"],
-    ["http_calls", "request_payload_id"],
-    ["http_calls", "response_payload_id"],
+    ["capture_calls", "request_payload_id"],
+    ["capture_calls", "response_payload_id"],
+    ["capture_http_calls", "request_payload_id"],
+    ["capture_http_calls", "response_payload_id"],
   ]);
 
-  if (!columnExists(db, "transcripts", "character")) {
+  if (!columnExists(db, "capture_transcripts", "character")) {
     db.run(
-      `DROP INDEX IF EXISTS idx_transcripts_source;
-       ALTER TABLE transcripts ADD COLUMN character TEXT;`,
+      `DROP INDEX IF EXISTS idx_capture_transcripts_source;
+       ALTER TABLE capture_transcripts ADD COLUMN character TEXT;`,
     );
   }
 
   addIntegerColumns(db, [
-    ["calls", "cache_write_tokens"],
-    ["transcripts", "cache_write_tokens"],
+    ["capture_calls", "cache_write_tokens"],
+    ["capture_transcripts", "cache_write_tokens"],
   ]);
 }
 

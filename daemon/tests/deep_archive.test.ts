@@ -1,7 +1,8 @@
+import { readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import fixture from "./autonomy_captures/deep_archive.json" with { type: "json" };
@@ -314,7 +315,7 @@ describe("runDeepIdleArchive", () => {
   test("a failed archive reports failure and does not finish the idle period", async () => {
     const kase = required(fixture.pure_archive[0]);
     const { config, characterDir } = await world(kase.active_before);
-    await mkdir(join(config.dirs.data, "history.db"));
+    await mkdir(join(config.dirs.data, "shore.db"));
 
     const result = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
 

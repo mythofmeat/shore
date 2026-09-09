@@ -72,7 +72,7 @@ export interface GenerationAssembly {
 export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
   const { runtime } = a;
   const dataDir = runtime.config.dirs.data;
-  const ledgerPath = rustJoin(dataDir, "ledger.db");
+  const ledgerPath = rustJoin(dataDir, "shore.db");
   const global = () => runtime.registry.globalConfig();
   const usage = (character: string) =>
     usageConfigView(runtime.registry.effectiveConfig(character).app.usage);
@@ -564,7 +564,7 @@ async function releaseCharacter(a: CommandAssembly, character: string): Promise<
 
 function commandDeps(a: CommandAssembly): CommandDeps {
   const { runtime } = a;
-  const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");
+  const ledgerPath = rustJoin(runtime.config.dirs.data, "shore.db");
   return {
     threads: runtime.registry,
     autonomy: runtime.autonomy,

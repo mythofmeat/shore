@@ -16,7 +16,7 @@ import type {
   MessageOrigin,
 } from "./types.ts";
 
-export const HISTORY_DB_FILE = "history.db";
+export const HISTORY_DB_FILE = "shore.db";
 
 const bumpRevision = (source: "NEW" | "OLD") =>
   `INSERT INTO history_archive_revision(character, revision) VALUES (${source}.character, 1)

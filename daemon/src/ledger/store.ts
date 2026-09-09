@@ -333,13 +333,13 @@ export class Ledger {
     this.#pricing = pricing ?? new PricingEngine(sqlitePricingStore(db));
   }
 
-  static create(path: string, pricing?: PricingEngine): Ledger {
+  static create(path: string, pricing?: PricingEngine, recoverPending = true): Ledger {
     const db = new Database(path, { create: true, readwrite: true });
     db.run("PRAGMA busy_timeout = 5000;");
     db.run("PRAGMA journal_mode = WAL;");
     db.run(SCHEMA);
     migrate(db);
-    db.query("UPDATE call_attempts SET status = 'unresolved' WHERE status = 'pending'").run();
+    if (recoverPending) db.query("UPDATE call_attempts SET status = 'unresolved' WHERE status = 'pending'").run();
     return new Ledger(db, pricing);
   }
 

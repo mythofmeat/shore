@@ -53,7 +53,7 @@ MUTANTS = [
 
     # --- the migration is resumable only if the index is written last -------
     ("migration: a migrated character is migrated again",
-     "  if (existsSync(characterThreadsIndex(data, character))) return false;\n",
+     "  if (durableExists(characterThreadsIndex(data, character))) return false;\n",
      ""),
     ("migration: the index is written before the move, not after",
      "  await mkdir(to, { recursive: true });\n"
@@ -274,11 +274,11 @@ MUTANTS = [
      "  return Array.isArray(msg.content_blocks) && !isToolResultOnly(msg);"),
     ("turns: a thread that was never opened fails instead of counting zero",
      "  try {\n"
-     '    raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), "utf8");\n'
+     '    raw = readDurable(activeJsonlIn(threadDataDir(data, character, id)));\n'
      "  } catch {\n"
      "    return 0;\n"
      "  }",
-     '  raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), "utf8");'),
+     '  raw = readDurable(activeJsonlIn(threadDataDir(data, character, id)));'),
     ("turns: a torn tail line stops the count instead of being skipped",
      "    try {\n"
      "      parsed = JSON.parse(line);\n"
@@ -287,8 +287,8 @@ MUTANTS = [
      "    }",
      "    parsed = JSON.parse(line);"),
     ("turns: every thread is counted against home's window",
-     "    raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), \"utf8\");",
-     "    raw = await readFile(activeJsonlIn(threadDataDir(data, character, MAIN_THREAD)), \"utf8\");"),
+     "    raw = readDurable(activeJsonlIn(threadDataDir(data, character, id)));",
+     "    raw = readDurable(activeJsonlIn(threadDataDir(data, character, MAIN_THREAD)));"),
     ("turns: the roster is counted, but every entry gets the first thread's count",
      "    ids.map(async (id) => [id, await threadTurnCount(data, character, id)] as const),",
      "    ids.map(async (id) => [id, await threadTurnCount(data, character, ids[0] ?? id)] as const),"),

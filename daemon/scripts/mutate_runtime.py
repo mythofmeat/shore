@@ -22,9 +22,7 @@ map has to actually convert, because a `Map` that spreads to `{}` starts the
 server without its token — and the only symptom is an auth failure in someone
 else's logs.
 
-**A retention window that is not the window.** The rotation cutoff decides what
-gets deleted. Too short and history vanishes; too long and the size backstop is
-doing all the work.
+**Diagnostic retention.** Starting the runtime must not prune captured calls.
 
 A mutant is KILLED if `bun test tests/runtime.test.ts` fails with it applied.
 
@@ -44,16 +42,16 @@ MUTANTS = [
     # --- stores ---------------------------------------------------------------
     ("ledger: opened instead of created, so a first run records nothing ever after",
      R,
-     '  Ledger.create(rustJoin(config.dirs.data, "ledger.db")).close();',
-     '  Ledger.open(rustJoin(config.dirs.data, "ledger.db")).close();'),
+     '  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();',
+     '  Ledger.open(rustJoin(config.dirs.data, "shore.db")).close();'),
     ("ledger: never touched at all",
      R,
-     '  Ledger.create(rustJoin(config.dirs.data, "ledger.db")).close();',
+     '  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();',
      "  void config;"),
     ("ledger: created somewhere other than the data dir the recorders read",
      R,
-     '  Ledger.create(rustJoin(config.dirs.data, "ledger.db")).close();',
-     '  Ledger.create(rustJoin(config.dirs.cache, "ledger.db")).close();'),
+     '  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();',
+     '  Ledger.create(rustJoin(config.dirs.cache, "shore.db")).close();'),
     ("call store: a failed open becomes fatal, trading the daemon for its telemetry",
      R,
      "  } catch (e) {\n"
@@ -124,31 +122,11 @@ MUTANTS = [
     # tick. Recorded rather than chased.
     # ("notify: the executor is handed a notifier bound to no event at all", ...)
 
-    # --- rotation -------------------------------------------------------------
-    ("rotation: the first pass waits an hour, so a long-idle daemon keeps stale rows",
+    ("retention: starting runtime clocks purges retained diagnostics",
      R,
-     "  rotate();\n  const timer = setInterval(rotate, CALL_STORE_ROTATE_MS);",
-     "  const timer = setInterval(rotate, CALL_STORE_ROTATE_MS);"),
-    ("rotation: the cutoff is in the future, deleting the whole store on every pass",
-     R,
-     "        new Date(Date.now() - CALL_STORE_RETENTION_DAYS * 86_400_000),",
-     "        new Date(Date.now() + CALL_STORE_RETENTION_DAYS * 86_400_000),"),
-    ("rotation: the retention window is read as hours, keeping half a day of history",
-     R,
-     "        new Date(Date.now() - CALL_STORE_RETENTION_DAYS * 86_400_000),",
-     "        new Date(Date.now() - CALL_STORE_RETENTION_DAYS * 3_600_000),"),
-    ("rotation: the size backstop is dropped, so the store grows without bound",
-     R,
-     "        CALL_STORE_MAX_BYTES,",
-     "        Number.MAX_SAFE_INTEGER,"),
-    ("rotation: a failure takes the daemon's startup down with it",
-     R,
-     "    } catch (e) {\n"
-     "      shoreLog.warn(`shore: call store rotation failed: ${String(e)}`);\n"
-     "    }",
-     "    } catch (e) {\n"
-     "      throw e;\n"
-     "    }"),
+     "  const keepaliveTimer = startKeepaliveTimer(runtime.keepalive, intervals.keepaliveMs);",
+     "  runtime.callStore?.rotate(new Date(), 0);\n"
+     "  const keepaliveTimer = startKeepaliveTimer(runtime.keepalive, intervals.keepaliveMs);"),
 
 ]
 

@@ -1,3 +1,4 @@
+import { HISTORY_TABLES, LEDGER_TABLES } from "../storage/migrate.ts";
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { writeFileSync } from "node:fs";
 
@@ -25,6 +26,7 @@ export function exportHistoryDatabase(path: string, character: string, output: s
   source.close();
   const copy = new Database(output, { create: false, readwrite: true });
   copy.run("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = OFF");
+  keepTables(copy, HISTORY_TABLES);
   copy.query(
     `DELETE FROM history_alternatives
        WHERE message_id IN (SELECT id FROM history_messages WHERE NOT ${CHARACTER_ARCHIVES_SQL})`,
@@ -42,12 +44,13 @@ export function exportHistoryDatabase(path: string, character: string, output: s
 }
 
 export function exportLedgerDatabase(path: string, character: string, output: string): void {
-  Ledger.create(path).close();
+  Ledger.create(path, undefined, false).close();
   const source = new Database(path, { readonly: true });
   writeFileSync(output, source.serialize());
   source.close();
   const copy = new Database(output, { create: false, readwrite: true });
-  copy.run("PRAGMA journal_mode = DELETE");
+  copy.run("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = OFF");
+  keepTables(copy, LEDGER_TABLES);
   copy.query("DELETE FROM call_attempts WHERE character != ?1").run(character);
   copy.query("DELETE FROM calls WHERE character != ?1").run(character);
   copy.run("DELETE FROM pricing; DELETE FROM usage_budget_warnings; VACUUM;");
@@ -150,7 +153,7 @@ export function importLedgerDatabase(
   sourcePath: string,
   character: string,
 ): void {
-  Ledger.create(destinationPath).close();
+  Ledger.create(destinationPath, undefined, false).close();
   const destination = new Database(destinationPath, { create: true, readwrite: true });
   const source = new Database(sourcePath, { readonly: true });
   try {
@@ -274,4 +277,10 @@ function number(value: unknown): number {
 
 function binding(row: Row, column: string): SQLQueryBindings {
   return row[column] ?? null;
+}
+
+function keepTables(db: Database, allowed: readonly string[]): void {
+  for (const row of db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]) {
+    if (!allowed.includes(row.name) && !row.name.startsWith("sqlite_")) db.run(`DROP TABLE "${row.name.replaceAll('"', '""')}"`);
+  }
 }

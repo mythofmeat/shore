@@ -1,3 +1,4 @@
+import { readFile } from "./support/stored_files.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
@@ -603,7 +604,7 @@ describe("runGeneration", () => {
           ...rest,
           context: {
             ...(rest["context"] as Record<string, unknown>),
-            ledger: join(run.dataDir, "ledger.db"),
+            ledger: join(run.dataDir, "shore.db"),
             usage: { allow_compaction_over_budget: false, budgets: [], timezone: "local" },
           },
         }),
@@ -798,7 +799,7 @@ test("a failed tool loop is durable before the final answer and repaired after r
   });
 
   expect(run.error).toBeDefined();
-  const raw = await Bun.file(characterActiveJsonl(run.dataDir, "ada", MAIN_THREAD)).text();
+  const raw = await readFile(characterActiveJsonl(run.dataDir, "ada", MAIN_THREAD), "utf8");
   const durable = raw.trim().split("\n").map((line) => JSON.parse(line) as Message);
   expect(durable.map((message) => message.role)).toEqual(["user", "assistant"]);
   expect(durable[1]?.content_blocks).toEqual([

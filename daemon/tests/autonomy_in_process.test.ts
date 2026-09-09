@@ -1,6 +1,7 @@
+import { readFile } from "./support/stored_files.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent } from "../src/testing/fake_agent_query.ts";
-import { readFile } from "node:fs/promises";
+
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -551,7 +552,7 @@ describe("running a heartbeat", () => {
 
     await executor.runHeartbeatTick("ada", NO_HOOKS);
 
-    expect(seen[0]?.context?.ledger).toBe(join(config.dirs.data, "ledger.db"));
+    expect(seen[0]?.context?.ledger).toBe(join(config.dirs.data, "shore.db"));
     expect(seen[0]?.context?.call_type).toBe("heartbeat");
   });
 
@@ -593,7 +594,7 @@ describe("the other two actions", () => {
       cost_usd: 100,
       limit: "block",
     } as never);
-    Ledger.create(join(config.dirs.data, "ledger.db")).close();
+    Ledger.create(join(config.dirs.data, "shore.db")).close();
     const seen: SidecarRequest[] = [];
     const send = compactionGenerate({
       config,
@@ -616,7 +617,7 @@ describe("the other two actions", () => {
 
     expect(seen).toHaveLength(1);
     expect(seen[0]?.context).toMatchObject({
-      ledger: join(config.dirs.data, "ledger.db"),
+      ledger: join(config.dirs.data, "shore.db"),
       character: "ada",
       call_type: "compaction",
       thinking_enabled: true,

@@ -74,7 +74,7 @@ MUTANTS = [
      '    throw new ThreadError("exists", `thread ${JSON.stringify(child)} already exists for ${character}`);',
      "    void 0;"),
     ("refusal: a directory that already holds data is written over",
-     "  if (existsSync(childDir) && (await readdir(childDir)).length > 0) {",
+     "  if (durableExists(activeJsonlIn(childDir)) || (existsSync(childDir) && (await readdir(childDir)).length > 0)) {",
      "  if (false as boolean) {"),
     ("refusal: an unknown source is forked from as if it were empty",
      "  if (sourceRecord === undefined) {\n"

@@ -141,7 +141,7 @@ MUTANTS = [
     # --- the ledger and the budget check --------------------------------------
     ("ledger: the path is the data root itself, so nothing is ever recorded",
      D,
-     '  const ledgerPath = rustJoin(dataDir, "ledger.db");',
+     '  const ledgerPath = rustJoin(dataDir, "shore.db");',
      "  const ledgerPath = dataDir;"),
     ("budget: the ledger is opened on every turn, whether or not a budget exists",
      D,
@@ -208,7 +208,7 @@ MUTANTS = [
      "      lastRequest: { get: () => undefined, set: () => {} } as never,"),
     ("commands: the ledger is the data root, so `shore usage` reports nothing",
      D,
-     '  const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");',
+     '  const ledgerPath = rustJoin(runtime.config.dirs.data, "shore.db");',
      "  const ledgerPath = runtime.config.dirs.data;"),
     ("commands: payload capture is hidden from `shore log`",
      D,

@@ -1,12 +1,11 @@
+import { readFileSync } from "./support/stored_files.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-  existsSync,
+import { existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
+
   rmSync,
-  writeFileSync,
-} from "node:fs";
+  writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -157,7 +156,7 @@ describe("the registry as the thread authority", () => {
     }
     await registry.archiveThread("aria", "configured");
     await registry.archiveThread("aria", "optout", { retain: false });
-    const store = HistoryStore.open(join(dataDir, "history.db"));
+    const store = HistoryStore.open(join(dataDir, "shore.db"));
     expect(store.entries("aria/configured")[0]?.memory_status).toBe(enabled ? "pending" : undefined);
     expect(store.entries("aria/optout")[0]?.memory_status).toBeUndefined();
     expect(store.backfillThreadArchiveRetention("aria")).toBe(0);

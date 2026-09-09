@@ -24,7 +24,7 @@ async function fixture() {
   roots.push(dir);
   const conversationDir = join(dir, "ada", "threads", "main");
   await mkdir(conversationDir, { recursive: true });
-  return { dir, conversationDir, character: "ada", dbPath: join(dir, "history.db"), path: join(dir, "search.db") };
+  return { dir, conversationDir, character: "ada", dbPath: join(dir, "shore.db"), path: join(dir, "search.db") };
 }
 
 function message(text: string): Message {
@@ -36,7 +36,7 @@ function message(text: string): Message {
 
 function put(store: HistoryStore, key: string, idx: number, texts: string[], options: Partial<SegmentEntry> = {}) {
   store.putSegment(key, idx, {
-    file: "history.db", message_count: texts.length, compacted_at: stamp, retain: true, ...options,
+    file: "shore.db", message_count: texts.length, compacted_at: stamp, retain: true, ...options,
   }, texts.map(message));
 }
 

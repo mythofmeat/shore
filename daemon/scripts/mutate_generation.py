@@ -161,7 +161,7 @@ MUTANTS = [
     # --- the tool context's paths --------------------------------------------
     ("context: the image dir is the character dir itself",
      CTX,
-     '    imageDir: rustJoin(charDataDir, "images"),',
+     '    imageDir: characterMediaDir(dataDir, charName),',
      "    imageDir: charDataDir,"),
     ("context: the workspace is resolved under data rather than config",
      CTX,

@@ -104,13 +104,13 @@ export function resolveModelForRequest(
 
 function ensureCallContext(request: SidecarRequest, deps: GenerateDeps): void {
   request.context ??= {
-    ledger: rustJoin(deps.config.dirs.data, "ledger.db"),
+    ledger: rustJoin(deps.config.dirs.data, "shore.db"),
     character: "unknown",
     call_type: "message",
     thinking_enabled: request.provider_options?.thinking_enabled === true,
     usage: usageConfigView(deps.config.app.usage),
   };
-  request.context.ledger ??= rustJoin(deps.config.dirs.data, "ledger.db");
+  request.context.ledger ??= rustJoin(deps.config.dirs.data, "shore.db");
   request.context.usage ??= usageConfigView(deps.config.app.usage);
 }
 

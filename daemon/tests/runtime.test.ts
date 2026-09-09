@@ -76,7 +76,7 @@ describe("what assembly creates", () => {
     try {
       const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
 
-      const path = join(config.dirs.data, "ledger.db");
+      const path = join(config.dirs.data, "shore.db");
       expect(existsSync(path)).toBe(true);
 
       const { Ledger } = await import("../src/ledger/store.ts");
@@ -90,16 +90,13 @@ describe("what assembly creates", () => {
     }
   });
 
-  test("a call store that will not open leaves the runtime up, without capture", async () => {
+  test("an inaccessible durable database refuses startup", async () => {
     const { root, config } = await dirsUnder("shore-runtime-store-");
     try {
       await mkdir(config.dirs.cache, { recursive: true });
-      await mkdir(join(config.dirs.cache, "calls.db"), { recursive: true });
+      await mkdir(join(config.dirs.data, "shore.db"), { recursive: true });
 
-      const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
-      expect(runtime.callStore).toBeUndefined();
-
-      await runtime.shutdown();
+      expect(createRuntime({ config, providers: {}, connectMcp: NO_MCP })).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -121,7 +118,7 @@ describe("what assembly wires together", () => {
         model: "claude-fixture",
         sdk: "anthropic",
         messages: [],
-        context: { character: "ada", ledger: join(config.dirs.data, "ledger.db"), call_type: "message" },
+        context: { character: "ada", ledger: join(config.dirs.data, "shore.db"), call_type: "message" },
       } as never, undefined);
 
       await runtime.keepalive.pingNow("ada");
@@ -142,7 +139,7 @@ describe("what assembly wires together", () => {
         model: "claude-fixture",
         sdk: "anthropic",
         messages: [],
-        context: { character: "ada", ledger: join(config.dirs.data, "ledger.db"), call_type: "message" },
+        context: { character: "ada", ledger: join(config.dirs.data, "shore.db"), call_type: "message" },
       } as never, undefined);
 
       const outcome = await runtime.keepalive.pingNow("ada");
@@ -263,7 +260,7 @@ describe("what assembly wires together", () => {
 });
 
 describe("the clocks", () => {
-  test("rotation runs at once rather than an hour after startup", async () => {
+  test("starting the clocks never expires diagnostic records", async () => {
     const { root, config } = await dirsUnder("shore-runtime-rotate-");
     try {
       const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
@@ -279,10 +276,7 @@ describe("the clocks", () => {
       const clocks = startRuntimeClocks(runtime);
       clocks.stop();
 
-      expect(rotated.length).toBe(1);
-      const ageDays = (Date.now() - (rotated[0] as { cutoff: Date }).cutoff.getTime()) / 86_400_000;
-      expect(Math.round(ageDays)).toBe(14);
-      expect(rotated[0]?.max).toBe(536_870_912);
+      expect(rotated).toEqual([]);
 
       await runtime.shutdown();
     } finally {

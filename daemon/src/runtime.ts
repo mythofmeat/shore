@@ -1,3 +1,5 @@
+import { preparePersistentStorage } from "./storage/prepare.ts";
+import { migrateDatabases } from "./storage/migrate.ts";
 import { shoreLog } from "./log.ts";
 
 import { mkdirSync } from "node:fs";
@@ -66,9 +68,6 @@ import {
 } from "./llm/nanogpt_subscription.ts";
 import { NANOGPT_PROVIDER } from "./llm/providers/nanogpt_config.ts";
 
-const CALL_STORE_RETENTION_DAYS = 14;
-const CALL_STORE_MAX_BYTES = 536_870_912;
-const CALL_STORE_ROTATE_MS = 3_600_000;
 const COST_BACKFILL_MS = 6 * 3_600_000;
 
 export interface RuntimeOptions {
@@ -112,6 +111,8 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     loadConfig(options.configPath, options.env === undefined ? {} : { env: options.env });
 
   createRuntimeDirs(config);
+  migrateDatabases(config.dirs);
+  await preparePersistentStorage(config.dirs);
 
   const notifier = new NotificationService(config.app.notifications);
   const snapshotGate = new SnapshotGate();
@@ -222,7 +223,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       }
       memoryRetain.register({
         character,
-        historyPath: rustJoin(effective.dirs.data, "history.db"),
+        historyPath: rustJoin(effective.dirs.data, "shore.db"),
         userName:
           retain.user_name ?? resolveDisplayName(effective.app.defaults, options.env ?? process.env),
         possessivePronoun: retain.possessive_pronoun,
@@ -245,7 +246,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     },
     () => Date.now(),
     {
-      ledgerPath: rustJoin(config.dirs.data, "ledger.db"),
+      ledgerPath: rustJoin(config.dirs.data, "shore.db"),
       maxIdleSecs: () =>
         Number(registry.globalConfig().app.cache.keepalive_max.asSecs()),
       runActivity: async (run) => await snapshotGate.withActivity(run),
@@ -357,9 +358,8 @@ export function startRuntimeClocks(
   });
   const keepaliveTimer = startKeepaliveTimer(runtime.keepalive, intervals.keepaliveMs);
   const autonomyTimer = startAutonomyTimer(runtime.autonomy);
-  const rotation = startCallStoreRotation(runtime.callStore);
   const costBackfill = startCostBackfill(
-    rustJoin(runtime.config.dirs.data, "ledger.db"),
+    rustJoin(runtime.config.dirs.data, "shore.db"),
     runtime.snapshotGate,
   );
 
@@ -367,7 +367,6 @@ export function startRuntimeClocks(
     stop: () => {
       keepaliveTimer.stop();
       autonomyTimer.stop();
-      rotation.stop();
       costBackfill.stop();
       setCallObserver(undefined);
     },
@@ -398,7 +397,7 @@ function createRuntimeDirs(config: LoadedConfig): void {
 }
 
 function openCallStore(config: LoadedConfig): CallStore | undefined {
-  const path = rustJoin(config.dirs.cache, "calls.db");
+  const path = rustJoin(config.dirs.data, "shore.db");
   try {
     const store = CallStore.open(path);
     shoreLog.info(`shore: call payload store enabled at ${path}`);
@@ -417,7 +416,7 @@ function installCallStoreWireCapture(store: CallStore | undefined): () => void {
 }
 
 function ensureLedger(config: LoadedConfig): void {
-  Ledger.create(rustJoin(config.dirs.data, "ledger.db")).close();
+  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();
 }
 
 export function mcpConfigView(config: LoadedConfig): Record<string, McpServerConfigView> {
@@ -520,7 +519,7 @@ export function sharedToolDeps(
         ...(params.image_size === undefined ? {} : { image_size: params.image_size }),
       }),
     modelHistoryQuery: (character, since, until) => {
-      const ledger = ledgerFor(rustJoin(config.dirs.data, "ledger.db"));
+      const ledger = ledgerFor(rustJoin(config.dirs.data, "shore.db"));
       if (ledger === null) throw new Error("the ledger is unavailable");
       return Promise.resolve(
         modelUsageSummary(ledger.database, {
@@ -583,34 +582,6 @@ function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () 
 
   void sweep();
   const timer = setInterval(() => void sweep(), COST_BACKFILL_MS);
-  timer.unref?.();
-  return { stop: () => clearInterval(timer) };
-}
-
-function startCallStoreRotation(
-  store: CallStore | undefined,
-): { stop: () => void } {
-  if (store === undefined) return { stop: () => {} };
-
-  const rotate = () => {
-    try {
-      const stats = store.rotate(
-        new Date(Date.now() - CALL_STORE_RETENTION_DAYS * 86_400_000),
-        CALL_STORE_MAX_BYTES,
-      );
-      if (stats.deleted_by_age > 0 || stats.deleted_by_size > 0) {
-        shoreLog.info(
-          `shore: call store rotation pruned ${stats.deleted_by_age} rows by age and ` +
-            `${stats.deleted_by_size} by size`,
-        );
-      }
-    } catch (e) {
-      shoreLog.warn(`shore: call store rotation failed: ${String(e)}`);
-    }
-  };
-
-  rotate();
-  const timer = setInterval(rotate, CALL_STORE_ROTATE_MS);
   timer.unref?.();
   return { stop: () => clearInterval(timer) };
 }

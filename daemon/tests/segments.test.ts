@@ -1,7 +1,8 @@
+import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import { clear, segments } from "../src/commands/segments.ts";
@@ -106,7 +107,7 @@ describe("segment management", () => {
     let index = HistorySearchIndex.open({
       conversationDir: characterDir,
       character: "ada",
-      dbPath: join(root, "history.db"),
+      dbPath: join(root, "shore.db"),
       path,
     });
     await index.reconcile();
@@ -121,12 +122,12 @@ describe("segment management", () => {
     expect(mutations).toBe(1);
     expect((await handleSearchHistory({ query: "disowned", mode: "lexical" }, characterDir, {
       character: "ada",
-      dbPath: join(root, "history.db"),
+      dbPath: join(root, "shore.db"),
       indexPath: path,
     })).count).toBe(0);
     const first = await handleSearchHistory({ query: "needle", mode: "lexical" }, characterDir, {
       character: "ada",
-      dbPath: join(root, "history.db"),
+      dbPath: join(root, "shore.db"),
       indexPath: path,
     });
     expect(first.searched_messages).toBe(2);
@@ -136,7 +137,7 @@ describe("segment management", () => {
     index = HistorySearchIndex.open({
       conversationDir: characterDir,
       character: "ada",
-      dbPath: join(root, "history.db"),
+      dbPath: join(root, "shore.db"),
       path,
     });
     await index.reconcile();
@@ -144,7 +145,7 @@ describe("segment management", () => {
     index.close();
     expect((await handleSearchHistory({ query: "disowned", mode: "lexical" }, characterDir, {
       character: "ada",
-      dbPath: join(root, "history.db"),
+      dbPath: join(root, "shore.db"),
       indexPath: path,
     })).count).toBe(1);
   });
@@ -354,7 +355,7 @@ describe("segment management", () => {
     expect({ reloads, repoints, completed }).toEqual({ reloads: 1, repoints: 1, completed: 1 });
     expect((await handleSearchHistory({ query: "risky", mode: "lexical" }, characterDir, {
       character: "ada",
-      dbPath: join(root, "history.db"),
+      dbPath: join(root, "shore.db"),
     })).count).toBe(0);
   });
 

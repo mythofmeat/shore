@@ -249,7 +249,7 @@ function labelAccountedCall(
   const options = request.provider_options;
   request.context = {
     ...request.context,
-    ledger: request.context?.ledger ?? rustJoin(config.dirs.data, "ledger.db"),
+    ledger: request.context?.ledger ?? rustJoin(config.dirs.data, "shore.db"),
     character,
     call_type: callType,
     thinking_enabled: options?.thinking_enabled === true,
