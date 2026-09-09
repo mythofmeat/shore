@@ -1,8 +1,10 @@
+import { readdir } from "./support/stored_files.ts";
+import { readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
 import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir,  writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import rawFixture from "./memory_captures/compaction_assembly.json" with { type: "json" };

@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
@@ -216,7 +217,7 @@ describe("reading and writing the file", () => {
   test("a save that cannot land says so", async () => {
     await inTempDir(async (dir) => {
       const blocker = join(dir, "blocker");
-      await Bun.write(blocker, "not a directory");
+      mkdirSync(join(dir, "shore.db"));
       const wrote = await saveState(join(blocker, STATE_FILENAME), {
         ticksWithoutUser: 0,
         nextWakeAt: undefined,

@@ -1,3 +1,4 @@
+import { migrateCharacterMedia } from "./storage/media.ts";
 import { shoreLog } from "./log.ts";
 
 import {
@@ -150,6 +151,7 @@ export class CharacterRegistry {
     const found = discoverCharacters(this.#configDir, this.#workspaceRoot());
     for (const name of found) {
       try {
+        migrateCharacterMedia(this.#dataDir, name);
         await recoverForks(this.#dataDir, name);
         const index = await this.#withThreadIndex(name, async () =>
           this.#remember(name, await ensureThreads(this.#dataDir, name, new Date().toISOString())),

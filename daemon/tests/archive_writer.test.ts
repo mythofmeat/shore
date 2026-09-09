@@ -1,8 +1,10 @@
+import { listDurableFiles } from "../src/storage/files.ts";
+import { readFileSync, readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
+
+import { mkdtemp, mkdir, readdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
@@ -40,6 +42,11 @@ async function snapshot(dir: string): Promise<Record<string, string>> {
     }
   }
   await walk(dir);
+  for (const name of listDurableFiles(dir)) {
+    if (!name.includes("/")) {
+      try { out[name] = await readFile(join(dir, name), "utf8"); } catch {}
+    }
+  }
   return out;
 }
 

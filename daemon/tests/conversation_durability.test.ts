@@ -1,7 +1,9 @@
+import { readdir } from "./support/stored_files.ts";
+import { readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp,  rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 

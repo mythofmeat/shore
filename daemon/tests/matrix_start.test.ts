@@ -154,7 +154,7 @@ describe("starting", () => {
       log: { warn: () => {} },
       login: (() => Promise.reject(new Error("homeserver unreachable"))),
     });
-    expect(existsSync(join(config.dirs.data, "matrix"))).toBe(true);
+    expect(existsSync(join(config.dirs.data, "shore.db"))).toBe(true);
     expect(existsSync(join(config.dirs.config, "matrix"))).toBe(false);
   });
 

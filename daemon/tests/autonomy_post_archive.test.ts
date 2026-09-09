@@ -1,5 +1,6 @@
+import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { CharacterRegistry } from "../src/characters.ts";

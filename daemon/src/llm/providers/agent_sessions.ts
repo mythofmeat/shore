@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { pack, unpack, withStorage } from "../../storage/store.ts";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 import { MAIN_THREAD, resolveShoreDirs, rustJoin } from "../../config/dirs.ts";
 import { shoreLog } from "../../log.ts";
@@ -26,7 +27,8 @@ export interface SessionRecord {
 export type SessionBook = Record<string, SessionRecord>;
 
 export function sessionKey(character: string, ledger: string, thread: string, scope?: string): string {
-  const base = `${character}${SESSION_KEY_SEPARATOR}${ledger}`;
+  const canonicalLedger = basename(ledger) === "ledger.db" ? join(dirname(ledger), "shore.db") : ledger;
+  const base = `${character}${SESSION_KEY_SEPARATOR}${canonicalLedger}`;
   if (scope !== undefined) return `${base}${SESSION_KEY_SEPARATOR}${thread}${SESSION_KEY_SEPARATOR}${scope}`;
   return thread === MAIN_THREAD ? base : `${base}${SESSION_KEY_SEPARATOR}${thread}`;
 }
@@ -50,21 +52,40 @@ export function bookPath(): string {
   return bookPathIn(resolveShoreDirs().data);
 }
 
+function bookPrefix(path: string): string {
+  return `sdk_sessions/${basename(path)}/`;
+}
+
+function normalizeKey(key: string): string {
+  const parts = key.split(SESSION_KEY_SEPARATOR);
+  if (parts[1] !== undefined && basename(parts[1]) === "ledger.db") parts[1] = join(dirname(parts[1]), "shore.db");
+  return parts.join(SESSION_KEY_SEPARATOR);
+}
+
 export function readBook(path: string): SessionBook {
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as SessionBook;
-  } catch {
-    return {};
+  if (existsSync(path)) {
+    const legacy = JSON.parse(readFileSync(path, "utf8")) as SessionBook;
+    writeBook(path, Object.fromEntries(Object.entries(legacy).map(([key, record]) => [normalizeKey(key), record])));
   }
+  const prefix = bookPrefix(path);
+  return withStorage(dirname(path), (db) => {
+    const rows = db.query("SELECT path, content FROM state_files WHERE substr(path, 1, length(?1)) = ?1").all(prefix) as { path: string; content: Uint8Array }[];
+    return Object.fromEntries(rows.map((row) => [Buffer.from(row.path.slice(prefix.length), "base64url").toString(), JSON.parse(unpack(row.content)) as SessionRecord]));
+  });
 }
 
 export function writeBook(path: string, book: SessionBook): void {
-  try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(book), "utf8");
-  } catch {
-    shoreLog.warn("claude_agent: session book unwritable");
-  }
+  const prefix = bookPrefix(path);
+  withStorage(dirname(path), (db) => db.transaction(() => {
+    db.query("DELETE FROM state_files WHERE substr(path, 1, length(?1)) = ?1").run(prefix);
+    db.query("DELETE FROM state_files WHERE path = ?1").run(basename(path));
+    if (Object.keys(book).length === 0) db.query("INSERT INTO state_files(path, character, content) VALUES (?1, ?2, ?3)").run(basename(path), "", pack("{}"));
+    const insert = db.query("INSERT INTO state_files(path, character, content) VALUES (?1, ?2, ?3)");
+    for (const [key, record] of Object.entries(book)) {
+      insert.run(prefix + Buffer.from(normalizeKey(key)).toString("base64url"), sessionKeyOwner(key) ?? "", pack(JSON.stringify(record)));
+    }
+  })());
+  if (existsSync(path)) unlinkSync(path);
 }
 
 export function writeSession(path: string, key: string, record: SessionRecord): void {

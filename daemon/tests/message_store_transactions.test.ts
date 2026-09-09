@@ -1,5 +1,7 @@
+import { withStorage } from "../src/storage/store.ts";
+import { readFile } from "./support/stored_files.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -245,9 +247,7 @@ test("a failed store commit does not advance the conversation revision", async (
   const beforeRevision = engine.currentRevision();
   const beforeFile = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
 
-  const movedCharacterDir = join(dir, "ada-before-failure");
-  await rename(characterDir, movedCharacterDir);
-  await writeFile(characterDir, "blocks directory recreation", "utf8");
+  withStorage(dir, (db) => db.run("CREATE TRIGGER refuse_state BEFORE INSERT ON state_files BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END"));
 
   expect(
     engine.appendMessage(message("failed-append", "user", "must not appear", 2)),
@@ -255,5 +255,5 @@ test("a failed store commit does not advance the conversation revision", async (
 
   expect(engine.currentRevision()).toBe(beforeRevision);
   expect(wire(engine.messages())).toEqual(wire(beforeMessages));
-  expect(await readFile(join(movedCharacterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(beforeFile);
+  expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(beforeFile);
 });

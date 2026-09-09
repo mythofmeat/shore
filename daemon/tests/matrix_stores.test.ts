@@ -1,5 +1,6 @@
+import { withStorage } from "../src/storage/store.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -196,7 +197,7 @@ describe("sidecar durability", () => {
 
     const rooms = new RoomBindings(path);
     expect(rooms.entries()).toEqual([]);
-    expect(readdirSync(root).some((f) => f.startsWith("bindings.json.corrupt."))).toBe(true);
+    expect(stateNames(root).some((f) => f.startsWith("bindings.json.corrupt."))).toBe(true);
     expect(existsSync(path)).toBe(false);
   });
 
@@ -204,7 +205,7 @@ describe("sidecar durability", () => {
     const root = scratch();
     const rooms = new RoomBindings(join(root, "bindings.json"));
     expect(rooms.entries()).toEqual([]);
-    expect(readdirSync(root)).toEqual([]);
+    expect(stateNames(root)).toEqual([]);
   });
 
   test("a write that cannot land is reported, not swallowed", () => {
@@ -215,16 +216,20 @@ describe("sidecar durability", () => {
     expect(() => rooms.bind("!room:example.com", "alice")).toThrow();
   });
 
-  test("the temporary file is unique per write, so writers cannot collide", () => {
+  test("writes replace the database row atomically", () => {
     const root = scratch();
     const path = join(root, "bindings.json");
     const rooms = new RoomBindings(path);
     rooms.bind("!a:example.com", "alice");
     rooms.bind("!b:example.com", "bob");
-    expect(readdirSync(root)).toEqual(["bindings.json"]);
+    expect(stateNames(root)).toEqual(["bindings.json"]);
     expect(new RoomBindings(path).entries()).toEqual([
       ["alice", "!a:example.com"],
       ["bob", "!b:example.com"],
     ]);
   });
 });
+
+function stateNames(data: string): string[] {
+  return withStorage(data, (db) => (db.query("SELECT path FROM state_files ORDER BY path").all() as { path: string }[]).map((row) => row.path));
+}

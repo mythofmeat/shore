@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { appendFile, mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,7 +18,9 @@ afterEach(async () => {
 async function tempDir(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "shore-trace-"));
   roots.push(root);
-  return join(root, "ada");
+  const dir = join(root, "ada");
+  await mkdir(dir);
+  return dir;
 }
 
 function message(text: string): Message {

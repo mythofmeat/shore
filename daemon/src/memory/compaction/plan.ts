@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readDurable } from "../../storage/files.ts";
 
 import { required } from "../../util/required.ts";
 
@@ -225,7 +225,7 @@ export async function readLiveSource(
   fallback: string,
 ): Promise<string> {
   try {
-    return await readFile(characterActiveJsonl(dataDir, character, thread), "utf8");
+    return readDurable(characterActiveJsonl(dataDir, character, thread));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     return fallback;

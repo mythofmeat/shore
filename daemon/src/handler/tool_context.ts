@@ -1,3 +1,4 @@
+import { characterMediaDir } from "../storage/media.ts";
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -69,7 +70,7 @@ export async function buildToolContext(
   const subagentsConfigured = config.app.subagents.size > 0;
 
   const ctx: ToolContext = {
-    imageDir: rustJoin(charDataDir, "images"),
+    imageDir: characterMediaDir(dataDir, charName),
     workspaceDir,
     characterDataDir: charDataDir,
     conversationDir: threadDataDir(dataDir, charName, MAIN_THREAD),

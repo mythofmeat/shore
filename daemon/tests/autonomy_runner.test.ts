@@ -1,3 +1,4 @@
+import { readFile, access } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -670,7 +671,7 @@ describe("persistence", () => {
     await inTempDir(async (dir) => {
       const { runner } = build({ dir });
       await runner.tick();
-      expect(await Bun.file(join(dir, STATE_FILENAME)).exists()).toBe(false);
+      expect(await access(join(dir, STATE_FILENAME)).then(() => true, () => false)).toBe(false);
     });
   });
 
@@ -711,7 +712,7 @@ describe("persistence", () => {
       runner.note("wake", "the user returned", time.now);
       await runner.persist();
 
-      const lines = (await Bun.file(join(dir, "heartbeat.jsonl")).text()).trimEnd().split("\n");
+      const lines = (await readFile(join(dir, "heartbeat.jsonl"), "utf8")).trimEnd().split("\n");
       expect(lines.length).toBe(1);
       expect(lines[0]).toContain("wake");
       expect(lines[0]).toContain("the user returned");
@@ -767,7 +768,7 @@ describe("when the daemon cannot be reached", () => {
       const saved = await loadState(join(dir, STATE_FILENAME));
       expect(saved, "the state was written despite the throw").toBeDefined();
       expect(saved?.ticksWithoutUser).toBe(1);
-      const log = (await Bun.file(join(dir, "heartbeat.jsonl")).text()).trimEnd();
+      const log = (await readFile(join(dir, "heartbeat.jsonl"), "utf8")).trimEnd();
       expect(log).toContain("tick_fired");
     });
   });
@@ -790,7 +791,7 @@ describe("what an action reports back", () => {
       time.now += 4 * HOUR;
       await runner.tick();
 
-      const lines = (await Bun.file(join(dir, "heartbeat.jsonl")).text()).trimEnd().split("\n");
+      const lines = (await readFile(join(dir, "heartbeat.jsonl"), "utf8")).trimEnd().split("\n");
       expect(lines.map((l) => (JSON.parse(l) as { kind: string }).kind)).toEqual([
         "tick_fired",
         "tool_use",

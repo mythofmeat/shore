@@ -1,3 +1,5 @@
+import { basename, dirname } from "node:path";
+import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import { shoreLog } from "../log.ts";
 
 export const STATE_VERSION = 4;
@@ -92,7 +94,9 @@ function keepaliveField(o: Record<string, unknown>): PersistedKeepalive | undefi
 export async function loadState(path: string): Promise<AutonomyStateFile | undefined> {
   let raw: string;
   try {
-    raw = await Bun.file(path).text();
+    const stored = readCharacterState(dirname(path), basename(path));
+    if (stored === undefined) return undefined;
+    raw = stored;
   } catch {
     return undefined;
   }
@@ -101,7 +105,7 @@ export async function loadState(path: string): Promise<AutonomyStateFile | undef
 
 export async function saveState(path: string, state: AutonomyStateFile): Promise<boolean> {
   try {
-    await Bun.write(path, encodeState(state));
+    writeCharacterState(dirname(path), basename(path), encodeState(state));
     return true;
   } catch (err) {
     shoreLog.error(`shore: failed to save autonomy state at ${path}: ${String(err)}`);

@@ -1,8 +1,9 @@
+import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";

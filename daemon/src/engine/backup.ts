@@ -1,6 +1,6 @@
+import { readDurable, writeDurable, listDurableFiles, deleteDurable } from "../storage/files.ts";
 import { shoreLog } from "../log.ts";
 
-import { copyFile, mkdir, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 export const BACKUP_THROTTLE_MS = 10_000;
@@ -30,14 +30,14 @@ export async function backupBeforeWrite(
   const previous = lastBackupAt.get(path);
   if (previous !== undefined && at - previous < throttleMs) return undefined;
 
-  let size: number;
+  let content: string;
   try {
-    size = (await stat(path)).size;
+    content = readDurable(path);
   } catch {
     lastBackupAt.set(path, at);
     return undefined;
   }
-  if (size === 0) {
+  if (content.length === 0) {
     lastBackupAt.set(path, at);
     return undefined;
   }
@@ -45,8 +45,7 @@ export async function backupBeforeWrite(
   const dir = backupDirFor(path);
   const target = join(dir, `${basename(path)}.${stampOf(at)}`);
   try {
-    await mkdir(dir, { recursive: true });
-    await copyFile(path, target);
+    writeDurable(target, content);
     lastBackupAt.set(path, at);
     await pruneBackups(dir, basename(path));
     return target;
@@ -60,13 +59,13 @@ export async function backupBeforeWrite(
 async function pruneBackups(dir: string, prefix: string): Promise<void> {
   let entries: string[];
   try {
-    entries = await readdir(dir);
+    entries = listDurableFiles(dir);
   } catch {
     return;
   }
-  const mine = entries.filter((name) => name.startsWith(`${prefix}.`)).sort();
+  const mine = entries.filter((name) => name.startsWith(`${prefix}.`) && !name.startsWith(`${prefix}.quarantine.`)).sort();
   for (const stale of mine.slice(0, Math.max(0, mine.length - MAX_BACKUPS))) {
-    await unlink(join(dir, stale)).catch(() => {});
+    deleteDurable(join(dir, stale));
   }
 }
 
@@ -79,10 +78,7 @@ export async function quarantineLines(
   const dir = backupDirFor(path);
   const target = join(dir, `${basename(path)}.quarantine.${stampOf(now())}`);
   try {
-    await mkdir(dir, { recursive: true });
-    const tmp = join(dir, `.${crypto.randomUUID()}.tmp`);
-    await writeFile(tmp, `${lines.join("\n")}\n`, "utf8");
-    await rename(tmp, target);
+    writeDurable(target, `${lines.join("\n")}\n`);
     return target;
   } catch (e) {
     shoreLog.error(`shore: could not quarantine unreadable lines from ${path}: ${String(e)}`);

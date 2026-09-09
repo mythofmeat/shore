@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { readState, writeState, deleteState } from "../../storage/store.ts";
+import { basename, dirname, relative } from "node:path";
 
 import { shoreLog } from "../../log.ts";
 
@@ -12,17 +12,17 @@ function isMissing(e: unknown): boolean {
   return (e as { code?: string } | null)?.code === "ENOENT";
 }
 
-function quarantine(path: string, reason: string): void {
-  const aside = `${path}.corrupt.${new Date().toISOString().replace(/[:.]/g, "-")}`;
+function quarantine(data: string, key: string, reason: string): void {
+  const aside = `${key}.corrupt.${new Date().toISOString().replace(/[:.]/g, "-")}`;
   try {
-    renameSync(path, aside);
-    shoreLog.warn(
-      `shore: ${path} was unreadable (${reason}); moved to ${aside} and starting from empty`,
-    );
+    const content = readState(data, key);
+    if (content !== undefined) {
+      writeState(data, aside, content);
+      deleteState(data, key);
+    }
+    shoreLog.warn(`shore: ${key} was unreadable (${reason}); preserved as ${aside} in shore.db`);
   } catch (e) {
-    shoreLog.warn(
-      `shore: ${path} was unreadable (${reason}) and could not be set aside: ${String(e)}`,
-    );
+    shoreLog.warn(`shore: could not quarantine ${key}: ${String(e)}`);
   }
 }
 
@@ -37,33 +37,28 @@ export function jsonSidecar<T>(path: string | undefined, fallback: () => T): Sid
     };
   }
 
+  const data = basename(dirname(path)) === "matrix" ? dirname(dirname(path)) : dirname(path);
+  const key = relative(data, path);
   return {
     read: () => {
       let raw: string;
       try {
-        raw = readFileSync(path, "utf8");
+        const stored = readState(data, key);
+        if (stored === undefined) return fallback();
+        raw = stored;
       } catch (e) {
-        if (!isMissing(e)) quarantine(path, String(e));
+        if (!isMissing(e)) quarantine(data, key, String(e));
         return fallback();
       }
       try {
         return JSON.parse(raw) as T;
       } catch (e) {
-        quarantine(path, String(e));
+        quarantine(data, key, String(e));
         return fallback();
       }
     },
     write: (value) => {
-      const dir = dirname(path);
-      mkdirSync(dir, { recursive: true });
-      const tmp = join(dir, `.${basename(path)}.${crypto.randomUUID()}.tmp`);
-      try {
-        writeFileSync(tmp, JSON.stringify(value));
-        renameSync(tmp, path);
-      } catch (e) {
-        rmSync(tmp, { force: true });
-        throw e;
-      }
+      writeState(data, key, JSON.stringify(value));
     },
   };
 }

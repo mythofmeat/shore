@@ -1,3 +1,4 @@
+import { readDurable } from "../storage/files.ts";
 import { shoreLog } from "../log.ts";
 
 import { access, readFile, rmdir, unlink } from "node:fs/promises";
@@ -250,7 +251,7 @@ async function recoverPending(
 ): Promise<void> {
   let active = "";
   try {
-    active = await readFile(activeJsonlIn(characterDir), "utf8");
+    active = readDurable(activeJsonlIn(characterDir));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }

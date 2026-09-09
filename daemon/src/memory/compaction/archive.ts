@@ -1,3 +1,4 @@
+import { writeDurable } from "../../storage/files.ts";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -93,7 +94,7 @@ export async function archiveAndRetain(
   }
 
   try {
-    await atomicWrite(activeJsonlIn(characterDir), retainedContent);
+    writeDurable(activeJsonlIn(characterDir), retainedContent);
   } catch (e) {
     throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
   }
@@ -144,7 +145,7 @@ async function archiveToDatabase(
       );
     }
     try {
-      await atomicWrite(activeJsonlIn(characterDir), retainedContent);
+      writeDurable(activeJsonlIn(characterDir), retainedContent);
     } catch (e) {
       if (idx !== undefined) store.abortCompaction(history.archiveKey, idx);
       throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);

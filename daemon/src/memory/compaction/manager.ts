@@ -1,3 +1,4 @@
+import { readDurable } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
 
 import { shoreLog } from "../../log.ts";
@@ -947,10 +948,7 @@ function budgetResetAt(e: unknown): string | undefined {
 async function currentActiveContent(opts: CompactOptions): Promise<string> {
   if (opts.resumable !== true || opts.dataDir === undefined) return opts.plan.sourceContent;
   try {
-    return await readFile(
-      characterActiveJsonl(opts.dataDir, opts.charName, compactThread(opts)),
-      "utf8",
-    );
+    return readDurable(characterActiveJsonl(opts.dataDir, opts.charName, compactThread(opts)));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return opts.plan.sourceContent;
     throw e;

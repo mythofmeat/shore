@@ -1,3 +1,4 @@
+import { readFile, access } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -186,7 +187,7 @@ describe("registering", () => {
       now.value += HOUR;
       await service.register(registration("nova", dir));
       expect(service.status("nova")?.covered_turn_count).toBe(0);
-      const saved = parseObject(await Bun.file(join(dir, STATE_FILENAME)).text());
+      const saved = parseObject(await readFile(join(dir, STATE_FILENAME), "utf8"));
       expect(saved["last_user_at"]).not.toBeNull();
     });
   });
@@ -204,7 +205,7 @@ describe("registering", () => {
 
       expect(executor.calls).toEqual([]);
       expect(service.status("nova")).toBeUndefined();
-      expect(await Bun.file(join(dir, STATE_FILENAME)).exists()).toBe(true);
+      expect(await access(join(dir, STATE_FILENAME)).then(() => true, () => false)).toBe(true);
     });
   });
 });
@@ -453,7 +454,7 @@ describe("the keepalive's two halves", () => {
       await service.tick();
       await service.unregister("nova");
 
-      const lines = (await Bun.file(join(dir, HEARTBEAT_LOG_FILENAME)).text())
+      const lines = (await readFile(join(dir, HEARTBEAT_LOG_FILENAME), "utf8"))
         .trim()
         .split("\n")
         .map(parseObject);
@@ -491,7 +492,7 @@ describe("the keepalive's two halves", () => {
       await service.tick();
       await service.unregister("nova");
 
-      const saved = parseObject(await Bun.file(join(dir, STATE_FILENAME)).text());
+      const saved = parseObject(await readFile(join(dir, STATE_FILENAME), "utf8"));
       expect(saved["keepalive_model"]).toBe("claude-opus-4-6");
       expect(saved["keepalive_interval_ms"]).toBe(3_300_000);
     });
@@ -511,7 +512,7 @@ describe("the keepalive's two halves", () => {
       await service.tick();
       await service.unregister("nova");
 
-      const saved = parseObject(await Bun.file(join(dir, STATE_FILENAME)).text());
+      const saved = parseObject(await readFile(join(dir, STATE_FILENAME), "utf8"));
       expect(saved["keepalive_model"] ?? null).toBeNull();
       expect(saved["keepalive_interval_ms"] ?? null).toBeNull();
     });

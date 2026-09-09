@@ -1,13 +1,14 @@
+import { readDurable } from "../storage/files.ts";
+import { readCharacterState, writeCharacterState, deleteCharacterState, characterScope, withStorage } from "../storage/store.ts";
 import { constants } from "node:fs";
 import {
   access,
+  stat,
   copyFile,
   mkdir,
   readFile,
   readdir,
   rm,
-  appendFile,
-  stat,
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,7 +25,6 @@ import { homeThreadIn } from "../engine/threads.ts";
 
 import {
   activePromptDir,
-  activePromptFile,
   normalizePromptVisiblePath,
 } from "../tools/workspace_path";
 import { localRfc3339 } from "../util/time.ts";
@@ -78,8 +78,8 @@ const canonicalFile = (
   workspaceRoot: string | undefined,
 ) => characterWorkspaceFile(configDir, charName, path, workspaceRoot);
 
-export const loadActivePromptFile = (characterDataDir: string, name: string) =>
-  effectiveContent(activePromptFile(characterDataDir, name));
+export const loadActivePromptFile = async (characterDataDir: string, name: string) =>
+  activeContent(characterDataDir, name);
 
 export async function loadPromptFile(
   characterDataDir: string,
@@ -89,17 +89,25 @@ export async function loadPromptFile(
   workspaceRoot?: string,
 ): Promise<string | undefined> {
   if (await activePromptSnapshotExists(characterDataDir)) {
-    return effectiveContent(activePromptFile(characterDataDir, name));
+    return activeContent(characterDataDir, name);
   }
   return effectiveContent(canonicalFile(configDir, charName, name, workspaceRoot));
 }
 
-async function activePromptSnapshotExists(characterDataDir: string): Promise<boolean> {
-  try {
-    return (await stat(activePromptDir(characterDataDir))).isDirectory();
-  } catch {
-    return false;
+function activeContent(characterDir: string, name: string): string | undefined {
+  const content = readCharacterState(characterDir, `active_prompt/${name}`);
+  return content?.trim() === "" ? undefined : content;
+}
+
+async function activePromptSnapshotExists(characterDir: string): Promise<boolean> {
+  const legacy = activePromptDir(characterDir);
+  if (await exists(legacy)) {
+    if (!(await stat(legacy)).isDirectory()) return false;
+    for (const name of await readdir(legacy)) readCharacterState(characterDir, `active_prompt/${name}`);
+    writeCharacterState(characterDir, "active_prompt/.snapshot", "1");
+    await rm(legacy, { recursive: true });
   }
+  return readCharacterState(characterDir, "active_prompt/.snapshot") !== undefined;
 }
 
 export const loadCanonicalMemoryIndex = (
@@ -115,7 +123,7 @@ export async function loadMemoryIndex(
   workspaceRoot?: string,
 ): Promise<string | undefined> {
   if (await activePromptSnapshotExists(characterDataDir)) {
-    return effectiveContent(activePromptFile(characterDataDir, MEMORY_INDEX_FILE));
+    return activeContent(characterDataDir, MEMORY_INDEX_FILE);
   }
   return effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
 }
@@ -125,7 +133,7 @@ export async function pendingDeferredEditPaths(
 ): Promise<string[]> {
   let content: string;
   try {
-    content = await readFile(join(characterDataDir, QUEUE_FILE), "utf8");
+    content = readCharacterState(characterDataDir, QUEUE_FILE) ?? "";
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw e;
@@ -160,7 +168,7 @@ export async function queueDeferredEdit(
   await mkdir(characterDataDir, { recursive: true });
 
   const line = JSON.stringify({ path, timestamp: localRfc3339(new Date()) });
-  await appendFile(join(characterDataDir, QUEUE_FILE), `${line}\n`, "utf8");
+  writeCharacterState(characterDataDir, QUEUE_FILE, (readCharacterState(characterDataDir, QUEUE_FILE) ?? "") + `${line}\n`);
 }
 
 export const noteMemoryIndexDeferred = (characterDataDir: string) =>
@@ -178,9 +186,7 @@ export async function changedPromptFiles(
     const canonical = await effectiveContent(
       canonicalFile(configDir, charName, path, workspaceRoot),
     );
-    const active = await effectiveContent(
-      activePromptFile(characterDataDir, path),
-    );
+    const active = activeContent(characterDataDir, path);
     if (canonical !== active) changed.push(path);
   }
   return changed;
@@ -194,19 +200,11 @@ async function copyPromptVisibleFile(
   seedOnly: boolean,
   workspaceRoot: string | undefined,
 ): Promise<void> {
-  const activeDir = activePromptDir(characterDataDir);
-  await mkdir(activeDir, { recursive: true });
-
+  const key = `active_prompt/${path}`;
+  if (seedOnly && readCharacterState(characterDataDir, key) !== undefined) return;
   const src = canonicalFile(configDir, charName, path, workspaceRoot);
-  const dst = join(activeDir, path);
-
-  if (seedOnly && (await exists(dst))) return;
-
-  if (await exists(src)) {
-    await copyFile(src, dst);
-  } else if (await exists(dst)) {
-    await rm(dst);
-  }
+  if (await exists(src)) writeCharacterState(characterDataDir, key, await readFile(src, "utf8"));
+  else deleteCharacterState(characterDataDir, key);
 }
 
 export async function ensureCharacterWorkspace(
@@ -259,16 +257,17 @@ export async function ensureActivePromptSnapshot(
 ): Promise<void> {
   await ensureCharacterWorkspace(characterDataDir, configDir, charName, workspaceRoot);
 
-  const activeDir = activePromptDir(characterDataDir);
-  await mkdir(activeDir, { recursive: true });
+  const legacyPrompt = activePromptDir(characterDataDir);
+  if (await exists(legacyPrompt) && !(await stat(legacyPrompt)).isDirectory()) throw new Error(`Blocked prompt snapshot: ${legacyPrompt}`);
+  await activePromptSnapshotExists(characterDataDir);
+  writeCharacterState(characterDataDir, "active_prompt/.snapshot", "1");
 
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
     await copyPromptVisibleFile(characterDataDir, configDir, charName, path, true, workspaceRoot);
   }
 
   for (const legacy of LEGACY_SNAPSHOTS) {
-    const p = join(activeDir, legacy);
-    if (await exists(p)) await rm(p);
+    deleteCharacterState(characterDataDir, `active_prompt/${legacy}`);
   }
 }
 
@@ -279,6 +278,7 @@ export async function refreshActivePromptSnapshot(
   workspaceRoot?: string,
 ): Promise<void> {
   await ensureCharacterWorkspace(characterDataDir, configDir, charName, workspaceRoot);
+  writeCharacterState(characterDataDir, "active_prompt/.snapshot", "1");
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
     await copyPromptVisibleFile(characterDataDir, configDir, charName, path, false, workspaceRoot);
   }
@@ -286,12 +286,14 @@ export async function refreshActivePromptSnapshot(
 
 export async function resetActivePromptSnapshot(characterDataDir: string): Promise<void> {
   await rm(activePromptDir(characterDataDir), { recursive: true, force: true });
-  await rm(join(characterDataDir, QUEUE_FILE), { force: true });
+  const { data, character } = characterScope(characterDataDir);
+  withStorage(data, (db) => db.query("DELETE FROM state_files WHERE character = ?1 AND substr(path, 1, length(?2)) = ?2").run(character, `${character}/active_prompt/`));
+  deleteCharacterState(characterDataDir, QUEUE_FILE);
 }
 
 async function conversationHasMessages(conversationDir: string): Promise<boolean> {
   try {
-    return (await readFile(activeJsonlIn(conversationDir), "utf8")).trim() !== "";
+    return (readDurable(activeJsonlIn(conversationDir))).trim() !== "";
   } catch (e) {
     return (e as NodeJS.ErrnoException).code !== "ENOENT";
   }
@@ -319,7 +321,7 @@ export async function applyDeferredEdits(
     )
   ) return;
   await refreshActivePromptSnapshot(characterDataDir, configDir, charName, workspaceRoot);
-  await rm(join(characterDataDir, QUEUE_FILE), { force: true });
+  deleteCharacterState(characterDataDir, QUEUE_FILE);
 }
 
 async function migrateLegacyFile(src: string, dst: string): Promise<void> {

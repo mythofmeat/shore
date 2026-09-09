@@ -1,3 +1,4 @@
+import { readDurable } from "../src/storage/files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
@@ -414,7 +415,7 @@ describe("operation traces", () => {
   }
 
   async function expectPersistedAsHeld(path: string, store: MessageStore, where: string): Promise<void> {
-    const onDisk = await Bun.file(path).text();
+    const onDisk = readDurable(path);
     const lines = onDisk === "" ? [] : onDisk.split("\n").slice(0, -1);
     expect(lines.length, `${where}: one line on disk per message held`).toBe(
       store.messages().length,
@@ -463,7 +464,7 @@ describe("operation traces", () => {
             await expectPersistedAsHeld(path, store, where);
           } else {
             expect(
-              settledVersions(await Bun.file(path).text()),
+              settledVersions(readDurable(path)),
               `file after ${JSON.stringify(step.op)}`,
             ).toBe(step.file);
           }

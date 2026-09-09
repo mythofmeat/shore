@@ -1,9 +1,13 @@
+import { readdir } from "node:fs/promises";
+import { Database } from "bun:sqlite";
+import { unpack } from "../src/storage/store.ts";
+import { readFileSync, readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+
 import { expandShared } from "./support/shared_subtrees.ts";
-import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir,  writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
@@ -46,12 +50,21 @@ async function snapshot(dir: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   async function walk(cur: string): Promise<void> {
     for (const entry of await readdir(cur, { withFileTypes: true })) {
+      if (entry.name.startsWith("shore.db")) continue;
       const p = join(cur, entry.name);
       if (entry.isDirectory()) await walk(p);
       else out[relative(dir, p).replaceAll("\\", "/")] = await readFile(p, "utf8");
     }
   }
   await walk(dir);
+  if (await Bun.file(join(dir, "shore.db")).exists()) {
+    const db = new Database(join(dir, "shore.db"), { readonly: true });
+    try {
+      for (const row of db.query("SELECT path, content FROM state_files").all() as { path: string; content: Uint8Array }[]) {
+        if (!row.path.endsWith("/.snapshot")) out[row.path] = unpack(row.content);
+      }
+    } finally { db.close(); }
+  }
   return out;
 }
 

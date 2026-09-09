@@ -1,13 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-  existsSync,
+import { existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   rmSync,
   statSync,
-  writeFileSync,
-} from "node:fs";
+  writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 

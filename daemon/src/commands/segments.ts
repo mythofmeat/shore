@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readDurable } from "../storage/files.ts";
 import { join } from "node:path";
 
 import {
@@ -141,7 +141,7 @@ export async function clear(
     const conversationDir = threadDataDir(ctx.dataDir, character, engine.thread);
     let activeContent: string;
     try {
-      activeContent = await readFile(activeJsonlIn(conversationDir), "utf8");
+      activeContent = readDurable(activeJsonlIn(conversationDir));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") activeContent = "";
       else throw error;

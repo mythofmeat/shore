@@ -1,5 +1,7 @@
+import { characterScope, readEvents } from "../src/storage/store.ts";
+import { dirname } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -116,7 +118,7 @@ describe("persistence", () => {
     });
   });
 
-  test("flush writes JSONL and clears dirty", async () => {
+  test("flush stores event records and clears dirty", async () => {
     await inTempDir(async (dir) => {
       const path = join(dir, "heartbeat.jsonl");
       const log = new HeartbeatLog(path);
@@ -125,7 +127,7 @@ describe("persistence", () => {
       await log.flushIfDirty();
 
       expect(log.isDirty).toBe(false);
-      const lines = (await Bun.file(path).text()).trimEnd().split("\n");
+      const lines = storedLines(path);
       expect(lines.length).toBe(2);
       expect(lines[0]).toContain("tick_fired");
       expect(lines[1]).toContain("message_sent");
@@ -151,14 +153,14 @@ describe("persistence", () => {
   test("a failed flush leaves the log dirty so the next one retries", async () => {
     await inTempDir(async (dir) => {
       const blocker = join(dir, "blocker");
-      await Bun.write(blocker, "not a directory");
+      mkdirSync(join(dir, "shore.db"));
 
       const log = new HeartbeatLog(join(blocker, "heartbeat.jsonl"));
       log.push("wake", "kept", stamp(0));
       await log.flushIfDirty();
 
       expect(log.isDirty, "the events must survive to be retried").toBe(true);
-      expect(log.recent(10).length).toBe(1);
+      expect(log.recent(1).length).toBe(1);
     });
   });
 
@@ -187,14 +189,14 @@ describe("persistence", () => {
     });
   });
 
-  test("load caps at capacity", async () => {
+  test("load retains records beyond the display capacity", async () => {
     await inTempDir(async (dir) => {
       const path = join(dir, "heartbeat.jsonl");
       const line = fixture.lines[0] ?? "";
       await Bun.write(path, Array.from({ length: HEARTBEAT_LOG_CAPACITY + 50 }, () => line).join("\n"));
 
       const loaded = await HeartbeatLog.load(path);
-      expect(loaded.recent(Number.MAX_SAFE_INTEGER).length).toBe(HEARTBEAT_LOG_CAPACITY);
+      expect(loaded.recent(Number.MAX_SAFE_INTEGER).length).toBe(HEARTBEAT_LOG_CAPACITY + 50);
     });
   });
 
@@ -206,21 +208,26 @@ describe("persistence", () => {
     });
   });
 
-  test("flush truncates when the ring is smaller than the file", async () => {
+  test("flushing a new writer preserves earlier records", async () => {
     await inTempDir(async (dir) => {
       const path = join(dir, "heartbeat.jsonl");
       const first = new HeartbeatLog(path);
       for (let i = 0; i < 5; i += 1) first.push("tick_fired", `e${i}`, stamp(i));
       await first.flushIfDirty();
-      expect((await Bun.file(path).text()).trimEnd().split("\n").length).toBe(5);
+      expect(storedLines(path).length).toBe(5);
 
       const second = new HeartbeatLog(path);
       second.push("wake", "fresh", stamp(9));
       await second.flushIfDirty();
 
-      const lines = (await Bun.file(path).text()).trimEnd().split("\n");
-      expect(lines.length).toBe(1);
-      expect(lines[0]).toContain("wake");
+      const lines = storedLines(path);
+      expect(lines.length).toBe(6);
+      expect(lines[5]).toContain("wake");
     });
   });
 });
+
+function storedLines(path: string): string[] {
+  const scope = characterScope(dirname(path));
+  return readEvents(scope.data, scope.character, "heartbeat");
+}

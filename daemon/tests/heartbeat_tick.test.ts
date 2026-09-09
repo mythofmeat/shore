@@ -538,7 +538,7 @@ describe("running a tick", () => {
       undefined,
     );
 
-    await copyFile(f.path, join(config.dirs.data, "ledger.db"));
+    await copyFile(f.path, join(config.dirs.data, "shore.db"));
     config.app.usage.timezone = "utc";
     config.app.usage.budgets = [{
       name: "monthly",

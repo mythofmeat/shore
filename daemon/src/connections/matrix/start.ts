@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { openStorage } from "../../storage/store.ts";
 
 import type { MatrixConfig } from "../../config/app.ts";
 import { rustJoin } from "../../config/dirs.ts";
@@ -79,10 +79,9 @@ export async function attemptMatrixBridge(options: StartOptions): Promise<StartO
   }
 
   const stateDir = rustJoin(options.config.dirs.data, STATE_DIR);
-  try {
-    mkdirSync(stateDir, { recursive: true });
-  } catch (e) {
-    const reason = `cannot create ${stateDir}: ${String(e)}`;
+  try { openStorage(options.config.dirs.data).close(); }
+  catch (e) {
+    const reason = `cannot create database state: ${String(e)}`;
     options.log?.warn?.(`Matrix bridge not started: ${reason}`);
     return { kind: "off", reason };
   }

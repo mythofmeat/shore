@@ -1,3 +1,4 @@
+import { writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -9,7 +10,6 @@ import {
   threadDataDir,
 } from "../config/dirs.ts";
 import { shoreLog } from "../log.ts";
-import { atomicWrite } from "./atomic.ts";
 import { HISTORY_DB_FILE, HistoryStore, type ThreadForkRecord } from "./history_store.ts";
 import {
   MessageStore,
@@ -169,7 +169,7 @@ async function forkThreadLocked(
     throw new ThreadError("exists", `thread ${JSON.stringify(child)} already exists for ${character}`);
   }
   const childDir = threadDataDir(data, character, child);
-  if (existsSync(childDir) && (await readdir(childDir)).length > 0) {
+  if (durableExists(activeJsonlIn(childDir)) || (existsSync(childDir) && (await readdir(childDir)).length > 0)) {
     throw new ThreadError(
       "exists",
       `${childDir} already holds data — remove it before forking into ${JSON.stringify(child)}`,
@@ -204,7 +204,7 @@ async function forkThreadLocked(
 
   await mkdir(childDir, { recursive: true });
   await writeFile(join(childDir, FORK_MARKER_FILE), `${JSON.stringify(marker, null, 2)}\n`, "utf8");
-  await atomicWrite(activeJsonlIn(childDir), serializeMessages(copied));
+  writeDurable(activeJsonlIn(childDir), serializeMessages(copied));
   if (options.failAfter === "context") throw new Error("injected fork failure after context");
 
   const historyStore = HistoryStore.open(dbPath);
@@ -297,6 +297,7 @@ export async function recoverForks(data: string, character: string): Promise<str
       continue;
     }
     await rm(dir, { recursive: true, force: true });
+    deleteThreadState(data, character, entry);
     const dbPath = join(data, HISTORY_DB_FILE);
     if (existsSync(dbPath)) {
       const store = HistoryStore.open(dbPath);

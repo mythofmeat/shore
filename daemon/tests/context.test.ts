@@ -1,6 +1,8 @@
+import { readdir } from "./support/stored_files.ts";
+import { readFile } from "./support/stored_files.ts";
 import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
-import { lstat, mkdtemp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir,  writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import rawFixture from "./handler_captures/context.json" with { type: "json" };

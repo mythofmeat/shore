@@ -1,3 +1,4 @@
+import { readDurable, writeDurable } from "../storage/files.ts";
 import { required } from "../util/required.ts";
 
 import { shoreLog } from "../log.ts";
@@ -369,7 +370,7 @@ export class MessageStore {
   ): Promise<{ store: MessageStore; raw: string }> {
     let raw: string;
     try {
-      raw = await readFile(path, "utf8");
+      raw = io === messageStoreIo ? readDurable(path) : await readFile(path, "utf8");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") {
         return { store: new MessageStore(path, [], io), raw: "" };
@@ -713,6 +714,10 @@ export class MessageStore {
     let buf = "";
     for (const msg of messages) buf += `${serializeForStorage(msg)}\n`;
 
+    if (this.#io === messageStoreIo) {
+      writeDurable(this.#path, buf);
+      return;
+    }
     const dir = dirname(this.#path);
     await this.#io.mkdir(dir);
     const tmp = this.#io.tempPath(dir);

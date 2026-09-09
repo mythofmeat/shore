@@ -1,8 +1,8 @@
+import { readDurable, writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 
-import { atomicWrite } from "./atomic.ts";
 import {
   MAIN_THREAD,
   activeJsonlIn,
@@ -114,7 +114,7 @@ export async function threadTurnCount(
 ): Promise<number> {
   let raw: string;
   try {
-    raw = await readFile(activeJsonlIn(threadDataDir(data, character, id)), "utf8");
+    raw = readDurable(activeJsonlIn(threadDataDir(data, character, id)));
   } catch {
     return 0;
   }
@@ -167,7 +167,7 @@ export async function readThreadsIndexIn(
   characterDir: string,
 ): Promise<ThreadsIndex | undefined> {
   try {
-    const raw: unknown = JSON.parse(await readFile(threadsIndexIn(characterDir), "utf8"));
+    const raw: unknown = JSON.parse(readDurable(threadsIndexIn(characterDir)));
     return isThreadsIndex(raw) ? raw : undefined;
   } catch {
     return undefined;
@@ -194,7 +194,7 @@ export async function writeThreadsIndex(
   character: string,
   index: ThreadsIndex,
 ): Promise<void> {
-  await atomicWrite(characterThreadsIndex(data, character), `${JSON.stringify(index, null, 2)}\n`);
+  writeDurable(characterThreadsIndex(data, character), `${JSON.stringify(index, null, 2)}\n`);
 }
 
 export async function migrateCharacterToThreads(
@@ -203,7 +203,7 @@ export async function migrateCharacterToThreads(
   now: string,
   dryRun = false,
 ): Promise<boolean> {
-  if (existsSync(characterThreadsIndex(data, character))) return false;
+  if (durableExists(characterThreadsIndex(data, character))) return false;
 
   const from = characterDataDir(data, character);
   const to = threadDataDir(data, character, MAIN_THREAD);
@@ -388,7 +388,7 @@ export async function archiveThread(
   const dir = threadDataDir(data, character, id);
   let active: string;
   try {
-    active = await readFile(activeJsonlIn(dir), "utf8");
+    active = readDurable(activeJsonlIn(dir));
   } catch {
     active = "";
   }
@@ -410,6 +410,7 @@ export async function archiveThread(
   }
 
   await rm(dir, { recursive: true, force: true });
+  deleteThreadState(data, character, id);
   forgetThreadSessions(data, character, id);
   const next: ThreadsIndex = {
     ...index,

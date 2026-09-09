@@ -1,6 +1,7 @@
+import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { MAIN_THREAD, archiveKey } from "../src/config/dirs.ts";
@@ -390,7 +391,8 @@ describe("archiving a thread", () => {
 
     const index = await archiveThread(root, "aria", "scratch");
     expect(index.threads.map((t) => t.id)).toEqual([MAIN_THREAD]);
-    expect(existsSync(join(root, HISTORY_DB_FILE))).toBe(false);
+    const history = HistoryStore.open(join(root, HISTORY_DB_FILE));
+    try { expect(history.segmentCount("aria/scratch")).toBe(0); } finally { history.close(); }
   });
 
   test("forgets the Agent SDK session the thread was resuming", async () => {

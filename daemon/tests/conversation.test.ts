@@ -1,9 +1,10 @@
+import { withStorage } from "../src/storage/store.ts";
 import { required } from "../src/util/required.ts";
 
 import { expandShared } from "./support/shared_subtrees.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import rawFixture from "./command_captures/conversation.json" with { type: "json" };
@@ -1095,14 +1096,14 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
       );
       const engine = await ConversationEngine.load("TestChar", root, () => {});
 
-      await chmod(join(characterDir, "threads", "main"), 0o555);
+      withStorage(root, (db) => db.run("CREATE TRIGGER refuse_state BEFORE INSERT ON state_files BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END"));
       let thrown: unknown;
       try {
         await deleteMessages(engine, { refs: ["m_1"] });
       } catch (e) {
         thrown = e;
       } finally {
-        await chmod(join(characterDir, "threads", "main"), 0o755);
+        withStorage(root, (db) => db.run("DROP TRIGGER refuse_state"));
       }
 
       expect(thrown, "a store that refused the write is an error, not a silent success").toBeInstanceOf(

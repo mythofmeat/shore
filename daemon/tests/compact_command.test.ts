@@ -1,3 +1,4 @@
+import { listDurableFiles } from "../src/storage/files.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -111,7 +112,9 @@ async function listing(dir: string): Promise<string[]> {
     }
     names.push(e.isDirectory() ? `${e.name}/` : e.name);
   }
-  return names.filter((name) => name !== "autonomy_state.json").sort();
+  names.push(...listDurableFiles(dir).filter((name) => name !== "threads").map((name) => name === "active_prompt" ? `${name}/` : name));
+  names.push(...listDurableFiles(join(dir, "threads", "main")));
+  return [...new Set(names)].filter((name) => name !== "autonomy_state.json").sort();
 }
 
 async function refusal(call: () => Promise<unknown>): Promise<Record<string, unknown>> {

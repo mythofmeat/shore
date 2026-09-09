@@ -1,10 +1,9 @@
+import { readDurable, writeDurable, deleteDurable } from "../../storage/files.ts";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { threadDataDir } from "../../config/dirs.ts";
 
-import { atomicWrite } from "../../engine/atomic.ts";
 import type { GenerateResponse, SidecarRequest } from "../../llm/types.ts";
 import type { AppliedCompactionWrite, ToolOutput } from "./types.ts";
 
@@ -101,7 +100,7 @@ export async function loadCompactionCheckpoint(
 ): Promise<CompactionCheckpoint | undefined> {
   let raw: string;
   try {
-    raw = await readFile(checkpointPath(dataDir, character, thread), "utf8");
+    raw = readDurable(checkpointPath(dataDir, character, thread));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw e;
@@ -131,7 +130,7 @@ export async function saveCompactionCheckpoint(
 ): Promise<void> {
   checkpoint.updatedAt = now().toISOString();
   const persisted = { ...checkpoint, request: withoutCredential(checkpoint.request) };
-  await atomicWrite(
+  writeDurable(
     checkpointPath(dataDir, checkpoint.character, thread),
     JSON.stringify(persisted, null, 2),
   );
@@ -143,7 +142,7 @@ export async function removeCompactionCheckpoint(
   thread: string,
 ): Promise<void> {
   try {
-    await rm(checkpointPath(dataDir, character, thread));
+    deleteDurable(checkpointPath(dataDir, character, thread));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }

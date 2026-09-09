@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { characterScope, importLegacyLog, insertEvent, readEvents, withStorage } from "../storage/store.ts";
 import { join } from "node:path";
 
 import type { Message } from "../engine/types.ts";
@@ -32,36 +32,27 @@ export async function appendSubagentTrace(
   now: () => Date = () => new Date(),
 ): Promise<void> {
   const record: SubagentTrace = { ...trace, ts: trace.ts ?? localRfc3339(now()) };
-  await mkdir(characterDataDir, { recursive: true });
-  await appendFile(subagentTraceFile(characterDataDir), `${JSON.stringify(record)}\n`, "utf8");
+  await migrateTraces(characterDataDir);
+  const { data, character } = characterScope(characterDataDir);
+  withStorage(data, (db) => insertEvent(db, { character, kind: "subagent", key: record.parent_tool_use_id, timestamp: record.ts, content: JSON.stringify(record) }));
 }
 
 export async function readSubagentTraces(
   characterDataDir: string,
   query: TraceQuery = {},
 ): Promise<SubagentTrace[]> {
-  let content: string;
-  try {
-    content = await readFile(subagentTraceFile(characterDataDir), "utf8");
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw e;
-  }
+  await migrateTraces(characterDataDir);
+  const { data, character } = characterScope(characterDataDir);
+  return readEvents(data, character, "subagent", query.count, query.ids)
+    .flatMap((line) => { const trace = parseTrace(line); return trace === undefined ? [] : [trace]; });
+}
 
-  const wanted = query.ids === undefined ? undefined : new Set(query.ids);
-  const traces: SubagentTrace[] = [];
-  for (const rawLine of content.split("\n")) {
-    const line = rawLine.trim();
-    if (line === "") continue;
+async function migrateTraces(characterDir: string): Promise<void> {
+  const { data, character } = characterScope(characterDir);
+  await importLegacyLog(data, `${character}/${TRACE_FILE}`, (line) => {
     const trace = parseTrace(line);
-    if (trace === undefined) continue;
-    if (wanted !== undefined && !wanted.has(trace.parent_tool_use_id)) continue;
-    traces.push(trace);
-  }
-
-  const count = query.count;
-  if (count === undefined || count <= 0 || traces.length <= count) return traces;
-  return traces.slice(traces.length - count);
+    return { character, kind: trace === undefined ? "legacy_invalid" : "subagent", key: trace?.parent_tool_use_id, timestamp: trace?.ts ?? "", content: line };
+  });
 }
 
 function parseTrace(line: string): SubagentTrace | undefined {
