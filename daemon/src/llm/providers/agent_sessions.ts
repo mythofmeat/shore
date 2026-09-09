@@ -11,6 +11,7 @@ export const SESSION_BOOK_FILE = "claude_agent_sessions.json";
 export interface DeliveredEntry {
   hash: string;
   uuid?: string;
+  sessionId?: string;
 }
 
 export const SESSION_BOOK_VERSION = 5;
@@ -24,20 +25,21 @@ export interface SessionRecord {
 
 export type SessionBook = Record<string, SessionRecord>;
 
-export function sessionKey(character: string, ledger: string, thread: string): string {
+export function sessionKey(character: string, ledger: string, thread: string, scope?: string): string {
   const base = `${character}${SESSION_KEY_SEPARATOR}${ledger}`;
+  if (scope !== undefined) return `${base}${SESSION_KEY_SEPARATOR}${thread}${SESSION_KEY_SEPARATOR}${scope}`;
   return thread === MAIN_THREAD ? base : `${base}${SESSION_KEY_SEPARATOR}${thread}`;
 }
 
 export function sessionKeyOwner(key: string): string | undefined {
   const parts = key.split(SESSION_KEY_SEPARATOR);
-  return parts.length === 2 || parts.length === 3 ? parts[0] : undefined;
+  return parts.length >= 2 && parts.length <= 4 ? parts[0] : undefined;
 }
 
 export function sessionKeyThread(key: string): string | undefined {
   const parts = key.split(SESSION_KEY_SEPARATOR);
   if (parts.length === 2) return MAIN_THREAD;
-  return parts.length === 3 ? parts[2] : undefined;
+  return parts.length === 3 || parts.length === 4 ? parts[2] : undefined;
 }
 
 export function bookPathIn(data: string): string {

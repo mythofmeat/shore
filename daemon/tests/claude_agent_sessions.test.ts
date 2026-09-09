@@ -32,6 +32,10 @@ function messageHashOf(m: WireMessage): string {
   return nextEntries(planTurn(undefined, [m]), undefined)[0]?.hash ?? "";
 }
 
+function nativeHistory(history: readonly WireMessage[], uuids: string[]) {
+  return nextEntries({ ...planTurn(undefined, history), resume: "session-1" }, uuids);
+}
+
 function seed(history: readonly WireMessage[], assistantUuid?: string): SessionRecord {
   const plan = planTurn(undefined, history);
   return {
@@ -70,16 +74,9 @@ describe("planTurn", () => {
     const record: SessionRecord = {
       version: SESSION_BOOK_VERSION,
     sessionId: "session-1",
-      entries: [
-        { hash: "h-user1" },
-        { hash: "h-asst1", uuid: "asst-uuid-1" },
-        { hash: "h-user2" },
-      ],
+      entries: nativeHistory([user1, asst1, user2], ["asst-uuid-1"]),
       pendingAssistantUuids: ["asst-uuid-2"],
     };
-    const seeded = planTurn(undefined, [user1, asst1, user2]);
-    record.entries = nextEntries(seeded, ["asst-uuid-1"]);
-
     const plan = planTurn(record, [user1, asst1, user2b]);
     expect(plan.fork).toBe(true);
     expect(plan.resume).toBe("session-1");
@@ -166,18 +163,26 @@ describe("planTurn fork bookkeeping", () => {
     expect(plan.prompt).not.toContain("still there?");
   });
 
-  test("a fork drops parent UUIDs because the SDK remints the copied transcript", () => {
+  test("a fork keeps parent anchors bound to the session that owns them", () => {
     const record: SessionRecord = {
       version: SESSION_BOOK_VERSION,
       sessionId: "session-1",
-      entries: nextEntries(planTurn(undefined, [user1, asst1, user2]), ["asst-uuid-1"]),
+      entries: nativeHistory([user1, asst1, user2], ["asst-uuid-1"]),
       pendingAssistantUuids: ["asst-uuid-2"],
     };
     const plan = planTurn(record, [user1, asst1, user2b]);
     const entries = nextEntries(plan, record.pendingAssistantUuids);
 
     expect(plan.fork).toBe(true);
-    expect(entries.every((entry) => entry.uuid === undefined)).toBe(true);
+    expect(entries[1]).toEqual({ hash: messageHashOf(asst1), uuid: "asst-uuid-1", sessionId: "session-1" });
+    expect(entries[2]?.uuid).toBeUndefined();
+    const fork = { ...record, sessionId: "fork-1", entries };
+    const again = planTurn(fork, [user1, asst1, user2b]);
+    expect(again.resume).toBe("session-1");
+    expect(again.resumeSessionAt).toBe("asst-uuid-1");
+    expect(again.prompt).toBe(user2b.content[0]?.type === "text" ? user2b.content[0].text : "");
+    const twice = { ...fork, sessionId: "fork-2", entries: nextEntries(again, ["fork-reply"]) };
+    expect(planTurn(twice, [user1, asst1, user2b]).resume).toBe("session-1");
   });
 });
 
@@ -194,10 +199,15 @@ describe("nextEntries", () => {
   });
 
   test("consumes the pending uuid once so later assistants stay unanchored", () => {
-    const plan = planTurn(undefined, [user1, asst1, msg("assistant", "second")]);
+    const plan = planTurn(seed([user1]), [user1, asst1, msg("assistant", "second")]);
     const entries = nextEntries(plan, ["asst-uuid-1"]);
     expect(entries[1]?.uuid).toBe("asst-uuid-1");
     expect(entries[2]?.uuid).toBeUndefined();
+  });
+
+  test("a cold replay never adopts assistant UUIDs from an old session", () => {
+    const plan = planTurn(undefined, [user1, asst1, user2]);
+    expect(nextEntries(plan, ["old-session-reply"]).every((entry) => entry.uuid === undefined)).toBe(true);
   });
 });
 
@@ -255,6 +265,14 @@ describe("conversationKey", () => {
   test("no context at all is still a usable key", () => {
     expect(conversationKey(request(undefined))).toBe("default\u0000");
   });
+
+  test("background workflows cannot replace the main chat session", () => {
+    const keys = ["message", "heartbeat", "compaction", "subagent", "keepalive"].map((call_type) =>
+      conversationKey(request({ ...context(), call_type })));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(conversationKey(request({ ...context(), call_type: "heartbeat_tool_loop" }))).toBe(keys[1] ?? "");
+    expect(conversationKey(request({ ...context(), call_type: "tool_loop" }))).toBe(keys[0] ?? "");
+  });
 });
 
 describe("forgetting a thread's sessions", () => {
@@ -263,6 +281,13 @@ describe("forgetting a thread's sessions", () => {
     [sessionKey("qifei", "/l.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "eval", entries: [] },
     [sessionKey("qifei", "/other.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "eval-other", entries: [] },
     [sessionKey("aria", "/l.db", "eval")]: { version: SESSION_BOOK_VERSION, sessionId: "aria-eval", entries: [] },
+  });
+
+  test("background session keys retain their owner and thread for cleanup", () => {
+    const key = sessionKey("qifei", "/l.db", "main", "heartbeat");
+    const record: SessionRecord = { version: SESSION_BOOK_VERSION, sessionId: "heartbeat", entries: [] };
+    expect(sessionKeyThread(key)).toBe("main");
+    expect(withoutThread({ [key]: record }, "qifei", "main")).toEqual({});
   });
 
   test("drops every ledger's session for that character's thread", () => {
@@ -478,7 +503,7 @@ describe("replaying a history that used tools", () => {
 
 describe("anchoring several rounds in one turn", () => {
   test("each assistant turn is given its own frame, in order", () => {
-    const plan = planTurn(undefined, [
+    const plan = planTurn(seed([user1]), [
       user1,
       { role: "assistant", content: [{ type: "text", text: "one" }] },
       { role: "user", content: [{ type: "text", text: "next" }] },
@@ -494,7 +519,7 @@ describe("anchoring several rounds in one turn", () => {
   });
 
   test("an assistant turn with no frame to anchor on is left unanchored", () => {
-    const plan = planTurn(undefined, [
+    const plan = planTurn(seed([user1]), [
       user1,
       { role: "assistant", content: [{ type: "text", text: "one" }] },
       { role: "user", content: [{ type: "text", text: "next" }] },
@@ -546,7 +571,7 @@ describe("image placement when a regeneration rebuilds history", () => {
   test("a fork before the image turn preserves its historical placement", async () => {
     const history = [user1, asst1, oldImage, msg("assistant", "Earlier reply"), latest];
     const record = seed(history);
-    record.entries = nextEntries(planTurn(undefined, history), ["early-anchor"]);
+    record.entries = nativeHistory(history, ["early-anchor"]);
     const plan = planTurn(record, history);
     expect(plan.fork).toBe(true);
     const content = await deliveredBlocks(plan);
@@ -569,7 +594,7 @@ describe("image placement when a regeneration rebuilds history", () => {
     const old = {
       ...seed([oldImage, asst1, latest]),
       version: 4,
-      entries: nextEntries(planTurn(undefined, [oldImage, asst1, latest]), ["anchor"]),
+      entries: nativeHistory([oldImage, asst1, latest], ["anchor"]),
     };
     const plan = planTurn(old, [oldImage, asst1, latest]);
     expect(plan.resume).toBeUndefined();
@@ -578,7 +603,7 @@ describe("image placement when a regeneration rebuilds history", () => {
 
   test("a valid earlier anchor does not reattach an image already in the session", () => {
     const record = seed([oldImage, asst1, latest]);
-    record.entries = nextEntries(planTurn(undefined, [oldImage, asst1, latest]), ["anchor"]);
+    record.entries = nativeHistory([oldImage, asst1, latest], ["anchor"]);
     const plan = planTurn(record, [oldImage, asst1, latest]);
     expect(plan.fork).toBe(true);
     expect(plan.images).toEqual([]);

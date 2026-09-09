@@ -20,12 +20,12 @@ wire captured through a logging proxy on `ANTHROPIC_BASE_URL`:
   it loads `~/.claude/settings.json` and project `CLAUDE.md`, and every turn costs a second API
   request to generate a session title. The provider turns all of that off.
 
-**History replay can significantly degrade model quality.** When Shore cannot reuse the native
-SDK history (for example after switching providers or changing earlier messages), it collapses
-the replayed messages into one user turn. Role labels in text do not preserve native turn
-structure, and the replay stays in the SDK session on subsequent turns. Shore displays a
-warning before generating whenever it collapses multiple messages or replays an assistant
-message. Start a new conversation or use the Anthropic API provider to preserve native turns.
+**Lossy chat-history replay is blocked before generation.** Shore sends a single new user turn or
+resumes a native session at a valid anchor. If doing so would require flattening several messages,
+an assistant turn, or a tool result into a user prompt, the request fails before calling the SDK.
+The error gives the reason. Restore the matching SDK session or use the Anthropic API provider
+to continue an existing conversation whose native session is unavailable. Previously Shore only
+warned and continued; those earlier replays remain in the SDK transcripts that received them.
 
 ## Enabling it
 
@@ -76,8 +76,8 @@ ledger, retries, fallback and the client stream all work as they do for any othe
 - **Finish reasons** come from the model's `message_delta`, falling back to the run's result when
   the stream never said how it ended, so a turn truncated at `max_tokens` is not reported as a
   clean stop.
-- **Images** are sent rather than described. History replays as text, so each picture leaves an
-  `[image attached: <type>]` marker where it was and the image itself rides along with the prompt.
+- **Images** are sent rather than described. A new picture carries an
+  `[image attached: <type>]` marker and the image itself rides along with the prompt.
   Assistant-attached images use the same `tool_pair` encoding as the Anthropic provider.
 - **Reasoning effort** passes through: `low` / `medium` / `high` / `xhigh` / `max`. `off` and
   `adaptive` are dropped, because the SDK takes a named level or nothing.
@@ -101,8 +101,8 @@ block, not just text — an image, a tool call's arguments and a tool result's o
 it — so two turns that differ only in what was attached are not read as one. Whitespace-only text
 blocks are dropped first, mirroring `daemon/src/handler/wire_messages.ts`, so a turn hashes the
 same when it is recorded as it does when it comes back on the wire. The book carries a `version`;
-one written under an older hash is ignored rather than compared against, which costs a single cold
-start on upgrade. The main thread is keyed exactly
+one written under an older hash is ignored rather than compared against. A cold start is allowed
+only for a single new user turn. The main thread is keyed exactly
 as it was before threads existed, so an in-flight session survives the upgrade; a side thread
 gets a session of its own, which is what makes running this provider in one thread while the
 main conversation stays on another possible at all. Each turn:
@@ -110,9 +110,9 @@ main conversation stays on another possible at all. Each turn:
 | Situation | Action |
 |---|---|
 | Incoming history extends what was delivered | `resume` the session, send only the new user message |
-| History diverges partway (an edit) | `resume` + `resumeSessionAt` the last delivered assistant turn + `forkSession`, replaying everything after it |
+| History diverges partway (an edit) | Fork at a matching native assistant anchor and send the revised user turn; block if older turns would need text replay |
 | Regenerating the most recent turn | Same fork, anchored one assistant turn further back; the user turn being answered is re-sent |
-| No common prefix, no session yet, or no assistant turn to anchor on | Fresh session; prior turns replayed as text, assistant ones wrapped in `<prior_assistant_turn>` |
+| No common prefix, no session yet, or no assistant turn to anchor on | Fresh session for a single new user turn; otherwise stop before generation |
 
 Completed native tool rounds are added to the delivered record before the run finishes: both
 the assistant's tool call and the user's tool result are already in the SDK session. Only the
@@ -122,15 +122,13 @@ new user message even when resuming the same session. Continuation tests now ins
 SDK prompt across successive tool-using turns and provider restarts. Session writes merge with
 the latest book so overlapping conversations cannot erase each other's records.
 
-This bookkeeping fix keeps the existing book version and session IDs. It does not remove replays
-already stored in an SDK transcript. An older record can still replay its last untracked tool
-results once when first continued; subsequent completed rounds use the corrected bookkeeping.
-Cold starts and divergent histories still follow the replay rules above and retain their warnings.
-
-A replay is lossy but not silent: tool calls and their results come back as
-`<prior_tool_call name=…>` / `<prior_tool_result>` pairs rather than being dropped, so a cold
-start — which shore compacting a conversation forces — does not tell the model it said things it
-has no record of doing.
+The book version and existing chat keys are preserved. An older record with untracked tool
+results now stops at the replay guard rather than adding another flattened copy. Background
+workflows have separate session keys, so a heartbeat, subagent, compaction call, or keepalive
+cannot replace the main chat's record. Background jobs can still use transcript text as task
+input in those separate sessions; their diagnostic explicitly identifies background replay.
+The blocking replay guard applies to foreground chat replies. Temporary system instructions, including recall and
+regeneration guidance, are passed in the SDK system prompt instead of the hashed conversation.
 
 Regeneration is the case worth understanding. Shore drops the assistant turn it is replacing, so
 the incoming history is exactly what was already delivered — there is no diverging tail to detect.
@@ -138,17 +136,16 @@ Treating that as an ordinary extension sends the SDK an **empty prompt**, and th
 blank turn. So an empty tail is read as "regenerate": fork at the assistant turn *before* the one
 being replaced and re-send the user turn that follows it.
 
-The fork anchor **must** be an assistant uuid. The SDK does not echo a `user` message back for a
-string prompt, so user uuids are never observable; anchoring on them silently forks from the end
-of the session and the regenerated turn still sees the turn it was supposed to replace. When no
-assistant uuid is available to anchor on, the turn cold starts rather than forking blind.
+Shore uses observed assistant UUIDs as fork anchors. When none is available, the replay guard
+prevents an existing multi-turn conversation from being flattened into a fresh session.
 
 A fork also resets the delivered record to the anchor. Everything after it is re-sent, because the
 forked session does not contain it — keeping those entries would claim the SDK had seen messages
-it never did. The SDK remints the UUID of every entry copied into a fork, so the new record drops
-all parent UUIDs as well; only assistant frames observed after the fork are valid anchors in that
-session. If the CLI nevertheless reports that a requested anchor is missing, shore discards that
-record so a retry cold-starts instead of repeating the same deterministic failure.
+it never did. The SDK remints the UUID of every entry copied into a fork. Each retained anchor
+therefore stores its original session ID alongside its UUID. Repeated regeneration forks from
+that original session and anchor, not from a copied UUID in the new session. Cold-start replays
+never adopt pending UUIDs from the old session. If the CLI reports a missing anchor, Shore
+discards the stale record; a subsequent attempt that needs lossy replay stops before querying.
 `tests/claude_agent_sessions.test.ts` pins all of this.
 
 ## Tools
@@ -255,8 +252,8 @@ a tool-using turn resumed the session rather than cold-starting (input tokens st
 - **Session book is only partly garbage collected.** Archiving a thread drops its entry, but
   nothing else does: entries accumulate per character + ledger + thread, and every fork mints a
   new session id. Deleting a character leaves its sessions behind. It is a small JSON file.
-- **Compaction desync.** Shore compacting a conversation changes the message prefix, so the next
-  turn falls back to a cold start with a text replay. Correct, but it pays a full cache write.
+- **Compaction desync.** Shore compacting a conversation changes the message prefix. If the
+  remaining history cannot resume natively, the next SDK turn is blocked by the replay guard.
 
 ## Packaging
 

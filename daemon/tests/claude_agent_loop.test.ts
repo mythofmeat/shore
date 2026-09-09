@@ -478,29 +478,31 @@ describe("what compaction is told the context weighs", () => {
   });
 });
 
-test("the SDK tool loop warns when replaying prior conversation turns", async () => {
-  const { events } = await drive(ONE_CALL, phase(), request({ messages: [
+test("the SDK tool loop blocks collapsed history before querying or running tools", async () => {
+  const tools = phase();
+  const { events, agent } = await drive(ONE_CALL, tools, request({ messages: [
     { role: "user", content: [{ type: "text", text: "hello" }] },
     { role: "assistant", content: [{ type: "text", text: "hi" }] },
     { role: "user", content: [{ type: "text", text: "read SOUL.md" }] },
   ] }));
-  expect(events[1]?.type).toBe("provider_warning");
-  const warning = events.find((event) => event.type === "provider_warning");
-  expect(warning?.message).toContain("can significantly degrade model quality");
-  expect(events.filter((event) => event.type === "provider_warning")).toHaveLength(1);
-  expect(done(events).content).toBe("it says Brian.");
+  const error = events.find((event) => event.type === "error");
+  expect(error?.message).toContain("blocked replay of 3 conversation messages");
+  expect(agent.calls).toEqual([]);
+  expect(tools.dispatched).toEqual([]);
+  expect(events.some((event) => event.type === "done")).toBe(false);
 });
 
-test("the replay warning describes the prompt after the initial hook changes it", async () => {
+test("the replay guard checks the prompt after the initial hook changes it", async () => {
   const tools = phase();
   tools.beforeTurn = (req) => {
     if (req.messages.length === 1) {
       req.messages.push({ role: "user", content: [{ type: "text", text: "another message" }] });
     }
   };
-  const { events } = await drive(ONE_CALL, tools);
-  const warning = events.find((event) => event.type === "provider_warning");
-  expect(warning?.message).toContain("collapsing 2 conversation messages");
+  const { events, agent } = await drive(ONE_CALL, tools);
+  const error = events.find((event) => event.type === "error");
+  expect(error?.message).toContain("blocked replay of 2 conversation messages");
+  expect(agent.calls).toEqual([]);
 });
 
 

@@ -213,9 +213,10 @@ export interface TurnPlan {
   fork: boolean;
   keptEntries: DeliveredEntry[];
   delivered: WireMessage[];
+  replayReason?: string;
 }
 
-function coldStart(msgs: readonly WireMessage[]): TurnPlan {
+function coldStart(msgs: readonly WireMessage[], replayReason = "No matching native SDK session is available."): TurnPlan {
   const replay = renderReplay(msgs);
   return {
     prompt: replay.text,
@@ -224,6 +225,7 @@ function coldStart(msgs: readonly WireMessage[]): TurnPlan {
     fork: false,
     keptEntries: [],
     delivered: [...msgs],
+    replayReason,
   };
 }
 
@@ -234,7 +236,7 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
   const k = commonPrefix(hashes, record.entries);
   const tail = msgs.slice(k);
 
-  if (k === 0) return coldStart(msgs);
+  if (k === 0) return coldStart(msgs, "The conversation no longer matches the start of the saved SDK session.");
 
   if (k === record.entries.length && tail.length > 0) {
     const replay = renderReplay(tail.filter((m) => m.role !== "assistant"));
@@ -251,7 +253,7 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
 
   const anchor = lastAssistantEntry(record.entries, k);
   const at = anchor < 0 ? undefined : record.entries[anchor]?.uuid;
-  if (at === undefined) return coldStart(msgs);
+  if (at === undefined) return coldStart(msgs, "The saved SDK session has no usable anchor for this regeneration or edit.");
 
   const resumed = msgs.slice(anchor + 1);
   const replay = renderReplay(resumed);
@@ -259,25 +261,48 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
     prompt: replay.text,
     images: replay.images,
     replayContent: replay.content,
-    resume: record.sessionId,
+    resume: record.entries[anchor]?.sessionId ?? record.sessionId,
     resumeSessionAt: at,
     fork: true,
     keptEntries: record.entries.slice(0, anchor + 1),
     delivered: [...resumed],
+    replayReason: "Continuing from the last matching native anchor would require replaying later history.",
   };
 }
 
-function* replayWarnings(plan: TurnPlan): Iterable<StreamEvent> {
+function* replayPolicy(plan: TurnPlan, req: SidecarRequest): Iterable<StreamEvent> {
   const replayed = plan.resume !== undefined && !plan.fork
     ? plan.delivered.filter((message) => message.role !== "assistant")
     : plan.delivered;
-  if (replayed.length <= 1 && !replayed.some((message) => message.role === "assistant")) return;
+  if (replayed.length <= 1 && !replayed.some((message) => message.role === "assistant" ||
+    message.content.some((block) => block.type === "tool_use" || block.type === "tool_result"))) return;
+  const callType = req.context?.call_type;
+  if (callType !== undefined && callType !== "message" && callType !== "tool_loop") {
+    const message = `Claude Agent SDK: ${callType} is replaying ${replayed.length} task-context messages ` +
+      "as text in a separate background session. The chat session is not modified.";
+    shoreLog.warn(message);
+    yield { type: "provider_warning", message };
+    return;
+  }
   const message =
-    `Claude Agent SDK: Shore is collapsing ${replayed.length} conversation messages into a single user turn. ` +
-    "This loses native turn structure and can significantly degrade model quality. " +
-    "The replay remains in this SDK session's history. Start a new conversation or switch to the Anthropic API provider to preserve native turns.";
-  shoreLog.warn(message);
-  yield { type: "provider_warning", message };
+    `Claude Agent SDK: blocked replay of ${replayed.length} conversation messages as a single user turn. ` +
+    `${plan.replayReason ?? "The pending messages cannot be sent as one native user turn."} ` +
+    "No prompt was sent to the SDK and its history was left untouched. " +
+    "Use the Anthropic API provider to continue with native history, or restore the matching SDK session.";
+  throw new Error(message);
+}
+
+function withSystemInstructions(req: SidecarRequest): SidecarRequest {
+  const instructions = req.messages.filter((message) => message.role === "system");
+  if (instructions.length === 0) return req;
+  return {
+    ...req,
+    messages: req.messages.filter((message) => message.role !== "system"),
+    system: [
+      ...(req.system ?? []),
+      ...instructions.map((message) => ({ text: replayText(message, []), label: "turn_instructions" })),
+    ],
+  };
 }
 
 export function nextEntries(
@@ -285,9 +310,11 @@ export function nextEntries(
   pendingAssistantUuids: readonly string[] | undefined,
 ): DeliveredEntry[] {
   const entries: DeliveredEntry[] = plan.keptEntries.map((entry) =>
-    plan.fork ? { hash: entry.hash } : { ...entry },
+    plan.fork && entry.uuid !== undefined && plan.resume !== undefined
+      ? { ...entry, sessionId: entry.sessionId ?? plan.resume }
+      : { ...entry },
   );
-  const pending = plan.fork ? [] : [...(pendingAssistantUuids ?? [])];
+  const pending = plan.resume === undefined || plan.fork ? [] : [...(pendingAssistantUuids ?? [])];
   for (const m of plan.delivered) {
     const entry: DeliveredEntry = { hash: messageHash(m) };
     if (m.role === "assistant") {
@@ -337,10 +364,14 @@ function discardMissingAnchor(
 }
 
 export function conversationKey(req: SidecarRequest): string {
+  const callType = req.context?.call_type;
+  const scope = callType === undefined || callType === "message" || callType === "tool_loop"
+    ? undefined : callType === "heartbeat_tool_loop" ? "heartbeat" : callType;
   return sessionKey(
     req.context?.character ?? "default",
     req.context?.ledger ?? "",
     req.context?.thread ?? MAIN_THREAD,
+    scope,
   );
 }
 
@@ -617,6 +648,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
+    req = withSystemInstructions({ ...req });
     const startedAt = Date.now();
     let firstTokenAt = 0;
     const acc = newTurnAccumulator();
@@ -636,7 +668,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
         throw new Error("Tool-capable generation requires a tool executor; use the shared tool loop");
       }
       yield { type: "start", model: req.model };
-      yield* replayWarnings(plan);
+      yield* replayPolicy(plan, req);
 
       const run = this.#runQuery({ prompt: agentPrompt(plan), options: buildOptions(req, plan, abort) });
 
@@ -903,6 +935,7 @@ export async function* claudeAgentToolLoopEvents(
   deps: ClaudeAgentDeps = {},
   options: ToolLoopOptions = {},
 ): AsyncIterable<StreamEvent> {
+  req = withSystemInstructions({ ...req });
   const defs = req.tools ?? [];
   if (defs.length === 0) {
     yield* new ClaudeAgentProvider(deps).stream(req, signal);
@@ -958,8 +991,9 @@ export async function* claudeAgentToolLoopEvents(
   try {
     yield { type: "start", model: req.model };
     await tools.beforeTurn?.(req);
+    Object.assign(req, withSystemInstructions(req));
     plan = planTurn(record, req.messages);
-    yield* replayWarnings(plan);
+    yield* replayPolicy(plan, req);
     const run = (deps.runQuery ?? query)({
       prompt: agentPrompt(plan),
       options: buildOptions(req, plan, abort, {

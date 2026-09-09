@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   ClaudeAgentProvider,
+  type AgentQuery,
   nextEntries,
   planTurn,
 } from "../src/llm/providers/claude_agent.ts";
@@ -343,7 +344,7 @@ describe("what the turn leaves behind", () => {
     expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_0_asst_1"]);
   });
 
-  test("a missing resume anchor discards the stale record so the next attempt starts cold", async () => {
+  test("a missing resume anchor clears the stale record and blocks a lossy retry", async () => {
     const dir = await bookDir();
     const path = join(dir, "sessions.json");
     const key = "default\u0000";
@@ -358,7 +359,7 @@ describe("what the turn leaves behind", () => {
       [key]: {
         version: SESSION_BOOK_VERSION,
         sessionId: "forked-session",
-        entries: nextEntries(planTurn(undefined, history), ["missing-parent-uuid"]),
+        entries: nextEntries({ ...planTurn(undefined, history), resume: "forked-session" }, ["missing-parent-uuid"]),
       },
     };
     await writeFile(path, JSON.stringify(stale), "utf8");
@@ -381,11 +382,11 @@ describe("what the turn leaves behind", () => {
     }
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({});
 
-    for await (const _event of provider.stream(req)) {
-      void _event;
-    }
-    expect(agent.calls[1]?.options.resume).toBeUndefined();
-    expect(agent.calls[1]?.options.resumeSessionAt).toBeUndefined();
+    const retried: StreamEvent[] = [];
+    for await (const event of provider.stream(req)) retried.push(event);
+    expect(agent.calls).toHaveLength(1);
+    expect(retried.find((event) => event.type === "error")?.message).toContain("blocked replay");
+    expect(kinds(retried)).not.toContain("done");
   });
 });
 
@@ -467,9 +468,9 @@ describe("sending a picture", () => {
   });
 });
 
-describe("conversation replay warnings", () => {
-  test("warns before model output when history is collapsed", async () => {
-    const { events } = await collect(
+describe("conversation replay guard", () => {
+  test("blocks before model output when history would be collapsed", async () => {
+    const { events, agent } = await collect(
       { rounds: [{ blocks: [{ kind: "text", text: "reply" }] }] },
       request({ messages: [
         { role: "user", content: [{ type: "text", text: "hello" }] },
@@ -477,11 +478,11 @@ describe("conversation replay warnings", () => {
         { role: "user", content: [{ type: "text", text: "continue" }] },
       ] }),
     );
-    expect(events[1]?.type).toBe("provider_warning");
-    const warning = events.find((event) => event.type === "provider_warning");
-    expect(warning?.message).toContain("collapsing 3 conversation messages into a single user turn");
-    expect(events.filter((event) => event.type === "provider_warning")).toHaveLength(1);
-    expect(done(events).content).toBe("reply");
+    expect(events[1]?.type).toBe("error");
+    const error = events.find((event) => event.type === "error");
+    expect(error?.message).toContain("blocked replay of 3 conversation messages");
+    expect(agent.calls).toEqual([]);
+    expect(kinds(events)).not.toContain("done");
   });
 
   test("does not warn for a fresh conversation", async () => {
@@ -504,4 +505,105 @@ test("a native session continuation does not warn about replay", async () => {
   ] }))) events.push(event);
   expect(agent.calls[1]?.options.resume).toBeDefined();
   expect(kinds(events)).not.toContain("provider_warning");
+});
+
+test.each([false, true])("repeated regeneration of an eleven-message chat uses the original native anchor (image: %s)", async (withImage) => {
+  const path = join(await bookDir(), "sessions.json");
+  const sessions = new Map<string, Set<string>>();
+  const calls: Parameters<AgentQuery>[0][] = [];
+  const runQuery: AgentQuery = async function* (params) {
+    calls.push(params);
+    const { resume, resumeSessionAt, forkSession } = params.options;
+    if (resumeSessionAt !== undefined && !sessions.get(resume ?? "")?.has(resumeSessionAt)) {
+      throw new Error(`No message found with message.uuid of: ${resumeSessionAt}`);
+    }
+    const sid = resume === undefined || forkSession === true ? `session-${String(calls.length)}` : resume;
+    const anchors = sessions.get(sid) ?? new Set<string>();
+    if (forkSession === true) {
+      for (const uuid of sessions.get(resume ?? "") ?? []) anchors.add(`${sid}:copy:${uuid}`);
+    }
+    sessions.set(sid, anchors);
+    const agent = fakeAgent({ sessionId: sid, rounds: [{ blocks: [{ kind: "text", text: `reply ${String(calls.length)}` }] }] });
+    for await (const frame of agent.query(params)) {
+      if (frame.type === "assistant") {
+        const uuid = `${sid}:${String(calls.length)}:${frame.uuid}` as typeof frame.uuid;
+        anchors.add(uuid);
+        yield { ...frame, uuid };
+      } else yield frame;
+    }
+  };
+  const provider = new ClaudeAgentProvider({ runQuery, bookPath: () => path });
+  const history: SidecarRequest["messages"] = [];
+  for (let turn = 1; turn <= 6; turn += 1) {
+    history.push({ role: "user", content: [
+      ...(withImage && turn === 6 ? [{ type: "image" as const, source: { type: "base64" as const, media_type: "image/png", data: "aW1hZ2U=" } }] : []),
+      { type: "text", text: `question ${String(turn)}` },
+    ] });
+    const events: StreamEvent[] = [];
+    for await (const event of provider.stream(request({ messages: [...history] }))) events.push(event);
+    expect(kinds(events)).not.toContain("error");
+    if (turn < 6) history.push({ role: "assistant", content: [{ type: "text", text: done(events).content }] });
+  }
+  expect(history).toHaveLength(11);
+  for (let regeneration = 0; regeneration < 3; regeneration += 1) {
+    const restarted = new ClaudeAgentProvider({ runQuery, bookPath: () => path });
+    const events: StreamEvent[] = [];
+    for await (const event of restarted.stream(request({ messages: [...history] }))) events.push(event);
+    expect(kinds(events)).not.toContain("error");
+    expect(kinds(events)).not.toContain("provider_warning");
+    const prompt = calls.at(-1)?.prompt;
+    if (withImage && typeof prompt !== "string" && prompt !== undefined) {
+      const turns = [];
+      for await (const message of prompt) turns.push(message.message.content);
+      expect(turns).toHaveLength(1);
+      expect(JSON.stringify(turns)).toContain("question 6");
+      expect(JSON.stringify(turns)).not.toContain("prior_assistant_turn");
+    } else expect(prompt).toBe("question 6");
+    expect(calls.at(-1)?.options.resume).toBe("session-1");
+    expect(calls.at(-1)?.options.resumeSessionAt).toBe("session-1:5:msg_0_asst_0");
+    expect(calls.at(-1)?.options.forkSession).toBe(true);
+  }
+});
+
+test("temporary system instructions do not diverge the conversation on the next turn", async () => {
+  const path = join(await bookDir(), "sessions.json");
+  const agent = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "reply" }] }] });
+  const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
+  const history = request().messages;
+  for (const instruction of ["first recall", "second recall"]) {
+    const events: StreamEvent[] = [];
+    for await (const event of provider.stream(request({ messages: [
+      ...history,
+      { role: "system", content: [{ type: "text", text: instruction }] },
+    ] }))) events.push(event);
+    expect(kinds(events)).not.toContain("error");
+    expect(agent.calls.at(-1)?.options.systemPrompt).toContain(instruction);
+    history.push({ role: "assistant", content: [{ type: "text", text: "reply" }] });
+    history.push({ role: "user", content: [{ type: "text", text: "continue" }] });
+  }
+  expect(agent.calls[1]?.options.resume).toBe("session-fake");
+  expect(agent.calls[1]?.prompt).toBe("continue");
+});
+
+test("a heartbeat between chat turns cannot replace the chat session", async () => {
+  const path = join(await bookDir(), "sessions.json");
+  const chat = fakeAgent({ sessionId: "chat-session", rounds: [{ blocks: [{ kind: "text", text: "chat reply" }] }] });
+  const heartbeat = fakeAgent({ sessionId: "heartbeat-session", rounds: [{ blocks: [{ kind: "text", text: "heartbeat reply" }] }] });
+  const provider = new ClaudeAgentProvider({ runQuery: chat.query, bookPath: () => path });
+  const background = new ClaudeAgentProvider({ runQuery: heartbeat.query, bookPath: () => path });
+  const context = { character: "qifei", ledger: "/data/ledger.db", call_type: "message", thinking_enabled: false };
+  const first = request({ context });
+  for await (const event of provider.stream(first)) expect(event.type).not.toBe("error");
+  for await (const event of background.stream(request({ context: { ...context, call_type: "heartbeat" } }))) {
+    expect(event.type).not.toBe("error");
+  }
+  for await (const event of provider.stream(request({ context, messages: [
+    ...first.messages,
+    { role: "assistant", content: [{ type: "text", text: "chat reply" }] },
+    { role: "user", content: [{ type: "text", text: "continue" }] },
+  ] }))) expect(event.type).not.toBe("error");
+  expect(chat.calls[1]?.options.resume).toBe("chat-session");
+  expect(chat.calls[1]?.prompt).toBe("continue");
+  const book = JSON.parse(await readFile(path, "utf8")) as SessionBook;
+  expect(Object.values(book).map(record => record.sessionId).sort()).toEqual(["chat-session", "heartbeat-session"]);
 });
