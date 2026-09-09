@@ -43,12 +43,12 @@ describe("deleting a character", () => {
     for (const path of result.removed) expect(existsSync(path)).toBe(false);
     expect(discoverCharacters(dirs.config, dirs.workspace)).toEqual(["bea"]);
 
-    const history = new Database(join(dirs.data, "history.db"), { readonly: true });
+    const history = new Database(join(dirs.data, "shore.db"), { readonly: true });
     expect(
       history.query("SELECT DISTINCT character FROM history_messages ORDER BY character").values(),
     ).toEqual([["bea"]]);
     history.close();
-    const ledger = new Database(join(dirs.data, "ledger.db"), { readonly: true });
+    const ledger = new Database(join(dirs.data, "shore.db"), { readonly: true });
     expect(ledger.query("SELECT character FROM calls ORDER BY character").values())
       .toEqual([["bea"]]);
     ledger.close();
@@ -178,7 +178,7 @@ async function root(name: string): Promise<ShoreDirs> {
     workspace: join(base, "workspace"),
   };
   await Promise.all(Object.values(dirs).map((path) => mkdir(path as string, { recursive: true })));
-  Ledger.create(join(dirs.data, "ledger.db")).close();
+  Ledger.create(join(dirs.data, "shore.db")).close();
   return dirs;
 }
 
@@ -203,7 +203,7 @@ async function seedCharacter(dirs: ShoreDirs, character: string): Promise<void> 
     join(dirs.data, character, "threads", "main", "active.jsonl"),
     `${JSON.stringify(message)}\n`,
   );
-  const history = HistoryStore.open(join(dirs.data, "history.db"));
+  const history = HistoryStore.open(join(dirs.data, "shore.db"));
   history.putSegment(
     character,
     0,
@@ -212,7 +212,7 @@ async function seedCharacter(dirs: ShoreDirs, character: string): Promise<void> 
   );
   history.close();
 
-  const ledger = new Database(join(dirs.data, "ledger.db"), { readwrite: true });
+  const ledger = new Database(join(dirs.data, "shore.db"), { readwrite: true });
   ledger
     .query(
       `INSERT INTO calls

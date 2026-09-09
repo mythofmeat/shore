@@ -1,6 +1,10 @@
+import { preparePersistentStorage } from "../src/storage/prepare.ts";
+import { writeSession, readBook, bookPathIn, sessionKey, SESSION_BOOK_VERSION } from "../src/llm/providers/agent_sessions.ts";
+import { writeDurable, readDurable } from "../src/storage/files.ts";
+import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,7 +25,7 @@ describe("character archives", () => {
     const source = await root("source");
     await seedCharacter(source, "ada", "hello from ada");
     await seedCharacter(source, "bea", "hello from bea");
-    const sourceHistory = HistoryStore.open(join(source.data, "history.db"));
+    const sourceHistory = HistoryStore.open(join(source.data, "shore.db"));
     for (const key of ["ada/side", "ada/retired", "adam/side", "bea/side"]) {
       sourceHistory.putSegment(key, 0, {
         file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z", retain: true,
@@ -51,13 +55,35 @@ describe("character archives", () => {
       .toBe("You are ada.\n");
     expect(await readFile(join(target.data, "ada", "threads", "main", "active.jsonl"), "utf8"))
       .toContain("hello from ada");
-    const history = new Database(join(target.data, "history.db"), { readonly: true });
+    const history = new Database(join(target.data, "shore.db"), { readonly: true });
     expect(history.query("SELECT DISTINCT character FROM history_messages ORDER BY character").values()).toEqual([
       ["ada"], ["ada/retired"], ["ada/side"],
     ]);
     expect(history.query("SELECT character, memory_doc FROM history_segments WHERE character != 'ada' ORDER BY character").values())
       .toEqual([["ada/retired", "pending"], ["ada/side", "pending"]]);
     history.close();
+  });
+
+  test("media and native sessions resume after moving an archive to another data directory", async () => {
+    const source = await root("media-source");
+    await seedCharacter(source, "ada", "image conversation");
+    const oldImage = join(source.data, "ada", "images", "generated", "picture.png");
+    await mkdir(join(source.data, "ada", "images", "generated"), { recursive: true });
+    await writeFile(oldImage, "original image bytes");
+    const active = join(source.data, "ada", "threads", "main", "active.jsonl");
+    writeDurable(active, JSON.stringify({ ...userMessage("ada", "image"), images: [oldImage] }) + "\n");
+    writeSession(bookPathIn(source.data), sessionKey("ada", join(source.data, "shore.db"), "main"), {
+      version: SESSION_BOOK_VERSION, sessionId: "resume-me", entries: [],
+    });
+    await preparePersistentStorage(source);
+    const output = join(source.runtime, "media.shore.tar.gz");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+    const target = await root("media-target");
+    await importCharacter(context(target, new Set()), { archive: output });
+    await preparePersistentStorage(target);
+    expect(await readFile(join(target.data, "media", "ada", "generated", "picture.png"), "utf8")).toBe("original image bytes");
+    expect(readDurable(join(target.data, "ada", "threads", "main", "active.jsonl"))).toContain(join(target.data, "media", "ada"));
+    expect(readBook(bookPathIn(target.data))[sessionKey("ada", join(target.data, "shore.db"), "main")]?.sessionId).toBe("resume-me");
   });
 
   test("import refuses an existing character before changing it", async () => {
@@ -80,7 +106,7 @@ describe("character archives", () => {
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
 
     const target = await root("hidden-target");
-    const history = HistoryStore.open(join(target.data, "history.db"));
+    const history = HistoryStore.open(join(target.data, "shore.db"));
     history.putSegment(
       key,
       0,
@@ -91,7 +117,7 @@ describe("character archives", () => {
 
     expect(importCharacter(context(target, new Set()), { archive: output }))
       .rejects.toThrow("history already exists");
-    const preserved = new Database(join(target.data, "history.db"), { readonly: true });
+    const preserved = new Database(join(target.data, "shore.db"), { readonly: true });
     const count = preserved
       .query("SELECT COUNT(*) AS count FROM history_messages WHERE character = ?1")
       .get(key) as { count: number };
@@ -101,7 +127,7 @@ describe("character archives", () => {
   test("a later import failure removes all imported thread rows and preserves other characters", async () => {
     const source = await root("rollback-source");
     await seedCharacter(source, "ada", "main");
-    const store = HistoryStore.open(join(source.data, "history.db"));
+    const store = HistoryStore.open(join(source.data, "shore.db"));
     store.putSegment("ada/retired", 0, {
       file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z",
     }, [userMessage("ada", "retired")]);
@@ -112,7 +138,7 @@ describe("character archives", () => {
     await seedCharacter(target, "adam", "preserved");
     expect(importCharacter(context(target, new Set(["adam"]), () => { throw new Error("refresh failed"); }), { archive: output }))
       .rejects.toThrow("refresh failed");
-    const restored = HistoryStore.open(join(target.data, "history.db"));
+    const restored = HistoryStore.open(join(target.data, "shore.db"));
     expect(restored.archiveKeys("ada")).toEqual([]);
     expect(restored.readSegment("adam", 0)[0]?.content).toBe("preserved");
     restored.close();
@@ -131,7 +157,7 @@ async function root(name: string): Promise<ShoreDirs> {
     workspace: join(base, "workspace"),
   };
   await Promise.all(Object.values(dirs).map((path) => mkdir(path as string, { recursive: true })));
-  Ledger.create(join(dirs.data, "ledger.db")).close();
+  Ledger.create(join(dirs.data, "shore.db")).close();
   return dirs;
 }
 
@@ -145,7 +171,7 @@ async function seedCharacter(dirs: ShoreDirs, character: string, text: string): 
   await writeFile(join(dirs.config, "characters", character, "config.toml"), "[defaults]\nstream = true\n");
   const message = userMessage(character, text);
   await writeFile(join(data, "threads", "main", "active.jsonl"), `${JSON.stringify(message)}\n`);
-  const history = HistoryStore.open(join(dirs.data, "history.db"));
+  const history = HistoryStore.open(join(dirs.data, "shore.db"));
   history.putSegment(
     character,
     0,

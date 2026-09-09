@@ -1,3 +1,6 @@
+import { exportUnifiedDatabase, importUnifiedDatabase, removeStoredCharacter } from "../storage/archive.ts";
+import { databasePath } from "../storage/store.ts";
+import { characterMediaDir } from "../storage/media.ts";
 import { chmod, cp, link, mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -11,22 +14,19 @@ import {
   characterDataDir,
   characterWorkspaceDir,
   isUsableCharacterName,
-  rustJoin,
 } from "../config/dirs.ts";
 import { invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
 import {
-  exportHistoryDatabase,
-  exportLedgerDatabase,
   importHistoryDatabase,
   importLedgerDatabase,
   removeCharacterDatabaseRows,
 } from "./archive_databases.ts";
 
 const FORMAT = "shore-character";
-const VERSION = 1;
+const VERSION = 2;
 const MAX_EXTRACTED_BYTES = 4 * 1024 * 1024 * 1024 * 1024;
-const TOP_LEVEL = new Set(["manifest.json", "config", "workspace", "data", "history.db", "ledger.db"]);
+const TOP_LEVEL = new Set(["manifest.json", "config", "workspace", "data", "history.db", "ledger.db", "shore.db", "media"]);
 
 export interface ArchiveContext {
   readonly dirs: ShoreDirs;
@@ -38,7 +38,8 @@ export interface ArchiveContext {
 
 interface Manifest {
   format: typeof FORMAT;
-  version: typeof VERSION;
+  version: 1 | 2;
+  source_data?: string;
   character: string;
   created_at: string;
   contents: {
@@ -47,7 +48,7 @@ interface Manifest {
     data: boolean;
     history: true;
     ledger: true;
-    call_diagnostics: false;
+    call_diagnostics: boolean;
     external_memory_bank: false;
   };
 }
@@ -77,7 +78,7 @@ export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<
         noMtime: false,
         strict: true,
       },
-      ["manifest.json", "config", "workspace", "data", "history.db", "ledger.db"],
+      ["manifest.json", "config", "workspace", "data", "shore.db", "media"],
     );
     await chmod(temporaryOutput, 0o600);
     try {
@@ -94,7 +95,7 @@ export async function exportCharacter(ctx: ArchiveContext, args: Args): Promise<
       archive: output,
       bytes: size,
       live: true,
-      call_diagnostics: "excluded_disposable_cache",
+      call_diagnostics: "included",
       external_memory: "rebuild_from_archived_segments",
     };
   } finally {
@@ -149,11 +150,12 @@ export async function deleteCharacter(ctx: ArchiveContext, args: Args): Promise<
     archived = written.archive;
   }
 
-  const historyPath = rustJoin(ctx.dirs.data, "history.db");
-  const ledgerPath = rustJoin(ctx.dirs.data, "ledger.db");
+  const historyPath = databasePath(ctx.dirs.data);
+  const ledgerPath = databasePath(ctx.dirs.data);
   await ctx.withSnapshot(async () => {
     await ctx.releaseCharacter(character);
     for (const path of present) await rm(path, { recursive: true, force: true });
+    if (await exists(historyPath)) removeStoredCharacter(historyPath, character);
     removeCharacterDatabaseRows(historyPath, ledgerPath, character, {
       history: await exists(historyPath),
       ledger: await exists(ledgerPath),
@@ -175,6 +177,7 @@ function deletionTargets(dirs: ShoreDirs, character: string): string[] {
     characterConfigDir(dirs.config, character),
     characterDataDir(dirs.data, character),
     characterCacheDir(dirs.cache, character),
+    characterMediaDir(dirs.data, character),
   ];
   return paths.filter(
     (path, index) =>
@@ -222,19 +225,14 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string)
     await mkdir(join(stage, "data"));
   }
 
-  exportHistoryDatabase(
-    rustJoin(dirs.data, "history.db"),
-    character,
-    join(stage, "history.db"),
-  );
-  exportLedgerDatabase(
-    rustJoin(dirs.data, "ledger.db"),
-    character,
-    join(stage, "ledger.db"),
-  );
+  const media = characterMediaDir(dirs.data, character);
+  if (await exists(media)) await cp(media, join(stage, "media"), copyOptions());
+  else await mkdir(join(stage, "media"));
+  exportUnifiedDatabase(databasePath(dirs.data), character, join(stage, "shore.db"));
   const manifest: Manifest = {
     format: FORMAT,
     version: VERSION,
+    source_data: dirs.data,
     character,
     created_at: new Date().toISOString(),
     contents: {
@@ -243,7 +241,7 @@ async function stageCharacter(dirs: ShoreDirs, character: string, stage: string)
       data: await hasEntries(join(stage, "data")),
       history: true,
       ledger: true,
-      call_diagnostics: false,
+      call_diagnostics: true,
       external_memory_bank: false,
     },
   };
@@ -278,7 +276,7 @@ async function readManifest(stage: string): Promise<Manifest> {
   } catch (error) {
     throw invalidRequest(`Not a readable Shore character archive: ${String(error)}`);
   }
-  if (!isRecord(value) || value["format"] !== FORMAT || value["version"] !== VERSION) {
+  if (!isRecord(value) || value["format"] !== FORMAT || (value["version"] !== 1 && value["version"] !== VERSION)) {
     throw invalidRequest("Unsupported or malformed Shore character archive");
   }
   const character = value["character"];
@@ -288,8 +286,11 @@ async function readManifest(stage: string): Promise<Manifest> {
   if (!await exists(join(stage, "workspace", SOUL_FILE))) {
     throw invalidRequest(`Archive has no workspace/${SOUL_FILE}`);
   }
-  for (const file of ["history.db", "ledger.db"]) {
+  for (const file of value["version"] === 1 ? ["history.db", "ledger.db"] : ["shore.db"]) {
     if (!await exists(join(stage, file))) throw invalidRequest(`Archive has no ${file}`);
+  }
+  if (value["version"] === 2 && (typeof value["source_data"] !== "string" || !isAbsolute(value["source_data"]))) {
+    throw invalidRequest("Archive has an invalid source data directory");
   }
   return value as unknown as Manifest;
 }
@@ -298,15 +299,15 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
   const configTarget = characterConfigDir(ctx.dirs.config, character);
   const workspaceTarget = characterWorkspaceDir(ctx.dirs.config, character, ctx.dirs.workspace);
   const dataTarget = characterDataDir(ctx.dirs.data, character);
-  const occupied = [configTarget, workspaceTarget, dataTarget].filter((path, index, all) =>
+  const occupied = [configTarget, workspaceTarget, dataTarget, characterMediaDir(ctx.dirs.data, character)].filter((path, index, all) =>
     all.indexOf(path) === index,
   );
   if (ctx.hasCharacter(character) || (await Promise.all(occupied.map(exists))).some(Boolean)) {
     throw invalidRequest(`Refusing to overwrite existing character '${character}'`);
   }
 
-  const historyPath = rustJoin(ctx.dirs.data, "history.db");
-  const ledgerPath = rustJoin(ctx.dirs.data, "ledger.db");
+  const historyPath = databasePath(ctx.dirs.data);
+  const ledgerPath = databasePath(ctx.dirs.data);
   const created: string[] = [];
   const imported = { history: false, ledger: false };
   try {
@@ -325,14 +326,28 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
     await cp(join(stage, "data"), dataTarget, copyOptions());
     created.push(dataTarget);
 
-    importHistoryDatabase(historyPath, join(stage, "history.db"), character);
-    imported.history = true;
-    importLedgerDatabase(ledgerPath, join(stage, "ledger.db"), character);
-    imported.ledger = true;
+    if (await exists(join(stage, "shore.db"))) {
+      const manifest = await readManifest(stage);
+      importUnifiedDatabase(historyPath, join(stage, "shore.db"), character, manifest.source_data, ctx.dirs.data);
+      imported.history = true;
+      imported.ledger = true;
+      const media = characterMediaDir(ctx.dirs.data, character);
+      if (await exists(join(stage, "media"))) {
+        await mkdir(dirname(media), { recursive: true });
+        await cp(join(stage, "media"), media, copyOptions());
+        created.push(media);
+      }
+    } else {
+      importHistoryDatabase(historyPath, join(stage, "history.db"), character);
+      imported.history = true;
+      importLedgerDatabase(ledgerPath, join(stage, "ledger.db"), character);
+      imported.ledger = true;
+    }
     await ctx.refreshDiscovery();
   } catch (error) {
     if (imported.history || imported.ledger) {
       try {
+        removeStoredCharacter(historyPath, character);
         removeCharacterDatabaseRows(historyPath, ledgerPath, character, imported);
       } catch {}
     }
