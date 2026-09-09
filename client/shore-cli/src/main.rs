@@ -43,9 +43,10 @@ fn main() -> ExitCode {
         return cli::report_flag_problem(&problem);
     }
 
-    let cli = match <Cli as clap::FromArgMatches>::from_arg_matches(
-        &cli::grouped_command().get_matches(),
-    ) {
+    let matches = cli::grouped_command().get_matches();
+    let thread_from_env =
+        matches.value_source("thread") == Some(clap::parser::ValueSource::EnvVariable);
+    let cli = match <Cli as clap::FromArgMatches>::from_arg_matches(&matches) {
         Ok(parsed) => parsed,
         Err(e) => e.exit(),
     };
@@ -85,7 +86,13 @@ fn main() -> ExitCode {
 
     let outcome: Result<ExitCode, Box<dyn std::error::Error>> = match cli.command {
         Some(command) => rt
-            .block_on(run::execute(cli.character, cli.thread, cli.addr, command))
+            .block_on(run::execute(
+                cli.character,
+                cli.thread,
+                thread_from_env,
+                cli.addr,
+                command,
+            ))
             .map(|()| ExitCode::SUCCESS),
         None => rt
             .block_on(tui::run(cli.addr, cli.character, cli.thread))

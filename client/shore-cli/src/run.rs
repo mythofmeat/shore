@@ -60,6 +60,7 @@ pub(crate) fn already_reported(err: &(dyn std::error::Error + 'static)) -> bool 
 pub(crate) async fn execute(
     requested_character: Option<String>,
     requested_thread: Option<String>,
+    thread_from_env: bool,
     requested_addr: Option<String>,
     cli_command: CliCommand,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -87,7 +88,7 @@ pub(crate) async fn execute(
 
     info!(character = ?character, thread = ?thread, "CLI executing command");
 
-    let (mut conn, _server_hello, history) = SWPConnection::connect_in_thread(
+    let (mut conn, _server_hello, mut history) = SWPConnection::connect_in_thread(
         &addr,
         "cli",
         "shore-cli",
@@ -118,18 +119,42 @@ pub(crate) async fn execute(
     if let Some(requested) = thread.as_deref().filter(|r| !r.is_empty())
         && let Some(serving) = history.selected_thread.as_deref().filter(|s| !s.is_empty())
         && serving != requested
-        && reads_the_selected_thread(command_ref)
     {
-        return Err(report_unresolved_thread(
-            requested,
-            serving,
-            &display_character,
-            thread_source(
-                cli.thread.as_deref(),
-                std::env::var("SHORE_THREAD").ok().as_deref(),
-                requested,
-            ),
-        ));
+        let source = thread_source(cli.thread.as_deref(), thread_from_env);
+        if source == ThreadSource::Flag {
+            if reads_the_selected_thread(command_ref) {
+                return Err(report_unresolved_thread(
+                    requested,
+                    serving,
+                    &display_character,
+                ));
+            }
+        } else {
+            if source == ThreadSource::Env
+                && let Some(saved) = state::read_active_thread(&display_character)
+                && saved != requested
+                && saved != serving
+            {
+                let (fallback_conn, _, fallback_history) = SWPConnection::connect_in_thread(
+                    &addr,
+                    "cli",
+                    "shore-cli",
+                    Some(display_character.clone()),
+                    Some(saved),
+                )
+                .await?;
+                conn = fallback_conn;
+                history = fallback_history;
+            }
+            if let Some(selected) = history.selected_thread.as_deref() {
+                cli_err!(
+                    "thread {requested:?} is unavailable for {display_character}; using {selected:?}"
+                );
+                if let Err(e) = state::write_active_thread(&display_character, selected) {
+                    cli_err!("could not save thread {selected:?}: {e}");
+                }
+            }
+        }
     }
 
     match command_ref {
@@ -999,11 +1024,11 @@ enum ThreadSource {
     Saved,
 }
 
-fn thread_source(from_cli: Option<&str>, from_env: Option<&str>, requested: &str) -> ThreadSource {
-    if from_cli != Some(requested) {
+fn thread_source(from_cli: Option<&str>, from_env: bool) -> ThreadSource {
+    if from_cli.is_none() {
         return ThreadSource::Saved;
     }
-    if from_env == Some(requested) {
+    if from_env {
         ThreadSource::Env
     } else {
         ThreadSource::Flag
@@ -1014,26 +1039,15 @@ fn report_unresolved_thread(
     requested: &str,
     serving: &str,
     character: &str,
-    source: ThreadSource,
 ) -> Box<dyn std::error::Error> {
     output::print_error(&format!("no thread named {requested:?} for {character}"));
     cli_err!();
-    match source {
-        ThreadSource::Flag => cli_err!("  you asked for it with --thread"),
-        ThreadSource::Env => cli_err!("  SHORE_THREAD names it in this shell"),
-        ThreadSource::Saved => {
-            cli_err!("  it is the thread `shore thread use` saved for {character}");
-        }
-    }
+    cli_err!("  you asked for it with --thread");
     cli_err!("  the daemon is serving {serving:?}");
     cli_err!();
     cli_err!("  shore thread             list the threads that do exist");
     cli_err!("  shore thread new {requested}   create it");
-    match source {
-        ThreadSource::Flag => cli_err!("  shore thread use {requested}   make it the saved choice"),
-        ThreadSource::Env => cli_err!("  set -e SHORE_THREAD      drop the override"),
-        ThreadSource::Saved => cli_err!("  shore thread use {serving}      go back to {serving}"),
-    }
+    cli_err!("  shore thread use {requested}   make it the saved choice");
     Box::new(ReportedError::new(format!(
         "no thread named {requested:?} for {character}"
     )))
@@ -2000,23 +2014,12 @@ mod tests {
         use super::{ThreadSource, thread_source};
 
         assert_eq!(
-            thread_source(None, None, "eval"),
+            thread_source(None, false),
             ThreadSource::Saved,
             "nothing on the command line means it came off disk",
         );
-        assert_eq!(
-            thread_source(Some("eval"), Some("eval"), "eval"),
-            ThreadSource::Env,
-        );
-        assert_eq!(
-            thread_source(Some("eval"), None, "eval"),
-            ThreadSource::Flag,
-        );
-        assert_eq!(
-            thread_source(Some("eval"), Some("other"), "eval"),
-            ThreadSource::Flag,
-            "the flag beats the environment, so name the flag",
-        );
+        assert_eq!(thread_source(Some("eval"), true), ThreadSource::Env);
+        assert_eq!(thread_source(Some("eval"), false), ThreadSource::Flag);
     }
 
     macro_rules! assert_variant {

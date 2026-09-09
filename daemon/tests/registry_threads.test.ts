@@ -20,6 +20,7 @@ import { HistoryStore } from "../src/engine/history_store.ts";
 import { ThreadError } from "../src/engine/threads.ts";
 import { ForkBusy } from "../src/engine/fork.ts";
 import { tryBeginCompaction } from "../src/memory/compaction/manager.ts";
+import { buildSessionHistorySnapshot } from "../src/swp/handshake.ts";
 
 const roots: string[] = [];
 
@@ -64,6 +65,22 @@ async function registryWith(...characters: string[]): Promise<{
 }
 
 describe("the registry as the thread authority", () => {
+  test("a restart resumes a persisted thread and sends stale choices to the persisted home", async () => {
+    const { registry, configDir, dataDir, loaded } = await registryWith("aria");
+    await registry.createThread("aria", "eval");
+    await registry.createThread("aria", "home");
+    await registry.setHomeThread("aria", "home");
+
+    const restarted = await CharacterRegistry.create(configDir, dataDir, loaded);
+    const resumed = await buildSessionHistorySnapshot(restarted, "aria", "eval");
+    expect(resumed.selectedThread).toBe("eval");
+
+    await restarted.archiveThread("aria", "eval");
+    const restartedAgain = await CharacterRegistry.create(configDir, dataDir, loaded);
+    const recovered = await buildSessionHistorySnapshot(restartedAgain, "aria", "eval");
+    expect(recovered.selectedThread).toBe("home");
+  });
+
   test("a fresh character has exactly one thread, and it is home", async () => {
     const { registry } = await registryWith("aria");
 
