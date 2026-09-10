@@ -218,7 +218,6 @@ export interface TurnPlan {
   keptEntries: DeliveredEntry[];
   delivered: WireMessage[];
   replayReason?: string;
-  warning?: string;
 }
 
 function coldStart(msgs: readonly WireMessage[], replayReason = "No matching native SDK session is available."): TurnPlan {
@@ -276,19 +275,19 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
 }
 
 async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: string, key: string, record: SessionRecord | undefined): Promise<TurnPlan> {
-  const replayed = plan.resume !== undefined && !plan.fork
-    ? plan.delivered.filter((message) => message.role !== "assistant")
-    : plan.delivered;
-  if (replayed.length <= 1 && !replayed.some((message) => message.role === "assistant" ||
+  const continuing = plan.resume !== undefined && !plan.fork;
+  const pending = continuing ? record?.pendingAssistantHashes ?? [] : [];
+  const acknowledged = !continuing || (
+    pending.length === (record?.pendingAssistantUuids?.length ?? 0) &&
+    pending.every((hash, index) => {
+      const message = plan.delivered[index];
+      return message?.role === "assistant" && messageHash(message) === hash;
+    })
+  );
+  const replayed = plan.delivered.slice(pending.length);
+  if (acknowledged && replayed.length === 1 && !replayed.some((message) => message.role === "assistant" ||
     message.content.some((block) => block.type === "tool_use" || block.type === "tool_result"))) {
     return record?.storedTranscript === true ? { ...plan, sessionStore: nativeHistoryStore(path, key) } : plan;
-  }
-  const callType = req.context?.call_type;
-  if (callType !== undefined && callType !== "message" && callType !== "tool_loop") {
-    const message = `Claude Agent SDK: ${callType} is replaying ${replayed.length} task-context messages ` +
-      "as text in a separate background session. The chat session is not modified.";
-    shoreLog.warn(message);
-    return { ...plan, warning: message };
   }
   const seeded = await seedNativeHistory(req, nativeHistoryStore(path, key));
   shoreLog.info("claude_agent: initialized native history from Shore's active conversation");
@@ -309,10 +308,14 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
 
 function withSystemInstructions(req: SidecarRequest): SidecarRequest {
   const instructions = req.messages.filter((message) => message.role === "system");
-  if (instructions.length === 0) return req;
+  if (instructions.length === 0 && req.messages.at(-1)?.role !== "assistant") return req;
+  const messages = req.messages.filter((message) => message.role !== "system");
+  if (messages.at(-1)?.role === "assistant") {
+    messages.push({ role: "user", content: [{ type: "text", text: "Continue according to the system instructions." }] });
+  }
   return {
     ...req,
-    messages: req.messages.filter((message) => message.role !== "system"),
+    messages,
     system: [
       ...(req.system ?? []),
       ...instructions.map((message) => ({ text: replayText(message, []), label: "turn_instructions" })),
@@ -673,6 +676,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     const startedAt = Date.now();
     let firstTokenAt = 0;
     const acc = newTurnAccumulator();
+    const blocks = new BlockAssembler();
     const seen: SdkTurnFacts = { subtype: "success", assistantUuids: [] };
 
     const path = this.#bookPath();
@@ -690,12 +694,12 @@ export class ClaudeAgentProvider implements SidecarProvider {
       }
       yield { type: "start", model: req.model };
       plan = await withNativeHistory(plan, req, path, key, record);
-      if (plan.warning !== undefined) yield { type: "provider_warning", message: plan.warning };
 
       const run = this.#runQuery({ prompt: agentPrompt(plan), options: buildOptions(req, plan, abort) });
 
       for await (const event of anthropicContentEvents(rawEventsOf(run, seen), acc)) {
         if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = Date.now();
+        blocks.absorb(event);
         yield event;
       }
 
@@ -707,7 +711,10 @@ export class ClaudeAgentProvider implements SidecarProvider {
           ...(plan.sessionStore === undefined ? {} : { storedTranscript: true }),
           ...(seen.assistantUuids.length === 0
             ? {}
-            : { pendingAssistantUuids: seen.assistantUuids }),
+            : {
+                pendingAssistantUuids: seen.assistantUuids,
+                pendingAssistantHashes: [messageHash({ role: "assistant", content: blocks.finish() })],
+              }),
         });
       }
 
@@ -1017,7 +1024,6 @@ export async function* claudeAgentToolLoopEvents(
     Object.assign(req, withSystemInstructions(req));
     plan = planTurn(record, req.messages);
     plan = await withNativeHistory(plan, req, path, key, record);
-    if (plan.warning !== undefined) yield { type: "provider_warning", message: plan.warning };
     const run = (deps.runQuery ?? query)({
       prompt: agentPrompt(plan),
       options: buildOptions(req, plan, abort, {
@@ -1060,7 +1066,10 @@ export async function* claudeAgentToolLoopEvents(
         ...(plan.sessionStore === undefined ? {} : { storedTranscript: true }),
         ...(pendingAssistantUuids.length === 0
           ? {}
-          : { pendingAssistantUuids }),
+          : {
+              pendingAssistantUuids,
+              pendingAssistantHashes: [messageHash({ role: "assistant", content: round.finalBlocks() })],
+            }),
       });
     }
 

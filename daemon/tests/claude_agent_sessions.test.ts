@@ -385,6 +385,11 @@ describe("what a message hash is taken over", () => {
 });
 
 describe("the session book version", () => {
+  test("a book that may contain flattened history is not trusted", () => {
+    const stale = { ...seed([user1, asst1, user2]), version: 5 };
+    expect(planTurn(stale, [user1, asst1, user2, msg("assistant", "reply"), msg("user", "continue")]).resume).toBeUndefined();
+  });
+
   test("a book written before the hash changed is not trusted", () => {
     const stale = { ...seed([user1]), version: 1 };
     const plan = planTurn(stale, [user1, asst1, user2]);

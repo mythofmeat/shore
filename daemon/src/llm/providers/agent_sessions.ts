@@ -15,13 +15,14 @@ export interface DeliveredEntry {
   sessionId?: string;
 }
 
-export const SESSION_BOOK_VERSION = 5;
+export const SESSION_BOOK_VERSION = 6;
 
 export interface SessionRecord {
   version: number;
   sessionId: string;
   entries: DeliveredEntry[];
   pendingAssistantUuids?: string[];
+  pendingAssistantHashes?: string[];
   storedTranscript?: true;
 }
 

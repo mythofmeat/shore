@@ -3,8 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { InMemorySessionStore, query } from "@anthropic-ai/claude-agent-sdk";
-import { ClaudeAgentProvider, conversationKey, planTurn, type AgentQuery } from "../src/llm/providers/claude_agent.ts";
-import { readBook } from "../src/llm/providers/agent_sessions.ts";
+import { ClaudeAgentProvider, conversationKey, nextEntries, planTurn, type AgentQuery } from "../src/llm/providers/claude_agent.ts";
+import { readBook, writeSession } from "../src/llm/providers/agent_sessions.ts";
 import { seedNativeHistory } from "../src/llm/providers/claude_agent_history.ts";
 import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import type { SidecarRequest, StreamEvent, WireMessage } from "../src/llm/types.ts";
@@ -118,3 +118,71 @@ test.each([false, true])("the real SDK continues and regenerates after compactio
     await rm(dir, { recursive: true, force: true });
   }
 }, 120_000);
+
+test.each(["legacy replay", "edited reply", "omitted reply", "heartbeat", "subagent", "heartbeat after reply"])("the real SDK preserves history for %s", async (scenario) => {
+  const dir = await mkdtemp(join(tmpdir(), "shore-history-boundaries-"));
+  const path = join(dir, "sessions.json");
+  const mock = await startMockAnthropic({ fallback: { text: "native reply" } });
+  const provider = new ClaudeAgentProvider({
+    bookPath: () => path,
+    runQuery: params => query({ ...params, options: {
+      ...params.options,
+      env: { ...params.options.env, HOME: dir, CLAUDE_CONFIG_DIR: join(dir, "claude") },
+    } }),
+  });
+  const drive = async (messages: WireMessage[], callType = "message") => {
+    const events: StreamEvent[] = [];
+    const request: SidecarRequest = {
+      ...req(messages), base_url: mock.url,
+      context: { character: "test", call_type: callType, thinking_enabled: false },
+    };
+    const signal = AbortSignal.timeout(25_000);
+    if (scenario === "heartbeat after reply") request.tools = [{ name: "read", description: "read", input_schema: { type: "object" } }];
+    const phase: ToolPhase = {
+      messages: [], recordTurn: () => {},
+      runTool: () => { throw new Error("No tool execution expected"); },
+    };
+    for await (const event of request.tools === undefined ? provider.stream(request, signal) : provider.streamWithTools(request, phase, signal)) events.push(event);
+    expect(events.filter(event => event.type === "error")).toEqual([]);
+  };
+  try {
+    let expected: WireMessage[];
+    if (scenario === "legacy replay") {
+      await drive([user("old question\n\n<prior_assistant_turn>\nold answer\n</prior_assistant_turn>\n\nprevious question")]);
+      const request = { ...req([]), context: { character: "test", call_type: "message", thinking_enabled: false } };
+      const key = conversationKey(request);
+      const record = required(readBook(path)[key]);
+      const prior = [user("old question"), assistant("old answer"), user("previous question")];
+      writeSession(path, key, { ...record, version: 5, entries: nextEntries(planTurn(undefined, prior), undefined) });
+      expected = [...prior, assistant("native reply"), user("continue")];
+      await drive(expected);
+    } else if (scenario === "edited reply" || scenario === "omitted reply") {
+      await drive([user("question")]);
+      expected = [user("question"), ...(scenario === "edited reply" ? [assistant("edited answer")] : []), user("continue")];
+      await drive(expected);
+    } else if (scenario === "heartbeat after reply") {
+      expected = [user("question"), assistant("answer"), user("Continue according to the system instructions.")];
+      const messages: WireMessage[] = [...expected.slice(0, -1), { role: "system", content: [{ type: "text", text: "Check outstanding reminders." }] }];
+      await drive(messages, "heartbeat");
+      await drive(messages, "heartbeat");
+      expect(JSON.stringify(required(mock.requests.at(-1)).body.system)).toContain("Check outstanding reminders.");
+      expect(JSON.stringify(required(mock.requests.at(-1)).body.messages)).not.toContain("native reply");
+    } else {
+      expected = [user("question"), assistant("answer"), user("run background task")];
+      await drive(expected, scenario);
+    }
+    const messages = required(mock.requests.at(-1)).body.messages as WireMessage[];
+    if (scenario === "omitted reply") {
+      expect(JSON.stringify(messages)).not.toContain("native reply");
+      expect(JSON.stringify(messages)).toContain("question");
+      expect(JSON.stringify(messages)).toContain("continue");
+    } else {
+      expect(messages.map(message => message.role)).toEqual(expected.map(message => message.role));
+      for (const message of expected) expect(JSON.stringify(messages)).toContain((message.content[0] as { text: string }).text);
+    }
+    expect(JSON.stringify(messages)).not.toContain("prior_assistant_turn");
+  } finally {
+    await mock.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);

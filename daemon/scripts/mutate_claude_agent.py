@@ -5,7 +5,7 @@ The Agent SDK owns conversation history; shore only remembers a hash per message
 so it can tell, next turn, whether the incoming history still extends what the
 session was given. Everything downstream rests on that comparison: an exact
 prefix resumes the session, a divergence forks it at an assistant uuid, and no
-common prefix cold starts and replays the whole conversation as text.
+common prefix rebuilds native history from Shore's active conversation.
 
 So a hash that is too coarse does not throw — it silently claims two different
 conversations are one. The original hash was taken over text blocks only, which
@@ -138,8 +138,8 @@ MUTANTS = [
      "  if (record === undefined || record.version === undefined) return coldStart(msgs);"),
     ("version: the book is stamped with the version it is not",
      SESSIONS,
-     "export const SESSION_BOOK_VERSION = 5;",
-     "export const SESSION_BOOK_VERSION = 4;"),
+     "export const SESSION_BOOK_VERSION = 6;",
+     "export const SESSION_BOOK_VERSION = 5;"),
 
     # --- reading a stream the provider does not own ---------------------------
     ("stream: the model's own events are ignored, so nothing streams at all",
