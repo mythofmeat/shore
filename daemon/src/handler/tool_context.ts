@@ -21,6 +21,7 @@ import type { ToolContext } from "../tools/dispatch.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 export interface ToolContextDeps {
+  signal?: AbortSignal;
   mcpRegistry?: Pick<McpRegistry, "call">;
   runSubagent?: (parent: ToolContext) => NonNullable<ToolContext["runSubagent"]>;
   deferEdit?: (path: string) => Promise<void> | void;
@@ -70,6 +71,7 @@ export async function buildToolContext(
   const subagentsConfigured = config.app.subagents.size > 0;
 
   const ctx: ToolContext = {
+    ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     imageDir: characterMediaDir(dataDir, charName),
     workspaceDir,
     characterDataDir: charDataDir,

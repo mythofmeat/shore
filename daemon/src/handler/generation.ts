@@ -441,14 +441,14 @@ async function streamTurn(
         config,
         deps.dataDir,
         charName,
-        deps.tools?.(charName, {
+        { ...deps.tools?.(charName, {
           conversation: params.conversation,
           send: (message) => send(message),
           ...(params.rid === undefined ? {} : { rid: params.rid }),
           now: params.now,
           newMessageId: params.newMessageId,
           signal: params.signal,
-        }) ?? {},
+        }), signal: params.signal },
       )
     : undefined;
 

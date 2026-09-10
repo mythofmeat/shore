@@ -68,8 +68,8 @@ describe("parseDiceNotation", () => {
     expect(() => parseDiceNotation("2d6 +3")).toThrow("Invalid sides: 6 ");
   });
 
-  test("integer bounds are i64, not JavaScript's safe range", () => {
-    expect(parseDiceNotation("4294967295d6").count).toBe(4_294_967_295);
+  test("roll counts are bounded while sides and modifiers retain their integer ranges", () => {
+    expect(() => parseDiceNotation("4294967295d6")).toThrow("Dice count must be at most 1000");
     expect(() => parseDiceNotation("4294967296d6")).toThrow("Invalid dice count: 4294967296");
     expect(parseDiceNotation("1d6+2147483647").modifier).toBe(2_147_483_647);
     expect(() => parseDiceNotation("1d6+2147483648")).toThrow("Invalid modifier: +2147483648");

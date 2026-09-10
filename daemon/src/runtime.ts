@@ -485,6 +485,7 @@ export function sharedToolDeps(
   subagent?: SubagentToolDeps,
 ): ToolContextDeps {
   return {
+    ...(subagent?.turn === undefined ? {} : { signal: subagent.turn.signal }),
     mcpRegistry: mcp.callView(),
     ...(subagent === undefined
       ? {}

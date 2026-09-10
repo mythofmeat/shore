@@ -208,7 +208,7 @@ export async function dispatchTool(
       return await handleDelete(args, ctx.workspaceDir, ctx.characterDataDir);
 
     case "git":
-      return await handleGit(args, ctx.workspaceDir, ctx.characterName);
+      return await handleGit(args, ctx.workspaceDir, ctx.characterName, ctx.signal);
 
     case "set_next_wake": {
       if (ctx.scheduleNextWake === undefined) {

@@ -80,31 +80,35 @@ export class McpClient {
 
   static async connect(this: void, spec: McpServerSpec): Promise<McpClient> {
     const client = new Client({ name: "shore", version: "1.0.0" });
+    let transport: StdioClientTransport | StreamableHTTPClientTransport | undefined;
+    let diagnostics = "";
     try {
       if (spec.transport.kind === "stdio") {
         const { command, args, env, cwd } = spec.transport;
-        await client.connect(
-          new StdioClientTransport({
+        transport = new StdioClientTransport({
             command,
             args,
             env: childEnvironment(env),
             stderr: "pipe",
             ...(cwd === undefined ? {} : { cwd }),
-          }),
-        );
+          });
+        transport.stderr?.on("data", (chunk: Buffer) => {
+          diagnostics = (diagnostics + chunk.toString("utf8")).slice(-8192);
+        });
+        await client.connect(transport);
       } else {
         const { url, headers } = spec.transport;
         const opts =
           Object.keys(headers).length === 0 ? undefined : { requestInit: { headers } };
-        await client.connect(
-          new StreamableHTTPClientTransport(
+        transport = new StreamableHTTPClientTransport(
             new URL(url),
             opts,
-          ) as unknown as Parameters<Client["connect"]>[0],
-        );
+          );
+        await client.connect(transport as unknown as Parameters<Client["connect"]>[0]);
       }
     } catch (e) {
-      throw new McpError(`connect to MCP server '${spec.name}': ${String(e)}`);
+      await transport?.close().catch(() => {});
+      throw new McpError(`connect to MCP server '${spec.name}': ${String(e)}${diagnostics === "" ? "" : `\nstderr: ${diagnostics}`}`);
     }
     return new McpClient(spec.name, client);
   }

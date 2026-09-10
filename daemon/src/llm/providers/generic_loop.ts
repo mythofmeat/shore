@@ -30,6 +30,7 @@ import { pushAssistantBlocks } from "../request.ts";
 interface ProviderTurn {
   response: GenerateResponse;
   blocks: ContentBlock[];
+  toolCalls: ToolUseEvent[];
   finishReason: string;
 }
 
@@ -110,6 +111,7 @@ class TurnBuilder {
   private reasoningContent: string | undefined;
   private readonly redacted: ContentBlock[] = [];
   private readonly toolUses: ContentBlock[] = [];
+  private readonly calls = new Map<string, ToolUseEvent>();
   private completedBlocks: ContentBlock[] | undefined;
   finishReason = "end_turn";
   usage: Usage = emptyUsage();
@@ -135,6 +137,7 @@ class TurnBuilder {
         this.redacted.push({ type: "redacted_thinking", data: event.data });
         break;
       case "tool_use":
+        this.calls.set(event.id, event);
         this.toolUses.push({
           type: "tool_use",
           id: event.id,
@@ -185,6 +188,12 @@ class TurnBuilder {
   textSoFar(): string {
     return this.text;
   }
+
+  toolCalls(): ToolUseEvent[] {
+    return this.blocks().flatMap((block) =>
+      block.type === "tool_use" ? [this.calls.get(block.id) ?? block] : [],
+    );
+  }
 }
 
 class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
@@ -218,9 +227,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
   }
 
   toolUses(turn: ProviderTurn): ToolUseEvent[] {
-    return turn.blocks.flatMap((b) =>
-      b.type === "tool_use" ? [{ id: b.id, name: b.name, input: b.input }] : [],
-    );
+    return turn.toolCalls;
   }
 
   async callModel(): Promise<ProviderTurn> {
@@ -267,6 +274,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
       return {
         turn: {
           blocks,
+          toolCalls: builder.toolCalls(),
           finishReason: builder.finishReason,
           response: {
             content: builder.textSoFar(), content_blocks: blocks, finish_reason: builder.finishReason,
