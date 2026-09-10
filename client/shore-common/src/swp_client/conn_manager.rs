@@ -268,6 +268,9 @@ async fn run_connected_session(
                             if !send_event(ConnEvent::SendFailed(msg), event_tx, cmd_rx).await {
                                 return SessionOutcome::Exit;
                             }
+                            if !send_event(ConnEvent::Disconnected(format!("send failed: {e}")), event_tx, cmd_rx).await {
+                                return SessionOutcome::Exit;
+                            }
                             return SessionOutcome::Reconnect;
                         }
                     }
@@ -458,7 +461,7 @@ mod tests {
         let (client, server) = tokio::io::duplex(64);
         drop(server);
         let mut conn = SWPConnection::from_raw_stream(client);
-        let (event_tx, mut event_rx) = mpsc::channel(1);
+        let (event_tx, mut event_rx) = mpsc::channel(2);
         let (cmd_tx, mut cmd_rx) = mpsc::channel(1);
         let mut sync_state = SyncState::new(0, None, None);
         let message = ClientMessage::Message(ClientMessageBody {
@@ -497,6 +500,10 @@ mod tests {
         };
         assert_eq!(failed.text, "keep this");
         assert_eq!(failed.images, vec!["photo.png"]);
+        assert!(
+            matches!(event_rx.recv().await.unwrap(), ConnEvent::Disconnected(_)),
+            "a socket failure must also tell the UI to reconnect"
+        );
     }
 }
 
@@ -591,6 +598,64 @@ mod blocked_io_tests {
     };
     use crate::protocol::client_msg::{ClientMessage, Command};
     use crate::swp_client::{SWPConnection, sync::SyncState};
+
+    #[tokio::test]
+    async fn rejecting_an_extra_command_keeps_the_original_socket_and_response() {
+        use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+
+        let (stream, peer) = tokio::io::duplex(8);
+        let mut conn = SWPConnection::from_raw_stream(stream);
+        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
+        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::channel(2);
+        let task = tokio::spawn(async move {
+            let mut sync = SyncState::new(0, None, None);
+            run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync).await
+        });
+        let command = |rid: &str| {
+            ConnCommand::Send(ClientMessage::Command(Command {
+                rid: Some(rid.into()),
+                name: "status".into(),
+                args: serde_json::json!({}),
+            }))
+        };
+        cmd_tx.send(command("original")).await.unwrap();
+        let mut reader = BufReader::new(peer);
+        assert_eq!(reader.read_u8().await.unwrap(), b'{');
+        cmd_tx.send(command("extra")).await.unwrap();
+        let rejected = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(rejected, ConnEvent::SendFailed(ClientMessage::Command(Command { rid:Some(ref rid), .. })) if rid == "extra")
+        );
+        let mut line = String::from("{");
+        let _read = reader.read_line(&mut line).await.unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&line)
+                .unwrap()
+                .get("rid")
+                .and_then(serde_json::Value::as_str),
+            Some("original")
+        );
+        reader
+            .write_all(b"{\"type\":\"stream_start\",\"rid\":\"original\"}\n")
+            .await
+            .unwrap();
+        let reply = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(reply, ConnEvent::Message(ref frame) if frame.request_id() == Some("original"))
+        );
+        assert!(
+            event_rx.try_recv().is_err(),
+            "a rejected extra command must not announce a disconnect"
+        );
+        cmd_tx.send(ConnCommand::Shutdown).await.unwrap();
+        assert!(matches!(task.await.unwrap(), SessionOutcome::Exit));
+    }
 
     #[tokio::test]
     async fn shutdown_interrupts_a_full_event_queue() {

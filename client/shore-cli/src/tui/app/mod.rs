@@ -474,6 +474,7 @@ impl App {
         }
         self.abort_stream();
         self.request_epoch = self.request_epoch.wrapping_add(1);
+        self.pending_navigation = None;
         self.pending_history_page = None;
         self.history_page_loading = false;
         self.pending_edit_prefill = None;

@@ -313,15 +313,15 @@ impl ServerMessage {
             Self::ToolCall(frame) => frame.rid.as_deref(),
             Self::ToolResult(frame) => frame.rid.as_deref(),
             Self::SendImage(frame) => frame.rid.as_deref(),
+            Self::ProviderWarning(frame) => frame.rid.as_deref(),
+            Self::ProviderFallbackWarning(frame) => frame.rid.as_deref(),
+            Self::UsageWarning(frame) => frame.rid.as_deref(),
+            Self::ConfigWarning(frame) => frame.rid.as_deref(),
             Self::Hello(_)
             | Self::Shutdown(_)
             | Self::Ping(_)
             | Self::NewMessage(_)
             | Self::CacheWarning(_)
-            | Self::ProviderWarning(_)
-            | Self::ProviderFallbackWarning(_)
-            | Self::UsageWarning(_)
-            | Self::ConfigWarning(_)
             | Self::Unknown => None,
         }
     }

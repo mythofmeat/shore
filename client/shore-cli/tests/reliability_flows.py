@@ -82,6 +82,80 @@ def run_cli(args, respond, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, edi
 
 
 class ReliabilityFlows(unittest.TestCase):
+    def test_request_scoped_warnings_reach_stderr(self):
+        def respond(request, send, _stream, _seen):
+            for warning in [
+                {"type": "provider_warning", "message": "PROVIDER_DEGRADED"},
+                {"type": "provider_fallback_warning", "provider": "test", "from_key": "one", "to_key": "two", "kind": "rate_limit", "message": "FALLBACK_USED"},
+                {"type": "usage_warning", "budget": "daily", "message": "BUDGET_WARNING", "current_cost": 8, "cost_limit": 10, "percent_used": 80, "crossed_warn_at": [80], "period": "day", "period_start": "", "reset_at": ""},
+                {"type": "config_warning", "path": "test.toml", "message": "CONFIG_WARNING"},
+            ]:
+                send({**warning, "rid": "other-request", "message": "UNRELATED_WARNING"})
+                send({**warning, "rid": request["rid"]})
+            send(terminal_frame(request["rid"], "reply"))
+        result, _ = run_cli(["msg", "send", "hello"], respond)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for text in [b"PROVIDER_DEGRADED", b"FALLBACK_USED", b"BUDGET_WARNING", b"CONFIG_WARNING"]:
+            self.assertIn(text, result.stderr)
+        self.assertNotIn(b"UNRELATED_WARNING", result.stderr)
+
+    def offline_tui(self, root, keys=b""):
+        master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
+        env = environment(root)
+        frames = Path(root) / "frames.txt"
+        env["SHORE_TUI_DEBUG_FRAMES"] = str(frames)
+        def controlling_terminal():
+            os.setsid()
+            fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+        proc = subprocess.Popen([BINARY, "--addr", "127.0.0.1:1", "--character", "ada", "--thread", "main"],
+                                env=env, stdin=slave, stdout=slave, stderr=slave, preexec_fn=controlling_terminal)
+        try:
+            deadline = time.monotonic() + .6
+            while time.monotonic() < deadline and proc.poll() is None:
+                if select.select([master], [], [], .02)[0]:
+                    os.read(master, 65536)
+            self.assertIsNone(proc.poll(), "draft failures must not abort the TUI")
+            if keys:
+                os.write(master, keys)
+                time.sleep(.1)
+            os.write(master, b"\x03")
+            proc.wait(timeout=3)
+            return frames.read_text()
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            os.close(slave)
+            os.close(master)
+
+    def test_offline_startup_recovers_the_requested_conversation(self):
+        with tempfile.TemporaryDirectory() as root:
+            drafts = Path(root) / "data" / "drafts"
+            drafts.mkdir(parents=True)
+            (drafts / "current.md").write_text("DRAFT_BEFORE_CONNECT")
+            frames = self.offline_tui(root)
+            self.assertIn("DRAFT_BEFORE_CONNECT", frames)
+            saved = [json.loads(path.read_text()) for path in drafts.glob("*/*.json")]
+            self.assertEqual(len(saved), 1)
+            self.assertEqual((saved[0]["character"], saved[0]["thread"]), ("ada", "main"))
+
+    def test_offline_input_is_saved_under_the_requested_conversation(self):
+        with tempfile.TemporaryDirectory() as root:
+            self.offline_tui(root, b"OFFLINE_INPUT")
+            saved = [json.loads(path.read_text()) for path in (Path(root) / "data" / "drafts").glob("*/*.json")]
+            self.assertEqual(len(saved), 1)
+            self.assertEqual((saved[0]["character"], saved[0]["thread"]), ("ada", "main"))
+            self.assertEqual(saved[0]["text"], "OFFLINE_INPUT")
+
+    def test_draft_storage_failure_keeps_the_tui_available(self):
+        with tempfile.TemporaryDirectory() as root:
+            data = Path(root) / "data"
+            data.mkdir()
+            (data / "drafts").write_text("not a directory")
+            frames = self.offline_tui(root, b"STILL_USABLE")
+            self.assertIn("STILL_USABLE", frames)
+
     def test_json_ignores_live_messages_and_unrelated_results(self):
         def respond(request, send, _stream, _seen):
             send({"type": "new_message", "revision": 2, "character": "ada", **message("LIVE_CHAT_TEXT")})

@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 const KEEP_EDITOR_SESSIONS: usize = 20;
@@ -28,11 +29,38 @@ impl Draft {
     }
 
     fn directory(&self, dir: &Path) -> PathBuf {
-        use std::hash::{Hash, Hasher};
-        let mut hash = std::collections::hash_map::DefaultHasher::new();
-        (&self.daemon, &self.character, &self.thread).hash(&mut hash);
-        dir.join(format!("{:016x}", hash.finish()))
+        let mut hash = Sha256::new();
+        for field in [&self.daemon, &self.character, &self.thread] {
+            hash.update(u64::try_from(field.len()).unwrap_or(u64::MAX).to_be_bytes());
+            hash.update(field.as_bytes());
+        }
+        dir.join(format!("v1-{}", hex(&hash.finalize())))
     }
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn image_suffix(bytes: &[u8]) -> &'static str {
+    image::guess_format(bytes)
+        .ok()
+        .and_then(|format| format.extensions_str().first().copied())
+        .unwrap_or("bin")
+}
+
+pub(crate) fn recover_attachment(data: &str) -> std::io::Result<PathBuf> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    let mut copy = tempfile::Builder::new()
+        .prefix("shore-recovered-")
+        .suffix(&format!(".{}", image_suffix(&bytes)))
+        .tempfile()?;
+    std::io::Write::write_all(&mut copy, &bytes)?;
+    let (_file, path) = copy.keep().map_err(|error| error.error)?;
+    Ok(path)
 }
 
 pub(crate) fn lock_session(dir: &Path, owner: &str) -> std::io::Result<std::fs::File> {
@@ -49,12 +77,19 @@ pub(crate) fn lock_session(dir: &Path, owner: &str) -> std::io::Result<std::fs::
 }
 
 pub(crate) fn load(dir: &Path, owner: &str, identity: &Draft) -> Option<Draft> {
+    let _store_lock = lock_store(dir).ok()?;
     let directory = identity.directory(dir);
     let own_path = directory.join(format!("{owner}.json"));
-    let mut paths: Vec<_> = std::fs::read_dir(&directory)
-        .into_iter()
-        .flatten()
-        .flatten()
+    let mut directories = vec![directory.clone()];
+    directories.extend(std::fs::read_dir(dir).ok()?.flatten().filter_map(|entry| {
+        let name = entry.file_name();
+        let text = name.to_str()?;
+        (text.len() == 16 && text.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .then(|| entry.path())
+    }));
+    let mut paths: Vec<_> = directories
+        .iter()
+        .flat_map(|path| std::fs::read_dir(path).into_iter().flatten().flatten())
         .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
         .collect();
     paths.sort_by_key(|entry| std::cmp::Reverse(entry.metadata().and_then(|m| m.modified()).ok()));
@@ -79,10 +114,18 @@ pub(crate) fn load(dir: &Path, owner: &str, identity: &Draft) -> Option<Draft> {
         if !draft.same_conversation(identity) || draft.is_empty() {
             continue;
         }
-        if path != own_path && std::fs::rename(&path, &own_path).is_err() {
+        if path != own_path
+            && (std::fs::create_dir_all(&directory).is_err()
+                || std::fs::rename(&path, &own_path).is_err())
+        {
             continue;
         }
-        return Some(draft);
+        return Some(
+            save_locked(dir, owner, &draft, &[]).unwrap_or_else(|error| {
+                tracing::warn!("could not update the recovered draft: {error}");
+                draft
+            }),
+        );
     }
     let _legacy_lock = lock_session(dir, "legacy").ok()?;
     let legacy_path = dir.join("current.md");
@@ -92,7 +135,7 @@ pub(crate) fn load(dir: &Path, owner: &str, identity: &Draft) -> Option<Draft> {
     }
     let mut migrated = identity.clone();
     migrated.text = text;
-    save(dir, owner, &migrated, &[]).ok()?;
+    let _saved = save_locked(dir, owner, &migrated, &[]).ok()?;
     std::fs::rename(legacy_path, dir.join(format!("legacy-{owner}.md"))).ok()?;
     Some(migrated)
 }
@@ -103,30 +146,71 @@ pub(crate) fn save(
     draft: &Draft,
     owned_images: &[PathBuf],
 ) -> std::io::Result<()> {
+    let _store_lock = lock_store(dir)?;
+    save_locked(dir, owner, draft, owned_images).map(|_| ())
+}
+
+#[derive(Debug)]
+struct StoreLock(std::fs::File);
+
+impl Drop for StoreLock {
+    fn drop(&mut self) {
+        if let Err(error) = self.0.unlock() {
+            tracing::warn!("could not release the draft store lock: {error}");
+        }
+    }
+}
+
+fn lock_store(dir: &Path) -> std::io::Result<StoreLock> {
+    std::fs::create_dir_all(dir)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(dir.join("store.lock"))?;
+    file.try_lock()?;
+    Ok(StoreLock(file))
+}
+
+fn save_locked(
+    dir: &Path,
+    owner: &str,
+    draft: &Draft,
+    owned_images: &[PathBuf],
+) -> std::io::Result<Draft> {
     let directory = draft.directory(dir);
     let path = directory.join(format!("{owner}.json"));
     if draft.is_empty() {
-        return match std::fs::remove_file(path) {
+        match std::fs::remove_file(path) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
             result => result,
-        };
+        }?;
+        if let Err(error) = prune_attachments(dir) {
+            tracing::warn!("could not reclaim draft attachments: {error}");
+        }
+        return Ok(draft.clone());
     }
     std::fs::create_dir_all(&directory)?;
     let mut snapshot = draft.clone();
     for image in &mut snapshot.images {
-        if owned_images.iter().any(|owned| owned == Path::new(image)) {
-            use std::hash::Hasher;
+        let copy_required = owned_images.iter().any(|owned| owned == Path::new(image));
+        if copy_required || Path::new(image).parent() == Some(dir.join("attachments").as_path()) {
             let attachments = dir.join("attachments");
             std::fs::create_dir_all(&attachments)?;
-            let bytes = std::fs::read(&*image)?;
-            let mut digest = std::collections::hash_map::DefaultHasher::new();
-            digest.write(&bytes);
-            let mut destination = attachments.join(format!("{:016x}.png", digest.finish()));
+            let bytes = match std::fs::read(&*image) {
+                Ok(bytes) => bytes,
+                Err(_) if !copy_required => continue,
+                Err(error) => return Err(error),
+            };
+            let suffix = image_suffix(&bytes);
+            let mut destination =
+                attachments.join(format!("{}.{suffix}", hex(&Sha256::digest(&bytes))));
             if let Ok(existing) = std::fs::read(&destination)
                 && existing != bytes
             {
                 destination = attachments.join(format!(
-                    "{}.png",
+                    "{}.{suffix}",
                     shore_common::swp_client::connection::request_id()
                 ));
             }
@@ -143,6 +227,43 @@ pub(crate) fn save(
     serde_json::to_writer(&mut tmp, &snapshot)?;
     tmp.as_file().sync_all()?;
     let _file = tmp.persist(path).map_err(|error| error.error)?;
+    if let Err(error) = prune_attachments(dir) {
+        tracing::warn!("could not reclaim draft attachments: {error}");
+    }
+    Ok(snapshot)
+}
+
+fn prune_attachments(dir: &Path) -> std::io::Result<()> {
+    let attachments = dir.join("attachments");
+    let mut referenced = std::collections::HashSet::new();
+    for entry_result in std::fs::read_dir(dir)? {
+        let entry = entry_result?;
+        if !entry.file_type()?.is_dir() || entry.path() == attachments {
+            continue;
+        }
+        for candidate in std::fs::read_dir(entry.path())? {
+            let path = candidate?.path();
+            if path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+            let bytes = std::fs::read(path)?;
+            let Ok(saved) = serde_json::from_slice::<Draft>(&bytes) else {
+                return Ok(());
+            };
+            referenced.extend(saved.images.into_iter().map(PathBuf::from));
+        }
+    }
+    let files = match std::fs::read_dir(attachments) {
+        Ok(files) => files,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    for file_result in files {
+        let file = file_result?;
+        if file.file_type()?.is_file() && !referenced.contains(&file.path()) {
+            std::fs::remove_file(file.path())?;
+        }
+    }
     Ok(())
 }
 
@@ -259,6 +380,142 @@ mod recovery_tests {
             text: text.into(),
             ..Draft::default()
         }
+    }
+
+    #[test]
+    fn persisted_identity_has_a_specified_stable_directory() {
+        assert_eq!(
+            message("main", "").directory(std::path::Path::new("drafts")),
+            std::path::Path::new(
+                "drafts/v1-b8f85f2dbc3d1ad2fc9bcc055eb0b24167f53f8c775286a1ea333e86700a7b6a"
+            )
+        );
+    }
+
+    #[test]
+    fn old_hash_directories_are_recovered_by_their_stored_identity() {
+        let tmp = tempfile::tempdir().unwrap();
+        let original = message("main", "recover across toolchain changes");
+        let old_directory = tmp.path().join("0123456789abcdef");
+        std::fs::create_dir(&old_directory).unwrap();
+        std::fs::write(
+            old_directory.join("previous.json"),
+            serde_json::to_vec(&original).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(load(tmp.path(), "new", &original), Some(original.clone()));
+        assert!(original.directory(tmp.path()).join("new.json").exists());
+        assert!(!old_directory.join("previous.json").exists());
+    }
+
+    #[test]
+    fn migration_repairs_old_image_suffixes_without_discarding_missing_attachments() {
+        let tmp = tempfile::tempdir().unwrap();
+        let attachments = tmp.path().join("attachments");
+        std::fs::create_dir(&attachments).unwrap();
+        let old_image = attachments.join("old.png");
+        std::fs::write(&old_image, b"\xff\xd8\xffpayload").unwrap();
+        let missing = attachments
+            .join("missing.png")
+            .to_string_lossy()
+            .into_owned();
+        let mut original = message("main", "keep the entire draft");
+        original.images = vec![old_image.to_string_lossy().into_owned(), missing.clone()];
+        let old_directory = tmp.path().join("0123456789abcdef");
+        std::fs::create_dir(&old_directory).unwrap();
+        std::fs::write(
+            old_directory.join("previous.json"),
+            serde_json::to_vec(&original).unwrap(),
+        )
+        .unwrap();
+        let recovered = load(tmp.path(), "next", &original).unwrap();
+        assert_eq!(recovered.text, original.text);
+        assert!(recovered.images.first().unwrap().ends_with(".jpg"));
+        assert_eq!(recovered.images.get(1), Some(&missing));
+    }
+
+    #[test]
+    fn collection_cannot_race_with_another_sessions_unpublished_attachment() {
+        let tmp = tempfile::tempdir().unwrap();
+        let lock = super::lock_store(tmp.path()).unwrap();
+        let attachments = tmp.path().join("attachments");
+        std::fs::create_dir(&attachments).unwrap();
+        let pending = attachments.join("pending.png");
+        std::fs::write(&pending, b"\x89PNG\r\n\x1a\npayload").unwrap();
+        assert!(save(tmp.path(), "clearing", &message("main", ""), &[]).is_err());
+        assert!(pending.exists(), "the publisher still owns the store lock");
+        let mut published = message("side", "published");
+        published
+            .images
+            .push(pending.to_string_lossy().into_owned());
+        let snapshot = super::save_locked(tmp.path(), "publisher", &published, &[]).unwrap();
+        drop(lock);
+        save(tmp.path(), "clearing", &message("main", ""), &[]).unwrap();
+        assert!(std::path::Path::new(snapshot.images.first().unwrap()).exists());
+    }
+
+    #[test]
+    fn a_duplicated_descriptor_does_not_extend_a_finished_store_transaction() {
+        let tmp = tempfile::tempdir().unwrap();
+        let transaction = super::lock_store(tmp.path()).unwrap();
+        let _inherited = transaction.0.try_clone().unwrap();
+        drop(transaction);
+        save(tmp.path(), "next", &message("main", "next draft"), &[]).unwrap();
+        assert_eq!(
+            load(tmp.path(), "reader", &message("main", "")),
+            Some(message("main", "next draft"))
+        );
+    }
+
+    #[test]
+    fn recovered_uploads_keep_their_image_format() {
+        for (bytes, suffix) in [
+            (b"\xff\xd8\xffpayload".as_slice(), "jpg"),
+            (b"GIF89apayload", "gif"),
+            (b"RIFF0000WEBPpayload", "webp"),
+            (b"\x89PNG\r\n\x1a\npayload", "png"),
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            let source = tmp.path().join("clipboard.png");
+            std::fs::write(&source, bytes).unwrap();
+            let mut original = message("main", "caption");
+            original.images.push(source.to_string_lossy().into_owned());
+            save(tmp.path(), "previous", &original, &[source]).unwrap();
+            let recovered = load(tmp.path(), "next", &original).unwrap();
+            let path = recovered.images.first().unwrap();
+            let upload = shore_common::swp_client::read_image_upload(path).unwrap();
+            assert!(
+                upload.filename.ends_with(&format!(".{suffix}")),
+                "{}",
+                upload.filename
+            );
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn clearing_drafts_reclaims_only_unreferenced_attachments() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("clipboard.png");
+        std::fs::write(&source, b"\x89PNG\r\n\x1a\npayload").unwrap();
+        let mut original = message("main", "caption");
+        original.images.push(source.to_string_lossy().into_owned());
+        save(tmp.path(), "first", &original, &[source]).unwrap();
+        let recovered = load(tmp.path(), "first", &original).unwrap();
+        let attachment = recovered.images.first().unwrap();
+        let mut shared = recovered.clone();
+        shared.thread = "side".into();
+        save(tmp.path(), "second", &shared, &[]).unwrap();
+        save(tmp.path(), "first", &message("main", ""), &[]).unwrap();
+        assert!(
+            std::path::Path::new(attachment).exists(),
+            "another draft still owns the image"
+        );
+        save(tmp.path(), "second", &message("side", ""), &[]).unwrap();
+        assert!(
+            !std::path::Path::new(attachment).exists(),
+            "sent/cleared images must not accumulate"
+        );
     }
 
     #[test]

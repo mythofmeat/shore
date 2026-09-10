@@ -8,6 +8,8 @@ mod images;
 mod input;
 mod keymap;
 mod markdown;
+#[cfg(test)]
+mod review_tests;
 mod ui;
 
 use std::io;
@@ -633,7 +635,7 @@ fn restore_draft(app: &mut App, dir: &Path) {
     app.set_status("restored the draft and attachments you left");
 }
 
-fn save_draft(app: &App, dir: &Path) {
+fn save_draft(app: &App, dir: &Path) -> bool {
     if let Err(e) = draft::save(
         dir,
         &app.request_prefix,
@@ -641,6 +643,29 @@ fn save_draft(app: &App, dir: &Path) {
         &app.paste_temp_paths,
     ) {
         warn!("failed to keep the unsent draft: {e}");
+        return false;
+    }
+    true
+}
+
+fn initialize_drafts(app: &mut App, root: PathBuf) {
+    match draft::lock_session(&root, &app.request_prefix) {
+        Ok(lock) => {
+            app.draft_lock = Some(lock);
+            restore_draft(app, &root);
+            app.draft_root = Some(root);
+        }
+        Err(error) => {
+            warn!("draft recovery unavailable: {error}");
+            app.set_warning("draft recovery unavailable; unsent messages will not be saved");
+        }
+    }
+}
+
+fn persist_conversation(app: &App) {
+    if app.persist_session && !app.character_name.is_empty() {
+        persist_active_character(&app.character_name);
+        let _persisted = crate::state::write_active_thread(&app.character_name, &app.thread_name);
     }
 }
 
@@ -652,9 +677,11 @@ fn adopt_conversation(app: &mut App, character: Option<&str>, thread: Option<&st
     }
     let root = app.draft_root.clone();
     if let Some(dir) = &root {
-        save_draft(app, dir);
+        let _saved = save_draft(app, dir);
     }
+    let navigation = app.pending_navigation.take();
     app.retire_operations();
+    app.pending_navigation = navigation;
     app.input.set_text(String::new());
     app.input.reset_history();
     app.input.exit_command_mode();
@@ -667,10 +694,7 @@ fn adopt_conversation(app: &mut App, character: Option<&str>, thread: Option<&st
     app.history_version = app.history_version.wrapping_add(1);
     app.character_name = next_character;
     app.thread_name = next_thread;
-    if app.persist_session && !app.character_name.is_empty() {
-        persist_active_character(&app.character_name);
-        let _persisted = crate::state::write_active_thread(&app.character_name, &app.thread_name);
-    }
+    persist_conversation(app);
     app.scroll_offset = 0;
     app.auto_scroll = true;
     app.usage_budgets.clear();
@@ -780,6 +804,23 @@ async fn send_conn_commands(
     }
 }
 
+fn restore_image_path(app: &mut App, path: String, data: Option<&str>) -> String {
+    if Path::new(&path).exists() {
+        return path;
+    }
+    if let Some(encoded) = data {
+        match draft::recover_attachment(encoded) {
+            Ok(recovered) => {
+                let result = recovered.to_string_lossy().into_owned();
+                app.paste_temp_paths.push(recovered);
+                return result;
+            }
+            Err(error) => app.set_error(format!("could not restore attachment {path}: {error}")),
+        }
+    }
+    path
+}
+
 fn restore_failed_send(app: &mut App, command: ConnCommand) {
     let ConnCommand::Send(client_message) = command else {
         return;
@@ -795,11 +836,13 @@ fn restore_failed_send(app: &mut App, command: ConnCommand) {
         {
             app.pending_navigation = None;
         }
-        app.set_error("command not sent; connection unavailable");
+        app.set_error("command not sent; try again");
         return;
     };
 
-    app.abort_stream();
+    if app.stream.rid == message.rid {
+        app.abort_stream();
+    }
     if app
         .entries
         .last()
@@ -811,7 +854,21 @@ fn restore_failed_send(app: &mut App, command: ConnCommand) {
         let _removed = app.entries.pop();
     }
     app.input.set_text(message.text);
-    app.pending_images = message.images;
+    app.pending_images = message
+        .images
+        .into_iter()
+        .enumerate()
+        .map(|(index, path)| {
+            restore_image_path(
+                app,
+                path,
+                message
+                    .image_data
+                    .get(index)
+                    .map(|image| image.data.as_str()),
+            )
+        })
+        .collect();
     app.set_error("message not sent; restored to input for retry");
 }
 
@@ -842,8 +899,12 @@ async fn send_conn_command(
         app.pending_navigation.clone_from(&cmd.rid);
     }
     if let Err(error) = cmd_tx.try_send(command) {
-        prepare_for_reconnect(app);
+        let closed = matches!(error, tokio::sync::mpsc::error::TrySendError::Closed(_));
         restore_failed_send(app, error.into_inner());
+        if closed {
+            app.retire_operations();
+            app.connection_status = ConnectionStatus::Disconnected;
+        }
     }
 }
 
@@ -1257,6 +1318,8 @@ async fn run_tui(
     } else {
         App {
             connection_status: ConnectionStatus::Connecting,
+            character_name: resolved_character.clone().unwrap_or_default(),
+            thread_name: resolved_thread.clone().unwrap_or_default(),
             ..App::default()
         }
     };
@@ -1276,8 +1339,7 @@ async fn run_tui(
                     .map(|address| address.0)
             })
             .unwrap_or_default();
-        app.draft_lock = Some(draft::lock_session(&root, &app.request_prefix)?);
-        app.draft_root = Some(root);
+        initialize_drafts(&mut app, root);
     }
 
     let (cmd_tx, mut event_rx) = if fixture_mode {
@@ -1397,10 +1459,12 @@ async fn run_tui(
                     needs_redraw = true;
                 }
             }
-            _ = draft_tick.tick(), if !fixture_mode => {
+            _ = draft_tick.tick(), if app.draft_root.is_some() => {
                 let snapshot = draft_snapshot(&app);
-                if saved_draft != snapshot {
-                    save_draft(&app, &draft::drafts_dir());
+                if saved_draft != snapshot
+                    && let Some(root) = &app.draft_root
+                    && save_draft(&app, root)
+                {
                     saved_draft = snapshot;
                 }
             }
@@ -1414,7 +1478,9 @@ async fn run_tui(
     info!("TUI exiting");
     if !fixture_mode {
         save_prefs(&app);
-        save_draft(&app, &draft::drafts_dir());
+        if let Some(root) = &app.draft_root {
+            let _saved = save_draft(&app, root);
+        }
         drop(cmd_tx.try_send(ConnCommand::Shutdown));
     }
 
@@ -1482,6 +1548,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             app.character_name = next_character;
             app.thread_name = selected_thread.unwrap_or_default();
+            persist_conversation(app);
 
             if let Some(private) = config.get("private").and_then(serde_json::Value::as_bool) {
                 app.is_private = private;
@@ -1516,7 +1583,6 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
                 app.set_error("a request from the previous conversation could not be sent");
                 return UiEffect::redraw(RedrawEffect::Immediate);
             }
-            prepare_for_reconnect(app);
             restore_failed_send(app, ConnCommand::Send(message));
             UiEffect::redraw(RedrawEffect::Immediate)
         }
@@ -1837,7 +1903,11 @@ fn restore_unpersisted_user_draft(app: &mut App) -> bool {
         return false;
     };
     app.input.set_text(turn.joined_text());
-    app.pending_images = turn.images.into_iter().map(|image| image.path).collect();
+    app.pending_images = turn
+        .images
+        .into_iter()
+        .map(|image| restore_image_path(app, image.path, image.data.as_deref()))
+        .collect();
     true
 }
 
@@ -5853,6 +5923,7 @@ mod send_failure_tests {
         app.stream.active = true;
 
         let _ = handle_conn_event(&mut app, ConnEvent::SendFailed(failed_message()));
+        let _ = handle_conn_event(&mut app, ConnEvent::Disconnected("send failed".into()));
 
         assert!(matches!(
             app.connection_status,
@@ -5887,7 +5958,7 @@ mod draft_lifecycle_tests {
         leaving
             .input
             .set_text("the thing I was halfway through saying".to_owned());
-        save_draft(&leaving, tmp.path());
+        assert!(save_draft(&leaving, tmp.path()));
 
         let mut arriving = App::default();
         restore_draft(&mut arriving, tmp.path());
@@ -5911,7 +5982,7 @@ mod draft_lifecycle_tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut leaving = App::default();
         leaving.input.set_text("keep me".to_owned());
-        save_draft(&leaving, tmp.path());
+        assert!(save_draft(&leaving, tmp.path()));
 
         let mut arriving = App::default();
         restore_draft(&mut arriving, tmp.path());
@@ -5928,10 +5999,10 @@ mod draft_lifecycle_tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut app = App::default();
         app.input.set_text("about to send".to_owned());
-        save_draft(&app, tmp.path());
+        assert!(save_draft(&app, tmp.path()));
 
         let _sent = app.input.take_text();
-        save_draft(&app, tmp.path());
+        assert!(save_draft(&app, tmp.path()));
 
         let mut next = App::default();
         restore_draft(&mut next, tmp.path());
@@ -6136,7 +6207,7 @@ mod reliability_tests {
         let mut app = App::default();
         app.input.set_text("unsent with image".into());
         app.pending_images.push("/tmp/image.png".into());
-        save_draft(&app, tmp.path());
+        assert!(save_draft(&app, tmp.path()));
         let mut resumed = App::default();
         restore_draft(&mut resumed, tmp.path());
         assert_eq!(resumed.input.text, "unsent with image");

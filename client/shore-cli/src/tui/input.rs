@@ -1095,7 +1095,7 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
 
         UiCommand::Cancel => {
             if app.stream.active {
-                app.stream.reset();
+                app.set_status("cancelling generation");
                 Action::Send(ConnCommand::Send(ClientMessage::Cancel(Cancel {})))
             } else {
                 app.set_status("nothing to cancel");
@@ -1795,7 +1795,10 @@ mod tests {
             action,
             Action::Send(ConnCommand::Send(ClientMessage::Cancel(_)))
         ));
-        assert!(!app.stream.active, "stream state should be reset on cancel");
+        assert!(
+            app.stream.active,
+            "retain request ownership until cancellation is acknowledged"
+        );
     }
 
     #[test]
@@ -1874,7 +1877,7 @@ mod tests {
             parse_command(&mut app, "cancel"),
             Action::Send(ConnCommand::Send(ClientMessage::Cancel(_)))
         ));
-        assert!(!app.stream.active);
+        assert!(app.stream.active);
     }
 
     #[test]
