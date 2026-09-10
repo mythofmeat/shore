@@ -12,8 +12,7 @@
     "lint:citations": "bun run scripts/check_live_citations.ts",
     "mutate": "bun run scripts/mutate.ts",
     "rerecord": "bun run scripts/rerecord.ts",
-    "rerecord:check": "bun run scripts/rerecord.ts --check",
-    "postinstall": "git config core.hooksPath .githooks || true"
+    "rerecord:check": "bun run scripts/rerecord.ts --check"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.42",

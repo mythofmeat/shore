@@ -33,8 +33,9 @@ nothing runs it, so the rot it catches — a `find` pattern that stops matching
 because the source moved — stays silent until somebody remembers. But that rot
 needs no test runs to find: it is `source.count(find) == 1`, file reads and
 substring counts. `--stale` does only that and skips every `bun test`, which is
-fast enough for `.githooks/pre-commit`. It does not catch a mutant that still
-applies but has stopped being killed; that still wants the full sweep.
+fast enough for routine verification before committing. It does not catch a
+mutant that still applies but has stopped being killed; that still wants the
+full sweep.
 
 **The tests run somewhere the repository is not.** A mutant that rewrites a path
 makes the code under test write to a path nobody chose. `rustJoin: always treat
