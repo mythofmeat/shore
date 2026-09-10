@@ -127,7 +127,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
             },
           }),
 
-      engine: async (name) => await this.#deps.registry.getOrCreate(name),
+      engine: async (name, thread) => await this.#deps.registry.getOrCreate(name, thread),
       ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
       ...(this.#deps.notifyAutonomousMessage === undefined
         ? {}
