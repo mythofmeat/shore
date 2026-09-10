@@ -15,7 +15,11 @@ pub(crate) struct CompactionFingerprint {
 pub(crate) struct ConvCache {
     pub fingerprint: ConvFingerprint,
     pub lines: Vec<Line<'static>>,
-    pub content_visual: u16,
+    pub content_visual: usize,
+    pub settled_fingerprint: ConvFingerprint,
+    pub settled_entries: usize,
+    pub settled_lines: usize,
+    pub settled_images: usize,
 }
 
 #[derive(Default, PartialEq, Eq, Clone)]
@@ -40,4 +44,20 @@ pub(crate) struct ConvFingerprint {
     pub spinner_frame: u32,
     pub character_name_len: u32,
     pub image_cache_version: u64,
+}
+
+impl ConvFingerprint {
+    pub(crate) fn settled(&self) -> Self {
+        let mut result = self.clone();
+        result.entries_len = 0;
+        result.last_entry = 0;
+        result.second_last_entry = 0;
+        result.stream_active = false;
+        result.stream_regen = false;
+        result.stream_phase_len = 0;
+        result.stream_tool_name_len = 0;
+        result.spinner_frame = 0;
+        result.compaction = None;
+        result
+    }
 }

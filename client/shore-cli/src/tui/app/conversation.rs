@@ -152,6 +152,7 @@ impl ConversationEntry {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SubagentTaskView {
+    pub parent_request_id: Option<String>,
     pub task_id: String,
     pub name: String,
     pub query: String,
@@ -165,6 +166,7 @@ pub(crate) struct SubagentTaskView {
 impl SubagentTaskView {
     pub(crate) fn new(task_id: String, name: String) -> Self {
         Self {
+            parent_request_id: None,
             task_id,
             name,
             query: String::new(),

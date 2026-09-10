@@ -18,6 +18,7 @@ impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin> AsyncReadWr
 pub struct SWPConnection {
     reader: BufReader<Box<dyn AsyncReadWrite>>,
     read_pending: Vec<u8>,
+    last_request: Option<(Option<String>, Option<String>)>,
     writer: BufWriter<Box<dyn AsyncReadWrite>>,
 }
 
@@ -39,6 +40,7 @@ impl SWPConnection {
         Ok(Self {
             reader: BufReader::new(Box::new(tokio::io::join(r, tokio::io::sink()))),
             read_pending: Vec::new(),
+            last_request: None,
             writer: BufWriter::new(Box::new(tokio::io::join(tokio::io::empty(), w))),
         })
     }
@@ -59,17 +61,24 @@ impl SWPConnection {
         character: Option<String>,
         thread: Option<String>,
     ) -> Result<(Self, ServerHello, History)> {
-        let mut conn = Self::open(addr).await?;
-        let (server_hello, history) = conn
-            .do_handshake(
-                client_type.into(),
-                client_name.into(),
-                character,
-                thread,
-                Some(&addr.0),
-            )
-            .await?;
-        Ok((conn, server_hello, history))
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            let mut conn = Self::open(addr).await?;
+            let (server_hello, history) = conn
+                .do_handshake(
+                    client_type.into(),
+                    client_name.into(),
+                    character,
+                    thread,
+                    Some(&addr.0),
+                )
+                .await?;
+            Ok((conn, server_hello, history))
+        })
+        .await
+        .map_err(|_| ClientError::Timeout {
+            message: "connection handshake timed out".into(),
+            retry_after_ms: None,
+        })?
     }
 
     async fn do_handshake(
@@ -206,16 +215,47 @@ impl SWPConnection {
             ClientError::Serialize(e)
         })?;
         trace!(bytes = line.len(), "sending message");
-        self.writer
-            .write_all(line.as_bytes())
-            .await
-            .map_err(ClientError::Io)?;
-        self.writer
-            .write_all(b"\n")
-            .await
-            .map_err(ClientError::Io)?;
-        self.writer.flush().await.map_err(ClientError::Io)?;
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            self.writer
+                .write_all(line.as_bytes())
+                .await
+                .map_err(ClientError::Io)?;
+            self.writer
+                .write_all(b"\n")
+                .await
+                .map_err(ClientError::Io)?;
+            self.writer.flush().await.map_err(ClientError::Io)?;
+            Ok::<(), ClientError>(())
+        })
+        .await
+        .map_err(|_| ClientError::Timeout {
+            message: "connection write timed out".into(),
+            retry_after_ms: None,
+        })??;
+        match msg {
+            ClientMessage::Command(command) => {
+                self.last_request = Some((command.rid.clone(), Some(command.name.clone())));
+            }
+            ClientMessage::Message(message) => {
+                self.last_request = Some((message.rid.clone(), None))
+            }
+            ClientMessage::Regen(regen) => self.last_request = Some((regen.rid.clone(), None)),
+            ClientMessage::Hello(_) | ClientMessage::Cancel(_) => {}
+        }
         Ok(())
+    }
+
+    pub fn matches_last_request(&self, response: &ServerMessage) -> bool {
+        let Some((rid, name)) = &self.last_request else {
+            return response.request_id().is_none();
+        };
+        if rid.as_deref() != response.request_id() {
+            return false;
+        }
+        if let ServerMessage::CommandOutput(output) = response {
+            return name.as_deref() == Some(output.name.as_str());
+        }
+        true
     }
 
     pub async fn recv(&mut self) -> Result<ServerMessage> {
@@ -249,7 +289,7 @@ impl SWPConnection {
             .map(|path| read_image_upload(path))
             .collect::<Result<Vec<_>>>()?;
 
-        let rid = Some(uuid_v4());
+        let rid = Some(request_id());
         let msg = ClientMessage::Message(ClientMessageBody {
             rid: rid.clone(),
             text: text.into(),
@@ -268,7 +308,7 @@ impl SWPConnection {
         guidance: Option<String>,
     ) -> Result<Option<String>> {
         use crate::protocol::client_msg::Regen;
-        let rid = Some(uuid_v4());
+        let rid = Some(request_id());
         let msg = ClientMessage::Regen(Regen {
             rid: rid.clone(),
             stream,
@@ -284,7 +324,7 @@ impl SWPConnection {
         args: serde_json::Value,
     ) -> Result<Option<String>> {
         use crate::protocol::client_msg::Command;
-        let rid = Some(uuid_v4());
+        let rid = Some(request_id());
         let msg = ClientMessage::Command(Command {
             rid: rid.clone(),
             name: name.into(),
@@ -342,6 +382,7 @@ impl SWPConnection {
         Self {
             reader: BufReader::new(Box::new(tokio::io::join(r, tokio::io::sink()))),
             read_pending: Vec::new(),
+            last_request: None,
             writer: BufWriter::new(Box::new(tokio::io::join(tokio::io::empty(), w))),
         }
     }
@@ -426,7 +467,7 @@ where
         .map_err(|e| ClientError::Protocol(format!("server sent invalid UTF-8 framing: {e}")))
 }
 
-fn uuid_v4() -> String {
+pub fn request_id() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -549,7 +590,7 @@ mod tests {
             handles.push(std::thread::spawn(move || {
                 let mut local = Vec::with_capacity(100);
                 for _ in 0..100 {
-                    local.push(uuid_v4());
+                    local.push(request_id());
                 }
                 local
             }));
@@ -565,5 +606,27 @@ mod tests {
             }
         }
         assert_eq!(all_ids.len(), 800);
+    }
+}
+
+#[cfg(test)]
+mod deadline_tests {
+    use super::{ClientError, SWPConnection, ServerAddr};
+
+    #[tokio::test]
+    async fn an_open_socket_without_a_hello_reaches_the_handshake_deadline() {
+        crate::test_env::set_env(crate::token::TOKEN_ENV, "test-token");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = ServerAddr(listener.local_addr().unwrap().to_string());
+        let attempt =
+            tokio::spawn(
+                async move { SWPConnection::connect(&address, "test", "test", None).await },
+            );
+        let (_socket, _) = listener.accept().await.unwrap();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(12), attempt)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(result, Err(ClientError::Timeout { .. })));
     }
 }

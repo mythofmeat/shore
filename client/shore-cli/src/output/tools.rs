@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::Write;
 
 use serde_json::Value;
 
@@ -126,7 +126,7 @@ pub(crate) fn write_tools<W: Write>(out: &mut W, data: &Value) {
 }
 
 pub(crate) fn print(data: &Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_tools(&mut out, data);
 }

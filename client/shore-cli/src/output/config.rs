@@ -1,4 +1,6 @@
-use std::io::{self, Write};
+#[cfg(test)]
+use std::io;
+use std::io::Write;
 
 use serde_json::{Map, Value};
 
@@ -389,19 +391,19 @@ pub(crate) fn write_check<W: Write>(out: &mut W, data: &Value) {
 }
 
 pub(crate) fn print(data: &Value, show_all: bool) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_config(&mut out, data, show_all);
 }
 
 pub(crate) fn print_check(data: &Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_check(&mut out, data);
 }
 
 pub(crate) fn print_schema(data: &Value, filter: Option<&str>) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_schema(&mut out, data, filter);
 }

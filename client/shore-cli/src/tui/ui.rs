@@ -468,27 +468,18 @@ fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 
-fn squeeze_blank_lines(lines: &mut Vec<Line<'static>>) {
-    let mut consecutive_blanks = 0_u32;
-    let mut squeezed = Vec::with_capacity(lines.len());
-
-    for line in lines.drain(..) {
-        if line.width() == 0 {
-            consecutive_blanks = consecutive_blanks.saturating_add(1);
-            if consecutive_blanks > 1 {
-                continue;
-            }
-        } else {
-            consecutive_blanks = 0;
+fn squeeze_blank_lines_from(lines: &mut Vec<Line<'static>>, from: usize) {
+    let tail: Vec<_> = lines.drain(from..).collect();
+    for line in tail {
+        if line.width() == 0 && lines.last().is_some_and(|previous| previous.width() == 0) {
+            continue;
         }
-        squeezed.push(line);
+        lines.push(line);
     }
-
-    *lines = squeezed;
 }
 
-fn visual_line_count(lines: &[Line<'static>], _width: u16) -> u16 {
-    usize_to_u16(lines.len())
+fn visual_line_count(lines: &[Line<'static>], _width: u16) -> usize {
+    lines.len()
 }
 
 fn truncate_to_width(s: &mut String, max_width: usize) {
@@ -771,18 +762,14 @@ fn draw_conversation(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
 
         let grew_above = std::mem::take(&mut app.grew_above_viewport);
         if !app.auto_scroll && same_width && !grew_above {
-            let added_below_viewport =
-                i32::from(content_visual).saturating_sub(i32::from(previous_content_visual));
-            app.scroll_offset = u16::try_from(
-                i32::from(app.scroll_offset)
-                    .saturating_add(added_below_viewport)
-                    .clamp(0, i32::from(u16::MAX)),
-            )
-            .unwrap_or_default();
+            app.scroll_offset = app
+                .scroll_offset
+                .saturating_add(content_visual)
+                .saturating_sub(previous_content_visual);
         }
     }
 
-    let visible_height = area.height;
+    let visible_height = usize::from(area.height);
     let content_visual = app.conv_cache.content_visual;
     let total_visual = content_visual.max(visible_height);
     let max_scroll = total_visual.saturating_sub(visible_height);
@@ -803,9 +790,9 @@ fn draw_conversation(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         let top_pad = visible_height.saturating_sub(content_visual);
         Rect {
             x: area.x,
-            y: area.y.saturating_add(top_pad),
+            y: area.y.saturating_add(usize_to_u16(top_pad)),
             width: area.width,
-            height: content_visual,
+            height: usize_to_u16(content_visual),
         }
     } else {
         area
@@ -813,7 +800,17 @@ fn draw_conversation(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
 
     frame.render_widget(Clear, area);
 
-    let paragraph = Paragraph::new(Text::from(app.conv_cache.lines.clone())).scroll((scroll, 0));
+    let visible = app
+        .conv_cache
+        .lines
+        .get(
+            scroll
+                ..scroll
+                    .saturating_add(visible_height)
+                    .min(app.conv_cache.lines.len()),
+        )
+        .unwrap_or_default();
+    let paragraph = Paragraph::new(Text::from(visible.to_vec()));
 
     frame.render_widget(paragraph, render_area);
 
@@ -924,13 +921,43 @@ fn render_turn(
 }
 
 fn build_conversation_lines(
-    app: &App,
+    app: &mut App,
     content_width: u16,
-) -> (Vec<Line<'static>>, Vec<crate::tui::app::ImageEntry>, u16) {
-    let mut lines: Vec<Line<'static>> = Vec::new();
-    let mut image_index: Vec<crate::tui::app::ImageEntry> = Vec::new();
+) -> (Vec<Line<'static>>, Vec<crate::tui::app::ImageEntry>, usize) {
+    let settled_fingerprint = app.conversation_fingerprint(content_width).settled();
+    let settled_entries = app
+        .entries
+        .iter()
+        .position(|entry| entry.as_turn().is_some_and(|turn| turn.is_streaming()))
+        .unwrap_or(app.entries.len());
+    let reuse = app.conv_cache.settled_fingerprint == settled_fingerprint
+        && app.conv_cache.settled_entries <= settled_entries;
+    let first = if reuse {
+        app.conv_cache.settled_entries
+    } else {
+        0
+    };
+    let mut lines = std::mem::take(&mut app.conv_cache.lines);
+    lines.truncate(if reuse {
+        app.conv_cache.settled_lines
+    } else {
+        0
+    });
+    let mut image_index = std::mem::take(&mut app.image_index);
+    image_index.truncate(if reuse {
+        app.conv_cache.settled_images
+    } else {
+        0
+    });
+    if !reuse {
+        app.conv_cache.settled_entries = 0;
+        app.conv_cache.settled_lines = 0;
+        app.conv_cache.settled_images = 0;
+    }
+    app.conv_cache.settled_fingerprint = settled_fingerprint;
 
-    for entry in &app.entries {
+    for (index, entry) in app.entries.iter().enumerate().skip(first) {
+        let from = lines.len();
         match entry {
             ConversationEntry::Turn(turn) => {
                 render_turn(&mut lines, app, turn, content_width, &mut image_index);
@@ -970,6 +997,12 @@ fn build_conversation_lines(
                 push_archive_boundary(&mut lines, content_width, *archived_count);
             }
         }
+        squeeze_blank_lines_from(&mut lines, from);
+        if index.saturating_add(1) <= settled_entries {
+            app.conv_cache.settled_entries = index.saturating_add(1);
+            app.conv_cache.settled_lines = lines.len();
+            app.conv_cache.settled_images = image_index.len();
+        }
     }
 
     let trailing_streaming = matches!(
@@ -997,7 +1030,7 @@ fn build_conversation_lines(
         ]));
     }
 
-    squeeze_blank_lines(&mut lines);
+    squeeze_blank_lines_from(&mut lines, app.conv_cache.settled_lines);
 
     let content_visual = visual_line_count(&lines, content_width);
 
@@ -1814,6 +1847,17 @@ mod subagent_panel_tests {
     use shore_common::protocol::server_msg::{ServerMessage, StreamChunk, ToolCall, ToolResult};
 
     fn asking(h: &mut Harness, task_id: &str, name: &str, query: &str) {
+        if !h.app.stream.active {
+            let _ = crate::tui::handle_server_message(
+                &mut h.app,
+                ServerMessage::StreamStart(shore_common::protocol::server_msg::StreamStart {
+                    rid: None,
+                    regen: false,
+                    subagent: None,
+                    task_id: None,
+                }),
+            );
+        }
         let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
@@ -2087,6 +2131,7 @@ mod subagent_panel_tests {
     }
 
     fn ask_call(h: &mut Harness, tool_id: &str, name: &str, output: &str, is_error: bool) {
+        asking(h, tool_id, name, "what is the weather");
         let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
@@ -2270,9 +2315,10 @@ fn draw_output_pager(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     pager.viewport = viewport;
     pager.scroll = pager
         .scroll
-        .min(usize_to_u16(total).saturating_sub(viewport.max(1)));
-    let first_shown = usize::from(pager.scroll).saturating_add(1).min(total);
-    let last_shown = usize::from(pager.scroll)
+        .min(total.saturating_sub(usize::from(viewport.max(1))));
+    let first_shown = pager.scroll.saturating_add(1).min(total);
+    let last_shown = pager
+        .scroll
         .saturating_add(usize::from(viewport))
         .min(total);
     let position = if total == 0 {
@@ -2281,18 +2327,20 @@ fn draw_output_pager(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         format!("{first_shown}-{last_shown} of {total}")
     };
 
-    let body = Paragraph::new(Text::from(pager.lines.clone()))
-        .scroll((pager.scroll, 0))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .padding(Padding::vertical(1))
-                .title_top(Line::from(format!(" output · :{} ", pager.command)).right_aligned())
-                .title_bottom(
-                    Line::from(format!(" j/k scroll · Esc close   {position} ")).right_aligned(),
-                )
-                .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM)),
-        );
+    let visible = pager
+        .lines
+        .get(pager.scroll..last_shown)
+        .unwrap_or_default();
+    let body = Paragraph::new(Text::from(visible.to_vec())).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .padding(Padding::vertical(1))
+            .title_top(Line::from(format!(" output · :{} ", pager.command)).right_aligned())
+            .title_bottom(
+                Line::from(format!(" j/k scroll · Esc close   {position} ")).right_aligned(),
+            )
+            .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM)),
+    );
 
     frame.render_widget(Clear, popup_area);
     frame.render_widget(body, popup_area);

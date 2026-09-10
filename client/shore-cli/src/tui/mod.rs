@@ -8,6 +8,8 @@ mod images;
 mod input;
 mod keymap;
 mod markdown;
+#[cfg(test)]
+mod review_tests;
 mod ui;
 
 use std::io;
@@ -242,7 +244,7 @@ impl TuiFixtureConfig {
             }
         }
 
-        app.scroll_offset = self.scroll_offset;
+        app.scroll_offset = usize::from(self.scroll_offset);
         app.auto_scroll = self.scroll_offset == 0;
         Ok(app)
     }
@@ -569,6 +571,23 @@ fn strip_editor_fence(contents: &str) -> String {
     kept.trim_end_matches('\n').to_owned()
 }
 
+fn with_cooked_terminal<T, F: FnOnce() -> io::Result<T>>(operation: F) -> io::Result<T> {
+    let result = (|| {
+        execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
+        disable_raw_mode()?;
+        execute!(io::stdout(), LeaveAlternateScreen)?;
+        operation()
+    })();
+    enable_raw_mode()?;
+    execute!(
+        io::stdout(),
+        EnterAlternateScreen,
+        DisableLineWrap,
+        EnableBracketedPaste
+    )?;
+    result
+}
+
 fn open_in_editor(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     input: &mut InputState,
@@ -580,20 +599,11 @@ fn open_in_editor(
     let tmp = draft::editor_session_path(&draft::drafts_dir(), &draft::stamp_now());
     std::fs::write(&tmp, editor_buffer(input.text.as_str(), last_reply))?;
 
-    execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
-    disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen)?;
-
     let (program, args) = crate::run::editor_invocation(&editor, &tmp);
-    drop(std::process::Command::new(program).args(args).status());
-
-    enable_raw_mode()?;
-    execute!(
-        io::stdout(),
-        EnterAlternateScreen,
-        DisableLineWrap,
-        EnableBracketedPaste
-    )?;
+    with_cooked_terminal(|| {
+        let _status = std::process::Command::new(program).args(args).status()?;
+        Ok(())
+    })?;
     force_full_redraw(terminal)?;
 
     if let Ok(contents) = std::fs::read_to_string(&tmp) {
@@ -603,18 +613,93 @@ fn open_in_editor(
     Ok(())
 }
 
-fn restore_draft(app: &mut App, dir: &Path) {
-    let Some(text) = draft::load(dir) else {
-        return;
-    };
-    app.input.set_text(text);
-    app.input.reset_history();
-    app.set_status("restored the draft you left in the input box");
+fn draft_snapshot(app: &App) -> draft::Draft {
+    draft::Draft {
+        daemon: app.draft_daemon.clone(),
+        character: app.character_name.clone(),
+        thread: app.thread_name.clone(),
+        text: app.input.text.clone(),
+        images: app.pending_images.clone(),
+        editing_ref: app.editing_ref.clone(),
+    }
 }
 
-fn save_draft(app: &App, dir: &Path) {
-    if let Err(e) = draft::save(dir, app.input.text.as_str()) {
+fn restore_draft(app: &mut App, dir: &Path) {
+    let Some(saved) = draft::load(dir, &app.request_prefix, &draft_snapshot(app)) else {
+        return;
+    };
+    app.input.set_text(saved.text);
+    app.pending_images = saved.images;
+    app.editing_ref = saved.editing_ref;
+    app.input.reset_history();
+    app.set_status("restored the draft and attachments you left");
+}
+
+fn save_draft(app: &App, dir: &Path) -> bool {
+    if let Err(e) = draft::save(
+        dir,
+        &app.request_prefix,
+        &draft_snapshot(app),
+        &app.paste_temp_paths,
+    ) {
         warn!("failed to keep the unsent draft: {e}");
+        return false;
+    }
+    true
+}
+
+fn initialize_drafts(app: &mut App, root: PathBuf) {
+    match draft::lock_session(&root, &app.request_prefix) {
+        Ok(lock) => {
+            app.draft_lock = Some(lock);
+            restore_draft(app, &root);
+            app.draft_root = Some(root);
+        }
+        Err(error) => {
+            warn!("draft recovery unavailable: {error}");
+            app.set_warning("draft recovery unavailable; unsent messages will not be saved");
+        }
+    }
+}
+
+fn persist_conversation(app: &App) {
+    if app.persist_session && !app.character_name.is_empty() {
+        persist_active_character(&app.character_name);
+        let _persisted = crate::state::write_active_thread(&app.character_name, &app.thread_name);
+    }
+}
+
+fn adopt_conversation(app: &mut App, character: Option<&str>, thread: Option<&str>) {
+    let next_character = character.unwrap_or(&app.character_name).to_owned();
+    let next_thread = thread.unwrap_or(&app.thread_name).to_owned();
+    if app.character_name == next_character && app.thread_name == next_thread {
+        return;
+    }
+    let root = app.draft_root.clone();
+    if let Some(dir) = &root {
+        let _saved = save_draft(app, dir);
+    }
+    let navigation = app.pending_navigation.take();
+    app.retire_operations();
+    app.pending_navigation = navigation;
+    app.input.set_text(String::new());
+    app.input.reset_history();
+    app.input.exit_command_mode();
+    app.pending_images.clear();
+    app.editing_ref = None;
+    app.entries.clear();
+    app.image_cache.clear();
+    app.image_index.clear();
+    app.conv_cache = app::ConvCache::default();
+    app.history_version = app.history_version.wrapping_add(1);
+    app.character_name = next_character;
+    app.thread_name = next_thread;
+    persist_conversation(app);
+    app.scroll_offset = 0;
+    app.auto_scroll = true;
+    app.usage_budgets.clear();
+    if let Some(dir) = &root {
+        restore_draft(app, dir);
     }
 }
 
@@ -627,19 +712,9 @@ fn pick_image(
 
     let start = start_dir.unwrap_or(".");
 
-    execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
-    disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen)?;
-
-    let result = try_yazi(&chooser_file, start).or_else(|| try_fzf(&chooser_file, start));
-
-    enable_raw_mode()?;
-    execute!(
-        io::stdout(),
-        EnterAlternateScreen,
-        DisableLineWrap,
-        EnableBracketedPaste
-    )?;
+    let result = with_cooked_terminal(|| {
+        Ok(try_yazi(&chooser_file, start).or_else(|| try_fzf(&chooser_file, start)))
+    })?;
     force_full_redraw(terminal)?;
 
     match result {
@@ -720,12 +795,30 @@ fn which_exists(cmd: &str) -> bool {
 }
 
 async fn send_conn_commands(
+    app: &mut App,
     cmd_tx: &tokio::sync::mpsc::Sender<ConnCommand>,
     cmds: Vec<ConnCommand>,
 ) {
     for cmd in cmds {
-        drop(cmd_tx.send(cmd).await);
+        send_conn_command(app, cmd_tx, cmd).await;
     }
+}
+
+fn restore_image_path(app: &mut App, path: String, data: Option<&str>) -> String {
+    if Path::new(&path).exists() {
+        return path;
+    }
+    if let Some(encoded) = data {
+        match draft::recover_attachment(encoded) {
+            Ok(recovered) => {
+                let result = recovered.to_string_lossy().into_owned();
+                app.paste_temp_paths.push(recovered);
+                return result;
+            }
+            Err(error) => app.set_error(format!("could not restore attachment {path}: {error}")),
+        }
+    }
+    path
 }
 
 fn restore_failed_send(app: &mut App, command: ConnCommand) {
@@ -733,23 +826,85 @@ fn restore_failed_send(app: &mut App, command: ConnCommand) {
         return;
     };
     let ClientMessage::Message(message) = client_message else {
-        app.set_error("command not sent; connection unavailable");
+        if let ClientMessage::Regen(regen) = &client_message
+            && app.stream.rid == regen.rid
+        {
+            app.abort_stream();
+        }
+        if let ClientMessage::Command(failed) = &client_message
+            && app.pending_navigation == failed.rid
+        {
+            app.pending_navigation = None;
+        }
+        app.set_error("command not sent; try again");
         return;
     };
 
+    if app.stream.rid == message.rid {
+        app.abort_stream();
+    }
+    if app
+        .entries
+        .last()
+        .and_then(ConversationEntry::as_turn)
+        .is_some_and(|turn| {
+            turn.role == Role::User && turn.msg_id.is_none() && turn.joined_text() == message.text
+        })
+    {
+        let _removed = app.entries.pop();
+    }
     app.input.set_text(message.text);
-    app.pending_images = message.images;
+    app.pending_images = message
+        .images
+        .into_iter()
+        .enumerate()
+        .map(|(index, path)| {
+            restore_image_path(
+                app,
+                path,
+                message
+                    .image_data
+                    .get(index)
+                    .map(|image| image.data.as_str()),
+            )
+        })
+        .collect();
     app.set_error("message not sent; restored to input for retry");
 }
 
 async fn send_conn_command(
     app: &mut App,
     cmd_tx: &tokio::sync::mpsc::Sender<ConnCommand>,
-    command: ConnCommand,
+    mut command: ConnCommand,
 ) {
-    if let Err(error) = cmd_tx.send(command).await {
-        prepare_for_reconnect(app);
-        restore_failed_send(app, error.0);
+    if let ConnCommand::Send(message) = &mut command {
+        let request_slot = match message {
+            ClientMessage::Command(cmd) => Some(&mut cmd.rid),
+            ClientMessage::Message(body) => Some(&mut body.rid),
+            ClientMessage::Regen(regen) => Some(&mut regen.rid),
+            ClientMessage::Cancel(_) | ClientMessage::Hello(_) => None,
+        };
+        if let Some(rid) = request_slot
+            && rid.is_none()
+        {
+            *rid = Some(app.next_request_id("command"));
+        }
+    }
+    if let ConnCommand::Send(ClientMessage::Command(cmd)) = &command
+        && matches!(cmd.name.as_str(), "switch_thread" | "switch_character")
+    {
+        if let Some(previous) = app.pending_navigation.take() {
+            let _ = app.retired_streams.insert(previous);
+        }
+        app.pending_navigation.clone_from(&cmd.rid);
+    }
+    if let Err(error) = cmd_tx.try_send(command) {
+        let closed = matches!(error, tokio::sync::mpsc::error::TrySendError::Closed(_));
+        restore_failed_send(app, error.into_inner());
+        if closed {
+            app.retire_operations();
+            app.connection_status = ConnectionStatus::Disconnected;
+        }
     }
 }
 
@@ -929,7 +1084,7 @@ async fn handle_conn_event_and_send(
     event: ConnEvent,
 ) -> UiEffect {
     let effect = handle_conn_event(app, event);
-    send_conn_commands(cmd_tx, effect.cmds).await;
+    send_conn_commands(app, cmd_tx, effect.cmds).await;
     UiEffect {
         cmds: vec![],
         redraw: effect.redraw,
@@ -991,7 +1146,7 @@ fn mark_connection_task_exited(app: &mut App, conn_events_open: &mut bool) {
 
 fn prepare_for_reconnect(app: &mut App) {
     app.connection_status = ConnectionStatus::Connecting;
-    app.abort_stream();
+    app.retire_operations();
     app.effective_sampler = None;
     app.sampler_settings_loading = false;
     app.pending_sampler_settings_rid = None;
@@ -1029,7 +1184,7 @@ async fn handle_action(
         }
         Action::SendMulti(cmds) => {
             if send_enabled {
-                send_conn_commands(cmd_tx, cmds).await;
+                send_conn_commands(app, cmd_tx, cmds).await;
             } else {
                 app.set_status("fixture mode: command ignored");
             }
@@ -1037,11 +1192,7 @@ async fn handle_action(
         }
         Action::OpenInEditor => {
             let last_reply = app.last_assistant_text();
-            drop(open_in_editor(
-                terminal,
-                &mut app.input,
-                last_reply.as_deref(),
-            ));
+            open_in_editor(terminal, &mut app.input, last_reply.as_deref())?;
             Ok(true)
         }
         Action::PickImage(start_dir) => {
@@ -1090,12 +1241,55 @@ async fn handle_action(
         Action::SendAndSavePrefs(cmds) => {
             save_prefs(app);
             if send_enabled {
-                send_conn_commands(cmd_tx, cmds).await;
+                send_conn_commands(app, cmd_tx, cmds).await;
             }
             Ok(true)
         }
         Action::Redraw => Ok(true),
         Action::None => Ok(false),
+    }
+}
+
+struct TerminalSession {
+    was_raw: bool,
+}
+
+impl TerminalSession {
+    fn enter() -> io::Result<Self> {
+        let session = Self {
+            was_raw: crossterm::terminal::is_raw_mode_enabled()?,
+        };
+        let was_raw = session.was_raw;
+        let previous_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            restore_terminal(was_raw);
+            previous_hook(info);
+        }));
+        enable_raw_mode()?;
+        execute!(
+            io::stdout(),
+            EnterAlternateScreen,
+            DisableLineWrap,
+            EnableBracketedPaste
+        )?;
+        Ok(session)
+    }
+}
+
+fn restore_terminal(was_raw: bool) {
+    let _paste = execute!(io::stdout(), DisableBracketedPaste);
+    let _wrap = execute!(io::stdout(), EnableLineWrap);
+    let _screen = execute!(io::stdout(), LeaveAlternateScreen, crossterm::cursor::Show);
+    if was_raw {
+        let _raw = enable_raw_mode();
+    } else {
+        let _raw = disable_raw_mode();
+    }
+}
+
+impl Drop for TerminalSession {
+    fn drop(&mut self) {
+        restore_terminal(self.was_raw);
     }
 }
 
@@ -1106,13 +1300,7 @@ async fn run_tui(
     thread: Option<String>,
     debug: TuiDebugConfig,
 ) -> io::Result<std::process::ExitCode> {
-    enable_raw_mode()?;
-    execute!(
-        io::stdout(),
-        EnterAlternateScreen,
-        DisableLineWrap,
-        EnableBracketedPaste
-    )?;
+    let terminal_session = TerminalSession::enter()?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
@@ -1130,6 +1318,8 @@ async fn run_tui(
     } else {
         App {
             connection_status: ConnectionStatus::Connecting,
+            character_name: resolved_character.clone().unwrap_or_default(),
+            thread_name: resolved_thread.clone().unwrap_or_default(),
             ..App::default()
         }
     };
@@ -1139,7 +1329,17 @@ async fn run_tui(
     if !fixture_mode {
         load_prefs(&mut app);
         load_keymap(&mut app);
-        restore_draft(&mut app, &draft::drafts_dir());
+        let root = draft::drafts_dir();
+        app.persist_session = true;
+        app.draft_daemon = addr
+            .clone()
+            .or_else(|| {
+                shore_common::swp_client::discover_or_default(None)
+                    .ok()
+                    .map(|address| address.0)
+            })
+            .unwrap_or_default();
+        initialize_drafts(&mut app, root);
     }
 
     let (cmd_tx, mut event_rx) = if fixture_mode {
@@ -1158,7 +1358,7 @@ async fn run_tui(
     notif_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut draft_tick = tokio::time::interval(DRAFT_AUTOSAVE_INTERVAL);
     draft_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let mut saved_draft = app.input.text.clone();
+    let mut saved_draft = draft_snapshot(&app);
     let mut needs_redraw = true;
     let mut deferred_stream_dirty = false;
     let mut needs_full_redraw = false;
@@ -1259,10 +1459,13 @@ async fn run_tui(
                     needs_redraw = true;
                 }
             }
-            _ = draft_tick.tick(), if !fixture_mode => {
-                if saved_draft != app.input.text {
-                    save_draft(&app, &draft::drafts_dir());
-                    saved_draft.clone_from(&app.input.text);
+            _ = draft_tick.tick(), if app.draft_root.is_some() => {
+                let snapshot = draft_snapshot(&app);
+                if saved_draft != snapshot
+                    && let Some(root) = &app.draft_root
+                    && save_draft(&app, root)
+                {
+                    saved_draft = snapshot;
                 }
             }
         }
@@ -1275,17 +1478,23 @@ async fn run_tui(
     info!("TUI exiting");
     if !fixture_mode {
         save_prefs(&app);
-        save_draft(&app, &draft::drafts_dir());
-        drop(cmd_tx.send(ConnCommand::Shutdown).await);
+        if let Some(root) = &app.draft_root {
+            let _saved = save_draft(&app, root);
+        }
+        drop(cmd_tx.try_send(ConnCommand::Shutdown));
     }
 
     for path in &app.paste_temp_paths {
-        drop(std::fs::remove_file(path));
+        if !app
+            .pending_images
+            .iter()
+            .any(|image| Path::new(image) == path)
+        {
+            drop(std::fs::remove_file(path));
+        }
     }
 
-    execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
-    disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen)?;
+    drop(terminal_session);
 
     #[expect(
         clippy::print_stderr,
@@ -1317,6 +1526,11 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             selected_thread,
             ..
         } => {
+            adopt_conversation(
+                app,
+                selected_character.as_deref(),
+                selected_thread.as_deref(),
+            );
             let has_selected_character = selected_character.is_some();
             let next_character = selected_character.unwrap_or_default();
             if app.character_name != next_character {
@@ -1334,6 +1548,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             app.character_name = next_character;
             app.thread_name = selected_thread.unwrap_or_default();
+            persist_conversation(app);
 
             if let Some(private) = config.get("private").and_then(serde_json::Value::as_bool) {
                 app.is_private = private;
@@ -1358,7 +1573,16 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
         }
 
         ConnEvent::SendFailed(message) => {
-            prepare_for_reconnect(app);
+            let rid = match &message {
+                ClientMessage::Message(body) => body.rid.as_deref(),
+                ClientMessage::Regen(regen) => regen.rid.as_deref(),
+                ClientMessage::Command(command) => command.rid.as_deref(),
+                ClientMessage::Hello(_) | ClientMessage::Cancel(_) => None,
+            };
+            if app.stale_request(rid) {
+                app.set_error("a request from the previous conversation could not be sent");
+                return UiEffect::redraw(RedrawEffect::Immediate);
+            }
             restore_failed_send(app, ConnCommand::Send(message));
             UiEffect::redraw(RedrawEffect::Immediate)
         }
@@ -1474,6 +1698,7 @@ fn count_user_turns(messages: &[Message]) -> usize {
 }
 
 fn reset_history_paging(app: &mut App) {
+    app.pending_history_page = None;
     app.history_next_before = None;
     app.history_has_more_before = true;
     app.history_page_loading = false;
@@ -1678,7 +1903,11 @@ fn restore_unpersisted_user_draft(app: &mut App) -> bool {
         return false;
     };
     app.input.set_text(turn.joined_text());
-    app.pending_images = turn.images.into_iter().map(|image| image.path).collect();
+    app.pending_images = turn
+        .images
+        .into_iter()
+        .map(|image| restore_image_path(app, image.path, image.data.as_deref()))
+        .collect();
     true
 }
 
@@ -1847,6 +2076,9 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
         return UiEffect::redraw(RedrawEffect::None);
     };
     let idx = app.subagent_task_index(&task_id, name.as_deref());
+    if let Some(task) = app.subagent_tasks.get_mut(idx) {
+        task.parent_request_id = msg.request_id().map(str::to_owned);
+    }
 
     match msg {
         ServerMessage::StreamChunk(chunk) => {
@@ -2109,13 +2341,62 @@ fn route_compaction_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
 }
 
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
+    let navigation_response = app
+        .pending_navigation
+        .as_deref()
+        .is_some_and(|rid| Some(rid) == msg.request_id());
+    if !navigation_response && app.stale_request(msg.request_id()) {
+        return UiEffect::redraw(RedrawEffect::None);
+    }
+    if app.pending_navigation.is_some()
+        && matches!(msg, ServerMessage::History(_))
+        && !navigation_response
+    {
+        return UiEffect::redraw(RedrawEffect::None);
+    }
+    if navigation_response
+        && matches!(
+            msg,
+            ServerMessage::CommandOutput(_) | ServerMessage::Error(_)
+        )
+    {
+        app.pending_navigation = None;
+    }
     if is_compaction_frame(&msg) {
         return route_compaction_frame(app, msg);
     }
     if msg.task_id().is_some() || msg.subagent().is_some() {
+        let known_task = app
+            .subagent_tasks
+            .iter()
+            .find(|task| Some(task.task_id.as_str()) == msg.task_id());
+        let expected = known_task.map_or(app.stream.rid.as_deref(), |task| {
+            task.parent_request_id.as_deref()
+        });
+        if expected != msg.request_id() {
+            return UiEffect::redraw(RedrawEffect::None);
+        }
         return route_subagent_task_frame(app, msg);
     }
-
+    let stream_frame = matches!(
+        msg,
+        ServerMessage::StreamChunk(_)
+            | ServerMessage::StreamEnd(_)
+            | ServerMessage::ToolCall(_)
+            | ServerMessage::ToolResult(_)
+            | ServerMessage::Phase(_)
+    );
+    if stream_frame || matches!(msg, ServerMessage::StreamStart(_)) {
+        if app.stream.active {
+            if app.stream.rid.as_deref() != msg.request_id() {
+                return UiEffect::redraw(RedrawEffect::None);
+            }
+        } else {
+            if stream_frame {
+                return UiEffect::redraw(RedrawEffect::None);
+            }
+        }
+    }
     let redraw = match msg {
         ServerMessage::StreamStart(start) => {
             app.spinner_frame = 0;
@@ -2154,6 +2435,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
 
             let keep_bottom = app.auto_scroll;
+            app.history_version = app.history_version.wrapping_add(1);
             app.set_active_model(Some(&end.metadata.model));
             app.tokens = end.metadata.tokens.clone();
 
@@ -2407,6 +2689,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     }
                 }
                 "history_page" => {
+                    if app.pending_history_page.as_deref() != co.rid.as_deref()
+                        || app.pending_history_page.is_none()
+                    {
+                        return UiEffect::redraw(RedrawEffect::None);
+                    }
+                    app.pending_history_page = None;
                     prepend_history_page(app, &co.data);
                     return UiEffect {
                         cmds: subagent_trace_fetch(app),
@@ -2517,7 +2805,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     };
                     let changed =
                         co.data.get("changed").and_then(serde_json::Value::as_bool) == Some(true);
-                    app.thread_name.clone_from(&name);
+                    adopt_conversation(app, None, Some(&name));
                     if !app.character_name.is_empty() {
                         let _persisted =
                             crate::state::write_active_thread(&app.character_name, &name);
@@ -2539,7 +2827,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 "switch_character" => {
                     if let Some(name) = co.data.get("character").and_then(|v| v.as_str()) {
-                        app.character_name = name.to_owned();
+                        adopt_conversation(app, Some(name), None);
                         persist_active_character(name);
                     }
                     app.subagent_traces.clear();
@@ -2721,7 +3009,13 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         app.update_completions();
                     }
                 }
-                "switch_model" => {
+                "switch_model"
+                    if co
+                        .data
+                        .get("role")
+                        .and_then(serde_json::Value::as_str)
+                        .is_none_or(|role| role == "chat") =>
+                {
                     let active_name = co
                         .data
                         .get("active")
@@ -2754,7 +3048,13 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     let verb = if favorite { "favorited" } else { "unfavorited" };
                     app.set_status(format!("{verb} {}", crate::output::abbreviate_model(name)));
                 }
-                "reset_model" => {
+                "reset_model"
+                    if co
+                        .data
+                        .get("role")
+                        .and_then(serde_json::Value::as_str)
+                        .is_none_or(|role| role == "chat") =>
+                {
                     app.set_active_model(None);
                     app.effective_sampler = None;
                     app.set_status("model reset to default");
@@ -2981,6 +3281,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::History(hist) => {
+            adopt_conversation(
+                app,
+                hist.selected_character.as_deref(),
+                hist.selected_thread.as_deref(),
+            );
             if let Some(delta) = hist.delta {
                 let keep_position = match delta.after.as_deref() {
                     Some(id) => app
@@ -5255,6 +5560,15 @@ mod redraw_tests {
     #[test]
     fn final_stream_end_requests_full_redraw() {
         let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
         let effect = handle_server_message(
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
@@ -5366,6 +5680,15 @@ mod redraw_tests {
     #[test]
     fn tool_use_stream_end_keeps_regular_redraw() {
         let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
         let effect = handle_server_message(
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
@@ -5424,6 +5747,15 @@ mod redraw_tests {
     #[test]
     fn stream_chunk_effect_is_deferred() {
         let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
         let effect = handle_server_message(
             &mut app,
             ServerMessage::StreamChunk(StreamChunk {
@@ -5442,6 +5774,15 @@ mod redraw_tests {
     fn final_stream_end_attaches_metadata_by_msg_id_when_available() {
         let target_meta = metadata();
         let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
         app.entries.push(ConversationEntry::assistant(
             Some("m_target".into()),
             "target".into(),
@@ -5494,6 +5835,15 @@ mod redraw_tests {
     #[test]
     fn final_stream_end_with_unmatched_msg_id_does_not_annotate_latest_assistant() {
         let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+                subagent: None,
+                task_id: None,
+            }),
+        );
         app.entries.push(ConversationEntry::assistant(
             Some("m_existing".into()),
             "existing".into(),
@@ -5573,6 +5923,7 @@ mod send_failure_tests {
         app.stream.active = true;
 
         let _ = handle_conn_event(&mut app, ConnEvent::SendFailed(failed_message()));
+        let _ = handle_conn_event(&mut app, ConnEvent::Disconnected("send failed".into()));
 
         assert!(matches!(
             app.connection_status,
@@ -5607,7 +5958,7 @@ mod draft_lifecycle_tests {
         leaving
             .input
             .set_text("the thing I was halfway through saying".to_owned());
-        save_draft(&leaving, tmp.path());
+        assert!(save_draft(&leaving, tmp.path()));
 
         let mut arriving = App::default();
         restore_draft(&mut arriving, tmp.path());
@@ -5631,7 +5982,7 @@ mod draft_lifecycle_tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut leaving = App::default();
         leaving.input.set_text("keep me".to_owned());
-        save_draft(&leaving, tmp.path());
+        assert!(save_draft(&leaving, tmp.path()));
 
         let mut arriving = App::default();
         restore_draft(&mut arriving, tmp.path());
@@ -5648,10 +5999,10 @@ mod draft_lifecycle_tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut app = App::default();
         app.input.set_text("about to send".to_owned());
-        save_draft(&app, tmp.path());
+        assert!(save_draft(&app, tmp.path()));
 
         let _sent = app.input.take_text();
-        save_draft(&app, tmp.path());
+        assert!(save_draft(&app, tmp.path()));
 
         let mut next = App::default();
         restore_draft(&mut next, tmp.path());
@@ -5714,5 +6065,369 @@ mod prefs_path_tests {
 
         assert!(migrate_prefs(&data, &[missing]).is_none());
         assert!(!data.exists());
+    }
+}
+
+#[cfg(test)]
+mod reliability_tests {
+    use super::*;
+    use serde_json::json;
+    fn frame(value: serde_json::Value) -> ServerMessage {
+        serde_json::from_value(value).unwrap()
+    }
+    fn msg(id: &str, text: &str) -> serde_json::Value {
+        json!({"msg_id":id,"role":"assistant","content":text,"timestamp":"2026-09-10T00:00:00Z"})
+    }
+    fn history(thread: &str, messages: serde_json::Value) -> ServerMessage {
+        frame(
+            json!({"type":"history","selected_character":"ada","selected_thread":thread,"messages":messages,"config":{},"revision":1}),
+        )
+    }
+    #[test]
+    fn switch_retires_stream_and_edit() {
+        let mut app = App {
+            character_name: "ada".into(),
+            thread_name: "main".into(),
+            ..App::default()
+        };
+        app.start_editing("last".into(), "old edit".into());
+        let _ = handle_server_message(&mut app, frame(json!({"type":"stream_start","rid":"old"})));
+        let _ = handle_server_message(
+            &mut app,
+            frame(json!({"type":"stream_chunk","rid":"old","text":"unfinished"})),
+        );
+        let _ = handle_server_message(
+            &mut app,
+            history("side", json!([msg("side-reply", "side original")])),
+        );
+        assert!(app.editing_ref.is_none());
+        assert!(
+            !app.entries
+                .last()
+                .unwrap()
+                .as_turn()
+                .unwrap()
+                .is_streaming()
+        );
+        let _ = handle_server_message(
+            &mut app,
+            frame(json!({"type":"stream_chunk","rid":"old","text":" OLD CONTINUATION"})),
+        );
+        assert_eq!(
+            app.entries.last().unwrap().as_turn().unwrap().joined_text(),
+            "side original"
+        );
+    }
+    #[test]
+    fn stale_cancel_preserves_new_request() {
+        let mut app = App::default();
+        let _ = handle_server_message(&mut app, frame(json!({"type":"stream_start","rid":"new"})));
+        let _ = handle_server_message(
+            &mut app,
+            frame(json!({"type":"stream_chunk","rid":"new","text":"new reply"})),
+        );
+        let _ = handle_server_message(
+            &mut app,
+            frame(
+                json!({"type":"stream_end","rid":"old","content":"","finish_reason":"cancelled","is_final":true,"metadata":{"tokens":{"input":0,"output":0,"cache_read":0,"cache_write":0},"timing":{"total_ms":0,"ttft_ms":0},"model":"test"}}),
+            ),
+        );
+        assert!(app.stream.active);
+        assert_eq!(
+            app.entries.last().unwrap().as_turn().unwrap().joined_text(),
+            "new reply"
+        );
+    }
+    #[test]
+    fn edit_prefill_pins_message_id() {
+        let mut app = App::default();
+        let rid = app.begin_edit_prefill("last");
+        let _ = handle_server_message(
+            &mut app,
+            frame(
+                json!({"type":"command_output","name":"get","rid":rid,"data":msg("stable-message-id","original")}),
+            ),
+        );
+        assert_eq!(app.editing_ref.as_deref(), Some("stable-message-id"));
+        app.input.set_text("replacement".into());
+        let action = input::handle_event(
+            &mut app,
+            crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+                crossterm::event::KeyCode::Enter,
+                crossterm::event::KeyModifiers::NONE,
+            )),
+        );
+        let Action::SendMulti(commands) = action else {
+            panic!("expected edit")
+        };
+        let ConnCommand::Send(ClientMessage::Command(cmd)) = commands.first().unwrap() else {
+            panic!("expected command")
+        };
+        assert_eq!(cmd.args.get("ref").unwrap(), "stable-message-id");
+    }
+    #[test]
+    fn unsolicited_history_page_cannot_enter_current_thread() {
+        let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            history("side", json!([msg("side-reply", "side original")])),
+        );
+        let _ = handle_server_message(
+            &mut app,
+            frame(
+                json!({"type":"command_output","name":"history_page","data":{"messages":[msg("main-old","wrong thread page")],"active_start":1,"has_more_before":false}}),
+            ),
+        );
+        assert!(
+            !app.entries
+                .iter()
+                .filter_map(ConversationEntry::as_turn)
+                .any(|t| t.joined_text() == "wrong thread page")
+        );
+    }
+    #[test]
+    fn long_transcript_shows_its_tail() {
+        let mut app = App::default();
+        let body = (0..66000)
+            .map(|n| format!("line {n}\n"))
+            .collect::<String>()
+            + "TAIL_SENTINEL";
+        app.entries = build_history_entries(
+            vec![serde_json::from_value(msg("long", &format!("```\n{body}\n```"))).unwrap()],
+            0,
+        );
+        let rendered = render_app_to_string(&mut app, 80, 24).unwrap();
+        assert!(app.conv_cache.lines.len() > 65535);
+        assert!(app.conv_cache.content_visual > 65535);
+        assert!(rendered.contains("TAIL_SENTINEL"));
+    }
+    #[test]
+    fn draft_save_retains_attachment_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = App::default();
+        app.input.set_text("unsent with image".into());
+        app.pending_images.push("/tmp/image.png".into());
+        assert!(save_draft(&app, tmp.path()));
+        let mut resumed = App::default();
+        restore_draft(&mut resumed, tmp.path());
+        assert_eq!(resumed.input.text, "unsent with image");
+        assert_eq!(resumed.pending_images, app.pending_images);
+    }
+}
+
+#[cfg(test)]
+mod reliability_input_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn background_model_preserves_chat_model_display() {
+        let mut app = App::default();
+        app.set_active_model(Some("provider:chat"));
+        let frame=serde_json::from_value(json!({"type":"command_output","name":"switch_model","data":{"active":"provider:background","role":"heartbeat","config_key":"defaults.background.heartbeat","changed":true}})).unwrap();
+        let _ = handle_server_message(&mut app, frame);
+        assert_eq!(app.model, "provider:chat");
+    }
+    #[test]
+    fn paste_in_command_palette_stays_in_palette() {
+        let mut app = App::default();
+        app.input.enter_command_mode();
+        app.input.cmd_text = "model use ".into();
+        app.input.cmd_cursor = 10;
+        let _ = input::handle_event(
+            &mut app,
+            crossterm::event::Event::Paste("provider:model".into()),
+        );
+        assert_eq!(app.input.mode, app::InputMode::Command);
+        assert_eq!(app.input.cmd_text, "model use provider:model");
+        assert!(app.input.text.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod conversation_reliability_tests {
+    use super::{
+        App, ConversationEntry, ServerMessage, adopt_conversation, draft, handle_server_message,
+        render_app_to_string, send_conn_command,
+    };
+    use crate::tui::app::OutputPager;
+    use serde_json::json;
+    use shore_common::protocol::client_msg::{ClientMessage, Command};
+    use shore_common::swp_client::ConnCommand;
+
+    fn frame(value: serde_json::Value) -> ServerMessage {
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn a_switch_discards_old_page_and_catalog_responses_but_accepts_new_ones() {
+        let mut app = App {
+            character_name: "ada".into(),
+            thread_name: "main".into(),
+            ..App::default()
+        };
+        let page_rid = app.next_request_id("history_page");
+        app.pending_history_page = Some(page_rid.clone());
+        app.history_page_loading = true;
+        let catalog_rid = app.begin_palette_catalog_request("models");
+        let _effect = handle_server_message(
+            &mut app,
+            frame(
+                json!({"type":"history", "selected_character":"ada", "selected_thread":"side", "messages":[], "config":{}, "revision":2}),
+            ),
+        );
+        let _page = handle_server_message(
+            &mut app,
+            frame(
+                json!({"type":"command_output", "name":"history_page", "rid":page_rid, "data":{"messages":[{"msg_id":"wrong", "role":"assistant", "content":"wrong conversation", "timestamp":""}]}}),
+            ),
+        );
+        let _catalog = handle_server_message(
+            &mut app,
+            frame(
+                json!({"type":"command_output", "name":"list_models", "rid":catalog_rid, "data":{"models":{"wrong":[{"id":"wrong-model"}]}}}),
+            ),
+        );
+        assert!(app.entries.is_empty());
+        assert!(app.model_names.is_empty());
+        assert!(app.pending_palette_catalog.is_empty());
+        assert!(!app.history_page_loading);
+        let fresh = app.next_request_id("history_page");
+        app.pending_history_page = Some(fresh.clone());
+        let _new_page = handle_server_message(
+            &mut app,
+            frame(
+                json!({"type":"command_output", "name":"history_page", "rid":fresh, "data":{"messages":[{"msg_id":"right", "role":"assistant", "content":"right conversation", "timestamp":""}], "active_start":0, "has_more_before":false}}),
+            ),
+        );
+        assert_eq!(
+            app.entries
+                .iter()
+                .find_map(ConversationEntry::as_turn)
+                .unwrap()
+                .joined_text(),
+            "right conversation"
+        );
+    }
+
+    #[test]
+    fn conversation_switches_restore_their_own_editor_and_attachments() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = App {
+            draft_root: Some(tmp.path().to_path_buf()),
+            draft_daemon: "localhost:9090".into(),
+            character_name: "ada".into(),
+            thread_name: "main".into(),
+            ..App::default()
+        };
+        app.draft_lock = Some(draft::lock_session(tmp.path(), &app.request_prefix).unwrap());
+        app.start_editing("stable-message-id".into(), "edit in progress".into());
+        app.pending_images.push("attachment.png".into());
+        adopt_conversation(&mut app, None, Some("side"));
+        assert!(app.input.text.is_empty());
+        assert!(app.pending_images.is_empty());
+        assert!(app.editing_ref.is_none());
+        app.input.set_text("side draft".into());
+        adopt_conversation(&mut app, None, Some("main"));
+        assert_eq!(app.input.text, "edit in progress");
+        assert_eq!(app.pending_images, ["attachment.png"]);
+        assert_eq!(app.editing_ref.as_deref(), Some("stable-message-id"));
+        adopt_conversation(&mut app, None, Some("side"));
+        assert_eq!(app.input.text, "side draft");
+    }
+
+    #[test]
+    fn stale_chunks_tools_and_starts_cannot_mutate_a_new_reply() {
+        let mut app = App::default();
+        let _start =
+            handle_server_message(&mut app, frame(json!({"type":"stream_start", "rid":"new"})));
+        let _chunk = handle_server_message(
+            &mut app,
+            frame(json!({"type":"stream_chunk", "rid":"new", "text":"keep this"})),
+        );
+        for stale in [
+            json!({"type":"stream_start", "rid":"old", "regen":true}),
+            json!({"type":"stream_chunk", "rid":"old", "text":"wrong"}),
+            json!({"type":"tool_call", "rid":"old", "tool_id":"old-tool", "tool_name":"wrong", "input":{}}),
+            json!({"type":"tool_result", "rid":"old", "tool_id":"old-tool", "tool_name":"wrong", "output":"wrong"}),
+            json!({"type":"stream_chunk", "rid":"old", "task_id":"old-task", "subagent":"wrong", "text":"wrong"}),
+        ] {
+            let _effect = handle_server_message(&mut app, frame(stale));
+        }
+        assert_eq!(
+            app.entries.last().unwrap().as_turn().unwrap().joined_text(),
+            "keep this"
+        );
+        assert_eq!(app.stream.rid.as_deref(), Some("new"));
+        assert!(app.subagent_tasks.is_empty());
+    }
+
+    #[test]
+    fn spinner_updates_preserve_settled_text_allocations() {
+        let mut app = App::default();
+        app.entries.push(ConversationEntry::user(
+            "settled message".into(),
+            vec![],
+            "".into(),
+        ));
+        let _start = handle_server_message(
+            &mut app,
+            frame(json!({"type":"stream_start", "rid":"live"})),
+        );
+        let _first = render_app_to_string(&mut app, 80, 24).unwrap();
+        let allocation = |state: &App| {
+            state
+                .conv_cache
+                .lines
+                .iter()
+                .flat_map(|line| &line.spans)
+                .find(|span| span.content.contains("settled message"))
+                .unwrap()
+                .content
+                .as_ptr()
+        };
+        let before = allocation(&app);
+        assert_eq!(app.conv_cache.settled_entries, 1);
+        app.spinner_frame = 1;
+        let _second = render_app_to_string(&mut app, 80, 24).unwrap();
+        assert_eq!(allocation(&app), before);
+    }
+
+    #[test]
+    fn the_output_pager_can_reach_past_the_terminal_integer_limit() {
+        let mut app = App::default();
+        let mut lines = vec![ratatui::text::Line::from("line"); 66_000];
+        lines.push(ratatui::text::Line::from("PAGER_TAIL"));
+        app.output_pager = Some(OutputPager {
+            command: "status".into(),
+            lines,
+            scroll: 0,
+            viewport: 1,
+        });
+        app.scroll_output_pager(i32::MAX);
+        let rendered = render_app_to_string(&mut app, 80, 24).unwrap();
+        assert!(rendered.contains("PAGER_TAIL"));
+    }
+
+    #[tokio::test]
+    async fn full_command_queue_does_not_block_input_or_leave_pending_navigation() {
+        let mut app = App::default();
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        tx.try_send(ConnCommand::Shutdown).unwrap();
+        tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            send_conn_command(
+                &mut app,
+                &tx,
+                ConnCommand::Send(ClientMessage::Command(Command {
+                    rid: None,
+                    name: "switch_thread".into(),
+                    args: json!({"name":"side"}),
+                })),
+            ),
+        )
+        .await
+        .unwrap();
+        assert!(app.pending_navigation.is_none());
+        assert!(!app.error_log.is_empty());
     }
 }

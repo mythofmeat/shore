@@ -1,4 +1,4 @@
-use std::io::{self, IsTerminal, Write};
+use std::io::Write;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Instant;
 
@@ -47,7 +47,7 @@ impl StreamSpinner {
                 active: false,
             })),
             handle: None,
-            is_terminal: io::stdout().is_terminal(),
+            is_terminal: crate::output::stdout().is_terminal(),
             cleared: false,
         }
     }
@@ -81,7 +81,7 @@ impl StreamSpinner {
                     let model_abbrev = s.model.as_deref().map(abbreviate_model);
                     format_spinner_line(&s.phase, model_abbrev, elapsed)
                 };
-                let stdout = io::stdout();
+                let stdout = crate::output::stdout();
                 let mut out = stdout.lock();
                 let _ignored = write!(out, "\r");
                 _ = crossterm::execute!(out, Clear(ClearType::CurrentLine));
@@ -118,7 +118,7 @@ impl StreamSpinner {
             let _ignored = h.await;
         }
         if self.is_terminal {
-            let stdout = io::stdout();
+            let stdout = crate::output::stdout();
             let mut out = stdout.lock();
             let _ignored = write!(out, "\r");
             _ = crossterm::execute!(out, Clear(ClearType::CurrentLine));

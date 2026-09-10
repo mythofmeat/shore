@@ -246,7 +246,7 @@ impl EffectiveSamplerSnapshot {
 pub(crate) struct OutputPager {
     pub command: String,
     pub lines: Vec<Line<'static>>,
-    pub scroll: u16,
+    pub scroll: usize,
     pub viewport: u16,
 }
 
@@ -279,12 +279,22 @@ pub(crate) struct ImageEntry {
 }
 
 pub(crate) struct App {
+    pub persist_session: bool,
+    pub draft_daemon: String,
+    pub draft_lock: Option<std::fs::File>,
+    pub draft_root: Option<std::path::PathBuf>,
+    pub request_prefix: String,
+    pub request_epoch: u64,
+    pub request_seq: u64,
+    pub retired_streams: std::collections::HashSet<String>,
+    pub pending_navigation: Option<String>,
+    pub pending_history_page: Option<String>,
     pub entries: Vec<ConversationEntry>,
     pub stream: StreamState,
     pub input: InputState,
     pub completion: CompletionState,
     pub alt_picker: Option<AltPickerState>,
-    pub scroll_offset: u16,
+    pub scroll_offset: usize,
     pub connection_status: ConnectionStatus,
     pub character_name: String,
     pub characters: Vec<CharacterInfo>,
@@ -292,7 +302,6 @@ pub(crate) struct App {
     pub home_thread: String,
     pub threads: Vec<ThreadRow>,
     pub pending_thread_refresh_rid: Option<String>,
-    pub thread_refresh_seq: u64,
     pub model_names: Vec<String>,
     pub favorite_model_names: Vec<String>,
     pub subscription_model_names: Vec<String>,
@@ -302,9 +311,7 @@ pub(crate) struct App {
     pub effective_sampler: Option<EffectiveSamplerSnapshot>,
     pub sampler_settings_loading: bool,
     pub pending_sampler_settings_rid: Option<String>,
-    pub sampler_settings_request_seq: u64,
     pub pending_palette_commands: std::collections::HashMap<String, String>,
-    pub palette_command_request_seq: u64,
     pub palette_catalog: crate::cli::PaletteCatalog,
     pub palette_catalog_loaded: bool,
     pub pending_palette_catalog: std::collections::HashMap<String, String>,
@@ -315,7 +322,7 @@ pub(crate) struct App {
     pub should_quit: bool,
     pub interrupt: bool,
     pub auto_scroll: bool,
-    pub conversation_max_scroll: u16,
+    pub conversation_max_scroll: usize,
     pub grew_above_viewport: bool,
     pub history_next_before: Option<usize>,
     pub history_has_more_before: bool,
@@ -344,7 +351,6 @@ pub(crate) struct App {
     pub paste_temp_paths: Vec<std::path::PathBuf>,
     pub editing_ref: Option<String>,
     pub pending_edit_prefill: Option<PendingEditPrefill>,
-    pub edit_prefill_seq: u64,
     pub image_index: Vec<ImageEntry>,
     pub fullscreen: Option<usize>,
     pub spinner_frame: usize,
@@ -357,6 +363,16 @@ pub(crate) struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
+            persist_session: false,
+            draft_daemon: String::new(),
+            draft_lock: None,
+            draft_root: None,
+            request_prefix: shore_common::swp_client::connection::request_id(),
+            request_epoch: 0,
+            request_seq: 0,
+            retired_streams: std::collections::HashSet::new(),
+            pending_navigation: None,
+            pending_history_page: None,
             entries: Vec::new(),
             stream: StreamState::default(),
             input: InputState::default(),
@@ -370,7 +386,6 @@ impl Default for App {
             home_thread: String::new(),
             threads: Vec::new(),
             pending_thread_refresh_rid: None,
-            thread_refresh_seq: 0,
             model_names: Vec::new(),
             favorite_model_names: Vec::new(),
             subscription_model_names: Vec::new(),
@@ -380,9 +395,7 @@ impl Default for App {
             effective_sampler: None,
             sampler_settings_loading: false,
             pending_sampler_settings_rid: None,
-            sampler_settings_request_seq: 0,
             pending_palette_commands: std::collections::HashMap::new(),
-            palette_command_request_seq: 0,
             palette_catalog: crate::cli::PaletteCatalog::default(),
             palette_catalog_loaded: false,
             pending_palette_catalog: std::collections::HashMap::new(),
@@ -427,7 +440,6 @@ impl Default for App {
             paste_temp_paths: Vec::new(),
             editing_ref: None,
             pending_edit_prefill: None,
-            edit_prefill_seq: 0,
             image_index: Vec::new(),
             fullscreen: None,
             spinner_frame: 0,
@@ -440,6 +452,50 @@ impl Default for App {
 }
 
 impl App {
+    pub(crate) fn next_request_id(&mut self, kind: &str) -> String {
+        self.request_seq = self.request_seq.wrapping_add(1);
+        format!(
+            "{}_{}_{}_{kind}",
+            self.request_prefix, self.request_epoch, self.request_seq
+        )
+    }
+
+    pub(crate) fn stale_request(&self, rid: Option<&str>) -> bool {
+        rid.is_some_and(|id| {
+            self.retired_streams.contains(id)
+                || (id.starts_with(&format!("{}_", self.request_prefix))
+                    && !id.starts_with(&format!("{}_{}_", self.request_prefix, self.request_epoch)))
+        })
+    }
+
+    pub(crate) fn retire_operations(&mut self) {
+        if let Some(rid) = self.stream.rid.take() {
+            let _ = self.retired_streams.insert(rid);
+        }
+        self.abort_stream();
+        self.request_epoch = self.request_epoch.wrapping_add(1);
+        self.pending_navigation = None;
+        self.pending_history_page = None;
+        self.history_page_loading = false;
+        self.pending_edit_prefill = None;
+        self.pending_thread_refresh_rid = None;
+        self.pending_sampler_settings_rid = None;
+        self.sampler_settings_loading = false;
+        self.pending_palette_commands.clear();
+        self.invalidate_palette_catalog();
+        self.pending_subagent_trace_ids.clear();
+        self.subagent_traces.clear();
+        self.subagent_tasks.clear();
+        self.subagent_panel = None;
+        self.compaction = None;
+        self.palette_confirmation = None;
+        self.confirmed_palette_command = None;
+        self.alt_picker = None;
+        self.output_pager = None;
+        self.fullscreen = None;
+        self.completion.clear();
+    }
+
     pub(crate) fn conversation_fingerprint(&self, width: u16) -> ConvFingerprint {
         fn block_summary(b: &Block) -> u64 {
             match b {
@@ -527,12 +583,12 @@ impl App {
         }
     }
 
-    pub(crate) fn scroll_up(&mut self, amount: u16) {
+    pub(crate) fn scroll_up(&mut self, amount: usize) {
         self.scroll_offset = self.scroll_offset.saturating_add(amount);
         self.auto_scroll = false;
     }
 
-    pub(crate) fn scroll_down(&mut self, amount: u16) {
+    pub(crate) fn scroll_down(&mut self, amount: usize) {
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
         if self.scroll_offset == 0 {
             self.auto_scroll = true;
@@ -596,6 +652,7 @@ impl App {
         let Some(task) = self.subagent_tasks.get_mut(idx) else {
             return;
         };
+        task.parent_request_id.clone_from(&self.stream.rid);
         task.query = query;
         task.status = "running".to_owned();
         task.detail = None;
@@ -777,8 +834,7 @@ impl App {
     }
 
     pub(crate) fn begin_edit_prefill(&mut self, msg_ref: &str) -> String {
-        self.edit_prefill_seq = self.edit_prefill_seq.wrapping_add(1);
-        let rid = format!("tui_edit_prefill_{}", self.edit_prefill_seq);
+        let rid = self.next_request_id("edit_prefill");
         self.pending_edit_prefill = Some(PendingEditPrefill {
             rid: rid.clone(),
             msg_ref: msg_ref.to_owned(),
@@ -799,8 +855,7 @@ impl App {
     }
 
     pub(crate) fn begin_palette_command(&mut self, command: &str) -> String {
-        self.palette_command_request_seq = self.palette_command_request_seq.wrapping_add(1);
-        let rid = format!("tui_palette_{}", self.palette_command_request_seq);
+        let rid = self.next_request_id("palette");
         let _ = self
             .pending_palette_commands
             .insert(rid.clone(), command.to_owned());
@@ -808,8 +863,7 @@ impl App {
     }
 
     pub(crate) fn begin_palette_catalog_request(&mut self, kind: &str) -> String {
-        self.palette_command_request_seq = self.palette_command_request_seq.wrapping_add(1);
-        let rid = format!("tui_palette_catalog_{}", self.palette_command_request_seq);
+        let rid = self.next_request_id("palette_catalog");
         let _ = self
             .pending_palette_catalog
             .insert(rid.clone(), kind.to_owned());
@@ -860,10 +914,17 @@ impl App {
         let Some(pager) = &mut self.output_pager else {
             return;
         };
-        let total = u16::try_from(pager.lines.len()).unwrap_or(u16::MAX);
-        let last = total.saturating_sub(pager.viewport.max(1));
-        let next = i64::from(pager.scroll).saturating_add(i64::from(delta));
-        pager.scroll = next.clamp(0, i64::from(last)).try_into().unwrap_or(0);
+        let last = pager
+            .lines
+            .len()
+            .saturating_sub(usize::from(pager.viewport.max(1)));
+        let amount = usize::try_from(delta.unsigned_abs()).unwrap_or(usize::MAX);
+        pager.scroll = if delta < 0 {
+            pager.scroll.saturating_sub(amount)
+        } else {
+            pager.scroll.saturating_add(amount)
+        }
+        .min(last);
     }
 
     pub(crate) fn start_editing(&mut self, msg_ref: String, content: String) {
@@ -1214,16 +1275,14 @@ impl App {
     }
 
     pub(crate) fn begin_sampler_settings_refresh(&mut self) -> String {
-        self.sampler_settings_request_seq = self.sampler_settings_request_seq.wrapping_add(1);
-        let rid = format!("tui_sampler_settings_{}", self.sampler_settings_request_seq);
+        let rid = self.next_request_id("sampler_settings");
         self.sampler_settings_loading = true;
         self.pending_sampler_settings_rid = Some(rid.clone());
         rid
     }
 
     pub(crate) fn begin_thread_refresh(&mut self) -> String {
-        self.thread_refresh_seq = self.thread_refresh_seq.wrapping_add(1);
-        let rid = format!("tui_threads_{}", self.thread_refresh_seq);
+        let rid = self.next_request_id("threads");
         self.pending_thread_refresh_rid = Some(rid.clone());
         rid
     }

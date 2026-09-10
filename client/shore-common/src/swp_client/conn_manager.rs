@@ -95,6 +95,40 @@ enum SessionOutcome {
     Reconnect,
 }
 
+async fn await_without_queueing<F: Future>(
+    future: F,
+    event_tx: &mpsc::Sender<ConnEvent>,
+    cmd_rx: &mut mpsc::Receiver<ConnCommand>,
+) -> Option<F::Output> {
+    tokio::pin!(future);
+    loop {
+        tokio::select! {
+            biased;
+            _ = event_tx.closed() => return None,
+            output = &mut future => return Some(output),
+            command = cmd_rx.recv() => match command {
+                Some(ConnCommand::Shutdown) | None => return None,
+                Some(ConnCommand::Send(message)) => {
+                    if event_tx.try_send(ConnEvent::SendFailed(message)).is_err() {
+                        return None;
+                    }
+                }
+            },
+        }
+    }
+}
+
+async fn send_event(
+    event: ConnEvent,
+    event_tx: &mpsc::Sender<ConnEvent>,
+    cmd_rx: &mut mpsc::Receiver<ConnCommand>,
+) -> bool {
+    matches!(
+        await_without_queueing(event_tx.send(event), event_tx, cmd_rx).await,
+        Some(Ok(()))
+    )
+}
+
 async fn connection_loop(
     addr: Option<String>,
     config: Option<String>,
@@ -112,27 +146,38 @@ async fn connection_loop(
             Ok(resolved) => resolved,
             Err(e) => {
                 error!(error = %e, "failed to resolve daemon address");
-                let _resolve_fail_sent = event_tx
-                    .send(ConnEvent::Disconnected(format!(
-                        "address resolution failed: {e}"
-                    )))
-                    .await;
-                sleep(backoff).await;
+                if !send_event(
+                    ConnEvent::Disconnected(format!("address resolution failed: {e}")),
+                    &event_tx,
+                    &mut cmd_rx,
+                )
+                .await
+                {
+                    return;
+                }
+                if await_without_queueing(sleep(backoff), &event_tx, &mut cmd_rx)
+                    .await
+                    .is_none()
+                {
+                    return;
+                }
                 backoff = next_backoff(backoff, max_backoff);
                 continue;
             }
         };
         info!(addr = ?resolved, client = %app_name, "attempting connection");
 
-        match SWPConnection::connect_in_thread(
+        let attempt = SWPConnection::connect_in_thread(
             &resolved,
             &client_id,
             &app_name,
             target.character.clone(),
             target.thread.clone(),
-        )
-        .await
-        {
+        );
+        let Some(result) = await_without_queueing(attempt, &event_tx, &mut cmd_rx).await else {
+            return;
+        };
+        match result {
             Ok((mut conn, hello, history)) => {
                 info!(
                     server = %hello.server_name,
@@ -147,8 +192,8 @@ async fn connection_loop(
                     history.selected_thread.as_deref(),
                 );
 
-                let _connected_sent = event_tx
-                    .send(ConnEvent::Connected {
+                if !send_event(
+                    ConnEvent::Connected {
                         server_name: hello.server_name,
                         characters: hello.characters,
                         history: history.messages,
@@ -156,8 +201,14 @@ async fn connection_loop(
                         config: history.config,
                         selected_character: history.selected_character,
                         selected_thread: history.selected_thread,
-                    })
-                    .await;
+                    },
+                    &event_tx,
+                    &mut cmd_rx,
+                )
+                .await
+                {
+                    return;
+                }
 
                 let outcome =
                     run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync_state).await;
@@ -171,9 +222,15 @@ async fn connection_loop(
             }
             Err(e) => {
                 warn!(error = %e, "connect failed");
-                let _ignored = event_tx
-                    .send(ConnEvent::Disconnected(format!("connect failed: {e}")))
-                    .await;
+                if !send_event(
+                    ConnEvent::Disconnected(format!("connect failed: {e}")),
+                    &event_tx,
+                    &mut cmd_rx,
+                )
+                .await
+                {
+                    return;
+                }
             }
         }
 
@@ -181,7 +238,12 @@ async fn connection_loop(
             backoff_ms = backoff.as_millis(),
             "reconnecting after backoff"
         );
-        sleep(backoff).await;
+        if await_without_queueing(sleep(backoff), &event_tx, &mut cmd_rx)
+            .await
+            .is_none()
+        {
+            return;
+        }
         backoff = next_backoff(backoff, max_backoff);
     }
 }
@@ -198,9 +260,17 @@ async fn run_connected_session(
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Some(ConnCommand::Send(msg)) => {
-                        if let Err(e) = conn.send(&msg).await {
+                        let Some(result) = await_without_queueing(conn.send(&msg), event_tx, cmd_rx).await else {
+                            return SessionOutcome::Exit;
+                        };
+                        if let Err(e) = result {
                             error!(error = %e, "send failed, disconnecting");
-                            let _send_fail_sent = event_tx.send(ConnEvent::SendFailed(msg)).await;
+                            if !send_event(ConnEvent::SendFailed(msg), event_tx, cmd_rx).await {
+                                return SessionOutcome::Exit;
+                            }
+                            if !send_event(ConnEvent::Disconnected(format!("send failed: {e}")), event_tx, cmd_rx).await {
+                                return SessionOutcome::Exit;
+                            }
                             return SessionOutcome::Reconnect;
                         }
                     }
@@ -218,9 +288,9 @@ async fn run_connected_session(
                 match msg {
                     Ok(ServerMessage::Shutdown(_)) => {
                         info!("server sent shutdown");
-                        let _server_shutdown_sent = event_tx.send(ConnEvent::Disconnected(
-                            "server shutdown".into()
-                        )).await;
+                        if !send_event(ConnEvent::Disconnected("server shutdown".into()), event_tx, cmd_rx).await {
+                            return SessionOutcome::Exit;
+                        }
                         return SessionOutcome::Reconnect;
                     }
                     Ok(ServerMessage::Ping(_)) => {
@@ -228,9 +298,9 @@ async fn run_connected_session(
                     Ok(server_msg) => {
                         let decision = sync_state.observe(&server_msg);
                         if matches!(decision, SyncDecision::Resync) {
-                            let _resync_sent = event_tx.send(ConnEvent::Disconnected(
-                                "history revision gap".into()
-                            )).await;
+                            if !send_event(ConnEvent::Disconnected("history revision gap".into()), event_tx, cmd_rx).await {
+                            return SessionOutcome::Exit;
+                        }
                             return SessionOutcome::Reconnect;
                         }
                         if matches!(decision, SyncDecision::DropStale) {
@@ -240,16 +310,16 @@ async fn run_connected_session(
                             );
                             continue;
                         }
-                        if event_tx.send(ConnEvent::Message(server_msg)).await.is_err() {
+                        if !send_event(ConnEvent::Message(server_msg), event_tx, cmd_rx).await {
                             debug!("event receiver dropped, exiting connection loop");
                             return SessionOutcome::Exit;
                         }
                     }
                     Err(e) => {
                         warn!(error = %e, "connection lost");
-                        let _conn_lost_sent = event_tx.send(ConnEvent::Disconnected(
-                            "connection lost".into()
-                        )).await;
+                        if !send_event(ConnEvent::Disconnected("connection lost".into()), event_tx, cmd_rx).await {
+                            return SessionOutcome::Exit;
+                        }
                         return SessionOutcome::Reconnect;
                     }
                 }
@@ -391,7 +461,7 @@ mod tests {
         let (client, server) = tokio::io::duplex(64);
         drop(server);
         let mut conn = SWPConnection::from_raw_stream(client);
-        let (event_tx, mut event_rx) = mpsc::channel(1);
+        let (event_tx, mut event_rx) = mpsc::channel(2);
         let (cmd_tx, mut cmd_rx) = mpsc::channel(1);
         let mut sync_state = SyncState::new(0, None, None);
         let message = ClientMessage::Message(ClientMessageBody {
@@ -430,5 +500,224 @@ mod tests {
         };
         assert_eq!(failed.text, "keep this");
         assert_eq!(failed.images, vec!["photo.png"]);
+        assert!(
+            matches!(event_rx.recv().await.unwrap(), ConnEvent::Disconnected(_)),
+            "a socket failure must also tell the UI to reconnect"
+        );
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::{ConnCommand, ConnEvent, Duration, spawn_connection};
+
+    #[tokio::test]
+    async fn shutdown_interrupts_a_peer_that_never_sends_hello() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let (tx, mut rx) = spawn_connection(
+            Some(listener.local_addr().unwrap().to_string()),
+            None,
+            "test",
+            "test",
+            None,
+            None,
+        );
+        let (mut socket, _) = listener.accept().await.unwrap();
+        tx.send(ConnCommand::Shutdown).await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), rx.recv())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let mut byte = [0_u8];
+        assert_eq!(
+            tokio::io::AsyncReadExt::read(&mut socket, &mut byte)
+                .await
+                .unwrap(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn shutdown_interrupts_reconnect_backoff() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        drop(listener);
+        let (tx, mut rx) = spawn_connection(Some(address), None, "test", "test", None, None);
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(1), rx.recv())
+                .await
+                .unwrap(),
+            Some(ConnEvent::Disconnected(_))
+        ));
+        tx.send(ConnCommand::Shutdown).await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(250), rx.recv())
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn disconnected_messages_fail_promptly_without_waiting_for_the_handshake() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let (tx, mut rx) = spawn_connection(
+            Some(listener.local_addr().unwrap().to_string()),
+            None,
+            "test",
+            "test",
+            None,
+            None,
+        );
+        let (_socket, _) = listener.accept().await.unwrap();
+        tx.send(ConnCommand::Send(
+            crate::protocol::client_msg::ClientMessage::Regen(crate::protocol::client_msg::Regen {
+                rid: Some("pending".into()),
+                stream: true,
+                guidance: None,
+            }),
+        ))
+        .await
+        .unwrap();
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_millis(250), rx.recv())
+                .await
+                .unwrap(),
+            Some(ConnEvent::SendFailed(_))
+        ));
+        tx.send(ConnCommand::Shutdown).await.unwrap();
+    }
+}
+
+#[cfg(test)]
+mod blocked_io_tests {
+    use super::{
+        ConnCommand, ConnEvent, Duration, SessionOutcome, run_connected_session, send_event,
+    };
+    use crate::protocol::client_msg::{ClientMessage, Command};
+    use crate::swp_client::{SWPConnection, sync::SyncState};
+
+    #[tokio::test]
+    async fn rejecting_an_extra_command_keeps_the_original_socket_and_response() {
+        use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+
+        let (stream, peer) = tokio::io::duplex(8);
+        let mut conn = SWPConnection::from_raw_stream(stream);
+        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
+        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::channel(2);
+        let task = tokio::spawn(async move {
+            let mut sync = SyncState::new(0, None, None);
+            run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync).await
+        });
+        let command = |rid: &str| {
+            ConnCommand::Send(ClientMessage::Command(Command {
+                rid: Some(rid.into()),
+                name: "status".into(),
+                args: serde_json::json!({}),
+            }))
+        };
+        cmd_tx.send(command("original")).await.unwrap();
+        let mut reader = BufReader::new(peer);
+        assert_eq!(reader.read_u8().await.unwrap(), b'{');
+        cmd_tx.send(command("extra")).await.unwrap();
+        let rejected = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(rejected, ConnEvent::SendFailed(ClientMessage::Command(Command { rid:Some(ref rid), .. })) if rid == "extra")
+        );
+        let mut line = String::from("{");
+        let _read = reader.read_line(&mut line).await.unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&line)
+                .unwrap()
+                .get("rid")
+                .and_then(serde_json::Value::as_str),
+            Some("original")
+        );
+        reader
+            .write_all(b"{\"type\":\"stream_start\",\"rid\":\"original\"}\n")
+            .await
+            .unwrap();
+        let reply = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(reply, ConnEvent::Message(ref frame) if frame.request_id() == Some("original"))
+        );
+        assert!(
+            event_rx.try_recv().is_err(),
+            "a rejected extra command must not announce a disconnect"
+        );
+        cmd_tx.send(ConnCommand::Shutdown).await.unwrap();
+        assert!(matches!(task.await.unwrap(), SessionOutcome::Exit));
+    }
+
+    #[tokio::test]
+    async fn shutdown_interrupts_a_full_event_queue() {
+        let (event_tx, _event_rx) = tokio::sync::mpsc::channel(1);
+        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::channel(1);
+        event_tx
+            .try_send(ConnEvent::Disconnected("existing".into()))
+            .unwrap();
+        let mut sending = tokio::spawn(async move {
+            send_event(
+                ConnEvent::Disconnected("pending".into()),
+                &event_tx,
+                &mut cmd_rx,
+            )
+            .await
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut sending)
+                .await
+                .is_err()
+        );
+        cmd_tx.send(ConnCommand::Shutdown).await.unwrap();
+        assert!(
+            !tokio::time::timeout(Duration::from_millis(250), sending)
+                .await
+                .unwrap()
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn shutdown_interrupts_a_write_to_a_peer_that_is_not_reading() {
+        let (stream, _peer) = tokio::io::duplex(8);
+        let mut conn = SWPConnection::from_raw_stream(stream);
+        let (event_tx, _event_rx) = tokio::sync::mpsc::channel(1);
+        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::channel(2);
+        cmd_tx
+            .send(ConnCommand::Send(ClientMessage::Command(Command {
+                rid: Some("blocked".into()),
+                name: "status".into(),
+                args: serde_json::json!({}),
+            })))
+            .await
+            .unwrap();
+        let mut task = tokio::spawn(async move {
+            let mut sync = SyncState::new(0, None, None);
+            matches!(
+                run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync).await,
+                SessionOutcome::Exit
+            )
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut task)
+                .await
+                .is_err()
+        );
+        cmd_tx.send(ConnCommand::Shutdown).await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(250), task)
+                .await
+                .unwrap()
+                .unwrap()
+        );
     }
 }

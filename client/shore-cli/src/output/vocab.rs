@@ -184,7 +184,7 @@ pub(crate) fn hidden<W: Write>(out: &mut W, count: usize, flag: &str) {
 }
 
 pub(crate) fn print_index(title: &str, blurb: &str, entries: &[(&str, &str)]) {
-    let stdout = std::io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     section(&mut out, title, None);
     note(&mut out, blurb);

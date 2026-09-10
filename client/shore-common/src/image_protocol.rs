@@ -33,7 +33,7 @@ pub fn detect_protocol() -> Option<ImageProtocol> {
 
 pub fn detect_protocol_probe() -> Option<ImageProtocol> {
     let env_result = detect_protocol();
-    if env_result.is_some() {
+    if env_result.is_some() || std::env::var("SHORE_IMAGES").is_ok() {
         return env_result;
     }
 
