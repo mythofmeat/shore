@@ -93,6 +93,7 @@
         "broadcast_events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -110,6 +111,7 @@
           },
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 2,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -323,6 +325,7 @@
         "broadcast_events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -533,7 +536,8 @@
             "revision": 1,
             "role": "user",
             "timestamp": "<minted_timestamp>",
-            "type": "new_message"
+            "type": "new_message",
+            "thread": "main"
           }
         ],
         "conversation": [
@@ -674,7 +678,8 @@
             "revision": 1,
             "role": "user",
             "timestamp": "<minted_timestamp>",
-            "type": "new_message"
+            "type": "new_message",
+            "thread": "main"
           }
         ],
         "conversation": [
@@ -841,6 +846,7 @@
         "broadcast_events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -1081,6 +1087,7 @@
         "broadcast_events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -1098,6 +1105,7 @@
           },
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 4,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -1348,6 +1356,7 @@
         "broadcast_events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -1365,6 +1374,7 @@
           },
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 2,
             "character": "ada",
             "msg_id": "<minted_id>",

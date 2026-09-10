@@ -126,7 +126,8 @@ function mergeGroup(group: Message[]): Message {
     msg_id: lastAssistant.msg_id,
     role: "assistant",
     content: deriveContentTextOnly(mergedBlocks),
-    images: lastAssistant.images,
+    images: [...new Map(group.filter((message) => message.role === "assistant")
+      .flatMap((message) => message.images).map((image) => [image.path, image])).values()],
     content_blocks: mergedBlocks,
     ...(lastAssistant.alt_index !== undefined ? { alt_index: lastAssistant.alt_index } : {}),
     ...(lastAssistant.alt_count !== undefined ? { alt_count: lastAssistant.alt_count } : {}),

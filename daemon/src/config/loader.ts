@@ -21,7 +21,7 @@ import {
   type HomeLookup,
   type ShoreDirs,
 } from "./dirs.ts";
-import { applyDotenv } from "./dotenv.ts";
+import { prepareDotenv } from "./dotenv.ts";
 import { rustTrim } from "./duration.ts";
 import { catalogFromSections, findModel, CatalogError, type ModelCatalog } from "./models.ts";
 import { ProviderRegistry, ProviderRegistryError } from "./providers.ts";
@@ -33,6 +33,7 @@ export interface RawConfigTable {
   table: TomlTable;
   dirs: ShoreDirs;
   files: string[];
+  adoptEnvironment?: () => void;
 }
 
 export type ConfigErrorKind =
@@ -112,20 +113,20 @@ function loadDotenv(
   configDir: string,
   target: Record<string, string | undefined>,
   onWarn: ConfigWarn,
-): void {
+): (() => void) | undefined {
   const path = rustJoin(configDir, ".env");
-  if (!exists(path)) return;
-
   try {
-    const applied = applyDotenv(path, target);
-    if (applied.length > 0) {
-      shoreLog.info(`shore: loaded ${applied.length} variables from ${path}`);
-    }
+    const candidate = prepareDotenv(path, target, true);
+    return () => {
+      candidate.adopt();
+      if (candidate.keys.length > 0) shoreLog.info(`shore: loaded ${candidate.keys.length} variables from ${path}`);
+    };
   } catch (e) {
     onWarn("Failed to load .env file", [
       ["path", path],
       ["error", e instanceof Error ? e.message : String(e)],
     ]);
+    return undefined;
   }
 }
 
@@ -172,6 +173,7 @@ export function loadRawConfigTable(
     createDefault?: (configDir: string) => void;
     onWarn?: ConfigWarn;
     envTarget?: Record<string, string | undefined>;
+    deferEnvironment?: boolean;
   } = {},
 ): RawConfigTable {
   const dirs = resolveShoreDirs(options.env, options.homeLookup);
@@ -181,7 +183,7 @@ export function loadRawConfigTable(
 
   const configFile = configPath ?? rustJoin(configDirectory, "config.toml");
 
-  loadDotenv(configDirectory, options.envTarget ?? process.env, options.onWarn ?? consoleConfigWarn);
+  const adoptEnvironment = loadDotenv(configDirectory, options.envTarget ?? process.env, options.onWarn ?? consoleConfigWarn);
 
   let table: TomlTable;
   const files: string[] = [];
@@ -207,7 +209,8 @@ export function loadRawConfigTable(
 
   loadConfD(rustJoin(configDirectory, "conf.d"), table, files);
 
-  return { table, dirs, files };
+  if (options.deferEnvironment !== true) adoptEnvironment?.();
+  return { table, dirs, files, ...(adoptEnvironment === undefined ? {} : { adoptEnvironment }) };
 }
 
 export function parentOf(path: string): string {
@@ -276,6 +279,7 @@ export interface LoadedConfig {
   dirs: ShoreDirs;
   rawTable: TomlTable | undefined;
   files?: string[];
+  adoptEnvironment?: () => void;
 }
 
 function sectionTable(value: unknown): TomlTable | undefined {
@@ -333,10 +337,15 @@ export function loadConfig(
     homeLookup?: HomeLookup;
     createDefault?: (configDir: string) => void;
     onWarn?: ConfigWarn;
+    deferEnvironment?: boolean;
   } = {},
 ): LoadedConfig {
-  const raw = loadRawConfigTable(configPath, options);
-  return parseConfigTable(raw.table, raw.dirs, options.onWarn, raw.files);
+  const raw = loadRawConfigTable(configPath, { ...options, deferEnvironment: true });
+  const config = parseConfigTable(raw.table, raw.dirs, options.onWarn, raw.files);
+  if (options.deferEnvironment === true) {
+    if (raw.adoptEnvironment !== undefined) config.adoptEnvironment = raw.adoptEnvironment;
+  } else raw.adoptEnvironment?.();
+  return config;
 }
 
 export function loadCharacterConfig(

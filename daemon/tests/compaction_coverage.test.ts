@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -626,7 +627,7 @@ describe("one plan carried from resolution to archival", () => {
   test("a conversation rewritten under the plan refuses to commit", async () => {
     const w = await world();
     const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
-    await writeFile(
+    writeDurable(
       join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
       jsonl([message("m_9", "user", "a different conversation", newMessageVersion())]),
     );
@@ -674,7 +675,7 @@ describe("one plan carried from resolution to archival", () => {
     w.config.app.memory.compaction.max_context_tokens = 0;
     const resolved = required(await resolve(w, { keepRecentTurns: 1 }));
 
-    await writeFile(
+    writeDurable(
       join(w.dataDir, "ada", "threads", "main", "active.jsonl"),
       jsonl([message("m_9", "user", "a different conversation", newMessageVersion())]),
     );

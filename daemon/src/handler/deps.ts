@@ -355,7 +355,7 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
 
     reloadGlobalConfig: () => {
       try {
-        return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });
+        return loadConfig(runtime.configPath, { ...(a.env === undefined ? {} : { env: a.env }), deferEnvironment: true });
       } catch (e) {
         shoreLog.warn(`shore: could not re-read ${runtime.configPath}: ${String(e)}`);
         return undefined;
@@ -402,6 +402,7 @@ export async function applyReloadedConfig(
   config: LoadedConfig,
 ): Promise<ReloadSummary> {
   const summary = await a.runtime.registry.reloadRuntimeState(config);
+  config.adoptEnvironment?.();
   applySubscriptionProviders(a.runtime.registry);
   await a.runtime.refreshHistoryIndexes();
   await reconnectMcpIfChanged(a, config);
@@ -501,7 +502,7 @@ export function configReloader(
 
     let config: LoadedConfig;
     try {
-      config = loadConfig(a.runtime.configPath, a.env === undefined ? {} : { env: a.env });
+      config = loadConfig(a.runtime.configPath, { ...(a.env === undefined ? {} : { env: a.env }), deferEnvironment: true });
     } catch (e) {
       shoreLog.warn(
         `shore: config hot reload failed, keeping the running config — ${where}: ${String(e)}`,
@@ -542,7 +543,7 @@ async function pushHistorySnapshots(a: CommandAssembly): Promise<void> {
   for (const [sessionId, character] of a.router.sessions()) {
     if (character === null) continue;
     try {
-      const snapshot = await a.handshake.history(character);
+      const snapshot = await a.handshake.history(character, a.router.threadFor(sessionId) ?? undefined);
       await a.router.sendToSession(sessionId, historyMessage(snapshot, undefined));
     } catch (e) {
       shoreLog.warn(`shore: could not push history to session ${sessionId}: ${String(e)}`);

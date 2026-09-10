@@ -59,20 +59,49 @@ export function parseDotenv(
   return pairs;
 }
 
-export function applyDotenv(
+type Environment = Record<string, string | undefined>;
+const overlays = new WeakMap<Environment, Map<string, Map<string, { inherited: string | undefined; value: string }>>>();
+
+export function prepareDotenv(
   path: string,
-  target: Record<string, string | undefined> = process.env,
-): string[] {
+  target: Environment = process.env,
+  allowMissing = false,
+): { keys: string[]; adopt: () => void } {
   let content: string;
   try {
     content = readFileSync(path, "utf8");
   } catch (e) {
-    throw new DotenvError(e instanceof Error ? e.message : String(e));
+    if (allowMissing && (e as NodeJS.ErrnoException).code === "ENOENT") content = "";
+    else throw new DotenvError(e instanceof Error ? e.message : String(e));
   }
+  const prior = overlays.get(target)?.get(path) ?? new Map<string, { inherited: string | undefined; value: string }>();
+  const inherited = (key: string) => {
+    const previous = prior.get(key);
+    return previous !== undefined && target[key] === previous.value ? previous.inherited : target[key];
+  };
+  const pairs = parseDotenv(content, inherited);
+  const next = new Map(pairs.map(([key, value]) => [key, { inherited: inherited(key), value }]));
+  let adopted = false;
+  return { keys: pairs.map(([key]) => key), adopt: () => {
+    if (adopted) return;
+    adopted = true;
+    for (const key of prior.keys()) {
+      if (next.has(key)) continue;
+      const value = inherited(key);
+      if (value === undefined) delete target[key];
+      else target[key] = value;
+    }
+    for (const [key, entry] of next) target[key] = entry.value;
+    const paths = overlays.get(target) ?? new Map<string, Map<string, { inherited: string | undefined; value: string }>>();
+    paths.set(path, next);
+    overlays.set(target, paths);
+  } };
+}
 
-  const pairs = parseDotenv(content, (name) => target[name]);
-  for (const [key, value] of pairs) target[key] = value;
-  return pairs.map(([key]) => key);
+export function applyDotenv(path: string, target: Environment = process.env): string[] {
+  const candidate = prepareDotenv(path, target);
+  candidate.adopt();
+  return candidate.keys;
 }
 
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\n" || c === "\r";

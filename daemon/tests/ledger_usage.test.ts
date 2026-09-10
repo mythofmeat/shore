@@ -172,7 +172,7 @@ test("the backfill leaves already-costed rows alone unless forced", async () => 
   expect(costOf(ledger, 3), "a flat-plan row must not start accruing cost").toBe(0);
 });
 
-test("the backfill zeroes a subscription provider's rows rather than hunting for a price", async () => {
+test("backfill does not reclassify historical calls using today's subscription settings", async () => {
   const ledger = ledgerWith([
     { provider: "zai-sub", model: "glm-5.1" },
     { provider: "openai", model: "gpt-nonexistent" },
@@ -183,13 +183,13 @@ test("the backfill zeroes a subscription provider's rows rather than hunting for
   try {
     const result = await backfillLedgerCosts(ledger);
 
-    expect(costOf(ledger, 1), "a flat-plan row costs nothing, it is not unpriced").toBe(0);
-    expect(result.updated).toBe(1);
+    expect(costOf(ledger, 1), "an unpriced historical call keeps its original accounting policy").toBeNull();
+    expect(result.updated).toBe(0);
     expect(
       result.failures.map((f) => f.model),
-      "a subscription provider is never reported as missing pricing",
-    ).toEqual(["openai/gpt-nonexistent"]);
-    expect(fetched.calls, "only the billable model sends us to the catalog").toBe(1);
+      "current subscription settings do not supply historical prices",
+    ).toEqual(["zai-sub/glm-5.1", "openai/gpt-nonexistent"]);
+    expect(fetched.calls, "both historical calls still need prices").toBe(2);
   } finally {
     setSubscriptionProviders(DEFAULT_SUBSCRIPTION_PROVIDERS);
   }

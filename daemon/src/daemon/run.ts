@@ -208,13 +208,14 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     env,
     diagnostics,
     onHistory: (history) => server.broadcast({ type: "history", ...history } as ServerMessage),
-    emit: (character, revision, msg) =>
+    emit: (character, revision, msg, thread) =>
       emitNewMessageEvent(
         (message) => server.broadcast(message),
         character,
         msg.origin ?? "autonomous",
         revision,
         msg,
+        thread,
       ),
   });
 

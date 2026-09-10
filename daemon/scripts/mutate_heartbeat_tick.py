@@ -36,7 +36,7 @@ ENGINE_BLOCK = (
     "    try {\n"
     "      const engine = await deps.engine(character);\n"
     "      await engine.appendMessage(msg);\n"
-    "      deps.emit?.(character, engine.currentRevision(), msg);\n"
+    "      deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");\n"
     "    } catch (e) {\n"
     "      shoreLog.error(\n"
     "        `shore: heartbeat could not persist the autonomous message for ${character}: ${String(e)}`,\n"
@@ -98,7 +98,7 @@ MUTANTS = [
      T, ENGINE_BLOCK,
      "    try {\n"
      "      const engine = await deps.engine(character);\n"
-     "      deps.emit?.(character, engine.currentRevision(), msg);\n"
+     "      deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");\n"
      "      await engine.appendMessage(msg);\n"
      "    } catch (e) {\n"
      "      shoreLog.error(`shore: heartbeat could not persist for ${character}: ${String(e)}`);\n"
@@ -107,14 +107,14 @@ MUTANTS = [
      T, ENGINE_BLOCK,
      "    const engine = await deps.engine(character);\n"
      "    await engine.appendMessage(msg);\n"
-     "    deps.emit?.(character, engine.currentRevision(), msg);"),
+     "    deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");"),
     ("deliver: the notification only fires when the append succeeded",
      T,
      "  deps.notify?.(`Shore - ${character}`, msg.content);",
      "  if (deps.engine !== undefined) deps.notify?.(`Shore - ${character}`, msg.content);"),
     ("deliver: nothing is pushed, so connected clients never see the message",
      T,
-     "      deps.emit?.(character, engine.currentRevision(), msg);",
+     "      deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? \"main\");",
      "      void engine;"),
     ("deliver: the message is never appended, only announced",
      T,

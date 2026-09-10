@@ -889,7 +889,7 @@ export function enforceBudgetForCall(
     return undefined;
   }
 
-  if (isSubscriptionCall(call.provider, call.model, now)) {
+  if (isSubscriptionCall(call.provider, call.model, now, call.character)) {
     return undefined;
   }
 

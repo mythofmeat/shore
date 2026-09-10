@@ -197,8 +197,8 @@ MUTANTS = [
      "  for (const name of discoverCharacters(fresh.dirs.config, fresh.dirs.workspace)) {",
      "  for (const name of [] as string[]) {"),
     ("reload: the environment is not threaded, so the dirs re-resolve",
-     "const loaderOptions = (ctx: ConfigContext): { env?: Env } =>\n"
-     "  ctx.env === undefined ? {} : { env: ctx.env };",
+     "const loaderOptions = (ctx: ConfigContext): { env?: Env; deferEnvironment: boolean } =>\n"
+     "  ({ ...(ctx.env === undefined ? {} : { env: ctx.env }), deferEnvironment: true });",
      "const loaderOptions = (ctx: ConfigContext): { env?: Env } => {\n"
      "  void ctx;\n"
      "  return {};\n"

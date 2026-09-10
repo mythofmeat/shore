@@ -18,6 +18,7 @@ import type { BudgetBlock } from "../ledger/budget.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 
 export interface HeartbeatEngine {
+  readonly thread?: string;
   appendMessage(msg: Message): Promise<void>;
   currentRevision(): number;
 }
@@ -30,7 +31,7 @@ export interface HeartbeatTickDeps
     > {
   generate: HeartbeatLoopDeps["generate"];
   engine?: (character: string) => Promise<HeartbeatEngine>;
-  emit?: (character: string, revision: number, msg: Message) => void;
+  emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   notify?: (title: string, body: string) => void;
   newId?: () => string;
   nowIso?: () => string;
@@ -120,7 +121,7 @@ export async function persistHeartbeatMessage(
     try {
       const engine = await deps.engine(character);
       await engine.appendMessage(msg);
-      deps.emit?.(character, engine.currentRevision(), msg);
+      deps.emit?.(character, engine.currentRevision(), msg, engine.thread ?? request.context?.thread ?? "main");
     } catch (e) {
       shoreLog.error(
         `shore: heartbeat could not persist the autonomous message for ${character}: ${String(e)}`,

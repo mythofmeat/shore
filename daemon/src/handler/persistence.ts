@@ -6,6 +6,7 @@ import { deriveContentFromBlocks, MessageStore } from "../engine/message_store.t
 import type { PendingAlt } from "../engine/message_store.ts";
 import { embedImageData } from "../engine/wire_images.ts";
 import { rustTrim } from "../memory/lines.ts";
+import { mergeToolLoopMessages } from "../engine/merge.ts";
 import type { UsageBudgetWarningEvent } from "../ledger/budget.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import type { WireMessage } from "../llm/types.ts";
@@ -18,6 +19,7 @@ export interface CompletedResponseMessage {
 }
 
 export interface PersistEngine {
+  readonly thread?: string;
   appendMessage(msg: Message): Promise<void>;
   replaceAfterLastUserTurn(newMessages: Message[]): Promise<number>;
   currentRevision(): number;
@@ -90,6 +92,10 @@ export async function persistAndNotify(
     ),
     ...responseMessages,
   ];
+  const displayMessages = new Map(mergeToolLoopMessages(generatedMessages).map((message) => [message.msg_id, message]));
+  for (const message of responseMessages) {
+    message.images = displayMessages.get(message.msg_id)?.images ?? message.images;
+  }
   await applyGeneratedMessagesToEngine(engine, generatedMessages, {
     regenAlt: params.regenAlt,
     responseEventIds,
@@ -139,7 +145,7 @@ export async function applyGeneratedMessagesToEngine(
     await engine.replaceAfterLastUserTurn(generatedMessages);
     const revision = engine.currentRevision();
     for (const msg of eventMessages) {
-      emitNewMessageEvent(emitEvent, charName, "assistant_reply", revision, msg);
+      emitNewMessageEvent(emitEvent, charName, "assistant_reply", revision, msg, engine.thread);
     }
     return;
   }
@@ -149,7 +155,7 @@ export async function applyGeneratedMessagesToEngine(
     const emitted = shouldEmit ? structuredClone(msg) : undefined;
     await engine.appendMessage(msg);
     if (emitted !== undefined) {
-      emitNewMessageEvent(emitEvent, charName, "assistant_reply", engine.currentRevision(), emitted);
+      emitNewMessageEvent(emitEvent, charName, "assistant_reply", engine.currentRevision(), emitted, engine.thread);
     }
   }
 }
@@ -193,6 +199,7 @@ export function emitNewMessageEvent(
   origin: MessageOrigin,
   revision: number,
   msg: Message,
+  thread = "main",
 ): void {
   const wireMsg: Message = { ...msg, origin };
   embedImageData(wireMsg.images);
@@ -200,6 +207,7 @@ export function emitNewMessageEvent(
     type: "new_message",
     revision,
     character,
+    thread,
     ...wireMsg,
   } as unknown as ServerMessage);
 }

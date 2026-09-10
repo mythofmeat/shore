@@ -168,13 +168,15 @@ function migrateCallAttempts(db: Database): void {
 }
 
 let subscriptionProviders = new Set(["opencode-go", "opencode"]);
+let characterSubscriptionProviders = new Map<string, Set<string>>();
 
-export function setSubscriptionProviders(names: Iterable<string>): void {
+export function setSubscriptionProviders(names: Iterable<string>, characters: Iterable<readonly [string, Iterable<string>]> = []): void {
   subscriptionProviders = new Set(names);
+  characterSubscriptionProviders = new Map([...characters].map(([character, providers]) => [character, new Set(providers)]));
 }
 
-export const isSubscriptionProvider = (provider: string): boolean =>
-  subscriptionProviders.has(provider);
+export const isSubscriptionProvider = (provider: string, character?: string): boolean =>
+  (character === undefined ? subscriptionProviders : characterSubscriptionProviders.get(character) ?? subscriptionProviders).has(provider);
 
 let nanoGptCoveredModels = new Set<string>();
 let nanoGptSubscriptionState: NanoGptSubscriptionState | undefined;
@@ -197,8 +199,9 @@ export function isSubscriptionCall(
   provider: string,
   model: string,
   now: number = Date.now(),
+  character?: string,
 ): boolean {
-  if (provider !== NANOGPT_PROVIDER) return isSubscriptionProvider(provider);
+  if (provider !== NANOGPT_PROVIDER) return isSubscriptionProvider(provider, character);
   return nanoGptCoveredModels.has(model) &&
     nanoGptSubscriptionState?.active === true &&
     nanoGptSubscriptionState.state === "active" &&
@@ -219,6 +222,7 @@ export interface Timing {
 }
 
 export interface RecordCall {
+  subscription?: boolean;
   provider: string;
   api_key_name?: string | undefined;
   model: string;
@@ -552,7 +556,7 @@ export class Ledger {
 
   #buildRow(record: RecordCall, ts: string, classified: CacheClassification): CallRow {
     const { state: cache_state, anomaly: cache_anomaly } = classified;
-    const subscription = isSubscriptionCall(record.provider, record.model, Date.parse(ts));
+    const subscription = record.subscription ?? isSubscriptionCall(record.provider, record.model, Date.parse(ts), record.character);
 
     const priced = subscription
       ? undefined
