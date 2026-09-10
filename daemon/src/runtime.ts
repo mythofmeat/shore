@@ -1,3 +1,4 @@
+import { closeStorageConnections } from "./storage/store.ts";
 import { preparePersistentStorage } from "./storage/prepare.ts";
 import { migrateDatabases } from "./storage/migrate.ts";
 import { startDiagnosticRetention } from "./storage/retention.ts";
@@ -332,6 +333,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       await memoryRetain.shutdown();
       await memoryBackends.shutdown();
       await mcp.current.shutdown();
+      closeStorageConnections();
       uninstallWireCapture();
       callStore?.close();
       closeLedgers();

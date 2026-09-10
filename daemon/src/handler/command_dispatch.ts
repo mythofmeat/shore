@@ -70,7 +70,7 @@ async function annotations(
     case "switch_character":
       return await afterSwitchCharacter(data, ctx);
     case "switch_thread":
-      return await afterSwitchThread(data, ctx);
+      return await afterSwitchThread(args, data, ctx);
     case "thread_model":
       return await afterThreadModelChange(args, data, ctx);
     default:
@@ -157,12 +157,15 @@ async function afterSwitchCharacter(
 }
 
 async function afterSwitchThread(
+  args: unknown,
   data: unknown,
   ctx: DispatchContext,
 ): Promise<Record<string, unknown> | undefined> {
   const selected = isRecord(data) ? data["thread"] : undefined;
   if (typeof selected !== "string") return undefined;
-  if (isRecord(data) && data["changed"] !== true) return undefined;
+  const changed = isRecord(data) && data["changed"] === true;
+  const resync = isRecord(args) && args["resync"] === true;
+  if (!changed && !resync) return undefined;
 
   const previous = ctx.router.threadFor(ctx.sessionId);
   ctx.router.setSelectedThread(ctx.sessionId, selected);
@@ -176,6 +179,7 @@ async function afterSwitchThread(
   }
 
   await ctx.router.sendToSession(ctx.sessionId, historyMessage(snapshot, ctx.rid));
+  if (!changed) return undefined;
   await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", selected);
 
   return {

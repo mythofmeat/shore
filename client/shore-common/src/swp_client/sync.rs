@@ -4,6 +4,7 @@ use crate::protocol::server_msg::ServerMessage;
 pub(crate) enum SyncDecision {
     Deliver,
     DropStale,
+    Resync,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +44,21 @@ impl SyncState {
     pub(crate) fn observe(&mut self, msg: &ServerMessage) -> SyncDecision {
         match msg {
             ServerMessage::History(history) => {
+                if let Some(delta) = &history.delta {
+                    if history.selected_character != self.selected_character
+                        || history.selected_thread.as_deref().unwrap_or("main")
+                            != self.selected_thread.as_deref().unwrap_or("main")
+                        || history.revision <= self.snapshot_revision
+                    {
+                        return SyncDecision::DropStale;
+                    }
+                    if delta.base_revision != self.snapshot_revision {
+                        return SyncDecision::Resync;
+                    }
+                    self.snapshot_revision = history.revision;
+                    return SyncDecision::Deliver;
+                }
+
                 let moved = history.selected_character != self.selected_character
                     || (history.selected_thread.is_some()
                         && history.selected_thread != self.selected_thread);
@@ -121,9 +137,26 @@ mod tests {
     }
 
     #[test]
+    fn deltas_require_a_contiguous_revision_in_the_selected_thread() {
+        let mut sync = SyncState::new(5, Some("ada"), Some("main"));
+        let delta = |base, revision, thread: &str| {
+            serde_json::from_value::<ServerMessage>(serde_json::json!({
+            "type": "history", "messages": [], "selected_character": "ada", "selected_thread": thread,
+            "revision": revision, "delta": {"base_revision": base, "after": null}
+        })).unwrap()
+        };
+        assert_eq!(sync.observe(&delta(5, 6, "side")), SyncDecision::DropStale);
+        assert_eq!(sync.observe(&delta(5, 6, "main")), SyncDecision::Deliver);
+        assert_eq!(sync.observe(&delta(5, 6, "main")), SyncDecision::DropStale);
+        assert_eq!(sync.observe(&delta(7, 8, "main")), SyncDecision::Resync);
+        assert_eq!(sync.latest_revision(), 6);
+    }
+
+    #[test]
     fn drops_stale_history_snapshots() {
         let mut sync = SyncState::new(5, Some("alice"), None);
         let stale = ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![message("m1")],
             active_start: 0,
@@ -141,6 +174,7 @@ mod tests {
     fn accepts_newer_history_snapshots() {
         let mut sync = SyncState::new(5, Some("alice"), None);
         let newer = ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![message("m1")],
             active_start: 0,
@@ -192,6 +226,7 @@ mod tests {
 
     fn history(revision: u64) -> ServerMessage {
         ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![message("m")],
             active_start: 0,
@@ -226,6 +261,7 @@ mod tests {
     fn switching_character_resets_independent_revision_watermarks() {
         let mut sync = SyncState::new(650, Some("poppy"), None);
         let switched = ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![message("y1")],
             active_start: 0,
@@ -243,6 +279,7 @@ mod tests {
     fn switching_thread_resets_the_watermark_even_when_the_new_thread_is_behind() {
         let mut sync = SyncState::new(40, Some("alice"), Some("main"));
         let switched = ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![message("e1")],
             active_start: 0,
@@ -261,6 +298,7 @@ mod tests {
     fn staying_in_the_same_thread_still_drops_a_stale_snapshot() {
         let mut sync = SyncState::new(5, Some("alice"), Some("eval"));
         let stale = ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![message("m1")],
             active_start: 0,
@@ -278,6 +316,7 @@ mod tests {
     fn a_daemon_that_names_no_thread_never_looks_like_a_move() {
         let mut sync = SyncState::new(5, Some("alice"), Some("eval"));
         let quiet = ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![message("m1")],
             active_start: 0,

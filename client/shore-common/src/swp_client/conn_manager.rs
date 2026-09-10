@@ -226,7 +226,14 @@ async fn run_connected_session(
                     Ok(ServerMessage::Ping(_)) => {
                     }
                     Ok(server_msg) => {
-                        if matches!(sync_state.observe(&server_msg), SyncDecision::DropStale) {
+                        let decision = sync_state.observe(&server_msg);
+                        if matches!(decision, SyncDecision::Resync) {
+                            let _resync_sent = event_tx.send(ConnEvent::Disconnected(
+                                "history revision gap".into()
+                            )).await;
+                            return SessionOutcome::Reconnect;
+                        }
+                        if matches!(decision, SyncDecision::DropStale) {
                             debug!(
                                 latest_revision = sync_state.latest_revision(),
                                 "dropping stale sync message"
@@ -331,6 +338,52 @@ mod tests {
             Some("eval".into())
         );
         assert_eq!(reconnect_thread(&unselected, None), None);
+    }
+
+    #[tokio::test]
+    async fn revision_gap_notifies_the_ui_before_reconnecting() {
+        use tokio::io::AsyncWriteExt;
+
+        let (client, mut server) = tokio::io::duplex(4096);
+        let mut conn = SWPConnection::from_raw_stream(client);
+        let (event_tx, mut event_rx) = mpsc::channel(4);
+        let (_cmd_tx, mut cmd_rx) = mpsc::channel(1);
+        let mut sync_state = SyncState::new(2, Some("ada"), Some("side"));
+        server
+            .write_all(
+                concat!(
+                    "{\"type\":\"stream_start\",\"rid\":\"reply\",\"regen\":false}\n",
+                    "{\"type\":\"history\",\"messages\":[],\"revision\":4,",
+                    "\"selected_character\":\"ada\",\"selected_thread\":\"side\",",
+                    "\"delta\":{\"base_revision\":3,\"after\":\"missing\"}}\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(1),
+            run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync_state),
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(outcome, SessionOutcome::Reconnect));
+        assert!(matches!(
+            event_rx.try_recv().unwrap(),
+            ConnEvent::Message(ServerMessage::StreamStart(_))
+        ));
+        assert!(
+            matches!(event_rx.try_recv().unwrap(), ConnEvent::Disconnected(_)),
+            "the UI must discard the abandoned stream before reconnecting"
+        );
+        assert!(
+            event_rx.try_recv().is_err(),
+            "the invalid delta must not reach the UI"
+        );
+        assert_eq!(sync_state.latest_revision(), 2);
+        assert_eq!(sync_state.selected_thread(), Some("side"));
     }
 
     #[tokio::test]

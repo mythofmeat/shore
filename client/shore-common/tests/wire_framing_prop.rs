@@ -334,6 +334,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
             .prop_map(
                 |(rid, messages, active_start, config, selected_character, revision)| {
                     ServerMessage::History(History {
+                        delta: None,
                         rid,
                         messages,
                         active_start,

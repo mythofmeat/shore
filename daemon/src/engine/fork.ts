@@ -1,4 +1,5 @@
 import { withConversation } from "./lifecycle.ts";
+import { forkPromptState, resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { threadFile, writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -6,6 +7,7 @@ import { join } from "node:path";
 
 import {
   archiveKey,
+  characterDataDir,
   characterThreadsDir,
   threadDataDir,
 } from "../config/dirs.ts";
@@ -206,6 +208,7 @@ async function forkThreadLocked(
   await mkdir(childDir, { recursive: true });
   await writeFile(join(childDir, FORK_MARKER_FILE), `${JSON.stringify(marker, null, 2)}\n`, "utf8");
   writeDurable(threadFile(data, character, child, "active.jsonl"), serializeMessages(copied));
+  await forkPromptState(characterDataDir(data, character), source, child);
   if (options.failAfter === "context") throw new Error("injected fork failure after context");
 
   const historyStore = HistoryStore.open(dbPath);
@@ -297,6 +300,7 @@ export async function recoverForks(data: string, character: string): Promise<str
       recovered.push(entry);
       continue;
     }
+    await resetActivePromptSnapshot(characterDataDir(data, character), entry);
     await rm(dir, { recursive: true, force: true });
     deleteThreadState(data, character, entry);
     const dbPath = join(data, HISTORY_DB_FILE);

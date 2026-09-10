@@ -1,5 +1,5 @@
 import { basename, dirname, relative, sep, join } from "node:path";
-import { deleteState, readState, writeState, withStorage } from "./store.ts";
+import { pack, replaceCollection, appendCollection, ensureCollection, deleteState, readState, writeState, withStorage } from "./store.ts";
 
 export interface StateFile { data: string; key: string; character: string }
 export type DurableFile = string | StateFile;
@@ -66,5 +66,37 @@ export function listDurableFiles(directory: DurableFile): string[] {
   return withStorage(scope.data, (db) => {
     const rows = db.query("SELECT path FROM state_files WHERE substr(path, 1, length(?1)) = ?1 ORDER BY path").all(prefix) as { path: string }[];
     return [...new Set(rows.map((row) => row.path.slice(prefix.length).split("/")[0] as string))];
+  });
+}
+
+export function appendDurableLine(file: DurableFile, line: string): void {
+  const scope = fileScope(file);
+  withStorage(scope.data, db => db.transaction(() => {
+    ensureCollection(db, scope.key, scope.character, "jsonl");
+    appendCollection(db, scope.key, [{ text: line }]);
+  })());
+}
+
+export function initializeDurableLines(file: DurableFile, initial: () => string, repair = false): void {
+  const scope = fileScope(file);
+  withStorage(scope.data, db => db.transaction(() => {
+    if (!repair && db.query("SELECT 1 FROM state_collections WHERE path = ?1").get(scope.key) !== null) return;
+    replaceCollection(db, scope.key, scope.character, "jsonl", initial());
+  })());
+}
+
+export function replaceDurableSuffix(file: DurableFile, keep: number, lines: readonly string[]): void {
+  const scope = fileScope(file);
+  withStorage(scope.data, db => db.transaction(() => {
+    db.query("DELETE FROM state_lines WHERE path = ?1 AND seq >= ?2").run(scope.key, keep);
+    appendCollection(db, scope.key, lines.map(text => ({ text })));
+  })());
+}
+
+export function updateDurableLine(file: DurableFile, index: number, line: string): void {
+  const scope = fileScope(file);
+  withStorage(scope.data, db => {
+    const result = db.query("UPDATE state_lines SET content = ?1 WHERE path = ?2 AND seq = ?3").run(pack(line), scope.key, index);
+    if (result.changes !== 1) throw new Error(`Missing message row ${scope.key}:${String(index)}`);
   });
 }

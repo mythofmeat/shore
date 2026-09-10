@@ -1,3 +1,4 @@
+import { HistoryMediaDelivery } from "./history_media.ts";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ImageUpload } from "../protocol/ImageUpload";
 import type { ServerMessage } from "../protocol/ServerMessage";
@@ -24,8 +25,15 @@ export interface ByteSink {
   write(bytes: Uint8Array): Promise<void> | void;
 }
 
+const mediaDeliveries = new WeakMap<ByteSink, HistoryMediaDelivery>();
+
 export async function writeMessage(sink: ByteSink, msg: ServerMessage): Promise<void> {
-  await sink.write(encoder.encode(`${JSON.stringify(msg)}\n`));
+  let delivery = mediaDeliveries.get(sink);
+  if (delivery === undefined) {
+    delivery = new HistoryMediaDelivery();
+    mediaDeliveries.set(sink, delivery);
+  }
+  await sink.write(encoder.encode(`${JSON.stringify(delivery.prepare(msg))}\n`));
 }
 
 export class WireReader {

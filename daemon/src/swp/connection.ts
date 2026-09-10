@@ -330,7 +330,10 @@ export async function messageLoop(
             ctx.router.threadFor(session.sessionId),
           )
         ) {
-          await writeMessage(sink, result.msg);
+          const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !session.capabilities.includes("history-deltas")
+            ? historyMessage(await (ctx.handshake ?? DEFAULT_HANDSHAKE).history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null))
+            : result.msg;
+          await writeMessage(sink, message);
         }
         break;
       }

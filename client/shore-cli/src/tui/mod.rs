@@ -1694,7 +1694,7 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
     }
 
     if msg.content_blocks.is_empty() {
-        let msg_id = (msg.role == Role::Assistant).then_some(msg.msg_id);
+        let msg_id = Some(msg.msg_id);
         entries.push(ConversationEntry::Turn(Turn::text(
             msg.role,
             msg_id,
@@ -1733,8 +1733,12 @@ fn image_max_cells() -> (u16, u16) {
 }
 
 fn transmit_entry_images(app: &mut App) {
+    transmit_entry_images_from(app, 0);
+}
+
+fn transmit_entry_images_from(app: &mut App, start: usize) {
     let (max_cols, max_rows) = image_max_cells();
-    for entry in &app.entries {
+    for entry in app.entries.iter().skip(start) {
         let Some(turn) = entry.as_turn() else {
             continue;
         };
@@ -2977,6 +2981,66 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::History(hist) => {
+            if let Some(delta) = hist.delta {
+                let keep_position = match delta.after.as_deref() {
+                    Some(id) => app
+                        .entries
+                        .iter()
+                        .rposition(|entry| match entry {
+                            ConversationEntry::Turn(turn) => turn.msg_id.as_deref() == Some(id),
+                            ConversationEntry::System { msg_id, .. } => {
+                                msg_id.as_deref() == Some(id)
+                            }
+                            ConversationEntry::ArchiveBoundary { .. } => false,
+                        })
+                        .map(|index| index.saturating_add(1)),
+                    None => Some(
+                        app.entries
+                            .iter()
+                            .rposition(|entry| {
+                                matches!(entry, ConversationEntry::ArchiveBoundary { .. })
+                            })
+                            .map_or(0, |index| index.saturating_add(1)),
+                    ),
+                };
+                let Some(keep) = keep_position else {
+                    return UiEffect {
+                        cmds: vec![ConnCommand::Send(ClientMessage::Command(Command {
+                            rid: None,
+                            name: "switch_thread".into(),
+                            args: serde_json::json!({"name": app.thread_name, "resync": true}),
+                        }))],
+                        redraw: RedrawEffect::None,
+                    };
+                };
+                let mut messages = hist.messages;
+                for message in &mut messages {
+                    for image in &mut message.images {
+                        if image.data.is_none() {
+                            image.data = app
+                                .entries
+                                .iter()
+                                .rev()
+                                .filter_map(ConversationEntry::as_turn)
+                                .flat_map(|turn| &turn.images)
+                                .find(|old| old.path == image.path && old.data.is_some())
+                                .and_then(|old| old.data.clone());
+                        }
+                    }
+                }
+                let suffix = app.entries.split_off(keep);
+                let mut prefix = std::mem::replace(&mut app.entries, suffix);
+                reconcile_streaming_turn(app, messages, 0);
+                prefix.append(&mut app.entries);
+                app.entries = prefix;
+                app.history_version = app.history_version.wrapping_add(1);
+                transmit_entry_images_from(app, keep);
+                return UiEffect {
+                    cmds: vec![],
+                    redraw: RedrawEffect::Immediate,
+                };
+            }
+
             if let Some(private) = hist
                 .config
                 .get("private")
@@ -3030,6 +3094,186 @@ mod redraw_tests {
     fn unset_env(key: &str) {
         // SAFETY: as above.
         unsafe { std::env::remove_var(key) }
+    }
+
+    #[test]
+    fn a_filtered_log_recovers_from_a_missing_delta_anchor() {
+        let mut app = App::default();
+        let message = |id: &str, role: &str| {
+            serde_json::json!({
+                "msg_id": id, "role": role, "content": id, "images": [], "content_blocks": [], "timestamp": ""
+            })
+        };
+        let history = |revision, messages, delta| {
+            serde_json::from_value(serde_json::json!({
+                "type": "history", "messages": messages, "selected_character": "ada",
+                "selected_thread": "side", "revision": revision, "delta": delta
+            }))
+            .unwrap()
+        };
+        let initial = serde_json::json!([message("user", "user"), message("reply", "assistant")]);
+        let _ = handle_server_message(&mut app, history(2, initial, serde_json::Value::Null));
+        let _ = handle_server_message(
+            &mut app,
+            serde_json::from_value(serde_json::json!({
+                "type": "command_output", "name": "log", "data": {"messages": []}
+            }))
+            .unwrap(),
+        );
+        assert!(app.entries.is_empty());
+
+        let effect = handle_server_message(
+            &mut app,
+            history(
+                3,
+                serde_json::json!([message("reply", "assistant"), message("next", "user")]),
+                serde_json::json!({"base_revision": 2, "after": "user"}),
+            ),
+        );
+        assert_eq!(effect.cmds.len(), 1);
+        let Some(ConnCommand::Send(ClientMessage::Command(command))) = effect.cmds.first() else {
+            panic!("missing anchor must request a synchronization snapshot");
+        };
+        assert_eq!(command.name, "switch_thread");
+        assert_eq!(
+            command.args,
+            serde_json::json!({"name": "side", "resync": true})
+        );
+
+        let _ = handle_server_message(
+            &mut app,
+            history(
+                3,
+                serde_json::json!([
+                    message("user", "user"),
+                    message("reply", "assistant"),
+                    message("next", "user")
+                ]),
+                serde_json::Value::Null,
+            ),
+        );
+        let next = handle_server_message(
+            &mut app,
+            history(
+                4,
+                serde_json::json!([message("next", "user"), message("answer", "assistant")]),
+                serde_json::json!({"base_revision": 3, "after": "reply"}),
+            ),
+        );
+        assert!(next.cmds.is_empty());
+        assert_eq!(
+            app.entries
+                .iter()
+                .filter_map(ConversationEntry::as_turn)
+                .filter_map(|turn| turn.msg_id.as_deref())
+                .collect::<Vec<_>>(),
+            ["user", "reply", "next", "answer"]
+        );
+        assert_eq!(app.thread_name, "side");
+    }
+
+    #[test]
+    fn a_revision_gap_disconnect_clears_stream_state_before_the_snapshot() {
+        let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            serde_json::from_value(serde_json::json!({
+                "type": "stream_start", "rid": "abandoned", "regen": false
+            }))
+            .unwrap(),
+        );
+        assert!(app.stream.active);
+        let _ = handle_conn_event(
+            &mut app,
+            ConnEvent::Disconnected("history revision gap".into()),
+        );
+        let _ = handle_conn_event(
+            &mut app,
+            ConnEvent::Connected {
+                server_name: "test".into(),
+                characters: vec![],
+                history: vec![],
+                active_start: 0,
+                config: serde_json::json!({}),
+                selected_character: Some("ada".into()),
+                selected_thread: Some("side".into()),
+            },
+        );
+        assert!(!app.stream.active);
+        assert!(app.stream.rid.is_none());
+        assert_eq!(app.thread_name, "side");
+    }
+
+    #[test]
+    fn a_history_delta_replaces_only_the_suffix_and_preserves_paging() {
+        let mut app = App::default();
+        let message = |id: &str, role: &str| {
+            serde_json::json!({
+                "msg_id": id, "role": role, "content": id, "images": [], "content_blocks": [], "timestamp": ""
+            })
+        };
+        let mut old = message("old", "assistant");
+        *old.get_mut("images").unwrap() =
+            serde_json::json!([{"path": "stable-image", "data": "aW1hZ2U="}]);
+        let full: ServerMessage = serde_json::from_value(serde_json::json!({
+            "type": "history", "messages": [message("user", "user"), old],
+            "selected_character": "ada", "selected_thread": "main", "revision": 2
+        }))
+        .unwrap();
+        let _ = handle_server_message(&mut app, full);
+        app.history_has_more_before = false;
+        let prefix = app
+            .entries
+            .first()
+            .unwrap()
+            .as_turn()
+            .unwrap()
+            .blocks
+            .as_ptr();
+        let mut replacement = message("new", "assistant");
+        *replacement.get_mut("images").unwrap() = serde_json::json!([{"path": "stable-image"}]);
+        let delta: ServerMessage = serde_json::from_value(serde_json::json!({
+            "type": "history", "messages": [replacement],
+            "selected_character": "ada", "selected_thread": "main", "revision": 3,
+            "delta": {"base_revision": 2, "after": "user"}
+        }))
+        .unwrap();
+        let _ = handle_server_message(&mut app, delta);
+        assert_eq!(app.entries.len(), 2);
+        assert_eq!(
+            app.entries
+                .first()
+                .unwrap()
+                .as_turn()
+                .unwrap()
+                .blocks
+                .as_ptr(),
+            prefix
+        );
+        assert_eq!(
+            app.entries
+                .get(1)
+                .unwrap()
+                .as_turn()
+                .unwrap()
+                .msg_id
+                .as_deref(),
+            Some("new")
+        );
+        assert_eq!(
+            app.entries
+                .get(1)
+                .unwrap()
+                .as_turn()
+                .unwrap()
+                .images
+                .first()
+                .unwrap()
+                .data
+                .as_deref(),
+            Some("aW1hZ2U=")
+        );
+        assert!(!app.history_has_more_before);
     }
 
     #[test]
@@ -3229,6 +3473,7 @@ mod redraw_tests {
         let _ = handle_server_message(
             &mut app,
             ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages: vec![],
                 active_start: 0,
@@ -3252,6 +3497,7 @@ mod redraw_tests {
         let _ = handle_server_message(
             &mut app,
             ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages: vec![],
                 active_start: 0,
@@ -3433,6 +3679,7 @@ mod redraw_tests {
         let _ = handle_server_message(
             &mut app,
             ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages,
                 active_start: 0,

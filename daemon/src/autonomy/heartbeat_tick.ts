@@ -33,7 +33,7 @@ export interface HeartbeatTickDeps
       "character" | "wrapUpGrace" | "maxToolIterations" | "note" | "generate"
     > {
   generate: HeartbeatLoopDeps["generate"];
-  engine?: (character: string) => Promise<HeartbeatEngine>;
+  engine?: (character: string, thread?: string) => Promise<HeartbeatEngine>;
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   notify?: (title: string, body: string) => void;
   newId?: () => string;
@@ -143,6 +143,19 @@ export async function runHeartbeatTick(
   deps: HeartbeatTickDeps,
 ): Promise<AutonomyActionResult> {
   const thread = await homeThreadOf(config.dirs.data, character);
+  if (deps.engine !== undefined) {
+    let engine: HeartbeatEngine | undefined;
+    let failure: unknown;
+    try { engine = await deps.engine(character, thread); }
+    catch (error) { failure = error; }
+    deps = {
+      ...deps,
+      engine: async () => {
+        if (engine === undefined) throw failure;
+        return engine;
+      },
+    };
+  }
   return await withConversation(threadDataDir(config.dirs.data, character, thread), "turn", async (signal) => {
     const events: { kind: HeartbeatEventKind; detail: string }[] = [];
     const note = (kind: HeartbeatEventKind, detail: string): void => {

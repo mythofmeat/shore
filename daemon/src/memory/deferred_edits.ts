@@ -295,6 +295,33 @@ export async function refreshActivePromptSnapshot(
   }
 }
 
+export async function forkPromptState(
+  characterDir: string,
+  source: string,
+  child: string,
+): Promise<void> {
+  const hasSnapshot = await activePromptSnapshotExists(characterDir, source);
+  const files = hasSnapshot
+    ? [...PROTECTED_PATHS, MEMORY_INDEX_FILE].map(path => `active_prompt/${path}`)
+    : [];
+  await rm(snapshotDir(characterDir, child), { recursive: true, force: true });
+  const { data, character } = characterScope(characterDir);
+  withStorage(data, db => db.transaction(() => {
+    const childPromptPrefix = `${character}/${stateFile(child, "active_prompt/")}`;
+    db.query(
+      "DELETE FROM state_files WHERE character = ?1 AND substr(path, 1, length(?2)) = ?2",
+    ).run(character, childPromptPrefix);
+    deleteCharacterState(characterDir, stateFile(child, QUEUE_FILE));
+    for (const file of files) {
+      const content = readCharacterState(characterDir, stateFile(source, file)) ?? "";
+      writeCharacterState(characterDir, stateFile(child, file), content);
+    }
+    if (hasSnapshot) writeCharacterState(characterDir, stateFile(child, "active_prompt/.snapshot"), "1");
+    const queue = readCharacterState(characterDir, stateFile(source, QUEUE_FILE));
+    if (queue !== undefined) writeCharacterState(characterDir, stateFile(child, QUEUE_FILE), queue);
+  })());
+}
+
 export async function resetActivePromptSnapshot(characterDataDir: string, thread = MAIN_THREAD): Promise<void> {
   await rm(snapshotDir(characterDataDir, thread), { recursive: true, force: true });
   const { data, character } = characterScope(characterDataDir);

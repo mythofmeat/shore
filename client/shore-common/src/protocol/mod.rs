@@ -133,6 +133,7 @@ mod tests {
     #[test]
     fn server_history_round_trip() {
         let msg = ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![Message {
                 msg_id: "m1".into(),
@@ -165,6 +166,7 @@ mod tests {
     #[test]
     fn server_request_history_round_trip() {
         let msg = ServerMessage::History(History {
+            delta: None,
             rid: Some("cmd_switch_01".into()),
             messages: vec![],
             active_start: 0,

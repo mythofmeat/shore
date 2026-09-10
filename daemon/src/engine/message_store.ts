@@ -1,4 +1,4 @@
-import { readDurable, writeDurable, durablePath, type DurableFile } from "../storage/files.ts";
+import { readDurable, writeDurable, appendDurableLine, initializeDurableLines, replaceDurableSuffix, updateDurableLine, durablePath, type DurableFile } from "../storage/files.ts";
 import { required } from "../util/required.ts";
 
 import { shoreLog } from "../log.ts";
@@ -349,6 +349,7 @@ export class MessageStore {
   readonly #io: MessageStoreIo;
   #mutationTail: Promise<void> = Promise.resolve();
   #quarantined = 0;
+  #repairRows = false;
   #altDefects: readonly AlternativeDefect[] = [];
 
   private constructor(path: DurableFile, messages: Message[], io: MessageStoreIo) {
@@ -359,7 +360,9 @@ export class MessageStore {
   }
 
   static create(path: DurableFile, io: MessageStoreIo = messageStoreIo): MessageStore {
-    return new MessageStore(path, [], io);
+    const store = new MessageStore(path, [], io);
+    store.#repairRows = true;
+    return store;
   }
 
   static async load(path: DurableFile, io: MessageStoreIo = messageStoreIo): Promise<MessageStore> {
@@ -409,6 +412,7 @@ export class MessageStore {
 
     const store = new MessageStore(path, messages, io);
     store.#quarantined = unreadable.length;
+    store.#repairRows = (raw.match(/[^\n]*\n|[^\n]+$/g) ?? []).length !== messages.length;
     store.#altDefects = defects;
     return { store, raw };
   }
@@ -457,6 +461,13 @@ export class MessageStore {
 
   async append(msg: Message): Promise<void> {
     const candidate = versioned(structuredClone(msg));
+    if (this.#io === messageStoreIo) {
+      return await this.#enqueue(async () => {
+        this.#prepareRows();
+        appendDurableLine(this.#file, `${serializeForStorage(candidate)}\n`);
+        this.#messages.push(candidate);
+      });
+    }
     await this.#mutate((messages) => {
       messages.push(candidate);
       return changed(undefined);
@@ -523,6 +534,20 @@ export class MessageStore {
   }
 
   async edit(msgId: string, newContent: string): Promise<void> {
+    if (this.#io === messageStoreIo) {
+      return await this.#enqueue(async () => {
+        const index = this.#messages.findIndex(message => message.msg_id === msgId);
+        if (index === -1) throw new MessageNotFound(msgId);
+        const msg = structuredClone(required(this.#messages[index]));
+        msg.content = newContent;
+        msg.content_blocks = msg.role === "assistant" ? editAssistantText(msg.content_blocks, newContent) : [{ type: "text", text: newContent }];
+        msg.version = newMessageVersion();
+        await backupBeforeWrite(this.#file);
+        this.#prepareRows();
+        updateDurableLine(this.#file, index, `${serializeForStorage(msg)}\n`);
+        this.#messages[index] = msg;
+      });
+    }
     await this.#mutate((messages) => {
       const msg = messages.find((m) => m.msg_id === msgId);
       if (msg === undefined) throw new MessageNotFound(msgId);
@@ -548,6 +573,28 @@ export class MessageStore {
 
   async replaceAfterLastUserTurn(newMessages: Message[]): Promise<number> {
     const replacements = structuredClone(newMessages).map(versioned);
+    if (this.#io === messageStoreIo) {
+      return await this.#enqueue(async () => {
+        const keep = this.#keepIndex();
+        const removed = this.#messages.length - keep;
+        const candidates = new Map(replacements.map(message => [message.msg_id, message]));
+        const preserves = this.#messages.slice(keep).every(previous => {
+          const replacement = candidates.get(previous.msg_id);
+          if (replacement === undefined) return false;
+          const { version: _beforeVersion, ...before } = previous;
+          const { version: _afterVersion, ...after } = replacement;
+          if (serializeForStorage(before) !== serializeForStorage(after)) return false;
+          if (previous.version !== undefined) replacement.version = previous.version;
+          return true;
+        });
+        if (!preserves) await backupBeforeWrite(this.#file);
+        this.#prepareRows();
+        replaceDurableSuffix(this.#file, keep, replacements.map(message => `${serializeForStorage(message)}\n`));
+        this.#messages.length = keep;
+        this.#messages.push(...replacements);
+        return removed;
+      });
+    }
     return await this.#mutate((messages) => {
       const keep = this.#keepIndex(messages);
       const removed = messages.length - keep;
@@ -694,21 +741,29 @@ export class MessageStore {
     return 0;
   }
 
+  #prepareRows(): void {
+    initializeDurableLines(this.#file, () => serializeMessages(this.#messages), this.#repairRows);
+    this.#repairRows = false;
+  }
+
   async #mutate<T>(mutation: (messages: Message[]) => Mutation<T>): Promise<T> {
-    const predecessor = this.#mutationTail;
-    const gate = Promise.withResolvers<void>();
-    this.#mutationTail = gate.promise;
-    await predecessor;
-    try {
+    return await this.#enqueue(async () => {
       const nextMessages = structuredClone(this.#messages);
       const { changed: didChange, result } = mutation(nextMessages);
       if (!didChange) return result;
       await this.#persist(nextMessages);
       this.#messages = nextMessages;
       return result;
-    } finally {
-      gate.resolve();
-    }
+    });
+  }
+
+  async #enqueue<T>(run: () => Promise<T>): Promise<T> {
+    const predecessor = this.#mutationTail;
+    const gate = Promise.withResolvers<void>();
+    this.#mutationTail = gate.promise;
+    await predecessor;
+    try { return await run(); }
+    finally { gate.resolve(); }
   }
 
   async #persist(messages: readonly Message[]): Promise<void> {
