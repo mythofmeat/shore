@@ -479,21 +479,20 @@ describe("what compaction is told the context weighs", () => {
   });
 });
 
-test("the SDK tool loop blocks collapsed history before querying or running tools", async () => {
+test("the SDK tool loop restores native history before querying or running tools", async () => {
   const tools = phase();
   const { events, agent } = await drive(ONE_CALL, tools, request({ messages: [
     { role: "user", content: [{ type: "text", text: "hello" }] },
     { role: "assistant", content: [{ type: "text", text: "hi" }] },
     { role: "user", content: [{ type: "text", text: "read SOUL.md" }] },
   ] }));
-  const error = events.find((event) => event.type === "error");
-  expect(error?.message).toContain("blocked replay of 3 conversation messages");
-  expect(agent.calls).toEqual([]);
-  expect(tools.dispatched).toEqual([]);
-  expect(events.some((event) => event.type === "done")).toBe(false);
+  expect(events.some((event) => event.type === "error")).toBe(false);
+  expect(agent.calls[0]?.options.sessionStore).toBeDefined();
+  expect(tools.dispatched).toHaveLength(1);
+  expect(done(events).content).toBe("it says Brian.");
 });
 
-test("the replay guard checks the prompt after the initial hook changes it", async () => {
+test("native history includes changes from the initial hook", async () => {
   const tools = phase();
   tools.beforeTurn = (req) => {
     if (req.messages.length === 1) {
@@ -501,9 +500,15 @@ test("the replay guard checks the prompt after the initial hook changes it", asy
     }
   };
   const { events, agent } = await drive(ONE_CALL, tools);
-  const error = events.find((event) => event.type === "error");
-  expect(error?.message).toContain("blocked replay of 2 conversation messages");
-  expect(agent.calls).toEqual([]);
+  expect(events.some((event) => event.type === "error")).toBe(false);
+  const options = agent.calls[0]?.options;
+  const history = await options?.sessionStore?.load({ projectKey: "-tmp", sessionId: options.resume ?? "" });
+  expect(history?.map((entry) => entry.message)).toEqual(request().messages);
+  const prompt = agent.calls[0]?.prompt;
+  expect(typeof prompt).not.toBe("string");
+  if (prompt !== undefined && typeof prompt !== "string") {
+    for await (const turn of prompt) expect(turn.message.content).toEqual([{ type: "text", text: "another message" }]);
+  }
 });
 
 

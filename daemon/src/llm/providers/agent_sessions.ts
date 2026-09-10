@@ -22,6 +22,7 @@ export interface SessionRecord {
   sessionId: string;
   entries: DeliveredEntry[];
   pendingAssistantUuids?: string[];
+  storedTranscript?: true;
 }
 
 export type SessionBook = Record<string, SessionRecord>;

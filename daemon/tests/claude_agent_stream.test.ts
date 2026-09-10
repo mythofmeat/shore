@@ -345,7 +345,7 @@ describe("what the turn leaves behind", () => {
     expect(Object.values(book)[0]?.pendingAssistantUuids).toEqual(["msg_0_asst_1"]);
   });
 
-  test("a missing resume anchor clears the stale record and blocks a lossy retry", async () => {
+  test("a missing resume anchor clears the stale record so a retry can restore native history", async () => {
     const dir = await bookDir();
     const path = join(dir, "sessions.json");
     const key = "default\u0000";
@@ -384,10 +384,12 @@ describe("what the turn leaves behind", () => {
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({});
 
     const retried: StreamEvent[] = [];
-    for await (const event of provider.stream(req)) retried.push(event);
-    expect(agent.calls).toHaveLength(1);
-    expect(retried.find((event) => event.type === "error")?.message).toContain("blocked replay");
-    expect(kinds(retried)).not.toContain("done");
+    const recovered = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "recovered" }] }] });
+    const restarted = new ClaudeAgentProvider({ runQuery: recovered.query, bookPath: () => path });
+    for await (const event of restarted.stream(req)) retried.push(event);
+    expect(recovered.calls[0]?.options.sessionStore).toBeDefined();
+    expect(kinds(retried)).not.toContain("error");
+    expect(done(retried).content).toBe("recovered");
   });
 });
 
@@ -469,8 +471,8 @@ describe("sending a picture", () => {
   });
 });
 
-describe("conversation replay guard", () => {
-  test("blocks before model output when history would be collapsed", async () => {
+describe("native history restoration", () => {
+  test("loads prior turns as native history when no matching SDK session exists", async () => {
     const { events, agent } = await collect(
       { rounds: [{ blocks: [{ kind: "text", text: "reply" }] }] },
       request({ messages: [
@@ -479,11 +481,12 @@ describe("conversation replay guard", () => {
         { role: "user", content: [{ type: "text", text: "continue" }] },
       ] }),
     );
-    expect(events[1]?.type).toBe("error");
-    const error = events.find((event) => event.type === "error");
-    expect(error?.message).toContain("blocked replay of 3 conversation messages");
-    expect(agent.calls).toEqual([]);
-    expect(kinds(events)).not.toContain("done");
+    expect(kinds(events)).not.toContain("error");
+    const options = agent.calls[0]?.options;
+    expect(options?.sessionStore).toBeDefined();
+    const history = await options?.sessionStore?.load({ projectKey: "-tmp", sessionId: options.resume ?? "" });
+    expect(history?.map((entry) => entry.type)).toEqual(["user", "assistant"]);
+    expect(done(events).content).toBe("reply");
   });
 
   test("does not warn for a fresh conversation", async () => {

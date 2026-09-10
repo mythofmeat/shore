@@ -9,6 +9,7 @@ import {
   type Options,
   type SDKMessage,
   type SDKUserMessage,
+  type SessionStore,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RawMessageStreamEvent } from "@anthropic-ai/sdk/resources/messages";
@@ -37,6 +38,7 @@ import type { ContentBlock } from "../../engine/types.ts";
 import { compareByCodePoint } from "../../util/sort.ts";
 import { omissionNotice } from "../images.ts";
 import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
+import { nativeHistoryStore, seedNativeHistory } from "./claude_agent_history.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
 import {
@@ -206,6 +208,8 @@ function replayContent(msgs: readonly WireMessage[]): ContentBlock[] {
 
 export interface TurnPlan {
   prompt: string;
+  nativeContent?: ContentBlock[];
+  sessionStore?: SessionStore;
   replayContent?: ContentBlock[];
   images: ContentBlock[];
   resume?: string;
@@ -214,6 +218,7 @@ export interface TurnPlan {
   keptEntries: DeliveredEntry[];
   delivered: WireMessage[];
   replayReason?: string;
+  warning?: string;
 }
 
 function coldStart(msgs: readonly WireMessage[], replayReason = "No matching native SDK session is available."): TurnPlan {
@@ -270,26 +275,36 @@ export function planTurn(record: SessionRecord | undefined, msgs: readonly WireM
   };
 }
 
-function* replayPolicy(plan: TurnPlan, req: SidecarRequest): Iterable<StreamEvent> {
+async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: string, key: string, record: SessionRecord | undefined): Promise<TurnPlan> {
   const replayed = plan.resume !== undefined && !plan.fork
     ? plan.delivered.filter((message) => message.role !== "assistant")
     : plan.delivered;
   if (replayed.length <= 1 && !replayed.some((message) => message.role === "assistant" ||
-    message.content.some((block) => block.type === "tool_use" || block.type === "tool_result"))) return;
+    message.content.some((block) => block.type === "tool_use" || block.type === "tool_result"))) {
+    return record?.storedTranscript === true ? { ...plan, sessionStore: nativeHistoryStore(path, key) } : plan;
+  }
   const callType = req.context?.call_type;
   if (callType !== undefined && callType !== "message" && callType !== "tool_loop") {
     const message = `Claude Agent SDK: ${callType} is replaying ${replayed.length} task-context messages ` +
       "as text in a separate background session. The chat session is not modified.";
     shoreLog.warn(message);
-    yield { type: "provider_warning", message };
-    return;
+    return { ...plan, warning: message };
   }
-  const message =
-    `Claude Agent SDK: blocked replay of ${replayed.length} conversation messages as a single user turn. ` +
-    `${plan.replayReason ?? "The pending messages cannot be sent as one native user turn."} ` +
-    "No prompt was sent to the SDK and its history was left untouched. " +
-    "Use the Anthropic API provider to continue with native history, or restore the matching SDK session.";
-  throw new Error(message);
+  const seeded = await seedNativeHistory(req, nativeHistoryStore(path, key));
+  shoreLog.info("claude_agent: initialized native history from Shore's active conversation");
+  return {
+    prompt: "",
+    images: [],
+    nativeContent: seeded.promptContent,
+    sessionStore: seeded.sessionStore,
+    resume: seeded.sessionId,
+    fork: false,
+    keptEntries: req.messages.slice(0, -1).map((message, index) => {
+      const uuid = seeded.assistantUuids.get(index);
+      return { hash: messageHash(message), ...(uuid === undefined ? {} : { uuid }) };
+    }),
+    delivered: req.messages.slice(-1),
+  };
 }
 
 function withSystemInstructions(req: SidecarRequest): SidecarRequest {
@@ -432,6 +447,7 @@ function buildOptions(
           },
         }),
     ...(plan.resume === undefined ? {} : { resume: plan.resume }),
+    ...(plan.sessionStore === undefined ? {} : { sessionStore: plan.sessionStore }),
     ...(plan.resumeSessionAt === undefined ? {} : { resumeSessionAt: plan.resumeSessionAt }),
     ...(plan.fork ? { forkSession: true } : {}),
   };
@@ -523,6 +539,10 @@ async function* rawEventsOf(
       throw new Error(
         "claude_agent: the SDK compacted mid-turn, so its history no longer matches shore's",
       );
+    }
+
+    if (msg.type === "system" && msg.subtype === "mirror_error") {
+      throw new Error(`claude_agent: failed to persist native history: ${msg.error}`);
     }
 
     if (msg.type === "result") {
@@ -629,6 +649,7 @@ async function* oneUserTurn(content: ContentBlock[]): AsyncIterable<SDKUserMessa
 }
 
 export function agentPrompt(plan: TurnPlan): AgentPrompt {
+  if (plan.nativeContent !== undefined) return oneUserTurn(plan.nativeContent);
   if (plan.images.length === 0) return plan.prompt;
   return oneUserTurn(plan.replayContent ?? [{ type: "text", text: plan.prompt }, ...plan.images]);
 }
@@ -657,7 +678,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     const path = this.#bookPath();
     const key = conversationKey(req);
     const record = readBook(path)[key];
-    const plan = planTurn(record, req.messages);
+    let plan = planTurn(record, req.messages);
 
     const abort = new AbortController();
     if (signal?.aborted) abort.abort();
@@ -668,7 +689,8 @@ export class ClaudeAgentProvider implements SidecarProvider {
         throw new Error("Tool-capable generation requires a tool executor; use the shared tool loop");
       }
       yield { type: "start", model: req.model };
-      yield* replayPolicy(plan, req);
+      plan = await withNativeHistory(plan, req, path, key, record);
+      if (plan.warning !== undefined) yield { type: "provider_warning", message: plan.warning };
 
       const run = this.#runQuery({ prompt: agentPrompt(plan), options: buildOptions(req, plan, abort) });
 
@@ -682,6 +704,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
           version: SESSION_BOOK_VERSION,
           sessionId: seen.sessionId,
           entries: nextEntries(plan, record?.pendingAssistantUuids),
+          ...(plan.sessionStore === undefined ? {} : { storedTranscript: true }),
           ...(seen.assistantUuids.length === 0
             ? {}
             : { pendingAssistantUuids: seen.assistantUuids }),
@@ -993,7 +1016,8 @@ export async function* claudeAgentToolLoopEvents(
     await tools.beforeTurn?.(req);
     Object.assign(req, withSystemInstructions(req));
     plan = planTurn(record, req.messages);
-    yield* replayPolicy(plan, req);
+    plan = await withNativeHistory(plan, req, path, key, record);
+    if (plan.warning !== undefined) yield { type: "provider_warning", message: plan.warning };
     const run = (deps.runQuery ?? query)({
       prompt: agentPrompt(plan),
       options: buildOptions(req, plan, abort, {
@@ -1033,6 +1057,7 @@ export async function* claudeAgentToolLoopEvents(
           ...nextEntries(plan, record?.pendingAssistantUuids),
           ...round.nativeEntries(seen.assistantUuids),
         ],
+        ...(plan.sessionStore === undefined ? {} : { storedTranscript: true }),
         ...(pendingAssistantUuids.length === 0
           ? {}
           : { pendingAssistantUuids }),
