@@ -1,4 +1,5 @@
 import { CallStore } from "../call_store.ts";
+import { pruneSdkSessions } from "../llm/providers/agent_session_retention.ts";
 import { shoreLog } from "../log.ts";
 import type { SnapshotGate } from "../snapshot_gate.ts";
 import { databasePath, openStorage, pack, unpack } from "./store.ts";
@@ -68,6 +69,9 @@ export function startDiagnosticRetention(data: string, gate: SnapshotGate, inter
       await gate.withActivity(async () => {
         if (stopped) return;
         const stats = pruneDiagnostics(data);
+        const nowMs = Date.now();
+        const sdkSessions = pruneSdkSessions(data, nowMs - DIAGNOSTIC_RETENTION_MS, nowMs);
+        if (sdkSessions > 0) shoreLog.info(`shore: diagnostic retention removed ${sdkSessions} retired SDK sessions and their transcript copies`);
         if (stats.captures + stats.heartbeats + stats.subagentTraces > 0) {
           shoreLog.info(`shore: diagnostic retention removed ${stats.captures} captures and ${stats.heartbeats} heartbeat events; retained results for ${stats.subagentTraces} expired subagent traces`);
         }

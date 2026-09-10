@@ -360,6 +360,7 @@ describe("what the turn leaves behind", () => {
       [key]: {
         version: SESSION_BOOK_VERSION,
         sessionId: "forked-session",
+        storedTranscript: true,
         entries: nextEntries({ ...planTurn(undefined, history), resume: "forked-session" }, ["missing-parent-uuid"]),
       },
     };

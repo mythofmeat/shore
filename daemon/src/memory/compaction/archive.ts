@@ -1,7 +1,9 @@
 import { writeDurable } from "../../storage/files.ts";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { forgetThreadSessions } from "../../llm/providers/agent_sessions.ts";
+import { MAIN_THREAD } from "../../config/dirs.ts";
 
 import { activeJsonlIn, compactionManifestIn, segmentsDirIn } from "../../config/dirs.ts";
 
@@ -86,6 +88,8 @@ export async function archiveAndRetain(
       characterDir,
       segmentMetadata,
     );
+    const [character, thread = MAIN_THREAD] = history.archiveKey.split("/");
+    if (character !== undefined) forgetThreadSessions(dirname(history.dbPath), character, thread, Date.parse(now()));
     return newId();
   }
 

@@ -95,6 +95,7 @@ test.each([false, true])("the real SDK continues and regenerates after compactio
       expect(messages[1]?.content).toContainEqual({ type: "tool_use", id: "toolu_retained", name: "mcp__shore__read", input: {} });
       expect(messages[2]?.content).toContainEqual({ type: "tool_result", tool_use_id: "toolu_retained", content: "retained tool output" });
     }
+    await rm(join(dir, "claude", "projects"), { recursive: true, force: true });
     await drive(compacted);
     expect(calls[2]?.options.sessionStore).toBeDefined();
     expect(calls[2]?.options.forkSession).toBe(true);
@@ -119,7 +120,7 @@ test.each([false, true])("the real SDK continues and regenerates after compactio
   }
 }, 120_000);
 
-test.each(["legacy replay", "edited reply", "omitted reply", "heartbeat", "subagent", "heartbeat after reply"])("the real SDK preserves history for %s", async (scenario) => {
+test.each(["legacy replay", "unmirrored session", "edited reply", "omitted reply", "heartbeat", "subagent", "heartbeat after reply"])("the real SDK preserves history for %s", async (scenario) => {
   const dir = await mkdtemp(join(tmpdir(), "shore-history-boundaries-"));
   const path = join(dir, "sessions.json");
   const mock = await startMockAnthropic({ fallback: { text: "native reply" } });
@@ -156,6 +157,16 @@ test.each(["legacy replay", "edited reply", "omitted reply", "heartbeat", "subag
       writeSession(path, key, { ...record, version: 5, entries: nextEntries(planTurn(undefined, prior), undefined) });
       expected = [...prior, assistant("native reply"), user("continue")];
       await drive(expected);
+    } else if (scenario === "unmirrored session") {
+      await drive([user("question")]);
+      const book = readBook(path);
+      const key = required(Object.keys(book)[0]);
+      const { storedTranscript: _stored, ...old } = required(book[key]);
+      writeSession(path, key, old);
+      expected = [user("question"), assistant("native reply"), user("continue")];
+      await drive(expected);
+      expect(readBook(path)[key]?.sessionId).not.toBe(old.sessionId);
+      expect(readBook(path)[key]?.storedTranscript).toBe(true);
     } else if (scenario === "edited reply" || scenario === "omitted reply") {
       await drive([user("question")]);
       expected = [user("question"), ...(scenario === "edited reply" ? [assistant("edited answer")] : []), user("continue")];

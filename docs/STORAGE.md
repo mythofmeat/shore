@@ -30,8 +30,23 @@ schedule, while results, errors, timestamps, model names, and parent-call links
 remain indefinitely. These result records remain queryable as subagent traces
 with empty `messages` and `messages_expired: true`.
 
-Main conversation history and alternatives, memory and session state, and usage
-accounting do not expire. Malformed subagent records and records without a valid
+Shore mirrors new SDK sessions into the database so its retention policy does
+not depend on the SDK's separate local-file cleanup. Existing sessions without
+a mirror are rebuilt from Shore history on their next use.
+SDK sessions are retired when compaction or clearing replaces a thread's active
+conversation, or when another SDK session replaces them. Retired sessions keep
+their compressed database mirrors and local SDK transcript files for 30 days
+from retirement. The daily sweep then removes both copies, including SDK
+subagent transcript directories. Sessions referenced by an active thread,
+including parent sessions needed for regeneration, remain protected regardless
+of age. Reactivating a session cancels retirement. Unreferenced database mirrors
+discovered by the sweep receive a fresh 30-day grace period. Local files without
+a known Shore session ID are left to the SDK's own cleanup policy. The SDK may
+remove its local files earlier; the database mirror preserves the diagnostic
+copy for the full retirement period.
+
+Main conversation history and alternatives, memory and active session state,
+and usage accounting do not expire. Malformed subagent records and records without a valid
 age are preserved for inspection. Capture cleanup reclaims only payloads and
 chunks no longer referenced by retained captures. Freed pages can be reused by
 new records; daily cleanup does not run a full `VACUUM`. There is no total-size

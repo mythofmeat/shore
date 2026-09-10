@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 
 import { MAIN_THREAD, resolveShoreDirs, rustJoin } from "../../config/dirs.ts";
 import { shoreLog } from "../../log.ts";
+import { reconcileSessions, retireSession } from "./agent_session_retention.ts";
 
 export const SESSION_KEY_SEPARATOR = "\u0000";
 
@@ -76,9 +77,12 @@ export function readBook(path: string): SessionBook {
   });
 }
 
-export function writeBook(path: string, book: SessionBook): void {
+export function writeBook(path: string, book: SessionBook, nowMs = Date.now()): void {
   const prefix = bookPrefix(path);
   withStorage(dirname(path), (db) => db.transaction(() => {
+    const previous = db.query("SELECT path, content FROM state_files WHERE substr(path, 1, length(?1)) = ?1").all(prefix) as { path: string; content: Uint8Array }[];
+    const before = Object.fromEntries(previous.map(row => [Buffer.from(row.path.slice(prefix.length), "base64url").toString(), JSON.parse(unpack(row.content)) as SessionRecord]));
+    reconcileSessions(db, before, book, nowMs);
     db.query("DELETE FROM state_files WHERE substr(path, 1, length(?1)) = ?1").run(prefix);
     db.query("DELETE FROM state_files WHERE path = ?1").run(basename(path));
     if (Object.keys(book).length === 0) db.query("INSERT INTO state_files(path, character, content) VALUES (?1, ?2, ?3)").run(basename(path), "", pack("{}"));
@@ -90,8 +94,13 @@ export function writeBook(path: string, book: SessionBook): void {
   if (existsSync(path)) unlinkSync(path);
 }
 
-export function writeSession(path: string, key: string, record: SessionRecord): void {
-  writeBook(path, { ...readBook(path), [key]: record });
+export function writeSession(path: string, key: string, record: SessionRecord, previous?: { record: SessionRecord | undefined }): void {
+  const book = readBook(path);
+  if (previous !== undefined && JSON.stringify(book[key]) !== JSON.stringify(previous.record)) {
+    withStorage(dirname(path), db => retireSession(db, record.sessionId, sessionKeyOwner(key) ?? "", Date.now()));
+    return;
+  }
+  writeBook(path, { ...book, [key]: record });
 }
 
 export function withoutThread(
@@ -111,13 +120,13 @@ export function withoutThread(
   return dropped === 0 ? undefined : kept;
 }
 
-export function forgetThreadSessions(data: string, character: string, thread: string): number {
+export function forgetThreadSessions(data: string, character: string, thread: string, nowMs = Date.now()): number {
   const path = bookPathIn(data);
   const book = readBook(path);
   const kept = withoutThread(book, character, thread);
   if (kept === undefined) return 0;
   const dropped = Object.keys(book).length - Object.keys(kept).length;
-  writeBook(path, kept);
+  writeBook(path, kept, nowMs);
   shoreLog.info(
     `shore: forgot ${String(dropped)} Agent SDK session(s) for ${character} thread ${thread}`,
   );

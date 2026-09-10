@@ -285,9 +285,9 @@ async function withNativeHistory(plan: TurnPlan, req: SidecarRequest, path: stri
     })
   );
   const replayed = plan.delivered.slice(pending.length);
-  if (acknowledged && replayed.length === 1 && !replayed.some((message) => message.role === "assistant" ||
+  if ((plan.resume === undefined || record?.storedTranscript === true) && acknowledged && replayed.length === 1 && !replayed.some((message) => message.role === "assistant" ||
     message.content.some((block) => block.type === "tool_use" || block.type === "tool_result"))) {
-    return record?.storedTranscript === true ? { ...plan, sessionStore: nativeHistoryStore(path, key) } : plan;
+    return { ...plan, sessionStore: nativeHistoryStore(path, key) };
   }
   const seeded = await seedNativeHistory(req, nativeHistoryStore(path, key));
   shoreLog.info("claude_agent: initialized native history from Shore's active conversation");
@@ -715,7 +715,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
                 pendingAssistantUuids: seen.assistantUuids,
                 pendingAssistantHashes: [messageHash({ role: "assistant", content: blocks.finish() })],
               }),
-        });
+        }, { record });
       }
 
       const total = Date.now() - startedAt;
@@ -1070,7 +1070,7 @@ export async function* claudeAgentToolLoopEvents(
               pendingAssistantUuids,
               pendingAssistantHashes: [messageHash({ role: "assistant", content: round.finalBlocks() })],
             }),
-      });
+      }, { record });
     }
 
     const total = Date.now() - startedAt;
