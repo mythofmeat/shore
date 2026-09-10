@@ -141,7 +141,9 @@ MUTANTS = [
      "\n  const config = snapshot.config;"),
     ("effects: a thread switch never pushes the new thread's history", DISPATCH,
      "  await ctx.router.sendToSession(ctx.sessionId, historyMessage(snapshot, ctx.rid));\n"
+     "  if (!changed) return undefined;\n"
      '  await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", selected);',
+     "  if (!changed) return undefined;\n"
      '  await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", selected);'),
     ("effects: a thread switch leaves the cached request pointed at the old thread", DISPATCH,
      '  await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", selected);\n',
@@ -150,7 +152,13 @@ MUTANTS = [
      '  await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", selected);',
      '  await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change");'),
     ("effects: a no-op thread switch still pushes history and reprimes", DISPATCH,
-     '  if (isRecord(data) && data["changed"] !== true) return undefined;\n',
+     '  if (!changed && !resync) return undefined;\n',
+     ""),
+    ("effects: explicit resync still skips the current thread's history", DISPATCH,
+     '  if (!changed && !resync) return undefined;',
+     '  if (!changed) return undefined;'),
+    ("effects: resync reprimes the cache without a thread change", DISPATCH,
+     '  if (!changed) return undefined;\n',
      ""),
     ("effects: a failed thread snapshot leaves the session on the new thread", DISPATCH,
      "  } catch (e) {\n    ctx.router.setSelectedThread(ctx.sessionId, previous);\n    throw e;\n  }",
@@ -192,6 +200,7 @@ MUTANTS = [
 ]
 
 TESTS = [
+    "tests/command_path.test.ts",
     "tests/handler_command_dispatch.test.ts",
     "tests/swp.test.ts",
     "tests/swp_transport.test.ts",

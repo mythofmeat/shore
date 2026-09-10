@@ -3008,7 +3008,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         cmds: vec![ConnCommand::Send(ClientMessage::Command(Command {
                             rid: None,
                             name: "switch_thread".into(),
-                            args: serde_json::json!({"name": app.thread_name}),
+                            args: serde_json::json!({"name": app.thread_name, "resync": true}),
                         }))],
                         redraw: RedrawEffect::None,
                     };
@@ -3094,6 +3094,114 @@ mod redraw_tests {
     fn unset_env(key: &str) {
         // SAFETY: as above.
         unsafe { std::env::remove_var(key) }
+    }
+
+    #[test]
+    fn a_filtered_log_recovers_from_a_missing_delta_anchor() {
+        let mut app = App::default();
+        let message = |id: &str, role: &str| {
+            serde_json::json!({
+                "msg_id": id, "role": role, "content": id, "images": [], "content_blocks": [], "timestamp": ""
+            })
+        };
+        let history = |revision, messages, delta| {
+            serde_json::from_value(serde_json::json!({
+                "type": "history", "messages": messages, "selected_character": "ada",
+                "selected_thread": "side", "revision": revision, "delta": delta
+            }))
+            .unwrap()
+        };
+        let initial = serde_json::json!([message("user", "user"), message("reply", "assistant")]);
+        let _ = handle_server_message(&mut app, history(2, initial, serde_json::Value::Null));
+        let _ = handle_server_message(
+            &mut app,
+            serde_json::from_value(serde_json::json!({
+                "type": "command_output", "name": "log", "data": {"messages": []}
+            }))
+            .unwrap(),
+        );
+        assert!(app.entries.is_empty());
+
+        let effect = handle_server_message(
+            &mut app,
+            history(
+                3,
+                serde_json::json!([message("reply", "assistant"), message("next", "user")]),
+                serde_json::json!({"base_revision": 2, "after": "user"}),
+            ),
+        );
+        assert_eq!(effect.cmds.len(), 1);
+        let Some(ConnCommand::Send(ClientMessage::Command(command))) = effect.cmds.first() else {
+            panic!("missing anchor must request a synchronization snapshot");
+        };
+        assert_eq!(command.name, "switch_thread");
+        assert_eq!(
+            command.args,
+            serde_json::json!({"name": "side", "resync": true})
+        );
+
+        let _ = handle_server_message(
+            &mut app,
+            history(
+                3,
+                serde_json::json!([
+                    message("user", "user"),
+                    message("reply", "assistant"),
+                    message("next", "user")
+                ]),
+                serde_json::Value::Null,
+            ),
+        );
+        let next = handle_server_message(
+            &mut app,
+            history(
+                4,
+                serde_json::json!([message("next", "user"), message("answer", "assistant")]),
+                serde_json::json!({"base_revision": 3, "after": "reply"}),
+            ),
+        );
+        assert!(next.cmds.is_empty());
+        assert_eq!(
+            app.entries
+                .iter()
+                .filter_map(ConversationEntry::as_turn)
+                .filter_map(|turn| turn.msg_id.as_deref())
+                .collect::<Vec<_>>(),
+            ["user", "reply", "next", "answer"]
+        );
+        assert_eq!(app.thread_name, "side");
+    }
+
+    #[test]
+    fn a_revision_gap_disconnect_clears_stream_state_before_the_snapshot() {
+        let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            serde_json::from_value(serde_json::json!({
+                "type": "stream_start", "rid": "abandoned", "regen": false
+            }))
+            .unwrap(),
+        );
+        assert!(app.stream.active);
+        let _ = handle_conn_event(
+            &mut app,
+            ConnEvent::Disconnected("history revision gap".into()),
+        );
+        let _ = handle_conn_event(
+            &mut app,
+            ConnEvent::Connected {
+                server_name: "test".into(),
+                characters: vec![],
+                history: vec![],
+                active_start: 0,
+                config: serde_json::json!({}),
+                selected_character: Some("ada".into()),
+                selected_thread: Some("side".into()),
+            },
+        );
+        assert!(!app.stream.active);
+        assert!(app.stream.rid.is_none());
+        assert_eq!(app.thread_name, "side");
     }
 
     #[test]

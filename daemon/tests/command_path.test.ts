@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import fixture from "./handler_captures/command_path.json" with { type: "json" };
-import { CharacterError } from "../src/characters.ts";
+import { CharacterError, CharacterRegistry } from "../src/characters.ts";
 import { MAIN_THREAD } from "../src/config/dirs.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
@@ -20,7 +20,9 @@ import {
   type CommandPathDeps,
 } from "../src/handler/commands.ts";
 import { characterPreferencesPath, loadPreferences } from "../src/config/preferences.ts";
-import type { RequestMeta } from "../src/swp/session.ts";
+import { SessionRouter, type RequestMeta } from "../src/swp/session.ts";
+import { buildHandshakeProvider } from "../src/swp/handshake.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { existsSync } from "node:fs";
 import { testTmp } from "./support/tmp.ts";
 import { SnapshotGate } from "../src/snapshot_gate.ts";
@@ -202,6 +204,44 @@ function meta(selected: string | null, rid: string | null): RequestMeta {
     rid,
     kind: "command",
   };
+}
+
+for (const thread of ["main", "side"]) {
+  test(`resync restores full ${thread} history after a filtered log loses the delta anchor`, async () => {
+    const h = await harness(["ada"]);
+    const sent: ServerMessage[] = [];
+    const registry = await CharacterRegistry.create(h.dirs.config, h.dirs.data, h.deps.globalConfig(),
+      history => sent.push({ type: "history", ...history } as ServerMessage));
+    if (thread !== MAIN_THREAD) await registry.createThread("ada", thread);
+    h.deps.registry = registry;
+    h.deps.commands.threads = registry;
+    h.deps.handshake = buildHandshakeProvider(registry);
+    h.deps.router = new SessionRouter();
+    h.deps.router.registerSession({ id: 1, clientType: "tui", clientName: "test", capabilities: ["history-deltas"], character: "ada", thread },
+      async frame => { sent.push(frame); });
+    h.deps.dispatchRuntime.refreshCachedRequest = async () => { throw new Error("resync must not reprime the cache"); };
+    const initialRequest = meta("ada", "resync");
+    const request = { ...initialRequest, session: { ...initialRequest.session, selectedThread: thread } };
+    const engine = await registry.getOrCreate("ada", thread);
+    const message = (id: string, role: "user" | "assistant") => ({ msg_id: id, role, content: id, images: [], content_blocks: [], timestamp: "2026-09-10T00:00:00Z" });
+    await engine.appendMessage(message("user", "user"));
+    await engine.appendMessage(message("reply", "assistant"));
+    const filtered = await dispatchCommand(h.deps, { name: "log", args: { role: "system" } }, request);
+    expect(filtered.type).toBe("command_output");
+    if (filtered.type !== "command_output") throw new Error("log failed");
+    expect(filtered.data).toMatchObject({ messages: [] });
+    await engine.appendMessage(message("next", "user"));
+    expect(sent.at(-1)).toMatchObject({ type: "history", delta: { after: "user" } });
+    sent.length = 0;
+
+    const response = await dispatchCommand(h.deps, { name: "switch_thread", args: { name: thread, resync: true } }, request);
+
+    expect(response).toMatchObject({ type: "command_output", data: { thread, changed: false } });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ type: "history", selected_character: "ada", selected_thread: thread, revision: engine.currentRevision(), messages: engine.historySnapshot({}).messages });
+    expect(sent[0]).not.toHaveProperty("delta");
+    expect(h.deps.router.threadFor(1)).toBe(thread);
+  });
 }
 
 function envelope(frame: Awaited<ReturnType<typeof dispatchCommand>>): Record<string, unknown> {
