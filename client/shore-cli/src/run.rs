@@ -784,6 +784,7 @@ async fn handle_edit_command(
         return Ok(());
     };
 
+    let mut target_ref = msg_ref.clone();
     let replacement = match typed_replacement(content, msg_ref)? {
         Some(text) => text,
         None if !io::stdin().is_terminal() => {
@@ -791,7 +792,14 @@ async fn handle_edit_command(
                 .ok_or_else(|| empty_edit_refusal(msg_ref))?
         }
         None => {
-            let current = message_text(&fetch_single_message(conn, msg_ref, None).await?);
+            let message = fetch_single_message(conn, msg_ref, None).await?;
+            target_ref = message
+                .get("msg_id")
+                .and_then(serde_json::Value::as_str)
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| format!("could not read message {msg_ref}: missing message ID"))?
+                .to_owned();
+            let current = message_text(&message);
             let edited = edit_text_in_editor(&current)?;
             let Some(text) = editor_replacement(&current, &edited) else {
                 cli_out!("nothing to change, {msg_ref} left alone");
@@ -804,7 +812,7 @@ async fn handle_edit_command(
     _ = conn
         .send_command(
             "edit",
-            serde_json::json!({ "ref": msg_ref, "content": replacement }),
+            serde_json::json!({ "ref": target_ref, "content": replacement }),
         )
         .await?;
     let data = recv_command_data(conn).await?;

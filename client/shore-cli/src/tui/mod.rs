@@ -2858,7 +2858,15 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 "get" => {
                     if let Some(msg_ref) = app.take_edit_prefill(co.rid.as_deref()) {
                         match serde_json::from_value::<Message>(co.data.clone()) {
-                            Ok(message) => app.start_editing(msg_ref, editable_text(&message)),
+                            Ok(message) if !message.msg_id.is_empty() => {
+                                let text = editable_text(&message);
+                                app.start_editing(message.msg_id, text);
+                            }
+                            Ok(_) => {
+                                app.set_error(format!(
+                                    "could not read message {msg_ref}: missing message ID"
+                                ));
+                            }
                             Err(e) => {
                                 app.set_error(format!("could not read message {msg_ref}: {e}"));
                             }
@@ -4499,7 +4507,7 @@ mod redraw_tests {
         );
 
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
-        assert_eq!(app.editing_ref.as_deref(), Some("3"));
+        assert_eq!(app.editing_ref.as_deref(), Some("m_abc"));
         assert_eq!(app.input.text, "the third message");
         assert_eq!(app.input.mode, app::InputMode::Insert);
         assert!(app.pending_edit_prefill.is_none());
@@ -4522,6 +4530,81 @@ mod redraw_tests {
         assert!(app.editing_ref.is_none());
         assert!(app.input.text.is_empty());
         assert!(app.pending_edit_prefill.is_some());
+    }
+
+    #[test]
+    fn an_edit_prefill_without_a_message_id_does_not_arm_an_edit() {
+        for id in [serde_json::Value::Null, serde_json::json!("")] {
+            let mut app = App::default();
+            let rid = app.begin_edit_prefill("last");
+            let mut message = stored_message("m_original", "original text");
+            *message.get_mut("msg_id").unwrap() = id;
+            let _ = handle_server_message(
+                &mut app,
+                ServerMessage::CommandOutput(CommandOutput {
+                    rid: Some(rid),
+                    name: "get".into(),
+                    data: message,
+                }),
+            );
+            assert!(app.editing_ref.is_none());
+            assert!(app.pending_edit_prefill.is_none());
+            assert!(app.input.text.is_empty());
+            assert!(
+                app.error_log
+                    .iter()
+                    .any(|error| error.contains("could not read message last"))
+            );
+        }
+    }
+
+    #[test]
+    fn an_edit_keeps_its_resolved_target_when_a_new_message_arrives() {
+        use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+
+        for reference in ["last", "-1", "1", "m_original"] {
+            let mut app = App::default();
+            app.input.mode = app::InputMode::Command;
+            app.input.cmd_text = format!("msg edit {reference}");
+            let enter = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+            let Action::Send(ConnCommand::Send(ClientMessage::Command(get))) =
+                input::handle_event(&mut app, enter.clone())
+            else {
+                panic!("edit should request its prefill");
+            };
+            assert_eq!(get.name, "get");
+            assert_eq!(get.args.get("ref").unwrap(), reference);
+            let _ = handle_server_message(
+                &mut app,
+                ServerMessage::CommandOutput(CommandOutput {
+                    rid: get.rid,
+                    name: "get".into(),
+                    data: stored_message("m_original", "original text"),
+                }),
+            );
+            assert_eq!(app.input.text, "original text");
+            let arrival = serde_json::from_value(serde_json::json!({
+                "type": "new_message", "character": app.character_name,
+                "msg_id": "m_new", "role": "user", "content": "new arrival",
+                "timestamp": "2026-09-10T00:00:00Z"
+            }))
+            .unwrap();
+            let _ = handle_server_message(&mut app, arrival);
+            app.input.set_text("replacement".into());
+            let Action::SendMulti(commands) = input::handle_event(&mut app, enter) else {
+                panic!("saving should send the edit and refresh history");
+            };
+            let Some(ConnCommand::Send(ClientMessage::Command(edit))) = commands.first() else {
+                panic!("first command should be the edit");
+            };
+            assert_eq!(edit.name, "edit");
+            assert_eq!(
+                edit.args.get("ref").unwrap(),
+                "m_original",
+                "requested {reference}"
+            );
+            assert_eq!(edit.args.get("content").unwrap(), "replacement");
+        }
     }
 
     #[test]
