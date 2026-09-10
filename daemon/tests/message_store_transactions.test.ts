@@ -247,7 +247,7 @@ test("a failed store commit does not advance the conversation revision", async (
   const beforeRevision = engine.currentRevision();
   const beforeFile = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
 
-  withStorage(dir, (db) => db.run("CREATE TRIGGER refuse_state BEFORE INSERT ON state_files BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END"));
+  withStorage(dir, (db) => db.run("CREATE TRIGGER refuse_state BEFORE INSERT ON state_lines BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END"));
 
   expect(
     engine.appendMessage(message("failed-append", "user", "must not appear", 2)),

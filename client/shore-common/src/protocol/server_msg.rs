@@ -16,6 +16,8 @@ pub struct ServerHello {
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct History {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delta: Option<HistoryDelta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub messages: Vec<Message>,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -30,6 +32,14 @@ pub struct History {
     #[serde(default)]
     #[ts(type = "number")]
     pub revision: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct HistoryDelta {
+    #[ts(type = "number")]
+    pub base_revision: u64,
+    pub after: Option<String>,
 }
 
 #[expect(

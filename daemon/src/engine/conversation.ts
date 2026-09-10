@@ -12,11 +12,11 @@ import {
 } from "../config/dirs.ts";
 
 import { HISTORY_DB_FILE } from "./history_store.ts";
-import { mergeToolLoopMessages } from "./merge";
+import { toolLoopGroups, mergeToolLoopMessages } from "./merge";
 import { MessageStore, type AltSelection, type PendingAlt } from "./message_store";
 import { SegmentReader } from "./segments";
 import type { Message } from "./types";
-import { embedMessagesImageData } from "./wire_images";
+import { imageDataForPath, embedMessagesImageData } from "./wire_images";
 
 
 export interface History {
@@ -27,6 +27,7 @@ export interface History {
   selected_character?: string;
   selected_thread?: string;
   revision: number;
+  delta?: { base_revision: number; after: string | null };
 }
 
 export type HistoryListener = (history: History) => void;
@@ -63,6 +64,9 @@ export class ConversationEngine {
   #messages: MessageStore;
   #segments: SegmentReader;
   #revision = 0;
+  #tailStart = 0;
+  #tailAnchor: string | null = null;
+  readonly #deltaImages = new Map<string, string>();
   #historyRewriteGeneration = 0;
   readonly #onHistory: HistoryListener | undefined;
 
@@ -85,6 +89,7 @@ export class ConversationEngine {
     this.#segments = segments;
     this.#onHistory = onHistory;
     registerConversation(conversationDir, this);
+    this.#resetTail();
   }
 
   static async load(
@@ -269,7 +274,7 @@ export class ConversationEngine {
     return await withConversation(this.#conversationDir, "update", async () => {
       await this.#messages.append(msg);
       this.#advanceRevision();
-      this.broadcastHistory();
+      this.#broadcastDelta();
     });
   }
 
@@ -328,9 +333,12 @@ export class ConversationEngine {
 
   async replaceAfterLastUserTurn(newMessages: Message[]): Promise<number> {
     return await withConversation(this.#conversationDir, "rewrite", async () => {
+      const lastUser = this.#messages.messages().findLastIndex(message => message.role === "user" && !(message.content_blocks.length > 0 && message.content_blocks.every(block => block.type === "tool_result")));
+      this.#tailStart = lastUser + 1;
+      this.#tailAnchor = this.#messages.messages()[lastUser]?.msg_id ?? null;
       const removed = await this.#messages.replaceAfterLastUserTurn(newMessages);
       this.#advanceRewrite();
-      this.broadcastHistory();
+      this.#broadcastDelta();
       return removed;
     });
   }
@@ -398,7 +406,45 @@ export class ConversationEngine {
   }
 
   broadcastHistory(): void {
+    this.#resetTail();
     this.#onHistory?.(this.historySnapshot({}));
+  }
+
+  #resetTail(): void {
+    this.#deltaImages.clear();
+    const messages = this.#messages.messages();
+    const groups = toolLoopGroups(messages);
+    const tail = groups.at(-1)?.[0];
+    this.#tailStart = tail === undefined ? 0 : messages.lastIndexOf(tail);
+    const previous = groups.at(-2);
+    this.#tailAnchor = previous === undefined ? null : mergeToolLoopMessages(previous)[0]?.msg_id ?? null;
+  }
+
+  #broadcastDelta(): void {
+    const messages = this.#messages.messages();
+    const suffix = messages.slice(this.#tailStart);
+    const groups = toolLoopGroups(suffix);
+    const merged = mergeToolLoopMessages(suffix);
+    if (this.#onHistory !== undefined) {
+      const outgoing = structuredClone(merged);
+      const paths = new Set<string>();
+      for (const message of outgoing) {
+        for (const image of [...message.images, ...(message.alternatives ?? []).flatMap(alt => alt.images)]) {
+          paths.add(image.path);
+          const data = image.data ?? this.#deltaImages.get(image.path) ?? imageDataForPath(image.path);
+          if (data !== undefined) { image.data = data; this.#deltaImages.set(image.path, data); }
+        }
+      }
+      for (const path of this.#deltaImages.keys()) if (!paths.has(path)) this.#deltaImages.delete(path);
+      this.#onHistory({
+        messages: outgoing, config: {}, selected_character: this.#characterName,
+        selected_thread: this.#thread, revision: this.#revision,
+        delta: { base_revision: this.#revision - 1, after: this.#tailAnchor },
+      });
+    }
+    const tail = groups.at(-1)?.[0];
+    if (tail !== undefined) this.#tailStart = messages.lastIndexOf(tail);
+    if (merged.length > 1) this.#tailAnchor = merged.at(-2)?.msg_id ?? this.#tailAnchor;
   }
 
   #advanceRevision(): void {

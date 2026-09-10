@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Database, type SQLQueryBindings } from "bun:sqlite";
-import { chmodSync, createReadStream, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { chmodSync, createReadStream, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
@@ -24,6 +24,23 @@ CREATE TABLE IF NOT EXISTS state_files (
   content BLOB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS state_files_character ON state_files(character);
+CREATE TABLE IF NOT EXISTS state_collections (
+  path TEXT PRIMARY KEY,
+  format TEXT NOT NULL CHECK(format IN ('jsonl', 'array'))
+);
+CREATE TABLE IF NOT EXISTS state_lines (
+  path TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  entry_key TEXT,
+  content BLOB NOT NULL,
+  PRIMARY KEY(path, seq),
+  UNIQUE(path, entry_key)
+) WITHOUT ROWID;
+CREATE TRIGGER IF NOT EXISTS delete_state_collection AFTER DELETE ON state_files BEGIN
+  DELETE FROM state_lines WHERE path = old.path;
+  DELETE FROM state_collections WHERE path = old.path;
+END;
+
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   character TEXT NOT NULL,
@@ -81,13 +98,39 @@ function migrateImportRows(db: Database): void {
   })();
 }
 
+const connections = new Map<string, { db: Database; dev: number; ino: number }>();
+const MAX_CONNECTIONS = 32;
+
+export function closeStorageConnections(): void {
+  for (const entry of connections.values()) entry.db.close();
+  connections.clear();
+}
+
 export function withStorage<T>(data: string, run: (db: Database) => T): T {
-  const db = openStorage(data);
-  try {
-    return run(db);
-  } finally {
-    db.close();
+  const key = resolve(data);
+  let entry = connections.get(key);
+  if (entry !== undefined) {
+    const stat = existsSync(databasePath(key)) ? statSync(databasePath(key)) : undefined;
+    if (stat?.ino !== entry.ino || stat.dev !== entry.dev) {
+      entry.db.close();
+      connections.delete(key);
+      entry = undefined;
+    }
   }
+  if (entry === undefined) {
+    const db = openStorage(key);
+    const stat = statSync(databasePath(key));
+    entry = { db, dev: stat.dev, ino: stat.ino };
+  }
+  connections.delete(key);
+  connections.set(key, entry);
+  while (connections.size > MAX_CONNECTIONS) {
+    const oldest = connections.entries().next().value;
+    if (oldest === undefined) break;
+    oldest[1].db.close();
+    connections.delete(oldest[0]);
+  }
+  return run(entry.db);
 }
 
 export const pack = (content: string): Uint8Array => zstdCompressSync(Buffer.from(content));
@@ -107,7 +150,7 @@ export function readState(data: string, path: string, character = ""): string | 
         .run(path, character, pack(readFileSync(legacy, "utf8")));
       row = read();
     }
-    return row === null ? undefined : unpack(row.content);
+    return row === null ? undefined : (collectionText(db, path) ?? unpack(row.content));
   });
   if (content !== undefined) retireLegacyFile(legacy, content, data);
   return content;
@@ -127,11 +170,16 @@ export function retireLegacyFile(path: string, authoritative: string, data = dir
 
 export function writeState(data: string, path: string, content: string, character = ""): void {
   if (existsSync(join(data, path))) readState(data, path, character);
-  withStorage(data, (db) => {
+  withStorage(data, (db) => db.transaction(() => {
+    const collection = db.query("SELECT format FROM state_collections WHERE path = ?1").get(path) as { format: CollectionFormat } | null;
+    if (collection !== null) {
+      replaceCollection(db, path, character, collection.format, content);
+      return;
+    }
     db.query(`INSERT INTO state_files(path, character, content) VALUES (?1, ?2, ?3)
       ON CONFLICT(path) DO UPDATE SET character = excluded.character, content = excluded.content`)
       .run(path, character, pack(content));
-  });
+  })());
   const legacy = join(data, path);
   retireLegacyFile(legacy, content, data);
 }
@@ -219,4 +267,44 @@ export function writeCharacterState(characterDir: string, file: string, content:
 export function deleteCharacterState(characterDir: string, file: string): void {
   const { data, character } = characterScope(characterDir);
   deleteState(data, `${character}/${file}`);
+}
+
+export type CollectionFormat = "jsonl" | "array";
+
+function collectionEntries(content: string, format: CollectionFormat): { text: string; key?: string }[] {
+  if (format === "jsonl") return (content.match(/[^\n]*\n|[^\n]+$/g) ?? []).map(text => ({ text }));
+  return (JSON.parse(content) as { uuid?: string }[]).map(entry => ({ text: JSON.stringify(entry), ...(entry.uuid === undefined ? {} : { key: entry.uuid }) }));
+}
+
+export function collectionText(db: Database, path: string): string | undefined {
+  const collection = db.query("SELECT format FROM state_collections WHERE path = ?1").get(path) as { format: CollectionFormat } | null;
+  if (collection === null) return undefined;
+  const rows = db.query("SELECT content FROM state_lines WHERE path = ?1 ORDER BY seq").all(path) as { content: Uint8Array }[];
+  const parts = rows.map(row => unpack(row.content));
+  return collection.format === "jsonl" ? parts.join("") : `[${parts.join(",")}]`;
+}
+
+export function ensureCollection(db: Database, path: string, character: string, format: CollectionFormat): void {
+  const existing = db.query("SELECT format FROM state_collections WHERE path = ?1").get(path) as { format: CollectionFormat } | null;
+  if (existing !== null) {
+    if (existing.format !== format) throw new Error(`Unexpected collection format for ${path}`);
+    return;
+  }
+  const row = db.query("SELECT content FROM state_files WHERE path = ?1").get(path) as { content: Uint8Array } | null;
+  replaceCollection(db, path, character, format, row === null ? (format === "array" ? "[]" : "") : unpack(row.content));
+}
+
+export function replaceCollection(db: Database, path: string, character: string, format: CollectionFormat, content: string): void {
+  const entries = collectionEntries(content, format);
+  db.query("INSERT INTO state_files(path, character, content) VALUES (?1, ?2, ?3) ON CONFLICT(path) DO UPDATE SET character = excluded.character, content = excluded.content")
+    .run(path, character, pack(format === "array" ? "[]" : ""));
+  db.query("INSERT INTO state_collections VALUES (?1, ?2) ON CONFLICT(path) DO UPDATE SET format = excluded.format").run(path, format);
+  db.query("DELETE FROM state_lines WHERE path = ?1").run(path);
+  appendCollection(db, path, entries);
+}
+
+export function appendCollection(db: Database, path: string, entries: readonly { text: string; key?: string }[]): void {
+  let seq = (db.query("SELECT coalesce(max(seq), -1) AS seq FROM state_lines WHERE path = ?1").get(path) as { seq: number }).seq + 1;
+  const insert = db.query("INSERT INTO state_lines(path, seq, entry_key, content) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(path, entry_key) DO UPDATE SET content = excluded.content");
+  for (const entry of entries) insert.run(path, seq++, entry.key ?? null, pack(entry.text));
 }

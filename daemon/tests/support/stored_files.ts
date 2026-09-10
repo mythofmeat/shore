@@ -4,7 +4,7 @@ import { Database } from "bun:sqlite";
 import { basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fileScope } from "../../src/storage/files.ts";
-import { characterScope, databasePath, readEvents, unpack } from "../../src/storage/store.ts";
+import { collectionText, characterScope, databasePath, readEvents, unpack } from "../../src/storage/store.ts";
 
 function stored(path: fs.PathLike): Buffer | undefined {
   const name = path instanceof URL ? fileURLToPath(path) : path.toString();
@@ -25,7 +25,7 @@ function stored(path: fs.PathLike): Buffer | undefined {
     try {
       if (db.query("SELECT 1 FROM sqlite_master WHERE name = 'state_files'").get() === null) continue;
       const row = db.query("SELECT content FROM state_files WHERE path = ?1").get(candidate.key) as { content: Uint8Array } | null;
-      if (row !== null) return Buffer.from(unpack(row.content));
+      if (row !== null) return Buffer.from(collectionText(db, candidate.key) ?? unpack(row.content));
       const prefix = `sdk_sessions/${basename(name)}/`;
       const sessions = db.query("SELECT path, content FROM state_files WHERE substr(path, 1, length(?1)) = ?1").all(prefix) as { path: string; content: Uint8Array }[];
       if (sessions.length > 0) return Buffer.from(JSON.stringify(Object.fromEntries(sessions.map((entry) => [Buffer.from(entry.path.slice(prefix.length), "base64url").toString(), JSON.parse(unpack(entry.content)) as unknown]))));

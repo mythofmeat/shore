@@ -112,7 +112,7 @@ export async function attemptMatrixBridge(options: StartOptions): Promise<StartO
       options.server.attachLocal({
         clientType: "bridge",
         clientName: `shore-matrix/${character}`,
-        capabilities: ["streaming"],
+        capabilities: ["streaming", "history-deltas"],
         character,
         onLag: (skipped) =>
           options.log?.warn?.("Matrix bridge fell behind", { skipped, character }),

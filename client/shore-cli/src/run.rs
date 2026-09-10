@@ -2078,6 +2078,7 @@ mod tests {
         let _client_hello: ClientMessage = read_json_line(&mut reader).await;
 
         let history = ServerMessage::History(History {
+            delta: None,
             rid: None,
             messages: vec![],
             active_start: 0,

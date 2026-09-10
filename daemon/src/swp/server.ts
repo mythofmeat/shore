@@ -1,3 +1,4 @@
+import { HistoryMediaDelivery } from "./history_media.ts";
 import { createServer, type Server as NetServer, type Socket } from "node:net";
 
 import type { CharacterInfo } from "../protocol/CharacterInfo";
@@ -190,11 +191,12 @@ export class Server {
     };
 
     const inbox = new Inbox();
+    const media = new HistoryMediaDelivery();
     this.#router.registerSession(client, (msg) => {
-      inbox.push(msg);
+      inbox.push(media.prepare(msg));
       return Promise.resolve();
     });
-    inbox.push(historyMessage(history));
+    inbox.push(media.prepare(historyMessage(history)));
 
     const subscription = this.#events.subscribe();
     const relay = (async () => {
@@ -218,7 +220,10 @@ export class Server {
             this.#router.threadFor(clientId),
           )
         ) {
-          inbox.push(result.msg);
+          const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
+            ? historyMessage(await provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null))
+            : result.msg;
+          inbox.push(media.prepare(message));
         }
       }
       inbox.close();

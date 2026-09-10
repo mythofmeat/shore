@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname } from "node:path";
 import type { SessionKey, SessionStore, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import type { ContentBlock } from "../../engine/types.ts";
-import { pack, unpack, withStorage } from "../../storage/store.ts";
+import { withStorage, ensureCollection, collectionText, appendCollection } from "../../storage/store.ts";
 import type { SidecarRequest } from "../types.ts";
 import { ToolNames } from "./claude_agent_tools.ts";
 import { sessionKeyOwner } from "./agent_sessions.ts";
@@ -14,28 +14,18 @@ export function nativeHistoryStore(book: string, conversation: string): SessionS
   const prefix = `sdk_transcripts/${basename(book)}/${Buffer.from(character).toString("base64url")}/`;
   const pathOf = (key: SessionKey) => prefix + [key.sessionId, key.subpath ?? ""]
     .map((part) => Buffer.from(part).toString("base64url")).join("/");
-  const load = (key: SessionKey): SessionStoreEntry[] | null => {
-    return withStorage(data, (db) => {
-      const row = db.query("SELECT content FROM state_files WHERE path = ?1").get(pathOf(key)) as { content: Uint8Array } | null;
-      return row === null ? null : JSON.parse(unpack(row.content)) as SessionStoreEntry[];
-    });
-  };
   return {
-    load: (key) => Promise.resolve(load(key)),
+    load: (key) => Promise.resolve(withStorage(data, (db) => db.transaction(() => {
+      const path = pathOf(key);
+      if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(path) === null) return null;
+      ensureCollection(db, path, character, "array");
+      return JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[];
+    })())),
     append: (key, added) => {
       withStorage(data, (db) => db.transaction(() => {
-        const row = db.query("SELECT content FROM state_files WHERE path = ?1").get(pathOf(key)) as { content: Uint8Array } | null;
-        const entries = row === null ? [] : JSON.parse(unpack(row.content)) as SessionStoreEntry[];
-        const positions = new Map(entries.flatMap((entry, index) => entry.uuid === undefined ? [] : [[entry.uuid, index] as const]));
-        for (const entry of added) {
-          const index = entry.uuid === undefined ? undefined : positions.get(entry.uuid);
-          if (index === undefined) {
-            if (entry.uuid !== undefined) positions.set(entry.uuid, entries.length);
-            entries.push(entry);
-          } else entries[index] = entry;
-        }
-        db.query(`INSERT INTO state_files(path, character, content) VALUES (?1, ?2, ?3)
-          ON CONFLICT(path) DO UPDATE SET content = excluded.content`).run(pathOf(key), character, pack(JSON.stringify(entries)));
+        const path = pathOf(key);
+        ensureCollection(db, path, character, "array");
+        appendCollection(db, path, added.map(entry => ({ text: JSON.stringify(entry), ...(entry.uuid === undefined ? {} : { key: entry.uuid }) })));
       })());
       return Promise.resolve();
     },

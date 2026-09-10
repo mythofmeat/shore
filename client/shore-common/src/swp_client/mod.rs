@@ -80,6 +80,7 @@ mod tests {
             assert_eq!(h.token.as_deref(), Some("test-token"));
 
             let history = ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages: vec![Message {
                     msg_id: "m1".into(),
@@ -195,6 +196,7 @@ mod tests {
             write_raw_line(&mut w, r#"{"type":"another_future_frame"}"#).await;
 
             let history = ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages: vec![],
                 active_start: 0,

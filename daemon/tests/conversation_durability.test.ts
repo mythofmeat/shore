@@ -126,13 +126,14 @@ describe("backupBeforeWrite", () => {
 });
 
 describe("the store takes a copy before it rewrites the file", () => {
-  test("the prior contents survive an append", async () => {
+  test("the prior contents survive an edit", async () => {
     const dir = await workspace();
     const path = join(dir, "threads", "main", "active.jsonl");
     await writeFile(path, `${line("m1", "before")}\n`, "utf8");
 
     const store = await MessageStore.load(path);
-    await store.append(message("m2", "after"));
+    await store.append(message("m2", "new turn"));
+    await store.edit("m1", "after");
 
     const backups = await readdir(backupDirFor(path));
     expect(backups).toHaveLength(1);

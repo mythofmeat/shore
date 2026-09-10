@@ -3485,6 +3485,7 @@ pub(crate) mod scenario_tests {
         let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages: history_msgs,
                 active_start: 1,
@@ -6242,6 +6243,7 @@ pub(crate) mod scenario_tests {
         let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages: history_msgs,
                 active_start: 0,
@@ -6354,6 +6356,7 @@ pub(crate) mod scenario_tests {
         let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages: vec![
                     msg("m_0", Role::User, "first question"),
@@ -6474,6 +6477,7 @@ pub(crate) mod scenario_tests {
         let _ = crate::tui::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
+                delta: None,
                 rid: None,
                 messages: history_msgs,
                 active_start: 0,

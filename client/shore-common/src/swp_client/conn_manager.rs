@@ -226,7 +226,11 @@ async fn run_connected_session(
                     Ok(ServerMessage::Ping(_)) => {
                     }
                     Ok(server_msg) => {
-                        if matches!(sync_state.observe(&server_msg), SyncDecision::DropStale) {
+                        let decision = sync_state.observe(&server_msg);
+                        if matches!(decision, SyncDecision::Resync) {
+                            return SessionOutcome::Reconnect;
+                        }
+                        if matches!(decision, SyncDecision::DropStale) {
                             debug!(
                                 latest_revision = sync_state.latest_revision(),
                                 "dropping stale sync message"
