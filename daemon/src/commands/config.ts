@@ -427,8 +427,8 @@ function preferredModelMask(ctx: ConfigContext, key: string): string | null {
   return active === undefined || active === ctx.config.app.defaults.model ? null : active;
 }
 
-const loaderOptions = (ctx: ConfigContext): { env?: Env } =>
-  ctx.env === undefined ? {} : { env: ctx.env };
+const loaderOptions = (ctx: ConfigContext): { env?: Env; deferEnvironment: boolean } =>
+  ({ ...(ctx.env === undefined ? {} : { env: ctx.env }), deferEnvironment: true });
 
 export async function configReload(ctx: ConfigContext, args: Args): Promise<unknown> {
   const apply = asBool(args["apply"]);
@@ -499,6 +499,7 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
 }
 
 function adopt(ctx: ConfigContext, fresh: LoadedConfig): void {
+  fresh.adoptEnvironment?.();
   ctx.runtime.adoptGlobalConfig(fresh);
   ctx.runtime.reloadRuntimeConfig(fresh);
   ctx.config = fresh;

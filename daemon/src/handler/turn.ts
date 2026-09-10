@@ -14,6 +14,7 @@ import { emitNewMessageEvent } from "./persistence.ts";
 import { ingestImages, type ImageUpload } from "./images.ts";
 
 export interface TurnEngine {
+  readonly thread?: string;
   messages(): readonly Message[];
   appendMessage(msg: Message): Promise<void>;
   currentRevision(): number;
@@ -91,6 +92,7 @@ export async function appendUserTurn(
     "user_input",
     engine.currentRevision(),
     { ...userMsg, images: userMsg.images.map((i) => ({ ...i })) },
+    engine.thread,
   );
 
   return undefined;

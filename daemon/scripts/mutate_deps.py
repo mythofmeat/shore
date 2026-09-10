@@ -160,15 +160,15 @@ MUTANTS = [
     # --- the command path -----------------------------------------------------
     ("config: reloads guess the path instead of re-reading the file startup read",
      D,
-     "        return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });",
-     "        return loadConfig(undefined, a.env === undefined ? {} : { env: a.env });"),
+     "        return loadConfig(runtime.configPath, { ...(a.env === undefined ? {} : { env: a.env }), deferEnvironment: true });",
+     "        return loadConfig(undefined, { ...(a.env === undefined ? {} : { env: a.env }), deferEnvironment: true });"),
     ("config: a file that stopped parsing fails the command that already succeeded",
      D,
      "      try {\n"
-     "        return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });\n"
+     "        return loadConfig(runtime.configPath, { ...(a.env === undefined ? {} : { env: a.env }), deferEnvironment: true });\n"
      "      } catch (e) {",
      "      try {\n"
-     "        return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });\n"
+     "        return loadConfig(runtime.configPath, { ...(a.env === undefined ? {} : { env: a.env }), deferEnvironment: true });\n"
      "      } catch (e) {\n"
      "        throw e;\n      }\n      // eslint-disable-next-line\n      try {\n"
      "        throw new Error();\n      } catch (e) {"),

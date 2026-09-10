@@ -145,6 +145,7 @@ interface Recorded {
 }
 
 export interface CallAttempt {
+  subscription?: boolean;
   ledger: Ledger;
   id: string;
   pricingReady: Promise<void>;
@@ -182,6 +183,7 @@ function record(
   if (ttl !== undefined) ledger.setCacheTtlSecs(ttl);
 
   const entry: RecordCall = {
+    ...(attempt?.subscription === undefined ? {} : { subscription: attempt.subscription }),
     provider: req.provider_key ?? req.sdk,
     api_key_name: ctx.api_key_name,
     model: req.model,
@@ -244,6 +246,7 @@ export function beginCallAttempt(
   const estimate = recentAttemptEstimate(ledger, provider, req.model, effectiveCallType);
   return {
     ledger,
+    ...(isNanoGptProvider(provider) ? {} : { subscription: isSubscriptionCall(provider, req.model, Date.now(), ctx.character) }),
     pricingReady: !isNanoGptProvider(provider) || isSubscriptionCall(provider, req.model)
       ? Promise.resolve()
       : prepareCallAccounting(req)

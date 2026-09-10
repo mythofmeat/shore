@@ -29,7 +29,7 @@ export interface InProcessExecutorDeps {
   registry: CharacterRegistry;
   cache: LastRequestCache;
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
-  emit?: (character: string, revision: number, msg: Message) => void;
+  emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   notifyAutonomousMessage?: (title: string, body: string) => void;
   notifyCompactionComplete?: (title: string, body: string) => void;
   callStore?: Pick<CallStore, "recordTranscript">;

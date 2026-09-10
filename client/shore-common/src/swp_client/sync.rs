@@ -62,7 +62,10 @@ impl SyncState {
                 }
             }
             ServerMessage::NewMessage(message) => {
-                if message.character != self.selected_character {
+                if message.character != self.selected_character
+                    || message.thread.as_deref().unwrap_or("main")
+                        != self.selected_thread.as_deref().unwrap_or("main")
+                {
                     return SyncDecision::DropStale;
                 }
                 if message.revision <= self.message_revision {
@@ -155,6 +158,7 @@ mod tests {
     fn drops_new_message_when_snapshot_already_covers_it() {
         let mut sync = SyncState::new(6, Some("alice"), None);
         let message = ServerMessage::NewMessage(NewMessage {
+            thread: None,
             revision: 6,
             character: Some("alice".into()),
             message: message("m2"),
@@ -165,10 +169,25 @@ mod tests {
 
     fn new_message(revision: u64) -> ServerMessage {
         ServerMessage::NewMessage(NewMessage {
+            thread: None,
             revision,
             character: Some("alice".into()),
             message: message("m"),
         })
+    }
+
+    #[test]
+    fn foreign_thread_revision_does_not_suppress_selected_thread_messages() {
+        let mut sync = SyncState::new(1, Some("alice"), Some("main"));
+        let foreign = ServerMessage::NewMessage(NewMessage {
+            thread: Some("side".into()),
+            revision: 99,
+            character: Some("alice".into()),
+            message: message("foreign"),
+        });
+        assert_eq!(sync.observe(&foreign), SyncDecision::DropStale);
+        assert_eq!(sync.latest_revision(), 1);
+        assert_eq!(sync.observe(&new_message(2)), SyncDecision::Deliver);
     }
 
     fn history(revision: u64) -> ServerMessage {
@@ -276,6 +295,7 @@ mod tests {
     fn drops_new_messages_for_another_character() {
         let mut sync = SyncState::new(5, Some("alice"), None);
         let foreign = ServerMessage::NewMessage(NewMessage {
+            thread: None,
             revision: 99,
             character: Some("bob".into()),
             message: message("b99"),

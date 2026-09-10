@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { required } from "../src/util/required.ts";
@@ -310,11 +311,11 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
   );
   expect(archived.kind).toBe("compacted");
   const retainedContent = await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8");
-  await writeFile(checkpointFile, JSON.stringify(crashed), "utf8");
+  writeDurable(checkpointFile, JSON.stringify(crashed));
 
   const grown = conversation();
   const grownContent = retainedContent + grown.map(activeLine).join("\n") + "\n";
-  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), grownContent, "utf8");
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), grownContent);
 
   const afterCrash = scripted([]);
   const resumed = await run(await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), afterCrash);
@@ -684,10 +685,9 @@ test("a conversation rewritten after the plan was resolved pauses instead of arc
   };
   const plan = await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
 
-  await writeFile(
+  writeDurable(
     activePath,
     conversation().slice(0, 2).map(activeLine).join("\n") + "\n",
-    "utf8",
   );
 
   const outcome = await compact(
@@ -736,7 +736,7 @@ test("turns that arrive while a pass runs are kept, not archived with the planne
   const plan = await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
 
   const arrived = conversationMessage("user", "one more thing while you were busy");
-  await writeFile(activePath, planned + activeLine(arrived) + "\n", "utf8");
+  writeDurable(activePath, planned + activeLine(arrived) + "\n");
 
   const outcome = await compact(
     options(

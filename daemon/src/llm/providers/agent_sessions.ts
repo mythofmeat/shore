@@ -1,5 +1,5 @@
-import { pack, unpack, withStorage } from "../../storage/store.ts";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { pack, unpack, withStorage, retireLegacyFile } from "../../storage/store.ts";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { MAIN_THREAD, resolveShoreDirs, rustJoin } from "../../config/dirs.ts";
@@ -66,11 +66,14 @@ function normalizeKey(key: string): string {
 }
 
 export function readBook(path: string): SessionBook {
-  if (existsSync(path)) {
+  const prefix = bookPrefix(path);
+  const authoritative = withStorage(dirname(path), (db) => db.query(
+    "SELECT 1 FROM state_files WHERE path = ?1 OR substr(path, 1, length(?2)) = ?2 LIMIT 1",
+  ).get(basename(path), prefix) !== null);
+  if (!authoritative && existsSync(path)) {
     const legacy = JSON.parse(readFileSync(path, "utf8")) as SessionBook;
     writeBook(path, Object.fromEntries(Object.entries(legacy).map(([key, record]) => [normalizeKey(key), record])));
   }
-  const prefix = bookPrefix(path);
   return withStorage(dirname(path), (db) => {
     const rows = db.query("SELECT path, content FROM state_files WHERE substr(path, 1, length(?1)) = ?1").all(prefix) as { path: string; content: Uint8Array }[];
     return Object.fromEntries(rows.map((row) => [Buffer.from(row.path.slice(prefix.length), "base64url").toString(), JSON.parse(unpack(row.content)) as SessionRecord]));
@@ -91,7 +94,7 @@ export function writeBook(path: string, book: SessionBook, nowMs = Date.now()): 
       insert.run(prefix + Buffer.from(normalizeKey(key)).toString("base64url"), sessionKeyOwner(key) ?? "", pack(JSON.stringify(record)));
     }
   })());
-  if (existsSync(path)) unlinkSync(path);
+  retireLegacyFile(path, JSON.stringify(book));
 }
 
 export function writeSession(path: string, key: string, record: SessionRecord, previous?: { record: SessionRecord | undefined }): void {

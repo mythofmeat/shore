@@ -77,7 +77,7 @@ export interface RuntimeOptions {
   config?: LoadedConfig | undefined;
   env?: NodeJS.ProcessEnv | undefined;
   onHistory?: HistoryListener | undefined;
-  emit?: ((character: string, revision: number, msg: Message) => void) | undefined;
+  emit?: ((character: string, revision: number, msg: Message, thread: string) => void) | undefined;
   connectMcp?: ((spec: McpServerSpec) => Promise<McpClient>) | undefined;
   connectMemoryBackend?: ConnectMemoryBackend | undefined;
   mcpRegistryOptions?: Omit<McpRegistryOptions, "onToolsChanged"> | undefined;
@@ -538,18 +538,17 @@ export function sharedToolDeps(
 }
 
 export function applySubscriptionProviders(registry: CharacterRegistry): void {
-  const flat = new Set<string>(DEFAULT_SUBSCRIPTION_PROVIDERS);
-  const configs = [
-    registry.globalConfig(),
-    ...registry.availableCharacters().map((c) => registry.effectiveConfig(c)),
-  ];
-  for (const config of configs) {
+  const policy = (config: LoadedConfig): Set<string> => {
+    const providers = new Set<string>(DEFAULT_SUBSCRIPTION_PROVIDERS);
     for (const [name, subscription] of config.providers.subscriptionSettings()) {
-      if (subscription) flat.add(name);
-      else flat.delete(name);
+      if (subscription) providers.add(name);
+      else providers.delete(name);
     }
-  }
-  setSubscriptionProviders(flat);
+    return providers;
+  };
+  setSubscriptionProviders(policy(registry.globalConfig()), registry.availableCharacters().map(
+    (character) => [character, policy(registry.effectiveConfig(character))] as const,
+  ));
   const config = registry.globalConfig();
   const models = readCacheSync(cachePath(config.dirs.cache, NANOGPT_PROVIDER));
   const state = readNanoGptSubscriptionSync(nanoGptSubscriptionPath(config.dirs.cache));

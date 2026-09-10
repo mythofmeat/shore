@@ -46,9 +46,9 @@ describe("merging a streamed turn into the conversation", () => {
       for (const message of got) {
         const source = required(byId.get(message.msg_id));
         expect(
-          wire({ ...message, content: "", content_blocks: [] }),
+          wire({ ...message, content: "", content_blocks: [], images: [] }),
           `${message.msg_id}: a merged turn keeps everything about the message it ends`,
-        ).toEqual(wire({ ...source, content: "", content_blocks: [] }));
+        ).toEqual(wire({ ...source, content: "", content_blocks: [], images: [] }));
 
         const untouched =
           JSON.stringify(message.content_blocks) === JSON.stringify(source.content_blocks);

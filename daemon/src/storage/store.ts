@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Database, type SQLQueryBindings } from "bun:sqlite";
-import { chmodSync, createReadStream, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { chmodSync, createReadStream, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { zstdCompressSync, zstdDecompressSync } from "node:zlib";
@@ -99,25 +99,36 @@ export function characterScope(characterDir: string): { data: string; character:
 
 export function readState(data: string, path: string, character = ""): string | undefined {
   const legacy = join(data, path);
-  if (existsSync(legacy)) {
-    const content = readFileSync(legacy, "utf8");
-    writeState(data, path, content, character);
-    return content;
-  }
-  return withStorage(data, (db) => {
-    const row = db.query("SELECT content FROM state_files WHERE path = ?1").get(path) as { content: Uint8Array } | null;
+  const content = withStorage(data, (db) => {
+    const read = () => db.query("SELECT content FROM state_files WHERE path = ?1").get(path) as { content: Uint8Array } | null;
+    let row = read();
+    if (row === null && existsSync(legacy)) {
+      db.query("INSERT OR IGNORE INTO state_files(path, character, content) VALUES (?1, ?2, ?3)")
+        .run(path, character, pack(readFileSync(legacy, "utf8")));
+      row = read();
+    }
     return row === null ? undefined : unpack(row.content);
   });
+  if (content !== undefined) retireLegacyFile(legacy, content);
+  return content;
+}
+
+export function retireLegacyFile(path: string, authoritative: string): void {
+  if (!existsSync(path)) return;
+  const content = readFileSync(path, "utf8");
+  if (content === authoritative) unlinkSync(path);
+  else renameSync(path, `${path}.legacy-conflict-${createHash("sha256").update(content).digest("hex")}`);
 }
 
 export function writeState(data: string, path: string, content: string, character = ""): void {
+  if (existsSync(join(data, path))) readState(data, path, character);
   withStorage(data, (db) => {
     db.query(`INSERT INTO state_files(path, character, content) VALUES (?1, ?2, ?3)
       ON CONFLICT(path) DO UPDATE SET character = excluded.character, content = excluded.content`)
       .run(path, character, pack(content));
   });
   const legacy = join(data, path);
-  if (existsSync(legacy)) unlinkSync(legacy);
+  retireLegacyFile(legacy, content);
 }
 
 export function deleteState(data: string, path: string): void {

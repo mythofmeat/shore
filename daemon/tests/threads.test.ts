@@ -1,3 +1,4 @@
+import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -166,7 +167,7 @@ describe("migration", () => {
     const root = await dataDir();
     await ensureThreads(root, "aria", NOW);
     await rm(join(root, "aria", "threads", MAIN_THREAD), { recursive: true, force: true });
-    await writeFile(join(root, "aria", "threads.json"), "{ not json");
+    writeDurable(join(root, "aria", "threads.json"), "{ not json");
 
     const later = "2026-09-05T00:00:00.000Z";
     expect(await ensureThreads(root, "aria", later)).toEqual(defaultThreadsIndex(later));
@@ -178,7 +179,7 @@ describe("migration", () => {
     const root = await dataDir();
     await ensureThreads(root, "aria", NOW);
     await rm(join(root, "aria", "threads", MAIN_THREAD), { recursive: true, force: true });
-    await writeFile(join(root, "aria", "threads.json"), "{ not json");
+    writeDurable(join(root, "aria", "threads.json"), "{ not json");
 
     const later = "2026-09-05T00:00:00.000Z";
     expect(await ensureThreads(root, "aria", later, true)).toEqual(defaultThreadsIndex(later));
@@ -223,7 +224,7 @@ describe("home thread", () => {
   test("a corrupt index reads as absent rather than throwing", async () => {
     const root = await dataDir();
     await ensureThreads(root, "aria", NOW);
-    await writeFile(join(root, "aria", "threads.json"), "{ not json");
+    writeDurable(join(root, "aria", "threads.json"), "{ not json");
 
     expect(await readThreadsIndex(root, "aria")).toBeUndefined();
     expect(homeThread(undefined)).toBe(MAIN_THREAD);
@@ -244,7 +245,7 @@ describe("home thread", () => {
       '{"version":1,"home":"main","threads":[{"created_at":"x"}]}',
       '{"version":1,"home":42,"threads":[]}',
     ]) {
-      await writeFile(path, shape);
+      writeDurable(path, shape);
       expect(await readThreadsIndex(root, "aria")).toBeUndefined();
     }
   });
@@ -252,7 +253,7 @@ describe("home thread", () => {
   test("an index from a future version is not read as this one", async () => {
     const root = await dataDir();
     await ensureThreads(root, "aria", NOW);
-    await writeFile(
+    writeDurable(
       join(root, "aria", "threads.json"),
       JSON.stringify({ ...defaultThreadsIndex(NOW), version: 2 }),
     );

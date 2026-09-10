@@ -37,6 +37,7 @@
         "events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -95,6 +96,7 @@
         "events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -158,6 +160,7 @@
         "events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -419,6 +422,7 @@
         "events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -492,6 +496,7 @@
         "events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",
@@ -558,6 +563,7 @@
         "events": [
           {
             "type": "new_message",
+            "thread": "main",
             "revision": 1,
             "character": "ada",
             "msg_id": "<minted_id>",

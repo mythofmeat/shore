@@ -919,6 +919,24 @@ describe("the router's notifier", () => {
 });
 
 describe("the command path", () => {
+  test("config refresh preserves a session's selected side thread", async () => {
+    const { root, runtime } = await runtimeUnder("reload-side-thread-", () => {}, ["ada"]);
+    try {
+      await runtime.registry.createThread("ada", "side");
+      const requested: (string | null | undefined)[] = [];
+      const router = new SessionRouter();
+      router.registerSession({ id: 1, character: "ada", thread: "side", capabilities: [], clientType: "cli", clientName: "test" }, async () => {});
+      await applyReloadedConfig(commandAssembly(runtime, {
+        router,
+        handshake: { hello: () => ({}) as never, history: (_character, thread) => {
+          requested.push(thread);
+          return Promise.resolve({} as never);
+        } },
+      }), runtime.registry.globalConfig());
+      expect(requested).toEqual(["side"]);
+    } finally { await runtime.shutdown(); await rm(root, { recursive: true, force: true }); }
+  });
+
   function commandAssembly(runtime: ShoreRuntime, extra: Partial<CommandAssembly> = {}) {
     return {
       runtime,
