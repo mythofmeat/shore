@@ -38,10 +38,34 @@ pub(crate) fn handle_event(app: &mut App, event: Event) -> Action {
 }
 
 fn handle_paste(app: &mut App, text: &str) -> Action {
-    if app.input.mode != InputMode::Insert {
-        app.input.mode = InputMode::Insert;
+    if app.show_help
+        || app.fullscreen.is_some()
+        || app.subagent_panel.is_some()
+        || app.alt_picker.is_some()
+        || app.palette_confirmation.is_some()
+        || (app.output_pager.is_some() && app.input.mode != InputMode::Command)
+    {
+        return Action::None;
     }
-    app.input.insert_str(text);
+    if app.input.mode == InputMode::Command {
+        if app.is_value_editor_open() {
+            for c in text
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+            {
+                app.type_value_editor_char(c);
+            }
+        } else {
+            for c in text.chars() {
+                app.input
+                    .cmd_insert_char(if c.is_control() { ' ' } else { c });
+            }
+            app.update_completions();
+        }
+    } else {
+        app.input.mode = InputMode::Insert;
+        app.input.insert_str(text);
+    }
     Action::Redraw
 }
 
@@ -137,12 +161,14 @@ fn redraw_or_load_older_history(app: &mut App) -> Action {
     }
 
     app.history_page_loading = true;
+    let rid = app.next_request_id("history_page");
+    app.pending_history_page = Some(rid.clone());
     let before = app.history_next_before.map_or_else(
         || serde_json::Value::String("active".into()),
         serde_json::Value::from,
     );
     Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-        rid: None,
+        rid: Some(rid),
         name: "history_page".into(),
         args: serde_json::json!({
             "before": before,
@@ -1020,12 +1046,12 @@ fn run_ui_command(app: &mut App, command: &UiCommand) -> Action {
             let lines = amount.unwrap_or(1);
             match direction {
                 ScrollDirection::Up => {
-                    app.scroll_up(lines);
+                    app.scroll_up(usize::from(lines));
                     return redraw_or_load_older_history(app);
                 }
-                ScrollDirection::Down => app.scroll_down(lines),
+                ScrollDirection::Down => app.scroll_down(usize::from(lines)),
                 ScrollDirection::Top => {
-                    app.scroll_up(u16::MAX);
+                    app.scroll_up(usize::MAX);
                     return redraw_or_load_older_history(app);
                 }
                 ScrollDirection::Bottom => app.scroll_to_bottom(),
@@ -1218,9 +1244,7 @@ fn nearest_image(app: &App) -> Option<usize> {
     let center = if app.auto_scroll {
         total.saturating_sub(half)
     } else {
-        total
-            .saturating_sub(usize::from(app.scroll_offset))
-            .saturating_sub(half)
+        total.saturating_sub(app.scroll_offset).saturating_sub(half)
     };
     app.image_index
         .iter()
@@ -1231,6 +1255,15 @@ fn nearest_image(app: &App) -> Option<usize> {
 
 fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action {
     if text.trim().is_empty() && images.is_empty() {
+        return Action::Redraw;
+    }
+
+    if app.stream.active {
+        app.input.set_text(text);
+        app.pending_images = images;
+        app.set_error(
+            "a reply is already in progress; your draft is ready to send when it finishes",
+        );
         return Action::Redraw;
     }
 
@@ -1266,9 +1299,11 @@ fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action
     ));
     app.scroll_to_bottom();
     app.stream.active = true;
+    let rid = app.next_request_id("message");
+    app.stream.rid = Some(rid.clone());
     Action::Send(ConnCommand::Send(ClientMessage::Message(
         ClientMessageBody {
-            rid: None,
+            rid: Some(rid),
             text,
             stream: true,
             images,
@@ -1293,16 +1328,6 @@ fn palette_swp_command(
 }
 
 fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
-    if shlex::split(raw_input).is_some_and(|words| {
-        words.iter().any(|word| {
-            matches!(word.as_str(), "--addr" | "--character" | "-c")
-                || word.starts_with("--addr=")
-                || word.starts_with("--character=")
-        })
-    }) {
-        app.set_error("the TUI is already attached to a daemon and character; switch with `character use` instead");
-        return Action::Redraw;
-    }
     let mut effective_input = raw_input.to_owned();
     let mut command = match crate::cli::parse_palette_command(raw_input) {
         Ok(parsed) => parsed,
@@ -1451,9 +1476,15 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         CliCommand::Msg {
             command: MsgCommand::Regen { guidance },
         } => {
+            if app.stream.active {
+                app.set_error("a reply is already in progress");
+                return Action::Redraw;
+            }
             app.begin_regen_optimistic();
+            let rid = app.next_request_id("regen");
+            app.stream.rid = Some(rid.clone());
             Action::Send(ConnCommand::Send(ClientMessage::Regen(Regen {
-                rid: None,
+                rid: Some(rid),
                 stream: true,
                 guidance: guidance.clone(),
             })))
@@ -2607,5 +2638,56 @@ mod tests {
             e.as_turn(),
             Some(t) if t.role == shore_common::protocol::types::Role::User
         )));
+    }
+}
+
+#[cfg(test)]
+mod reliability_tests {
+    use super::{Action, App, ClientMessage, ConnCommand, dispatch_cli_command, handle_event};
+    use crate::tui::app::InputMode;
+    use crossterm::event::Event;
+
+    #[test]
+    fn parsed_conversation_overrides_are_rejected_before_dispatch_or_confirmation() {
+        for command in [
+            "--thread side msg send hello",
+            "-tside clear",
+            "--thread=side clear",
+            "--character ada clear",
+            "--addr localhost:9090 clear",
+        ] {
+            let mut app = App::default();
+            assert!(matches!(
+                dispatch_cli_command(&mut app, command),
+                Action::Redraw
+            ));
+            assert!(app.palette_confirmation.is_none());
+            assert!(app.error_log.last().unwrap().contains("already attached"));
+        }
+    }
+
+    #[test]
+    fn quoted_flags_after_double_dash_remain_message_content() {
+        let mut app = App::default();
+        let action = dispatch_cli_command(&mut app, "msg send -- '--addr' '--thread'");
+        let Action::Send(ConnCommand::Send(ClientMessage::Message(message))) = action else {
+            panic!("expected a chat message");
+        };
+        assert_eq!(message.text, "--addr --thread");
+        assert_eq!(message.rid, app.stream.rid);
+        assert!(message.rid.is_some());
+    }
+
+    #[test]
+    fn pasted_unicode_is_inserted_at_the_command_cursor_without_changing_chat() {
+        let mut app = App::default();
+        app.input.set_text("unsent chat".into());
+        app.input.enter_command_mode();
+        app.input.cmd_text = "msg send  after".into();
+        app.input.cmd_cursor = 9;
+        let _action = handle_event(&mut app, Event::Paste("界🙂".into()));
+        assert_eq!(app.input.cmd_text, "msg send 界🙂 after");
+        assert_eq!(app.input.text, "unsent chat");
+        assert_eq!(app.input.mode, InputMode::Command);
     }
 }

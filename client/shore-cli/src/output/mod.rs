@@ -31,6 +31,60 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, FixedOffset, Local};
 
+static STDOUT_ERROR: std::sync::Mutex<Option<io::Error>> = std::sync::Mutex::new(None);
+
+pub(crate) struct OutputWriter<W>(W);
+
+fn record_output_error<T>(result: io::Result<T>) -> io::Result<T> {
+    if let Err(error) = &result {
+        let mut first = STDOUT_ERROR
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if first.is_none() {
+            *first = Some(io::Error::new(error.kind(), error.to_string()));
+        }
+    }
+    result
+}
+
+impl<W: Write> Write for OutputWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        record_output_error(self.0.write(buf))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        record_output_error(self.0.flush())
+    }
+}
+
+impl OutputWriter<io::Stdout> {
+    pub(crate) fn lock(&self) -> OutputWriter<io::StdoutLock<'static>> {
+        OutputWriter(self.0.lock())
+    }
+}
+
+impl<W: IsTerminal> OutputWriter<W> {
+    pub(crate) fn is_terminal(&self) -> bool {
+        self.0.is_terminal()
+    }
+}
+
+pub(crate) fn stdout() -> OutputWriter<io::Stdout> {
+    OutputWriter(io::stdout())
+}
+
+pub(crate) fn finish_stdout() -> io::Result<()> {
+    let _flush = stdout().flush();
+    let recorded = STDOUT_ERROR
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
+    match recorded {
+        Some(error) if error.kind() != io::ErrorKind::BrokenPipe => Err(error),
+        Some(_) | None => Ok(()),
+    }
+}
+
 static COLOR_STDOUT: AtomicBool = AtomicBool::new(true);
 static COLOR_STDERR: AtomicBool = AtomicBool::new(true);
 static DECORATE_STDOUT: AtomicBool = AtomicBool::new(true);
@@ -44,9 +98,9 @@ pub(crate) fn set_color_enabled(enabled: bool) {
 pub(crate) fn detect_color() {
     let vetoed = env_flag_set("NO_COLOR");
     let forced = env_flag_set("FORCE_COLOR");
-    let stdout_is_screen = forced || io::stdout().is_terminal();
+    let stdout_is_screen = forced || stdout().is_terminal();
     COLOR_STDOUT.store(
-        color_for_stream(vetoed, forced, io::stdout().is_terminal()),
+        color_for_stream(vetoed, forced, stdout().is_terminal()),
         Ordering::Relaxed,
     );
     COLOR_STDERR.store(
@@ -85,13 +139,13 @@ pub(crate) fn set_decoration_enabled(enabled: bool) {
 }
 
 pub(crate) fn write_stdout_line(args: fmt::Arguments<'_>) {
-    let stdout = io::stdout();
+    let stdout = stdout();
     let mut out = stdout.lock();
     let _ignored = writeln!(out, "{args}");
 }
 
 pub(crate) fn write_stdout(args: fmt::Arguments<'_>) {
-    let stdout = io::stdout();
+    let stdout = stdout();
     let mut out = stdout.lock();
     let _ignored = write!(out, "{args}");
 }

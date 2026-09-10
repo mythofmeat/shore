@@ -301,6 +301,31 @@ pub enum ServerMessage {
 }
 
 impl ServerMessage {
+    pub fn request_id(&self) -> Option<&str> {
+        match self {
+            Self::History(frame) => frame.rid.as_deref(),
+            Self::CommandOutput(frame) => frame.rid.as_deref(),
+            Self::Error(frame) => frame.rid.as_deref(),
+            Self::StreamStart(frame) => frame.rid.as_deref(),
+            Self::StreamChunk(frame) => frame.rid.as_deref(),
+            Self::StreamEnd(frame) => frame.rid.as_deref(),
+            Self::Phase(frame) => frame.rid.as_deref(),
+            Self::ToolCall(frame) => frame.rid.as_deref(),
+            Self::ToolResult(frame) => frame.rid.as_deref(),
+            Self::SendImage(frame) => frame.rid.as_deref(),
+            Self::Hello(_)
+            | Self::Shutdown(_)
+            | Self::Ping(_)
+            | Self::NewMessage(_)
+            | Self::CacheWarning(_)
+            | Self::ProviderWarning(_)
+            | Self::ProviderFallbackWarning(_)
+            | Self::UsageWarning(_)
+            | Self::ConfigWarning(_)
+            | Self::Unknown => None,
+        }
+    }
+
     #[must_use]
     pub fn subagent(&self) -> Option<&str> {
         match self {

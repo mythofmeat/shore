@@ -59,7 +59,13 @@ fn main() -> ExitCode {
 
     if let Some(CliCommand::Completions { shell }) = &cli.command {
         cli::print_completions(*shell);
-        return ExitCode::SUCCESS;
+        return match output::finish_stdout() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                output::print_error(&error);
+                ExitCode::FAILURE
+            }
+        };
     }
 
     if cli.command.is_some() {
@@ -98,7 +104,7 @@ fn main() -> ExitCode {
             .block_on(tui::run(cli.addr, cli.character, cli.thread))
             .map_err(Into::into),
     };
-    match outcome {
+    match outcome.and_then(|code| output::finish_stdout().map(|()| code).map_err(Into::into)) {
         Ok(code) => code,
         Err(e) => {
             if !run::already_reported(e.as_ref()) {

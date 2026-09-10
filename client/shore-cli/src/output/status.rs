@@ -1,4 +1,6 @@
-use std::io::{self, Write};
+#[cfg(test)]
+use std::io;
+use std::io::Write;
 
 use serde_json::Value;
 
@@ -276,13 +278,13 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
 }
 
 pub(crate) fn print(data: &Value, character: &str) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_status(&mut out, data, character);
 }
 
 pub(crate) fn print_section(data: &Value, name: &str) -> bool {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_section(&mut out, data, name)
 }

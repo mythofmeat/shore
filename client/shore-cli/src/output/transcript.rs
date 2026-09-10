@@ -1,4 +1,6 @@
-use std::io::{self, Write};
+#[cfg(test)]
+use std::io;
+use std::io::Write;
 
 use chrono::{DateTime, Local};
 use shore_common::protocol::server_msg::NewMessage;
@@ -219,7 +221,7 @@ pub(crate) fn print_log_with_boundary(
     character_name: &str,
     filter: LogFilter,
 ) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let width = term_width();
     write_log_with_boundary(
@@ -359,7 +361,7 @@ pub(crate) fn print_log_plain_with_boundary(
     character_name: &str,
     filter: LogFilter,
 ) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_log_plain_with_boundary(&mut out, messages, active_start, character_name, filter);
 }
@@ -476,7 +478,7 @@ fn write_log_plain_with_boundary(
 }
 
 pub(crate) fn print_new_message(msg: &NewMessage, character_name: &str) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let width = term_width();
 
@@ -510,7 +512,7 @@ pub(crate) fn print_new_message(msg: &NewMessage, character_name: &str) {
 }
 
 pub(crate) fn print_follow_stream_start(character_name: &str) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let width = term_width();
     let time_str = Local::now().format("%H:%M").to_string();
@@ -545,7 +547,7 @@ pub(crate) fn print_single_message(
 }
 
 pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_heartbeat_log(&mut out, data, term_width());
 }

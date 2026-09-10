@@ -13,12 +13,6 @@ use crate::state;
 
 static SESSION_DISPLAY_CHARACTER: OnceLock<String> = OnceLock::new();
 
-fn session_display_character() -> &'static str {
-    SESSION_DISPLAY_CHARACTER
-        .get()
-        .map_or("Assistant", String::as_str)
-}
-
 fn log_role_matches(filter: Option<&LogRole>, role: &Role) -> bool {
     match filter {
         None => true,
@@ -1807,6 +1801,10 @@ async fn recv_streaming_response(
     loop {
         let msg = conn.recv().await?;
 
+        if !conn.matches_last_request(&msg) {
+            continue;
+        }
+
         let tag = msg.subagent();
         if tag != current_subagent.as_deref() {
             if let Some(prev) = &current_subagent {
@@ -1908,6 +1906,9 @@ async fn recv_command_data(
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     loop {
         let msg = conn.recv().await?;
+        if !conn.matches_last_request(&msg) {
+            continue;
+        }
         match &msg {
             ServerMessage::CommandOutput(co) => {
                 return Ok(co.data.clone());
@@ -1921,22 +1922,12 @@ async fn recv_command_data(
                 );
                 return Err(ReportedError::new(err.message.clone()).into());
             }
-            ServerMessage::SendImage(img) => {
-                output::print_send_image(img);
-            }
-            ServerMessage::NewMessage(new_msg) => {
-                output::print_new_message(
-                    new_msg,
-                    new_msg
-                        .character
-                        .as_deref()
-                        .unwrap_or_else(|| session_display_character()),
-                );
-            }
             ServerMessage::ConfigWarning(w) => {
                 output::print_config_warning(w);
             }
-            ServerMessage::Hello(_)
+            ServerMessage::SendImage(_)
+            | ServerMessage::NewMessage(_)
+            | ServerMessage::Hello(_)
             | ServerMessage::History(_)
             | ServerMessage::Shutdown(_)
             | ServerMessage::Ping(_)
@@ -2091,8 +2082,16 @@ mod tests {
 
         let client_msg: ClientMessage = read_json_line(&mut reader).await;
 
+        let request = serde_json::to_value(&client_msg).unwrap();
         for msg in &responses {
-            write_json_line(&mut w, msg).await;
+            let mut response = serde_json::to_value(msg).unwrap();
+            if response.get("rid").is_none() {
+                let _previous = response.as_object_mut().unwrap().insert(
+                    "rid".into(),
+                    request.get("rid").cloned().unwrap_or_default(),
+                );
+            }
+            write_json_line(&mut w, &response).await;
         }
 
         client_msg

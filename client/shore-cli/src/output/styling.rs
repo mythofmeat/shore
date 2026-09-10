@@ -81,7 +81,7 @@ fn begin_block(out: &mut impl Write, state: &mut ChunkState, is_process: bool) {
 }
 
 pub(crate) fn print_chunk(chunk: &StreamChunk) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
     print_chunk_to(&mut out, &mut state, chunk);
@@ -150,7 +150,7 @@ fn print_chunk_to(out: &mut impl Write, state: &mut ChunkState, chunk: &StreamCh
 }
 
 pub(crate) fn print_subagent_begin(name: &str) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
     flush_thinking(&mut out, &mut state);
@@ -167,7 +167,7 @@ pub(crate) fn print_subagent_begin(name: &str) {
 }
 
 pub(crate) fn print_subagent_end(name: &str) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
     flush_thinking(&mut out, &mut state);
@@ -187,7 +187,7 @@ pub(crate) fn print_subagent_chunk(chunk: &StreamChunk) {
     if chunk.text.is_empty() {
         return;
     }
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
     stream_thinking(&mut out, &mut state, &chunk.text);
@@ -196,7 +196,7 @@ pub(crate) fn print_subagent_chunk(chunk: &StreamChunk) {
 }
 
 pub(crate) fn print_stream_end(end: &StreamEnd) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
 
     {
@@ -346,7 +346,7 @@ pub(crate) fn print_subagent_tool_call(call: &ToolCall) {
 }
 
 fn print_tool_call_styled(call: &ToolCall, color: Tone) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
 
@@ -374,7 +374,7 @@ pub(crate) fn print_subagent_tool_result(result: &ToolResult) {
 }
 
 fn print_tool_result_styled(result: &ToolResult, ok_color: Tone) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
 
@@ -397,7 +397,7 @@ pub(crate) fn print_stream_start(regen: bool) {
     if !regen {
         return;
     }
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
 
     paint(&mut out, Tone::Muted, "(regenerating...) ");
@@ -405,7 +405,7 @@ pub(crate) fn print_stream_start(regen: bool) {
 }
 
 pub(crate) fn print_phase(phase: &Phase) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
 
     let label = match phase.phase.as_str() {

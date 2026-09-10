@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::Write;
 
 use serde_json::Value;
 
@@ -476,7 +476,7 @@ pub(crate) fn write_limits<W: Write>(out: &mut W, data: &Value) {
 }
 
 pub(crate) fn print(data: &Value, view: View) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     match data.get("mode").and_then(Value::as_str).unwrap_or("") {
         "csv" | "tsv" => {

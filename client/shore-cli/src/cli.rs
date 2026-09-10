@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use std::path::{Path, PathBuf};
 
@@ -2075,7 +2075,16 @@ pub(crate) fn parse_palette_command(input: &str) -> Result<CliCommand, String> {
     {
         return Err(message);
     }
-    let parsed = Cli::try_parse_from(argv).map_err(|error| error.to_string())?;
+    let matches = Cli::command()
+        .try_get_matches_from(argv)
+        .map_err(|error| error.to_string())?;
+    if ["addr", "character", "thread"]
+        .iter()
+        .any(|name| matches.value_source(name) == Some(clap::parser::ValueSource::CommandLine))
+    {
+        return Err("the TUI is already attached to a daemon and conversation; use `character use` or `thread use` to switch".to_owned());
+    }
+    let parsed = Cli::from_arg_matches(&matches).map_err(|error| error.to_string())?;
     parsed.command.ok_or_else(|| "missing command".to_owned())
 }
 

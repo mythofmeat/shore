@@ -1,4 +1,6 @@
-use std::io::{self, Write};
+#[cfg(test)]
+use std::io;
+use std::io::Write;
 
 use serde_json::Value;
 
@@ -537,43 +539,43 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
 }
 
 pub(crate) fn print_thread_list(data: &Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_thread_list(&mut out, data);
 }
 
 pub(crate) fn print_model_list(data: &Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_model_list(&mut out, data);
 }
 
 pub(crate) fn print_model_info(data: &Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_model_info(&mut out, data);
 }
 
 pub(crate) fn print_model_settings(data: &Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_model_settings(&mut out, data);
 }
 
 pub(crate) fn print_provider_list(data: &Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_provider_list(&mut out, data);
 }
 
 pub(crate) fn print_provider_models(data: &Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_provider_models(&mut out, data);
 }
 
 pub(crate) fn print_character_list(data: &Value, active: Option<&str>) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_character_list(&mut out, data, active);
 }

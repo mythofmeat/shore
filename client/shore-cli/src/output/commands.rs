@@ -1,4 +1,6 @@
-use std::io::{self, Write};
+#[cfg(test)]
+use std::io;
+use std::io::Write;
 
 use crossterm::style::{Attribute, SetAttribute};
 use shore_common::duration::format_duration_ms;
@@ -73,7 +75,10 @@ fn print_segments(data: &serde_json::Value) {
         print_segment_row(segment);
         if let Some(messages) = data.get("messages").and_then(serde_json::Value::as_array) {
             if messages.is_empty() {
-                print_dim_line(&mut io::stdout().lock(), "(no messages recorded)");
+                print_dim_line(
+                    &mut crate::output::stdout().lock(),
+                    "(no messages recorded)",
+                );
             } else {
                 cli_out!();
                 print_log(
@@ -86,11 +91,17 @@ fn print_segments(data: &serde_json::Value) {
         return;
     }
     let Some(segments) = data.get("segments").and_then(serde_json::Value::as_array) else {
-        print_dim_line(&mut io::stdout().lock(), "(no segments recorded)");
+        print_dim_line(
+            &mut crate::output::stdout().lock(),
+            "(no segments recorded)",
+        );
         return;
     };
     if segments.is_empty() {
-        print_dim_line(&mut io::stdout().lock(), "(no segments recorded)");
+        print_dim_line(
+            &mut crate::output::stdout().lock(),
+            "(no segments recorded)",
+        );
         return;
     }
     for segment in segments {
@@ -155,7 +166,7 @@ fn print_clear_result(data: &serde_json::Value) {
 const CALL_BODY_PREVIEW: usize = 4000;
 
 fn print_call_log(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_call_log(&mut out, data, term_width());
 }
@@ -489,7 +500,7 @@ fn print_call_diff(
 }
 
 fn print_transcript(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_trace_transcript(&mut out, data, term_width());
 }
@@ -694,7 +705,7 @@ fn print_transcript_entry(
 }
 
 fn print_subagent_trace(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_subagent_trace(&mut out, data, term_width());
 }
@@ -843,7 +854,7 @@ fn truncate_display(s: &str, max: usize) -> String {
 }
 
 fn print_command_output_fallback(name: &str, data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     if use_color() {
         let _ignored = crossterm::execute!(out, SetAttribute(Attribute::Bold));
@@ -862,7 +873,7 @@ fn print_heartbeat_tick_now(data: &serde_json::Value) {
     let character = data["character"].as_str().unwrap_or("?");
     cli_out!("Tick scheduled for {character}.");
     if let Some(warning) = data["warning"].as_str() {
-        let stdout = io::stdout();
+        let stdout = crate::output::stdout();
         let mut out = stdout.lock();
         write_fg(&mut out, Tone::Warn, warning);
         _ = writeln!(out);
@@ -916,7 +927,7 @@ fn print_keepalive_ping(data: &serde_json::Value) {
 }
 
 fn print_tool_definition(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_tool_definition(&mut out, data, term_width());
 }
@@ -964,7 +975,7 @@ fn print_run_tool(data: &serde_json::Value) {
         print_tool_definition(data);
         return;
     }
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_run_tool(&mut out, data, term_width());
 }
@@ -1180,7 +1191,7 @@ fn print_alt_confirmation(data: &serde_json::Value) {
     if let Some(content) = data["content"].as_str() {
         let preview = first_line_preview(content, ALT_PREVIEW_CHARS);
         if !preview.is_empty() {
-            let stdout = io::stdout();
+            let stdout = crate::output::stdout();
             let mut out = stdout.lock();
             write_dim(&mut out, &format!("  {preview}\n"));
         }
@@ -1228,7 +1239,7 @@ fn print_alt_list(data: &serde_json::Value) {
         return;
     }
 
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let width = term_width();
     write_section_header(&mut out, "Alternates", msg_ref, width);
@@ -1349,7 +1360,7 @@ fn print_provider_refresh(data: &serde_json::Value) {
 }
 
 fn print_provider_refresh_all(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let width = term_width();
     write_section_header(&mut out, "Provider refresh", "all", width);
@@ -1407,7 +1418,7 @@ fn print_provider_refresh_all(data: &serde_json::Value) {
 }
 
 fn print_character_info(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     let width = term_width();
 
@@ -1463,7 +1474,7 @@ fn print_character_info(data: &serde_json::Value) {
 }
 
 fn print_compact_result(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_compact_result(&mut out, data, term_width());
 }
@@ -1677,7 +1688,7 @@ fn print_config_reload(data: &serde_json::Value) {
 }
 
 pub(crate) fn print_error_log(data: &serde_json::Value) {
-    let stdout = io::stdout();
+    let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_error_log(&mut out, data);
 }
