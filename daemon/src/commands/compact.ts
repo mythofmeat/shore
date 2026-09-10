@@ -1,3 +1,6 @@
+import { homeThreadOf } from "../engine/threads.ts";
+import { threadDataDir } from "../config/dirs.ts";
+import { withConversation } from "../engine/lifecycle.ts";
 import { shoreLog } from "../log.ts";
 
 import { join } from "node:path";
@@ -53,31 +56,33 @@ export async function compact(
   ctx: CompactContext,
   args: Args,
 ): Promise<unknown> {
-  const { dryRun, restart, keepTurnsOverride } = parseCompactArgs(args);
-  const character = engine.characterName;
+  return await withConversation(threadDataDir(ctx.config.dirs.data, engine.characterName, engine.thread ?? "main"), "rewrite", async () => {
+    const { dryRun, restart, keepTurnsOverride } = parseCompactArgs(args);
+    const character = engine.characterName;
 
-  let outcome: CompactionOutcome | undefined;
-  try {
-    outcome = await runCompactionPass(
-      character,
-      {
-        ...ctx.run,
-        config: ctx.config,
-      },
-      {
-        dryRun,
-        restart,
-        ...(engine.thread === undefined ? {} : { thread: engine.thread }),
-        ...(keepTurnsOverride === undefined ? {} : { keepTurnsOverride }),
-      },
-    );
-  } catch (e) {
-    throw compactionError(e);
-  }
+    let outcome: CompactionOutcome | undefined;
+    try {
+      outcome = await runCompactionPass(
+        character,
+        {
+          ...ctx.run,
+          config: ctx.config,
+        },
+        {
+          dryRun,
+          restart,
+          ...(engine.thread === undefined ? {} : { thread: engine.thread }),
+          ...(keepTurnsOverride === undefined ? {} : { keepTurnsOverride }),
+        },
+      );
+    } catch (e) {
+      throw compactionError(e);
+    }
 
-  if (outcome === undefined) throw invalidRequest("No messages to compact");
+    if (outcome === undefined) throw invalidRequest("No messages to compact");
 
-  return await buildCompactionResponse(engine, ctx, character, outcome);
+    return await buildCompactionResponse(engine, ctx, character, outcome);
+  });
 }
 
 export function compactionError(e: unknown): CommandError {
@@ -219,16 +224,17 @@ async function completeCompaction(
       ctx.config.dirs.config,
       character,
       ctx.config.dirs.workspace,
+      engine.thread,
     );
   } catch (e) {
     shoreLog.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
   }
 
   try {
-    await ctx.repoint?.(character, ctx.config);
+    if (engine.thread === undefined || engine.thread === await homeThreadOf(ctx.config.dirs.data, character)) await ctx.repoint?.(character, ctx.config);
   } catch (e) {
     throw internalError(e instanceof Error ? e.message : String(e));
   }
 
-  ctx.autonomy.onCompactionComplete(character, retainedTurns);
+  if (engine.thread === undefined || engine.thread === await homeThreadOf(ctx.config.dirs.data, character)) ctx.autonomy.onCompactionComplete(character, retainedTurns);
 }

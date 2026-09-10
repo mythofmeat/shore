@@ -1,9 +1,10 @@
-import { readDurable } from "../storage/files.ts";
+import { homeThreadOf } from "../engine/threads.ts";
+import { withConversation } from "../engine/lifecycle.ts";
+import { readDurable, threadFile } from "../storage/files.ts";
 import { join } from "node:path";
 
 import {
   MAIN_THREAD,
-  activeJsonlIn,
   archiveKey,
   characterDataDir,
   threadDataDir,
@@ -130,69 +131,71 @@ export async function clear(
   ctx: ClearContext,
   args: Args,
 ): Promise<unknown> {
-  const character = engine.characterName;
-  const guard = tryBeginCompaction(ctx.dataDir, character);
-  if (guard === undefined) {
-    throw new CommandError("busy", `Compaction already running for ${character}`);
-  }
-
-  try {
-    const characterDir = characterDataDir(ctx.dataDir, character);
-    const conversationDir = threadDataDir(ctx.dataDir, character, engine.thread);
-    let activeContent: string;
-    try {
-      activeContent = readDurable(activeJsonlIn(conversationDir));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") activeContent = "";
-      else throw error;
+  return await withConversation(threadDataDir(ctx.dataDir, engine.characterName, engine.thread), "rewrite", async () => {
+    const character = engine.characterName;
+    const guard = tryBeginCompaction(ctx.dataDir, character);
+    if (guard === undefined) {
+      throw new CommandError("busy", `Compaction already running for ${character}`);
     }
-    if (activeContent.trim() === "") throw invalidRequest("No messages to clear");
-
-    const excluded = args["exclude"] === true;
-    const note = nullableOptionalText(args["note"], "note");
-    await archiveAndRetain(
-      conversationDir,
-      0,
-      activeContent,
-      ctx.now ?? (() => new Date().toISOString()),
-      ctx.newId ?? (() => crypto.randomUUID()),
-      `clear-${crypto.randomUUID()}`,
-      {
-        dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
-        archiveKey: archiveKey(character, engine.thread),
-        retain: ctx.retainArchived === true,
-      },
-      {
-        ...(excluded ? { excluded: true } : {}),
-        ...(note === undefined ? {} : { note }),
-      },
-    );
 
     try {
-      await resetActivePromptSnapshot(characterDir);
-      await engine.reload();
-      await ctx.repoint?.(character);
-    } catch (error) {
-      throw internalError(error instanceof Error ? error.message : String(error));
-    }
-    ctx.onComplete?.(character);
+      const characterDir = characterDataDir(ctx.dataDir, character);
+      const conversationDir = threadDataDir(ctx.dataDir, character, engine.thread);
+      let activeContent: string;
+      try {
+        activeContent = readDurable(threadFile(ctx.dataDir, character, engine.thread, "active.jsonl"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") activeContent = "";
+        else throw error;
+      }
+      if (activeContent.trim() === "") throw invalidRequest("No messages to clear");
 
-    const store = HistoryStore.open(join(ctx.dataDir, HISTORY_DB_FILE));
-    try {
-      const record = store.entries(archiveKey(character, engine.thread)).at(-1);
-      return {
-        status: "clear",
-        character,
-        thread: engine.thread,
-        message_count: record?.message_count ?? 0,
-        segment: record === undefined ? null : presentSegment(record),
-      };
+      const excluded = args["exclude"] === true;
+      const note = nullableOptionalText(args["note"], "note");
+      await archiveAndRetain(
+        conversationDir,
+        0,
+        activeContent,
+        ctx.now ?? (() => new Date().toISOString()),
+        ctx.newId ?? (() => crypto.randomUUID()),
+        `clear-${crypto.randomUUID()}`,
+        {
+          dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
+          archiveKey: archiveKey(character, engine.thread),
+          retain: ctx.retainArchived === true,
+        },
+        {
+          ...(excluded ? { excluded: true } : {}),
+          ...(note === undefined ? {} : { note }),
+        },
+      );
+
+      try {
+        await resetActivePromptSnapshot(characterDir, engine.thread);
+        await engine.reload();
+        if (engine.thread === await homeThreadOf(ctx.dataDir, character)) await ctx.repoint?.(character);
+      } catch (error) {
+        throw internalError(error instanceof Error ? error.message : String(error));
+      }
+      if (engine.thread === await homeThreadOf(ctx.dataDir, character)) ctx.onComplete?.(character);
+
+      const store = HistoryStore.open(join(ctx.dataDir, HISTORY_DB_FILE));
+      try {
+        const record = store.entries(archiveKey(character, engine.thread)).at(-1);
+        return {
+          status: "clear",
+          character,
+          thread: engine.thread,
+          message_count: record?.message_count ?? 0,
+          segment: record === undefined ? null : presentSegment(record),
+        };
+      } finally {
+        store.close();
+      }
     } finally {
-      store.close();
+      guard.release();
     }
-  } finally {
-    guard.release();
-  }
+  });
 }
 
 function missing(idx: number, character: string, thread: string): string {

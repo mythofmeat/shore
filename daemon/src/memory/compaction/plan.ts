@@ -1,8 +1,7 @@
-import { readDurable } from "../../storage/files.ts";
+import { readDurable, threadFile } from "../../storage/files.ts";
 
 import { required } from "../../util/required.ts";
 
-import { characterActiveJsonl } from "../../config/dirs.ts";
 import { normalizeMessage } from "../../engine/message_store.ts";
 import type { Message } from "../../engine/types.ts";
 import { versionsIn } from "../coverage.ts";
@@ -225,7 +224,7 @@ export async function readLiveSource(
   fallback: string,
 ): Promise<string> {
   try {
-    return readDurable(characterActiveJsonl(dataDir, character, thread));
+    return readDurable(threadFile(dataDir, character, thread, "active.jsonl"));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     return fallback;

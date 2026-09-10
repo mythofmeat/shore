@@ -170,15 +170,11 @@ MUTANTS = [
 
     # --- archiving ----------------------------------------------------------
     ("archive: the home thread can be archived out from under the heartbeat",
-     "  if (index.home === id) {\n"
-     "    throw new ThreadError(\n"
-     '      "is_home",',
-     "  if (false as boolean) {\n"
-     "    throw new ThreadError(\n"
-     '      "is_home",'),
+     '\n    if (index.home === id) {\n      throw new ThreadError(\n        "is_home",',
+     '  if (false as boolean) {\n    throw new ThreadError(\n      "is_home",'),
     ("archive: an unknown thread archives silently",
-     "  requireThread(index, character, id);\n  if (index.home === id) {",
-     "  if (index.home === id) {"),
+     '\n    requireThread(index, character, id);\n    if (index.home === id) {',
+     '  if (index.home === id) {'),
     ("archive: the messages land under the bare character key",
      "        archiveKey: archiveKey(character, id),",
      "        archiveKey: character,"),
@@ -193,8 +189,8 @@ MUTANTS = [
      '  if (active.trim() !== "") {',
      "  if (false as boolean) {"),
     ("archive: the conversation is retained rather than fully archived",
-     "    await archiveAndRetain(\n      dir,\n      0,",
-     "    await archiveAndRetain(\n      dir,\n      1,"),
+     '\n      await archiveAndRetain(\n        dir,\n        0,',
+     '    await archiveAndRetain(\n      dir,\n      1,'),
     ("archive: the thread directory is left on disk",
      "  await rm(dir, { recursive: true, force: true });\n", ""),
     ("archive: the entry stays in the index",
@@ -204,8 +200,8 @@ MUTANTS = [
      "    threads: index.threads.filter((t) => t.id !== id),",
      "    threads: index.threads.filter((t) => t.id === id),"),
     ("archive: an unreadable active window is fatal",
-     "  } catch {\n    active = \"\";\n  }",
-     "  } catch (e) {\n    throw e;\n  }"),
+     '\n    } catch {\n      active = "";\n    }',
+     '  } catch (e) {\n    throw e;\n  }'),
 
     # --- the per-thread model -------------------------------------------------
     ("model: clearing a pin leaves the old model in place",
@@ -274,11 +270,11 @@ MUTANTS = [
      "  return Array.isArray(msg.content_blocks) && !isToolResultOnly(msg);"),
     ("turns: a thread that was never opened fails instead of counting zero",
      "  try {\n"
-     '    raw = readDurable(activeJsonlIn(threadDataDir(data, character, id)));\n'
+     '    raw = readDurable(threadFile(data, character, id, \"active.jsonl\"));\n'
      "  } catch {\n"
      "    return 0;\n"
      "  }",
-     '  raw = readDurable(activeJsonlIn(threadDataDir(data, character, id)));'),
+     '  raw = readDurable(threadFile(data, character, id, \"active.jsonl\"));'),
     ("turns: a torn tail line stops the count instead of being skipped",
      "    try {\n"
      "      parsed = JSON.parse(line);\n"
@@ -287,8 +283,8 @@ MUTANTS = [
      "    }",
      "    parsed = JSON.parse(line);"),
     ("turns: every thread is counted against home's window",
-     "    raw = readDurable(activeJsonlIn(threadDataDir(data, character, id)));",
-     "    raw = readDurable(activeJsonlIn(threadDataDir(data, character, MAIN_THREAD)));"),
+     "    raw = readDurable(threadFile(data, character, id, \"active.jsonl\"));",
+     "    raw = readDurable(threadFile(data, character, MAIN_THREAD, \"active.jsonl\"));"),
     ("turns: the roster is counted, but every entry gets the first thread's count",
      "    ids.map(async (id) => [id, await threadTurnCount(data, character, id)] as const),",
      "    ids.map(async (id) => [id, await threadTurnCount(data, character, ids[0] ?? id)] as const),"),

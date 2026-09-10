@@ -1,4 +1,4 @@
-import { readDurable, writeDurable } from "../storage/files.ts";
+import { readDurable, writeDurable, durablePath, type DurableFile } from "../storage/files.ts";
 import { required } from "../util/required.ts";
 
 import { shoreLog } from "../log.ts";
@@ -345,32 +345,34 @@ function messageFromAlternative(template: Message, index: number): Message | und
 export class MessageStore {
   #messages: Message[];
   readonly #path: string;
+  readonly #file: DurableFile;
   readonly #io: MessageStoreIo;
   #mutationTail: Promise<void> = Promise.resolve();
   #quarantined = 0;
   #altDefects: readonly AlternativeDefect[] = [];
 
-  private constructor(path: string, messages: Message[], io: MessageStoreIo) {
-    this.#path = path;
+  private constructor(path: DurableFile, messages: Message[], io: MessageStoreIo) {
+    this.#path = durablePath(path);
+    this.#file = path;
     this.#messages = messages;
     this.#io = io;
   }
 
-  static create(path: string, io: MessageStoreIo = messageStoreIo): MessageStore {
+  static create(path: DurableFile, io: MessageStoreIo = messageStoreIo): MessageStore {
     return new MessageStore(path, [], io);
   }
 
-  static async load(path: string, io: MessageStoreIo = messageStoreIo): Promise<MessageStore> {
+  static async load(path: DurableFile, io: MessageStoreIo = messageStoreIo): Promise<MessageStore> {
     return (await MessageStore.loadWithRaw(path, io)).store;
   }
 
   static async loadWithRaw(
-    path: string,
+    path: DurableFile,
     io: MessageStoreIo = messageStoreIo,
   ): Promise<{ store: MessageStore; raw: string }> {
     let raw: string;
     try {
-      raw = io === messageStoreIo ? readDurable(path) : await readFile(path, "utf8");
+      raw = io === messageStoreIo ? readDurable(path) : await readFile(durablePath(path), "utf8");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") {
         return { store: new MessageStore(path, [], io), raw: "" };
@@ -395,14 +397,14 @@ export class MessageStore {
     if (unreadable.length > 0) {
       const quarantined = await quarantineLines(path, unreadable);
       shoreLog.error(
-        `shore: ${String(unreadable.length)} unreadable line(s) in ${path} were quarantined` +
+        `shore: ${String(unreadable.length)} unreadable line(s) in ${durablePath(path)} were quarantined` +
           `${quarantined === undefined ? "" : ` to ${quarantined}`}; ` +
           `${String(messages.length)} message(s) loaded`,
       );
     }
 
     const defects = auditAlternatives(messages);
-    const report = describeAlternativeDefects(path, defects);
+    const report = describeAlternativeDefects(durablePath(path), defects);
     if (report !== undefined) shoreLog.warn(report);
 
     const store = new MessageStore(path, messages, io);
@@ -710,12 +712,12 @@ export class MessageStore {
   }
 
   async #persist(messages: readonly Message[]): Promise<void> {
-    await this.#io.backup(this.#path);
+    await (this.#io === messageStoreIo ? backupBeforeWrite(this.#file) : this.#io.backup(this.#path));
     let buf = "";
     for (const msg of messages) buf += `${serializeForStorage(msg)}\n`;
 
     if (this.#io === messageStoreIo) {
-      writeDurable(this.#path, buf);
+      writeDurable(this.#file, buf);
       return;
     }
     const dir = dirname(this.#path);

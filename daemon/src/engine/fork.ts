@@ -1,10 +1,10 @@
-import { writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
+import { withConversation } from "./lifecycle.ts";
+import { threadFile, writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
-  activeJsonlIn,
   archiveKey,
   characterThreadsDir,
   threadDataDir,
@@ -138,7 +138,8 @@ export async function forkThread(
 ): Promise<ForkResult> {
   return await withForkLock(
     `${data}\u0000${character}`,
-    async () => await forkThreadLocked(data, character, source, child, options),
+    async () => await withConversation(threadDataDir(data, character, source), "update",
+      async () => await forkThreadLocked(data, character, source, child, options)),
   );
 }
 
@@ -169,7 +170,7 @@ async function forkThreadLocked(
     throw new ThreadError("exists", `thread ${JSON.stringify(child)} already exists for ${character}`);
   }
   const childDir = threadDataDir(data, character, child);
-  if (durableExists(activeJsonlIn(childDir)) || (existsSync(childDir) && (await readdir(childDir)).length > 0)) {
+  if (durableExists(threadFile(data, character, child, "active.jsonl")) || (existsSync(childDir) && (await readdir(childDir)).length > 0)) {
     throw new ThreadError(
       "exists",
       `${childDir} already holds data — remove it before forking into ${JSON.stringify(child)}`,
@@ -204,7 +205,7 @@ async function forkThreadLocked(
 
   await mkdir(childDir, { recursive: true });
   await writeFile(join(childDir, FORK_MARKER_FILE), `${JSON.stringify(marker, null, 2)}\n`, "utf8");
-  writeDurable(activeJsonlIn(childDir), serializeMessages(copied));
+  writeDurable(threadFile(data, character, child, "active.jsonl"), serializeMessages(copied));
   if (options.failAfter === "context") throw new Error("injected fork failure after context");
 
   const historyStore = HistoryStore.open(dbPath);
@@ -253,7 +254,7 @@ async function loadForkSource(
   thread: string,
 ): Promise<ForkSource> {
   const store = await MessageStore.load(
-    activeJsonlIn(threadDataDir(data, character, thread)),
+    threadFile(data, character, thread, "active.jsonl"),
   );
   return {
     messages: () => store.messages(),

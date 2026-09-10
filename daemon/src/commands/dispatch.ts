@@ -486,6 +486,7 @@ function statusContext(
   deps: CommandDeps,
 ): Parameters<typeof status>[0] {
   return {
+    thread: engine.thread,
     characterName: engine.characterName,
     turnCount: engine.turnCount(),
     activeModel: effectiveChatModel(session.config, engine.characterName, session.threadModel)

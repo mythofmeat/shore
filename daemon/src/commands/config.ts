@@ -36,6 +36,7 @@ export interface ConfigRuntime {
 }
 
 export interface ConfigContext {
+  thread?: string;
   config: LoadedConfig;
   configPath: string;
   characterName: string | undefined;
@@ -460,6 +461,7 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
     fresh.dirs.config,
     character,
     fresh.dirs.workspace,
+    ctx.thread,
   );
 
   if (!apply) {
@@ -479,6 +481,7 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
         fresh.dirs.config,
         character,
         fresh.dirs.workspace,
+        ctx.thread,
       );
     } catch (e) {
       throw internalError(`Failed to refresh active prompt snapshot: ${message(e)}`);

@@ -1,3 +1,4 @@
+import type { CompactionCompletion } from "../memory/compaction/background.ts";
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -184,14 +185,15 @@ export function emitPostPersistStreamEnd(
 }
 
 export interface CompactionRunner {
-  run(charName: string, config: LoadedConfig): Promise<number>;
+  run(charName: string, config: LoadedConfig, thread?: string): Promise<CompactionCompletion>;
   applyDeferredEdits(
     characterDataDir: string,
     configDir: string,
     charName: string,
     workspaceRoot?: string,
+    thread?: string,
   ): Promise<void>;
-  repoint?(charName: string, config: LoadedConfig): Promise<void>;
+  repoint?(charName: string, config: LoadedConfig, thread?: string): Promise<void>;
 }
 
 export async function maybeCompact(
@@ -228,9 +230,9 @@ async function runInlineCompaction(
     model: null,
   });
 
-  let retained: number;
+  let completion: CompactionCompletion;
   try {
-    retained = await runner.run(charName, config);
+    completion = await runner.run(charName, config, engine.thread);
   } catch (e) {
     shoreLog.warn(`shore: inline compaction failed for ${charName}: ${String(e)}`);
     ctx.autonomy.onCompactionFailed(
@@ -239,6 +241,11 @@ async function runInlineCompaction(
         ? Date.parse(e.resumeAt)
         : undefined,
     );
+    return;
+  }
+
+  if (completion.kind !== "completed") {
+    ctx.autonomy.onCompactionFailed(charName, completion.retryAt);
     return;
   }
 
@@ -258,12 +265,13 @@ async function runInlineCompaction(
         config.dirs.config,
         charName,
         config.dirs.workspace,
+        engine.thread,
       );
     } catch (e) {
       shoreLog.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
     }
     try {
-      await runner.repoint?.(charName, config);
+      await runner.repoint?.(charName, config, engine.thread);
     } catch (e) {
       shoreLog.warn(`shore: failed to repoint cached request after compaction: ${String(e)}`);
     }
@@ -271,5 +279,5 @@ async function runInlineCompaction(
     guard.release();
   }
 
-  ctx.autonomy.onCompactionComplete(charName, retained);
+  ctx.autonomy.onCompactionComplete(charName, completion.retained);
 }

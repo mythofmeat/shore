@@ -25,6 +25,7 @@ import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/
 import { assistantImageModeForRequest, buildLlmMessages } from "./wire_messages.ts";
 
 export interface PrepareChatContextParams {
+  thread?: string;
   character: string;
   characterDataDir: string;
   config: LoadedConfig;
@@ -57,13 +58,14 @@ export async function prepareChatContext(
         config.dirs.config,
         character,
         config.dirs.workspace,
+        params.thread,
       );
     } catch (e) {
       shoreLog.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);
     }
   } else {
     try {
-      await resetActivePromptSnapshot(characterDataDir);
+      await resetActivePromptSnapshot(characterDataDir, params.thread);
       await ensureCharacterWorkspace(
         characterDataDir,
         config.dirs.config,
@@ -82,6 +84,7 @@ export async function prepareChatContext(
       character,
       name,
       config.dirs.workspace,
+      params.thread,
     );
   const characterDefinition = await promptFile(SOUL_FILE);
   const userDefinition = await promptFile(USER_FILE);
@@ -92,6 +95,7 @@ export async function prepareChatContext(
     config.dirs.config,
     character,
     config.dirs.workspace,
+    params.thread,
   );
 
   const promptParams = {
@@ -144,12 +148,14 @@ export async function buildChatShapeRequestFromDisk(
   messages: Message[],
   hasPriorContext: boolean,
   options: {
+    thread?: string;
     mcpToolDefs?: readonly ToolDefinition[];
     timeZone?: string;
     activeConversation?: boolean;
   } = {},
 ): Promise<BuiltRequest> {
   const prepared = await prepareChatContext({
+    ...(options.thread === undefined ? {} : { thread: options.thread }),
     character,
     characterDataDir,
     config,

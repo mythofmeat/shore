@@ -1,9 +1,10 @@
+import { registerConversation, withConversation } from "./lifecycle.ts";
+import { threadFile } from "../storage/files.ts";
 import { shoreLog } from "../log.ts";
 
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
 import {
-  activeJsonlIn,
   archiveKey,
   characterDataDir,
   MAIN_THREAD,
@@ -83,6 +84,7 @@ export class ConversationEngine {
     this.#messages = messages;
     this.#segments = segments;
     this.#onHistory = onHistory;
+    registerConversation(conversationDir, this);
   }
 
   static async load(
@@ -94,7 +96,7 @@ export class ConversationEngine {
     const characterDir = characterDataDir(dataDir, characterName);
     const conversationDir = threadDataDir(dataDir, characterName, thread);
     const historyDbPath = join(dataDir, HISTORY_DB_FILE);
-    const messages = await MessageStore.load(activeJsonlIn(conversationDir));
+    const messages = await MessageStore.load(threadFile(dataDir, characterName, thread, "active.jsonl"));
     const segments = await SegmentReader.load({
       dir: conversationDir,
       dbPath: historyDbPath,
@@ -258,37 +260,47 @@ export class ConversationEngine {
   }
 
   async stampMessageVersions(versions: ReadonlyMap<string, string>): Promise<number> {
-    return await this.#messages.stampVersions(versions);
+    return await withConversation(this.#conversationDir, "update", async () => {
+      return await this.#messages.stampVersions(versions);
+    });
   }
 
   async appendMessage(msg: Message): Promise<void> {
-    await this.#messages.append(msg);
-    this.#advanceRevision();
-    this.broadcastHistory();
+    return await withConversation(this.#conversationDir, "update", async () => {
+      await this.#messages.append(msg);
+      this.#advanceRevision();
+      this.broadcastHistory();
+    });
   }
 
   async recoverInterruptedToolLoop(): Promise<number> {
-    const recovered = await this.#messages.recoverInterruptedToolLoop(
-      `m_${crypto.randomUUID()}`,
-      new Date().toISOString(),
-    );
-    if (recovered > 0) {
-      this.#advanceRevision();
-      this.broadcastHistory();
-    }
-    return recovered;
+    return await withConversation(this.#conversationDir, "update", async () => {
+      const recovered = await this.#messages.recoverInterruptedToolLoop(
+        `m_${crypto.randomUUID()}`,
+        new Date().toISOString(),
+      );
+      if (recovered > 0) {
+        this.#advanceRevision();
+        this.broadcastHistory();
+      }
+      return recovered;
+    });
   }
 
   async insertMessageByTimestamp(msg: Message): Promise<void> {
-    await this.#messages.insertByTimestamp(msg);
-    this.#advanceRevision();
-    this.broadcastHistory();
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      await this.#messages.insertByTimestamp(msg);
+      this.#advanceRevision();
+      this.broadcastHistory();
+    });
   }
 
   async editMessage(msgId: string, newContent: string): Promise<void> {
-    await this.#messages.edit(msgId, newContent);
-    this.#advanceRewrite();
-    this.broadcastHistory();
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      await this.#messages.edit(msgId, newContent);
+      this.#advanceRewrite();
+      this.broadcastHistory();
+    });
   }
 
   async deleteMessage(msgId: string): Promise<void> {
@@ -296,64 +308,80 @@ export class ConversationEngine {
   }
 
   async deleteMessages(msgIds: readonly string[]): Promise<void> {
-    await this.#messages.deleteAll(msgIds);
-    this.#advanceRewrite();
-    this.broadcastHistory();
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      await this.#messages.deleteAll(msgIds);
+      this.#advanceRewrite();
+      this.broadcastHistory();
+    });
   }
 
   async truncateAfterLastUserTurn(): Promise<number> {
-    const removed = await this.#messages.truncateAfterLastUserTurn();
-    if (removed > 0) {
-      this.#advanceRewrite();
-      this.broadcastHistory();
-    }
-    return removed;
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      const removed = await this.#messages.truncateAfterLastUserTurn();
+      if (removed > 0) {
+        this.#advanceRewrite();
+        this.broadcastHistory();
+      }
+      return removed;
+    });
   }
 
   async replaceAfterLastUserTurn(newMessages: Message[]): Promise<number> {
-    const removed = await this.#messages.replaceAfterLastUserTurn(newMessages);
-    this.#advanceRewrite();
-    this.broadcastHistory();
-    return removed;
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      const removed = await this.#messages.replaceAfterLastUserTurn(newMessages);
+      this.#advanceRewrite();
+      this.broadcastHistory();
+      return removed;
+    });
   }
 
   async setAlt(msgId: string, index: number, count: number): Promise<void> {
-    await this.#messages.setAlt(msgId, index, count);
-    this.#advanceRevision();
-    this.broadcastHistory();
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      await this.#messages.setAlt(msgId, index, count);
+      this.#advanceRevision();
+      this.broadcastHistory();
+    });
   }
 
   async addAltCandidate(msgId: string): Promise<number> {
-    const count = await this.#messages.addAltCandidate(msgId);
-    this.#advanceRevision();
-    this.broadcastHistory();
-    return count;
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      const count = await this.#messages.addAltCandidate(msgId);
+      this.#advanceRevision();
+      this.broadcastHistory();
+      return count;
+    });
   }
 
   async selectAlt(msgId: string, index: number): Promise<AltSelection> {
-    const selection = await this.#messages.selectAlt(msgId, index);
-    this.#advanceRewrite();
-    this.broadcastHistory();
-    return selection;
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      const selection = await this.#messages.selectAlt(msgId, index);
+      this.#advanceRewrite();
+      this.broadcastHistory();
+      return selection;
+    });
   }
 
   async reset(): Promise<void> {
-    await this.#messages.clear();
-    this.#advanceRewrite();
-    this.broadcastHistory();
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      await this.#messages.clear();
+      this.#advanceRewrite();
+      this.broadcastHistory();
+    });
   }
 
   async reload(): Promise<void> {
-    this.#messages = await MessageStore.load(activeJsonlIn(this.#conversationDir));
-    this.#segments.close();
-    this.#segments = await SegmentReader.load({
-      dir: this.#conversationDir,
-      dbPath: this.#historyDbPath,
-      archiveKey: archiveKey(this.#characterName, this.#thread),
-      createHistoryDb: true,
+    return await withConversation(this.#conversationDir, "rewrite", async () => {
+      this.#messages = await MessageStore.load(threadFile(dirname(this.#historyDbPath), this.#characterName, this.#thread, "active.jsonl"));
+      this.#segments.close();
+      this.#segments = await SegmentReader.load({
+        dir: this.#conversationDir,
+        dbPath: this.#historyDbPath,
+        archiveKey: archiveKey(this.#characterName, this.#thread),
+        createHistoryDb: true,
+      });
+      this.#advanceRewrite();
+      this.broadcastHistory();
     });
-    this.#advanceRewrite();
-    this.broadcastHistory();
   }
 
   historySnapshot(config: unknown): History {

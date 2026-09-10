@@ -6,14 +6,13 @@ import { readBook, bookPathIn } from "../llm/providers/agent_sessions.ts";
 import { HeartbeatLog } from "../autonomy/heartbeat_log.ts";
 import { readSubagentTraces } from "../tools/subagent_trace.ts";
 import { readState, writeCharacterState } from "./store.ts";
-import { readDurable } from "./files.ts";
 import { migrateCharacterMedia } from "./media.ts";
 
 export async function preparePersistentStorage(dirs: Pick<ShoreDirs, "data">): Promise<void> {
   if (existsSync(bookPathIn(dirs.data))) readBook(bookPathIn(dirs.data));
   importSidecars(dirs.data, "matrix", "");
   for (const entry of readdirSync(dirs.data, { withFileTypes: true })) {
-    if (!entry.isDirectory() || ["media", "matrix", "plugins"].includes(entry.name) || entry.name.startsWith(".")) continue;
+    if (!entry.isDirectory() || ["legacy-conflicts", "media", "matrix", "plugins"].includes(entry.name) || entry.name.startsWith(".")) continue;
     const character = entry.name;
     const root = join(dirs.data, character);
     migrateCharacterMedia(dirs.data, character);
@@ -36,7 +35,7 @@ export async function preparePersistentStorage(dirs: Pick<ShoreDirs, "data">): P
         importBackups(dirs.data, `${character}/threads/${thread.name}/backups`, character);
         for (const file of ["active.jsonl", "compaction-checkpoint.json"]) {
           const path = join(threads, thread.name, file);
-          if (existsSync(path)) readDurable(path);
+          if (existsSync(path)) readState(dirs.data, `${character}/threads/${thread.name}/${file}`, character);
         }
       }
     }

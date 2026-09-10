@@ -1,7 +1,8 @@
+import { threadFile } from "../../storage/files.ts";
 import { shoreLog } from "../../log.ts";
 
 
-import { activeJsonlIn, threadDataDir } from "../../config/dirs.ts";
+import { threadDataDir } from "../../config/dirs.ts";
 
 import { MessageStore, isToolResultOnly } from "../../engine/message_store";
 import type { Message } from "../../engine/types";
@@ -32,7 +33,7 @@ export async function loadMessagesForCompaction(
   thread: string,
 ): Promise<LoadedConversation> {
   const conversationDir = threadDataDir(dataDir, character, thread);
-  const { store, raw } = await MessageStore.loadWithRaw(activeJsonlIn(conversationDir));
+  const { store, raw } = await MessageStore.loadWithRaw(threadFile(dataDir, character, thread, "active.jsonl"));
   return {
     store,
     conversationDir,
@@ -43,11 +44,15 @@ export async function loadMessagesForCompaction(
 
 export type Notify = (title: string, body: string) => void;
 
+export type CompactionCompletion =
+  | { kind: "completed"; retained: number }
+  | { kind: "skipped"; reason: string; retryAt?: number };
+
 export function handleCompactionOutcome(
   character: string,
   notify: Notify,
   outcome: CompactionOutcome,
-): number {
+): CompactionCompletion {
   if (outcome.kind === "compacted") {
     shoreLog.info(
       `shore: background compaction completed for ${character} ` +
@@ -59,10 +64,10 @@ export function handleCompactionOutcome(
       `Compaction complete: ${outcome.memoryFilesWritten.length} entries from ` +
         `${outcome.compactedTurns} turns`,
     );
-    return outcome.retainedTurns;
+    return { kind: "completed", retained: outcome.retainedTurns };
   }
 
-  if (outcome.kind === "rotated") {
+  if (outcome.kind === "rotated" && !outcome.dryRun) {
     shoreLog.info(
       `shore: archive-only rotation completed for ${character} ` +
         `(archived_messages=${String(outcome.archivedMessages)}, ` +
@@ -73,7 +78,7 @@ export function handleCompactionOutcome(
       `Conversation rotated into history (${String(outcome.archivedMessages)} messages, ` +
         `no memory write)`,
     );
-    return outcome.retainedTurns;
+    return { kind: "completed", retained: outcome.retainedTurns };
   }
 
   if (outcome.kind === "truncated") {
@@ -87,7 +92,7 @@ export function handleCompactionOutcome(
       `Compaction was cut off at the token ceiling and wrote only part of its summary. ` +
         `Conversation kept; will retry on next trigger.`,
     );
-    return 0;
+    return { kind: "skipped", reason: outcome.kind };
   }
 
   if (outcome.kind === "paused") {
@@ -96,10 +101,10 @@ export function handleCompactionOutcome(
         `(checkpoint=${outcome.checkpointId}, rounds=${outcome.toolRounds}, ` +
         `reason=${outcome.reason}, detail=${outcome.detail ?? "none"})`,
     );
-    return 0;
+    return { kind: "skipped", reason: outcome.kind };
   }
 
-  return 0;
+  return { kind: "skipped", reason: outcome.kind };
 }
 
 export async function pushAfterCompaction(

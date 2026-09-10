@@ -1,11 +1,11 @@
-import { readDurable, writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
+import { withConversation } from "./lifecycle.ts";
+import { threadFile, readDurable, writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
 import { existsSync } from "node:fs";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   MAIN_THREAD,
-  activeJsonlIn,
   archiveKey,
   characterDataDir,
   characterThreadsIndex,
@@ -114,7 +114,7 @@ export async function threadTurnCount(
 ): Promise<number> {
   let raw: string;
   try {
-    raw = readDurable(activeJsonlIn(threadDataDir(data, character, id)));
+    raw = readDurable(threadFile(data, character, id, "active.jsonl"));
   } catch {
     return 0;
   }
@@ -374,48 +374,50 @@ export async function archiveThread(
   id: string,
   options: ArchiveThreadOptions = {},
 ): Promise<ThreadsIndex> {
-  const now = options.now ?? (() => new Date().toISOString());
-  const index = await ensureThreads(data, character, now());
-  requireThread(index, character, id);
-  if (index.home === id) {
-    throw new ThreadError(
-      "is_home",
-      `thread ${JSON.stringify(id)} is the heartbeat home for ${character} — ` +
-        "point home at another thread first",
-    );
-  }
+  return await withConversation(threadDataDir(data, character, id), "rewrite", async () => {
+    const now = options.now ?? (() => new Date().toISOString());
+    const index = await ensureThreads(data, character, now());
+    requireThread(index, character, id);
+    if (index.home === id) {
+      throw new ThreadError(
+        "is_home",
+        `thread ${JSON.stringify(id)} is the heartbeat home for ${character} — ` +
+          "point home at another thread first",
+      );
+    }
 
-  const dir = threadDataDir(data, character, id);
-  let active: string;
-  try {
-    active = readDurable(activeJsonlIn(dir));
-  } catch {
-    active = "";
-  }
+    const dir = threadDataDir(data, character, id);
+    let active: string;
+    try {
+      active = readDurable(threadFile(data, character, id, "active.jsonl"));
+    } catch {
+      active = "";
+    }
 
-  if (active.trim() !== "") {
-    await archiveAndRetain(
-      dir,
-      0,
-      active,
-      now,
-      options.newId ?? (() => crypto.randomUUID()),
-      `thread-archive-${crypto.randomUUID()}`,
-      {
-        dbPath: join(data, HISTORY_DB_FILE),
-        archiveKey: archiveKey(character, id),
-        ...(options.retain === undefined ? {} : { retain: options.retain }),
-      },
-    );
-  }
+    if (active.trim() !== "") {
+      await archiveAndRetain(
+        dir,
+        0,
+        active,
+        now,
+        options.newId ?? (() => crypto.randomUUID()),
+        `thread-archive-${crypto.randomUUID()}`,
+        {
+          dbPath: join(data, HISTORY_DB_FILE),
+          archiveKey: archiveKey(character, id),
+          ...(options.retain === undefined ? {} : { retain: options.retain }),
+        },
+      );
+    }
 
-  await rm(dir, { recursive: true, force: true });
-  deleteThreadState(data, character, id);
-  forgetThreadSessions(data, character, id);
-  const next: ThreadsIndex = {
-    ...index,
-    threads: index.threads.filter((t) => t.id !== id),
-  };
-  await writeThreadsIndex(data, character, next);
-  return next;
+    await rm(dir, { recursive: true, force: true });
+    deleteThreadState(data, character, id);
+    forgetThreadSessions(data, character, id);
+    const next: ThreadsIndex = {
+      ...index,
+      threads: index.threads.filter((t) => t.id !== id),
+    };
+    await writeThreadsIndex(data, character, next);
+    return next;
+  });
 }

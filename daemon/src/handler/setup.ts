@@ -21,6 +21,7 @@ import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { prepareChatContext } from "./context.ts";
 
 export interface SetupEngine {
+  readonly thread?: string;
   messages(): readonly Message[];
   messagesThroughLastUserTurn(): Message[];
   segmentCount(): number;
@@ -94,6 +95,7 @@ export async function buildGenerationRequest(
   const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(config.app.tools.enabled_tools);
 
   const prepared = await prepareChatContext({
+    ...(engine.thread === undefined ? {} : { thread: engine.thread }),
     character: charName,
     characterDataDir: characterDataDir(params.dataDir, charName),
     config,

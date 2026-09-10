@@ -59,12 +59,14 @@ MUTANTS = [
      "        await resetActivePromptSnapshotIfEmpty(\n"
      "          characterDataDir(this.#dataDir, name),\n"
      "          threadDataDir(this.#dataDir, name, homeThread(index)),\n"
+     "          homeThread(index),\n"
      "        );",
      "        void resetActivePromptSnapshotIfEmpty;"),
     ("scan: every character's snapshot is dropped, live conversation or not",
      "        await resetActivePromptSnapshotIfEmpty(\n"
      "          characterDataDir(this.#dataDir, name),\n"
      "          threadDataDir(this.#dataDir, name, homeThread(index)),\n"
+     "          homeThread(index),\n"
      "        );",
      '        await (await import("./memory/deferred_edits.ts")).resetActivePromptSnapshot(\n'
      "          characterDataDir(this.#dataDir, name),\n"
@@ -73,10 +75,12 @@ MUTANTS = [
      "        await resetActivePromptSnapshotIfEmpty(\n"
      "          characterDataDir(this.#dataDir, name),\n"
      "          threadDataDir(this.#dataDir, name, homeThread(index)),\n"
+     "          homeThread(index),\n"
      "        );",
      "        await resetActivePromptSnapshotIfEmpty(\n"
      "          characterDataDir(this.#configDir, name),\n"
      "          threadDataDir(this.#dataDir, name, homeThread(index)),\n"
+     "          homeThread(index),\n"
      "        );"),
     ("available: membership is case insensitive",
      "    return this.#available.includes(name);",

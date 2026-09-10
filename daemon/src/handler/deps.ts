@@ -166,7 +166,7 @@ export function chatToolDeps(
     }),
     deferEdit: deferEditTo(
       characterDataDir(runtime.config.dirs.data, charName),
-      queueDeferredEdit,
+      (dir, path) => queueDeferredEdit(dir, path, turn.thread),
     ),
     activityStats: (days: number) => {
       const report = runtime.autonomy.activityStats(

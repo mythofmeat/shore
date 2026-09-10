@@ -50,17 +50,15 @@ MUTANTS = [
      "      failed: e instanceof Error ? e.message : String(e),",
      "      failed: undefined,"),
     ("report: a failed pass rethrows, abandoning the rest of the tick", I,
-     "    return {\n      events: [],\n      failed: e instanceof Error ? e.message : String(e),",
-     "    throw e;\n    return {\n      events: [],\n      failed: e instanceof Error ? e.message : String(e),"),
+     '\n      return {\n        events: [],\n        failed: e instanceof Error ? e.message : String(e),',
+     '    throw e;\n    return {\n      events: [],\n      failed: e instanceof Error ? e.message : String(e),'),
     ("report: missing dependencies are a silent skip that wedges the latch",
      I,
      '    return { events: [], failed: "idle compaction has no compaction dependencies" };',
      "    return { events: [] };"),
     ("report: missing dependencies still run the bookkeeping",
      I,
-     "  if (deps.run === undefined) {\n"
-     '    return { events: [], failed: "idle compaction has no compaction dependencies" };\n'
-     "  }",
+     '\n    if (deps.run === undefined) {\n      return { events: [], failed: "idle compaction has no compaction dependencies" };\n    }',
      "  if (deps.run === undefined) deps.run = { generate: (() => { throw new Error('no deps') }) as never };"),
     ("report: the retained count is dropped, so the turns are never marked covered",
      I,
@@ -90,8 +88,8 @@ MUTANTS = [
      '  shoreLog.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);\n'
      '  await reloadAndApplyDeferred(character, deps, "Idle compaction");'),
     ("pass: the compaction runs without the character's effective config", I,
-     "    retained = await runCompaction(character, {\n      ...deps.run,\n      config: deps.config,\n    });",
-     "    retained = await runCompaction(character, {\n      ...deps.run,\n    } as never);"),
+     '\n      completion = await runCompaction(character, {\n        ...deps.run,\n        config: deps.config,\n      });',
+     '    completion = await runCompaction(character, {\n      ...deps.run,\n    } as never);'),
 ]
 
 
