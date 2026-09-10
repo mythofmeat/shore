@@ -23,10 +23,20 @@ subagent diagnostics use indexed `events` rows. State and diagnostic event
 contents are Zstandard compressed; captured payloads use compressed,
 content-addressed chunks to share repeated data.
 
-Diagnostics have no automatic age or total-size expiry. The daemon no longer
-runs the old 14-day/512-MiB purge. Heartbeat display keeps a small in-memory
-window, while the database retains older events. Existing per-payload capture
-limits still apply. Routine conversation recovery backups retain eight copies;
+The daemon expires diagnostics older than 30 days at startup and once every
+24 hours. This removes raw API/HTTP captures, diagnostic transcripts, and
+heartbeat log events. Subagent intermediate messages expire on the same
+schedule, while results, errors, timestamps, model names, and parent-call links
+remain indefinitely. These result records remain queryable as subagent traces
+with empty `messages` and `messages_expired: true`.
+
+Main conversation history and alternatives, memory and session state, and usage
+accounting do not expire. Malformed subagent records and records without a valid
+age are preserved for inspection. Capture cleanup reclaims only payloads and
+chunks no longer referenced by retained captures. Freed pages can be reused by
+new records; daily cleanup does not run a full `VACUUM`. There is no total-size
+ceiling, and existing per-payload capture limits still apply. Existing backups
+are not pruned by this policy. Routine conversation recovery backups retain eight copies;
 quarantined malformed lines are excluded from that limit. Explicit character
 deletion removes that character's records and media.
 
@@ -47,11 +57,23 @@ natural-key rows are retained as compressed `legacy/conflicts/` state records.
 Malformed or unrecognized databases stop migration and remain available for
 inspection. Interrupted imports can be retried by restarting.
 
+History upgrades remove the obsolete `memory_retain` column and
+`history_memory_retain` queue; current retention settings and document state are
+preserved. Archive imports also omit the retired column. Zero-byte legacy
+database files are retired only when their WAL, shared-memory, and rollback
+journal files are absent or empty; nonempty sidecars stop migration for inspection.
+
+Import deduplication records use a `WITHOUT ROWID` table with 32-byte binary
+SHA-256 digests. Existing hexadecimal records are converted transactionally;
+their occurrence counters and destination IDs are preserved. Freed database
+pages remain reusable until an explicit `VACUUM` compacts the file. The daemon
+does not vacuum on every startup.
+
 Recognized JSON state and JSONL logs move into the database. Legacy logs are
 streamed in batches, including malformed nonempty lines retained for diagnosis.
 Unknown files are left in place. Existing images move to `media/<character>/`;
 compatibility links preserve old absolute references. Filename conflicts retain
-both originals. There is no image browser, retention policy, or new reattachment
+both originals. There is no image browser, media expiry, or new reattachment
 UI in this change.
 
 ## Character archives and backups

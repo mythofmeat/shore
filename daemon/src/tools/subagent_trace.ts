@@ -13,6 +13,7 @@ export interface SubagentTrace {
   rid?: string;
   model: string;
   messages: Message[];
+  messages_expired?: boolean;
   result?: string;
   error?: string;
 }
@@ -43,7 +44,7 @@ export async function readSubagentTraces(
 ): Promise<SubagentTrace[]> {
   await migrateTraces(characterDataDir);
   const { data, character } = characterScope(characterDataDir);
-  return readEvents(data, character, "subagent", query.count, query.ids)
+  return readEvents(data, character, ["subagent", "subagent_result"], query.count, query.ids)
     .flatMap((line) => { const trace = parseTrace(line); return trace === undefined ? [] : [trace]; });
 }
 
@@ -76,6 +77,7 @@ function parseTrace(line: string): SubagentTrace | undefined {
     ...(typeof fields["rid"] === "string" ? { rid: fields["rid"] } : {}),
     model: typeof fields["model"] === "string" ? fields["model"] : "",
     messages: Array.isArray(fields["messages"]) ? (fields["messages"] as Message[]) : [],
+    ...(fields["messages_expired"] === true ? { messages_expired: true } : {}),
     ...(typeof fields["result"] === "string" ? { result: fields["result"] } : {}),
     ...(typeof fields["error"] === "string" ? { error: fields["error"] } : {}),
   };

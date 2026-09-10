@@ -13,6 +13,7 @@ import {
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
+import { ZERO_USAGE } from "../src/call_store.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider } from "../src/llm/types.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
@@ -260,41 +261,54 @@ describe("what assembly wires together", () => {
 });
 
 describe("the clocks", () => {
-  test("starting the clocks never expires diagnostic records", async () => {
+  test("diagnostic retention runs at startup and periodically, and stops with the clocks", async () => {
     const { root, config } = await dirsUnder("shore-runtime-rotate-");
     try {
       const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
 
-      const rotated: { cutoff: Date; max: number }[] = [];
       const store = runtime.callStore;
-      expect(store).toBeDefined();
-      (store as unknown as { rotate: unknown }).rotate = (cutoff: Date, max: number) => {
-        rotated.push({ cutoff, max });
-        return { deleted_by_age: 0, deleted_by_size: 0 };
-      };
-
-      const clocks = startRuntimeClocks(runtime);
-      clocks.stop();
-
-      expect(rotated).toEqual([]);
-
-      await runtime.shutdown();
+      if (store === undefined) throw new Error("missing call store");
+      const record = () => store.recordCall({ call_id: "old", ts: new Date(0), usage: ZERO_USAGE, request_body: "diagnostic" });
+      record();
+      const clocks = startRuntimeClocks(runtime, { diagnosticRetentionMs: 5 });
+      try {
+        await Bun.sleep(15);
+        expect(store.callCount()).toBe(0);
+        record();
+        await Bun.sleep(15);
+        expect(store.callCount()).toBe(0);
+        clocks.stop();
+        record();
+        await Bun.sleep(15);
+        expect(store.callCount()).toBe(1);
+      } finally {
+        clocks.stop();
+        await runtime.shutdown();
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  test("a rotation that throws does not take the daemon down with it", async () => {
+  test("retention failures do not take down the daemon and a later sweep retries", async () => {
     const { root, config } = await dirsUnder("shore-runtime-rotfail-");
     try {
       const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
-      (runtime.callStore as unknown as { rotate: unknown }).rotate = () => {
-        throw new Error("database is locked");
-      };
-
-      expect(() => startRuntimeClocks(runtime).stop()).not.toThrow();
-
-      await runtime.shutdown();
+      const store = runtime.callStore;
+      if (store === undefined) throw new Error("missing call store");
+      store.recordCall({ call_id: "old", ts: new Date(0), usage: ZERO_USAGE, request_body: "diagnostic" });
+      store.database.run("CREATE TRIGGER fail_retention BEFORE DELETE ON capture_calls BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
+      const clocks = startRuntimeClocks(runtime, { diagnosticRetentionMs: 5 });
+      try {
+        await Bun.sleep(15);
+        expect(store.callCount()).toBe(1);
+        store.database.run("DROP TRIGGER fail_retention");
+        await Bun.sleep(15);
+        expect(store.callCount()).toBe(0);
+      } finally {
+        clocks.stop();
+        await runtime.shutdown();
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

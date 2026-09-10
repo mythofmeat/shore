@@ -14,6 +14,7 @@ import { appendSubagentTrace, readSubagentTraces } from "../src/tools/subagent_t
 import { HeartbeatLog } from "../src/autonomy/heartbeat_log.ts";
 import { migrateCharacterMedia } from "../src/storage/media.ts";
 import { exportUnifiedDatabase, importUnifiedDatabase } from "../src/storage/archive.ts";
+import { importHistoryDatabase } from "../src/commands/archive_databases.ts";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -59,12 +60,133 @@ test("both call databases merge without ID collisions or duplicated captures, an
   for (const oldPath of [join(paths.cache, "calls.db"), join(paths.data, "calls.db"), join(paths.data, "ledger.db"), join(paths.data, "history.db")]) expect(existsSync(oldPath)).toBe(false);
 });
 
+test.each(["history.db", "shore.db"])("obsolete retention schema is removed from %s without losing history", (filename) => {
+  const paths = dirs();
+  const legacyPath = join(paths.data, filename);
+  const history = HistoryStore.open(legacyPath);
+  history.putSegment("ada", 0, {
+    file: "0001.jsonl", message_count: 1, compacted_at: "2020-01-01T00:00:00Z", retain: true,
+  }, [{
+    msg_id: "old-message", role: "user", content: "keep my history", images: [],
+    content_blocks: [{ type: "text", text: "keep my history" }], timestamp: "2020-01-01T00:00:00Z",
+  }]);
+  history.close();
+  const legacy = new Database(legacyPath);
+  legacy.run("ALTER TABLE history_segments ADD COLUMN memory_retain INTEGER NOT NULL DEFAULT 0");
+  legacy.run("UPDATE history_segments SET memory_retain = 1");
+  legacy.run("CREATE TABLE history_memory_retain (character TEXT, segment INTEGER, status TEXT)");
+  legacy.run("INSERT INTO history_memory_retain VALUES ('ada', 0, 'pending')");
+  legacy.close();
+
+  migrateDatabases(paths);
+  migrateDatabases(paths);
+  expect(existsSync(legacyPath)).toBe(filename === "shore.db");
+  const check = (data: string) => {
+    withStorage(data, (db) => {
+      const columns = db.query("PRAGMA table_info(history_segments)").all() as { name: string }[];
+      expect(columns.map((column) => column.name)).not.toContain("memory_retain");
+      expect(db.query("SELECT 1 FROM sqlite_master WHERE name = 'history_memory_retain'").get()).toBeNull();
+      expect(db.query("SELECT retain_requested, memory_doc FROM history_segments").all())
+        .toEqual([{ retain_requested: 1, memory_doc: "pending" }]);
+      expect(db.query("PRAGMA quick_check").values()).toEqual([["ok"]]);
+    });
+    const store = HistoryStore.open(databasePath(data));
+    try {
+      expect(store.readSegment("ada", 0).map((message) => message.content)).toEqual(["keep my history"]);
+    } finally { store.close(); }
+  };
+  check(paths.data);
+  const archive = join(paths.root, "export.db");
+  exportUnifiedDatabase(databasePath(paths.data), "ada", archive);
+  const oldArchive = new Database(archive);
+  oldArchive.run("ALTER TABLE history_segments ADD COLUMN memory_retain INTEGER NOT NULL DEFAULT 0");
+  oldArchive.close();
+  const target = dirs();
+  importUnifiedDatabase(databasePath(target.data), archive, "ada");
+  check(target.data);
+  const legacyTarget = dirs();
+  importHistoryDatabase(databasePath(legacyTarget.data), archive, "ada");
+  check(legacyTarget.data);
+  const reopened = HistoryStore.open(databasePath(target.data));
+  try {
+    reopened.putSegment("ada", 1, {
+      file: "0002.jsonl", message_count: 0, compacted_at: "2020-01-02T00:00:00Z",
+    }, []);
+    expect(reopened.entries("ada")).toHaveLength(2);
+  } finally { reopened.close(); }
+});
+
+test("zero-byte legacy databases are retired without blocking populated databases", () => {
+  const paths = dirs();
+  const empty = [join(paths.data, "history.db"), join(paths.data, "calls.db"), join(paths.cache, "ledger.db")];
+  for (const path of empty) writeFileSync(path, "");
+  capture(join(paths.cache, "calls.db"), "keep");
+  migrateDatabases(paths);
+  migrateDatabases(paths);
+  for (const path of empty) expect(existsSync(path)).toBe(false);
+  const store = CallStore.open(databasePath(paths.data));
+  try { expect(store.callCount()).toBe(1); } finally { store.close(); }
+});
+
+test.each(["-wal", "-journal", "-shm"])("an empty database with a nonempty %s is preserved for inspection", (suffix) => {
+  const paths = dirs();
+  const path = join(paths.data, "history.db");
+  writeFileSync(path, "");
+  writeFileSync(`${path}${suffix}`, "potential recovery data");
+  expect(() => migrateDatabases(paths)).toThrow();
+  expect(existsSync(path)).toBe(true);
+  expect(readFileSync(`${path}${suffix}`, "utf8")).toBe("potential recovery data");
+});
+
 test("an invalid database is preserved and migration refuses to silently discard it", () => {
   const paths = dirs();
   const legacy = join(paths.data, "ledger.db");
   writeFileSync(legacy, "not a sqlite database");
   expect(() => migrateDatabases(paths)).toThrow();
   expect(readFileSync(legacy, "utf8")).toBe("not a sqlite database");
+});
+
+test("compacting old import records preserves deduplication when another source copy arrives", () => {
+  const paths = dirs();
+  const source = join(paths.cache, "calls.db");
+  capture(source, "shared");
+  const original = readFileSync(source);
+  migrateDatabases(paths);
+  withStorage(paths.data, (db) => {
+    db.run(`CREATE TABLE old_import_rows (
+      kind TEXT NOT NULL, table_name TEXT NOT NULL, digest TEXT NOT NULL,
+      occurrence INTEGER NOT NULL, target_id INTEGER,
+      PRIMARY KEY(kind, table_name, digest, occurrence));
+      INSERT INTO old_import_rows SELECT kind, table_name, lower(hex(digest)), occurrence, target_id FROM storage_import_rows;
+      DROP TABLE storage_import_rows;
+      ALTER TABLE old_import_rows RENAME TO storage_import_rows;`);
+  });
+  writeFileSync(join(paths.data, "calls.db"), original);
+  migrateDatabases(paths);
+  migrateDatabases(paths);
+  withStorage(paths.data, (db) => {
+    expect(db.query("SELECT wr FROM pragma_table_list WHERE name = 'storage_import_rows'").get()).toEqual({ wr: 1 });
+    expect(db.query("SELECT DISTINCT typeof(digest) AS type, length(digest) AS bytes FROM storage_import_rows").all())
+      .toEqual([{ type: "blob", bytes: 32 }]);
+  });
+  const store = CallStore.open(databasePath(paths.data));
+  try {
+    expect(store.callCount()).toBe(1);
+    for (const call of store.queryCalls({ limit: 1 })) expect(store.getCall(call.id)?.request).toContain("shared");
+  } finally { store.close(); }
+});
+
+test("an invalid legacy import digest rolls back the schema upgrade", () => {
+  const paths = dirs();
+  withStorage(paths.data, (db) => db.run(`DROP TABLE storage_import_rows;
+    CREATE TABLE storage_import_rows (kind TEXT, table_name TEXT, digest TEXT, occurrence INTEGER, target_id INTEGER);
+    INSERT INTO storage_import_rows VALUES ('capture', 'capture_calls', 'invalid', 1, 7);`));
+  expect(() => migrateDatabases(paths)).toThrow("Invalid storage import digest");
+  const db = new Database(databasePath(paths.data), { readonly: true });
+  try {
+    expect(db.query("SELECT digest, target_id FROM storage_import_rows").get()).toEqual({ digest: "invalid", target_id: 7 });
+    expect(db.query("SELECT 1 FROM sqlite_master WHERE name = 'storage_import_rows_compact'").get()).toBeNull();
+  } finally { db.close(); }
 });
 
 test("legacy traces stream into compressed indexed records, including malformed lines, without duplication", async () => {

@@ -1,6 +1,6 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { CallStore } from "../call_store.ts";
@@ -19,6 +19,7 @@ export const HISTORY_TABLES = [
 
 type Row = Record<string, SQLQueryBindings>;
 type Column = { name: string; pk: number; type: string };
+const SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"];
 
 export function migrateDatabases(dirs: Pick<ShoreDirs, "data" | "cache">): void {
   const destination = openStorage(dirs.data);
@@ -43,6 +44,13 @@ export function migrateDatabases(dirs: Pick<ShoreDirs, "data" | "cache">): void 
 }
 
 function migrateDatabase(destination: Database, sourcePath: string, kind: "history" | "ledger" | "capture", data: string): void {
+  if (statSync(sourcePath).size === 0) {
+    if (SIDECAR_SUFFIXES.some((suffix) => existsSync(`${sourcePath}${suffix}`) && statSync(`${sourcePath}${suffix}`).size > 0)) {
+      throw new Error(`Empty database has nonempty recovery files: ${sourcePath}; refusing to discard them`);
+    }
+    retireDatabase(sourcePath);
+    return;
+  }
   const source = new Database(sourcePath, { readonly: true });
   let snapshot: Uint8Array;
   try {
@@ -84,15 +92,20 @@ function migrateDatabase(destination: Database, sourcePath: string, kind: "histo
       rmSync(stage, { recursive: true, force: true });
     }
   }
+  retireDatabase(sourcePath);
+}
+
+function retireDatabase(sourcePath: string): void {
   unlinkSync(sourcePath);
-  for (const suffix of ["-wal", "-shm", "-journal"]) rmSync(`${sourcePath}${suffix}`, { force: true });
+  for (const suffix of SIDECAR_SUFFIXES) rmSync(`${sourcePath}${suffix}`, { force: true });
 }
 
 export function mergeTables(source: Database, destination: Database, kind: "history" | "ledger" | "capture", origin: string, namespace = kind as string): void {
   const tables = kind === "capture" ? CAPTURE_TABLES : kind === "ledger" ? LEDGER_TABLES : HISTORY_TABLES;
   const mappings = new Map<string, Map<number, number>>();
   for (const table of tables) {
-    const columns = source.query(`PRAGMA table_info(${table})`).all() as Column[];
+    const columns = (source.query(`PRAGMA table_info(${table})`).all() as Column[])
+      .filter((column) => table !== "history_segments" || column.name !== "memory_retain");
     if (columns.length === 0) continue;
     const primary = columns.filter((c) => c.pk > 0);
     const autoId = primary.length === 1 && primary[0]?.name === "id" && primary[0].type === "INTEGER";
@@ -111,11 +124,12 @@ export function mergeTables(source: Database, destination: Database, kind: "hist
         return mapped;
       });
       const digest = createHash("sha256").update(JSON.stringify(values)).digest("hex");
+      const digestBytes = Buffer.from(digest, "hex");
       const occurrence = (occurrences.get(digest) ?? 0) + 1;
       occurrences.set(digest, occurrence);
       const existing = destination.query(`SELECT target_id FROM storage_import_rows
         WHERE kind = ?1 AND table_name = ?2 AND digest = ?3 AND occurrence = ?4`)
-        .get(namespace, table, digest, occurrence) as { target_id: number | null } | null;
+        .get(namespace, table, digestBytes, occurrence) as { target_id: number | null } | null;
       let targetId = existing?.target_id ?? null;
       if (existing === null) {
         const reused = table === "capture_payloads"
@@ -136,7 +150,7 @@ export function mergeTables(source: Database, destination: Database, kind: "hist
           }
         }
         destination.query(`INSERT INTO storage_import_rows(kind, table_name, digest, occurrence, target_id)
-          VALUES (?1, ?2, ?3, ?4, ?5)`).run(namespace, table, digest, occurrence, targetId);
+          VALUES (?1, ?2, ?3, ?4, ?5)`).run(namespace, table, digestBytes, occurrence, targetId);
       }
       if (autoId && targetId !== null) ids.set(Number(row["id"]), targetId);
     }
@@ -149,4 +163,3 @@ function referenceTable(table: string, column: string): string | undefined {
   if ((table === "capture_calls" || table === "capture_http_calls") && (column === "request_payload_id" || column === "response_payload_id")) return "capture_payloads";
   return undefined;
 }
-

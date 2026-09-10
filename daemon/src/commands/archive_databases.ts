@@ -260,7 +260,8 @@ function columnsOf(db: Database, table: string): string[] {
       const name = row["name"];
       if (typeof name !== "string") throw new Error(`archive has a malformed ${table} schema`);
       return name;
-    });
+    })
+    .filter((name) => table !== "history_segments" || name !== "memory_retain");
 }
 
 function inserter(db: Database, table: string, columns: readonly string[], conflict = "") {

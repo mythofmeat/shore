@@ -1461,9 +1461,12 @@ function migrate(db: Database): void {
       "ALTER TABLE history_segments ADD COLUMN memory_doc_expires INTEGER NOT NULL DEFAULT 0",
     );
   }
-  if (columns.some((column) => column.name === "memory_retain")) {
+  db.transaction(() => {
     db.run("DROP TABLE IF EXISTS history_memory_retain");
-  }
+    if (columns.some((column) => column.name === "memory_retain")) {
+      db.run("ALTER TABLE history_segments DROP COLUMN memory_retain");
+    }
+  })();
   if (!columns.some((column) => column.name === "memory_doc_id")) {
     db.run("ALTER TABLE history_segments ADD COLUMN memory_doc_id TEXT");
   }

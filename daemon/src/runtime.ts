@@ -1,5 +1,6 @@
 import { preparePersistentStorage } from "./storage/prepare.ts";
 import { migrateDatabases } from "./storage/migrate.ts";
+import { startDiagnosticRetention } from "./storage/retention.ts";
 import { shoreLog } from "./log.ts";
 
 import { mkdirSync } from "node:fs";
@@ -340,6 +341,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
 export interface RuntimeClockIntervals {
   keepaliveMs?: number | undefined;
+  diagnosticRetentionMs?: number | undefined;
 }
 
 export function startRuntimeClocks(
@@ -358,6 +360,7 @@ export function startRuntimeClocks(
   });
   const keepaliveTimer = startKeepaliveTimer(runtime.keepalive, intervals.keepaliveMs);
   const autonomyTimer = startAutonomyTimer(runtime.autonomy);
+  const retention = startDiagnosticRetention(runtime.config.dirs.data, runtime.snapshotGate, intervals.diagnosticRetentionMs);
   const costBackfill = startCostBackfill(
     rustJoin(runtime.config.dirs.data, "shore.db"),
     runtime.snapshotGate,
@@ -368,6 +371,7 @@ export function startRuntimeClocks(
       keepaliveTimer.stop();
       autonomyTimer.stop();
       costBackfill.stop();
+      retention.stop();
       setCallObserver(undefined);
     },
   };

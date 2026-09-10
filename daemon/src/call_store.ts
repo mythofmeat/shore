@@ -693,6 +693,18 @@ export class CallStore {
     return removed;
   }
 
+  expireBefore(cutoff: Date): number {
+    const cutoffUnix = unixSeconds(cutoff);
+    return this.#db.transaction(() => {
+      let removed = 0;
+      for (const table of ["capture_calls", "capture_transcripts", "capture_http_calls"]) {
+        removed += this.#changes(`DELETE FROM ${table} WHERE ts_unix < ?1`, cutoffUnix);
+      }
+      if (removed > 0) this.#collectGarbage();
+      return removed;
+    })();
+  }
+
   rotate(cutoff: Date, maxTotalBytes: number): RotateStats {
     const cutoffUnix = unixSeconds(cutoff);
     const agedCalls = this.#changes("DELETE FROM capture_calls WHERE ts_unix < ?1", cutoffUnix);
