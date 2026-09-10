@@ -106,11 +106,7 @@
     },
     {
       "input": "4294967295d6",
-      "ok": {
-        "count": 4294967295,
-        "sides": 6,
-        "modifier": 0
-      }
+      "err": "Dice count must be at most 1000"
     },
     {
       "input": "4294967296d6",

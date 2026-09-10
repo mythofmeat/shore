@@ -4,6 +4,7 @@ import { InvalidArgs } from "./errors.ts";
 const U32_MAX = 4_294_967_295;
 const I32_MIN = -2_147_483_648;
 const I32_MAX = 2_147_483_647;
+export const MAX_DICE_COUNT = 1000;
 
 function parseU32(s: string): number | undefined {
   if (!/^\+?[0-9]+$/.test(s)) return undefined;
@@ -52,6 +53,9 @@ export function parseDiceNotation(notation: string): DiceNotation {
   if (count === 0) {
     throw new DiceParseError("Dice count must be at least 1");
   }
+  if (count > MAX_DICE_COUNT) {
+    throw new DiceParseError(`Dice count must be at most ${MAX_DICE_COUNT}`);
+  }
 
   const afterD = s.slice(dPos + 1);
   if (afterD === "") {
@@ -97,6 +101,9 @@ export function executeDiceRoll(notation: DiceNotation): {
   rolls: number[];
   total: number;
 } {
+  if (!Number.isInteger(notation.count) || notation.count < 1 || notation.count > MAX_DICE_COUNT) {
+    throw new DiceParseError(`Dice count must be between 1 and ${MAX_DICE_COUNT}`);
+  }
   const rolls: number[] = [];
   for (let i = 0; i < notation.count; i += 1) {
     rolls.push(1 + Math.floor(Math.random() * notation.sides));
@@ -127,4 +134,3 @@ export function handleRollDice(input: Record<string, unknown>): unknown {
   const { rolls, total } = executeDiceRoll(parsed);
   return { notation, rolls, total };
 }
-
