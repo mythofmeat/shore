@@ -1,11 +1,10 @@
-import { readDurable } from "../storage/files.ts";
+import { readDurable, archiveFile } from "../storage/files.ts";
 import { shoreLog } from "../log.ts";
 
 import { access, readFile, rmdir, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import {
-  activeJsonlIn,
   archiveKey,
   compactionManifestIn,
   segmentsDirIn,
@@ -89,7 +88,7 @@ export class SegmentReader {
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") {
         const history = await openHistory(ref);
-        if (history !== undefined) await recoverPending(history, ref.dir, character);
+        if (history !== undefined) await recoverPending(history, ref);
         return new SegmentReader(
           segmentsDir,
           EMPTY_MANIFEST,
@@ -117,7 +116,7 @@ export class SegmentReader {
     }
     const history = await openHistory(ref);
     if (history !== undefined) {
-      await recoverPending(history, ref.dir, character);
+      await recoverPending(history, ref);
       await importLegacySegments(history, character, manifest, segmentsDir, manifestPath);
     }
     return new SegmentReader(segmentsDir, manifest, history, character);
@@ -246,16 +245,15 @@ async function openHistory(ref: ConversationRef): Promise<HistoryStore | undefin
 
 async function recoverPending(
   history: HistoryStore,
-  characterDir: string,
-  character: string,
+  ref: ConversationRef,
 ): Promise<void> {
   let active = "";
   try {
-    active = readDurable(activeJsonlIn(characterDir));
+    active = readDurable(archiveFile(ref.dbPath, ref.archiveKey, "active.jsonl"));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
-  history.recoverPending(character, active);
+  history.recoverPending(ref.archiveKey, active);
 }
 
 async function importLegacySegments(

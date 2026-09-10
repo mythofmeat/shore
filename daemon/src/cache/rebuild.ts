@@ -129,6 +129,7 @@ export async function rebuildRequestFromDisk(
       hasPriorContext,
       {
         mcpToolDefs,
+        thread,
         activeConversation: store.messageCount() > 0,
         ...(deps.timeZone === undefined ? {} : { timeZone: deps.timeZone }),
       },

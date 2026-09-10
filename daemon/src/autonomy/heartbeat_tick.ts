@@ -1,3 +1,6 @@
+import { withConversation } from "../engine/lifecycle.ts";
+import { threadDataDir } from "../config/dirs.ts";
+import { homeThreadOf } from "../engine/threads.ts";
 import { shoreLog } from "../log.ts";
 
 import { buildAutonomousMessage } from "./heartbeat_shape.ts";
@@ -139,29 +142,34 @@ export async function runHeartbeatTick(
   config: LoadedConfig,
   deps: HeartbeatTickDeps,
 ): Promise<AutonomyActionResult> {
-  const events: { kind: HeartbeatEventKind; detail: string }[] = [];
-  const note = (kind: HeartbeatEventKind, detail: string): void => {
-    events.push({ kind, detail });
-  };
+  const thread = await homeThreadOf(config.dirs.data, character);
+  return await withConversation(threadDataDir(config.dirs.data, character, thread), "turn", async (signal) => {
+    const events: { kind: HeartbeatEventKind; detail: string }[] = [];
+    const note = (kind: HeartbeatEventKind, detail: string): void => {
+      events.push({ kind, detail });
+    };
 
-  const prepared = await prepareHeartbeatRequest(character, config, deps);
-  if (prepared === undefined) return { events };
+    const prepared = await prepareHeartbeatRequest(character, config, deps);
+    if (prepared === undefined) return { events };
 
-  const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(prepared.request);
-  if (blocked !== undefined) {
-    note("budget_paused", `Heartbeat paused before round 0 — ${blocked.summary}`);
+    const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(prepared.request);
+    if (blocked !== undefined) {
+      note("budget_paused", `Heartbeat paused before round 0 — ${blocked.summary}`);
+      return { events };
+    }
+
+    const loop = await runHeartbeatToolLoop(prepared.request, {
+      ...deps,
+      generate: (request, phase, loopSignal) => deps.generate(request, phase, AbortSignal.any([signal, loopSignal])),
+      character,
+      wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
+      maxToolIterations: prepared.maxToolIterations,
+      note: (detail) => note("tool_use", detail),
+    });
+
+    signal.throwIfAborted();
+    await persistHeartbeatMessage(character, prepared.request, loop, deps, note);
+
     return { events };
-  }
-
-  const loop = await runHeartbeatToolLoop(prepared.request, {
-    ...deps,
-    character,
-    wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
-    maxToolIterations: prepared.maxToolIterations,
-    note: (detail) => note("tool_use", detail),
   });
-
-  await persistHeartbeatMessage(character, prepared.request, loop, deps, note);
-
-  return { events };
 }

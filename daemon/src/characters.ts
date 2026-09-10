@@ -165,6 +165,7 @@ export class CharacterRegistry {
         await resetActivePromptSnapshotIfEmpty(
           characterDataDir(this.#dataDir, name),
           threadDataDir(this.#dataDir, name, homeThread(index)),
+          homeThread(index),
         );
       } catch (e) {
         shoreLog.warn(

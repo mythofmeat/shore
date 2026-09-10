@@ -1,11 +1,11 @@
-import { readDurable } from "../../storage/files.ts";
+import { readDurable, threadFile } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
 
 import { shoreLog } from "../../log.ts";
 
 import { dirname } from "node:path";
 
-import { characterActiveJsonl, characterDataDir, MAIN_THREAD } from "../../config/dirs.ts";
+import { characterDataDir, MAIN_THREAD } from "../../config/dirs.ts";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 
 import { pushAssistantTurn } from "../../llm/request";
@@ -948,7 +948,7 @@ function budgetResetAt(e: unknown): string | undefined {
 async function currentActiveContent(opts: CompactOptions): Promise<string> {
   if (opts.resumable !== true || opts.dataDir === undefined) return opts.plan.sourceContent;
   try {
-    return readDurable(characterActiveJsonl(opts.dataDir, opts.charName, compactThread(opts)));
+    return readDurable(threadFile(opts.dataDir, opts.charName, compactThread(opts), "active.jsonl"));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return opts.plan.sourceContent;
     throw e;

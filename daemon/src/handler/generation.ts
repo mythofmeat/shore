@@ -1,3 +1,5 @@
+import { withConversation } from "../engine/lifecycle.ts";
+import { threadDataDir } from "../config/dirs.ts";
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -43,7 +45,7 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
-import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
+import { homeThreadOf, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
@@ -188,11 +190,16 @@ export async function runGeneration(
   deps: GenerationDeps,
   params: GenerationParams,
 ): Promise<void> {
+  const engine = await deps.registry.getOrCreate(
+    params.charName, liveThread(deps.registry, params.charName, params.meta.session.selectedThread),
+  );
+  return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
+  params = { ...params, signal };
   const delivery = new OrderedDelivery(params.send);
   let generationFailure: unknown;
   let generationFailed = false;
   try {
-    await runGenerationCore(deps, { ...params, send: delivery.send }, () => delivery.flush());
+    await runGenerationCore(deps, engine, { ...params, send: delivery.send }, () => delivery.flush());
   } catch (error) {
     generationFailure = error;
     generationFailed = true;
@@ -207,10 +214,12 @@ export async function runGeneration(
     if (!generationFailed) throw error;
   }
   if (generationFailed) throw generationFailure;
+  }, params.signal);
 }
 
 async function runGenerationCore(
   deps: GenerationDeps,
+  engine: GenerationEngine,
   params: GenerationParams,
   flushFrames: () => Promise<void>,
 ): Promise<void> {
@@ -221,15 +230,13 @@ async function runGenerationCore(
   const { charName, regen } = params;
 
   const config = deps.registry.effectiveConfig(charName);
-  const engine = await deps.registry.getOrCreate(
-    charName,
-    liveThread(deps.registry, charName, params.meta.session.selectedThread),
-  );
 
+  const isHome = engine.thread === await homeThreadOf(deps.dataDir, charName);
+  const autonomy = isHome ? deps.autonomy : sideThreadAutonomy(config);
   const turnCtx: TurnContext = {
     emitEvent: deps.emitEvent,
     sendDirect: (message) => void params.send(message),
-    autonomy: deps.autonomy,
+    autonomy,
     now,
     newMessageId,
   };
@@ -326,6 +333,7 @@ async function runGenerationCore(
 
   let intermediatePersisted = false;
   const persistIntermediate = async (message: Message): Promise<void> => {
+    params.signal.throwIfAborted();
     const persisted = message.role === "assistant"
       ? {
           ...message,
@@ -362,12 +370,13 @@ async function runGenerationCore(
     throw e;
   });
 
+  params.signal.throwIfAborted();
   applyIntermediateMessages(request, intermediate, result.model);
 
   const persistCtx: PersistContext = {
     emitEvent: deps.emitEvent,
     sendDirect: (message) => void params.send(message),
-    autonomy: deps.autonomy,
+    autonomy,
     notifier: deps.notifier,
     newlyCrossedUsageBudgetWarnings: deps.newlyCrossedUsageBudgetWarnings,
     now,
@@ -393,6 +402,7 @@ async function runGenerationCore(
   emitPostPersistStreamEnd(turnCtx, engine, params.rid ?? undefined, result);
   await flushFrames();
 
+  if (deps.registry.listThreads(charName).find((thread) => thread.id === engine.thread)?.compaction === false) return;
   await maybeCompact(
     turnCtx,
     engine,
@@ -406,6 +416,7 @@ async function runGenerationCore(
 }
 
 export interface SubagentTurn {
+  thread?: string;
   conversation: readonly Message[];
   send: (message: ServerMessage) => void;
   rid?: string;
@@ -442,13 +453,14 @@ async function streamTurn(
         deps.dataDir,
         charName,
         { ...deps.tools?.(charName, {
+          ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }),
           conversation: params.conversation,
           send: (message) => send(message),
           ...(params.rid === undefined ? {} : { rid: params.rid }),
           now: params.now,
           newMessageId: params.newMessageId,
           signal: params.signal,
-        }), signal: params.signal },
+        }), signal: params.signal, ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }) },
       )
     : undefined;
 
@@ -617,4 +629,23 @@ function thinkingEnabled(opts: ProviderOptions | undefined): boolean {
 function resolvedReasoningEffort(opts: ProviderOptions | undefined): string | undefined {
   if (opts?.reasoning_effort !== undefined) return opts.reasoning_effort;
   return opts?.thinking_enabled === false ? "off" : undefined;
+}
+
+function sideThreadAutonomy(config: LoadedConfig): GenerationDeps["autonomy"] {
+  return {
+    ensureState: () => false,
+    needsActivityBackfill: () => false,
+    backfillActivity: () => {},
+    onUserMessage: () => {},
+    onCompactionComplete: () => {},
+    onCompactionFailed: () => {},
+    notifyAssistantMessage: () => {},
+    notifyLastRequest: () => {},
+    shouldCompactNow: (_character, turns, tokens) => {
+      const c = config.app.memory.compaction;
+      return c.enabled && turns >= c.min_turns &&
+        ((c.max_turns > 0 && turns >= c.max_turns) ||
+         (c.max_context_tokens > 0 && tokens >= c.max_context_tokens));
+    },
+  };
 }

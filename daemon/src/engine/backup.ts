@@ -1,4 +1,4 @@
-import { readDurable, writeDurable, listDurableFiles, deleteDurable } from "../storage/files.ts";
+import { readDurable, writeDurable, durablePath, atPath, type DurableFile, listDurableFiles, deleteDurable } from "../storage/files.ts";
 import { shoreLog } from "../log.ts";
 
 import { basename, dirname, join } from "node:path";
@@ -22,17 +22,18 @@ function stampOf(at: number): string {
 }
 
 export async function backupBeforeWrite(
-  path: string,
+  file: DurableFile,
   now: () => number = Date.now,
   throttleMs: number = BACKUP_THROTTLE_MS,
 ): Promise<string | undefined> {
+  const path = durablePath(file);
   const at = now();
   const previous = lastBackupAt.get(path);
   if (previous !== undefined && at - previous < throttleMs) return undefined;
 
   let content: string;
   try {
-    content = readDurable(path);
+    content = readDurable(file);
   } catch {
     lastBackupAt.set(path, at);
     return undefined;
@@ -45,9 +46,9 @@ export async function backupBeforeWrite(
   const dir = backupDirFor(path);
   const target = join(dir, `${basename(path)}.${stampOf(at)}`);
   try {
-    writeDurable(target, content);
+    writeDurable(atPath(file, target), content);
     lastBackupAt.set(path, at);
-    await pruneBackups(dir, basename(path));
+    await pruneBackups(file, dir, basename(path));
     return target;
   } catch (e) {
     shoreLog.warn(`shore: could not back up ${path} before writing: ${String(e)}`);
@@ -56,29 +57,30 @@ export async function backupBeforeWrite(
   }
 }
 
-async function pruneBackups(dir: string, prefix: string): Promise<void> {
+async function pruneBackups(file: DurableFile, dir: string, prefix: string): Promise<void> {
   let entries: string[];
   try {
-    entries = listDurableFiles(dir);
+    entries = listDurableFiles(atPath(file, dir));
   } catch {
     return;
   }
   const mine = entries.filter((name) => name.startsWith(`${prefix}.`) && !name.startsWith(`${prefix}.quarantine.`)).sort();
   for (const stale of mine.slice(0, Math.max(0, mine.length - MAX_BACKUPS))) {
-    deleteDurable(join(dir, stale));
+    deleteDurable(atPath(file, join(dir, stale)));
   }
 }
 
 export async function quarantineLines(
-  path: string,
+  file: DurableFile,
   lines: readonly string[],
   now: () => number = Date.now,
 ): Promise<string | undefined> {
+  const path = durablePath(file);
   if (lines.length === 0) return undefined;
   const dir = backupDirFor(path);
   const target = join(dir, `${basename(path)}.quarantine.${stampOf(now())}`);
   try {
-    writeDurable(target, `${lines.join("\n")}\n`);
+    writeDurable(atPath(file, target), `${lines.join("\n")}\n`);
     return target;
   } catch (e) {
     shoreLog.error(`shore: could not quarantine unreadable lines from ${path}: ${String(e)}`);

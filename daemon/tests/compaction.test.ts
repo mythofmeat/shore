@@ -457,7 +457,9 @@ describe("reporting an outcome", () => {
       const retained = handleCompactionOutcome("Aria", (title, body) => {
         notifications.push({ title, body, retained: 0 });
       }, outcome);
-      expect(retained).toBe(rec.retained as number);
+      expect(retained).toEqual(outcome.kind === "compacted" || (outcome.kind === "rotated" && !outcome.dryRun)
+        ? { kind: "completed", retained: rec.retained as number }
+        : { kind: "skipped", reason: outcome.kind });
       const expected = (rec.notifications as Json[]).map((n) => ({
         title: n.title,
         body: n.body,
@@ -570,7 +572,7 @@ function responseFor(name: string): GenerateResponse {
     case "whitespace_text":
       return { ...base, content: "   \n\t ", content_blocks: [], finish_reason: "end_turn" };
     case "unicode_space_text":
-      return { ...base, content: " ", content_blocks: [], finish_reason: "end_turn" };
+      return { ...base, content: "\u0085\u00A0", content_blocks: [], finish_reason: "end_turn" };
     case "bom_text":
       return { ...base, content: "﻿", content_blocks: [], finish_reason: "end_turn" };
     default:

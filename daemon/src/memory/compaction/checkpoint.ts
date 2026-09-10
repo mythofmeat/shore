@@ -1,4 +1,4 @@
-import { readDurable, writeDurable, deleteDurable } from "../../storage/files.ts";
+import { threadFile, readDurable, writeDurable, deleteDurable } from "../../storage/files.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 
@@ -100,7 +100,7 @@ export async function loadCompactionCheckpoint(
 ): Promise<CompactionCheckpoint | undefined> {
   let raw: string;
   try {
-    raw = readDurable(checkpointPath(dataDir, character, thread));
+    raw = readDurable(threadFile(dataDir, character, thread, "compaction-checkpoint.json"));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw e;
@@ -131,7 +131,7 @@ export async function saveCompactionCheckpoint(
   checkpoint.updatedAt = now().toISOString();
   const persisted = { ...checkpoint, request: withoutCredential(checkpoint.request) };
   writeDurable(
-    checkpointPath(dataDir, checkpoint.character, thread),
+    threadFile(dataDir, checkpoint.character, thread, "compaction-checkpoint.json"),
     JSON.stringify(persisted, null, 2),
   );
 }
@@ -142,7 +142,7 @@ export async function removeCompactionCheckpoint(
   thread: string,
 ): Promise<void> {
   try {
-    deleteDurable(checkpointPath(dataDir, character, thread));
+    deleteDurable(threadFile(dataDir, character, thread, "compaction-checkpoint.json"));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }

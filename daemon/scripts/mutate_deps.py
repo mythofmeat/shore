@@ -47,13 +47,13 @@ MUTANTS = [
      D,
      "    deferEdit: deferEditTo(\n"
      "      characterDataDir(runtime.config.dirs.data, charName),\n"
-     "      queueDeferredEdit,\n    ),",
+     "      (dir, path) => queueDeferredEdit(dir, path, turn.thread),\n    ),",
      "    deferEdit: deferEditTo(runtime.config.dirs.data, queueDeferredEdit),"),
     ("tools: there is no deferred-edit queue, so a self-edit lands live",
      D,
      "    deferEdit: deferEditTo(\n"
      "      characterDataDir(runtime.config.dirs.data, charName),\n"
-     "      queueDeferredEdit,\n    ),",
+     "      (dir, path) => queueDeferredEdit(dir, path, turn.thread),\n    ),",
      "    deferEdit: undefined,"),
     ("tools: the heatmap always reads the same character's tracker", D,
      "      const report = runtime.autonomy.activityStats(\n        charName,",

@@ -1,4 +1,5 @@
-import { writeDurable } from "../../storage/files.ts";
+import { refreshConversation, withConversation } from "../../engine/lifecycle.ts";
+import { writeDurable, archiveFile } from "../../storage/files.ts";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -70,40 +71,44 @@ export async function archiveAndRetain(
     "memory_before" | "memory_after" | "excluded" | "note"
   > = {},
 ): Promise<string> {
-  const lines = rustLines(activeContent).filter((l) => rustTrim(l) !== "");
-  const keep = Math.min(keepLastN, lines.length);
-  const splitAt = lines.length - keep;
-  const archived = lines.slice(0, splitAt);
-  const retained = lines.slice(splitAt);
-  const retainedContent = retained.length === 0 ? "" : retained.join("\n") + "\n";
+  return await withConversation(characterDir, "rewrite", async () => {
+    const lines = rustLines(activeContent).filter((l) => rustTrim(l) !== "");
+    const keep = Math.min(keepLastN, lines.length);
+    const splitAt = lines.length - keep;
+    const archived = lines.slice(0, splitAt);
+    const retained = lines.slice(splitAt);
+    const retainedContent = retained.length === 0 ? "" : retained.join("\n") + "\n";
 
-  if (history !== undefined && archived.length > 0) {
-    await archiveToDatabase(
-      history,
-      archived,
-      retainedContent,
-      activeContent,
-      now,
-      operationId,
-      characterDir,
-      segmentMetadata,
-    );
-    const [character, thread = MAIN_THREAD] = history.archiveKey.split("/");
-    if (character !== undefined) forgetThreadSessions(dirname(history.dbPath), character, thread, Date.parse(now()));
+    if (history !== undefined && archived.length > 0) {
+      await archiveToDatabase(
+        history,
+        archived,
+        retainedContent,
+        activeContent,
+        now,
+        operationId,
+        characterDir,
+        segmentMetadata,
+      );
+      const [character, thread = MAIN_THREAD] = history.archiveKey.split("/");
+      if (character !== undefined) forgetThreadSessions(dirname(history.dbPath), character, thread, Date.parse(now()));
+      await refreshConversation(characterDir);
+      return newId();
+    }
+
+    if (archived.length > 0) {
+      await writeSegment(characterDir, archived, now, operationId);
+    }
+
+    try {
+      writeDurable(history === undefined ? activeJsonlIn(characterDir) : archiveFile(history.dbPath, history.archiveKey, "active.jsonl"), retainedContent);
+    } catch (e) {
+      throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
+    }
+
+    await refreshConversation(characterDir);
     return newId();
-  }
-
-  if (archived.length > 0) {
-    await writeSegment(characterDir, archived, now, operationId);
-  }
-
-  try {
-    writeDurable(activeJsonlIn(characterDir), retainedContent);
-  } catch (e) {
-    throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
-  }
-
-  return newId();
+  });
 }
 
 async function archiveToDatabase(
@@ -149,7 +154,7 @@ async function archiveToDatabase(
       );
     }
     try {
-      writeDurable(activeJsonlIn(characterDir), retainedContent);
+      writeDurable(archiveFile(history.dbPath, history.archiveKey, "active.jsonl"), retainedContent);
     } catch (e) {
       if (idx !== undefined) store.abortCompaction(history.archiveKey, idx);
       throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);

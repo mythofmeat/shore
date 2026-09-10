@@ -109,15 +109,20 @@ export function readState(data: string, path: string, character = ""): string | 
     }
     return row === null ? undefined : unpack(row.content);
   });
-  if (content !== undefined) retireLegacyFile(legacy, content);
+  if (content !== undefined) retireLegacyFile(legacy, content, data);
   return content;
 }
 
-export function retireLegacyFile(path: string, authoritative: string): void {
+export function retireLegacyFile(path: string, authoritative: string, data = dirname(path)): void {
   if (!existsSync(path)) return;
   const content = readFileSync(path, "utf8");
   if (content === authoritative) unlinkSync(path);
-  else renameSync(path, `${path}.legacy-conflict-${createHash("sha256").update(content).digest("hex")}`);
+  else {
+    const dir = join(data, "legacy-conflicts");
+    mkdirSync(dir, { recursive: true });
+    const digest = createHash("sha256").update(path).update("\0").update(content).digest("hex");
+    renameSync(path, join(dir, `${basename(path)}.legacy-conflict-${digest}`));
+  }
 }
 
 export function writeState(data: string, path: string, content: string, character = ""): void {
@@ -128,7 +133,7 @@ export function writeState(data: string, path: string, content: string, characte
       .run(path, character, pack(content));
   });
   const legacy = join(data, path);
-  retireLegacyFile(legacy, content);
+  retireLegacyFile(legacy, content, data);
 }
 
 export function deleteState(data: string, path: string): void {

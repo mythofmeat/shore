@@ -257,14 +257,14 @@ MUTANTS = [
      "  const toolsGuidance = await promptFile(AGENTS_FILE);"),
     ("context: the memory index is not loaded", CONTEXT,
      "  const memoryIndex = await loadMemoryIndex(\n"
-     "    characterDataDir,\n    config.dirs.config,\n    character,\n    config.dirs.workspace,\n  );",
+     "    characterDataDir,\n    config.dirs.config,\n    character,\n    config.dirs.workspace,\n    params.thread,\n  );",
      "  const memoryIndex = undefined as string | undefined;"),
     ("context: the memory index reads the data dir as its config dir", CONTEXT,
      "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    config.dirs.config,",
      "  const memoryIndex = await loadMemoryIndex(\n    characterDataDir,\n    characterDataDir,"),
     ("context: the snapshot is never ensured", CONTEXT,
      "      await ensureActivePromptSnapshot(\n"
-     "        characterDataDir,\n        config.dirs.config,\n        character,\n        config.dirs.workspace,\n      );",
+     "        characterDataDir,\n        config.dirs.config,\n        character,\n        config.dirs.workspace,\n        params.thread,\n      );",
      "      void ensureActivePromptSnapshot;"),
     ("context: a failed snapshot is fatal", CONTEXT,
      "    } catch (e) {\n"
@@ -274,7 +274,7 @@ MUTANTS = [
 
     # --- prepareChatContext: the snapshot belongs to the conversation ------
     ("context: an empty conversation keeps the snapshot it inherited", CONTEXT,
-     "      await resetActivePromptSnapshot(characterDataDir);\n",
+     "      await resetActivePromptSnapshot(characterDataDir, params.thread);\n",
      ""),
     ("context: the snapshot is prepared before the conversation has anything in it", CONTEXT,
      "  const activeConversation = params.activeConversation ?? messages.length > 0;",

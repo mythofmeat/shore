@@ -42,7 +42,7 @@ export async function reliabilityGeneration(provider: SidecarProvider, thread = 
     notifier: { notifyMessageComplete: () => {} } as unknown as GenerationDeps["notifier"],
     diagnostics: { key_fallbacks: { push: () => {} } }, emitEvent: (frame) => { frames.push(frame); },
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
-    compaction: { run: async () => 0, applyDeferredEdits: async () => {} },
+    compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
     newlyCrossedUsageBudgetWarnings: async () => [], env: { SHORE_RELIABILITY_KEY: "fixture" },
     sleep: async () => {},
   };

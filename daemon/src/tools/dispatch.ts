@@ -25,6 +25,7 @@ import type { RetrievalConfig } from "../memory/workspace_index.ts";
 export type RetrievalMode = "auto" | "lexical" | "hybrid" | "vector";
 
 export interface ToolContext {
+  thread?: string;
   imageDir: string;
   workspaceDir: string;
   characterDataDir: string;

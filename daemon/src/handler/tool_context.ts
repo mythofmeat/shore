@@ -21,6 +21,7 @@ import type { ToolContext } from "../tools/dispatch.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 export interface ToolContextDeps {
+  thread?: string;
   signal?: AbortSignal;
   mcpRegistry?: Pick<McpRegistry, "call">;
   runSubagent?: (parent: ToolContext) => NonNullable<ToolContext["runSubagent"]>;
@@ -71,11 +72,12 @@ export async function buildToolContext(
   const subagentsConfigured = config.app.subagents.size > 0;
 
   const ctx: ToolContext = {
+    thread: deps.thread ?? MAIN_THREAD,
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     imageDir: characterMediaDir(dataDir, charName),
     workspaceDir,
     characterDataDir: charDataDir,
-    conversationDir: threadDataDir(dataDir, charName, MAIN_THREAD),
+    conversationDir: threadDataDir(dataDir, charName, deps.thread ?? MAIN_THREAD),
     historyDbPath: rustJoin(dataDir, HISTORY_DB_FILE),
     characterName: charName,
     configDir,

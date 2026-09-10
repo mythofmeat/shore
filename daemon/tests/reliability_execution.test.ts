@@ -57,7 +57,8 @@ test("cancelling generation reaches an in-flight MCP tool", async () => {
   } };
   h.deps.mcpRegistry = { ...mcp, toolDefsFiltered: () => [{ name: TOOL, description: "optional filters", input_schema: { type: "object" } }] };
   h.deps.tools = () => ({ mcpRegistry: mcp });
-  await h.run(parent.signal);
+  const failure = await h.run(parent.signal).then(() => undefined, (error: unknown) => error);
+  expect(failure).toBeDefined();
   expect(observed).toBeDefined();
   expect(observed?.aborted).toBe(true);
 });

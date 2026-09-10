@@ -1,8 +1,11 @@
+import { threadFile } from "../storage/files.ts";
+import { withConversation } from "../engine/lifecycle.ts";
+import type { CompactionCompletion } from "../memory/compaction/background.ts";
 import { shoreLog } from "../log.ts";
 
 import { join } from "node:path";
 
-import { activeJsonlIn, archiveKey, threadDataDir } from "../config/dirs.ts";
+import { archiveKey, threadDataDir } from "../config/dirs.ts";
 import { homeThreadOf } from "../engine/threads.ts";
 
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
@@ -63,38 +66,40 @@ export async function runDeepIdleArchive(
   deps: DeepArchiveDeps,
   coveredTurnCount: number,
 ): Promise<AutonomyActionResult> {
-  const dataDir = deps.config.dirs.data;
-  const thread = await homeThreadOf(dataDir, character);
-  const characterDir = threadDataDir(dataDir, character, thread);
+  const selected = await homeThreadOf(deps.config.dirs.data, character);
+  return await withConversation(threadDataDir(deps.config.dirs.data, character, selected), "update", async () => {
+    const dataDir = deps.config.dirs.data;
+    const thread = await homeThreadOf(dataDir, character);
 
-  let loaded: { store: MessageStore; raw: string };
-  try {
-    loaded = await MessageStore.loadWithRaw(activeJsonlIn(characterDir));
-  } catch (e) {
-    shoreLog.warn(
-      `shore: deep-idle archive for ${character} failed to read the active conversation: ${String(e)}`,
-    );
-    return {
-      events: [],
-      failed: message(e),
-      deepArchiveDone: false,
-    };
-  }
+    let loaded: { store: MessageStore; raw: string };
+    try {
+      loaded = await MessageStore.loadWithRaw(threadFile(dataDir, character, thread, "active.jsonl"));
+    } catch (e) {
+      shoreLog.warn(
+        `shore: deep-idle archive for ${character} failed to read the active conversation: ${String(e)}`,
+      );
+      return {
+        events: [],
+        failed: message(e),
+        deepArchiveDone: false,
+      };
+    }
 
-  const plan = deepArchivePlan(loaded.store.messages(), coveredTurnCount);
+    const plan = deepArchivePlan(loaded.store.messages(), coveredTurnCount);
 
-  if (plan.arm === "quiesce") {
-    shoreLog.debug(
-      `shore: deep-idle archive for ${character} has nothing to archive (tail=${plan.tail})`,
-    );
-    return { events: [], deepArchiveDone: true };
-  }
+    if (plan.arm === "quiesce") {
+      shoreLog.debug(
+        `shore: deep-idle archive for ${character} has nothing to archive (tail=${plan.tail})`,
+      );
+      return { events: [], deepArchiveDone: true };
+    }
 
-  const writeMemory = effectiveConfig(character, deps.config).app.memory.compaction.write_memory;
-  if (plan.arm === "pure" || !writeMemory) {
-    return await pureArchive(character, thread, deps, loaded.raw, plan.tail, plan.archivable);
-  }
-  return await compactionArchive(character, thread, deps);
+    const writeMemory = effectiveConfig(character, deps.config).app.memory.compaction.write_memory;
+    if (plan.arm === "pure" || !writeMemory) {
+      return await pureArchive(character, thread, deps, loaded.raw, plan.tail, plan.archivable);
+    }
+    return await compactionArchive(character, thread, deps);
+  });
 }
 
 async function pureArchive(
@@ -176,9 +181,9 @@ async function compactionArchive(
     `shore: deep-idle archive for ${character} — running a keep-0 compaction over uncovered turns`,
   );
 
-  let retained: number;
+  let completion: CompactionCompletion;
   try {
-    retained = await runCompaction(
+    completion = await runCompaction(
       character,
       {
         ...deps.run,
@@ -201,6 +206,8 @@ async function compactionArchive(
     };
   }
 
+  if (completion.kind !== "completed") return { events: [], failed: `Compaction skipped: ${completion.reason}`, deepArchiveDone: false, ...(completion.retryAt === undefined ? {} : { retryAt: completion.retryAt }) };
+  const retained = completion.retained;
   await reloadAndApplyDeferred(character, deps, "Deep-idle archive");
   shoreLog.info(
     `shore: deep-idle archive complete for ${character} (compaction pass, retained=${retained})`,

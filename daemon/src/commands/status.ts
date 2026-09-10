@@ -18,6 +18,7 @@ export interface StatusConfigView {
 }
 
 export interface StatusContext {
+  thread?: string;
   characterName: string;
   turnCount: number;
   activeModel: string | undefined;
@@ -114,7 +115,7 @@ export async function status(ctx: StatusContext): Promise<Json> {
   const effectiveModel = ctx.activeModel ?? ctx.config.app.defaults.model ?? null;
 
   const characterDataDir = `${ctx.config.dirs.data}/${ctx.characterName}`;
-  const pending = await pendingDeferredEditPaths(characterDataDir).catch(() => []);
+  const pending = await pendingDeferredEditPaths(characterDataDir, ctx.thread).catch(() => []);
 
   const tokens = ctx.conversationTokens;
   const halt = ctx.autonomy.keepaliveHalt();

@@ -507,7 +507,7 @@ async function chatTurn(
     } as unknown as GenerationDeps["diagnostics"],
     emitEvent: noop,
     mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
-    compaction: { run: async () => 0, applyDeferredEdits: async () => {} },
+    compaction: { run: async () => ({ kind: "completed", retained: 0 }), applyDeferredEdits: async () => {} },
     newlyCrossedUsageBudgetWarnings: async () => [],
     ledgerPath: ledger,
     sleep: async () => {
