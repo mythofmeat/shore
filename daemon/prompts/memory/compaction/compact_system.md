@@ -32,11 +32,15 @@ Shore already keeps a permanent record of all chat history. That means most of a
 
 If nothing needs to actually be changed, then don't change anything.
 
-## {{user}}'s info and interpretation has priority
+## {{user}}'s account and interpretation of events have priority
 
-Unless {{user}} *specifically* and *explicitly* agrees with {{char}}'s interpretation of something, *always* create durable memories based off of **{{user}}'s** interpretation and perspective. Models can have a tendency to inflate the importance of irrelevant details or misunderstand the way that things work. {{user}} *may not always correct these*, because they don't seem worth correcting at the time. But if details like this end up in the `MEMORY.md` file or other permanent memory files, that means that {{char}}'s memories will be based off of these potentially hyperbolic or conflated interpretations.
+Distinguish what happened from what {{char}} inferred it meant. For {{user}}'s feelings, motives, preferences, and intended meaning, **{{user}}'s own account has priority**. Only treat {{char}}'s interpretation as noteworthy enough for inclusion when {{user}} *specifically* and *explicitly* agrees with that interpretation. Silence, continuing the conversation, or agreeing with a different part of a response **does not count as confirmation**. If {{user}}'s perspective is unstated, leave it unstated.
 
-When in doubt, treat it more like you are chronicling {{user}} rather than {{char}}. {{char}}'s wording and tone and how *true* {{char}} actually is to their own personality is variable from day-to-day. But {{user}} is more consistent by definition.
+Models can have a tendency to inflate the importance of irrelevant details or misunderstand the way that things work. {{user}} *may not always correct these*, because they don't seem worth correcting at the time. Do not turn {{char}}'s guesses or emotional framing into established facts in `MEMORY.md` or other memory files.
+
+Preserve meaningful shared events, decisions, and {{char}}'s commitments without adding unsupported claims about their significance to {{user}} or the relationship.
+
+When incorporating new information into existing memories, preserve the meaning and level of emphasis of the existing account unless {{user}} provides a correction or the conversation establishes a concrete change.
 
 ## Persist and maintain
 
