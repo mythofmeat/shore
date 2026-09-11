@@ -1141,7 +1141,7 @@
       "messages_ref": "set1"
     },
     {
-      "name": "disallowed_paths_only",
+      "name": "workspace_paths_and_traversal",
       "keep_recent_turns": 2,
       "keep_turns_override": null,
       "retain_trailing_autonomous": false,
@@ -1154,13 +1154,40 @@
       "seed_links": [],
       "store_elsewhere": false,
       "with_data_dir": true,
-      "dispatches": [],
+      "dispatches": [
+        {
+          "name": "edit",
+          "input": {
+            "path": "DREAMS.md",
+            "content": "x"
+          },
+          "output": "{\"path\":\"DREAMS.md\",\"bytes_written\":1}",
+          "is_error": false,
+          "writes": {
+            "DREAMS.md": "x"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
+            "path": "notes.md",
+            "content": "z"
+          },
+          "output": "{\"path\":\"notes.md\",\"bytes_written\":1}",
+          "is_error": false,
+          "writes": {
+            "notes.md": "z"
+          },
+          "deletes": []
+        }
+      ],
       "deferred_queued_paths": [],
       "error": null,
       "messages_ref": "set1"
     },
     {
-      "name": "mixed_allowed_and_disallowed",
+      "name": "memory_and_prompt_paths",
       "keep_recent_turns": 2,
       "keep_turns_override": null,
       "retain_trailing_autonomous": false,
@@ -1190,6 +1217,19 @@
         {
           "name": "edit",
           "input": {
+            "path": "memory/dreams.md",
+            "content": "# dreams\n"
+          },
+          "output": "{\"path\":\"memory/dreams.md\",\"bytes_written\":9}",
+          "is_error": false,
+          "writes": {
+            "memory/dreams.md": "# dreams\n"
+          },
+          "deletes": []
+        },
+        {
+          "name": "edit",
+          "input": {
             "path": "SOUL.md",
             "content": "# soul\n"
           },
@@ -1208,7 +1248,7 @@
       "messages_ref": "set1"
     },
     {
-      "name": "delete_is_blocked",
+      "name": "delete_workspace_file",
       "keep_recent_turns": 2,
       "keep_turns_override": null,
       "retain_trailing_autonomous": false,
@@ -1216,12 +1256,29 @@
       "with_store": true,
       "max_tool_iterations": null,
       "archive_fails": false,
-      "seed": [],
+      "seed": [
+        {
+          "path": "notes.md",
+          "content": "# old\n"
+        }
+      ],
       "seed_dirs": [],
       "seed_links": [],
       "store_elsewhere": false,
       "with_data_dir": true,
       "dispatches": [
+        {
+          "name": "delete",
+          "input": {
+            "path": "notes.md"
+          },
+          "output": "moved to trash",
+          "is_error": false,
+          "writes": {},
+          "deletes": [
+            "notes.md"
+          ]
+        },
         {
           "name": "edit",
           "input": {

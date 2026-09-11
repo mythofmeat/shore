@@ -4,7 +4,7 @@ import { toolGeneration } from "./support/tool_generation.ts";
 import { required } from "../src/util/required.ts";
 
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -20,10 +20,66 @@ import type {
   ConversationMessage,
 } from "../src/memory/compaction/types.ts";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../src/llm/types.ts";
+import { handleDelete, handleEdit } from "../src/tools/workspace.ts";
+import { renderToolOutcome } from "../src/memory/compaction/run.ts";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
+});
+
+test("archive failure restores workspace edits, binary files, and deleted symlinks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-workspace-rollback-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  await mkdir(join(workspace, "projects"), { recursive: true });
+  await mkdir(join(workspace, "assets"));
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  const activeContent = conversation().map(activeLine).join("\n") + "\n";
+  await writeFile(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
+  const bytes = Buffer.from([0, 255, 254, 128, 10]);
+  await writeFile(join(workspace, "assets/data.bin"), bytes);
+  await symlink("data.bin", join(workspace, "assets/link.bin"));
+  await writeFile(join(workspace, "projects/note.md"), "original context");
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    dispatch: (name, input) => renderToolOutcome(() => name === "delete"
+      ? handleDelete(input as Record<string, unknown>, workspace, characterDir)
+      : handleEdit(input as Record<string, unknown>, workspace)),
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const calls: GenerateResponse["content_blocks"] = [
+    { type: "tool_use", id: "edit-note", name: "edit", input: { path: "projects/note.md", content: "new context" } },
+    { type: "tool_use", id: "edit-binary", name: "edit", input: { path: "assets/data.bin", content: "replacement" } },
+    { type: "tool_use", id: "delete-link", name: "delete", input: { path: "assets/link.bin" } },
+    { type: "tool_use", id: "delete-binary", name: "delete", input: { path: "assets/data.bin" } },
+    { type: "tool_use", id: "create", name: "edit", input: { path: "projects/new.md", content: "new file" } },
+  ];
+  const opts = options(dataDir, workspace, memoryStore,
+    await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools,
+    scripted([response("tool_use", calls), response("end_turn", [])]));
+  const failure = await compact({
+    ...opts,
+    conversationMgr: {
+      archiveAndRetain: async () => {
+        expect(readFile(join(workspace, "assets/data.bin"))).rejects.toThrow();
+        expect(readlink(join(workspace, "assets/link.bin"))).rejects.toThrow();
+        throw new Error("archive failed");
+      },
+    },
+  }, { keepRecentTurns: 1 }).catch((e: unknown) => e);
+  expect(failure).toBeInstanceOf(Error);
+  expect(failure).toHaveProperty("message", "archive failed");
+
+  expect(await readFile(join(workspace, "projects/note.md"), "utf8")).toBe("original context");
+  expect(await readFile(join(workspace, "assets/data.bin"))).toEqual(bytes);
+  expect(await readlink(join(workspace, "assets/link.bin"))).toBe("data.bin");
+  expect(readFile(join(workspace, "projects/new.md"))).rejects.toThrow();
+  expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
 });
 
 test.each([false, true])("compaction resumes without repeating writes and queues retention only after archive (retain: %s)", async (retain) => {

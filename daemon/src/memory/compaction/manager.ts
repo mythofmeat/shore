@@ -6,7 +6,7 @@ import { shoreLog } from "../../log.ts";
 import { dirname } from "node:path";
 
 import { characterDataDir, MAIN_THREAD } from "../../config/dirs.ts";
-import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 
 import { pushAssistantTurn } from "../../llm/request";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
@@ -19,12 +19,7 @@ import type { MarkdownMemoryStore } from "../markdown_store";
 import { rustLines, rustTrim } from "../lines";
 import { hasCompactionOperation } from "./archive.ts";
 import { conversationRef } from "../../engine/segments.ts";
-import {
-  normalizePromptVisiblePath,
-  pathComponents,
-  PathError,
-  resolvePath,
-} from "../../tools/workspace_path";
+import { PathError, resolvePath } from "../../tools/workspace_path";
 import type { FrameSink } from "../../llm/stream.ts";
 import {
   COMPACTION_SUBAGENT,
@@ -135,32 +130,6 @@ export function buildFinalMessage(
   return out.replaceAll("{{recap}}", "");
 }
 
-export function writeAllowedPath(path: string): boolean {
-  let normalized = rustTrim(path).replaceAll("\\", "/");
-  while (normalized.startsWith("./")) normalized = normalized.slice(2);
-
-  for (const component of pathComponents(normalized)) {
-    if (component === ".." || component === "/") return false;
-  }
-
-  const lower = normalized.toLowerCase();
-  if (lower === "memory.md") return true;
-  if (normalizePromptVisiblePath(normalized) !== undefined) return true;
-
-  if (!normalized.startsWith("memory/")) return false;
-  const rest = normalized.slice("memory/".length);
-  if (rest === "") return false;
-
-  const restLower = rest.toLowerCase();
-  return !(
-    restLower === "dreams.md" ||
-    restLower === "dreams" ||
-    restLower === "dreams/" ||
-    restLower.startsWith(".dreams/") ||
-    restLower.startsWith("dreaming/")
-  );
-}
-
 interface ToolLoopState extends CheckpointLoopState {
   writesApplied: AppliedCompactionWrite[];
   toolsCalled: string[];
@@ -188,9 +157,6 @@ async function dispatchCompactionTool(
   workspaceDir: string,
   state: ToolLoopState,
 ): Promise<{ output: string; isError: boolean }> {
-  if (name === "delete") {
-    return { output: `${name} is not available during compaction`, isError: true };
-  }
   if (name === "git" && state.dryRun) {
     return {
       output: "git blocked: dry-run compaction does not run commands",
@@ -198,23 +164,7 @@ async function dispatchCompactionTool(
     };
   }
 
-  const isWriteLike = name === "edit";
-
-  if (state.dryRun && isWriteLike) {
-    const intent = extractMemoryWriteIntent(input);
-    if (intent !== undefined) {
-      if (writeAllowedPath(intent.path)) {
-        state.dryRunPreviews.push({
-          path: intent.path,
-          content: intent.content ?? `<${name}: in-place edits, no preview available>`,
-        });
-      }
-    }
-    return {
-      output: `${name} blocked: dry-run compaction does not modify files`,
-      isError: true,
-    };
-  }
+  const isWriteLike = name === "edit" || name === "delete";
 
   if (isWriteLike) {
     const intent = extractMemoryWriteIntent(input);
@@ -222,17 +172,6 @@ async function dispatchCompactionTool(
       return { output: `${name} blocked: missing required 'path' field`, isError: true };
     }
     const displayPath = intent.path;
-    if (!writeAllowedPath(displayPath)) {
-      shoreLog.warn(
-        `shore: compaction refusing to write disallowed path ${displayPath} (tool ${name})`,
-      );
-      return {
-        output:
-          `${name} blocked: compaction may only write under memory/* or to the workspace-root ` +
-          `prompt files (MEMORY.md, SOUL.md, USER.md, AGENTS.md, TOOLS.md) (got: ${displayPath})`,
-        isError: true,
-      };
-    }
 
     let resolved: string;
     try {
@@ -242,9 +181,32 @@ async function dispatchCompactionTool(
       return { output: `${name} blocked: ${e.message}`, isError: true };
     }
 
+    if (state.dryRun) {
+      state.dryRunPreviews.push({
+        path: displayPath,
+        content: name === "delete" ? "<delete: move to trash>"
+          : intent.content ?? "<edit: in-place edits, no preview available>",
+      });
+      return {
+        output: `${name} blocked: dry-run compaction does not modify files`,
+        isError: true,
+      };
+    }
+
     let previousContent: string | undefined;
+    let previousEncoding: "base64" | undefined;
+    let previousSymlink: string | undefined;
     try {
-      previousContent = await readFile(resolved, "utf8");
+      if (name === "delete" && (await lstat(resolved)).isSymbolicLink()) {
+        previousSymlink = await readlink(resolved);
+      } else {
+        const bytes = await readFile(resolved);
+        previousContent = bytes.toString("utf8");
+        if (!Buffer.from(previousContent).equals(bytes)) {
+          previousContent = bytes.toString("base64");
+          previousEncoding = "base64";
+        }
+      }
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
         return {
@@ -257,18 +219,23 @@ async function dispatchCompactionTool(
     const result = await tools.dispatch(name, input);
     if (!result.isError) {
       let resultingContent: string | undefined;
-      try {
-        resultingContent = await readFile(resolved, "utf8");
-      } catch {
-        resultingContent = intent.content;
+      if (name === "edit") {
+        try {
+          resultingContent = await readFile(resolved, "utf8");
+        } catch {
+          resultingContent = intent.content;
+        }
       }
       state.writesApplied.push({
         displayPath,
         resolvedPath: resolved,
         ...(previousContent === undefined ? {} : { previousContent }),
+        ...(previousEncoding === undefined ? {} : { previousEncoding }),
+        ...(previousSymlink === undefined ? {} : { previousSymlink }),
         ...(resultingContent === undefined ? {} : { resultingContent }),
+        ...(name === "delete" ? { deleted: true } : {}),
       });
-      await tools.deferEdit?.(displayPath);
+      if (name === "edit") await tools.deferEdit?.(displayPath);
     }
     return result;
   }
@@ -422,7 +389,7 @@ async function runCompactionToolLoop(
   return driver.state;
 }
 
-async function writeWorkspaceFile(path: string, content: string): Promise<void> {
+async function writeWorkspaceFile(path: string, content: string | Uint8Array): Promise<void> {
   try {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, content, "utf8");
@@ -434,9 +401,20 @@ async function writeWorkspaceFile(path: string, content: string): Promise<void> 
 async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<void> {
   for (let i = writes.length - 1; i >= 0; i -= 1) {
     const write = required(writes[i]);
+    if (write.previousSymlink !== undefined) {
+      try {
+        await mkdir(dirname(write.resolvedPath), { recursive: true });
+        await symlink(write.previousSymlink, write.resolvedPath);
+      } catch (e) {
+        shoreLog.warn(`shore: rollback failed to restore compaction symlink at ${write.resolvedPath}: ${String(e)}`);
+      }
+      continue;
+    }
     if (write.previousContent !== undefined) {
       try {
-        await writeWorkspaceFile(write.resolvedPath, write.previousContent);
+        const content = write.previousEncoding === "base64"
+          ? Buffer.from(write.previousContent, "base64") : write.previousContent;
+        await writeWorkspaceFile(write.resolvedPath, content);
       } catch (e) {
         shoreLog.warn(
           `shore: rollback failed to restore compaction write at ${write.resolvedPath} ` +
@@ -906,6 +884,14 @@ async function checkpointConflict(
   const latest = new Map<string, AppliedCompactionWrite>();
   for (const write of checkpoint.loop.writesApplied) latest.set(write.resolvedPath, write);
   for (const write of latest.values()) {
+    if (write.deleted === true) {
+      try {
+        await lstat(write.resolvedPath);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
+      }
+      return { reason: "workspace_conflict", detail: write.displayPath };
+    }
     if (write.resultingContent === undefined) continue;
     try {
       if ((await readFile(write.resolvedPath, "utf8")) !== write.resultingContent) {
@@ -954,4 +940,3 @@ async function currentActiveContent(opts: CompactOptions): Promise<string> {
     throw e;
   }
 }
-

@@ -210,5 +210,8 @@ export interface AppliedCompactionWrite {
   displayPath: string;
   resolvedPath: string;
   previousContent?: string;
+  previousEncoding?: "base64";
+  previousSymlink?: string;
   resultingContent?: string;
+  deleted?: boolean;
 }

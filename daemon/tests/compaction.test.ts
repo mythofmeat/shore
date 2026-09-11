@@ -32,7 +32,6 @@ import {
   findTurnSplit,
   trailingAutonomousLen,
   tryBeginCompaction,
-  writeAllowedPath,
 } from "../src/memory/compaction/manager";
 import type {
   CompactionLlm,
@@ -50,7 +49,6 @@ import {
   resolvePath,
   resolveRoots,
 } from "../src/tools/workspace_path";
-import { rustTrim } from "../src/memory/lines";
 import { queueDeferredEdit } from "../src/memory/deferred_edits";
 import type { Message } from "../src/engine/types.ts";
 import { jsonlOf, maybePlanOf } from "./support/archival_plan.ts";
@@ -127,17 +125,6 @@ const WORKSPACE_PATHS: string[] = [
 const PROTECTED_FILES = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"];
 const PROMPT_VISIBLE_FILES = [...PROTECTED_FILES, "MEMORY.md"];
 
-function isDreamJournal(rest: string): boolean {
-  const lower = rest.toLowerCase();
-  return (
-    lower === "dreams.md" ||
-    lower === "dreams" ||
-    lower === "dreams/" ||
-    lower.startsWith(".dreams/") ||
-    lower.startsWith("dreaming/")
-  );
-}
-
 describe("what counts as a path inside the workspace", () => {
   for (const path of WORKSPACE_PATHS) {
     test(JSON.stringify(path), () => {
@@ -207,30 +194,6 @@ describe("resolving a path against the workspace root", () => {
         pathComponents(required(resolved)),
         "and names exactly the normalized path, under the workspace root",
       ).toEqual(["/", "ws", ...pathComponents(normalizeWorkspacePath(path))]);
-    });
-  }
-});
-
-describe("what compaction is allowed to write", () => {
-  for (const path of WORKSPACE_PATHS) {
-    test(JSON.stringify(path), () => {
-      const normalized = normalizeWorkspacePath(path);
-      const components = pathComponents(rustTrim(path).replaceAll("\\", "/"));
-      const outside = components.includes("..") || components.includes("/");
-      const underMemory = normalized.startsWith("memory/") && normalized !== "memory/";
-
-      const allowed =
-        !outside &&
-        (normalized.toLowerCase() === "memory.md" ||
-          PROMPT_VISIBLE_FILES.includes(normalized) ||
-          (underMemory && !isDreamJournal(normalized.slice("memory/".length))));
-
-      expect(
-        writeAllowedPath(path),
-        allowed
-          ? "compaction writes the memory index, the prompt files, and memory/**"
-          : "and nothing outside the workspace, and never the dream journal",
-      ).toBe(allowed);
     });
   }
 });
@@ -738,8 +701,6 @@ class ReplayTools implements CompactionTools {
   }
 }
 
-const REJECTS_A_WRITE = new Set(["disallowed_paths_only", "mixed_allowed_and_disallowed"]);
-
 function expectFinalRequestShape(
   request: SidecarRequest | undefined,
   built: Json | null,
@@ -790,7 +751,7 @@ function expectFinalRequestShape(
       `${where}: a pass stopped at its cap ends on the tool results, with no closing turn`,
     ).toBe("user");
   }
-  if (REJECTS_A_WRITE.has(where)) {
+  if (where === "workspace_paths_and_traversal") {
     const rejected = tail.some(
       (m) =>
         m.role === "user" &&
@@ -799,7 +760,7 @@ function expectFinalRequestShape(
           (b) =>
             b.type === "tool_result" &&
             typeof b.content === "string" &&
-            b.content.includes("blocked: compaction may only write"),
+            b.content.includes("path traversal"),
         ),
     );
     expect(rejected, `${where}: the model is told its write was refused, and why`).toBe(true);
@@ -895,7 +856,15 @@ function expectOutcomeShape(
         .filter((b) => b.type === "tool_use" && b.name === "edit")
         .map((b) => (b as { input: Record<string, unknown> }).input)
         .filter(
-          (input) => typeof input["path"] === "string" && writeAllowedPath(input["path"]),
+          (input) => {
+            if (typeof input["path"] !== "string") return false;
+            try {
+              resolvePath("/ws", input["path"]);
+              return true;
+            } catch {
+              return false;
+            }
+          },
         )
         .map((input) => ({
           path: input["path"] as string,
@@ -1195,7 +1164,7 @@ function scriptFor(name: string): GenerateResponse[] {
       return [toolRound([["read", {}]]), endTurn("nothing to save")];
     case "no_writes_at_all":
       return [endTurn("nothing to save")];
-    case "disallowed_paths_only":
+    case "workspace_paths_and_traversal":
       return [
         editRound([
           ["DREAMS.md", "x"],
@@ -1204,18 +1173,18 @@ function scriptFor(name: string): GenerateResponse[] {
         ]),
         endTurn("tried"),
       ];
-    case "mixed_allowed_and_disallowed":
+    case "memory_and_prompt_paths":
       return [
         editRound([
           ["memory/ok.md", "# ok\n"],
-          ["memory/dreams.md", "nope"],
+          ["memory/dreams.md", "# dreams\n"],
           ["SOUL.md", "# soul\n"],
         ]),
         endTurn("mixed"),
       ];
-    case "delete_is_blocked":
+    case "delete_workspace_file":
       return [
-        toolRound([["delete", { path: "memory/a.md" }]]),
+        toolRound([["delete", { path: "notes.md" }]]),
         editRound([["memory/a.md", "# A\n"]]),
         endTurn("done"),
       ];
@@ -1262,7 +1231,7 @@ function scriptFor(name: string): GenerateResponse[] {
       return [
         editRound([
           ["memory/a.md", "# A\n"],
-          ["DREAMS.md", "nope"],
+          ["DREAMS.md", "# dreams\n"],
         ]),
         endTurn("preview"),
       ];

@@ -4,7 +4,7 @@ import { fakeAgent } from "../src/testing/fake_agent_query.ts";
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -850,5 +850,150 @@ test.each([false, true])("SDK compaction with Hindsight preserves writes across 
     expect(history.nextCharacterMemoryRetainJob("ada")?.action).toBe("retain");
   } finally {
     history.close();
+  }
+});
+
+test("compaction edits files throughout the workspace through the normal tools", async () => {
+  const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
+  const config = await world();
+  config.app.memory.git_push = false;
+  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+  const paths = [
+    "notes.md", "projects/work.md", "workspace/journal/today.md", "DREAMS.md",
+    "memory/dreams.md", "memory/.dreams/entry.md", "memory/dreaming/entry.md",
+    "workspace/memory/fact.md",
+  ];
+  await writeFile(join(workspace, "notes.md"), "old context");
+  const seen: SidecarRequest[] = [];
+  const provider = scriptedProvider([
+    response(paths.map((path, i) => ({
+      type: "tool_use", id: `edit-${String(i)}`, name: "edit",
+      input: path === "notes.md"
+        ? { path, edits: [{ old_string: "old context", new_string: "current context" }] }
+        : { path, content: "current context" },
+    })), "tool_use"),
+    response([{ type: "text", text: "Updated the workspace." }]),
+  ], seen);
+
+  const outcome = await runCompactionPass("ada", {
+    config, generate: compactionGenerate({ config, providers: { anthropic: provider } }),
+  }, { keepTurnsOverride: 0 });
+
+  expect(outcome?.kind).toBe("compacted");
+  const results = seen.at(-1)?.messages.flatMap((m) => typeof m.content === "string" ? [] : m.content)
+    .filter((b) => b.type === "tool_result") ?? [];
+  expect(results).toHaveLength(paths.length);
+  expect(results.map((b) => b.is_error ?? false)).toEqual(paths.map(() => false));
+  for (const path of paths) {
+    expect(await readFile(join(workspace, path.replace(/^workspace\//, "")), "utf8")).toBe("current context");
+  }
+});
+
+test.each([false, true])("compaction uses normal trash deletion and keeps dry runs inert (%s)", async (dryRun) => {
+  const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
+  const config = await world();
+  config.app.memory.git_push = false;
+  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+  const trash = join(config.dirs.data, "ada", "trash");
+  await mkdir(join(workspace, "projects"));
+  await writeFile(join(workspace, "projects/obsolete.md"), "old context");
+  const seen: SidecarRequest[] = [];
+  const provider = scriptedProvider([
+    response([
+      { type: "tool_use", id: "delete", name: "delete", input: { path: "workspace/projects/obsolete.md" } },
+      { type: "tool_use", id: "edit", name: "edit", input: { path: "projects/current.md", content: "current context" } },
+      { type: "tool_use", id: "git", name: "git", input: { subcommand: "status", args: [] } },
+    ], "tool_use"),
+    response([{ type: "text", text: "Finished." }]),
+  ], seen);
+  const outcome = await runCompactionPass("ada", {
+    config, generate: compactionGenerate({ config, providers: { anthropic: provider } }),
+  }, { keepTurnsOverride: 0, dryRun });
+
+  expect(outcome?.kind).toBe(dryRun ? "dry_run" : "compacted");
+  const results = seen.at(-1)?.messages.flatMap((m) => typeof m.content === "string" ? [] : m.content)
+    .filter((b) => b.type === "tool_result") ?? [];
+  expect(results.map((b) => b.is_error ?? false)).toEqual([dryRun, dryRun, dryRun]);
+  if (outcome?.kind === "dry_run") {
+    expect(outcome.fileOpsPreview).toEqual([
+      { path: "workspace/projects/obsolete.md", content: "<delete: move to trash>" },
+      { path: "projects/current.md", content: "current context" },
+    ]);
+    expect(await readFile(join(workspace, "projects/obsolete.md"), "utf8")).toBe("old context");
+    expect(readFile(join(workspace, "projects/current.md"))).rejects.toThrow();
+    expect(readdir(trash)).rejects.toThrow();
+    expect(readdir(join(workspace, ".git"))).rejects.toThrow();
+  } else {
+    expect(readFile(join(workspace, "projects/obsolete.md"))).rejects.toThrow();
+    expect(await readFile(join(workspace, "projects/current.md"), "utf8")).toBe("current context");
+    const [stamp] = await readdir(trash);
+    expect(typeof stamp).toBe("string");
+    expect(await readFile(join(trash, stamp ?? "", "projects/obsolete.md"), "utf8")).toBe("old context");
+  }
+});
+
+test("compaction retains the normal workspace escape and protected-file restrictions", async () => {
+  const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
+  const config = await world();
+  config.app.memory.git_push = false;
+  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+  const outside = join(config.dirs.data, "outside.md");
+  await writeFile(outside, "outside context");
+  await symlink(config.dirs.data, join(workspace, "linked"));
+  await writeFile(join(workspace, "MEMORY.md"), "active context");
+  const calls: ContentBlock[] = [".git/config", "../escape.md", outside, "linked/outside.md"].flatMap((path, i) => [
+    { type: "tool_use", id: `edit-${String(i)}`, name: "edit", input: { path, content: "overwritten" } },
+    { type: "tool_use", id: `delete-${String(i)}`, name: "delete", input: { path } },
+  ]);
+  calls.push({ type: "tool_use", id: "delete-prompt", name: "delete", input: { path: "workspace/MEMORY.md" } });
+  const seen: SidecarRequest[] = [];
+  const provider = scriptedProvider([
+    response(calls, "tool_use"), response([{ type: "text", text: "Finished." }]),
+  ], seen);
+  const outcome = await runCompactionPass("ada", {
+    config, generate: compactionGenerate({ config, providers: { anthropic: provider } }),
+  }, { keepTurnsOverride: 0 });
+
+  expect(outcome?.kind).toBe("compacted");
+  const results = seen.at(-1)?.messages.flatMap((m) => typeof m.content === "string" ? [] : m.content)
+    .filter((b) => b.type === "tool_result") ?? [];
+  expect(results.map((b) => b.is_error)).toEqual(calls.map(() => true));
+  expect(await readFile(outside, "utf8")).toBe("outside context");
+  expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe("active context");
+});
+
+test.each([false, true])("compaction resumes a deletion without repeating it and detects recreation (%s)", async (recreate) => {
+  const { runCompactionPass } = await import("../src/memory/compaction/run.ts");
+  const config = await world();
+  config.app.memory.git_push = false;
+  const model = config.models.chat.get("chat.fixture");
+  if (model === undefined) throw new Error("missing fixture model");
+  model.maxToolIterations = 1;
+  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+  const path = join(workspace, "notes.md");
+  await writeFile(path, "old context");
+  const firstProvider = scriptedProvider([
+    response([{ type: "tool_use", id: "delete", name: "delete", input: { path: "notes.md" } }], "tool_use"),
+  ]);
+  const first = await runCompactionPass("ada", {
+    config, generate: compactionGenerate({ config, providers: { anthropic: firstProvider } }),
+  }, { keepTurnsOverride: 0 });
+  expect(first?.kind).toBe("paused");
+  expect(readFile(path)).rejects.toThrow();
+  const trash = join(config.dirs.data, "ada", "trash");
+  const before = await readdir(trash, { recursive: true });
+  if (recreate) await writeFile(path, "new user context");
+  model.maxToolIterations = 3;
+  const seen: SidecarRequest[] = [];
+  const nextProvider = scriptedProvider([response([{ type: "text", text: "Finished." }])], seen);
+  const second = await runCompactionPass("ada", {
+    config, generate: compactionGenerate({ config, providers: { anthropic: nextProvider } }),
+  }, { keepTurnsOverride: 0 });
+  expect(second?.kind).toBe(recreate ? "paused" : "compacted");
+  expect(seen).toHaveLength(recreate ? 0 : 1);
+  expect(await readdir(trash, { recursive: true })).toEqual(before);
+  if (recreate) {
+    expect(second).toMatchObject({ reason: "workspace_conflict", detail: "notes.md" });
+    expect(await readFile(path, "utf8")).toBe("new user context");
   }
 });
