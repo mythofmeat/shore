@@ -26,8 +26,8 @@ marked delivered. It must not run when no budget is configured — an open per
 turn to be told there is nothing to say — and it must not fail a turn that has
 already been persisted and answered.
 
-A mutant is KILLED if `bun test tests/handler_deps.test.ts` fails with it
-applied.
+A mutant is KILLED if the handler assembly or runtime activity tests fail
+with it applied.
 
 Run from the repository root:
     python3 daemon/scripts/mutate_deps.py
@@ -37,8 +37,9 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 D = "src/handler/deps.ts"
+R = "src/runtime.ts"
 
-TESTS = ["tests/handler_deps.test.ts"]
+TESTS = ["tests/handler_deps.test.ts", "tests/runtime_activity.test.ts"]
 
 # (label, file, find, replace)
 MUTANTS = [
@@ -55,26 +56,29 @@ MUTANTS = [
      "      characterDataDir(runtime.config.dirs.data, charName),\n"
      "      (dir, path) => queueDeferredEdit(dir, path, turn.thread),\n    ),",
      "    deferEdit: undefined,"),
-    ("tools: the heatmap always reads the same character's tracker", D,
-     "      const report = runtime.autonomy.activityStats(\n        charName,",
-     '      const report = runtime.autonomy.activityStats(\n        "ada",'),
-    ("tools: the heatmap is never wired, so every character reads as inactive", D,
+    ("tools: the heatmap always reads the same character's tracker", R,
+     "      const report = activity.activityStats(character, localWallClock(Date.now()), days);",
+     '      const report = activity.activityStats("ada", localWallClock(Date.now()), days);'),
+    ("tools: the heatmap discards its activity report, so every character reads as inactive", R,
      "      return report === undefined\n"
      "        ? undefined\n"
      "        : { stats: report.stats, turnCount: report.messageCount };",
      "      void report;\n      return undefined;"),
-    ("tools: the heatmap ignores the window it was asked for", D,
-     "        localWallClock(Date.now()),\n        days,",
-     "        localWallClock(Date.now()),\n        undefined,"),
+    ("tools: the heatmap ignores the window it was asked for", R,
+     "      const report = activity.activityStats(character, localWallClock(Date.now()), days);",
+     "      const report = activity.activityStats(character, localWallClock(Date.now()), undefined);"),
     ("tools: the turn count is dropped on the rename, so the heatmap has no total",
-     D,
+     R,
      "        : { stats: report.stats, turnCount: report.messageCount };",
      "        : { stats: report.stats, turnCount: 0 };"),
+    ("tools: background heatmaps cannot see the character's activity tracker", R,
+     "        activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),",
+     "        activityStats: () => undefined,"),
     ("tools: a chat turn's sub-agents are handed no turn, so they cannot stream out", D,
      "      ...(a.env === undefined ? {} : { env: a.env }),\n      turn,\n    }),",
      "      ...(a.env === undefined ? {} : { env: a.env }),\n    } as never),"),
     ("tools: the shared backends are dropped, so chat is offered less than a heartbeat", D,
-     "    ...sharedToolDeps(runtime.config, runtime.mcp, {\n"
+     "    ...sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy, {\n"
      "      providers: a.providers,\n"
      "      registry: runtime.registry,\n"
      "      ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),\n"

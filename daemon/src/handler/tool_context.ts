@@ -18,6 +18,7 @@ import { indexPath, type RetrievalConfig } from "../memory/workspace_index.ts";
 import { historyIndexPath } from "../memory/history_index.ts";
 import type { RetrievalConfig as ConfiguredRetrieval } from "../config/app.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
+import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
 export interface ToolContextDeps {
@@ -28,7 +29,7 @@ export interface ToolContextDeps {
   deferEdit?: (path: string) => Promise<void> | void;
   imageGenerator?: ToolContext["imageGenerator"];
   modelHistoryQuery?: ToolContext["modelHistoryQuery"];
-  activityStats?: ToolContext["activityStats"];
+  activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
   fetchImpl?: typeof fetch;
 }
 
@@ -69,6 +70,7 @@ export async function buildToolContext(
   }
 
   const mcp = deps.mcpRegistry;
+  const activityStats = deps.activityStats;
   const subagentsConfigured = config.app.subagents.size > 0;
 
   const ctx: ToolContext = {
@@ -94,7 +96,7 @@ export async function buildToolContext(
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
     ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),
-    ...(deps.activityStats === undefined ? {} : { activityStats: deps.activityStats }),
+    ...(activityStats === undefined ? {} : { activityStats: (days: number) => activityStats(charName, days) }),
     ...(embedder === undefined ? {} : { embedder }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(mcp === undefined

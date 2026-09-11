@@ -179,7 +179,10 @@ export async function dispatchTool(
       return handleRollDice(args);
 
     case "activity_heatmap":
-      return handleActivityHeatmap(args, ctx.activityStats ?? (() => undefined));
+      if (ctx.activityStats === undefined) {
+        throw new ToolIoError("activity history is not available in this context");
+      }
+      return handleActivityHeatmap(args, ctx.activityStats);
 
     case "read":
       return await handleRead(args, ctx.workspaceDir);

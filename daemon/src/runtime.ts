@@ -7,6 +7,7 @@ import { shoreLog } from "./log.ts";
 import { mkdirSync } from "node:fs";
 
 import { InProcessAutonomyExecutor } from "./autonomy/in_process.ts";
+import { localWallClock } from "./autonomy/activity.ts";
 import { KeepaliveService, startKeepaliveTimer } from "./cache/keepalive.ts";
 import { LastRequestCache } from "./cache/last_request.ts";
 import { AutonomyService, startAutonomyTimer } from "./autonomy/service.ts";
@@ -274,12 +275,14 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   refreshRetainRegistrations();
   memoryRetain.start();
 
-  const autonomy = new AutonomyService(
+  const autonomy: AutonomyService = new AutonomyService(
     new InProcessAutonomyExecutor({
       registry,
       cache,
       providers,
       tools: sharedToolDeps(config, mcp, {
+        activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
+      }, {
         providers,
         registry,
         ...(callStore === undefined ? {} : { callStore }),
@@ -484,9 +487,16 @@ export interface SubagentToolDeps {
 export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
+  activity: Pick<AutonomyService, "activityStats">,
   subagent?: SubagentToolDeps,
 ): ToolContextDeps {
   return {
+    activityStats: (character, days) => {
+      const report = activity.activityStats(character, localWallClock(Date.now()), days);
+      return report === undefined
+        ? undefined
+        : { stats: report.stats, turnCount: report.messageCount };
+    },
     ...(subagent?.turn === undefined ? {} : { signal: subagent.turn.signal }),
     ...(subagent?.turn?.thread === undefined ? {} : { thread: subagent.turn.thread }),
     mcpRegistry: mcp.callView(),

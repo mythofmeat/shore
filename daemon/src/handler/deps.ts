@@ -1,6 +1,5 @@
 import { shoreLog } from "../log.ts";
 
-import { localWallClock } from "../autonomy/activity.ts";
 import { compactionGenerate } from "../autonomy/in_process.ts";
 import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
@@ -157,7 +156,7 @@ export function chatToolDeps(
 ): ToolContextDeps {
   const { runtime } = a;
   return {
-    ...sharedToolDeps(runtime.config, runtime.mcp, {
+    ...sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy, {
       providers: a.providers,
       registry: runtime.registry,
       ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
@@ -168,16 +167,6 @@ export function chatToolDeps(
       characterDataDir(runtime.config.dirs.data, charName),
       (dir, path) => queueDeferredEdit(dir, path, turn.thread),
     ),
-    activityStats: (days: number) => {
-      const report = runtime.autonomy.activityStats(
-        charName,
-        localWallClock(Date.now()),
-        days,
-      );
-      return report === undefined
-        ? undefined
-        : { stats: report.stats, turnCount: report.messageCount };
-    },
   };
 }
 
@@ -191,7 +180,7 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
     }),
     cache: runtime.cache,
     rebuild: { mcpRegistry: runtime.mcp.current },
-    tools: sharedToolDeps(runtime.config, runtime.mcp),
+    tools: sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy),
   });
 }
 
@@ -588,7 +577,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
           config: runtime.config,
           ...(a.env === undefined ? {} : { env: a.env }),
         }),
-        tools: sharedToolDeps(runtime.config, runtime.mcp),
+        tools: sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy),
       },
       repoint: async (character, config) => {
         runtime.cache.invalidate(character, "compaction");

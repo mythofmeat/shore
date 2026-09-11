@@ -376,12 +376,16 @@ describe("the tool backends a character's turn gets", () => {
         },
       } as unknown as ShoreRuntime;
 
-      expect(chatToolDeps(assemblyFor(stubbed), "ada", turnFor()).activityStats?.(30)).toEqual({
+      const ada = await buildToolContext(runtime.config, runtime.config.dirs.data, "ada",
+        chatToolDeps(assemblyFor(stubbed), "ada", turnFor()));
+      const nova = await buildToolContext(runtime.config, runtime.config.dirs.data, "nova",
+        chatToolDeps(assemblyFor(stubbed), "nova", turnFor()));
+      expect(ada.activityStats?.(30)).toEqual({
         stats: { hour_histogram: [1] } as never,
         turnCount: 12,
       });
       expect(
-        chatToolDeps(assemblyFor(stubbed), "nova", turnFor()).activityStats?.(7),
+        nova.activityStats?.(7),
       ).toBeUndefined();
       expect(asked).toEqual(["ada:30", "nova:7"]);
     } finally {
@@ -424,7 +428,7 @@ describe("the tool backends a character's turn gets", () => {
       );
 
       const chat = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
-      const heartbeat = sharedToolDeps(runtime.config, runtime.mcp, {
+      const heartbeat = sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy, {
         providers: {},
         registry: runtime.registry,
       });
