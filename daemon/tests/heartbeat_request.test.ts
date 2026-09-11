@@ -133,7 +133,7 @@ describe("the heartbeat model override", () => {
     expect(out).toBe(request);
   });
 
-  test("is a no-op when the configured model is the one already in use", async () => {
+  test("applies the configured model's credentials and settings even when its ID is already in use", async () => {
     const config = await baseConfig("slowthink");
     const request = minimalRequest("claude-opus-slowthink");
 
@@ -141,9 +141,10 @@ describe("the heartbeat model override", () => {
       env: ENV,
     });
 
-    expect(override).toBeUndefined();
+    expect(override?.name).toBe("slowthink");
     expect(out.model).toBe("claude-opus-slowthink");
-    expect(out).toBe(request);
+    expect(out.api_key).toBe("slowthink-secret");
+    expect(out).not.toBe(request);
   });
 
   test("resolves a provider-prefixed pin with no static entry", async () => {

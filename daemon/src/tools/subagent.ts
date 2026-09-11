@@ -1,25 +1,22 @@
-import { readCharacterState } from "../storage/store.ts";
 import { readFileSync } from "node:fs";
-import { activePromptFile, normalizePromptVisiblePath, resolvePath } from "./workspace_path";
+import { MAIN_THREAD } from "../config/dirs.ts";
+import { loadPromptFileFromWorkspace } from "../memory/deferred_edits.ts";
+import { normalizePromptVisiblePath, resolvePath } from "./workspace_path";
 import { wallClockMarker } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { ContentBlock, Message } from "../engine/types";
 
 export const MAX_HISTORY_MESSAGES = 100;
 
-export interface PromptFileReader {
-  read: (path: string) => string | undefined;
-}
-
 export type MacroWarn = (path: string, reason: string) => void;
 
 export interface MacroContext {
+  thread?: string;
   characterDataDir: string;
   workspaceDir: string;
   history: readonly Message[];
   charName: string;
   userName: string;
-  readFile?: (path: string) => string | undefined;
   warn?: MacroWarn;
 }
 
@@ -51,7 +48,7 @@ function formatFriendlyTime(at: Date): string {
   return at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
-export function expandPromptMacros(text: string, ctx: MacroContext): string {
+export async function expandPromptMacros(text: string, ctx: MacroContext): Promise<string> {
   let out = "";
   let rest = text;
 
@@ -70,7 +67,7 @@ export function expandPromptMacros(text: string, ctx: MacroContext): string {
     const inner = innerRaw.trim();
 
     if (inner.startsWith("file:")) {
-      out += readPromptFile(inner.slice("file:".length).trim(), ctx);
+      out += await readPromptFile(inner.slice("file:".length).trim(), ctx);
     } else if (inner.startsWith("active_history:")) {
       out += renderHistorySlice(
         ctx.history,
@@ -88,9 +85,8 @@ export function expandPromptMacros(text: string, ctx: MacroContext): string {
   return out + rest;
 }
 
-function readPromptFile(path: string, ctx: MacroContext): string {
+async function readPromptFile(path: string, ctx: MacroContext): Promise<string> {
   const warn = ctx.warn ?? (() => {});
-  const read = ctx.readFile ?? defaultReadFile;
 
   try {
     resolvePath(ctx.workspaceDir, path);
@@ -101,14 +97,12 @@ function readPromptFile(path: string, ctx: MacroContext): string {
 
   const visible = normalizePromptVisiblePath(path);
   if (visible !== undefined) {
-    const snapshot = ctx.readFile === undefined
-      ? readCharacterState(ctx.characterDataDir, `active_prompt/${visible}`)
-      : read(activePromptFile(ctx.characterDataDir, visible));
-    if (snapshot !== undefined) return snapshot;
+    const thread = ctx.thread ?? MAIN_THREAD;
+    return (await loadPromptFileFromWorkspace(ctx.characterDataDir, ctx.workspaceDir, visible, thread)) ?? "";
   }
 
   const target = resolvePath(ctx.workspaceDir, path);
-  const content = read(target);
+  const content = defaultReadFile(target);
   if (content === undefined) {
     warn(path, "file unreadable");
     return "";

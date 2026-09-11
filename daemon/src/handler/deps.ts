@@ -149,6 +149,17 @@ export type ToolAssembly = Pick<
   "runtime" | "providers" | "diagnostics" | "env"
 >;
 
+function runtimeToolDeps(a: ToolAssembly, turn?: SubagentTurn): ToolContextDeps {
+  const { runtime } = a;
+  return sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy, {
+    providers: a.providers,
+    registry: runtime.registry,
+    ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
+    ...(a.env === undefined ? {} : { env: a.env }),
+    ...(turn === undefined ? {} : { turn }),
+  });
+}
+
 export function chatToolDeps(
   a: ToolAssembly,
   charName: string,
@@ -156,13 +167,7 @@ export function chatToolDeps(
 ): ToolContextDeps {
   const { runtime } = a;
   return {
-    ...sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy, {
-      providers: a.providers,
-      registry: runtime.registry,
-      ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
-      ...(a.env === undefined ? {} : { env: a.env }),
-      turn,
-    }),
+    ...runtimeToolDeps(a, turn),
     deferEdit: deferEditTo(
       characterDataDir(runtime.config.dirs.data, charName),
       (dir, path) => queueDeferredEdit(dir, path, turn.thread),
@@ -180,7 +185,7 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
     }),
     cache: runtime.cache,
     rebuild: { mcpRegistry: runtime.mcp.current },
-    tools: sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy),
+    tools: runtimeToolDeps(a),
   });
 }
 
@@ -577,7 +582,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
           config: runtime.config,
           ...(a.env === undefined ? {} : { env: a.env }),
         }),
-        tools: sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy),
+        tools: runtimeToolDeps(a),
       },
       repoint: async (character, config) => {
         runtime.cache.invalidate(character, "compaction");

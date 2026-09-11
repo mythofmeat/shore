@@ -19,6 +19,7 @@ import { budgetStopIn, describeError } from "../llm/errors.ts";
 import { truncateSummary } from "../notifications.ts";
 import type { BudgetBlock } from "../ledger/budget.ts";
 import type { SidecarRequest } from "../llm/types.ts";
+import type { ToolConversation } from "../handler/tool_context.ts";
 
 export interface HeartbeatEngine {
   readonly thread?: string;
@@ -30,9 +31,10 @@ export interface HeartbeatTickDeps
   extends PrepareHeartbeatDeps,
     Omit<
       HeartbeatLoopDeps,
-      "character" | "wrapUpGrace" | "maxToolIterations" | "note" | "generate"
+      "character" | "wrapUpGrace" | "maxToolIterations" | "note" | "generate" | "dispatch"
     > {
   generate: HeartbeatLoopDeps["generate"];
+  dispatch: (...args: [...Parameters<HeartbeatLoopDeps["dispatch"]>, ToolConversation]) => ReturnType<HeartbeatLoopDeps["dispatch"]>;
   engine?: (character: string, thread?: string) => Promise<HeartbeatEngine>;
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   notify?: (title: string, body: string) => void;
@@ -162,7 +164,7 @@ export async function runHeartbeatTick(
       events.push({ kind, detail });
     };
 
-    const prepared = await prepareHeartbeatRequest(character, config, deps);
+    const prepared = await prepareHeartbeatRequest(character, config, { ...deps, thread });
     if (prepared === undefined) return { events };
 
     const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(prepared.request);
@@ -173,6 +175,7 @@ export async function runHeartbeatTick(
 
     const loop = await runHeartbeatToolLoop(prepared.request, {
       ...deps,
+      dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, prepared),
       generate: (request, phase, loopSignal) => deps.generate(request, phase, AbortSignal.any([signal, loopSignal])),
       character,
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,

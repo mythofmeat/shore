@@ -8,7 +8,6 @@ import type { MemoryBackend } from "./backend.ts";
 
 const MESSAGE_CHARS = 1_200;
 const QUERY_CHARS = 4_000;
-const MEMORY_CHARS = 600;
 const TRANSCRIPT_RESULTS = 12;
 
 export interface MemoryRecallDiagnostics {
@@ -137,7 +136,7 @@ export async function runMemoryRecall(
       results_truncated: results.length > TRANSCRIPT_RESULTS,
       memories: memories.map((memory) => memory.text),
     });
-    return memories.length === 0 ? undefined : formatMemories(memories);
+    return memories.length === 0 ? undefined : formatMemories(memories, results.length - memories.length);
   } catch (error) {
     const message = deadline.aborted && input.signal?.aborted !== true
       ? `memory recall timed out after ${recall.timeout.toString()}`
@@ -277,7 +276,7 @@ export function parseRecallResult(raw: unknown): RecalledMemory[] {
     const type = entry["type"] ?? entry["fact_type"];
     const scores = parseRecallScores(entry["scores"]);
     return [{
-      text: truncate(text.trim(), MEMORY_CHARS),
+      text: text.trim(),
       ...(typeof occurredAt === "string" ? { occurred_at: occurredAt } : {}),
       ...(typeof id === "string" ? { id } : {}),
       ...(typeof type === "string" ? { type } : {}),
@@ -298,13 +297,16 @@ function parseRecallScores(raw: unknown): RecallScores | undefined {
   return Object.keys(scores).length === 0 ? undefined : scores;
 }
 
-export function formatMemories(memories: readonly RecalledMemory[]): string {
-  return memories
+export function formatMemories(memories: readonly RecalledMemory[], omitted = 0): string {
+  const lines = memories
     .map((memory) => {
       const day = memory.occurred_at?.slice(0, 10);
       return day === undefined ? `- ${memory.text}` : `- ${memory.text} (said ${day})`;
-    })
-    .join("\n");
+    });
+  if (omitted > 0) {
+    lines.push(`[${omitted} additional recalled ${omitted === 1 ? "memory" : "memories"} omitted by the configured result limit; the entries above are complete.]`);
+  }
+  return lines.join("\n");
 }
 
 function safeParse(raw: string): unknown {

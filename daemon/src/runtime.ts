@@ -498,8 +498,10 @@ export function sharedToolDeps(
         : { stats: report.stats, turnCount: report.messageCount };
     },
     ...(subagent?.turn === undefined ? {} : { signal: subagent.turn.signal }),
+    ...(subagent?.turn === undefined ? {} : { conversation: subagent.turn.conversation }),
     ...(subagent?.turn?.thread === undefined ? {} : { thread: subagent.turn.thread }),
     mcpRegistry: mcp.callView(),
+    mcpToolDefs: (patterns) => mcp.current.toolDefsFiltered(patterns),
     ...(subagent === undefined
       ? {}
       : {
@@ -508,6 +510,7 @@ export function sharedToolDeps(
             return subagentRunner({
               config: subagent.registry.effectiveConfig(parent.characterName),
               ctx: parent,
+              conversation: parent.conversation,
               providers: subagent.providers,
               ...(subagent.callStore === undefined ? {} : { callStore: subagent.callStore }),
               mcpRegistry: mcp.current,
@@ -516,7 +519,6 @@ export function sharedToolDeps(
                 ? {}
                 : {
                     sendDirect: turn.send,
-                    conversation: turn.conversation,
                     ...(turn.rid === undefined ? {} : { rid: turn.rid }),
                     now: turn.now,
                     newMessageId: turn.newMessageId,

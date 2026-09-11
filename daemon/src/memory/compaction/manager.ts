@@ -240,7 +240,8 @@ async function dispatchCompactionTool(
     return result;
   }
 
-  return await tools.dispatch(name, input);
+  return await tools.dispatch(name, input, (nestedName, nestedInput, write) =>
+    dispatchCompactionTool(nestedName, nestedInput, { ...tools, dispatch: write }, workspaceDir, state));
 }
 
 class CompactionDriver {

@@ -510,6 +510,18 @@ describe("the forwarder", () => {
 });
 
 describe("the prompt macros", () => {
+  test("file contents reach the model without being expanded as template variables", async () => {
+    const { config, root } = await configWith({
+      researcher: spec({ prompt: "Notes for {{char}}:\n{{file:notes.md}}" }),
+    });
+    const workspace = contextIn(root).workspaceDir;
+    await mkdir(workspace, { recursive: true });
+    await writeFile(join(workspace, "notes.md"), "Literal {{char}} and {{file:secrets.md}}");
+    const seen: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("ok", seen));
+    expect(seen[0]?.system?.[0]?.text).toBe("Notes for ada:\nLiteral {{char}} and {{file:secrets.md}}");
+  });
+
   test("a conversation message cannot make the prompt read a file", async () => {
     const seen: SidecarRequest[] = [];
     const { config, root } = await configWith({

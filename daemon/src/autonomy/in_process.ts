@@ -50,12 +50,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   async runHeartbeatTick(character: string, hooks: TickHooks): Promise<AutonomyActionResult> {
     return await this.#withForeground(async () => {
       const config = this.#deps.registry.effectiveConfig(character);
-      const toolCtx = await buildToolContext(
-        config,
-        config.dirs.data,
-        character,
-        this.#deps.tools ?? {},
-      );
+      let toolCtx: ReturnType<typeof buildToolContext> | undefined;
 
       return await runHeartbeatTick(character, config, {
         cache: this.#deps.cache,
@@ -83,10 +78,15 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         return response;
       },
 
-      dispatch: async (name, input, toolUseId, tools) => {
+      dispatch: async (name, input, toolUseId, tools, conversation) => {
+        toolCtx ??= buildToolContext(config, config.dirs.data, character, {
+          ...this.#deps.tools,
+          thread: conversation.thread,
+          conversation: conversation.conversation,
+        });
         const exec: ToolExecution = {
           sendDirect: () => {},
-          ctx: toolCtx,
+          ctx: await toolCtx,
           limits: toolLimitsFrom(config.app.tools, config.app.subagents),
           now: () => new Date().toISOString(),
           newMessageId: () => `m_${crypto.randomUUID()}`,
@@ -203,11 +203,11 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
 
   #compactionDeps(config: LoadedConfig): {
     generate: CompactionGenerate;
-    tools?: Omit<ToolContextDeps, "runSubagent">;
+    tools?: ToolContextDeps;
   } {
     return {
       generate: compactionGenerate(this.#generateDeps(config)),
-      ...(this.#deps.tools === undefined ? {} : { tools: withoutSubagent(this.#deps.tools) }),
+      ...(this.#deps.tools === undefined ? {} : { tools: this.#deps.tools }),
     };
   }
 }
@@ -259,9 +259,4 @@ function labelAccountedCall(
       : { reasoning_effort: options.reasoning_effort }),
     usage: usageConfigView(config.app.usage),
   };
-}
-
-function withoutSubagent(tools: ToolContextDeps): Omit<ToolContextDeps, "runSubagent"> {
-  const { runSubagent: _dropped, ...rest } = tools;
-  return rest;
 }

@@ -19,6 +19,7 @@ import {
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
 import { McpCancelled } from "../mcp/client.ts";
 import type { SubagentConfig, ToolsConfig } from "../config/app.ts";
+import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
 import type { RetrievalConfig } from "../memory/workspace_index.ts";
 
@@ -26,6 +27,8 @@ export type RetrievalMode = "auto" | "lexical" | "hybrid" | "vector";
 
 export interface ToolContext {
   thread?: string;
+  conversation?: readonly Message[];
+  dryRun?: boolean;
   imageDir: string;
   workspaceDir: string;
   characterDataDir: string;
@@ -48,6 +51,7 @@ export interface ToolContext {
   historyIndexPath?: string;
 
   deferEdit?: (path: string) => Promise<void> | void;
+  trackWorkspaceWrite?: (name: string, input: unknown, write: () => Promise<unknown>) => Promise<unknown>;
 
   runSubagent?: (
     name: string,
@@ -139,6 +143,9 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
+  if (ctx.dryRun && (["edit", "delete", "git", "generate_image"].includes(name) || name.startsWith("mcp__"))) {
+    throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
+  }
   const args = (input ?? {}) as ToolInput;
 
   switch (name) {
@@ -189,7 +196,9 @@ export async function dispatchTool(
 
     case "edit": {
       const path = typeof args["path"] === "string" ? args["path"] : "";
-      const result = await handleEdit(args, ctx.workspaceDir, ctx.memoryFileLimits);
+      const write = () => handleEdit(args, ctx.workspaceDir, ctx.memoryFileLimits);
+      const result = ctx.trackWorkspaceWrite === undefined ? await write()
+        : await ctx.trackWorkspaceWrite(name, input, write);
       await annotateDeferredEdit(path, result, ctx);
       return result;
     }
@@ -208,8 +217,11 @@ export async function dispatchTool(
       return await handleSearch(args, ctx.workspaceDir, ctx.retrievalConfig, semantics);
     }
 
-    case "delete":
-      return await handleDelete(args, ctx.workspaceDir, ctx.characterDataDir);
+    case "delete": {
+      const write = () => handleDelete(args, ctx.workspaceDir, ctx.characterDataDir);
+      return ctx.trackWorkspaceWrite === undefined ? await write()
+        : await ctx.trackWorkspaceWrite(name, input, write);
+    }
 
     case "git":
       return await handleGit(args, ctx.workspaceDir, ctx.characterName, ctx.signal);

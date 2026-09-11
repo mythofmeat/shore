@@ -75,16 +75,10 @@ MUTANTS = [
      "        activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),",
      "        activityStats: () => undefined,"),
     ("tools: a chat turn's sub-agents are handed no turn, so they cannot stream out", D,
-     "      ...(a.env === undefined ? {} : { env: a.env }),\n      turn,\n    }),",
-     "      ...(a.env === undefined ? {} : { env: a.env }),\n    } as never),"),
+     "    ...runtimeToolDeps(a, turn),",
+     "    ...runtimeToolDeps(a),"),
     ("tools: the shared backends are dropped, so chat is offered less than a heartbeat", D,
-     "    ...sharedToolDeps(runtime.config, runtime.mcp, runtime.autonomy, {\n"
-     "      providers: a.providers,\n"
-     "      registry: runtime.registry,\n"
-     "      ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),\n"
-     "      ...(a.env === undefined ? {} : { env: a.env }),\n"
-     "      turn,\n"
-     "    }),",
+     "    ...runtimeToolDeps(a, turn),",
      "    ...({} as Record<string, never>),"),
 
     # --- the autonomy surface -------------------------------------------------

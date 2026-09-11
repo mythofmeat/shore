@@ -28,7 +28,7 @@ afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
 });
 
-test("archive failure restores workspace edits, binary files, and deleted symlinks", async () => {
+test.each([false, true])("archive failure restores workspace edits, binary files, and deleted symlinks (delegated: %s)", async (delegated) => {
   const root = await mkdtemp(join(tmpdir(), "shore-compact-workspace-rollback-"));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dataDir = join(root, "data");
@@ -44,11 +44,16 @@ test("archive failure restores workspace edits, binary files, and deleted symlin
   await writeFile(join(workspace, "assets/data.bin"), bytes);
   await symlink("data.bin", join(workspace, "assets/link.bin"));
   await writeFile(join(workspace, "projects/note.md"), "original context");
+  const dispatch = (name: string, input: unknown) => renderToolOutcome(() => name === "delete"
+      ? handleDelete(input as Record<string, unknown>, workspace, characterDir)
+      : handleEdit(input as Record<string, unknown>, workspace));
   const tools: CompactionTools = {
     workspaceDir: workspace,
-    dispatch: (name, input) => renderToolOutcome(() => name === "delete"
-      ? handleDelete(input as Record<string, unknown>, workspace, characterDir)
-      : handleEdit(input as Record<string, unknown>, workspace)),
+    dispatch: (name, input, trackNestedWrite) => {
+      if (name !== "ask_research") return dispatch(name, input);
+      const nested = input as { name: string; input: unknown };
+      return required(trackNestedWrite)(nested.name, nested.input, () => dispatch(nested.name, nested.input));
+    },
     ensureWorkspaceGitRepo: async () => {},
     gitCommitAll: async () => false,
   };
@@ -61,7 +66,10 @@ test("archive failure restores workspace edits, binary files, and deleted symlin
   ];
   const opts = options(dataDir, workspace, memoryStore,
     await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools,
-    scripted([response("tool_use", calls), response("end_turn", [])]));
+    scripted([response("tool_use", delegated ? calls.map((call) => {
+      if (call.type !== "tool_use") return call;
+      return { ...call, name: "ask_research", input: { name: call.name, input: call.input } };
+    }) : calls), response("end_turn", [])]));
   const failure = await compact({
     ...opts,
     conversationMgr: {

@@ -128,8 +128,8 @@ MUTANTS = [
     # --- the tick -------------------------------------------------------------
     ("tick: a body that cannot be built runs the loop anyway, on an empty one",
      T,
-     '\n\n    const prepared = await prepareHeartbeatRequest(character, config, deps);\n    if (prepared === undefined) return { events };',
-     '  const prepared = (await prepareHeartbeatRequest(character, config, deps)) ?? {\n    request: { messages: [] } as never,\n    maxToolIterations: undefined,\n    override: undefined,\n  };'),
+     '\n\n    const prepared = await prepareHeartbeatRequest(character, config, { ...deps, thread });\n    if (prepared === undefined) return { events };',
+     '  const prepared = (await prepareHeartbeatRequest(character, config, { ...deps, thread })) ?? {\n    request: { messages: [] } as never,\n    maxToolIterations: undefined,\n    override: undefined,\n    thread,\n    conversation: [],\n  };'),
     ("tick: a heartbeat reports a turn count, so its turns are marked covered",
      T,
      "    return { events };\n  });\n"

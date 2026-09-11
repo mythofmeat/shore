@@ -23,7 +23,7 @@ import type {
   ToolDefinition,
 } from "../llm/types.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
-import { rustJoin } from "../config/dirs.ts";
+import { MAIN_THREAD, rustJoin } from "../config/dirs.ts";
 import {
   InvalidArgs,
   NotImplemented,
@@ -110,10 +110,11 @@ export async function runSubagent(
   const displayName = resolveDisplayName(config.app.defaults, deps.env);
   const vars = templateVars(charName, displayName);
 
-  const systemText = expandPromptMacros(renderTemplate(spec.prompt, vars), {
+  const systemText = await expandPromptMacros(renderTemplate(spec.prompt, vars), {
+    thread: deps.ctx.thread ?? MAIN_THREAD,
     characterDataDir: deps.ctx.characterDataDir,
     workspaceDir: deps.ctx.workspaceDir,
-    history: (deps.conversation ?? []).slice(-MAX_HISTORY_MESSAGES),
+    history: (deps.conversation ?? deps.ctx.conversation ?? []).slice(-MAX_HISTORY_MESSAGES),
     charName,
     userName: displayName,
   });
@@ -163,6 +164,7 @@ export async function runSubagent(
     context: {
       ledger: rustJoin(config.dirs.data, "shore.db"),
       character: charName,
+      thread: deps.ctx.thread ?? MAIN_THREAD,
       call_type: "subagent",
       ...(built.api_key_name === undefined ? {} : { api_key_name: built.api_key_name }),
       thinking_enabled: built.request.provider_options?.thinking_enabled === true,

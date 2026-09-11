@@ -19,14 +19,15 @@ import { configView } from "../../config/preferences.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import { toRequestModel } from "../../config/models.ts";
 import type { FrameSink } from "../../llm/stream.ts";
-import type { SidecarRequest } from "../../llm/types.ts";
+import type { SidecarRequest, ToolDefinition } from "../../llm/types.ts";
+import type { Message } from "../../engine/types.ts";
 import type { LastRequestCache } from "../../cache/last_request.ts";
 import type { RebuildDeps } from "../../cache/rebuild.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { buildToolContext, credentialEntry, type ToolContextDeps } from "../../handler/tool_context.ts";
 import { toolLimitsFrom, type ToolContext } from "../../tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../../tools/execute.ts";
-import { BUILTIN_TOOL_SCHEMAS } from "../../tools/registry.ts";
+import { schemasFrom } from "../../tools/validate.ts";
 import {
   ensureWorkspaceGitRepoBestEffort,
   gitCommitAll,
@@ -68,7 +69,7 @@ export interface CompactionRunDeps {
   config: LoadedConfig;
   generate: RealCompactionLlmOptions["generate"];
   notify?: (title: string, body: string) => void;
-  tools?: Omit<ToolContextDeps, "runSubagent">;
+  tools?: ToolContextDeps;
   now?: () => string;
   newId?: () => string;
   emit?: FrameSink;
@@ -227,8 +228,10 @@ export async function runCompactionPass(
         );
       }
 
-      const resolved = await resolveDeps(character, deps, effective, thread);
-      const chatRequest = await resolveChatRequest(character, thread, loaded, resolved.effective);
+      const chatRequest = await resolveChatRequest(character, thread, loaded, effective,
+        deps.tools?.mcpToolDefs?.(effective.app.tools.enabled_tools) ?? []);
+      const resolved = await resolveDeps(character, deps, effective, thread,
+        [...loaded.store.messages()], chatRequest.tools, options.dryRun ?? false);
 
       const outcome = await compact(
         {
@@ -393,6 +396,9 @@ async function resolveDeps(
   deps: CompactionRunDeps,
   effective: LoadedConfig,
   thread: string,
+  conversation: readonly Message[],
+  tools: readonly ToolDefinition[] | undefined,
+  dryRun: boolean,
 ): Promise<ResolvedDeps> {
   const configDir = effective.dirs.config;
   const systemTemplate =
@@ -416,7 +422,9 @@ async function resolveDeps(
     shoreLog.warn(`shore: markdown memory store unavailable for ${character}: ${String(e)}`);
   }
 
-  const toolCtx = await buildToolContext(effective, effective.dirs.data, character, { ...deps.tools, thread });
+  const toolCtx = await buildToolContext(effective, effective.dirs.data, character, {
+    ...deps.tools, thread, conversation, dryRun,
+  });
   const entry = effective.providers.get(model.providerKey);
   const providerEntry = entry === undefined ? undefined : credentialEntry(entry);
 
@@ -434,29 +442,44 @@ async function resolveDeps(
       ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
     }),
     markdownStore,
-    tools: compactionTools(toolCtx, effective),
+    tools: compactionTools(toolCtx, effective, tools),
     maxToolIterations: model.maxToolIterations,
   };
 }
 
-function compactionTools(ctx: ToolContext, config: LoadedConfig): CompactionTools {
+function compactionTools(ctx: ToolContext, config: LoadedConfig, tools: readonly ToolDefinition[] | undefined): CompactionTools {
   const exec: ToolExecution = {
     sendDirect: () => {},
     ctx,
     limits: toolLimitsFrom(config.app.tools, config.app.subagents),
     now: () => new Date().toISOString(),
     newMessageId: () => `m_${crypto.randomUUID()}`,
-    schemas: BUILTIN_TOOL_SCHEMAS,
+    schemas: schemasFrom(tools),
   };
   return {
     workspaceDir: ctx.workspaceDir,
-    dispatch: async (name, input) => {
-      const run = await runToolUse(
-        { id: `compaction_${crypto.randomUUID()}`, name, input },
-        exec,
-        [],
-      );
-      return { output: run.window?.output ?? run.raw, isError: run.isError };
+    dispatch: async (name, input, trackNestedWrite) => {
+      if (trackNestedWrite !== undefined) {
+        ctx.trackWorkspaceWrite = async (nestedName, nestedInput, write) => {
+          let value: unknown;
+          const result = await trackNestedWrite(nestedName, nestedInput, () => renderToolOutcome(async () => {
+            value = await write();
+            return value;
+          }));
+          if (result.isError) throw new Error(result.output);
+          return value;
+        };
+      }
+      try {
+        const run = await runToolUse(
+          { id: `compaction_${crypto.randomUUID()}`, name, input },
+          exec,
+          [],
+        );
+        return { output: run.window?.output ?? run.raw, isError: run.isError };
+      } finally {
+        delete ctx.trackWorkspaceWrite;
+      }
     },
     deferEdit: async (path) => await queueDeferredEdit(ctx.characterDataDir, path, ctx.thread),
     ensureWorkspaceGitRepo: async (workspaceDir) => {
@@ -484,6 +507,7 @@ async function resolveChatRequest(
   thread: string,
   loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
   effective: LoadedConfig,
+  mcpToolDefs: readonly ToolDefinition[],
 ): Promise<SidecarRequest> {
   const chatModel = resolveChatModelForCharacter(
     configView(effective),
@@ -504,7 +528,7 @@ async function resolveChatRequest(
     chatModel,
     [...loaded.store.messages()],
     hasPriorContext,
-    { thread },
+    { thread, mcpToolDefs },
   );
   return built.request;
 }

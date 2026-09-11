@@ -20,11 +20,18 @@ import type { RetrievalConfig as ConfiguredRetrieval } from "../config/app.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
+import type { Message } from "../engine/types.ts";
 
-export interface ToolContextDeps {
-  thread?: string;
+export interface ToolConversation {
+  thread: string;
+  conversation: readonly Message[];
+}
+
+export interface ToolContextDeps extends Partial<ToolConversation> {
+  dryRun?: boolean;
   signal?: AbortSignal;
   mcpRegistry?: Pick<McpRegistry, "call">;
+  mcpToolDefs?: McpRegistry["toolDefsFiltered"];
   runSubagent?: (parent: ToolContext) => NonNullable<ToolContext["runSubagent"]>;
   deferEdit?: (path: string) => Promise<void> | void;
   imageGenerator?: ToolContext["imageGenerator"];
@@ -75,6 +82,8 @@ export async function buildToolContext(
 
   const ctx: ToolContext = {
     thread: deps.thread ?? MAIN_THREAD,
+    conversation: deps.conversation ?? [],
+    ...(deps.dryRun === undefined ? {} : { dryRun: deps.dryRun }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     imageDir: characterMediaDir(dataDir, charName),
     workspaceDir,

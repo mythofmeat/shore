@@ -19,6 +19,7 @@ import { segmentCount } from "../memory/compaction/archive.ts";
 import { conversationRef } from "../engine/segments.ts";
 import { homeThreadOf, threadChatModel } from "../engine/threads.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
+import type { ToolConversation } from "../handler/tool_context.ts";
 
 
 export const IDLE_ANCHOR_TEXT =
@@ -87,7 +88,7 @@ export async function rebuildRequestFromDisk(
   dataDir: string,
   config: LoadedConfig,
   deps: RebuildDeps = {},
-): Promise<BuiltRequest | undefined> {
+): Promise<(BuiltRequest & ToolConversation) | undefined> {
   const characterDir = characterDataDir(dataDir, character);
   const thread = deps.thread ?? (await homeThreadOf(dataDir, character));
   const conversationDir = threadDataDir(dataDir, character, thread);
@@ -135,7 +136,7 @@ export async function rebuildRequestFromDisk(
       },
     );
     shoreLog.info(`shore: heartbeat rebuilt the request for ${character} from disk`);
-    return built;
+    return { ...built, thread, conversation: [...store.messages()] };
   } catch (e) {
     shoreLog.warn(`shore: heartbeat rebuild for ${character} failed: ${String(e)}`);
     return undefined;

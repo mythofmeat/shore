@@ -37,6 +37,17 @@ S = "src/tools/subagent_loop.ts"
 
 TESTS = ["tests/subagent_loop.test.ts"]
 
+MACRO_INPUT = (
+    "  const systemText = await expandPromptMacros(renderTemplate(spec.prompt, vars), {\n"
+    "    thread: deps.ctx.thread ?? MAIN_THREAD,\n"
+    "    characterDataDir: deps.ctx.characterDataDir,\n"
+    "    workspaceDir: deps.ctx.workspaceDir,\n"
+    "    history: (deps.conversation ?? deps.ctx.conversation ?? []).slice(-MAX_HISTORY_MESSAGES),\n"
+    "    charName,\n"
+    "    userName: displayName,\n"
+    "  });"
+)
+
 # (label, file, find, replace)
 MUTANTS = [
     # --- the recursion cap ----------------------------------------------------
@@ -75,12 +86,13 @@ MUTANTS = [
      "      // dropped"),
     ("request: the prompt is not rendered, so {{char}} reaches the model literally",
      S,
-     "  const systemText = expandPromptMacros(renderTemplate(spec.prompt, vars), {",
-     "  const systemText = expandPromptMacros(spec.prompt, {"),
-    ("request: the macros are expanded before the var pass, reopening the file-read hole",
-     S,
-     "  const systemText = expandPromptMacros(renderTemplate(spec.prompt, vars), {",
-     "  const systemText = renderTemplate(expandPromptMacros(spec.prompt, {"),
+     "  const systemText = await expandPromptMacros(renderTemplate(spec.prompt, vars), {",
+     "  const systemText = await expandPromptMacros(spec.prompt, {"),
+    ("request: file and history contents are reinterpreted as template variables",
+     S, MACRO_INPUT,
+     MACRO_INPUT.replace("await expandPromptMacros(renderTemplate(spec.prompt, vars), {",
+                         "renderTemplate(await expandPromptMacros(spec.prompt, {")
+                .replace("  });", "  }), vars);")),
     ("request: the query is not the message, so the sub-agent is asked nothing",
      S,
      '      messages: [{ role: "user", content: [{ type: "text", text: query }] }],',

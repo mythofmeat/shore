@@ -9,10 +9,10 @@ import {
   resolveChatModelForCharacter,
 } from "../config/preferences.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
-import { toRequestModel, type ResolvedModel } from "../config/models.ts";
+import { resolvedReplayPriorThinking, toRequestModel, type ResolvedModel } from "../config/models.ts";
 import { resolveDisplayName } from "../config/app.ts";
 import { resolvePromptTemplate } from "../config/dirs.ts";
-import { credentialEntry } from "../handler/tool_context.ts";
+import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
 import { formatWallClock } from "../engine/prompt.ts";
 import { homeThreadOf, threadChatModel } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
@@ -75,9 +75,6 @@ export function applyHeartbeatModelOverride(
     findEffectiveModel(v, c, n, h),
   );
   if (resolved === undefined) return { request, override: undefined };
-  if (resolved.modelId === request.model) {
-    return { request, override: undefined };
-  }
 
   const entry = config.providers.get(resolved.providerKey);
   try {
@@ -88,7 +85,7 @@ export function applyHeartbeatModelOverride(
         messages: request.messages,
         ...(request.system === undefined ? {} : { system: request.system }),
         ...(request.tools === undefined ? {} : { tools: request.tools }),
-        replay: request.replay_prior_thinking,
+        replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),
       },
       deps.env,
     );
@@ -106,6 +103,7 @@ export function applyHeartbeatModelOverride(
 }
 
 export interface PrepareHeartbeatDeps {
+  thread?: string;
   cache: LastRequestCache;
   rebuild?: RebuildDeps;
   env?: NodeJS.ProcessEnv;
@@ -113,7 +111,7 @@ export interface PrepareHeartbeatDeps {
   timeZone?: string;
 }
 
-export interface PreparedHeartbeat {
+export interface PreparedHeartbeat extends ToolConversation {
   request: SidecarRequest;
   maxToolIterations: number | undefined;
   override: ResolvedModel | undefined;
@@ -124,7 +122,7 @@ export async function prepareHeartbeatRequest(
   config: LoadedConfig,
   deps: PrepareHeartbeatDeps,
 ): Promise<PreparedHeartbeat | undefined> {
-  const thread = await homeThreadOf(config.dirs.data, character);
+  const thread = deps.thread ?? await homeThreadOf(config.dirs.data, character);
   const rebuilt = await rebuildRequestFromDisk(
     character,
     config.dirs.data,
@@ -187,6 +185,8 @@ export async function prepareHeartbeatRequest(
 
   return {
     request,
+    thread: rebuilt.thread,
+    conversation: rebuilt.conversation,
     maxToolIterations,
     override,
   };

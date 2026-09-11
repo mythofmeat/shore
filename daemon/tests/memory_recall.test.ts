@@ -53,6 +53,27 @@ const CONVERSATION = [
 ];
 
 describe("memory recall", () => {
+  test.each([10_000, 1])("preserves complete backend facts and their qualifications with a %d-token budget", async (maxTokens) => {
+    const config = world();
+    config.app.memory.recall.max_tokens = maxTokens;
+    const text = "Remember the discussion. ".repeat(30) + "This was a joke, not a promise.";
+    const calls: Record<string, unknown>[] = [];
+    const transcripts: string[] = [];
+    const block = await runMemoryRecall({ config, character: "qifei", messages: CONVERSATION }, {
+      diagnostics: new Diagnostics(),
+      backend: backendOf({ call: async (_tool, args) => {
+        calls.push(args);
+        return { results: [{ id: "whole-fact", text }] };
+      } }),
+      callStore: { recordTranscript: (entry) => transcripts.push(entry.entry_json) },
+    });
+    expect(calls[0]?.max_tokens).toBe(maxTokens);
+    expect(block).toBe(`- ${text}`);
+    expect(JSON.parse(transcripts[0] ?? "{}")).toMatchObject({
+      results: [{ id: "whole-fact", text }], memories: [text],
+    });
+  });
+
   test("asks the configured server and returns a formatted block", async () => {
     const calls: { tool: string; args: unknown }[] = [];
     const diagnostics = new Diagnostics();
@@ -277,7 +298,7 @@ describe("memory recall", () => {
 
   test("the transcript keeps scored candidates beyond the injected slice", async () => {
     const rows: string[] = [];
-    await runMemoryRecall(
+    const block = await runMemoryRecall(
       { config: world(), character: "qifei", messages: CONVERSATION },
       {
         diagnostics: new Diagnostics(),
@@ -297,6 +318,7 @@ describe("memory recall", () => {
     );
 
     expect(rows).toHaveLength(1);
+    expect(block).toBe("- first\n- second\n- third\n[1 additional recalled memory omitted by the configured result limit; the entries above are complete.]");
     expect(JSON.parse(rows[0] ?? "{}")).toMatchObject({
       query: "what was that music script i wrote",
       query_from: "user",

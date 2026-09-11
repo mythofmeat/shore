@@ -92,10 +92,20 @@ export async function loadPromptFile(
   workspaceRoot?: string,
   thread = MAIN_THREAD,
 ): Promise<string | undefined> {
+  return await loadPromptFileFromWorkspace(characterDataDir,
+    characterWorkspaceDir(configDir, charName, workspaceRoot), name, thread);
+}
+
+export async function loadPromptFileFromWorkspace(
+  characterDataDir: string,
+  workspaceDir: string,
+  name: string,
+  thread = MAIN_THREAD,
+): Promise<string | undefined> {
   if (await activePromptSnapshotExists(characterDataDir, thread)) {
     return activeContent(characterDataDir, name, thread);
   }
-  return effectiveContent(canonicalFile(configDir, charName, name, workspaceRoot));
+  return effectiveContent(join(workspaceDir, name));
 }
 
 function activeContent(characterDir: string, name: string, thread: string): string | undefined {
@@ -127,10 +137,7 @@ export async function loadMemoryIndex(
   workspaceRoot?: string,
   thread = MAIN_THREAD,
 ): Promise<string | undefined> {
-  if (await activePromptSnapshotExists(characterDataDir, thread)) {
-    return activeContent(characterDataDir, MEMORY_INDEX_FILE, thread);
-  }
-  return effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
+  return await loadPromptFile(characterDataDir, configDir, charName, MEMORY_INDEX_FILE, workspaceRoot, thread);
 }
 
 export async function pendingDeferredEditPaths(

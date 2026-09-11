@@ -46,7 +46,7 @@ BUILD_INPUTS = (
     "        messages: request.messages,\n"
     "        ...(request.system === undefined ? {} : { system: request.system }),\n"
     "        ...(request.tools === undefined ? {} : { tools: request.tools }),\n"
-    "        replay: request.replay_prior_thinking,"
+    "        replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),"
 )
 
 CAP = (
@@ -73,10 +73,10 @@ MUTANTS = [
      "    shoreLog.warn(`shore: heartbeat model not found: ${String(e)}`);\n"
      "    return { request, override: undefined };\n"
      "  }"),
-    ("override: swaps even when the body already runs on that model",
+    ("override: a same-ID alias silently loses its configured settings",
      H,
-     "  if (resolved.modelId === request.model) {",
-     "  if (false as boolean) {"),
+     "  if (resolved === undefined) return { request, override: undefined };",
+     "  if (resolved === undefined || resolved.modelId === request.model) return { request, override: undefined };"),
     ("override: a missing key ends the tick instead of falling back to chat",
      H,
      "  } catch (e) {\n"
@@ -94,17 +94,17 @@ MUTANTS = [
      "        messages: [],\n"
      "        ...(request.system === undefined ? {} : { system: request.system }),\n"
      "        ...(request.tools === undefined ? {} : { tools: request.tools }),\n"
-     "        replay: request.replay_prior_thinking,"),
+     "        replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),"),
     ("override: the swapped body drops the system prefix",
      H, BUILD_INPUTS,
      "        messages: request.messages,\n"
      "        ...(request.tools === undefined ? {} : { tools: request.tools }),\n"
-     "        replay: request.replay_prior_thinking,"),
+     "        replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),"),
     ("override: the swapped body drops the tool definitions",
      H, BUILD_INPUTS,
      "        messages: request.messages,\n"
      "        ...(request.system === undefined ? {} : { system: request.system }),\n"
-     "        replay: request.replay_prior_thinking,"),
+     "        replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),"),
     ("override: the provider entry is dropped, so `[providers].keys` is ignored",
      H,
      "      entry === undefined ? undefined : credentialEntry(entry),",
@@ -121,13 +121,12 @@ MUTANTS = [
      "  const copy: SidecarRequest = { ...request };"),
     ("prepare: the stale chat request id rides along into every heartbeat round",
      H,
-     "    const { rid: _rid, ...rest } = copy.context;\n"
-     '    copy.context = { ...rest, call_type: "heartbeat" };',
-     '    copy.context = { ...copy.context, call_type: "heartbeat" };'),
+     "  request.context = {\n    ...request.context,",
+     '  request.context = {\n    ...request.context,\n    rid: deps.cache.get(character)?.context?.rid,'),
     ("prepare: the tick is not labelled a heartbeat in the ledger",
      H,
-     '    copy.context = { ...rest, call_type: "heartbeat" };',
-     "    copy.context = { ...rest };"),
+     '    call_type: "heartbeat",',
+     '    call_type: "message",'),
     ("prepare: a cold rebuild is not cached, so keepalive pings no-op until a user speaks",
      H,
      "    deps.cache.set(character, source, {\n"
@@ -152,7 +151,7 @@ MUTANTS = [
      "    );\n"
      "    return undefined;\n"
      "  }",
-     "  if (rebuilt === undefined) return { request: { messages: [] } as never, maxToolIterations: undefined, override: undefined };"),
+     "  if (rebuilt === undefined) return { request: { messages: [] } as never, maxToolIterations: undefined, override: undefined, thread, conversation: [] };"),
     ("prepare: the round cap always comes from the chat model, not the one running",
      H, CAP,
      "    resolveChatModelForCharacter(\n"

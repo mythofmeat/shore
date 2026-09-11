@@ -192,10 +192,14 @@ export interface ToolOutput {
   isError: boolean;
 }
 
+export type CompactionWriteTracker = (
+  name: string, input: unknown, write: () => Promise<ToolOutput>,
+) => Promise<ToolOutput>;
+
 export interface CompactionTools {
   readonly workspaceDir: string;
 
-  dispatch(name: string, input: unknown): Promise<ToolOutput>;
+  dispatch(name: string, input: unknown, trackNestedWrite?: CompactionWriteTracker): Promise<ToolOutput>;
 
   deferEdit?(path: string): Promise<void>;
 
