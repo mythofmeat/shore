@@ -10,6 +10,55 @@ import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import type { SidecarRequest, StreamEvent, WireMessage } from "../src/llm/types.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import { required } from "../src/util/required.ts";
+import { oversizedImage } from "./support/oversized_image.ts";
+import { prepareImageBlocks } from "../src/llm/prepare_images.ts";
+import type { ContentBlock } from "../src/engine/types.ts";
+
+
+test("historical tool images are reduced without changing the original blocks", async () => {
+  const image = await oversizedImage();
+  const blocks: ContentBlock[] = [{ type: "tool_result", tool_use_id: "old", content: [image] }];
+  const prepared = await prepareImageBlocks(blocks);
+  expect(JSON.stringify(prepared).length).toBeLessThan(5 * 1024 * 1024);
+  expect(image.source.data.length).toBeGreaterThan(5 * 1024 * 1024);
+  expect(blocks[0]).toMatchObject({ content: [image] });
+  const result = prepared[0];
+  if (result?.type !== "tool_result" || !Array.isArray(result.content)) throw new Error("missing tool image");
+  const resized = result.content[0];
+  if (resized?.type !== "image") throw new Error("missing resized image");
+  expect(await new Bun.Image(Buffer.from(resized.source.data, "base64")).metadata()).toMatchObject({ width: 1220, height: 1220 });
+});
+
+test("the real SDK accepts an upload and then the same image in a rebuilt heartbeat", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "shore-heartbeat-image-"));
+  const mock = await startMockAnthropic({ fallback: { text: "image received" } });
+  const image = await oversizedImage();
+  const provider = new ClaudeAgentProvider({
+    bookPath: () => join(dir, "sessions.json"),
+    runQuery: params => query({ ...params, options: {
+      ...params.options,
+      env: { ...params.options.env, HOME: dir, CLAUDE_CONFIG_DIR: join(dir, "claude") },
+    } }),
+  });
+  const messages: WireMessage[] = [{ role: "user", content: [image, { type: "text", text: "Describe this image" }] }];
+  try {
+    for (const callType of ["message", "heartbeat"]) {
+      const events: StreamEvent[] = [];
+      for await (const event of provider.stream({ ...req(messages), base_url: mock.url, context: { character: "test", call_type: callType, thinking_enabled: false } }, AbortSignal.timeout(25_000))) events.push(event);
+      expect(events.filter(event => event.type === "error")).toEqual([]);
+      expect(events.find(event => event.type === "done")?.content).toBe("image received");
+      messages.push(assistant("image received"), user("Continue"));
+    }
+    const sent = required(mock.requests.at(-1)).body.messages as WireMessage[];
+    const imported = sent.flatMap(message => message.content).find(block => block.type === "image");
+    if (imported?.type !== "image") throw new Error("heartbeat lost its historical image");
+    expect(imported.source.data.length).toBeLessThanOrEqual(5 * 1024 * 1024);
+    expect(image.source.data.length).toBeGreaterThan(5 * 1024 * 1024);
+  } finally {
+    await mock.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
 
 const user = (text: string): WireMessage => ({ role: "user", content: [{ type: "text", text }] });
 const assistant = (text: string): WireMessage => ({ role: "assistant", content: [{ type: "text", text }] });

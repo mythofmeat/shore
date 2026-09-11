@@ -1,3 +1,4 @@
+import { prepareRequestImages } from "../prepare_images.ts";
 import { retryToolStream } from "../tool_loop.ts";
 import { ToolLoopStop } from "../tool_loop_control.ts";
 import { createHash } from "node:crypto";
@@ -672,7 +673,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    req = withSystemInstructions({ ...req });
+    req = withSystemInstructions(await prepareRequestImages(req));
     const startedAt = Date.now();
     let firstTokenAt = 0;
     const acc = newTurnAccumulator();
@@ -965,7 +966,7 @@ export async function* claudeAgentToolLoopEvents(
   deps: ClaudeAgentDeps = {},
   options: ToolLoopOptions = {},
 ): AsyncIterable<StreamEvent> {
-  req = withSystemInstructions({ ...req });
+  req = withSystemInstructions(await prepareRequestImages(req));
   const defs = req.tools ?? [];
   if (defs.length === 0) {
     yield* new ClaudeAgentProvider(deps).stream(req, signal);
@@ -1021,7 +1022,7 @@ export async function* claudeAgentToolLoopEvents(
   try {
     yield { type: "start", model: req.model };
     await tools.beforeTurn?.(req);
-    Object.assign(req, withSystemInstructions(req));
+    Object.assign(req, withSystemInstructions(await prepareRequestImages(req)));
     plan = planTurn(record, req.messages);
     plan = await withNativeHistory(plan, req, path, key, record);
     const run = (deps.runQuery ?? query)({

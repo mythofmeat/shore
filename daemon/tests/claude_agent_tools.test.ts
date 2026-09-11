@@ -15,6 +15,7 @@ import {
 } from "../src/llm/providers/claude_agent_tools.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
 import type { ToolDefinition } from "../src/llm/types.ts";
+import { oversizedImage } from "./support/oversized_image.ts";
 
 const EMPTY_SCHEMA: Record<string, unknown> = { type: "object" };
 
@@ -44,6 +45,24 @@ const ok = (text: string): ContentBlock => ({
   type: "tool_result",
   tool_use_id: "toolu_1",
   content: text,
+});
+
+test("live tool images are prepared before crossing the MCP boundary", async () => {
+  const image = await oversizedImage();
+  const client = await connected([def("read")], async () => ({
+    type: "tool_result", tool_use_id: "toolu_image", content: [image],
+  }));
+  try {
+    const result = await client.callTool({ name: "read", arguments: {} });
+    const content = result.content as { type: string; data?: string; mimeType?: string }[];
+    const output = content[0];
+    expect(output?.type).toBe("image");
+    expect(output?.mimeType).toBe("image/webp");
+    expect(output?.data?.length).toBeLessThanOrEqual(5_000_000);
+    expect(image.source.data.length).toBeGreaterThan(5 * 1024 * 1024);
+  } finally {
+    await client.close();
+  }
 });
 
 describe("what the model is shown", () => {

@@ -1,3 +1,4 @@
+import { prepareImageBlock } from "../prepare_images.ts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   CallToolRequestSchema,
@@ -138,7 +139,7 @@ export function shoreToolServer(
   server.server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const bare = request.params.name;
     if (names.wireOf(bare) === undefined) throw new UnknownShoreTool(bare);
-    return toCallToolResult(await run(bare, request.params.arguments ?? {}));
+    return toCallToolResult(await prepareImageBlock(await run(bare, request.params.arguments ?? {})));
   });
 
   return server;

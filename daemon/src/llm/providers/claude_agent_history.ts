@@ -7,6 +7,7 @@ import { withStorage, ensureCollection, collectionText, appendCollection } from 
 import type { SidecarRequest } from "../types.ts";
 import { ToolNames } from "./claude_agent_tools.ts";
 import { sessionKeyOwner } from "./agent_sessions.ts";
+import { prepareImageBlocks } from "../prepare_images.ts";
 
 export function nativeHistoryStore(book: string, conversation: string): SessionStore {
   const data = dirname(book);
@@ -47,9 +48,10 @@ export async function seedNativeHistory(req: SidecarRequest, sessionStore: Sessi
   const names = new ToolNames(req.tools ?? []);
   const timestamp = new Date().toISOString();
   let parentUuid: string | null = null;
-  const entries: SessionStoreEntry[] = req.messages.slice(0, -1).map((message, index) => {
+  const entries: SessionStoreEntry[] = [];
+  for (const [index, message] of req.messages.slice(0, -1).entries()) {
     const uuid = randomUUID();
-    const content = message.content.map((block) => block.type === "tool_use"
+    const content = (await prepareImageBlocks(message.content)).map((block) => block.type === "tool_use"
       ? { ...block, name: names.wireOf(block.name) ?? block.name } : block);
     const entry: SessionStoreEntry = {
       type: message.role,
@@ -75,8 +77,8 @@ export async function seedNativeHistory(req: SidecarRequest, sessionStore: Sessi
     };
     if (message.role === "assistant") assistantUuids.set(index, uuid);
     parentUuid = uuid;
-    return entry;
-  });
+    entries.push(entry);
+  }
   await sessionStore.append({ projectKey: "", sessionId }, entries);
   return {
     sessionId,
