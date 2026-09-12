@@ -17,7 +17,7 @@ import {
 import type { CompactContext } from "./compact.ts";
 import type { SessionActivateContext } from "./activate.ts";
 import type { KeepalivePingContext } from "./keepalive.ts";
-import { describeTool, runTool, type RunToolContext } from "./run_tool.ts";
+import type { RunToolContext } from "./run_tool.ts";
 import type { Args } from "./navigation.ts";
 
 import { usage } from "./usage.ts";
@@ -85,34 +85,7 @@ export async function runCommand(
     return await runRegisteredOperation(cmd.name, { engine, session, deps }, cmd.args);
   }
   const args = (cmd.args ?? {}) as Args;
-  const character = engine.characterName;
-
   switch (cmd.name) {
-    case "run_tool":
-      if (deps.runTool === undefined) throw unwired("run_tool");
-      if (args["describe"] === true) {
-        return describeTool(
-          character,
-          {
-            ...deps.runTool,
-            config: session.config,
-            dataDir: session.dataDir,
-            conversation: engine.messages(),
-          },
-          args,
-        );
-      }
-      return await runTool(
-        character,
-        {
-          ...deps.runTool,
-          config: session.config,
-          dataDir: session.dataDir,
-          conversation: engine.messages(),
-          ...(session.signal === undefined ? {} : { signal: session.signal }),
-        },
-        args,
-      );
     case "usage":
       return await usage(usageContext(session, deps), args);
 

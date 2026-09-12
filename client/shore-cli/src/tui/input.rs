@@ -1691,6 +1691,9 @@ fn palette_confirmation_prompt(app: &App, command: &CliCommand) -> Option<String
             ..
         } => Some(format!("Write setting {key:?} to the config?")),
         CliCommand::Debug {
+            subcommand: Some(crate::cli::DebugCommand::Tool { describe: true, .. }),
+        } => None,
+        CliCommand::Debug {
             subcommand:
                 Some(crate::cli::DebugCommand::Tool {
                     name,
