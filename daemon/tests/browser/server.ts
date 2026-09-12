@@ -7,7 +7,41 @@ import type { SidecarProvider } from "../../src/llm/types.ts";
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
 await mkdir(join(root, "config"));
 const configPath = join(root, "config", "shore.toml");
-await writeFile(configPath, `[defaults]\nmodel = "anthropic:claude-opus-4-8"\n[providers.anthropic]\napi_key_env = "SHORE_BROWSER_KEY"\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${process.env["SHORE_BROWSER_TEST_PORT"] ?? "17349"}"\n`);
+const oldKey = process.env["SHORE_BROWSER_DISCOVERY_KEY"];
+process.env["SHORE_BROWSER_DISCOVERY_KEY"] = "private-discovery-fixture-key";
+const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
+  if (request.headers.get("authorization") !== "Bearer private-discovery-fixture-key") return new Response("Wrong fixture key", { status: 401 });
+  if (new URL(request.url).pathname === "/v1/models") return Response.json({ data: [
+    { id: "vendor/visible", name: "Visible test model", context_length: 64000, max_output_tokens: 4096, supported_parameters: ["tools", "reasoning"] },
+    { id: "vendor/hidden", name: "Hidden test model" },
+  ] });
+  return new Response("Fixture discovery unavailable", { status: 503 });
+} });
+await writeFile(configPath, `[defaults]
+model = "anthropic:claude-opus-4-8"
+[providers.anthropic]
+api_key_env = "SHORE_BROWSER_KEY"
+[providers.anthropic.discovery]
+enabled = false
+[providers.fixture]
+sdk = "openai"
+base_url = "${discovery.url.href}v1"
+api_key_env = "SHORE_BROWSER_DISCOVERY_KEY"
+[providers.fixture.discovery]
+enabled = true
+ignore = ["vendor/hidden"]
+[providers.broken]
+sdk = "openai"
+base_url = "${discovery.url.href}broken"
+api_key_env = "SHORE_BROWSER_DISCOVERY_KEY"
+[providers.broken.discovery]
+enabled = true
+[providers.off]
+enabled = false
+[daemon.web]
+enabled = true
+bind_addr = "127.0.0.1:${process.env["SHORE_BROWSER_TEST_PORT"] ?? "17349"}"
+`);
 let generation = 0;
 const provider: SidecarProvider = {
   async *stream(request, signal) {
@@ -30,8 +64,12 @@ try {
   const daemon = await startDaemon({ argv: ["--config", configPath, "--addr", "127.0.0.1:0"], env: {
     XDG_CONFIG_HOME: join(root, "config-home"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "runtime"),
     SHORE_TOKEN: "browser-test-token", SHORE_BROWSER_KEY: "test-key",
-  }, providers: { anthropic: provider }, instancesPath: join(root, "instances.json"), watchConfig: false });
+  }, providers: { anthropic: provider }, instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false });
   process.once("SIGTERM", () => { daemon.stop(); });
   process.once("SIGINT", () => { daemon.stop(); });
   await daemon.done;
-} finally { await rm(root, { recursive: true, force: true }); }
+} finally {
+  await discovery.stop(true);
+  if (oldKey === undefined) delete process.env["SHORE_BROWSER_DISCOVERY_KEY"]; else process.env["SHORE_BROWSER_DISCOVERY_KEY"] = oldKey;
+  await rm(root, { recursive: true, force: true });
+}

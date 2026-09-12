@@ -288,6 +288,11 @@ pub(crate) fn render(
     character: &str,
 ) -> Option<String> {
     let command = crate::cli::parse_palette_command(input).ok()?;
+    if matches!(&command, CliCommand::Provider { .. })
+        && let Err(error) = crate::run::validate_provider_output(wire_name, data)
+    {
+        return Some(format!("Invalid provider result: {error}"));
+    }
     if matches!(&command, CliCommand::Config { path: true, .. }) {
         return Some(
             data.get("config_dir")
@@ -525,6 +530,28 @@ pub(crate) fn render(
         "log" | "list_characters" | "switch_character" | "switch_model" | "reset_model"
         | "delete" | "list_alternatives" | "alt" => None,
         _ => Some(json(data)),
+    }
+}
+
+#[cfg(test)]
+mod provider_contract_tests {
+    use super::render;
+
+    #[test]
+    fn provider_palette_rejects_malformed_data_and_keeps_additive_json_fields() {
+        let invalid = render(
+            "provider",
+            "list_providers",
+            &serde_json::json!({"providers":[{"name":"incomplete"}]}),
+            "ada",
+        );
+        assert!(invalid.is_some_and(|text| text.starts_with("Invalid provider result:")));
+        let data = serde_json::json!({"providers":[],"future":"inspectable"});
+        let output = render("provider --json", "list_providers", &data, "ada").unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&output).unwrap(),
+            data
+        );
     }
 }
 

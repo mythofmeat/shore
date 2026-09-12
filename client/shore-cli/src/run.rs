@@ -1,6 +1,7 @@
 use shore_common::protocol::operations::{
     ConversationLog, ConversationLogArgs, CreateCharacter, GetMessage, GetMessageArgs,
-    NamedOperationArgs, Operation, SwitchCharacter, SwitchThread, SwitchThreadArgs,
+    NamedOperationArgs, Operation, OperationResponse, SwitchCharacter, SwitchThread,
+    SwitchThreadArgs,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -387,6 +388,9 @@ async fn handle_generic_swp_command(
     };
     _ = conn.send_command(name, args).await?;
     let data = recv_command_data(conn).await?;
+    if matches!(other, CliCommand::Provider { .. }) {
+        validate_provider_output(name, &data)?;
+    }
     if toml_mode {
         print_config_toml(&data, show_all)?;
     } else if json_mode {
@@ -406,6 +410,15 @@ async fn handle_generic_swp_command(
     } else {
         output::format_command(name, &data);
     }
+    Ok(())
+}
+
+pub(crate) fn validate_provider_output(
+    name: &str,
+    data: &serde_json::Value,
+) -> Result<(), serde_json::Error> {
+    let _: OperationResponse =
+        serde_json::from_value(serde_json::json!({ "name": name, "data": data }))?;
     Ok(())
 }
 

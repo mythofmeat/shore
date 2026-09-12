@@ -7,6 +7,26 @@ import { validOperationInput, validOperationResult } from "../src/browser/operat
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
 
 describe("executable operation contracts", () => {
+  test("provider contracts preserve nullable filters and require a truthful batch result", () => {
+    for (const include_hidden of [true, false, null]) {
+      const input = { provider: "fixture", include_hidden };
+      expect(parseOperationInput("list_provider_models", input)).toEqual(input);
+      expect(validOperationInput("list_provider_models", input)).toBe(true);
+    }
+    for (const input of [{}, { provider: 1 }, { provider: "fixture", include_hidden: "true" }, { provider: "fixture", extra: true }]) {
+      expect(() => parseOperationInput("list_provider_models", input)).toThrow();
+      expect(validOperationInput("list_provider_models", input)).toBe(false);
+    }
+    const success = { provider: "fixture", ok: true, model_count: 2, fetched_at: "now", cache_path: "/cache/models.json" };
+    const failure = { provider: "broken", ok: false, error: "Unavailable" };
+    const result = { results: [success, failure], skipped: [{ provider: "off", reason: "disabled" }], future: "inspectable" };
+    expect<unknown>(parseOperationResult("refresh_all_provider_models", result)).toEqual(result);
+    expect(validOperationResult("refresh_all_provider_models", result)).toBe(true);
+    for (const invalid of [{ ...success, ok: false }, { ...failure, ok: true }, { ...success, model_count: -1 }]) {
+      expect(() => parseOperationResult("refresh_all_provider_models", { results: [invalid], skipped: [] })).toThrow();
+      expect(validOperationResult("refresh_all_provider_models", { results: [invalid], skipped: [] })).toBe(false);
+    }
+  });
   test("conversation optional values preserve the daemon's null and integer semantics in both clients", () => {
     for (const [name, input] of [
       ["log", { turns: 0, count: null, role: "assistant" }],

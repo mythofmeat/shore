@@ -2,8 +2,9 @@ use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
     ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, EditMessage,
-    EditMessageArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, MessageReferences,
-    Operation,
+    EditMessageArgs, EmptyOperationArgs, GetMessage, GetMessageArgs, InjectSystem,
+    InjectSystemArgs, ListProviderModels, ListProviders, MessageReferences, Operation,
+    ProviderArgs, ProviderModelsArgs, RefreshAllProviderModels, RefreshProviderModels,
 };
 use shore_common::protocol::types::Role;
 use std::path::{Path, PathBuf};
@@ -2634,22 +2635,25 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
 }
 
 fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::json;
     let CliCommand::Provider { subcommand, .. } = cmd else {
         return None;
     };
     match subcommand {
-        Some(ProviderCommand::Models { name, all, .. }) => Some((
-            "list_provider_models",
-            json!({ "provider": name, "include_hidden": *all }),
-        )),
-        Some(ProviderCommand::Refresh { name: Some(n), .. }) => {
-            Some(("refresh_provider_models", json!({ "provider": n })))
+        Some(ProviderCommand::Models { name, all, .. }) => {
+            operation_to_swp::<ListProviderModels>(ProviderModelsArgs {
+                provider: name.clone(),
+                include_hidden: Some(*all),
+            })
         }
+        Some(ProviderCommand::Refresh {
+            name: Some(name), ..
+        }) => operation_to_swp::<RefreshProviderModels>(ProviderArgs {
+            provider: name.clone(),
+        }),
         Some(ProviderCommand::Refresh { name: None, .. }) => {
-            Some(("refresh_all_provider_models", json!({})))
+            operation_to_swp::<RefreshAllProviderModels>(EmptyOperationArgs {})
         }
-        None => Some(("list_providers", json!({}))),
+        None => operation_to_swp::<ListProviders>(EmptyOperationArgs {}),
     }
 }
 

@@ -220,6 +220,27 @@ test("discovery remains available when character configuration cannot load", asy
   expect(catalogue.operations.find((operation) => operation.name === "edit")?.available).toBe(false);
 });
 
+test("all provider operations remain global and reject malformed requests before discovery", async () => {
+  const h = await harness([]);
+  h.deps.registry.resolveCharacter = () => { throw new Error("Provider operations must not resolve a character"); };
+  let fetched = false;
+  h.deps.commands.fetchImpl = Object.assign(async () => { fetched = true; throw new Error("Unexpected provider request"); }, { preconnect: fetch.preconnect });
+  const discovered = await dispatchCommand(h.deps, { name: "discover_operations", args: {} }, meta(null, "discover"));
+  if (discovered.type !== "command_output") throw new Error("Missing discovery result");
+  const operations = parseOperationResult("discover_operations", discovered.data).operations.filter((operation) => operation.category === "Providers");
+  expect(operations).toHaveLength(4);
+  expect(operations.every((operation) => operation.scope === "global" && operation.available === true)).toBe(true);
+  const all = await dispatchCommand(h.deps, { name: "refresh_all_provider_models", args: {} }, meta(null, "all"));
+  expect(all).toMatchObject({ type: "command_output", rid: "all", data: { results: [], skipped: [] } });
+  const one = await dispatchCommand(h.deps, { name: "refresh_provider_models", args: { provider: "absent" } }, meta(null, "one"));
+  expect(one).toMatchObject({ type: "error", rid: "one", message: 'provider "absent" is not configured' });
+  for (const [name, args] of [["refresh_provider_models", {}], ["refresh_all_provider_models", { provider: "unexpected" }], ["list_provider_models", { provider: "fixture", include_hidden: "true" }]] as const) {
+    const frame = await dispatchCommand(h.deps, { name, args }, meta(null, "invalid"));
+    expect(frame).toMatchObject({ type: "error", rid: "invalid", code: "invalid_request" });
+  }
+  expect(fetched).toBe(false);
+});
+
 for (const thread of ["main", "side"]) {
   test(`resync restores full ${thread} history after a filtered log loses the delta anchor`, async () => {
     const h = await harness(["ada"]);

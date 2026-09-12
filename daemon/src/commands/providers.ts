@@ -27,7 +27,9 @@ import { internalError, invalidRequest, notFound, providerError } from "./errors
 import { setNanoGptSubscription } from "../ledger/store.ts";
 import { discoverClaudeAgent, type ClaudeAgentModelQuery } from "../llm/providers/claude_agent_models.ts";
 
-export type Args = Record<string, unknown>;
+import type { OperationInput, OperationResult } from "../operations/types.ts";
+import type { ProviderDiscoveredModel } from "../protocol/ProviderDiscoveredModel.ts";
+import type { ProviderStaticModel } from "../protocol/ProviderStaticModel.ts";
 
 export interface ProvidersContext {
   config: LoadedConfig;
@@ -35,11 +37,9 @@ export interface ProvidersContext {
   runClaudeAgentQuery?: ClaudeAgentModelQuery;
 }
 
-const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
-
-function requireProvider(args: Args): string {
-  const provider = asStr(args["provider"]);
-  if (provider === undefined || provider === "") {
+function requireProvider(args: OperationInput<"refresh_provider_models">): string {
+  const provider = args.provider;
+  if (provider === "") {
     throw invalidRequest("missing required argument: provider");
   }
   return provider;
@@ -47,7 +47,7 @@ function requireProvider(args: Args): string {
 
 const envSet = (name: string): boolean => (process.env[name]?.trim() ?? "") !== "";
 
-export function listProviders(ctx: ProvidersContext): unknown {
+export function listProviders(ctx: ProvidersContext): OperationResult<"list_providers"> {
   const providers = ctx.config.providers.entries().map(([name, entry]) => {
     const cache = readCacheSync(cachePath(ctx.config.dirs.cache, name));
     const hidden =
@@ -174,7 +174,7 @@ function firstUsableKey(entry: ProviderEntry): string | undefined {
   return undefined;
 }
 
-export async function refreshProviderModels(ctx: ProvidersContext, args: Args): Promise<unknown> {
+export async function refreshProviderModels(ctx: ProvidersContext, args: OperationInput<"refresh_provider_models">): Promise<OperationResult<"refresh_provider_models">> {
   const provider = requireProvider(args);
   const outcome = await refreshOne(ctx.config, ctx.config.dirs.cache, provider, ctx.fetchImpl, ctx.runClaudeAgentQuery);
   return {
@@ -185,9 +185,9 @@ export async function refreshProviderModels(ctx: ProvidersContext, args: Args): 
   };
 }
 
-export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<unknown> {
-  const results: unknown[] = [];
-  const skipped: unknown[] = [];
+export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<OperationResult<"refresh_all_provider_models">> {
+  const results: OperationResult<"refresh_all_provider_models">["results"] = [];
+  const skipped: OperationResult<"refresh_all_provider_models">["skipped"] = [];
 
   for (const [name, entry] of ctx.config.providers.entries()) {
     if (!entry.enabled) {
@@ -209,14 +209,14 @@ export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<u
         cache_path: outcome.cachePath,
       });
     } catch (e) {
-      results.push({ provider: name, ok: false, error: (e as Error).message });
+      results.push({ provider: name, ok: false, error: e instanceof Error ? e.message : String(e) });
     }
   }
 
   return { results, skipped };
 }
 
-function discoveredToJson(m: DiscoveredModel, learned: Record<string, boolean>): unknown {
+function discoveredToJson(m: DiscoveredModel, learned: Record<string, boolean>): ProviderDiscoveredModel {
   return {
     source: "discovered",
     model_id: m.model_id,
@@ -239,7 +239,7 @@ function discoveredToJson(m: DiscoveredModel, learned: Record<string, boolean>):
   };
 }
 
-export function listProviderModels(ctx: ProvidersContext, args: Args): unknown {
+export function listProviderModels(ctx: ProvidersContext, args: OperationInput<"list_provider_models">): OperationResult<"list_provider_models"> {
   const provider = requireProvider(args);
   const includeHidden = args["include_hidden"] === true;
 
@@ -253,8 +253,8 @@ export function listProviderModels(ctx: ProvidersContext, args: Args): unknown {
 
   const cache = readCacheSync(cachePath(ctx.config.dirs.cache, provider));
   const learned = readLearnedImageSupport(ctx.config.dirs.cache, provider);
-  const discovered: unknown[] = [];
-  const hidden: unknown[] = [];
+  const discovered: ProviderDiscoveredModel[] = [];
+  const hidden: ProviderDiscoveredModel[] = [];
   for (const m of cache?.models ?? []) {
     const visible = entry === undefined || isVisible(entry.discovery, m.model_id);
     if (visible || includeHidden) discovered.push(discoveredToJson(m, learned));
@@ -263,7 +263,7 @@ export function listProviderModels(ctx: ProvidersContext, args: Args): unknown {
 
   const staticModels = [...ctx.config.models.chat.values()]
     .filter((m) => m.providerKey === provider)
-    .map((m) => ({
+    .map((m): ProviderStaticModel => ({
       source: "static",
       name: m.name,
       qualified_name: m.qualifiedName,
