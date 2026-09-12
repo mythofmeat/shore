@@ -177,6 +177,14 @@ describe("schemaValueLiteral", () => {
     expect(schemaValueLiteral(at("tools.enabled"), "[read, edit]")).toBe('["read", "edit"]');
   });
 
+  test("quoted lists preserve embedded commas, quotes and empty arguments", () => {
+    const values = ["notify-send", "a,b", 'a"quote', "", "line\nbreak"];
+    const entry = at("notifications.command");
+    const literal = schemaValueLiteral(entry, JSON.stringify(values));
+    expect(Bun.TOML.parse(`items = ${literal}`)).toEqual({ items: values });
+    expect(() => schemaValueLiteral(entry, '["unfinished]')).toThrow("valid quoted list");
+  });
+
   test("every settable key produces a literal the parser accepts", async () => {
     const ctx = await world("");
     const settable = schemaOf(ctx).filter((e) => e.settable);

@@ -29,6 +29,9 @@ use ratatui::Terminal;
 use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::buffer::Buffer;
 use shore_common::protocol::client_msg::{ClientMessage, Command};
+use shore_common::protocol::operations::{
+    ConfigReloadArgs, ConfigReloadResult, Operation, ReloadConfiguration,
+};
 use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::{ContentBlock, Message, Role, StreamMetadata};
 use tracing::{info, instrument, warn};
@@ -2616,7 +2619,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             let palette_command = app.take_palette_command(co.rid.as_deref());
             if co.name == "config_reload"
-                && co.data.get("applied").is_none()
+                && co.data.get("applied").and_then(serde_json::Value::as_bool) == Some(false)
                 && let Some((command_text, yes)) = palette_command.as_deref().and_then(|text| {
                     let parsed = crate::cli::parse_palette_command(text).ok()?;
                     let crate::cli::CliCommand::Config {
@@ -2629,14 +2632,14 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     Some((text.to_owned(), yes))
                 })
             {
-                let changed = co
-                    .data
-                    .get("changed_prompt_files")
-                    .and_then(serde_json::Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(serde_json::Value::as_str)
-                    .collect::<Vec<_>>();
+                let preview = match serde_json::from_value::<ConfigReloadResult>(co.data.clone()) {
+                    Ok(preview) => preview,
+                    Err(error) => {
+                        app.set_error(format!("Invalid configuration preview: {error}"));
+                        return UiEffect::redraw(RedrawEffect::Immediate);
+                    }
+                };
+                let changed = preview.changed_prompt_files;
                 if !changed.is_empty() && !yes {
                     app.set_warning(format!(
                         "System prompt files changed: {}. Config reloaded without activating them; review them, then run `:config reload --yes`.",
@@ -2644,15 +2647,21 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     ));
                 }
                 let rid = app.begin_palette_command(&command_text);
+                let command = match ReloadConfiguration::command(
+                    ConfigReloadArgs {
+                        apply: Some(true),
+                        refresh_prompts: Some(yes && !changed.is_empty()),
+                    },
+                    Some(rid),
+                ) {
+                    Ok(command) => command,
+                    Err(error) => {
+                        app.set_error(error.to_string());
+                        return UiEffect::redraw(RedrawEffect::Immediate);
+                    }
+                };
                 return UiEffect {
-                    cmds: vec![ConnCommand::Send(ClientMessage::Command(Command {
-                        rid: Some(rid),
-                        name: "config_reload".into(),
-                        args: serde_json::json!({
-                            "apply": true,
-                            "refresh_prompts": yes && !changed.is_empty()
-                        }),
-                    }))],
+                    cmds: vec![ConnCommand::Send(ClientMessage::Command(command))],
                     redraw: RedrawEffect::Immediate,
                 };
             }
@@ -4800,6 +4809,7 @@ mod redraw_tests {
                 rid: Some(check_rid),
                 name: "config_reload".into(),
                 data: serde_json::json!({
+                    "applied": false, "config_path": "fixture.toml", "character": "ada",
                     "changed_prompt_files": ["system.md"]
                 }),
             }),

@@ -58,7 +58,7 @@ macro_rules! wire_types {
 }
 
 wire_types! {
-    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers }
+    pub enum OperationCategory { Application, Characters, Threads, Conversation, Providers, Configuration }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationScope { Global, Selection, Character, OptionalCharacter }
@@ -67,13 +67,13 @@ wire_types! {
     pub enum OperationPrerequisite { Threads }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery }
+    pub enum OperationEffect { Read, WorkspaceWrite, HistoryWrite, Selection, ModelSelection, ProviderDiscovery, ConfigWrite }
 
     #[serde(rename_all = "snake_case")]
     pub enum OperationConfirmation { None, Archive, Delete }
 
     #[serde(rename_all = "snake_case")]
-    pub enum OperationChoices { Characters, Threads, Models, Providers }
+    pub enum OperationChoices { Characters, Threads, Models, Providers, ConfigKeys }
 
     pub struct OperationField {
         pub label: String,
@@ -107,6 +107,134 @@ wire_types! {
     }
 
     pub struct OperationCatalogue { pub operations: Vec<OperationDescriptor> }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ConfigKind { Boolean, String, Integer, Float, Duration, Enum, List, Map, Table, Unknown }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ConfigSource { ChatModels, EmbeddingModels, ImageModels, Tools, Subagents, Characters, Providers }
+
+    #[serde(rename_all = "lowercase")]
+    pub enum ConfigWidth { Usize, U32, U64 }
+
+    pub struct ConfigSchemaEntry {
+        pub key: String,
+        pub kind: ConfigKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub item_kind: Option<ConfigKind>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub width: Option<ConfigWidth>,
+        pub r#type: String,
+        pub settable: bool,
+        pub optional: bool,
+        pub restart_required: bool,
+        pub secret: bool,
+        pub values: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub source: Option<ConfigSource>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub key_source: Option<ConfigSource>,
+    }
+
+    pub struct ConfigSources {
+        pub chat_models: Vec<String>, pub embedding_models: Vec<String>, pub image_models: Vec<String>,
+        pub tools: Vec<String>, pub subagents: Vec<String>, pub characters: Vec<String>, pub providers: Vec<String>,
+    }
+
+    pub struct ConfigSchemaResult { pub schema: Vec<ConfigSchemaEntry>, pub sources: ConfigSources }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ConfigArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub key: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub value: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ConfigReloadArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub apply: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub refresh_prompts: Option<bool>,
+    }
+
+    pub struct ConfigView {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub key: Option<String>,
+        #[ts(type = "unknown")]
+        pub config: serde_json::Value,
+        #[ts(type = "unknown")]
+        pub defaults: serde_json::Value,
+    }
+
+    pub struct ConfigInvalidated {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub merged_character_configs: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub character_discovery: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub removed_character_engines: Option<usize>,
+    }
+
+    pub struct ConfigSetResult {
+        pub set: String,
+        #[ts(type = "unknown")]
+        pub value: serde_json::Value,
+        #[ts(type = "unknown")]
+        pub previous: serde_json::Value,
+        pub file: String,
+        pub action: String,
+        pub restart_required: Vec<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub masked_by_preference: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub invalidated: Option<ConfigInvalidated>,
+    }
+
+    #[serde(untagged)]
+    pub enum ConfigResult { Set(ConfigSetResult), View(ConfigView) }
+
+    pub struct ConfigCheckResult {
+        pub valid: bool,
+        pub warnings: Vec<String>, pub info: Vec<String>,
+        pub config_dir: String, pub data_dir: String, pub cache_dir: String,
+        pub chat_models: usize, pub providers: usize,
+    }
+
+    pub struct ConfigReloadResult {
+        pub applied: bool,
+        pub config_path: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub character: Option<String>,
+        pub changed_prompt_files: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub prompts_refreshed: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub restart_required: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub invalidated: Option<ConfigInvalidated>,
+    }
+
+    pub struct ToolAccess { pub tool: String, pub main: bool, pub subagents: Vec<String> }
+    pub struct SubagentAccess {
+        pub name: String, pub enabled: bool, pub tools: Vec<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub model: Option<String>,
+    }
+    pub struct ToolAccessResult { pub tools: Vec<ToolAccess>, pub subagents: Vec<SubagentAccess>, pub mcp: Vec<String>, pub warnings: Vec<String> }
 
     #[serde(deny_unknown_fields)]
     pub struct ProviderArgs { pub provider: String }
@@ -627,6 +755,11 @@ macro_rules! operations {
 
 operations! {
     DiscoverOperations: "discover_operations" (EmptyOperationArgs) => OperationCatalogue,
+    Configuration: "config" (ConfigArgs) => ConfigResult,
+    CheckConfiguration: "config_check" (EmptyOperationArgs) => ConfigCheckResult,
+    ConfigurationSchema: "config_schema" (EmptyOperationArgs) => ConfigSchemaResult,
+    ReloadConfiguration: "config_reload" (ConfigReloadArgs) => ConfigReloadResult,
+    ToolAccessListing: "tools" (EmptyOperationArgs) => ToolAccessResult,
     ListProviders: "list_providers" (EmptyOperationArgs) => ProviderListing,
     ListProviderModels: "list_provider_models" (ProviderModelsArgs) => ProviderModelListing,
     RefreshProviderModels: "refresh_provider_models" (ProviderArgs) => ProviderRefreshed,

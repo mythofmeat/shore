@@ -105,6 +105,95 @@ class ReliabilityFlows(unittest.TestCase):
             self.assertIn(text, result.stderr)
         self.assertNotIn(b"UNRELATED_WARNING", result.stderr)
 
+    def test_tui_reload_applies_canonical_preview_without_replaying_it(self):
+        with tempfile.TemporaryDirectory() as root, socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            listener.settimeout(5)
+            address = "127.0.0.1:%s" % listener.getsockname()[1]
+            ready = threading.Event()
+            applied = threading.Event()
+            stop = threading.Event()
+            seen = []
+            errors = []
+            def serve():
+                try:
+                    conn, _ = listener.accept()
+                    with conn:
+                        conn.settimeout(.1)
+                        stream = conn.makefile("rwb")
+                        def send(value):
+                            stream.write((json.dumps(value) + "\n").encode())
+                            stream.flush()
+                        send({"type": "hello", "v": 1, "server_name": "test", "characters": [{"name": "ada"}]})
+                        stream.readline()
+                        send({"type": "history", "messages": [], "config": {}, "selected_character": "ada", "selected_thread": "main", "revision": 1})
+                        ready.set()
+                        conn.settimeout(5)
+                        while not stop.is_set():
+                            raw = stream.readline()
+                            if not raw:
+                                break
+                            request = json.loads(raw)
+                            if request.get("type") != "command":
+                                continue
+                            name = request["name"]
+                            if name == "config_reload":
+                                seen.append(request)
+                                apply = request.get("args", {}).get("apply") is True
+                                data = {"applied": apply, "config_path": "fixture.toml", "character": "ada", "changed_prompt_files": ["SOUL.md"], "restart_required": []}
+                                if apply:
+                                    data["prompts_refreshed"] = request["args"].get("refresh_prompts", False)
+                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": data})
+                                if apply:
+                                    applied.set()
+                            else:
+                                send({"type": "command_output", "name": name, "rid": request.get("rid"), "data": {}})
+                except BaseException as error:
+                    if not stop.is_set():
+                        errors.append(error)
+            worker = threading.Thread(target=serve, daemon=True)
+            worker.start()
+            master, slave = pty.openpty()
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 28, 110, 0, 0))
+            env = environment(root)
+            frames = Path(root) / "frames.txt"
+            env["SHORE_TUI_DEBUG_FRAMES"] = str(frames)
+            def controlling_terminal():
+                os.setsid()
+                fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+            proc = subprocess.Popen([BINARY, "--addr", address, "--character", "ada", "--thread", "main"], env=env, stdin=slave, stdout=slave, stderr=slave, preexec_fn=controlling_terminal)
+            try:
+                self.assertTrue(ready.wait(3), errors)
+                deadline = time.monotonic() + .3
+                while time.monotonic() < deadline:
+                    if select.select([master], [], [], .01)[0]:
+                        os.read(master, 65536)
+                os.write(master, b"\x1b")
+                time.sleep(.05)
+                os.write(master, b":config reload\r")
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline and not applied.is_set():
+                    if select.select([master], [], [], .01)[0]:
+                        os.read(master, 65536)
+                self.assertTrue(applied.is_set(), "TUI did not apply preview: %s; %s" % (seen, frames.read_text()[-3000:]))
+                self.assertEqual(len(seen), 2)
+                self.assertEqual(seen[1]["args"], {"apply": True, "refresh_prompts": False})
+                self.assertNotEqual(seen[0]["rid"], seen[1]["rid"])
+                self.assertEqual(errors, [])
+            finally:
+                stop.set()
+                if proc.poll() is None:
+                    os.write(master, b"\x03")
+                    try:
+                        proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                os.close(master)
+                os.close(slave)
+                worker.join(timeout=2)
+
     def offline_tui(self, root, keys=b""):
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))

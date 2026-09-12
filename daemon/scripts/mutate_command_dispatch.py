@@ -84,8 +84,8 @@ MUTANTS = [
      "      a.every((v, i) => equal(v, b[i]))"),
     # --- the gates -------------------------------------------------------------
     ("gate: a `config` read republishes the config too", DISPATCH,
-     '      return isRecord(args) && typeof args["value"] === "string"',
-     "      return isRecord(args)"),
+     'name === "config" && isRecord(args) && typeof args["key"] === "string" && typeof args["value"] === "string"',
+     'name === "config" && isRecord(args) && typeof args["key"] === "string"' ),
     ("gate: `switch_character` reads the requested name, not the accepted one", DISPATCH,
      '  const selected = isRecord(data) ? data["character"] : undefined;',
      '  const selected = isRecord(data) ? data["name"] : undefined;'),
@@ -104,28 +104,28 @@ MUTANTS = [
 
     # --- the effects, and their order ------------------------------------------
     ("effects: a runtime set never reaches the registry", DISPATCH,
-     "  await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);\n",
+     "  if (ctx.character !== undefined) await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);\n",
      ""),
     ("effects: a runtime set never reaches the schedulers", DISPATCH,
      "  ctx.runtime.reloadRuntimeConfig(ctx.config);\n  return invalidated",
      "  return invalidated"),
     ("effects: the schedulers are updated before the registry", DISPATCH,
-     "  await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);\n"
+     "  if (ctx.character !== undefined) await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);\n"
      "  ctx.runtime.reloadRuntimeConfig(ctx.config);",
      "  ctx.runtime.reloadRuntimeConfig(ctx.config);\n"
-     "  await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);"),
+     "  if (ctx.character !== undefined) await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);"),
     ("effects: a reset adopts the daemon's config instead of the command's", DISPATCH,
      "  const summary = await ctx.runtime.applyReloadedConfig(fresh);",
      "  const summary = await ctx.runtime.applyReloadedConfig(ctx.runtime.globalConfig());"),
     ("effects: restart_required is computed after the adoption", DISPATCH,
-     "  const restart = { restart_required: restartRequiredChanges(ctx.runtime.globalConfig(), fresh) };\n"
+     "  const restart = { restart_required: isRecord(data) && Object.hasOwn(data, \"restart_required\") ? data[\"restart_required\"] : restartRequiredChanges(ctx.runtime.globalConfig(), fresh) };\n"
      "  if (!applied) return restart;\n\n"
      "  const summary = await ctx.runtime.applyReloadedConfig(fresh);",
      "  if (!applied) {\n"
      "    return { restart_required: restartRequiredChanges(ctx.runtime.globalConfig(), fresh) };\n"
      "  }\n\n"
      "  const summary = await ctx.runtime.applyReloadedConfig(fresh);\n"
-     "  const restart = { restart_required: restartRequiredChanges(ctx.runtime.globalConfig(), fresh) };"),
+     "  const restart = { restart_required: isRecord(data) && Object.hasOwn(data, \"restart_required\") ? data[\"restart_required\"] : restartRequiredChanges(ctx.runtime.globalConfig(), fresh) };"),
     ("effects: the check phase compares against the merged config, not the file", DISPATCH,
      "  const fresh = applied ? ctx.config : ctx.runtime.reloadGlobalConfig();",
      "  const fresh = ctx.config;"),

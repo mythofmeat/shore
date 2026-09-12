@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 
 test("a real browser creates, chats, edits, forks, confirms deletion and recovers its draft", async ({ page }) => {
   const errors: string[] = [];

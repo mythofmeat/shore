@@ -8,6 +8,7 @@ import { characterInfo, createCharacter, listCharacters, switchCharacter } from 
 import { archiveThread, forkThread, listThreads, newThread, switchThread, threadHome, threadLabel, threadModel } from "./threads.ts";
 import { threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
+import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
 import { listProviders, listProviderModels, refreshProviderModels, refreshAllProviderModels, type ProvidersContext } from "./providers.ts";
 
 export interface CommandOperationContext {
@@ -36,6 +37,9 @@ function register<N extends OperationName>(
 const characterPresentation = {
   category: "Characters", scope: "global", prerequisites: [], effects: ["read"], confirmation: "none",
 } as const;
+const configPresentation = {
+  category: "Configuration", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none",
+} as const;
 const providerPresentation = {
   category: "Providers", scope: "global", prerequisites: [], effects: ["read"], confirmation: "none",
 } as const;
@@ -55,6 +59,20 @@ const historyFields = {
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  config: register("config", { ...configPresentation, label: "Read or edit configuration", effects: ["read", "config_write"], fields: {
+    key: { label: "Configuration key", choices: "config_keys", hint: "Omit to inspect the complete configuration" },
+    value: { label: "New value", multiline: true, hint: "Omit to read; setting a value also requires a key. Lists accept bracketed values." },
+  } }, ({ session }, args) => config(session, args)),
+  config_schema: register("config_schema", { ...configPresentation, label: "Browse configuration schema", fields: {} },
+    ({ session }) => configSchemaCommand(session)),
+  config_check: register("config_check", { ...configPresentation, label: "Check configuration", fields: {} },
+    ({ session }) => configCheck(session, session.env ?? process.env)),
+  config_reload: register("config_reload", { ...configPresentation, label: "Reload configuration", effects: ["config_write"], fields: {
+    apply: { label: "Apply configuration", hint: "Omit or leave false to preview changes without applying" },
+    refresh_prompts: { label: "Refresh prompt snapshot", hint: "Requires a selected character and Apply configuration" },
+  } }, ({ session }, args) => configReload(session, args)),
+  tools: register("tools", { ...configPresentation, label: "Inspect tool access", fields: {} },
+    ({ session, deps }) => tools(session, (deps.runTool?.mcpTools() ?? []).map((tool) => tool.full_name))),
   list_providers: register("list_providers", { ...providerPresentation, label: "Browse providers", fields: {} },
     (context) => listProviders(providersContext(context))),
   list_provider_models: register("list_provider_models", { ...providerPresentation, label: "Browse provider models", fields: {

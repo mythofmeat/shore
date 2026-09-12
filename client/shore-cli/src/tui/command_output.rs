@@ -288,11 +288,6 @@ pub(crate) fn render(
     character: &str,
 ) -> Option<String> {
     let command = crate::cli::parse_palette_command(input).ok()?;
-    if matches!(&command, CliCommand::Provider { .. })
-        && let Err(error) = crate::run::validate_provider_output(wire_name, data)
-    {
-        return Some(format!("Invalid provider result: {error}"));
-    }
     if matches!(&command, CliCommand::Config { path: true, .. }) {
         return Some(
             data.get("config_dir")
@@ -302,6 +297,13 @@ pub(crate) fn render(
                     str::to_owned,
                 ),
         );
+    }
+    if matches!(
+        &command,
+        CliCommand::Provider { .. } | CliCommand::Config { .. }
+    ) && let Err(error) = crate::run::validate_registered_output(wire_name, data)
+    {
+        return Some(format!("Invalid operation result: {error}"));
     }
     let specialized_json = matches!(
         &command,
@@ -541,7 +543,7 @@ mod provider_contract_tests {
             &serde_json::json!({"providers":[{"name":"incomplete"}]}),
             "ada",
         );
-        assert!(invalid.is_some_and(|text| text.starts_with("Invalid provider result:")));
+        assert!(invalid.is_some_and(|text| text.starts_with("Invalid operation result:")));
         let data = serde_json::json!({"providers":[],"future":"inspectable"});
         let output = render("provider --json", "list_providers", &data, "ada").unwrap();
         assert_eq!(
@@ -580,9 +582,10 @@ mod tests {
             "config_schema",
             &serde_json::json!({
                 "schema": [
-                    { "key": "cache.ttl", "type": "duration", "settable": true },
-                    { "key": "daemon.addr", "type": "string", "settable": true }
-                ]
+                    { "key": "cache.ttl", "type": "duration", "kind": "duration", "settable": true, "optional": false, "restart_required": false, "secret": false, "values": ["1h"] },
+                    { "key": "daemon.addr", "type": "string", "kind": "string", "settable": true, "optional": false, "restart_required": true, "secret": false, "values": [] }
+                ],
+                "sources": {"chat_models":[],"embedding_models":[],"image_models":[],"tools":[],"subagents":[],"characters":[],"providers":[]}
             }),
             "ada",
         )

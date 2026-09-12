@@ -88,7 +88,8 @@
             "Characters",
             "Threads",
             "Conversation",
-            "Providers"
+            "Providers",
+            "Configuration"
           ]
         },
         "OperationScope": {
@@ -114,7 +115,8 @@
             "history_write",
             "selection",
             "model_selection",
-            "provider_discovery"
+            "provider_discovery",
+            "config_write"
           ]
         },
         "OperationConfirmation": {
@@ -164,7 +166,603 @@
             "characters",
             "threads",
             "models",
+            "providers",
+            "config_keys"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "config",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConfigArgs",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConfigResult",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConfigSetResult"
+        },
+        {
+          "$ref": "#/$defs/ConfigView"
+        }
+      ],
+      "$defs": {
+        "ConfigSetResult": {
+          "type": "object",
+          "properties": {
+            "set": {
+              "type": "string"
+            },
+            "value": true,
+            "previous": true,
+            "file": {
+              "type": "string"
+            },
+            "action": {
+              "type": "string"
+            },
+            "restart_required": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "masked_by_preference": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "invalidated": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConfigInvalidated"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "set",
+            "value",
+            "previous",
+            "file",
+            "action",
+            "restart_required",
+            "masked_by_preference"
+          ]
+        },
+        "ConfigInvalidated": {
+          "type": "object",
+          "properties": {
+            "merged_character_configs": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "character_discovery": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "removed_character_engines": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0
+            }
+          }
+        },
+        "ConfigView": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "config": true,
+            "defaults": true
+          },
+          "required": [
+            "config",
+            "defaults"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "config_check",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConfigCheckResult",
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "info": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "config_dir": {
+          "type": "string"
+        },
+        "data_dir": {
+          "type": "string"
+        },
+        "cache_dir": {
+          "type": "string"
+        },
+        "chat_models": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "providers": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "valid",
+        "warnings",
+        "info",
+        "config_dir",
+        "data_dir",
+        "cache_dir",
+        "chat_models",
+        "providers"
+      ]
+    }
+  },
+  {
+    "name": "config_schema",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConfigSchemaResult",
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigSchemaEntry"
+          }
+        },
+        "sources": {
+          "$ref": "#/$defs/ConfigSources"
+        }
+      },
+      "required": [
+        "schema",
+        "sources"
+      ],
+      "$defs": {
+        "ConfigSchemaEntry": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/ConfigKind"
+            },
+            "item_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConfigKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "width": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConfigWidth"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "type": "string"
+            },
+            "settable": {
+              "type": "boolean"
+            },
+            "optional": {
+              "type": "boolean"
+            },
+            "restart_required": {
+              "type": "boolean"
+            },
+            "secret": {
+              "type": "boolean"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConfigSource"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "key_source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConfigSource"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "key",
+            "kind",
+            "type",
+            "settable",
+            "optional",
+            "restart_required",
+            "secret",
+            "values"
+          ]
+        },
+        "ConfigKind": {
+          "type": "string",
+          "enum": [
+            "boolean",
+            "string",
+            "integer",
+            "float",
+            "duration",
+            "enum",
+            "list",
+            "map",
+            "table",
+            "unknown"
+          ]
+        },
+        "ConfigWidth": {
+          "type": "string",
+          "enum": [
+            "usize",
+            "u32",
+            "u64"
+          ]
+        },
+        "ConfigSource": {
+          "type": "string",
+          "enum": [
+            "chat_models",
+            "embedding_models",
+            "image_models",
+            "tools",
+            "subagents",
+            "characters",
             "providers"
+          ]
+        },
+        "ConfigSources": {
+          "type": "object",
+          "properties": {
+            "chat_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "embedding_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "image_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subagents": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "characters": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "providers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "chat_models",
+            "embedding_models",
+            "image_models",
+            "tools",
+            "subagents",
+            "characters",
+            "providers"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "config_reload",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConfigReloadArgs",
+      "type": "object",
+      "properties": {
+        "apply": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "refresh_prompts": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ConfigReloadResult",
+      "type": "object",
+      "properties": {
+        "applied": {
+          "type": "boolean"
+        },
+        "config_path": {
+          "type": "string"
+        },
+        "character": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "changed_prompt_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "prompts_refreshed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "restart_required": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigInvalidated"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "applied",
+        "config_path",
+        "character",
+        "changed_prompt_files"
+      ],
+      "$defs": {
+        "ConfigInvalidated": {
+          "type": "object",
+          "properties": {
+            "merged_character_configs": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "character_discovery": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "removed_character_engines": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "tools",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ToolAccessResult",
+      "type": "object",
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ToolAccess"
+          }
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubagentAccess"
+          }
+        },
+        "mcp": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "tools",
+        "subagents",
+        "mcp",
+        "warnings"
+      ],
+      "$defs": {
+        "ToolAccess": {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "type": "string"
+            },
+            "main": {
+              "type": "boolean"
+            },
+            "subagents": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "tool",
+            "main",
+            "subagents"
+          ]
+        },
+        "SubagentAccess": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "tools",
+            "model"
           ]
         }
       }

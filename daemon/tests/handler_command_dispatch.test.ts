@@ -492,7 +492,7 @@ describe("every other command", () => {
   test("an answer that is not an object keeps its shape, and its effects run", async () => {
     const f = fakes();
 
-    expect(await afterCommand("config", { value: "false" }, ["a", "b"], f.ctx)).toEqual(["a", "b"]);
+    expect(await afterCommand("config", { key: "defaults.stream", value: "false" }, ["a", "b"], f.ctx)).toEqual(["a", "b"]);
     expect(f.log.order).toEqual(["effective", "schedulers"]);
   });
 });

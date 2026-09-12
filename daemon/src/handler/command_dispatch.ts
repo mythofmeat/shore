@@ -39,6 +39,19 @@ export interface DispatchContext {
   readonly handshake: HandshakeProvider;
 }
 
+type ConfigurationDispatchContext = Pick<DispatchContext, "config" | "runtime"> & { character?: string };
+
+export async function afterConfigurationCommand(name: string, args: unknown, data: unknown, ctx: ConfigurationDispatchContext): Promise<unknown> {
+  const extra = await configurationAnnotations(name, args, data, ctx);
+  return extra === undefined || !isRecord(data) ? data : { ...data, ...extra };
+}
+
+async function configurationAnnotations(name: string, args: unknown, data: unknown, ctx: ConfigurationDispatchContext): Promise<Record<string, unknown> | undefined> {
+  if (name === "config_reload") return afterConfigReload(data, ctx);
+  if (name === "config" && isRecord(args) && typeof args["key"] === "string" && typeof args["value"] === "string") return afterConfigSet(data, ctx);
+  return undefined;
+}
+
 export async function afterCommand(
   name: string,
   args: unknown,
@@ -57,12 +70,8 @@ async function annotations(
   ctx: DispatchContext,
 ): Promise<Record<string, unknown> | undefined> {
   switch (name) {
-    case "config":
-      return isRecord(args) && typeof args["value"] === "string"
-        ? await afterConfigSet(data, ctx)
-        : undefined;
-    case "config_reload":
-      return await afterConfigReload(data, ctx);
+    case "config": case "config_reload":
+      return configurationAnnotations(name, args, data, ctx);
     case "switch_model":
     case "reset_model":
     case "set_model_setting":
@@ -100,22 +109,22 @@ async function afterChatModelChange(
 
 async function afterConfigSet(
   data: unknown,
-  ctx: DispatchContext,
+  ctx: ConfigurationDispatchContext,
 ): Promise<Record<string, unknown>> {
-  await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);
+  if (ctx.character !== undefined) await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);
   ctx.runtime.reloadRuntimeConfig(ctx.config);
   return invalidated(data, { merged_character_configs: true });
 }
 
 async function afterConfigReload(
   data: unknown,
-  ctx: DispatchContext,
+  ctx: ConfigurationDispatchContext,
 ): Promise<Record<string, unknown> | undefined> {
   const applied = isRecord(data) && data["applied"] === true;
   const fresh = applied ? ctx.config : ctx.runtime.reloadGlobalConfig();
   if (fresh === undefined) return undefined;
 
-  const restart = { restart_required: restartRequiredChanges(ctx.runtime.globalConfig(), fresh) };
+  const restart = { restart_required: isRecord(data) && Object.hasOwn(data, "restart_required") ? data["restart_required"] : restartRequiredChanges(ctx.runtime.globalConfig(), fresh) };
   if (!applied) return restart;
 
   const summary = await ctx.runtime.applyReloadedConfig(fresh);

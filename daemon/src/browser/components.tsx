@@ -42,15 +42,15 @@ export function Blocks({ blocks, reasoning, tools, openImage }: { blocks: Conten
 }
 
 type ChoiceLists = Partial<Record<NonNullable<OperationField["choices"]>, string[]>>;
-export function Field({ control, value, change, label, presentation, choices = {} }: {
-  control: Control; value: unknown; change: (value: unknown) => void; label: string; presentation?: OperationField; choices?: ChoiceLists;
+export function Field({ control, value, change, label, presentation, choices = {}, suggestions, secret = false }: {
+  control: Control; value: unknown; change: (value: unknown) => void; label: string; presentation?: OperationField; choices?: ChoiceLists; suggestions?: string[]; secret?: boolean;
 }) {
   const id = useId();
   switch (control.kind) {
     case "string": {
       const options = control.choices;
-      const candidates = presentation?.choices === undefined ? undefined : choices[presentation.choices];
-      return <div className="field"><label htmlFor={id}>{label}</label>{options !== undefined ? <select id={id} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)}>{options.map((option) => <option key={option}>{option}</option>)}</select>
+      const candidates = suggestions ?? (presentation?.choices === undefined ? undefined : choices[presentation.choices]);
+      return <div className="field"><label htmlFor={id}>{label}</label>{secret ? <input id={id} type="password" autoComplete="new-password" value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} /> : options !== undefined ? <select id={id} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)}>{options.map((option) => <option key={option}>{option}</option>)}</select>
         : presentation?.multiline === true ? <textarea id={id} rows={5} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} />
           : <><input id={id} list={candidates === undefined ? undefined : `${id}-choices`} value={typeof value === "string" ? value : ""} onChange={(event) => change(event.target.value)} />{candidates === undefined ? null : <datalist id={`${id}-choices`}>{candidates.map((candidate) => <option key={candidate} value={candidate} />)}</datalist>}</>}</div>;
     }
@@ -59,14 +59,14 @@ export function Field({ control, value, change, label, presentation, choices = {
     case "null": return <p className="muted">{label}: explicitly unset</p>;
     case "array": {
       const items: unknown[] = Array.isArray(value) ? value : [];
-      return <fieldset><legend>{label}</legend>{items.map((item, index) => <div className="collection-row" key={index}><Field control={control.item} value={item} label={`${label} ${String(index + 1)}`} change={(next) => change(items.map((old, position) => position === index ? next : old))} /><button type="button" aria-label={`Remove ${label} ${String(index + 1)}`} onClick={() => change(items.filter((_, position) => position !== index))}>Remove</button></div>)}<button type="button" onClick={() => change([...items, initialValue(control.item)])}>Add {label.toLowerCase()}</button></fieldset>;
+      return <fieldset><legend>{label}</legend>{items.map((item, index) => <div className="collection-row" key={index}><Field control={control.item} value={item} label={`${label} ${String(index + 1)}`} choices={choices} {...(suggestions === undefined ? {} : { suggestions })} secret={secret} change={(next) => change(items.map((old, position) => position === index ? next : old))} /><button type="button" aria-label={`Remove ${label} ${String(index + 1)}`} onClick={() => change(items.filter((_, position) => position !== index))}>Remove</button></div>)}<button type="button" onClick={() => change([...items, initialValue(control.item)])}>Add {label.toLowerCase()}</button></fieldset>;
     }
     case "union": {
       const index = Math.max(0, control.options.findIndex((option) => acceptsKind(option, value)));
       const selected = control.options[index];
       return <fieldset><label className="field">{label} format<select value={index} onChange={(event) => {
         const option = control.options[Number(event.target.value)]; if (option !== undefined) change(initialValue(option));
-      }}>{control.options.map((option, position) => <option key={position} value={position}>{option.kind === "null" ? "Explicitly unset" : option.kind === "array" ? "Collection" : option.kind === "integer" ? "Whole number" : option.kind === "string" && option.choices !== undefined ? option.choices.join(" / ") : option.kind}</option>)}</select></label>{selected === undefined ? null : <Field control={selected} value={value} change={change} label={label} {...(presentation === undefined ? {} : { presentation })} choices={choices} />}</fieldset>;
+      }}>{control.options.map((option, position) => <option key={position} value={position}>{option.kind === "null" ? "Explicitly unset" : option.kind === "array" ? "Collection" : option.kind === "integer" ? "Whole number" : option.kind === "string" && option.choices !== undefined ? option.choices.join(" / ") : option.kind}</option>)}</select></label>{selected === undefined ? null : <Field control={selected} value={value} change={change} label={label} {...(presentation === undefined ? {} : { presentation })} choices={choices} {...(suggestions === undefined ? {} : { suggestions })} secret={secret} />}</fieldset>;
     }
     case "object": {
       const values = record(value);

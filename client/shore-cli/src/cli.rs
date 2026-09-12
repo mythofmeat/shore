@@ -1,10 +1,11 @@
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
-    ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, EditMessage,
-    EditMessageArgs, EmptyOperationArgs, GetMessage, GetMessageArgs, InjectSystem,
-    InjectSystemArgs, ListProviderModels, ListProviders, MessageReferences, Operation,
-    ProviderArgs, ProviderModelsArgs, RefreshAllProviderModels, RefreshProviderModels,
+    CheckConfiguration, ConfigArgs, Configuration, ConfigurationSchema, ConversationLog,
+    ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, EditMessage, EditMessageArgs,
+    EmptyOperationArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
+    ListProviderModels, ListProviders, MessageReferences, Operation, ProviderArgs,
+    ProviderModelsArgs, RefreshAllProviderModels, RefreshProviderModels, ToolAccessListing,
 };
 use shore_common::protocol::types::Role;
 use std::path::{Path, PathBuf};
@@ -2510,21 +2511,32 @@ pub(crate) fn to_swp_command(
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Tools { .. }),
             ..
-        } => Some(("tools", json!({}))),
+        } => operation_to_swp::<ToolAccessListing>(EmptyOperationArgs {}),
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Keys { .. }),
             ..
-        } => Some(("config_schema", json!({}))),
+        } => operation_to_swp::<ConfigurationSchema>(EmptyOperationArgs {}),
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Get { key, .. }),
             ..
-        } => Some(("config", json!({ "key": key }))),
+        } => operation_to_swp::<Configuration>(ConfigArgs {
+            key: Some(key.clone()),
+            value: None,
+        }),
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Set { key, value, .. }),
             ..
-        } => Some(("config", json!({ "key": key, "value": value }))),
-        CliCommand::Config { check: true, .. } => Some(("config_check", json!({}))),
-        CliCommand::Config { .. } => Some(("config", json!({ "key": null, "value": null }))),
+        } => operation_to_swp::<Configuration>(ConfigArgs {
+            key: Some(key.clone()),
+            value: Some(value.clone()),
+        }),
+        CliCommand::Config { check: true, .. } => {
+            operation_to_swp::<CheckConfiguration>(EmptyOperationArgs {})
+        }
+        CliCommand::Config { .. } => operation_to_swp::<Configuration>(ConfigArgs {
+            key: None,
+            value: None,
+        }),
 
         CliCommand::Usage { .. } => usage_to_swp(cmd, character),
     }

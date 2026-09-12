@@ -6,22 +6,14 @@ import {
 import { requiresRestart } from "./restart.ts";
 import { BUDGET_ALIASES, canonicalConfigPath, canonicalSettingKey, formatConfigPath, MODEL_FIELDS, NOTIFICATION_EVENTS, parseConfigPath, REMOVED_CONFIG } from "./surface.ts";
 
-export interface SchemaEntry {
-  key: string;
-  kind: ConfigTypeInfo["kind"];
-  item_kind: ConfigTypeInfo["kind"] | undefined;
-  width: "usize" | "u32" | "u64" | undefined;
-  type: string;
-  settable: boolean;
-  optional: boolean;
-  restart_required: boolean;
-  values: readonly string[];
-  source: ConfigValueSource | undefined;
-  key_source: ConfigValueSource | undefined;
+import { isSecretConfigPath } from "./serialize.ts";
+import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
+
+export type SchemaEntry = ConfigSchemaEntry & {
   description?: string;
   scope?: string;
   units?: string;
-}
+};
 
 const DURATION_EXAMPLES = ["0s", "30s", "5m", "1h", "12h", "7d"] as const;
 const BOOLEANS = ["true", "false"] as const;
@@ -91,18 +83,21 @@ function sourceOf(info: ConfigTypeInfo): ConfigValueSource | undefined {
 }
 
 function entry(key: string, info: ConfigTypeInfo): SchemaEntry {
+  const width = info.kind === "list" ? info.item?.width : info.width;
+  const source = sourceOf(info);
   return {
     key,
     kind: info.kind,
-    item_kind: info.item?.kind,
-    width: info.kind === "list" ? info.item?.width : info.width,
+    ...(info.item === undefined ? {} : { item_kind: info.item.kind }),
+    ...(width === undefined ? {} : { width }),
     type: describe(info),
     settable: settable(info),
     optional: info.optional === true,
     restart_required: requiresRestart(key),
-    values: candidates(info),
-    source: sourceOf(info),
-    key_source: info.keySource,
+    secret: isSecretConfigPath(key.split(".")),
+    values: [...candidates(info)],
+    ...(source === undefined ? {} : { source }),
+    ...(info.keySource === undefined ? {} : { key_source: info.keySource }),
   };
 }
 
@@ -154,7 +149,7 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
       path[2] = BUDGET_ALIASES.find((rule) => rule.legacy[0] === path[2])?.canonical[0] ?? path[2] as string;
     }
     const key = formatConfigPath(path);
-    out.push({ ...old, key, settable: old.settable && !path.includes("<index>"), description: describeOption(path), scope: "global or character", ...(unitsOf(path) === undefined ? {} : { units: unitsOf(path) as string }) });
+    out.push({ ...old, key, secret: isSecretConfigPath(path), settable: old.settable && !path.includes("<index>"), description: describeOption(path), scope: "global or character", ...(unitsOf(path) === undefined ? {} : { units: unitsOf(path) as string }) });
   }
   const add = (path: string[], info: ConfigTypeInfo): void => {
     const key = formatConfigPath(path);
