@@ -585,6 +585,31 @@ describe("deleting a character through the command path", () => {
 });
 
 describe("an export abandoned while it waits for the snapshot", () => {
+  test("trusted browser budgets reach archive handlers without leaking into native requests", async () => {
+    const source = await harness(["ada"]); source.wireArchive(new SnapshotGate());
+    const request = meta(null, "browser-archive");
+    const limited = { ...request, session: { ...request.session, archiveLimits: { bytes: 1, entries: 100 } } };
+    const output = join(source.dirs.cache, "limited.tar.gz");
+    const refusedExport = await dispatchCommand(source.deps, { name: "export_character", args: { character: "ada", output } }, limited);
+    expect(refusedExport).toMatchObject({ type: "error", rid: "browser-archive" });
+    if (refusedExport.type !== "error") throw new Error("Browser export exceeded its processing budget");
+    expect(refusedExport.message).toContain("browser archive processing limits");
+    expect(existsSync(output)).toBe(false);
+    expect(await dispatchCommand(source.deps, { name: "export_character", args: { character: "ada", output } }, request))
+      .toMatchObject({ type: "command_output", name: "export_character" });
+    expect(source.deps.commands.archive?.limits).toBeUndefined();
+    const target = await harness([]); target.wireArchive(new SnapshotGate());
+    const refusedImport = await dispatchCommand(target.deps, { name: "import_character", args: { archive: output } }, limited);
+    expect(refusedImport).toMatchObject({ type: "error", rid: "browser-archive" });
+    if (refusedImport.type !== "error") throw new Error("Browser import exceeded its processing budget");
+    expect(refusedImport.message).toContain("browser processing limit");
+    expect(existsSync(join(target.dirs.config, "characters", "ada"))).toBe(false);
+    expect(await dispatchCommand(target.deps, { name: "import_character", args: { archive: output } }, request))
+      .toMatchObject({ type: "command_output", name: "import_character" });
+    expect(existsSync(join(target.dirs.config, "characters", "ada", "workspace", "SOUL.md"))).toBe(true);
+    expect(target.deps.commands.archive?.limits).toBeUndefined();
+  });
+
   test("dispatchCommand does not stage the character after its client leaves", async () => {
     const h = await harness(["ada"]);
     const gate = new SnapshotGate();

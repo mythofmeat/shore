@@ -72,6 +72,32 @@ test("the compiled executable serves a real browser from an empty directory and 
           await expect(page.getByRole("heading", { name: "packaged / main" })).toBeVisible();
           await page.reload();
           await expect(page.getByRole("heading", { name: "packaged / main" })).toBeVisible();
+          await page.getByRole("button", { name: "Character archives", exact: true }).click();
+          await dialog.getByRole("button", { name: "Prepare archive", exact: true }).click();
+          await expect(dialog.getByText("Export ready to download.", { exact: true })).toBeVisible();
+          const downloading = page.waitForEvent("download");
+          await dialog.getByRole("button", { name: "Download archive", exact: true }).click();
+          const download = await downloading;
+          expect(download.suggestedFilename()).toBe("packaged.shore.tar.gz");
+          const archive = join(root, "picked-backup.tar.gz");
+          await download.saveAs(archive);
+          await dialog.getByRole("button", { name: "Delete character…", exact: true }).click();
+          await dialog.getByLabel("Repeat character name", { exact: true }).fill("packaged");
+          await dialog.getByRole("button", { name: "Run action" }).click();
+          await dialog.getByRole("button", { name: "Confirm delete", exact: true }).click();
+          await expect(dialog.getByRole("heading", { name: "Action completed" })).toBeVisible();
+          await expect(page.getByRole("navigation", { name: "Characters" })).not.toContainText("packaged");
+          await dialog.getByRole("button", { name: "Close dialog" }).click();
+          await page.getByRole("button", { name: "Character archives", exact: true }).click();
+          await expect(dialog.getByLabel("Archive file", { exact: true })).toBeEnabled();
+          await dialog.getByLabel("Archive file", { exact: true }).setInputFiles(archive);
+          await dialog.getByRole("button", { name: "Import archive", exact: true }).click();
+          await dialog.getByRole("button", { name: "Confirm import", exact: true }).click();
+          await expect(dialog.getByText("Import completed for packaged. Temporary upload removed.", { exact: true })).toBeVisible();
+          await dialog.getByRole("button", { name: "Refresh characters", exact: true }).click();
+          await dialog.getByRole("button", { name: "Close dialog" }).click();
+          await page.getByRole("navigation", { name: "Characters" }).getByRole("button", { name: "P packaged" }).click();
+          await expect(page.getByRole("heading", { name: "packaged / main" })).toBeVisible();
           expect(pageErrors).toEqual([]);
         } finally { await context.close(); }
       } finally {

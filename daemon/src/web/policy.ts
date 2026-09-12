@@ -64,10 +64,14 @@ export function securityHeaders(): Headers {
   });
 }
 
+export class WebBodyTooLarge extends Error {
+  constructor() { super("Request body is too large"); }
+}
+
 export async function readSmallJson(request: Request, limit: number): Promise<unknown> {
   if (request.headers.get("content-type")?.split(";", 1)[0]?.trim() !== "application/json") throw new Error("Expected application/json");
   const length = Number(request.headers.get("content-length") ?? "0");
-  if (!Number.isSafeInteger(length) || length < 0 || length > limit) throw new Error("Request body is too large");
+  if (!Number.isSafeInteger(length) || length < 0 || length > limit) throw new WebBodyTooLarge();
   const reader = request.body?.getReader();
   if (reader === undefined) throw new Error("Expected a JSON body");
   let bytes = 0;
@@ -79,7 +83,7 @@ export async function readSmallJson(request: Request, limit: number): Promise<un
       const chunk: unknown = next.value;
       if (!(chunk instanceof Uint8Array)) throw new Error("Expected a byte stream");
       bytes += chunk.byteLength;
-      if (bytes > limit) throw new Error("Request body is too large");
+      if (bytes > limit) throw new WebBodyTooLarge();
       chunks.push(chunk);
     }
   } finally {

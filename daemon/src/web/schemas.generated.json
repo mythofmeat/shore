@@ -80,5 +80,363 @@
         ]
       }
     }
+  },
+  "archive_export": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebArchiveExport",
+    "type": "object",
+    "properties": {
+      "character": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "character"
+    ]
+  },
+  "archive_info": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebArchiveInfo",
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "filename": {
+        "type": "string"
+      },
+      "bytes": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      },
+      "expires_at": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      },
+      "phase": {
+        "$ref": "#/$defs/WebArchivePhase"
+      },
+      "downloadable": {
+        "type": "boolean"
+      },
+      "result": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/WebArchiveResult"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "filename",
+      "bytes",
+      "expires_at",
+      "phase",
+      "downloadable"
+    ],
+    "$defs": {
+      "WebArchivePhase": {
+        "type": "string",
+        "enum": [
+          "uploading",
+          "ready",
+          "exporting",
+          "importing",
+          "imported",
+          "failed",
+          "uncertain"
+        ]
+      },
+      "WebArchiveResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "export_character"
+              },
+              "data": {
+                "$ref": "#/$defs/ExportCharacterResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "import_character"
+              },
+              "data": {
+                "$ref": "#/$defs/ImportCharacterResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          }
+        ]
+      },
+      "ExportCharacterResult": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "archive": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "live": {
+            "type": "boolean"
+          },
+          "call_diagnostics": {
+            "type": "string"
+          },
+          "external_memory": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "character",
+          "archive",
+          "bytes",
+          "live",
+          "call_diagnostics",
+          "external_memory"
+        ]
+      },
+      "ImportCharacterResult": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "archive": {
+            "type": "string"
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "external_memory": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "character",
+          "archive",
+          "imported",
+          "external_memory"
+        ]
+      }
+    }
+  },
+  "archive_list": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebArchiveList",
+    "type": "object",
+    "properties": {
+      "archives": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/WebArchiveInfo"
+        }
+      },
+      "max_upload_bytes": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      },
+      "max_expanded_bytes": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "archives",
+      "max_upload_bytes",
+      "max_expanded_bytes"
+    ],
+    "$defs": {
+      "WebArchiveInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "phase": {
+            "$ref": "#/$defs/WebArchivePhase"
+          },
+          "downloadable": {
+            "type": "boolean"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WebArchiveResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "bytes",
+          "expires_at",
+          "phase",
+          "downloadable"
+        ]
+      },
+      "WebArchivePhase": {
+        "type": "string",
+        "enum": [
+          "uploading",
+          "ready",
+          "exporting",
+          "importing",
+          "imported",
+          "failed",
+          "uncertain"
+        ]
+      },
+      "WebArchiveResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "export_character"
+              },
+              "data": {
+                "$ref": "#/$defs/ExportCharacterResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "import_character"
+              },
+              "data": {
+                "$ref": "#/$defs/ImportCharacterResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          }
+        ]
+      },
+      "ExportCharacterResult": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "archive": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "live": {
+            "type": "boolean"
+          },
+          "call_diagnostics": {
+            "type": "string"
+          },
+          "external_memory": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "character",
+          "archive",
+          "bytes",
+          "live",
+          "call_diagnostics",
+          "external_memory"
+        ]
+      },
+      "ImportCharacterResult": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "archive": {
+            "type": "string"
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "external_memory": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "character",
+          "archive",
+          "imported",
+          "external_memory"
+        ]
+      }
+    }
   }
 }
