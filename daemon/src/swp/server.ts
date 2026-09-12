@@ -172,6 +172,7 @@ export class Server {
   readonly #connections = new Set<Promise<void>>();
   readonly #localPeers = new Set<() => Promise<void>>();
   #stopped = false;
+  #serving = false;
   readonly #stopController = new AbortController();
   #handshake: HandshakeProvider | undefined;
   #controlHandler: ((msg: ControlRoutedMessage) => Promise<void>) | undefined;
@@ -366,7 +367,10 @@ export class Server {
 
   async bind(): Promise<{ readonly host: string; readonly port: number }> {
     const { host, port } = splitAddr(this.#config.addr);
-    const listener = createServer({ noDelay: true });
+    const listener = createServer({ noDelay: true }, (socket) => {
+      if (!this.#serving || this.#stopped) { socket.destroy(); return; }
+      this.#accept(socket);
+    });
     this.#listener = listener;
 
     await new Promise<void>((resolve, reject) => {
@@ -396,9 +400,7 @@ export class Server {
           : `${address.address}:${address.port}`,
     });
 
-    listener.on("connection", (socket) => {
-      this.#accept(socket);
-    });
+    this.#serving = true;
 
     await this.#shutdownSignal;
 
