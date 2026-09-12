@@ -3,14 +3,76 @@ import { commandCatalogue, commandOperations, type CommandOperationContext } fro
 import { assertContractBindings, parseOperationInput, parseOperationResult } from "../src/operations/contracts.ts";
 import { defineOperation, discoverOperations } from "../src/operations/registry.ts";
 import { validOperationInput, validOperationResult } from "../src/browser/operation_validators.generated.js";
+import { operationPolicy } from "../src/operations/policy.ts";
+import memoryReports from "../../client/shore-cli/tests/fixtures/memory_compaction.json" with { type: "json" };
+import memorySegments from "../../client/shore-cli/tests/fixtures/memory_segments.json" with { type: "json" };
 
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
 
 describe("executable operation contracts", () => {
+  test("memory inputs retain null, omission, zero and false without coercion", () => {
+    for (const [name, input] of [
+      ["compact", {}], ["compact", { dry_run: true, restart: false, keep_turns: 0 }], ["compact", { dry_run: null, restart: null, keep_turns: null }],
+      ["clear", { exclude: false, note: null }], ["segments", {}], ["segments", { action: null }],
+      ["segments", { action: "note", index: 0, value: null }], ["segments", { action: "label", index: 0, value: "" }],
+    ] as const) {
+      expect<unknown>(parseOperationInput(name, input)).toEqual(input);
+      expect(validOperationInput(name, input)).toBe(true);
+    }
+    for (const [name, input] of [
+      ["compact", { dry_run: "true" }], ["compact", { restart: 1 }], ["compact", { keep_turns: -1 }], ["compact", { keep_turns: 1.5 }],
+      ["compact", { keep_turns: Number.MAX_SAFE_INTEGER + 1 }], ["clear", { exclude: "false" }], ["clear", { note: 0 }],
+      ["segments", { action: "remove" }], ["segments", { index: -1 }], ["segments", { index: Number.MAX_SAFE_INTEGER + 1 }], ["segments", { value: false }],
+    ] as const) {
+      expect(() => parseOperationInput(name, input)).toThrow();
+      expect(validOperationInput(name, input)).toBe(false);
+    }
+  });
+
+  test("every compaction outcome and segment variant requires complete fields and keeps future details", () => {
+    const segment = memorySegments.segments[0];
+    if (segment === undefined) throw new Error("Missing memory fixture");
+    for (const [name, result] of [
+      ...memoryReports.map((report) => ["compact", report] as const),
+      ["segments", memorySegments], ["segments", { character: "ada", thread: "main", segment, messages: [] }],
+      ["segments", { character: "ada", thread: "main", segment, action: "note" }],
+      ["clear", { status: "clear", character: "ada", thread: "main", message_count: 2, segment }],
+      ["clear", { status: "clear", character: "ada", thread: "main", message_count: 0, segment: null }],
+    ] as const) {
+      const future = { ...result, future_detail: { text: "still inspectable" } };
+      expect<unknown>(parseOperationResult(name, future)).toEqual(future);
+      expect(validOperationResult(name, future)).toBe(true);
+      for (const key of Object.keys(result)) {
+        const incomplete = Object.fromEntries(Object.entries(result).filter(([field]) => field !== key));
+        expect(() => parseOperationResult(name, incomplete), `${name}.${key}`).toThrow();
+        expect(validOperationResult(name, incomplete), `${name}.${key}`).toBe(false);
+      }
+    }
+    expect(validOperationResult("segments", { ...memorySegments, segments: [{ ...segment, excluded: "unknown" }] })).toBe(false);
+  });
+
+  test("argument policies distinguish previews and segment reads from context changes", () => {
+    const catalogue = commandCatalogue();
+    const compact = catalogue.find((operation) => operation.name === "compact");
+    const segments = catalogue.find((operation) => operation.name === "segments");
+    if (compact === undefined || segments === undefined) throw new Error("Missing memory operations");
+    expect(operationPolicy(compact, { dry_run: true })).toMatchObject({ effects: ["read", "provider_call"], confirmation: "none" });
+    for (const input of [{}, { dry_run: false }, { dry_run: null }]) expect(operationPolicy(compact, input)).toMatchObject({ confirmation: "archive" });
+    for (const input of [{}, { action: null }, { action: "list" }, { action: "show", index: 0 }]) expect(operationPolicy(segments, input).effects).toEqual(["read"]);
+    for (const action of ["exclude", "include", "label", "note"]) expect(operationPolicy(segments, { action }).effects).toEqual(["history_write"]);
+    for (const value of [null, true, false, 0, ""]) {
+      const operation = { ...compact, policies: [{ condition: { kind: "equals" as const, field: "test", value }, effects: ["read" as const], confirmation: "none" as const }] };
+      expect(operationPolicy(operation, { test: value }).confirmation).toBe("none");
+      expect(operationPolicy(operation, {}).confirmation).toBe("archive");
+      expect(operationPolicy(operation, { test: value === "" ? "other" : String(value) }).confirmation).toBe("archive");
+    }
+    const invalid = { ...commandOperations, compact: { ...commandOperations.compact, presentation: { ...commandOperations.compact.presentation, policies: [{ condition: { kind: "absent" as const, field: "typo" }, effects: [], confirmation: "none" as const }] } } };
+    expect(() => discoverOperations(invalid)).toThrow("Unknown policy field: compact.typo");
+  });
   test("diagnostic filters are shared by browser and daemon without string coercion or unsafe IDs", () => {
     for (const [name, input] of [
       ["call_log", { id: -1, against: 0, diff: true, wire: true, character: null, call_type: null, count: 0 }],
-      ["transcript", { source: "memory_recall", count: null }],
+      ["transcript", { source: "heartbeat", count: null }],
       ["subagent_trace", { ids: ["parent-1", "parent-2"], count: 0 }],
       ["heartbeat_log", { count: 0 }], ["error_log", {}], ["session_activate", {}],
     ] as const) {

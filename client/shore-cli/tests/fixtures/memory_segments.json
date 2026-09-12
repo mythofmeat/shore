@@ -1,0 +1,19 @@
+{
+  "character": "ada",
+  "thread": "main",
+  "count": 1,
+  "segments": [
+    {
+      "index": 4,
+      "compacted_at": "2026-08-20T12:00:00Z",
+      "first_message_at": "2026-08-20T10:00:00Z",
+      "last_message_at": "2026-08-20T11:00:00Z",
+      "message_count": 2,
+      "excluded": false,
+      "label": null,
+      "note": null,
+      "memory_before": null,
+      "memory_after": null
+    }
+  ]
+}

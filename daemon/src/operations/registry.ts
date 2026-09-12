@@ -2,6 +2,7 @@ import type { OperationInput, OperationName, OperationResult } from "./contracts
 import { assertContractBindings, operationSchema, parseOperationInput, parseOperationResult } from "./contracts.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { OperationField } from "../protocol/OperationField.ts";
+import type { OperationPolicy } from "../protocol/OperationPolicy.ts";
 
 export type FieldPresentation = OperationField;
 
@@ -9,6 +10,7 @@ export interface OperationPresentation<N extends OperationName> extends Pick<Ope
   prerequisites: Readonly<OperationDescriptor["prerequisites"]>;
   effects: Readonly<OperationDescriptor["effects"]>;
   fields: { [K in keyof OperationInput<N>]-?: FieldPresentation };
+  policies?: readonly OperationPolicy[];
 }
 
 export interface OperationRegistration<C, N extends OperationName> {
@@ -45,6 +47,8 @@ export function discoverOperations<C>(registry: OperationRegistry<C>) {
     if (JSON.stringify(fields) !== JSON.stringify(Object.keys(presentation.fields).sort())) {
       throw new Error(`Unaccounted operation fields: ${name}`);
     }
-    return { name, ...presentation, prerequisites: [...presentation.prerequisites], effects: [...presentation.effects], input: schema.input, output: schema.output };
+    const { policies, ...metadata } = presentation;
+    for (const policy of policies ?? []) if (!fields.includes(policy.condition.field)) throw new Error(`Unknown policy field: ${name}.${policy.condition.field}`);
+    return { name, ...metadata, ...(policies === undefined ? {} : { policies: [...policies] }), prerequisites: [...presentation.prerequisites], effects: [...presentation.effects], input: schema.input, output: schema.output };
   });
 }

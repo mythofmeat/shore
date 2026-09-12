@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { startDaemon } from "../../src/daemon/run.ts";
 import type { SidecarProvider } from "../../src/llm/types.ts";
 import { seedDiagnosticFixture } from "../support/diagnostic_fixture.ts";
+import { cacheFixture, compactionFixture, seedArchivedSegment } from "../support/memory_fixture.ts";
 
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
 await mkdir(join(root, "config"));
@@ -55,8 +56,10 @@ enabled = true
 bind_addr = "127.0.0.1:0"
 `);
 let generation = 0;
+const memoryStream = compactionFixture();
 const provider: SidecarProvider = {
   async *stream(request, signal) {
+    if (request.context?.call_type === "compaction") { yield* memoryStream(request, signal); return; }
     generation += 1;
     const question = request.messages.findLast((message) => message.role === "user")?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
     yield { type: "start", model: request.model };
@@ -69,7 +72,7 @@ const provider: SidecarProvider = {
     yield { type: "text", text };
     yield { type: "done", content: text, finish_reason: "end_turn", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
   },
-  generate() { throw new Error("Browser fixture requires streaming"); },
+  generate: cacheFixture,
 };
 
 try {
@@ -78,6 +81,7 @@ try {
     SHORE_TOKEN: "browser-test-token", SHORE_BROWSER_KEY: "test-key",
   }, providers: { anthropic: provider }, instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false });
   await seedDiagnosticFixture(daemon.runtime, "nova");
+  seedArchivedSegment(daemon.runtime, "recovery");
   process.once("SIGTERM", () => { daemon.stop(); });
   process.once("SIGINT", () => { daemon.stop(); });
   if (daemon.web === undefined) throw new Error("Browser fixture did not start its web listener");

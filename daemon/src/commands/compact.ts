@@ -14,7 +14,8 @@ import {
   type MemoryFileOp,
 } from "../memory/compaction/types.ts";
 import { CommandError, internalError, invalidRequest } from "./errors.ts";
-import type { Args } from "./navigation.ts";
+import type { OperationInput, OperationResult } from "../operations/types.ts";
+type Args = OperationInput<"compact">;
 
 const PREVIEW_CHARS = 200;
 
@@ -40,14 +41,10 @@ export function parseCompactArgs(args: Args): {
   restart: boolean;
   keepTurnsOverride: number | undefined;
 } {
-  const dry = args["dry_run"];
-  const restart = args["restart"];
-  const keep = args["keep_turns"];
   return {
-    dryRun: typeof dry === "boolean" ? dry : false,
-    restart: typeof restart === "boolean" ? restart : false,
-    keepTurnsOverride:
-      typeof keep === "number" && Number.isSafeInteger(keep) && keep >= 0 ? keep : undefined,
+    dryRun: args.dry_run ?? false,
+    restart: args.restart ?? false,
+    keepTurnsOverride: args.keep_turns ?? undefined,
   };
 }
 
@@ -55,7 +52,7 @@ export async function compact(
   engine: CompactEngine,
   ctx: CompactContext,
   args: Args,
-): Promise<unknown> {
+): Promise<OperationResult<"compact">> {
   return await withConversation(threadDataDir(ctx.config.dirs.data, engine.characterName, engine.thread ?? "main"), "rewrite", async () => {
     const { dryRun, restart, keepTurnsOverride } = parseCompactArgs(args);
     const character = engine.characterName;
@@ -100,7 +97,7 @@ export async function buildCompactionResponse(
   ctx: CompactContext,
   character: string,
   outcome: CompactionOutcome,
-): Promise<unknown> {
+): Promise<OperationResult<"compact">> {
   if (outcome.kind === "compacted") {
     shoreLog.info(
       `shore: compaction completed for ${character} ` +

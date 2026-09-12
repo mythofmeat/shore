@@ -1,3 +1,5 @@
+import { compact } from "./compact.ts";
+import { clear, segments } from "./segments.ts";
 import { status, errorLog, heartbeatLog, heartbeatTickNow, heartbeatSetDormant, heartbeatSetActive } from "./status.ts";
 import { statusContext } from "./status_context.ts";
 import { callLog, transcript } from "./call_log.ts";
@@ -79,6 +81,32 @@ const historyFields = {
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  compact: register("compact", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["history_write", "workspace_write", "provider_call"], confirmation: "archive", label: "Compact active context", fields: {
+    dry_run: { label: "Preview only", hint: "Uses the provider to preview memory writes without archiving the conversation" },
+    restart: { label: "Restart paused work", hint: "Discard the paused checkpoint and summarize again; already written memory files remain" },
+    keep_turns: { label: "Retain recent turns", hint: "Zero retains no recent user turns; omit for configured retention" },
+  }, policies: [{ condition: { kind: "equals", field: "dry_run", value: true }, effects: ["read", "provider_call"], confirmation: "none" }] }, (context, args) => {
+    const engine = engineOf(context);
+    const compaction = context.deps.compaction;
+    if (compaction === undefined) throw internalError("compact is not available in this build");
+    return compact(engine, { ...compaction, config: context.session.config, autonomy: context.deps.autonomy, run: { ...compaction.run, ...(context.session.emit === undefined ? {} : { emit: context.session.emit }) } }, args);
+  }),
+  segments: register("segments", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "none", label: "Inspect and manage segments", fields: {
+    action: { label: "Segment action", hint: "Omit to list segments; inspection and edits require an index" },
+    index: { label: "Segment index" },
+    value: { label: "Label or note", multiline: true, hint: "Used by label/note; explicitly unset or empty text clears the saved value" },
+  }, policies: [
+    { condition: { kind: "absent", field: "action" }, effects: ["read"], confirmation: "none" },
+    ...([null, "list", "show"] as const).map((value) => ({ condition: { kind: "equals" as const, field: "action", value }, effects: ["read" as const], confirmation: "none" as const })),
+  ] }, (context, args) => segments(context.session.dataDir, engineOf(context).characterName, engineOf(context).thread, args, context.deps.historyIndex)),
+  clear: register("clear", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "archive", label: "Clear active context", fields: {
+    exclude: { label: "Exclude from history search", hint: "The archived segment stays inspectable and can be included again" },
+    note: { label: "Archive note", multiline: true },
+  } }, (context, args) => clear(engineOf(context), {
+    dataDir: context.session.dataDir,
+    ...(context.deps.compaction?.repoint === undefined ? {} : { repoint: async (name) => await context.deps.compaction?.repoint?.(name, context.session.config) }),
+    onComplete: (name) => context.deps.autonomy.onCompactionComplete(name, 0),
+  }, args)),
   status: register("status", { ...diagnosticPresentation, label: "System status", fields: {} },
     (context) => status(statusContext(engineOf(context), context.session, context.deps))),
   error_log: register("error_log", { ...diagnosticPresentation, label: "Errors and key fallbacks", fields: { count: diagnosticCount } },
@@ -266,6 +294,7 @@ export function isRegisteredOperation(name: string): name is OperationName {
 }
 
 const prerequisiteAvailable: Record<OperationPrerequisite, (context: CommandOperationContext) => boolean> = {
+  compaction: (context) => context.deps.compaction !== undefined,
   threads: (context) => context.deps.threads !== undefined,
   autonomy: (context) => context.engine !== undefined && context.deps.autonomy.status(context.engine.characterName) !== undefined,
   keepalive: (context) => context.deps.keepalive !== undefined,
