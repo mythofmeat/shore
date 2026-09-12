@@ -1,5 +1,8 @@
 # Optional browser client — implementation record
 
+Implementation is paused at the user's request. See [the handover and resume prompt](WEB_GUI_HANDOVER.md)
+for the current checkpoint, verified results, remaining work and the next task.
+
 Full scope: [issue #214](https://github.com/mythofmeat/shore/issues/214). Completion means a usable
 graphical alternative for the union of CLI/TUI application workflows, with enforceable anti-drift
 checks. The generated action interface is a capability floor alongside designed conversation,
