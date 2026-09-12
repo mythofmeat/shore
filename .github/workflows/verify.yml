@@ -44,6 +44,11 @@ jobs:
           git diff --exit-code -- ../docs/capabilities/daemon.generated.json
           test -z "$(git ls-files --others --exclude-standard -- ../docs/capabilities/daemon.generated.json)"
       - run: bun run build
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:browser
+      - run: |
+          git diff --exit-code -- src/web/assets.generated.ts
+          test -z "$(git ls-files --others --exclude-standard -- src/web/assets.generated.ts)"
 
   client:
     name: Rust and generated protocol verification

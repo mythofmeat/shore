@@ -24,10 +24,12 @@ RUN addgroup -g "$USER_GID" "$USERNAME" \
 
 WORKDIR /app
 COPY --chown=${USER_UID}:${USER_GID}} ./daemon .
+COPY ./docs/capabilities /docs/capabilities
 RUN install -m 0755 bin/shore-patch.sh /usr/local/bin/shore-patch
 
 USER ${USERNAME}
 RUN bun install 
+RUN bun run browser:build
 
 ENV SHORE_ADDR=shore-daemon:7320
 ENV SHORE_CONFIG_DIR=/config
@@ -35,5 +37,6 @@ ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
 EXPOSE 7320
+EXPOSE 7340
 
 CMD ["bun", "run", "start"]

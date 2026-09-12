@@ -1,7 +1,7 @@
 import type { OperationInput, OperationName, OperationResult } from "../operations/types.ts";
 import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { BrowserConnection } from "./connection.ts";
-import { validOperationInput, validOperationResult } from "./operation_validators.generated.js";
+import { isOperationName, validOperationInput, validOperationResult } from "./operation_validators.generated.js";
 
 export class OperationFailure extends Error {
   constructor(readonly operation: OperationName, readonly completion: RequestFinished) {
@@ -12,6 +12,11 @@ export class OperationFailure extends Error {
 
 export class OperationClient {
   constructor(readonly connection: BrowserConnection) {}
+
+  async runDiscovered(name: string, input: unknown): Promise<OperationResult<OperationName>> {
+    if (!isOperationName(name) || !validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);
+    return this.run(name, input);
+  }
 
   async run<N extends OperationName>(name: N, input: OperationInput<N>): Promise<OperationResult<N>> {
     if (!validOperationInput(name, input)) throw new Error(`Invalid arguments for ${name}`);

@@ -8,6 +8,7 @@ import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
 import { validWebLogin, validWebProblem, validWebSession } from "./contracts.ts";
 import { readSmallJson, sameOrigin, securityHeaders, webBinding, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
+import { browserAssets } from "./assets.generated.ts";
 
 export interface WebServerOptions {
   readonly config: WebConfig;
@@ -65,6 +66,15 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       const url = new URL(request.url);
       if (url.host !== new URL(origin).host || url.search !== "") return problem(403, "forbidden", "Unrecognized browser origin or URL");
       if (!active) return problem(503, "unavailable", "The daemon is not ready");
+      if (request.method === "GET" || request.method === "HEAD") {
+        const asset = browserAssets[url.pathname === "/workspace" || url.pathname.startsWith("/workspace/") ? "/" : url.pathname];
+        if (asset !== undefined) {
+          const requestOrigin = request.headers.get("origin");
+          if ((requestOrigin !== null && requestOrigin !== origin) || ["cross-site", "same-site"].includes(request.headers.get("sec-fetch-site") ?? "")) return problem(403, "forbidden", "Use the daemon's own browser origin");
+          const headers = securityHeaders(); headers.set("content-type", asset.type);
+          return new Response(request.method === "HEAD" ? null : asset.body, { headers });
+        }
+      }
       if (!sameOrigin(request, origin)) return problem(403, "forbidden", "Use the daemon's own browser origin");
 
       if (url.pathname === "/api/login" && request.method === "POST") {
