@@ -4,6 +4,7 @@ pub mod operations;
 pub mod server_msg;
 pub mod tool_display;
 pub mod types;
+pub mod web;
 
 pub const SWP_V1: u32 = 1;
 

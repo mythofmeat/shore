@@ -1,0 +1,84 @@
+{
+  "login": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebLogin",
+    "type": "object",
+    "properties": {
+      "token": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "token"
+    ]
+  },
+  "session": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSessionInfo",
+    "type": "object",
+    "properties": {
+      "contract": {
+        "type": "string"
+      },
+      "protocol": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0
+      },
+      "expires_at": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      },
+      "max_message_bytes": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0
+      },
+      "max_pending_requests": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "contract",
+      "protocol",
+      "expires_at",
+      "max_message_bytes",
+      "max_pending_requests"
+    ]
+  },
+  "problem": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebProblem",
+    "type": "object",
+    "properties": {
+      "code": {
+        "$ref": "#/$defs/WebProblemCode"
+      },
+      "message": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "code",
+      "message"
+    ],
+    "$defs": {
+      "WebProblemCode": {
+        "type": "string",
+        "enum": [
+          "unauthorized",
+          "forbidden",
+          "invalid_request",
+          "too_many_requests",
+          "reload_required",
+          "unavailable",
+          "not_found"
+        ]
+      }
+    }
+  }
+}

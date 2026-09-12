@@ -6,6 +6,7 @@ import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import { sanitiseRid } from "../swp/admission.ts";
 import { ImagesUnsupportedError, NoModelError } from "./setup.ts";
 import {
   isControlRoutedMessage,
@@ -124,14 +125,7 @@ export interface MessageHandlerDeps {
   };
 }
 
-export function sanitiseRid(rid: string | null | undefined): string | null {
-  if (rid === undefined || rid === null) return null;
-  for (const ch of rid) {
-    const code = ch.codePointAt(0) ?? 0;
-    if (code > 0x7f || code === 0) return null;
-  }
-  return rid;
-}
+export { sanitiseRid } from "../swp/admission.ts";
 
 interface ActiveGeneration {
   readonly abort: () => void;
@@ -228,6 +222,7 @@ export class MessageHandler {
     if (routed.kind === "engine") {
       await this.cancelGeneration(
         routed.meta.session.sessionId,
+        routed.meta.rid,
         "user cancelled",
       );
       return;
@@ -238,7 +233,7 @@ export class MessageHandler {
       return;
     }
     for (const sessionId of this.#sessions.keys()) {
-      await this.cancelGeneration(sessionId, "all clients disconnected");
+      await this.cancelGeneration(sessionId, null, "all clients disconnected");
     }
     this.#deps.leases.clear();
   }
@@ -269,7 +264,7 @@ export class MessageHandler {
 
   async handleEngine(msg: ClientMessage, meta: RequestMeta): Promise<void> {
     if (msg.type === "cancel") {
-      await this.cancelGeneration(meta.session.sessionId, "user cancelled");
+      await this.cancelGeneration(meta.session.sessionId, meta.rid, "user cancelled");
       return;
     }
     if (msg.type !== "message" && msg.type !== "regen") return;
@@ -344,10 +339,12 @@ export class MessageHandler {
     if (previous !== undefined) {
       this.#deps.log?.info?.("aborting previous generation (superseded by new request)");
       previous.abort();
+      if (previous.rid !== null) await issuerSend(cancelledStreamEnd(previous.rid));
     }
 
     const controller = new AbortController();
-    const generation: ActiveGeneration = { abort: () => controller.abort(), rid };
+    const abort = () => controller.abort();
+    const generation: ActiveGeneration = { abort, rid };
     generations.set(scope, generation);
     this.#sessions.set(meta.session.sessionId, generations);
 
@@ -394,6 +391,7 @@ export class MessageHandler {
 
   async cancelGeneration(
     sessionId: number,
+    rid: string | null,
     reason: string,
   ): Promise<void> {
     const generations = this.#sessions.get(sessionId);
@@ -412,8 +410,11 @@ export class MessageHandler {
       generations.delete(key);
     }
     if (generations.size === 0) this.#sessions.delete(sessionId);
-    for (const [, generation] of selected) {
-      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(generation.rid));
+    const correlations = new Set(selected.map(([, generation]) => generation.rid));
+    if (rid !== null) correlations.add(rid);
+    if (correlations.size > 1) correlations.delete(null);
+    for (const correlation of correlations) {
+      await this.#deps.router.sendToSession(sessionId, cancelledStreamEnd(correlation));
     }
   }
 

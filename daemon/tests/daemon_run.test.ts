@@ -21,6 +21,7 @@ import { StartupError } from "../src/daemon/startup.ts";
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import { BrowserSocket } from "./support/browser.ts";
 
 const running: RunningDaemon[] = [];
 const roots: string[] = [];
@@ -74,12 +75,14 @@ async function start(
   place: Layout,
   extraArgv: readonly string[] = [],
   providers: Partial<Record<string, SidecarProvider>> = {},
+  watchConfig = true,
 ): Promise<RunningDaemon> {
   const daemon = await startDaemon({
     argv: ["--config", place.configPath, "--addr", "127.0.0.1:0", ...extraArgv],
     env: place.env,
     providers,
     instancesPath: place.instancesPath,
+    watchConfig,
   });
   running.push(daemon);
   return daemon;
@@ -477,6 +480,130 @@ describe("registered operation socket flows", () => {
     } finally {
       client.close();
     }
+  });
+});
+
+describe("optional browser transport", () => {
+  test("disabled serving creates no web listener and TCP commands still work", async () => {
+    const place = await layout();
+    const daemon = await start(place);
+    expect(daemon.web).toBeUndefined();
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("hello");
+      client.send({ type: "command", rid: "still-tcp", name: "list_characters", args: {} });
+      expect(await client.awaitFrame("command_output")).toMatchObject({ rid: "still-tcp", data: { characters: [{ name: "ada" }] } });
+    } finally { client.close(); }
+  });
+
+  test("an authenticated browser creates a character, forks its thread and observes the same persisted history as TCP", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`, []);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("browser answer") }, false);
+    const web = required(daemon.web);
+    const response = await fetch(`${web.origin}/api/login`, {
+      method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: TEST_TOKEN }),
+    });
+    expect(response.status).toBe(200);
+    const cookie = required(response.headers.get("set-cookie")?.split(";", 1)[0]);
+    const browser = new BrowserSocket(web.origin, cookie);
+    try {
+      await browser.attach();
+      browser.send({ type: "command", rid: "create", name: "create_character", args: { name: "nova" } });
+      expect(await browser.frame("command_output", "create")).toMatchObject({ data: { character: "nova", created_files: ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] } });
+      expect(daemon.runtime.historyIndex.registeredCharacters()).toContain("nova");
+      expect(daemon.runtime.workspaceIndex.registeredCharacters()).toContain("nova");
+      expect(daemon.runtime.autonomy.status("nova")).toBeDefined();
+      expect(await readFile(join(place.root, "config", "characters", "nova", "workspace", "SOUL.md"), "utf8")).toBe("You are nova.\n");
+      browser.send({ type: "command", rid: "select", name: "switch_character", args: { name: "nova" } });
+      expect(await browser.frame("command_output", "select")).toMatchObject({ data: { selected_character: "nova" } });
+      await browser.frame("history", "select");
+      browser.send({ type: "message", rid: "turn", text: "browser question", stream: true, images: [] });
+      expect(await browser.frame("stream_end", "turn")).toMatchObject({ content: "browser answer", is_final: true });
+      browser.send({ type: "command", rid: "fork", name: "fork_thread", args: { name: "branch", from: "main", turns: 1 } });
+      expect(await browser.frame("command_output", "fork")).toMatchObject({ data: { fork: { thread: "branch", source: "main", messages: 2, turns: 1, scope: "last_turns", requested_turns: 1 } } });
+      browser.send({ type: "command", rid: "select-fork", name: "switch_thread", args: { name: "branch", resync: true } });
+      const webHistory = await browser.frame("history", "select-fork");
+      expect(webHistory).toMatchObject({ selected_character: "nova", selected_thread: "branch", messages: [{ content: "browser question" }, { content: "browser answer" }] });
+      const tcp = await Client.open(daemon.port, "nova");
+      try {
+        await tcp.awaitFrame("history"); tcp.frames.length = 0;
+        tcp.send({ type: "command", rid: "tcp-select", name: "switch_thread", args: { name: "branch", resync: true } });
+        const tcpHistory = await tcp.awaitFrame("history");
+        if (webHistory.type !== "history") throw new Error("Expected browser history");
+        expect(tcpHistory["messages"]).toEqual(webHistory.messages);
+        expect((await daemon.runtime.registry.getOrCreate("nova", "branch")).historySnapshot({}).messages.map((message) => message.content)).toEqual(["browser question", "browser answer"]);
+      } finally { tcp.close(); }
+    } finally { await browser.close(); }
+  });
+
+  test("a failed web bind releases the TCP listener and data-directory lease before opening stores", async () => {
+    const occupied = createServer();
+    await new Promise<void>((resolve) => { occupied.listen(0, "127.0.0.1", resolve); });
+    const address = occupied.address();
+    if (address === null || typeof address === "string") throw new Error("Expected address");
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${String(address.port)}"\n`);
+    try {
+      expect(start(place)).rejects.toThrow("Failed to start browser transport");
+      await until(() => !existsSync(join(place.root, "data", "shore", DATA_DIRECTORY_LEASE_FILE)), "lease was not released");
+      expect(existsSync(place.instancesPath)).toBe(false);
+      expect(existsSync(join(place.root, "data", "shore", "shore.db"))).toBe(false);
+    } finally { await new Promise<void>((resolve) => { occupied.close(() => resolve()); }); }
+  });
+
+  test("runtime initialization failure closes the already-bound web listener and unregisters the instance", async () => {
+    const probe = createServer();
+    await new Promise<void>((resolve) => { probe.listen(0, "127.0.0.1", resolve); });
+    const address = probe.address();
+    if (address === null || typeof address === "string") throw new Error("Expected address");
+    await new Promise<void>((resolve) => { probe.close(() => resolve()); });
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${String(address.port)}"\n`);
+    await mkdir(join(place.root, "cache"));
+    await writeFile(join(place.root, "cache", "shore"), "blocks the runtime cache directory");
+    let failure: unknown;
+    try { await start(place); } catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(StartupError);
+    expect(String(failure)).toContain("Failed to initialize shore-daemon");
+    expect(existsSync(join(place.root, "data", "shore", DATA_DIRECTORY_LEASE_FILE))).toBe(false);
+    expect(await instances(place)).toEqual([]);
+    await new Promise<void>((resolve, reject) => {
+      probe.once("error", reject);
+      probe.listen(address.port, "127.0.0.1", resolve);
+    });
+    await new Promise<void>((resolve) => { probe.close(() => resolve()); });
+  });
+
+  test("browser cancellation settles its original request and permits another turn while the provider is held", async () => {
+    const place = await layout(`${MODEL_CONFIG}\n[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    let stopped = 0;
+    const provider: SidecarProvider = {
+      async *stream(req, signal) {
+        yield { type: "start", model: req.model };
+        try {
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) resolve();
+            else signal?.addEventListener("abort", () => resolve(), { once: true });
+          });
+        } finally { stopped += 1; }
+      },
+      generate() { throw new Error("Unexpected non-streaming call"); },
+    };
+    const daemon = await start(place, [], { anthropic: provider }, false);
+    const web = required(daemon.web);
+    const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: TEST_TOKEN }) });
+    const browser = new BrowserSocket(web.origin, required(login.headers.get("set-cookie")?.split(";", 1)[0]));
+    try {
+      await browser.attach();
+      for (let i = 0; i < 33; i += 1) {
+        const rid = `held-${String(i)}`;
+        browser.send({ type: "message", rid, text: "hold this turn", stream: true });
+        await browser.frame("stream_start", rid);
+        browser.send({ type: "cancel" });
+        expect(await browser.frame("stream_end", rid)).toMatchObject({ finish_reason: "cancelled", is_final: true });
+        await until(() => stopped > i, "Provider was not cancelled");
+      }
+      browser.send({ type: "command", rid: "still-live", name: "list_threads", args: {} });
+      expect(await browser.frame("command_output", "still-live")).toMatchObject({ name: "list_threads" });
+    } finally { await browser.close(); }
   });
 });
 
