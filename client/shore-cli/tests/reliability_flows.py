@@ -182,6 +182,21 @@ class ReliabilityFlows(unittest.TestCase):
         self.assertIn(b"active_start", result.stderr)
         self.assertEqual(result.stdout, b"")
 
+    def test_provider_results_are_validated_without_losing_additive_fields(self):
+        for data, valid in [({"providers": [], "future_metadata": "inspectable"}, True), ({"providers": [{"name": "incomplete"}]}, False)]:
+            with self.subTest(valid=valid):
+                def respond(request, send, _stream, _seen):
+                    send({"type": "command_output", "rid": request["rid"], "name": "list_providers", "data": data})
+                result, seen = run_cli(["provider", "--json"], respond)
+                self.assertEqual(seen[-1]["name"], "list_providers")
+                if valid:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout), data)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(result.stdout, b"")
+                    self.assertIn(b"missing field", result.stderr)
+
     @unittest.skipUnless(Path("/dev/full").exists(), "/dev/full is Linux-specific")
     def test_stdout_failure_exits_unsuccessfully(self):
         def respond(request, send, _stream, _seen):

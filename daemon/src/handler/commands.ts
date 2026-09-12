@@ -15,7 +15,6 @@ import {
 } from "../commands/dispatch.ts";
 import { internalError, invalidRequest } from "../commands/errors.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
-import type { Args } from "../commands/navigation.ts";
 import { runRegisteredOperation, isRegisteredOperation, commandOperations } from "../commands/registry.ts";
 import { parseOperationInput, parseOperationResult } from "../operations/contracts.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
@@ -70,9 +69,6 @@ export async function dispatchCommand(
   }
 
   if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {
-    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
-  }
-  if (cmd.name === "refresh_provider_models") {
     return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
   }
   if (cmd.name === "switch_character") {
@@ -192,31 +188,13 @@ async function characterlessCommand(
 
   let frame: ServerMessage;
   try {
-    const data =
-      cmd.name === "refresh_provider_models"
-        ? await refreshProviderModels(session, deps, cmd)
-        : await runCharacterlessCommand(session, deps.commands, cmd);
+    const data = await runCharacterlessCommand(session, deps.commands, cmd);
     frame = commandFrame(cmd.name, { ok: data });
   } catch (e) {
     frame = commandFrame(cmd.name, { err: e });
   }
 
   return frameWithRid(frame, rid);
-}
-
-async function refreshProviderModels(
-  session: CommandSession,
-  deps: CommandPathDeps,
-  cmd: Command,
-): Promise<unknown> {
-  const { refreshProviderModels: refresh } = await import("../commands/providers.ts");
-  return await refresh(
-    {
-      config: session.config,
-      ...(deps.commands.fetchImpl === undefined ? {} : { fetchImpl: deps.commands.fetchImpl }),
-    },
-    (cmd.args ?? {}) as Args,
-  );
 }
 
 function characterSession(

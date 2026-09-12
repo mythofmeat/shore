@@ -39,12 +39,6 @@ import {
 } from "./models.ts";
 import type { Args } from "./navigation.ts";
 import {
-  listProviderModels,
-  listProviders,
-  refreshAllProviderModels,
-  refreshProviderModels,
-} from "./providers.ts";
-import {
   errorLog,
   heartbeatLog,
   heartbeatSetActive,
@@ -107,8 +101,6 @@ export interface CommandDeps {
 const CHARACTERLESS = new Set([
   "list_models",
   "favorite_model",
-  "list_providers",
-  "list_provider_models",
   "export_character",
   "import_character",
   "delete_character",
@@ -256,15 +248,6 @@ export async function runCommand(
     case "usage":
       return await usage(usageContext(session, deps), args);
 
-    case "list_providers":
-      return listProviders(providersContext(session, deps));
-    case "refresh_provider_models":
-      return await refreshProviderModels(providersContext(session, deps), args);
-    case "refresh_all_provider_models":
-      return await refreshAllProviderModels(providersContext(session, deps));
-    case "list_provider_models":
-      return listProviderModels(providersContext(session, deps), args);
-
     default:
       throw invalidRequest(`Unknown command: ${cmd.name}`);
   }
@@ -287,10 +270,6 @@ export function runCharacterlessCommand(
       return listModels(session, args);
     case "favorite_model":
       return favoriteModel(session, args);
-    case "list_providers":
-      return listProviders(providersContext(session, deps));
-    case "list_provider_models":
-      return listProviderModels(providersContext(session, deps), args);
     case "export_character": {
       if (deps.archive === undefined) throw unwired("export_character");
       return exportCharacter(archiveWithSignal(deps.archive, session.signal), args);
@@ -357,16 +336,6 @@ function statusContext(
         ? undefined
         : { ...deps.historyIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
     ...(deps.mcpStatus === undefined ? {} : { mcpServers: deps.mcpStatus() }),
-  };
-}
-
-function providersContext(
-  session: CommandSession,
-  deps: CommandDeps,
-): Parameters<typeof listProviders>[0] {
-  return {
-    config: session.config,
-    ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
   };
 }
 

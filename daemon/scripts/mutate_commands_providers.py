@@ -54,11 +54,11 @@ SRC = ROOT / "src/commands/providers.ts"
 MUTANTS = [
     # --- argument handling ---------------------------------------------------
     ("provider: an empty string is a provider",
-     '  if (provider === undefined || provider === "") {',
-     "  if (provider === undefined) {"),
-    ("include_hidden: any truthy value opts in",
+     '  if (provider === "") {',
+     "  if (false) {"),
+    ("include_hidden: omission and null opt in",
      '  const includeHidden = args["include_hidden"] === true;',
-     '  const includeHidden = Boolean(args["include_hidden"]);'),
+     '  const includeHidden = args["include_hidden"] !== false;'),
     ("include_hidden: always on",
      '  const includeHidden = args["include_hidden"] === true;',
      "  const includeHidden = true as boolean;"),
@@ -224,17 +224,17 @@ MUTANTS = [
      '      skipped.push({ provider: name, reason: "discovery disabled" });'),
     ("refresh_all: a failure aborts the batch",
      "    } catch (e) {\n"
-     "      results.push({ provider: name, ok: false, error: (e as Error).message });\n"
+     "      results.push({ provider: name, ok: false, error: e instanceof Error ? e.message : String(e) });\n"
      "    }",
      "    } catch (e) {\n"
      "      throw e;\n"
      "    }"),
     ("refresh_all: a failure is reported as a skip",
-     "      results.push({ provider: name, ok: false, error: (e as Error).message });",
-     '      skipped.push({ provider: name, reason: (e as Error).message });'),
+     "      results.push({ provider: name, ok: false, error: e instanceof Error ? e.message : String(e) });",
+     '      skipped.push({ provider: name, reason: e instanceof Error ? e.message : String(e) });'),
     ("refresh_all: a failure is reported as a success",
-     "      results.push({ provider: name, ok: false, error: (e as Error).message });",
-     "      results.push({ provider: name, ok: true, error: (e as Error).message });"),
+     "      results.push({ provider: name, ok: false, error: e instanceof Error ? e.message : String(e) });",
+     "      results.push({ provider: name, ok: true, error: e instanceof Error ? e.message : String(e) });"),
 
     # --- list_provider_models -------------------------------------------------
     ("models: a provider known only through a static entry is a miss",
@@ -269,8 +269,8 @@ MUTANTS = [
      "    .filter((m) => entry === undefined || isVisible(entry.discovery, m.modelId))"),
     ("models: static entries from every provider are returned",
      "    .filter((m) => m.providerKey === provider)\n"
-     "    .map((m) => ({\n      source: \"static\",",
-     "    .map((m) => ({\n      source: \"static\","),
+     "    .map((m): ProviderStaticModel => ({\n      source: \"static\",",
+     "    .map((m): ProviderStaticModel => ({\n      source: \"static\","),
     ("models: the cache summary counts only what was returned",
      "        : { fetched_at: cache.fetched_at, model_count: cache.models.length },",
      "        : { fetched_at: cache.fetched_at, model_count: discovered.length },"),

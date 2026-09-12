@@ -8,6 +8,7 @@ import { characterInfo, createCharacter, listCharacters, switchCharacter } from 
 import { archiveThread, forkThread, listThreads, newThread, switchThread, threadHome, threadLabel, threadModel } from "./threads.ts";
 import { threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
+import { listProviders, listProviderModels, refreshProviderModels, refreshAllProviderModels, type ProvidersContext } from "./providers.ts";
 
 export interface CommandOperationContext {
   session: CommandSession;
@@ -18,6 +19,10 @@ export interface CommandOperationContext {
 function engineOf(context: CommandOperationContext): ConversationEngine {
   if (context.engine === undefined) throw invalidRequest("This operation requires a character");
   return context.engine;
+}
+
+function providersContext({ session, deps }: CommandOperationContext): ProvidersContext {
+  return { config: session.config, ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }) };
 }
 
 function register<N extends OperationName>(
@@ -31,6 +36,10 @@ function register<N extends OperationName>(
 const characterPresentation = {
   category: "Characters", scope: "global", prerequisites: [], effects: ["read"], confirmation: "none",
 } as const;
+const providerPresentation = {
+  category: "Providers", scope: "global", prerequisites: [], effects: ["read"], confirmation: "none",
+} as const;
+const providerField = { label: "Provider", choices: "providers" } as const;
 const threadPresentation = {
   category: "Threads", scope: "character", prerequisites: ["threads"], effects: ["read"], confirmation: "none",
 } as const;
@@ -46,6 +55,15 @@ const historyFields = {
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  list_providers: register("list_providers", { ...providerPresentation, label: "Browse providers", fields: {} },
+    (context) => listProviders(providersContext(context))),
+  list_provider_models: register("list_provider_models", { ...providerPresentation, label: "Browse provider models", fields: {
+    provider: providerField, include_hidden: { label: "Include hidden models", hint: "Include models excluded by discovery filters" },
+  } }, (context, args) => listProviderModels(providersContext(context), args)),
+  refresh_provider_models: register("refresh_provider_models", { ...providerPresentation, label: "Refresh provider models", effects: ["provider_discovery"], fields: { provider: providerField } },
+    (context, args) => refreshProviderModels(providersContext(context), args)),
+  refresh_all_provider_models: register("refresh_all_provider_models", { ...providerPresentation, label: "Refresh all providers", effects: ["provider_discovery"], fields: {} },
+    (context) => refreshAllProviderModels(providersContext(context))),
   discover_operations: register("discover_operations", {
     category: "Application", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none", label: "Browse available actions", fields: {},
   }, (context) => ({ operations: commandCatalogue(context) })),
