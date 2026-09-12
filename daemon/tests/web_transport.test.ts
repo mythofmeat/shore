@@ -73,6 +73,29 @@ function connectBrowser(origin: string, cookie: string, protocol = WEB_SUBPROTOC
 }
 
 describe("browser connection state", () => {
+  test("embedded app assets and deep links are public without attaching a peer or exposing history", async () => {
+    const f = await fixture(); f.web.activate();
+    const document = await fetch(`${f.web.origin}/workspace/ada/main`);
+    expect(document.status).toBe(200);
+    expect(document.headers.get("content-type")).toContain("text/html");
+    expect(document.headers.get("content-security-policy")).toContain("script-src 'self'");
+    const html = await document.text();
+    const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((match) => match[1]);
+    expect(assets).toHaveLength(2);
+    for (const asset of assets) {
+      const response = await fetch(`${f.web.origin}${asset ?? ""}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect((await response.text()).length).toBeGreaterThan(100);
+    }
+    expect((await fetch(`${f.web.origin}/`, { method: "HEAD" })).status).toBe(200);
+    expect((await fetch(`${f.web.origin}/`, { headers: { origin: "https://outside.example" } })).status).toBe(403);
+    expect((await fetch(`${f.web.origin}/`, { headers: { "sec-fetch-site": "cross-site" } })).status).toBe(403);
+    expect((await f.api("/api/session")).status).toBe(401);
+    expect(f.histories()).toBe(0);
+    expect(f.swp.sessionRouter.sessions()).toHaveLength(0);
+  });
+
   test("typed actions reject invalid results and failures while preserving correlation and additive results", async () => {
     const f = await fixture(); f.web.activate();
     const b = browserConnection(f.web.origin);
