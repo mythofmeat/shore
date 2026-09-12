@@ -1317,78 +1317,6 @@
       ]
     },
     {
-      "path": "shore segments retry",
-      "about": "Retry a Hindsight retain or delete that exhausted its attempts",
-      "long_about": null,
-      "hidden": false,
-      "aliases": [],
-      "subcommand_required": false,
-      "arguments": [
-        {
-          "id": "index",
-          "short": null,
-          "long": null,
-          "aliases": [],
-          "short_aliases": [],
-          "help": null,
-          "long_help": null,
-          "action": "Set",
-          "required": true,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 1,
-          "max_values": 1,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "json",
-          "short": null,
-          "long": "json",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Output raw JSON",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": true,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "help",
-          "short": "h",
-          "long": "help",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Print help",
-          "long_help": null,
-          "action": "Help",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        }
-      ]
-    },
-    {
       "path": "shore clear",
       "about": "Archive the active conversation without summarizing it into memory",
       "long_about": null,
@@ -1568,7 +1496,7 @@
           "long": "call-type",
           "aliases": [],
           "short_aliases": [],
-          "help": "Filter the listing by ledger call type (message, heartbeat, ...)",
+          "help": "Filter by ledger call type, or require that type when dumping an id",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -1579,9 +1507,7 @@
           "max_values": 1,
           "defaults": [],
           "choices": [],
-          "conflicts": [
-            "id"
-          ],
+          "conflicts": [],
           "env": null
         },
         {
@@ -1717,80 +1643,6 @@
           "max_values": 1,
           "defaults": [
             "20"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "json",
-          "short": null,
-          "long": "json",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Output raw JSON",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "help",
-          "short": "h",
-          "long": "help",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Print help",
-          "long_help": null,
-          "action": "Help",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        }
-      ]
-    },
-    {
-      "path": "shore trace recall",
-      "about": "What memory recall pulled in before each turn: the query, scored candidates, injected memories, and latency",
-      "long_about": null,
-      "hidden": false,
-      "aliases": [],
-      "subcommand_required": false,
-      "arguments": [
-        {
-          "id": "count",
-          "short": "n",
-          "long": "count",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Number of turns to show",
-          "long_help": null,
-          "action": "Set",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 1,
-          "max_values": 1,
-          "defaults": [
-            "10"
           ],
           "choices": [],
           "conflicts": [],
@@ -3583,7 +3435,7 @@
     {
       "path": "shore debug tool",
       "about": "Invoke one tool directly and print what the model would have received.",
-      "long_about": "Invoke one tool directly and print what the model would have received.\n\nThe call runs through the same path a real turn uses: arguments are\nschema-checked, the per-tool timeout applies, and the result is\ntruncated to the configured window. Side effects are real — `edit`\nwrites to the workspace, `ask_<agent>` spends tokens.\n\n`shore debug tool read path=notes.md`\n`shore debug tool search query=cache mode=hybrid`\n`shore debug tool ask_librarian query=\"what did we decide about TTLs\"`",
+      "long_about": "Invoke one tool directly and print what the model would have received.\n\nThe call runs through the same path a real turn uses: arguments are\nschema-checked, the per-tool timeout applies, and the result is\ntruncated to the configured window. Side effects are real — `bash`\nruns commands on the daemon host, `ask_<agent>` spends tokens.\n\n`shore debug tool bash \"command=cat notes.md\"`\n`shore debug tool search query=cache mode=hybrid`\n`shore debug tool ask_librarian query=\"what did we decide about TTLs\"`",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -3995,7 +3847,7 @@
     {
       "path": "shore model use",
       "about": "Switch the model something runs on",
-      "long_about": "Switch the model something runs on\n\nSpell out `use` when a model's name would otherwise read as one of these subcommands. An unknown name is an error, never a fallback.\n\nBare, this pins the chat model for the current thread until changed or reset. Every other target writes the config file, which is global: --background=<task> writes defaults.background.<task>, bare --background writes defaults.background.model (the value both tasks fall back to), --subagent=<name> writes subagents.<name>.model, and bare --subagent writes defaults.subagent_model.",
+      "long_about": "Switch the model something runs on\n\nSpell out `use` when a model's name would otherwise read as one of these subcommands. An unknown name is an error, never a fallback.\n\nBare, this pins the chat model for the current thread until changed or reset. Every other target writes the config file, which is global: --background=<task> writes <task>.model, bare --background writes both heartbeat.model and compaction.model; --subagent=<name> writes subagents.<name>.model, and bare --subagent writes subagents.model.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -4237,7 +4089,7 @@
     {
       "path": "shore model setting",
       "about": "Show, set, or clear saved sampler settings",
-      "long_about": "Show, set, or clear saved sampler settings\n\nBare and with no key, this is the overview: every role whose model or settings are its own rather than inherited, in one place. Add a target flag to see just that one. With a key and a value it saves; with --reset and a key it clears. Clearing everything at once is not supported — name the key.\n\nA sub-agent's settings are its own: they start from its model's catalog entry and take nothing from the chat model's settings, so tuning chat never moves a sub-agent.\n\nBare --subagent writes once against the model your sub-agents share, covering all of them; it errors if they are not all on one model. A named sub-agent overrides that shared value. Because the shared value belongs to the model, changing subagent_model picks up that model's settings rather than carrying the old ones over.\n\nThe keys are temperature, top_p, reasoning_effort, budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, sdk, replay_prior_thinking and max_tool_iterations.\n\nsdk takes anthropic, openai, openrouter, gemini, zai, deepseek or moonshot, which forces a wire shape on a discovered model whose provider catalog labelled it wrong.\n\nThe vendor knobs openrouter_provider, gemini_generation and zai_clear_thinking are settable per model too. A model only lists the knobs its own sdk honors.",
+      "long_about": "Show, set, or clear saved sampler settings\n\nBare and with no key, this is the overview: every role whose model or settings are its own rather than inherited, in one place. Add a target flag to see just that one. With a key and a value it saves; with --reset and a key it clears. Clearing everything at once is not supported — name the key.\n\nA sub-agent's settings are its own: they start from its model's catalog entry and take nothing from the chat model's settings, so tuning chat never moves a sub-agent.\n\nBare --subagent writes once against the model your sub-agents share, covering all of them; it errors if they are not all on one model. A named sub-agent overrides that shared value. Because the shared value belongs to the model, changing subagents.model picks up that model's settings rather than carrying the old ones over.\n\nThe keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, sdk, reasoning_replay and max_tool_rounds.\n\nsdk takes anthropic, openai, openrouter, gemini, zai, deepseek or moonshot, which forces a wire shape on a discovered model whose provider catalog labelled it wrong.\n\nThe vendor knobs openrouter_routing, gemini_thinking_mode and zai_clear_reasoning are settable per model too. A model only lists the knobs its own sdk honors.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -4568,7 +4420,7 @@
     {
       "path": "shore model reset",
       "about": "Drop a saved selection and fall back to what it would inherit",
-      "long_about": "Drop a saved selection and fall back to what it would inherit\n\nBare, this clears the thread's pin to inherit the character default. Other targets clear the config keys `use` would have written, so the role falls back the way it did before anything was pinned. Bare --background clears all three background keys; bare --subagent clears defaults.subagent_model and every per-sub-agent override.",
+      "long_about": "Drop a saved selection and fall back to what it would inherit\n\nBare, this clears the thread's pin to inherit the character default. Other targets clear the config keys `use` would have written, so the role falls back the way it did before anything was pinned. Bare --background clears both task model keys; bare --subagent clears subagents.model and every per-sub-agent override.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -5028,9 +4880,121 @@
       ]
     },
     {
+      "path": "shore config migrate",
+      "about": "Plan a local, offline configuration migration; use --write to apply it",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "config",
+          "short": null,
+          "long": "config",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Local main config.toml path",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "data_dir",
+          "short": null,
+          "long": "data-dir",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Local daemon data directory, including saved model preferences",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "write",
+          "short": null,
+          "long": "write",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Apply the validated migration while the daemon is stopped",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "daemon",
+          "short": null,
+          "long": "daemon",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Local shore-daemon executable for semantic validation",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": "SHORE_DAEMON"
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
       "path": "shore config get",
       "about": "Read one setting, or a whole section, by dotted key.",
-      "long_about": "Read one setting, or a whole section, by dotted key.\n\n`shore config get defaults.model`\n`shore config get memory.compaction`",
+      "long_about": "Read one setting, or a whole section, by dotted key.\n\n`shore config get chat.model`\n`shore config get compaction`",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -5041,7 +5005,7 @@
           "long": null,
           "aliases": [],
           "short_aliases": [],
-          "help": "Dotted key, e.g. defaults.stream, daemon.addr, mcp.beets.command",
+          "help": "Dotted key, e.g. heartbeat.enabled, daemon.listen_addr, mcp.beets.command",
           "long_help": null,
           "action": "Set",
           "required": true,
@@ -5148,7 +5112,7 @@
     {
       "path": "shore config set",
       "about": "Write one setting to the config file and apply it live.",
-      "long_about": "Write one setting to the config file and apply it live.\n\nThe value is checked against the setting's type before anything is\nwritten, and the file is restored if the result would not load. Keys\nunder [daemon], [notifications] and [connections] need a daemon\nrestart to take effect; `set` says so when you touch one.\n\n`shore config set defaults.model anthropic:claude-opus-4-5`\n`shore config set memory.compaction.idle_trigger 2h`\n`shore config set tools.enabled_tools read,edit,search`",
+      "long_about": "Write one setting to the config file and apply it live.\n\nThe value is checked against the setting's type before anything is\nwritten, and the file is restored if the result would not load. Keys\nunder [daemon], [notifications] and [matrix] need a daemon\nrestart to take effect; `set` says so when you touch one.\n\n`shore config set chat.model anthropic:claude-opus-4-5`\n`shore config set compaction.idle_after 2h`\n`shore config set tools.enabled bash,search`",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -5159,7 +5123,7 @@
           "long": null,
           "aliases": [],
           "short_aliases": [],
-          "help": "Dotted key, e.g. defaults.stream, cache.keepalive_max",
+          "help": "Dotted key, e.g. heartbeat.enabled, cache.keepalive_for",
           "long_help": null,
           "action": "Set",
           "required": true,
@@ -5385,7 +5349,7 @@
     },
     {
       "path": "shore config tools",
-      "about": "Show the resolved tool surface: which tools are enabled, sub-agent ownership, and any dangling config references. Read the raw values with `config get tools.enabled_tools`",
+      "about": "Show the resolved tool surface: which tools are enabled, sub-agent ownership, and any dangling config references. Read the raw values with `config get tools.enabled`",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -7801,20 +7765,6 @@
     },
     {
       "argv": [
-        "segments",
-        "retry",
-        "1"
-      ],
-      "mapping": {
-        "name": "segments",
-        "args": {
-          "action": "retry",
-          "index": 1
-        }
-      }
-    },
-    {
-      "argv": [
         "character"
       ],
       "mapping": null
@@ -8467,9 +8417,9 @@
         "name": "call_log",
         "args": {
           "id": 3,
-          "wire": true,
           "diff": true,
-          "against": 1
+          "against": 1,
+          "wire": true
         }
       }
     },
@@ -8484,21 +8434,6 @@
         "name": "transcript",
         "args": {
           "source": "heartbeat",
-          "count": 3
-        }
-      }
-    },
-    {
-      "argv": [
-        "trace",
-        "recall",
-        "--count",
-        "3"
-      ],
-      "mapping": {
-        "name": "transcript",
-        "args": {
-          "source": "memory_recall",
           "count": 3
         }
       }

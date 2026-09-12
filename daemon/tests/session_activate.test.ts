@@ -175,7 +175,7 @@ async function harnessFor(
     },
     tick: () => keepaliveService.tick(),
     activate: async () =>
-      (await sessionActivateCommand(CHARACTER, {
+      await sessionActivateCommand(CHARACTER, {
         keepalive: keepaliveService,
         lastRequest: cache,
         autonomy,
@@ -187,7 +187,7 @@ async function harnessFor(
         config,
         dataDir,
         now: () => clock,
-      })) as Awaited<ReturnType<Harness["activate"]>>,
+      }),
   };
 }
 

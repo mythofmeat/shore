@@ -1,8 +1,8 @@
 use shore_common::protocol::operations::{
-    ConfigReloadArgs, ConversationLog, ConversationLogArgs, CreateCharacter, GetMessage,
-    GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, ReloadConfiguration,
-    ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs, SwitchThread,
-    SwitchThreadArgs,
+    ConfigReloadArgs, ConversationLog, ConversationLogArgs, CreateCharacter, EmptyOperationArgs,
+    GetMessage, GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, ReadStatus,
+    ReloadConfiguration, ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs,
+    SwitchThread, SwitchThreadArgs, is_registered_operation,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -386,12 +386,7 @@ async fn handle_generic_swp_command(
     };
     _ = conn.send_command(name, args).await?;
     let data = recv_command_data(conn).await?;
-    if matches!(
-        other,
-        CliCommand::Provider { .. } | CliCommand::Config { .. } | CliCommand::Model { .. }
-    ) {
-        validate_registered_output(name, &data)?;
-    }
+    validate_registered_output(name, &data)?;
     if toml_mode {
         print_config_toml(&data, show_all)?;
     } else if json_mode {
@@ -418,6 +413,9 @@ pub(crate) fn validate_registered_output(
     name: &str,
     data: &serde_json::Value,
 ) -> Result<(), serde_json::Error> {
+    if !is_registered_operation(name) {
+        return Ok(());
+    }
     let _: OperationResponse =
         serde_json::from_value(serde_json::json!({ "name": name, "data": data }))?;
     Ok(())
@@ -907,8 +905,7 @@ async fn handle_status_command(
     let CliCommand::Status { section, json, .. } = cmd else {
         return Ok(());
     };
-    _ = conn.send_command("status", serde_json::json!({})).await?;
-    let data = recv_command_data(conn).await?;
+    let (_, data) = execute_operation_with_raw::<ReadStatus>(conn, EmptyOperationArgs {}).await?;
     match section {
         Some(s) => {
             let known = output::status::sections_of(&data);

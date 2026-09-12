@@ -5,7 +5,11 @@ import type { OperationField } from "../protocol/OperationField.ts";
 import { acceptsKind, initialValue, record, type Control } from "./forms.ts";
 
 export function Inspect({ value, label = "Inspect data" }: { value: unknown; label?: string }) {
-  return <details className="inspect"><summary>{label}</summary><pre>{JSON.stringify(value, null, 2)}</pre></details>;
+  return <details className="inspect"><summary>{label}</summary><pre>{JSON.stringify(value, null, 2)}</pre><button type="button" onClick={() => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2) ?? "null"], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = "shore-data.json"; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }}>Download JSON</button></details>;
 }
 
 export function Modal({ title, close, children }: { title: string; close: () => void; children: ReactNode }) {

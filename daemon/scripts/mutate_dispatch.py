@@ -84,12 +84,16 @@ MUTANTS = [
     ("wire: `refresh_provider_models` reaches the refresh-all arm", "src/commands/registry.ts",
      '(context, args) => refreshProviderModels(providersContext(context), args)',
      '(context, args) => refreshAllProviderModels(providersContext(context))'),
-    ("wire: `call_log` reaches `transcript`",
-     '    case "call_log":\n      return callLog({ characterName: character, callStore: deps.callStore }, args);',
-     '    case "call_log":\n      return transcript({ characterName: character, callStore: deps.callStore }, args);'),
-    ("wire: `heartbeat_set_dormant` reaches the active setter",
-     '    case "heartbeat_set_dormant":\n      return heartbeatSetDormant(statusContext(engine, session, deps));',
-     '    case "heartbeat_set_dormant":\n      return heartbeatSetActive(statusContext(engine, session, deps));'),
+    ('wire: `call_log` reaches `transcript`',
+     'src/commands/registry.ts',
+     '(context, args) => callLog({ characterName: engineOf(context).characterName, callStore: '
+     'context.deps.callStore }, args)',
+     '(context, args) => transcript({ characterName: engineOf(context).characterName, callStore: '
+     'context.deps.callStore }, args)'),
+    ('wire: `heartbeat_set_dormant` reaches the active setter',
+     'src/commands/registry.ts',
+     '(context) => heartbeatSetDormant(statusContext(engineOf(context), context.session, context.deps))',
+     '(context) => heartbeatSetActive(statusContext(engineOf(context), context.session, context.deps))'),
     ("wire: `config_check` reaches `config_reload`", "src/commands/registry.ts",
      '({ session }) => configCheck(session, session.env ?? process.env)',
      '({ session }) => configReload(session, {})'),
@@ -104,19 +108,15 @@ MUTANTS = [
     ("missing: `tools` is not in the table", "src/commands/registry.ts",
      '  tools: register("tools",',
      '  missing_tools: register("tools",'),
-    ("missing: `transcript` is not in the table",
-     '    case "transcript":\n      return transcript({ characterName: character, callStore: deps.callStore }, args);\n',
-     ""),
+    ('missing: `transcript` is not in the table',
+     'src/commands/registry.ts',
+     '  transcript: register("transcript",',
+     '  missing_transcript: register("transcript",'),
 
     # --- the characterless split ---------------------------------------------
     ('split: `status` answers without a character',
-     '  const args = (cmd.args ?? {}) as Args;\n'
-     '  switch (cmd.name) {\n'
-     '    case "export_character":',
-     '  const args = (cmd.args ?? {}) as Args;\n'
-     '  switch (cmd.name) {\n'
-     '    case "status": return {};\n'
-     '    case "export_character":'),
+     '): unknown {\n  if (isRegisteredOperation(cmd.name)) {',
+     '): unknown {\n  if (cmd.name === "status") return {};\n  if (isRegisteredOperation(cmd.name)) {'),
     ("split: `list_providers` is refused without a character", "src/commands/registry.ts",
      'list_providers: register("list_providers", { ...providerPresentation,',
      'list_providers: register("list_providers", { ...providerPresentation, scope: "character",'),

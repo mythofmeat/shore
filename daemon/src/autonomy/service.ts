@@ -29,7 +29,7 @@ export interface RegisterCharacter {
 
 export interface AutonomyStatus {
   character: string;
-  heartbeat_state: string;
+  heartbeat_state: import("../protocol/AutonomyHeartbeatState.ts").AutonomyHeartbeatState;
   ticks_without_user: number;
   covered_turn_count: number;
   next_wake_at?: number;

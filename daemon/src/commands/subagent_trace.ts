@@ -1,7 +1,8 @@
 import { characterDataDir } from "../config/dirs.ts";
 import { readSubagentTraces, type SubagentTrace } from "../tools/subagent_trace.ts";
 import { internalError } from "./errors.ts";
-import type { Args, Json } from "./conversation.ts";
+import type { OperationInput, OperationResult } from "../operations/types.ts";
+type Args = OperationInput<"subagent_trace">;
 
 const DEFAULT_COUNT = 20;
 
@@ -10,7 +11,7 @@ export interface SubagentTraceContext {
   characterName: string;
 }
 
-export async function subagentTrace(ctx: SubagentTraceContext, args: Args): Promise<Json> {
+export async function subagentTrace(ctx: SubagentTraceContext, args: Args): Promise<OperationResult<"subagent_trace">> {
   const ids = stringList(args["ids"]);
   const count = countArg(args, DEFAULT_COUNT);
   const dir = characterDataDir(ctx.dataDir, ctx.characterName);
@@ -30,7 +31,7 @@ export async function subagentTrace(ctx: SubagentTraceContext, args: Args): Prom
   return {
     character: ctx.characterName,
     ...(ids === undefined ? {} : { requested_ids: ids }),
-    entries: traces as unknown,
+    entries: traces,
   };
 }
 

@@ -80,7 +80,7 @@ const section = async (
   source: WorkspaceIndexSource | undefined = sourceFor(),
   character = "qifei",
 ): Promise<IndexSection | null> =>
-  (await workspaceIndexSection(source, character)) as IndexSection | null;
+  await workspaceIndexSection(source, character);
 
 interface IndexSection {
   background?: {

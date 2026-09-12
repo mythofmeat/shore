@@ -3,7 +3,7 @@ import type { KeepaliveService } from "../cache/keepalive.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
 import type { RebuildDeps } from "../cache/rebuild.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import type { Json } from "./conversation.ts";
+import type { OperationResult } from "../operations/types.ts";
 import { rfc3339, untilSecs } from "./status.ts";
 
 export interface SessionActivateContext {
@@ -17,25 +17,8 @@ export interface SessionActivateContext {
   now?: () => number;
 }
 
-interface ScheduledPing {
-  interval_secs: number;
-  next_ping_at: string;
-  seconds_until_ping: number;
-}
-
-export type KeepaliveActivation =
-  | { status: "unavailable"; detail: string }
-  | { status: "off" }
-  | ({ status: "resumed" } & ScheduledPing)
-  | ({
-      status: "primed";
-      input_tokens: number;
-      cache_read_tokens: number;
-      cache_creation_tokens: number;
-      wrote_cache: boolean;
-    } & ScheduledPing)
-  | { status: "skipped"; detail: string }
-  | { status: "failed"; detail: string };
+type ScheduledPing = import("../protocol/ScheduledKeepalivePing.ts").ScheduledKeepalivePing;
+export type KeepaliveActivation = import("../protocol/KeepaliveActivation.ts").KeepaliveActivation;
 
 async function ensurePrefix(
   character: string,
@@ -97,7 +80,7 @@ export async function activateKeepalive(
 export async function sessionActivateCommand(
   character: string,
   ctx: SessionActivateContext,
-): Promise<Json> {
+): Promise<OperationResult<"session_activate">> {
   const now = (ctx.now ?? Date.now)();
   const registered = await ctx.register(character, ctx.config);
   const keepalive = await activateKeepalive(character, ctx);

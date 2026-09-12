@@ -71,7 +71,7 @@ function sparse(d: Diagnostics): void {
     kind: "missing",
     status: undefined,
     reason: "no key configured",
-  });
+  } as unknown as KeyFallbackEntry);
 }
 
 function overflowing(d: Diagnostics): void {

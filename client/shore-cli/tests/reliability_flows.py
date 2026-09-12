@@ -129,6 +129,43 @@ class ReliabilityFlows(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(b"missing field", result.stderr)
 
+    def test_cli_diagnostic_filters_runtime_outcomes_and_full_results(self):
+        fixtures = Path(__file__).parent / "fixtures"
+        call = json.loads((fixtures / "diagnostic_call.json").read_text())
+        status = json.loads((fixtures / "diagnostic_status.json").read_text())
+        cases = [
+            (["status", "--json"], "status", {}, status),
+            (["trace", "calls", "2", "--wire", "--diff", "--against=1", "--json"], "call_log", {"id": 2, "wire": True, "diff": True, "against": 1}, call),
+            (["trace", "calls", "--count=0", "--call-type=heartbeat", "--json"], "call_log", {"count": 0, "call_type": "heartbeat"}, {"enabled": True, "entries": []}),
+            (["trace", "heartbeat", "--count=3", "--json"], "transcript", {"source": "heartbeat", "count": 3}, {"enabled": True, "source": "heartbeat", "entries": []}),
+            (["trace", "recall", "--json"], "transcript", {"source": "memory_recall", "count": 10}, {"enabled": True, "source": "memory_recall", "entries": []}),
+            (["trace", "subagent", "parent-1", "--json"], "subagent_trace", {"ids": ["parent-1"]}, {"character": "ada", "requested_ids": ["parent-1"], "entries": []}),
+            (["trace", "errors", "--count=0", "--json"], "error_log", {"count": 0}, {key: {"count": 0, "recent": []} for key in ["errors", "key_fallbacks", "memory_recall"]}),
+            (["trace", "events", "--json"], "heartbeat_log", {"count": 20}, {"events": [{"timestamp": "now", "kind": "wake", "detail": "manual wake"}]}),
+            (["debug", "heartbeat_tick_now"], "heartbeat_tick_now", {}, {"character": "ada", "status": "scheduled"}),
+            (["debug", "heartbeat_status_dormant"], "heartbeat_set_dormant", {}, {"character": "ada", "status": "dormant"}),
+            (["debug", "heartbeat_status_active"], "heartbeat_set_active", {}, {"character": "ada", "status": "active"}),
+            (["debug", "keepalive_ping_now"], "keepalive_ping_now", {}, {"character": "ada", "status": "skipped", "reason": "No prefix"}),
+            (["debug", "session_activate"], "session_activate", {}, {"character": "ada", "registered": False, "heartbeat": None, "keepalive": {"status": "unavailable", "detail": "No prefix"}}),
+        ]
+        for args, name, expected, output in cases:
+            with self.subTest(args=args):
+                def respond(request, send, _stream, _seen):
+                    self.assertEqual(request["name"], name)
+                    self.assertEqual(request["args"], expected)
+                    send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
+                result, _ = run_cli(args, respond)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                if args[0] == "debug":
+                    self.assertIn(b"ada", result.stdout)
+                else:
+                    self.assertEqual(json.loads(result.stdout), output)
+        def malformed(request, send, _stream, _seen):
+            send({"type": "command_output", "name": "call_log", "rid": request["rid"], "data": {"enabled": True, "call": {"id": 2}, "wire": []}})
+        result, _ = run_cli(["trace", "calls", "2", "--json"], malformed)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"CallLogResult", result.stderr)
+
     def test_tui_model_target_and_reload_use_canonical_requests(self):
         with tempfile.TemporaryDirectory() as root, socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
@@ -139,6 +176,7 @@ class ReliabilityFlows(unittest.TestCase):
             applied = threading.Event()
             model_changed = threading.Event()
             models = []
+            diagnostic_requests = []
             stop = threading.Event()
             seen = []
             errors = []
@@ -177,6 +215,10 @@ class ReliabilityFlows(unittest.TestCase):
                                 models.append(request)
                                 send({"type": "command_output", "name": name, "rid": request["rid"], "data": {"target": "role", "active": "fixture", "qualified_name": "fixture", "provider": "test", "model_id": "fixture-id", "changed": True, "role": "heartbeat", "config_key": "defaults.background.heartbeat", "cleared": [], "file": "fixture.toml", "restart_required": []}})
                                 model_changed.set()
+                            elif name == "call_log":
+                                diagnostic_requests.append(request)
+                                output = json.loads((Path(__file__).parent / "fixtures" / "diagnostic_call.json").read_text())
+                                send({"type": "command_output", "name": name, "rid": request["rid"], "data": output})
                             else:
                                 send({"type": "command_output", "name": name, "rid": request.get("rid"), "data": {}})
                 except BaseException as error:
@@ -220,6 +262,20 @@ class ReliabilityFlows(unittest.TestCase):
                 self.assertTrue(model_changed.is_set(), frames.read_text()[-3000:])
                 self.assertEqual(len(models), 1)
                 self.assertEqual(models[0]["args"], {"name": "fixture", "background_task": "heartbeat"})
+                os.write(master, b"\x1b")
+                time.sleep(.05)
+                os.write(master, b":trace calls 2 --wire --diff --against=1 --json\r")
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    if select.select([master], [], [], .01)[0]:
+                        os.read(master, 65536)
+                    if diagnostic_requests and "fixture-call-2" in frames.read_text():
+                        os.write(master, b"G")
+                    if "still visible" in frames.read_text():
+                        break
+                self.assertEqual(len(diagnostic_requests), 1)
+                self.assertEqual(diagnostic_requests[0]["args"], {"id": 2, "wire": True, "diff": True, "against": 1})
+                self.assertIn("still visible", frames.read_text())
                 self.assertEqual(errors, [])
             finally:
                 stop.set()

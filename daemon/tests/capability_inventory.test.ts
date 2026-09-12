@@ -45,7 +45,7 @@ describe("capability inventory", () => {
 
   test("removing a real production operation fails the inventory gate", async () => {
     const original = readFileSync(join(import.meta.dir, "../src/commands/dispatch.ts"), "utf8");
-    const removed = original.replace('case "status":', "");
+    const removed = original.replace('case "run_tool":', "");
     expect(removed).not.toBe(original);
     const [before, after] = await parseInventorySources([original, removed]);
     if (before === undefined || after === undefined) throw new Error("Missing parsed dispatcher");

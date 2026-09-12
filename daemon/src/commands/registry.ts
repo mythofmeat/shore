@@ -1,3 +1,10 @@
+import { status, errorLog, heartbeatLog, heartbeatTickNow, heartbeatSetDormant, heartbeatSetActive } from "./status.ts";
+import { statusContext } from "./status_context.ts";
+import { callLog, transcript } from "./call_log.ts";
+import { subagentTrace } from "./subagent_trace.ts";
+import { keepalivePingNowCommand } from "./keepalive.ts";
+import { sessionActivateCommand } from "./activate.ts";
+import type { OperationPrerequisite } from "../protocol/OperationPrerequisite.ts";
 import { changeThreadModel, listModels, favoriteModel, modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "./models.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { OperationInput, OperationName, OperationResult } from "../operations/contracts.ts";
@@ -38,6 +45,10 @@ function register<N extends OperationName>(
 const characterPresentation = {
   category: "Characters", scope: "global", prerequisites: [], effects: ["read"], confirmation: "none",
 } as const;
+const diagnosticPresentation = { category: "Diagnostics", scope: "character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
+const diagnosticCount = { label: "Recent entries", hint: "Zero returns an empty list; omit for the command's default" } as const;
+const storedDiagnosticCount = { ...diagnosticCount, hint: "Zero returns all stored entries; omit for the command's default" } as const;
+const heartbeatPresentation = { ...diagnosticPresentation, prerequisites: ["autonomy"], effects: ["runtime_write"] } as const;
 const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const modelTargetFields = {
   name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
@@ -68,6 +79,40 @@ const historyFields = {
 } as const;
 
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
+  status: register("status", { ...diagnosticPresentation, label: "System status", fields: {} },
+    (context) => status(statusContext(engineOf(context), context.session, context.deps))),
+  error_log: register("error_log", { ...diagnosticPresentation, label: "Errors and key fallbacks", fields: { count: diagnosticCount } },
+    (context, args) => errorLog(statusContext(engineOf(context), context.session, context.deps), args)),
+  heartbeat_log: register("heartbeat_log", { ...diagnosticPresentation, label: "Heartbeat events", fields: { count: diagnosticCount } },
+    (context, args) => heartbeatLog(statusContext(engineOf(context), context.session, context.deps), args)),
+  call_log: register("call_log", { ...diagnosticPresentation, label: "Inspect model calls", fields: {
+    id: { label: "Call ID", hint: "Omit to list recent calls" }, count: storedDiagnosticCount,
+    call_type: { label: "Call type", hint: "Filter the listing by its ledger call type" },
+    character: { label: "Call character filter", choices: "characters", hint: "Optional listing filter; defaults to the selected character" },
+    diff: { label: "Compare calls", hint: "Compare the chosen call with its previous call or an explicit comparison ID" },
+    against: { label: "Compare against call ID" }, wire: { label: "Include full HTTP bodies", hint: "Inspect captured request/response bodies and redacted headers" },
+  } }, (context, args) => callLog({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
+  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "Heartbeat activity or memory recall" }, count: storedDiagnosticCount } },
+    (context, args) => transcript({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
+  subagent_trace: register("subagent_trace", { ...diagnosticPresentation, label: "Stored subagent runs", fields: { ids: { label: "Parent tool-use IDs", hint: "Omit to list recent runs" }, count: storedDiagnosticCount } },
+    (context, args) => subagentTrace({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir }, args)),
+  heartbeat_tick_now: register("heartbeat_tick_now", { ...heartbeatPresentation, label: "Schedule heartbeat now", effects: ["runtime_write", "provider_call"], fields: {} },
+    (context) => heartbeatTickNow(statusContext(engineOf(context), context.session, context.deps))),
+  heartbeat_set_dormant: register("heartbeat_set_dormant", { ...heartbeatPresentation, label: "Make heartbeat dormant", fields: {} },
+    (context) => heartbeatSetDormant(statusContext(engineOf(context), context.session, context.deps))),
+  heartbeat_set_active: register("heartbeat_set_active", { ...heartbeatPresentation, label: "Activate heartbeat", fields: {} },
+    (context) => heartbeatSetActive(statusContext(engineOf(context), context.session, context.deps))),
+  keepalive_ping_now: register("keepalive_ping_now", { ...diagnosticPresentation, prerequisites: ["keepalive"], label: "Send cache keepalive ping", effects: ["runtime_write", "provider_call"], fields: {} },
+    (context) => {
+      if (context.deps.keepalive === undefined) throw internalError("keepalive_ping_now is not available in this build");
+      return keepalivePingNowCommand(engineOf(context).characterName, { ...context.deps.keepalive, config: context.session.config, dataDir: context.session.dataDir });
+    }),
+  session_activate: register("session_activate", { ...diagnosticPresentation, prerequisites: ["keepalive", "session_activation"], label: "Activate session and cache", effects: ["runtime_write", "provider_call"], fields: {} },
+    (context) => {
+      if (context.deps.keepalive === undefined || context.deps.activate === undefined) throw internalError("session_activate is not available in this build");
+      return sessionActivateCommand(engineOf(context).characterName, { ...context.deps.keepalive, ...context.deps.activate, autonomy: context.deps.autonomy, config: context.session.config, dataDir: context.session.dataDir, ...(context.deps.now === undefined ? {} : { now: context.deps.now }) });
+    }),
+
   list_models: register("list_models", { ...modelPresentation, scope: "global", label: "Browse models", fields: { include_hidden: modelHiddenField, favorites_only: { label: "Favorites only" } } },
     ({ session }, args) => listModels(session, args)),
   favorite_model: register("favorite_model", { ...modelPresentation, scope: "global", label: "Favorite model", effects: ["model_selection"], fields: { name: { ...modelTargetFields.name, hint: "The model whose favorite status will change" }, favorite: { label: "Favorite", hint: "Omit to toggle; explicit true/false avoids toggling twice" } } },
@@ -220,6 +265,13 @@ export function isRegisteredOperation(name: string): name is OperationName {
   return Object.hasOwn(commandOperations, name);
 }
 
+const prerequisiteAvailable: Record<OperationPrerequisite, (context: CommandOperationContext) => boolean> = {
+  threads: (context) => context.deps.threads !== undefined,
+  autonomy: (context) => context.engine !== undefined && context.deps.autonomy.status(context.engine.characterName) !== undefined,
+  keepalive: (context) => context.deps.keepalive !== undefined,
+  session_activation: (context) => context.deps.activate !== undefined,
+};
+
 export function runRegisteredOperation<N extends OperationName>(
   name: N,
   context: CommandOperationContext,
@@ -227,8 +279,10 @@ export function runRegisteredOperation<N extends OperationName>(
 ): OperationResult<N> | Promise<OperationResult<N>> {
   const registration = commandOperations[name];
   if (registration.presentation.scope === "character") engineOf(context);
-  if (registration.presentation.prerequisites.includes("threads") && context.deps.threads === undefined) {
-    throw internalError("thread commands need a character registry, and this one has none");
+  for (const requirement of registration.presentation.prerequisites) {
+    if (prerequisiteAvailable[requirement](context)) continue;
+    if (requirement === "autonomy") throw invalidRequest(`No autonomy state for character '${engineOf(context).characterName}'`);
+    throw internalError(requirement === "threads" ? "thread commands need a character registry, and this one has none" : `${name} is not available in this build`);
   }
   return registration.invoke(context, args);
 }
@@ -238,6 +292,6 @@ export function commandCatalogue(context?: CommandOperationContext) {
     ...operation,
     ...(context === undefined ? {} : { available:
       (operation.scope !== "character" || context.engine !== undefined) &&
-      (!operation.prerequisites.includes("threads") || context.deps.threads !== undefined) }),
+      operation.prerequisites.every((requirement) => prerequisiteAvailable[requirement](context)) }),
   }));
 }

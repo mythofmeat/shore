@@ -298,11 +298,7 @@ pub(crate) fn render(
                 ),
         );
     }
-    if matches!(
-        &command,
-        CliCommand::Provider { .. } | CliCommand::Config { .. } | CliCommand::Model { .. }
-    ) && let Err(error) = crate::run::validate_registered_output(wire_name, data)
-    {
+    if let Err(error) = crate::run::validate_registered_output(wire_name, data) {
         return Some(format!("Invalid operation result: {error}"));
     }
     let specialized_json = matches!(
@@ -563,10 +559,8 @@ mod tests {
         let rendered = render(
             "status --section daemon",
             "status",
-            &serde_json::json!({
-                "daemon": { "state": "running" },
-                "session": { "turns": 4 }
-            }),
+            &serde_json::from_str(include_str!("../../tests/fixtures/diagnostic_status.json"))
+                .unwrap(),
             "ada",
         )
         .expect("rendered");
@@ -598,8 +592,14 @@ mod tests {
     #[test]
     fn trace_calls_uses_the_human_formatter_unless_json_was_requested() {
         let data = serde_json::json!({
+            "enabled": true,
             "entries": [{
                 "id": 7,
+                "call_id": "fixture-call",
+                "ts": "2026-09-12T10:00:00Z",
+                "character": "ada",
+                "finish_reason": "end_turn",
+                "error": null,
                 "call_type": "message",
                 "provider": "anthropic",
                 "model": "claude",
