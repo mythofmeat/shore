@@ -290,6 +290,10 @@
     "TokenCounts": "{ input: number, output: number, cache_read: number, cache_write: number, }",
     "ToolCall": "{ rid?: string | null, tool_id: string, tool_name: string, input: unknown, subagent?: string | null, task_id?: string | null, }",
     "ToolResult": "{ rid?: string | null, tool_id: string, tool_name: string, output: string, is_error: boolean, subagent?: string | null, task_id?: string | null, }",
-    "UsageWarning": "{ rid?: string | null, budget: string, message: string, current_cost: number, cost_limit: number, percent_used: number, crossed_warn_at: Array<number>, period: string, period_start: string, reset_at: string, reset_at_display: string, scope?: string | null, }"
+    "UsageWarning": "{ rid?: string | null, budget: string, message: string, current_cost: number, cost_limit: number, percent_used: number, crossed_warn_at: Array<number>, period: string, period_start: string, reset_at: string, reset_at_display: string, scope?: string | null, }",
+    "WebLogin": "{ token: string, }",
+    "WebProblem": "{ code: WebProblemCode, message: string, }",
+    "WebProblemCode": "\"unauthorized\" | \"forbidden\" | \"invalid_request\" | \"too_many_requests\" | \"reload_required\" | \"unavailable\" | \"not_found\"",
+    "WebSessionInfo": "{ contract: string, protocol: number, expires_at: number, max_message_bytes: number, max_pending_requests: number, }"
   }
 }

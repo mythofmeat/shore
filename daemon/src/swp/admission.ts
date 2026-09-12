@@ -17,6 +17,15 @@ export class AdmissionError extends Error {
   override readonly name = "AdmissionError";
 }
 
+export function sanitiseRid(rid: string | null | undefined): string | null {
+  if (rid === undefined || rid === null) return null;
+  for (const ch of rid) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code > 0x7f || code === 0) return null;
+  }
+  return rid;
+}
+
 export function admitCapabilities(value: unknown): string[] {
   const capabilities = stringArray(value, "capabilities", MAX_CAPABILITIES);
   for (const capability of capabilities) {

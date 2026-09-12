@@ -110,6 +110,7 @@ export interface CommandDeps {
   historyIndex?: HistoryIndexSource;
   mcpStatus?: () => readonly McpServerStatus[];
   archive?: ArchiveContext;
+  onCharacterCreated?: (character: string) => Promise<void>;
 }
 
 const CHARACTERLESS = new Set([

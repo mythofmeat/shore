@@ -57,7 +57,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked
       - run: cargo test -p shore-common --lib export_bindings --locked
       - run: cargo test -p shore-common --lib export_operation_schemas --locked
+      - run: cargo test -p shore-common --lib export_web_schemas --locked
       - run: cargo test -p shore-cli export_capability_inventory --locked -- --ignored
       - run: |
-          git diff --exit-code -- ../daemon/src/protocol ../daemon/src/operations/schemas.generated.json ../docs/capabilities/terminal.generated.json
-          test -z "$(git ls-files --others --exclude-standard -- ../daemon/src/protocol ../daemon/src/operations/schemas.generated.json ../docs/capabilities/terminal.generated.json)"
+          git diff --exit-code -- ../daemon/src/protocol ../daemon/src/operations/schemas.generated.json ../daemon/src/web/schemas.generated.json ../docs/capabilities/terminal.generated.json
+          test -z "$(git ls-files --others --exclude-standard -- ../daemon/src/protocol ../daemon/src/operations/schemas.generated.json ../daemon/src/web/schemas.generated.json ../docs/capabilities/terminal.generated.json)"

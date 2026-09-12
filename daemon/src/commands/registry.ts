@@ -42,7 +42,12 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   create_character: register("create_character", {
     ...characterPresentation, label: "Create character", effects: ["workspace_write"],
     fields: { name: { label: "Character name" } },
-  }, ({ session }, args) => createCharacter(session.config.dirs.config, args, session.config.dirs.workspace)),
+  }, ({ session, deps }, args) => {
+    const result = createCharacter(session.config.dirs.config, args, session.config.dirs.workspace);
+    return deps.onCharacterCreated === undefined
+      ? result
+      : deps.onCharacterCreated(result.character).then(() => result);
+  }),
   switch_character: register("switch_character", {
     ...characterPresentation, label: "Select character", scope: "selection", effects: ["selection"],
     fields: { name: { label: "Character", choices: "characters" } },

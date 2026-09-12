@@ -113,11 +113,11 @@ MUTANTS = [
      "  void handshake;"),
     ("handshake: the command path gets its own provider rather than the server's",
      R,
-     "    handshake,\n    emitEvent:",
-     "    handshake: { hello: () => Promise.resolve({ characters: [] }),\n"
+     "      handshake,\n      emitEvent:",
+     "      handshake: { hello: () => Promise.resolve({ characters: [] }),\n"
      "                 history: () => Promise.resolve({ messages: [], activeStart: 0, config: {},\n"
      "                                                  selectedCharacter: null, revision: 0 }) },\n"
-     "    emitEvent:"),
+     "      emitEvent:"),
 
     # --- the push channels ----------------------------------------------------
     ("push: history changes are not broadcast, so a conversation stops appearing",
@@ -132,8 +132,8 @@ MUTANTS = [
     # --- the config the runtime runs on ---------------------------------------
     ("config: the runtime re-reads the default path rather than the one started with",
      R,
-     "    config: loaded,\n    configPath: startup.configPath,",
-     "    config: loaded,\n    configPath: undefined,"),
+     "      config: loaded,\n      configPath: startup.configPath,",
+     "      config: loaded,\n      configPath: undefined,"),
 
     # --- shutdown -------------------------------------------------------------
     ("shutdown: the instance is left in the registry, pointing at a dead process",
@@ -158,8 +158,8 @@ MUTANTS = [
     # --- the config watcher ---------------------------------------------------
     ("watch: the daemon does not watch its config directory at all",
      R,
-     "  const watcher = options.watchConfig === false\n    ? undefined\n    : startConfigWatcher({",
-     "  const watcher = true\n    ? undefined\n    : startConfigWatcher({"),
+     "    const watcher = options.watchConfig === false\n      ? undefined\n      : startConfigWatcher({",
+     "    const watcher = true\n      ? undefined\n      : startConfigWatcher({"),
     ("watch: the watcher is pointed at the data directory rather than the config one",
      R,
      "        configDir: loaded.dirs.config,",

@@ -1,4 +1,5 @@
-import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
+import type { ErrorObject, ValidateFunction } from "ajv/dist/2020.js";
+import { contractValidator } from "./validation.ts";
 import type { OperationRequest } from "../protocol/OperationRequest.ts";
 import type { OperationResponse } from "../protocol/OperationResponse.ts";
 import { internalError, invalidRequest } from "../commands/errors.ts";
@@ -10,8 +11,7 @@ type Results = { [Response in OperationResponse as Response["name"]]: Response["
 export type OperationInput<N extends OperationName> = Inputs[N];
 export type OperationResult<N extends OperationName> = Results[N];
 
-const validator = new Ajv2020({ allErrors: true, strict: true, allowUnionTypes: true, coerceTypes: false, useDefaults: false, removeAdditional: false });
-validator.addFormat("uint64", { type: "number", validate: Number.isSafeInteger });
+const validator = contractValidator();
 
 const contracts = new Map<string, { input: ValidateFunction; output: ValidateFunction; schemas: typeof schemas[number] }>();
 for (const schema of schemas) {

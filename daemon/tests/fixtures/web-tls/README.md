@@ -1,0 +1,1 @@
+This self-signed certificate and publicly committed key are only for localhost HTTPS/WebSocket tests. The test client explicitly trusts this certificate; system trust and certificate verification remain enabled. Do not use this key for a real listener.

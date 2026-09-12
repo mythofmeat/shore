@@ -241,6 +241,7 @@ describe("routed messages", () => {
     });
 
     const received = h.frames.get(1) ?? [];
+    expect(received.find((frame) => frame.type === "stream_end" && frame.rid === "r1")).toMatchObject({ finish_reason: "cancelled", is_final: true });
     expect(
       stripAbsent({
         launched,
@@ -330,7 +331,9 @@ describe("routed messages", () => {
 
     expect({ generation_running: h.started.length === 2 }).toEqual(c.output as never);
     expect(firstSignal).toBeDefined();
-    expect((h.frames.get(1) ?? []).filter((f) => f.type === "stream_end")).toHaveLength(0);
+    expect((h.frames.get(1) ?? []).filter((f) => f.type === "stream_end")).toMatchObject([
+      { rid: "r1", finish_reason: "cancelled", is_final: true },
+    ]);
   });
   test("a hello on the engine path is ignored", async () => {
     const c = caseByName(routed, "a hello on the engine path is ignored");
@@ -979,7 +982,7 @@ test("different threads can generate in one session without cancelling or mixing
   await main.send({ type: "stream_chunk", text: "main", content_type: "text" });
   await scratch.send({ type: "stream_chunk", text: "scratch", content_type: "text" });
   expect(h.frames.get(1)).toEqual([{ type: "stream_chunk", text: "scratch", content_type: "text" }]);
-  await h.handler.cancelGeneration(1, "user cancelled");
+  await h.handler.cancelGeneration(1, null, "user cancelled");
   expect(scratch.signal.aborted).toBe(true);
   expect(main.signal.aborted).toBe(false);
   expect(h.frames.get(1)?.at(-1)).toMatchObject({ type: "stream_end", rid: "scratch", finish_reason: "cancelled" });

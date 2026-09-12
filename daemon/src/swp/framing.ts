@@ -109,7 +109,7 @@ export class WireReader {
   }
 }
 
-function decodeClientMessage(value: unknown): ClientMessage {
+export function decodeClientMessage(value: unknown): ClientMessage {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new WireError("Frame is not a JSON object");
   }

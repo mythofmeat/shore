@@ -559,6 +559,11 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     diagnostics: a.diagnostics,
     callStore: runtime.callStore,
     ledgerPath,
+    onCharacterCreated: async (character) => {
+      await applyReloadedConfig(a, runtime.registry.globalConfig());
+      a.autonomy.ensureState(character, runtime.registry.effectiveConfig(character));
+      await a.autonomy.settled(character);
+    },
     archive: {
       dirs: runtime.config.dirs,
       hasCharacter: (character) => runtime.registry.hasCharacter(character),

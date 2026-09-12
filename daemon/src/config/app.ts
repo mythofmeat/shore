@@ -260,12 +260,48 @@ function optional<T>(inner: Reader<T>): Reader<T | undefined> {
   return typed((v) => inner(v), { ...typeOf(inner as Reader<unknown>), optional: true });
 }
 
+export interface WebConfig {
+  enabled: boolean;
+  bind_addr: string;
+  public_origin: string | undefined;
+  tls_cert: string | undefined;
+  tls_key: string | undefined;
+  max_connections: number;
+  max_queued_bytes: number;
+}
+
+export const defaultWebConfig = (): WebConfig => ({
+  enabled: false,
+  bind_addr: "127.0.0.1:7340",
+  public_origin: undefined,
+  tls_cert: undefined,
+  tls_key: undefined,
+  max_connections: 16,
+  max_queued_bytes: 32 * 1024 * 1024,
+});
+
+const WEB: StructSpec<WebConfig> = {
+  name: "WebConfig",
+  make: defaultWebConfig,
+  fields: {
+    enabled: readBool,
+    bind_addr: readString,
+    public_origin: optional(readString),
+    tls_cert: optional(readString),
+    tls_key: optional(readString),
+    max_connections: readUsize,
+    max_queued_bytes: readUsize,
+  },
+};
+
 export interface DaemonConfig {
   addr: string;
+  web: WebConfig;
 }
 
 const defaultDaemonConfig = (): DaemonConfig => ({
   addr: "127.0.0.1:7320",
+  web: defaultWebConfig(),
 });
 
 const DAEMON: StructSpec<DaemonConfig> = {
@@ -273,6 +309,7 @@ const DAEMON: StructSpec<DaemonConfig> = {
   make: defaultDaemonConfig,
   fields: {
     addr: readString,
+    web: struct(WEB),
   },
 };
 
